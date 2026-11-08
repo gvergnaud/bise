@@ -139,8 +139,10 @@ reclaim() {
 }
 # runs in the background of a job's shell ($1): marks $2 ("disk <GB>" or
 # "time <min>") and stops the job when the disk gets too low or the job runs
-# over HEAVY_MAX_MIN ($3) minutes; under the floor (HEAVY_DISK_WAIT_GB) it
-# reclaims first, so a job that grows a target is not the one that pays.
+# over HEAVY_MAX_MIN ($3) minutes; under HEAVY_RECLAIM_UNDER_GB (20; the floor,
+# 10, before disk-hygiene, architect m_55867) it reclaims first (the idle
+# targets' incremental dirs, then idle targets), so a job that grows a
+# target is not the one that pays.
 # $4 (an --alone job's, HEAVY_IDLE_MIN): minutes awake with no CPU used by
 # the job's processes (under HEAVY_IDLE_CPU_CS, 200 = 2 s, in all), past which it is stuck: stopped
 # too (main m_36953: a caffeinate with no child, 0 % CPU for 3 h, held
@@ -170,7 +172,7 @@ disk_watch() {
     if disk_under "${HEAVY_DISK_STOP_GB:-5}"; then why="disk $(free_gb)"
     elif [ "${3:-0}" -gt 0 ] && [ "$ran" -ge "${HEAVY_MAX_SEC:-$(( $3 * 60 ))}" ]; then why="time $3"
     elif [ "${4:-0}" -gt 0 ] && [ $(( ran - busy_ran )) -ge "${HEAVY_IDLE_SEC:-$(( $4 * 60 ))}" ]; then why="idle $4"
-    elif disk_under "${HEAVY_DISK_WAIT_GB:-10}"; then reclaim $(( ${HEAVY_DISK_WAIT_GB:-10} + 10 ))
+    elif disk_under "${HEAVY_RECLAIM_UNDER_GB:-20}"; then reclaim $(( ${HEAVY_RECLAIM_UNDER_GB:-20} + 10 ))
     fi
     if [ -n "$why" ]; then
       echo "$why" >"$2"

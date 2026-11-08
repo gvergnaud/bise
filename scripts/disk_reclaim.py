@@ -33,6 +33,18 @@ is cold, that's why). Each deletion is a line in ~/.bise/run/reclaim.log:
 Never ~/.bise/dev/build (its target holds the try's own bise, which 'bise-ambient --real'
 swaps in; keep-current m_30630 found it gone, removed by hand), whatever the roots say:
 protected(), checked on each target's real path.
+A target: a dir named target with cargo's CACHEDIR.TAG or a .rustc_info.json (a clone of the
+gate seed had no tag: on 2026-11-08, 11 of 12 task targets were never seen). The roots
+include the tip check's tree (~/.bise/run/tip-check) and .land-check's (a dot project).
+The trim (disk-hygiene, architect m_55867), before any deletion: a target whose green gate
+wrote <target>/.idle-since and that is idle --min-idle-min since is measured once: its own
+bytes are the files newer than its .seeded (gate.sh's mark of a seed clone; without it, its
+incremental dirs only). Over HEAVY_TRIM_GB (4): its incremental dirs go when that brings it
+under, else it is replaced by a fresh clone of the seed (its worktree's `gate.sh seed-into`),
+under its cargo locks; a reclaim.log line `trim-incremental|trim-reclone`. While the disk is
+under --want, the idle targets' incremental dirs go first (`low-incremental`), whole targets
+after. Once an hour each agent tmp's size goes to ~/.bise/run/tmp-sizes.log, and a tmp over
+HEAVY_TMP_CAP_GB (2) is printed once (~/.bise/run/tmp-warned): measured a week before more.
 One reclaim at a time (~/.bise/run/reclaim.lock): a second one returns at once.
 HEAVY_FREE_KB_FILE (tests): the free KB are read from that file, not statvfs.
 """
@@ -82,6 +94,29 @@ def plan(targets, free_gb, want_gb, now, idle_h, min_idle_min):
     return out
 
 
+def trim_action(own_gb, inc_gb, trim_gb):
+    """What the trim does to a target whose own bytes (written since its
+    clone) are own_gb, inc_gb of them in incremental/: None under trim_gb,
+    'incremental' when dropping those brings it under, else 'reclone' (a
+    fresh clone of the seed)."""
+    if own_gb <= trim_gb:
+        return None
+    return "incremental" if own_gb - inc_gb <= trim_gb else "reclone"
+
+
+def trim_candidates(targets, now, min_idle_min):
+    """targets: [(path, last_used, busy, idle_since)], idle_since the mtime of
+    the .idle-since a green gate wrote (None: none). The ones to measure: a
+    green gate marked them, nothing built since, idle min_idle_min."""
+    return [p for p, used, busy, since in targets
+            if since is not None and not busy and now - used >= min_idle_min * 60]
+
+
+def tmp_over(sizes_gb, cap_gb, warned):
+    """The agent tmps over cap_gb not warned yet. sizes_gb: {path: GB}."""
+    return sorted(p for p, gb in sizes_gb.items() if gb > cap_gb and p not in warned)
+
+
 def _self_test():
     now = 1_000_000
     t = [("/a", now - 7 * 3600, False), ("/b", now - 3600, False), ("/c", now - 120, False),
@@ -101,6 +136,28 @@ def _self_test():
         assert protected(os.path.join(build, "target"), keep) and protected(build, keep)
         assert not protected(os.path.join(d, "state", "build2", "target"), keep), "a sibling with the same prefix"
         assert not protected(os.path.join(d, "wt", "rust", "target"), keep)
+        # a target: cargo's tag, or a seed clone's .rustc_info.json (no tag); never another dir named target
+        for name, mark in (("a", "CACHEDIR.TAG"), ("b", ".rustc_info.json"), ("c", "README")):
+            os.makedirs(os.path.join(d, name, "target"))
+            open(os.path.join(d, name, "target", mark), "w").close()
+        assert is_target(os.path.join(d, "a", "target")) and is_target(os.path.join(d, "b", "target"))
+        assert not is_target(os.path.join(d, "c", "target")) and not is_target(os.path.join(d, "b"))
+        # a clone's own bytes: the files newer than its .seeded
+        t = os.path.join(d, "b", "target")
+        with open(os.path.join(t, "old"), "wb") as fh:
+            fh.write(b"x" * 8192)
+        os.utime(os.path.join(t, "old"), (now, now))
+        with open(os.path.join(t, "new"), "wb") as fh:
+            fh.write(b"y" * 8192)
+        assert 8192 <= own_bytes(t, now + 1) < 16384 and own_bytes(t, None) >= 16384
+    assert trim_action(3.9, 3, 4) is None
+    assert trim_action(9, 6, 4) == "incremental", "dropping incremental/ brings it to 3 GB"
+    assert trim_action(9, 2, 4) == "reclone"
+    assert trim_action(4, 4, 4) is None, "at the cap: kept"
+    m = [("/a", now - 3600, False, now - 3600), ("/b", now - 60, False, now - 60), ("/c", now - 3600, True, now - 3600),
+         ("/d", now - 3600, False, None)]
+    assert trim_candidates(m, now, 30) == ["/a"], "marked, idle 30 min, not busy"
+    assert tmp_over({"/x": 7.0, "/y": 1.3, "/z": 2.5}, 2, {"/z"}) == ["/x"], "over the cap, once"
     print("disk_reclaim self-test ok")
 
 
@@ -125,7 +182,17 @@ def roots():
     if r:
         return [p for p in r.split(":") if p]
     base = os.path.expanduser("~/.bise/worktrees")
-    return [os.path.join(base, h, a) for h in _ls(base) for a in _ls(os.path.join(base, h))]
+    # the task folders (.land-check's too: a dot project), and the tip check's tree
+    return [os.path.join(base, h, a) for h in _ls(base) for a in _ls(os.path.join(base, h))] \
+        + [os.path.expanduser("~/.bise/run/tip-check")]
+
+
+def is_target(p):
+    """A cargo target: a dir named target with cargo's CACHEDIR.TAG, or its
+    .rustc_info.json (a clone of the gate seed had no tag before gate.sh's
+    seed_mark: 11 of 12 task targets on 2026-11-08, never reclaimed)."""
+    return os.path.basename(p) == "target" and any(
+        os.path.exists(os.path.join(p, f)) for f in ("CACHEDIR.TAG", ".rustc_info.json"))
 
 
 def _ls(d):
@@ -136,7 +203,7 @@ def _ls(d):
 
 
 def find_targets(root, depth=4):
-    """cargo target dirs under root (CACHEDIR.TAG), not descending into one."""
+    """cargo target dirs under root (is_target), not descending into one."""
     out = []
     if depth < 0:
         return out
@@ -146,7 +213,7 @@ def find_targets(root, depth=4):
         p = os.path.join(root, name)
         if os.path.islink(p):
             continue
-        if name == "target" and os.path.exists(os.path.join(p, "CACHEDIR.TAG")):
+        if is_target(p):
             out.append(p)
         elif depth > 0:
             out += find_targets(p, depth - 1)
@@ -154,7 +221,14 @@ def find_targets(root, depth=4):
 
 
 def profiles(t):
-    return [os.path.join(t, d) for d in _ls(t) if os.path.exists(os.path.join(t, d, ".cargo-lock"))]
+    """The profile dirs of t (with a .cargo-lock), the gate's nested clippy target's too (<t>/clippy/debug)."""
+    out = []
+    for d in _ls_paths(t):
+        if os.path.exists(os.path.join(d, ".cargo-lock")):
+            out.append(d)
+        else:
+            out += [p for p in _ls_paths(d) if os.path.exists(os.path.join(p, ".cargo-lock"))]
+    return out
 
 
 def last_used(t):
@@ -270,6 +344,161 @@ def reclaim_one(t, reason, idle_min, log):
     return gb
 
 
+def incrementals(t):
+    """cargo's incremental dirs of t: <profile>/incremental, the nested clippy target's too."""
+    return [os.path.join(p, "incremental") for p in profiles(t) if os.path.isdir(os.path.join(p, "incremental"))]
+
+
+def own_bytes(d, since):
+    """The bytes of the files under d written after `since` (an epoch; None:
+    all of them), symlinks skipped: a clone's own blocks, the ones it shares
+    with the seed being older than its .seeded."""
+    n = 0
+    for dirpath, _, files in os.walk(d):
+        for f in files:
+            try:
+                s = os.lstat(os.path.join(dirpath, f))
+            except OSError:
+                continue
+            if not os.path.islink(os.path.join(dirpath, f)) and (since is None or s.st_mtime > since):
+                n += s.st_blocks * 512
+    return n
+
+
+def mtime(p):
+    try:
+        return os.stat(p).st_mtime
+    except OSError:
+        return None
+
+
+def seed_into_from(t):
+    """The worktree whose tests/gate.sh clones the seed into t: <wt>/rust/target's
+    <wt>, a task folder's <task>/target's <task>/<repo>; None when none."""
+    parent = os.path.dirname(t)
+    cands = [os.path.dirname(parent)] if os.path.basename(parent) == "rust" else _ls_paths(parent)
+    for c in cands:
+        if os.path.isfile(os.path.join(c, "tests", "gate.sh")) and os.path.exists(os.path.join(c, ".git")):
+            return c
+    return None
+
+
+def trim_one(t, trim_gb, log):
+    """Trim t (green-marked, idle): its own bytes measured, then nothing, its
+    incremental dirs dropped, or the whole target replaced by a fresh clone
+    of the seed (gate.sh seed-into), under its cargo locks. Without .seeded
+    (a target from before seed_mark), only incremental/ counts as its own.
+    Returns (action, GB freed) or None (busy, or under trim_gb)."""
+    seeded = mtime(os.path.join(t, ".seeded"))
+    incs = incrementals(t)
+    inc = sum(own_bytes(i, seeded) for i in incs) / GB
+    own = own_bytes(t, seeded) / GB if seeded is not None else inc
+    try:
+        os.remove(os.path.join(t, ".idle-since"))  # measured once per green gate
+    except OSError:
+        pass
+    act = trim_action(own, inc, trim_gb)
+    wt = seed_into_from(t) if act == "reclone" else None
+    if act == "reclone" and wt is None:
+        act = "incremental"  # no seed to clone from here: the incremental part only
+    if act is None:
+        return None
+    fds = lock_all(t)
+    if fds is None:
+        return None
+    before = free_kb()
+    away = []
+    try:
+        for d in (incs if act == "incremental" else [t]):
+            a = gone_dir(d)
+            os.rename(d, a)
+            away.append(a)
+    except OSError:
+        pass
+    finally:
+        for f in fds:
+            os.close(f)
+    if act == "reclone" and away:
+        env = dict(os.environ, PATH=os.path.expanduser("~/.cargo/bin") + os.pathsep + os.environ.get("PATH", ""))
+        try:
+            ok = subprocess.run(["/bin/bash", os.path.join(wt, "tests", "gate.sh"), "seed-into", t], cwd=wt, env=env,
+                                capture_output=True, timeout=900).returncode == 0
+        except (OSError, subprocess.SubprocessError):
+            ok = False
+        if not ok and not os.path.exists(t):
+            os.makedirs(t, exist_ok=True)
+            with open(os.path.join(t, "RECLAIMED.txt"), "w") as fh:
+                fh.write("heavy-run: this cargo target held %.1f GB of its own at %s and no seed clone could replace it "
+                         "(scripts/disk_reclaim.py): its next build is cold.\n" % (own, time.strftime("%Y-%m-%d %H:%M")))
+    for a in away:
+        shutil.rmtree(a, ignore_errors=True)
+    gb = max(0, free_kb() - before) / (GB / 1024)
+    with open(log, "a") as fh:
+        fh.write("%d\t%s\t%d\t%.1f\ttrim-%s\n" % (time.time(), t, 0, gb, act))
+    return act, gb
+
+
+def drop_incremental(t, log):
+    """The disk is low: t's incremental dirs go (its deps and outputs stay warm), under its cargo locks."""
+    incs = incrementals(t)
+    fds = lock_all(t) if incs else None
+    if fds is None:
+        return None
+    before = free_kb()
+    away = []
+    try:
+        for d in incs:
+            a = gone_dir(d)
+            os.rename(d, a)
+            away.append(a)
+    except OSError:
+        pass
+    finally:
+        for f in fds:
+            os.close(f)
+    for a in away:
+        shutil.rmtree(a, ignore_errors=True)
+    gb = max(0, free_kb() - before) / (GB / 1024)
+    with open(log, "a") as fh:
+        fh.write("%d\t%s\t%d\t%.1f\tlow-incremental\n" % (time.time(), t, 0, gb))
+    return gb
+
+
+def agent_tmps():
+    """The agents' tmp dirs (<home>/hubs/<hub>/agents/<agent>/tmp); HEAVY_TMP_ROOTS (tests): a ':' list instead."""
+    r = os.environ.get("HEAVY_TMP_ROOTS")
+    if r is not None:
+        return [p for p in r.split(":") if p]
+    hubs = os.path.expanduser("~/.bise/hubs")
+    return [os.path.join(hubs, h, "agents", a, "tmp") for h in _ls(hubs)
+            for a in _ls(os.path.join(hubs, h, "agents")) if os.path.isdir(os.path.join(hubs, h, "agents", a, "tmp"))]
+
+
+def log_tmps(run, now):
+    """Once an hour: each agent tmp's GB in <run>/tmp-sizes.log (<epoch> <path> <GB>), and one line per tmp
+    over HEAVY_TMP_CAP_GB (2) on stdout, once (<run>/tmp-warned): a week of sizes decides more (architect m_55867)."""
+    stamp = os.path.join(run, "tmp-sizes.stamp")
+    last = mtime(stamp)
+    if last is not None and now - last < 3600:
+        return
+    open(stamp, "w").close()
+    sizes = {t: own_bytes(t, None) / GB for t in agent_tmps()}
+    with open(os.path.join(run, "tmp-sizes.log"), "a") as fh:
+        for t, gb in sorted(sizes.items()):
+            fh.write("%d\t%s\t%.2f\n" % (now, t, gb))
+    wf = os.path.join(run, "tmp-warned")
+    try:
+        warned = set(open(wf).read().split("\n"))
+    except OSError:
+        warned = set()
+    over = tmp_over(sizes, float(os.environ.get("HEAVY_TMP_CAP_GB", 2)), warned)
+    for t in over:
+        print("disk_reclaim: %s holds %.1f GB (over %s GB)" % (t, sizes[t], os.environ.get("HEAVY_TMP_CAP_GB", 2)))
+    if over:
+        with open(wf, "a") as fh:
+            fh.write("".join(t + "\n" for t in over))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--want", type=float, default=0, help="GB free to reach (0: idle ones only)")
@@ -306,10 +535,38 @@ def main():
     keep = kept()
     ts = [(t, last_used(t), busy(t, exes, r, cwds)) for r in roots() for t in find_targets(r) if not protected(t, keep)]
     used = {t: u for t, u, _ in ts}
-    todo = plan(ts, free_kb() / (GB / 1024), a.want, now, a.idle_h, a.min_idle_min)
     log = os.path.join(run, "reclaim.log")
-    freed, n = 0.0, 0
+    freed, n, trimmed = 0.0, 0, set()
+    # the trim: a target a green gate marked, idle since, over HEAVY_TRIM_GB of its own
+    marked = [(t, u, b, mtime(os.path.join(t, ".idle-since"))) for t, u, b in ts]
+    for t in trim_candidates(marked, now, a.min_idle_min):
+        if a.dry_run:
+            print("would measure %s for a trim" % t)
+            continue
+        r = trim_one(t, float(os.environ.get("HEAVY_TRIM_GB", 4)), log)
+        if r is not None:
+            trimmed.add(t)
+            freed += r[1]
+            n += 1
+            print("disk_reclaim: trimmed %s (%s, %.1f GB)" % (t, r[0], r[1]))
+    # the disk is low: first the incremental dirs of the idle targets, then whole targets
+    if free_kb() / (GB / 1024) < a.want:
+        for t, u, b in sorted(ts, key=lambda x: x[1]):
+            if b or now - u < a.min_idle_min * 60 or free_kb() / (GB / 1024) >= a.want:
+                continue
+            if a.dry_run:
+                print("would drop the incremental dirs of %s" % t)
+                continue
+            gb = drop_incremental(t, log)
+            if gb is not None:
+                freed += gb
+                print("disk_reclaim: dropped %s's incremental dirs (%.1f GB)" % (t, gb))
+    if not a.dry_run:
+        log_tmps(run, now)
+    todo = plan(ts, free_kb() / (GB / 1024), a.want, now, a.idle_h, a.min_idle_min)
     for t, reason in todo:
+        if t in trimmed or not os.path.isdir(t):
+            continue  # trimmed in this pass: its use dates are stale
         if reason == "low" and free_kb() / (GB / 1024) >= a.want:
             break
         idle_min = int((now - used[t]) / 60)

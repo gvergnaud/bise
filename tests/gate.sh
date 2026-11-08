@@ -159,6 +159,36 @@ seed_strip() {  # in the repo root: a clone of a seed keeps the deps only
   done
   return 0
 }
+seed_mark() {  # the marks of a target cloned from a seed (disk-hygiene, architect m_55867)
+  # CACHEDIR.TAG: cargo writes it only in a target it creates, never in a
+  # clone, and scripts/disk_reclaim.py knows a target by it; .seeded: the
+  # clone's time, so the files newer than it are this target's own bytes
+  # (what disk_reclaim.py's trim measures)
+  printf 'Signature: 8a477f597d28d172789f06886806bc55\n# This file is a cache directory tag created by cargo.\n' >"$1/CACHEDIR.TAG" \
+    && rm -f "$1/.idle-since" "$1/RECLAIMED.txt" && : >"$1/.seeded"
+}
+seed_clone() {  # in the repo root: $2 (absent) becomes an APFS clone of the seed $1, the deps only, marked
+  rm -rf "$2.tmp"
+  cp -cR "$1" "$2.tmp" 2>/dev/null && seed_strip "$2.tmp" && seed_mark "$2.tmp" && mv "$2.tmp" "$2" && return 0
+  rm -rf "$2.tmp"; return 1
+}
+seed_save() {  # in the repo root: the target $1, built for these deps, becomes their seed (one kept); nothing when they have one
+  local seeds seed o
+  seeds="$(seeds_dir)"; seed="$seeds/$(seed_key)"
+  [ -e "$seed" ] && return 0
+  mkdir -p "$seeds" && mkdir "$seeds.lock" 2>/dev/null || return 0
+  # never `mv` onto an existing seed (it would nest the new one in it)
+  if [ ! -e "$seed" ]; then
+    rm -rf "$seed.tmp" && cp -cR "$1" "$seed.tmp" && rm -f "$seed.tmp/.seeded" "$seed.tmp/.idle-since" && mv "$seed.tmp" "$seed"
+  fi
+  # one seed: the new one replaces the older ones (0 bytes: a clone)
+  [ -e "$seed" ] && for o in "$seeds"/*; do [ "$o" = "$seed" ] || rm -rf "$o"; done
+  rmdir "$seeds.lock"
+  [ -e "$seed" ]
+}
+# a green quick/full gate: its target may be trimmed once idle; disk_reclaim.py's pass
+# does it (the gate deletes nothing, architect m_55867)
+mark_idle() { local t="${CARGO_TARGET_DIR:-$root/rust/target}"; [ -d "$t" ] && : >"$t/.idle-since"; return 0; }
 proc_start() { ps -o lstart= -p "$1" 2>/dev/null | tr -s ' ' _; }
 # the gate dir: runs <gpre><pid> (each with .owner, its start, and .root, its
 # checkout), the lock, a red step's log
@@ -297,12 +327,30 @@ if [ "$mode" = seed ]; then
     echo "seed: nothing to do (${CARGO_TARGET_DIR:+CARGO_TARGET_DIR set}${CARGO_TARGET_DIR:-$t there or no rust/})"; exit 0
   fi
   from="$(seed_from 2>/dev/null)"
-  if [ -n "$from" ] && cp -cR "$from" "$t.tmp" 2>/dev/null && seed_strip "$t.tmp" && mv "$t.tmp" "$t"; then
+  if [ -n "$from" ] && seed_clone "$from" "$t"; then
     echo "seed: $t, a clone of the warm seed $(basename "$from") (its deps; this repo's crates build here)"
   else
-    rm -rf "$t.tmp"; echo "seed: no warm seed to clone in $(seeds_dir): the first cargo here builds cold"
+    echo "seed: no warm seed to clone in $(seeds_dir): the first cargo here builds cold"
   fi
   exit 0
+fi
+if [ "$mode" = seed-into ] || [ "$mode" = seed-save ]; then
+  # seed-into <target>: <target> (absent) becomes a clone of the seed, for
+  # disk_reclaim.py's trim, which owns the deletion of the one it replaces;
+  # seed-save <target>: <target>, green on main's tip, becomes the seed of
+  # its deps when they have none yet (scripts/tip_check.py, after a land:
+  # deps only, seed_strip stays; architect m_55867). Exit 1: nothing done.
+  [ -n "${2:-}" ] || { echo "usage: gate.sh $mode <target>" >&2; exit 2; }
+  t="$(cd "$(dirname "$2")" 2>/dev/null && pwd)/$(basename "$2")"
+  cd "$(git rev-parse --show-toplevel 2>/dev/null || echo "$(dirname "$0")/..")" || exit 1
+  if [ "$mode" = seed-save ]; then
+    [ -d "$t" ] && seed_save "$t" && echo "seed: $(seeds_dir)/$(seed_key)" && exit 0
+    echo "seed-save: nothing saved"; exit 1
+  fi
+  [ -e "$t" ] && { echo "seed-into: $t exists"; exit 1; }
+  from="$(seed_from)"
+  [ -n "$from" ] && seed_clone "$from" "$t" && echo "seed-into: $t, a clone of $(basename "$from")" && exit 0
+  echo "seed-into: no seed to clone"; exit 1
 fi
 if [ "$mode" = new ] || [ "$mode" = done ]; then
   # BISE-230: a task's folder <home>/worktrees/<project-id>/<name>/, like
@@ -382,25 +430,16 @@ PY
   s=$SECONDS
   if [ -d "$seed" ]; then
     building && rm -rf "$seed.building"
-    cp -cR "$seed" "$tgt" || exit 1
-    seed_strip "$tgt"
+    seed_clone "$seed" "$tgt" || exit 1
     echo "target: clone of the seed $seed ($((SECONDS - s))s)"
   else
     newest="$(ls -dt "$seeds"/* 2>/dev/null | grep -v '\.tmp$' | head -1)"
-    [ -n "$newest" ] && cp -cR "$newest" "$tgt" && seed_strip "$tgt"
+    { [ -n "$newest" ] && seed_clone "$newest" "$tgt"; } || { mkdir -p "$tgt" && seed_mark "$tgt"; }
     echo "no seed for these deps: building one${newest:+ on top of $newest} (~2 min cold, once)"
     (cd rust && CARGO_TARGET_DIR="$tgt" cargo clippy --offline -q --workspace --all-targets --target-dir "$tgt/clippy") >/dev/null 2>&1 &
     (cd rust && CARGO_TARGET_DIR="$tgt" cargo test --offline -q --workspace --no-run) >/dev/null 2>&1; rc=$?
     wait $! || rc=1
-    if [ $rc = 0 ] && mkdir "$seeds.lock" 2>/dev/null; then
-      # one seed: the new one replaces the older ones (0 bytes: a clone);
-      # never `mv` onto an existing seed (it would nest the new one in it)
-      if [ ! -e "$seed" ]; then
-        rm -rf "$seed.tmp" && cp -cR "$tgt" "$seed.tmp" && mv "$seed.tmp" "$seed"
-      fi
-      for o in "$seeds"/*; do [ "$o" = "$seed" ] || rm -rf "$o"; done
-      rmdir "$seeds.lock"
-    fi
+    [ $rc = 0 ] && seed_save "$tgt"
     building && rm -rf "$seed.building"
     echo "target: built ($((SECONDS - s))s)$([ $rc = 0 ] || echo ', with errors: the gate shows them')"
   fi
@@ -484,15 +523,17 @@ share_machine
 # <task dir>/target, a clone of the warm seed (0 bytes, ~3 s), like
 # gate.sh new's, instead of a cold rust/target (3-13 GB and 2-5 min a task;
 # 5 of them filled the disk on 2026-10-11). The hub's task dirs are removed
-# with the task, target included.
+# with the task, target included. One disk_reclaim.py emptied (its
+# RECLAIMED.txt alone left) is cloned again too, not built cold.
 if [ -z "${CARGO_TARGET_DIR:-}" ] && [ -f "$root/.git" ] && [ -f "$(dirname "$root")/owner" ] && [ ! -d "$root/rust/target" ]; then
   tdir="$(dirname "$root")/target"
+  [ -d "$tdir" ] && [ -z "$(ls -A "$tdir" | grep -vx RECLAIMED.txt)" ] && rm -f "$tdir/RECLAIMED.txt" && rmdir "$tdir"
   if [ ! -d "$tdir" ]; then
     s=$SECONDS sd="$(seeds_dir)" k="$(seed_key)" from="$(seed_from)"
-    if [ -n "$from" ] && cp -cR "$from" "$tdir.tmp" 2>/dev/null && (cd "$root" && seed_strip "$tdir.tmp") && mv "$tdir.tmp" "$tdir"; then
+    if [ -n "$from" ] && seed_clone "$from" "$tdir"; then
       echo "target: $tdir, a clone of the seed $(basename "$from")$([ "$from" = "$sd/$k" ] || echo ' (older deps: the changed ones rebuild)') ($((SECONDS - s))s)"
     else
-      rm -rf "$tdir.tmp"; mkdir -p "$tdir"; echo "target: $tdir (no seed to clone: a cold build)"
+      mkdir -p "$tdir"; echo "target: $tdir (no seed to clone: a cold build)"
     fi
   fi
   export CARGO_TARGET_DIR="$tdir"
@@ -953,6 +994,7 @@ if [ "$mode" = full ]; then
   bins=(./repl-live ./repl-scripted ./sb-core "${CARGO_TARGET_DIR:-rust/target}/debug/bise")
   for f in ./harness-demo rust/jsrt/target/debug/bend-jsrt; do [ -e "$f" ] && bins+=("$f"); done
   if [ $rc = 0 ]; then scripts/bins.sh minos "${bins[@]}" || rc=1; fi
+  [ $rc = 0 ] && mark_idle
   [ $rc = 0 ] && echo "GATE full GREEN ($((SECONDS - s))s)$([ ${#pick_args[@]} = 0 ] || echo ": $(echo $picked | wc -w | tr -d ' ') e2e/tmux tests picked")" || echo "GATE full FAILED"
   # every test and the desktop's checks ran, on a clean tree: its sha is green
   if [ $rc = 0 ] && [ ${#pick_args[@]} = 0 ] && [ -n "$dwhy" ] && clean_tree; then
@@ -1123,4 +1165,5 @@ if [ $bend_changed = 1 ]; then
   # `exec > >(tee ...)`, which end only with the gate (gate_queue_test)
   wait "$proof_pid"; cat "$out/proof.res"; [ "$(cat "$out/proof.rc")" = 0 ] || exit 1
 fi
+mark_idle
 echo "GATE quick GREEN ($((SECONDS - t0))s):${pkgs:- no Rust tests}$([ $bend_changed = 1 ] && echo ' + PROOF') (full: gate.sh full)"

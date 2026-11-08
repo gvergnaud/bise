@@ -151,6 +151,18 @@ def quick(home, wt, sha, base, log):
     return rc == 0, int(time.time() - t0), cpu
 
 
+def save_seed(wt, log):
+    """main's tip is green here: its target becomes the warm seed of its deps when they have none yet
+    (a land changed Cargo.lock or a Cargo.toml), so new task targets clone their deps warm instead of
+    an older seed's (disk-hygiene, architect m_55867: deps only, one seed kept; gate.sh seed-save)"""
+    for t in (os.path.join(wt, "rust", "target"), os.path.join(os.path.dirname(wt), "target")):
+        if os.path.isdir(t):
+            with open(log, "a") as out:
+                subprocess.run(["bash", "tests/gate.sh", "seed-save", t], cwd=wt, stdout=out, stderr=subprocess.STDOUT,
+                               stdin=subprocess.DEVNULL)
+            return
+
+
 def blame(home, main_tree, named, log, agent_journals):
     """tip-red for the named commit, through tip_blame (its parent as the last green)"""
     sys.path.insert(0, HERE)
@@ -234,6 +246,8 @@ def run(home, main_tree, hook_base, now=time.time, sleep=time.sleep):
             v.update(state="infra", secs=0, cpu=0.0)
         else:
             green, secs, cpu = quick(home, wt, tip, base, log)
+            if green:
+                save_seed(wt, log)
             v.update(state="infra" if green is None else "green" if green else "red", secs=secs, cpu=cpu)
             if green is False and v["commits"] > 1:
                 # one red over several lands: the quick gate on their commits, by halves
