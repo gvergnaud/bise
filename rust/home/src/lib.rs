@@ -9,7 +9,7 @@
 //! The layout: `~/.bise` (or `$BISE_HOME`): `config.toml`, `auth.json`,
 //! `.env`, `prefs.json`, `sessions/`, `hubs/<name>-<hash>/`, `images/`,
 //! `crashes/`, `plugins.json`, `plugin-data/`, `cache/` (indexes),
-//! `run/` (0700), `drafts/`, `dev/{versions,build}`.
+//! `run/` (0700), `drafts/`, `usage/` (the usage counts), `dev/{versions,build}`.
 //!
 //! Each path keeps its env override (`BEND_CONFIG`, `BEND_SESSIONS_DIR`,
 //! ...). The harness exports them all at its start ([`Home::exports`]),
@@ -331,6 +331,42 @@ impl Home {
             std::fs::set_permissions(&d, std::fs::Permissions::from_mode(0o700))?;
         }
         Ok(d)
+    }
+
+    /// `<root>/usage`: the usage counts of this machine (bise_usage, the
+    /// plan usage-metrics-plan): one folder per UTC day, `sent/`,
+    /// `send.lock`, `state.json`, `install-id`. All of it is deleted when
+    /// he turns sharing off.
+    pub fn usage_dir(&self) -> PathBuf {
+        self.root.join("usage")
+    }
+
+    /// `<usage>/<day>`: one UTC day's spool, one `<source>.json` per
+    /// counting process (`day` is `YYYY-MM-DD`, bise_usage::Day).
+    pub fn usage_day_dir(&self, day: &str) -> PathBuf {
+        self.usage_dir().join(day)
+    }
+
+    /// `<usage>/sent`: the packets the server took, kept 7 days so he
+    /// sees what was sent.
+    pub fn usage_sent_dir(&self) -> PathBuf {
+        self.usage_dir().join("sent")
+    }
+
+    /// `<usage>/send.lock`: the one sender of the machine holds its flock.
+    pub fn usage_send_lock(&self) -> PathBuf {
+        self.usage_dir().join("send.lock")
+    }
+
+    /// `<usage>/state.json`: the cohort, the active days, the milestones.
+    pub fn usage_state(&self) -> PathBuf {
+        self.usage_dir().join("state.json")
+    }
+
+    /// `<usage>/install-id`: the random install id and its creation day
+    /// (never the host id).
+    pub fn usage_install_id(&self) -> PathBuf {
+        self.usage_dir().join("install-id")
     }
 
     /// The composer drafts, one file per workspace.

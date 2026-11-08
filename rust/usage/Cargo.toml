@@ -1,0 +1,11 @@
+[package]
+name = "bise-usage"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+description = "bise's usage counts (page usage-metrics-plan): closed keys, the day's packet, its caps and rounding, the local state, the install id, sharing_allowed, the body sent and the send fn behind a transport port. Pure: time, paths and the network come in as arguments."
+
+[dependencies]
+bise-home = { path = "../home" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

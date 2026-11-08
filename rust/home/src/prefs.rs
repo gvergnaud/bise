@@ -69,6 +69,23 @@ pub fn auto_update(prefs: Option<&Value>) -> bool {
     prefs.and_then(|p| p.get(AUTO_UPDATE)).and_then(Value::as_bool).unwrap_or(false)
 }
 
+/// `telemetry`: `{share, note_seen}`, the usage counts' setting (plan
+/// usage-metrics-plan). `share`: he shares the daily counts; unset reads
+/// as on (the opt-out he chose). `note_seen`: his note about it was shown
+/// on a surface; until then nothing is counted or sent. Read by
+/// bise_usage's `sharing_allowed` only.
+pub const TELEMETRY: &str = "telemetry";
+
+/// `telemetry.share`, from `prefs.json`'s object: on unless he set false.
+pub fn telemetry_share(prefs: Option<&Value>) -> bool {
+    prefs.and_then(|p| p.get(TELEMETRY)).and_then(|t| t.get("share")).and_then(Value::as_bool).unwrap_or(true)
+}
+
+/// `telemetry.note_seen`, from `prefs.json`'s object: false until set true.
+pub fn telemetry_note_seen(prefs: Option<&Value>) -> bool {
+    prefs.and_then(|p| p.get(TELEMETRY)).and_then(|t| t.get("note_seen")).and_then(Value::as_bool).unwrap_or(false)
+}
+
 /// The image store's retention in days, from `prefs.json`'s object: his
 /// number when it is one of at least 1, else the default.
 pub fn keep_days(prefs: Option<&Value>) -> u64 {
