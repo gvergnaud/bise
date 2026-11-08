@@ -12,7 +12,11 @@ type Written = Arc<Mutex<Vec<(Day, Tally)>>>;
 fn recording() -> (UsageSink, Written) {
     let got: Written = Arc::default();
     let g = got.clone();
-    (Box::new(move |day, t| Ok(g.lock().unwrap().push((day, t.clone())))), got)
+    let sink: UsageSink = Box::new(move |day, t| {
+        g.lock().unwrap().push((day, t.clone()));
+        Ok(())
+    });
+    (sink, got)
 }
 
 const NOV_5: u64 = 1_793_836_800; // 2026-11-05 00:00 UTC
