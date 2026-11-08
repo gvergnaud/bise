@@ -7,6 +7,10 @@
 //! and the token comes back once it is unlocked. Its own test binary: it
 //! sets BISE_HOME and BISE_TEST_KEYCHAIN for the whole process.
 
+// an integration test is its own crate: the lib's test_home! doesn't
+// reach it, so without this it runs on his real HOME and config.toml
+bise_home::test_home!();
+
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::sync::atomic::{AtomicUsize, Ordering};

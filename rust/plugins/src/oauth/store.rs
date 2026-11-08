@@ -149,10 +149,18 @@ pub fn save(dir: &Path, s: &Saved) -> Result<(), String> {
     bise_secrets::write(&f, &text, &|| save_file(dir, &f, &text)).map_err(|e| format!("cannot save the login: {}", e))
 }
 
+/// The store's folder, made and kept 0700 by whoever reaches it first: the
+/// lock (before a save in keychain mode, whose stub writer leaves an
+/// existing folder as it is) or a file save.
+fn private_dir(dir: &Path) -> std::io::Result<()> {
+    use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
+    std::fs::DirBuilder::new().recursive(true).mode(0o700).create(dir).map_err(|e| std::io::Error::other(format!("cannot create bise's secrets folder: {}", e)))?;
+    std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))
+}
+
 fn save_file(dir: &Path, f: &Path, text: &str) -> std::io::Result<()> {
-    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
-    std::fs::create_dir_all(dir).map_err(|e| std::io::Error::other(format!("cannot create bise's secrets folder: {}", e)))?;
-    let _ = std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700));
+    use std::os::unix::fs::OpenOptionsExt;
+    private_dir(dir)?;
     let tmp = f.with_extension(format!("tmp{}", std::process::id()));
     let res = (|| {
         let mut w = std::fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(&tmp)?;
@@ -209,7 +217,7 @@ pub fn logout(dir: &Path, resource: &str, config: &Config) -> Option<bool> {
 pub struct Lock(std::fs::File);
 
 pub(super) fn lock(dir: &Path, resource: &str) -> Option<Lock> {
-    std::fs::create_dir_all(dir).ok()?;
+    private_dir(dir).ok()?;
     lock_file(&file_of(dir, resource))
 }
 

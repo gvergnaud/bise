@@ -1,6 +1,10 @@
 //! The fixture plugin through the real bridge: resolved, its server
 //! started, the index files written, a tool call over loopback HTTP.
 
+// an integration test is its own crate: the lib's test_home! doesn't
+// reach it, so without this it runs on his real HOME and config.toml
+bise_home::test_home!();
+
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};

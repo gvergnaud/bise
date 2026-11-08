@@ -5,6 +5,10 @@
 //! a server without registration; then a bridge that keeps a server
 //! needing a login and connects it once the login is in the store.
 
+// an integration test is its own crate: the lib's test_home! doesn't
+// reach it, so without this it runs on his real HOME and config.toml
+bise_home::test_home!();
+
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::sync::atomic::{AtomicUsize, Ordering};

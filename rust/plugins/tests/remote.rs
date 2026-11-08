@@ -3,6 +3,10 @@
 //! expired session, a dropped stream, a 401, list_changed, a server
 //! gone; then a plugin with an http server through the real bridge.
 
+// an integration test is its own crate: the lib's test_home! doesn't
+// reach it, so without this it runs on his real HOME and config.toml
+bise_home::test_home!();
+
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::sync::atomic::{AtomicUsize, Ordering};

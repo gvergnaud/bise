@@ -3,6 +3,10 @@
 //! hub request for every command, with and without a hub, with and
 //! without the agent's variables.
 
+// an integration test is its own crate: the lib's test_home! doesn't
+// reach it, so without this it runs on his real HOME and config.toml
+bise_home::test_home!();
+
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf};
