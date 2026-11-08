@@ -1,4 +1,4 @@
-//! The data volume's free space, read on the hub's tick (disk-hygiene,
+//! The free space of the volume holding bise's home, read on the hub's tick (disk-hygiene,
 //! point 8; architect m_56051: one `statvfs`, on the loop, no thread of its
 //! own). Its whole GB goes to sb-core as `Input::DiskFree` only when it
 //! changed; sb-core decides whether main hears of it (hub/disk.bend: once
@@ -12,7 +12,8 @@ use std::path::Path;
 impl Shell {
     /// On each tick: the free GB, to sb-core when it changed.
     pub(super) fn disk_check(&mut self) {
-        let Some(gb) = free_gb(&volume(&self.opts.paths.worktrees)) else { return };
+        // the volume of bise's home: the hub's state is in it (Paths, bise_home::hub_state)
+        let Some(gb) = free_gb(&self.opts.paths.state) else { return };
         if let Some(gb) = self.disk.next(gb) {
             self.step(Input::DiskFree { gb });
         }
@@ -46,12 +47,6 @@ pub(super) fn free_gb(path: &Path) -> Option<u64> {
         return None;
     }
     Some((s.f_bavail as u64).saturating_mul(s.f_frsize as u64) >> 30)
-}
-
-/// The volume to watch: macOS's data volume (where ~/.bise lives), else `home`.
-pub(super) fn volume(home: &Path) -> std::path::PathBuf {
-    let data = Path::new("/System/Volumes/Data");
-    if data.is_dir() { data.to_path_buf() } else { home.to_path_buf() }
 }
 
 #[cfg(test)]
