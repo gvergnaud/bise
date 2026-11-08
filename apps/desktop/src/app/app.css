@@ -214,6 +214,67 @@ body:has(.app-shell) {
   color: var(--c-text);
   text-decoration: underline;
 }
+/* a thread's agent's links right after its name (BarLinks.tsx, designer m_57254): 12 from the name
+   to the first link's text (the title's 8 and the link's 4), 8 between texts, each a 24 high hit
+   area r 6, t-12 text-2; hover a 6 % fill and the text in ink. One line: a link with no room wraps
+   out of it, whole, the last first (page, then branch; the PR last); the subtitle's words give way
+   before them (its shrink), the fact stays */
+.app-bar-title .s {
+  flex-shrink: 1000;
+}
+.app-bar-links {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  max-height: var(--s-6);
+  overflow: hidden;
+  align-self: center;
+  margin-left: calc(var(--s-1) * -1);
+}
+.app-bar-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  padding: var(--s-1);
+  border-radius: var(--r-1);
+  font: 400 var(--t-12)/16px var(--font-ui);
+  color: var(--c-text-2);
+  white-space: nowrap;
+}
+.app-bar-link + .app-bar-link {
+  margin-left: var(--s-1);
+}
+.app-bar-link[data-mono] {
+  font-family: var(--font-mono);
+}
+.app-bar-link:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--c-text) 6%, transparent);
+  color: var(--c-text);
+}
+.app-bar-link:focus-visible {
+  outline: 2px solid var(--c-focus);
+  outline-offset: -2px;
+}
+.app-bar-link[data-tone='err'] {
+  color: var(--c-err);
+}
+.app-bar-link[data-tone='acc'] {
+  color: var(--c-accent);
+}
+.app-bar-link[data-tone='dim'] {
+  color: var(--c-text-3);
+}
+/* 'your merge' in the UI font beside the number */
+.app-bar-link-said {
+  font-family: var(--font-ui);
+}
+/* the page's title is prose: cut with … at 24 ch, its whole title in the tip */
+.app-bar-link-t {
+  max-width: 24ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .app-bar-go:focus-visible {
   outline: 2px solid var(--c-focus);
   outline-offset: 2px;

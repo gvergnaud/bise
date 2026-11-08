@@ -39,6 +39,7 @@ import { barTitleOf, stateFactOf, windowTitleOf, type StateFact } from "./title"
 import { useNow } from "./clock";
 import { panelToggle, usePanelBox } from "./panel/state";
 import { usePlaceCrumb } from "@/artifacts/crumb";
+import { BarLinks } from "./BarLinks";
 
 export type Width = "narrow" | "mid" | "wide";
 
@@ -439,6 +440,8 @@ export function Bar({ frame: state }: { frame: FrameState }) {
       </div>
       <div className="app-bar-title" data-testid="app.bar.title">
         <TitleSlot text={t.title} />
+        {/* the thread's agent's links right after its name: its PR, its branch, its page (designer m_57254) */}
+        {route.screen === "thread" && route.agent !== MAIN && <BarLinks project={route.project} agent={route.agent} />}
         {t.sub.length > 0 && (
           <span className="s" data-testid="app.bar.title.sub">
             {t.sub.map((p, i) => (
