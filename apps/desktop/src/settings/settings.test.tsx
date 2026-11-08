@@ -17,10 +17,10 @@ import { KEY_SECTIONS } from './keys';
 import { notifyRow } from './pages';
 import { capsOf, chromeCase, homeOf } from './chrome';
 import { stepOf } from './computer';
-import { focusOf } from './setupPage';
+import { focusOf, newsSeen } from './setupPage';
 import { fixButton, TRY_MS } from './gauge';
 import { article } from './keycheck';
-import { FALLBACK, fixLine, joinAnd } from './roleList';
+import { FALLBACK, fixLine, joinAnd, newsLine } from './roleList';
 import type { ComputerUse } from './computer';
 import { settings } from '@/proto/words.gen';
 
@@ -570,6 +570,32 @@ describe('settings · Setup: which model does what (page models-settings, pick A
     view('setup', ports(), { gauge: allOn() });
     expect(screen.queryByTestId('settings.fixline')).toBeNull();
     expect(document.querySelectorAll('.st-mark.err')).toHaveLength(0);
+  });
+
+  it('the news line: a newer model for the roles on the one it replaces, one role_set_many; Not now puts it off', () => {
+    const news = { model: 'anthropic/claude-opus-5-6', name: 'opus 5.6', replaces: 'anthropic/claude-opus-5-5', replaces_name: 'opus 5.5', roles: ['main', 'agents', 'small'] };
+    const p = ports();
+    view('setup', p, { gauge: { ...allOn(), news } });
+    expect(screen.getByTestId('settings.news').textContent).toContain(settings.news_out({ name: 'opus 5.6' }));
+    fireEvent.click(screen.getByTestId('settings.news.use'));
+    expect(screen.getByTestId('settings.news.use').textContent).toBe(settings.news_use_more({ n: 3, old: 'opus 5.5' }));
+    fireEvent.click(screen.getByTestId('settings.news.not-now'));
+    expect(p.sent).toEqual([
+      { cmd: 'role_set_many', roles: ['main', 'agents', 'small'], model: 'anthropic/claude-opus-5-6' },
+      { cmd: 'prefs_set', key: 'models.news_seen', value: ['anthropic/claude-opus-5-6'] },
+    ]);
+    // put off: gone at once, before the core's next gauge
+    expect(screen.queryByTestId('settings.news')).toBeNull();
+  });
+
+  it('the news line names its one role, and stays away for a model he put off', () => {
+    const g = allOn();
+    const news = { model: 'anthropic/claude-haiku-5', name: 'haiku 5', replaces: 'anthropic/claude-haiku-4-5', replaces_name: 'haiku 4.5', roles: ['small'] };
+    expect(newsLine({ ...g, news }, [])?.act).toBe(settings.news_use_one({ role: settings.short_small }));
+    expect(newsLine({ ...g, news }, ['anthropic/claude-haiku-5'])).toBeNull();
+    expect(newsLine(g, [])).toBeNull();
+    expect(newsSeen({ models: { news_seen: ['a/b', 3] } })).toEqual(['a/b']);
+    expect(newsSeen(null)).toEqual([]);
   });
 
   it('the fix line names the roles a fix brings back, joined in words', () => {

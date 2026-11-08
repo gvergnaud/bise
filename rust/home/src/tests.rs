@@ -232,6 +232,22 @@ fn the_window_pins_each_kind_by_its_hub_id() {
 }
 
 #[test]
+fn the_window_puts_off_a_models_news_by_its_id() {
+    use serde_json::json;
+    // Settings' news line 'Not now' (page models-settings, architect m_57407): models.news_seen = the ids
+    let o = json!({"theme": "dark"});
+    let v = prefs::set_dotted(&o, "models.news_seen", json!(["anthropic/claude-opus-5-6"])).unwrap();
+    assert_eq!(prefs::news_seen(&v), vec!["anthropic/claude-opus-5-6".to_string()]);
+    assert!(prefs::news_seen(&o).is_empty(), "none set: none");
+    assert_eq!(prefs::set_dotted(&v, "models.news_seen", Value::Null).unwrap()["models"], json!({}), "null takes it out");
+    assert!(prefs::set_dotted(&o, "models", json!({})).is_err(), "never whole");
+    assert!(prefs::set_dotted(&o, "models.main", json!("x/y")).is_err(), "only news_seen");
+    assert!(prefs::set_dotted(&o, "models.news_seen", json!("anthropic/claude-opus-5-6")).is_err(), "a list");
+    assert!(prefs::set_dotted(&o, "models.news_seen", json!(["opus"])).is_err(), "of provider/id");
+    assert!(prefs::set_dotted(&o, "models.news_seen", json!(vec!["a/b"; 201])).is_err(), "at most 200");
+}
+
+#[test]
 fn the_window_sets_known_prefs_by_dotted_key_and_keeps_their_types() {
     use serde_json::json;
     let o = json!({"theme": "dark", "quiet": {"call": true, "batch_min": 20}});

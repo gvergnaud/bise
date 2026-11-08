@@ -1328,6 +1328,14 @@ export const settings = {
   part_thinks: "thinks",
   /** voice mode's sub-rows: the voice */
   part_speaks: "speaks",
+  /** the news line (bise_catalog::news): a newer model is out */
+  news_out: (a: { name: string | number }): string => String(a.name) + " is out.",
+  /** the news line's act: one role */
+  news_use_one: (a: { role: string | number }): string => "Use it for " + String(a.role),
+  /** the news line's act: several roles on the model it replaces */
+  news_use_more: (a: { n: string | number; old: string | number }): string => "Use it for the " + String(a.n) + " roles on " + String(a.old),
+  /** the news line: put it off (it comes back for a later model) */
+  news_not_now: "Not now",
   /** a role with no model yet: its picker's words */
   part_pick: "Pick a model",
   /** the model that listens: its id, and where it changes today */

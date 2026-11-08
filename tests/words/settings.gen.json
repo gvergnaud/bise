@@ -2247,6 +2247,33 @@
     "one": null,
     "text": "Settings"
   },
+  "settings.news_not_now": {
+    "args": [],
+    "one": null,
+    "text": "Not now"
+  },
+  "settings.news_out": {
+    "args": [
+      "name"
+    ],
+    "one": null,
+    "text": "{name} is out."
+  },
+  "settings.news_use_more": {
+    "args": [
+      "n",
+      "old"
+    ],
+    "one": null,
+    "text": "Use it for the {n} roles on {old}"
+  },
+  "settings.news_use_one": {
+    "args": [
+      "role"
+    ],
+    "one": null,
+    "text": "Use it for {role}"
+  },
   "settings.no_answer": {
     "args": [
       "s"

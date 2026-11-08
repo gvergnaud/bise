@@ -5,7 +5,7 @@
 // accounts (added or replaced, with the steps to get one; once it works, the roles it fixes test
 // again), a permission the helper, a test setup_test. Owner: setup-page.
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import type { Account, AppCmd, FeatureId, SetupFix, SetupGauge } from '@/proto';
+import type { Account, AppCmd, FeatureId, JsonValue, SetupFix, SetupGauge } from '@/proto';
 import { Press } from '@/ds';
 import { settings } from '@/proto/words.gen';
 import { Accounts, keyAccountOf, type KeyAsk } from './accounts';
@@ -15,6 +15,7 @@ import { FEATURE_WORDS, providerName, type GaugePorts } from './gauge';
 import { keyField, type ProviderCheck } from './keycheck';
 import type { SettingsData, SettingsPorts } from './Settings';
 import { KeychainRow } from './keychain';
+import { getPref, type Prefs } from './prefs';
 
 /** The row the route lands on: /voice at Dictation and fn; /models at the top, the list. Pure. */
 export function focusOf(page: string | undefined): FeatureId | null {
@@ -58,7 +59,27 @@ function Fold({ title, open, onToggle, testId, children }: { title: string; open
   );
 }
 
-export function SetupPage({ data, ports, page }: { data: SettingsData; ports: SettingsPorts; page?: string | undefined }) {
+/** The news models he put off ('Not now'): prefs' models.news_seen, bise_home::prefs's one list. */
+const NEWS_SEEN = 'models.news_seen';
+
+/** The news_seen list from his prefs: its ids, none when unset. Pure. */
+export function newsSeen(prefs: Prefs | null): string[] {
+  const v = getPref(prefs, NEWS_SEEN);
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+}
+
+export function SetupPage({
+  data,
+  ports,
+  page,
+  setPref,
+}: {
+  data: SettingsData;
+  ports: SettingsPorts;
+  page?: string | undefined;
+  /** a pref he sets here (Settings' own: shown at once, sent as prefs_set) */
+  setPref: (key: string, value: JsonValue) => void;
+}) {
   const at = focusOf(page);
   const [accountsOpen, setAccountsOpen] = useState(false);
   const accountsRef = useRef<HTMLDivElement>(null);
@@ -140,7 +161,17 @@ export function SetupPage({ data, ports, page }: { data: SettingsData; ports: Se
   };
   return (
     <>
-      {g !== null && <RoleList g={g} roles={data.roles ?? []} models={models} error={data.roleError ?? null} ports={{ ...gp, set }} at={at} />}
+      {g !== null && (
+        <RoleList
+          g={g}
+          roles={data.roles ?? []}
+          models={models}
+          error={data.roleError ?? null}
+          ports={{ ...gp, set, putOff: (seen) => { setPref(NEWS_SEEN, seen); } }}
+          seen={newsSeen(data.prefs)}
+          at={at}
+        />
+      )}
       <div ref={accountsRef}>
         <Fold title={settings.fold_accounts} open={accountsOpen || held !== null} onToggle={() => { setAccountsOpen(!accountsOpen); }} testId="settings.fold.accounts">
           <Accounts

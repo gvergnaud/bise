@@ -260,7 +260,7 @@ export function PageBody({ page, route, prefs, setPref, data, ports }: PageProps
       );
     case 'setup':
       // a new route (/models, /voice) opens the page again at its part
-      return <SetupPage key={route ?? 'setup'} data={data} ports={ports} page={route} />;
+      return <SetupPage key={route ?? 'setup'} data={data} ports={ports} page={route} setPref={setPref} />;
     case 'computer':
       return <Computer cu={data.computerUse} send={ports.send} />;
     case 'keys':

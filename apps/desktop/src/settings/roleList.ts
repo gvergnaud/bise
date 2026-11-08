@@ -4,7 +4,7 @@
 // button when the row owns that role, one status; Voice mode's models as hears / thinks / speaks.
 // The core decides what works, what failed and what fixes it (bise_catalog::features); this file
 // only words it. Pure. Owner: setup-page.
-import type { FeatureId, FeaturePart, FeatureRow, Model, RoleId, RoleRow, SetupFix, SetupGauge } from '@/proto';
+import type { AppCmd, FeatureId, FeaturePart, FeatureRow, Model, RoleId, RoleRow, SetupFix, SetupGauge } from '@/proto';
 import type { PickerRow, PickerSide } from '@/ds';
 import { settings } from '@/proto/words.gen';
 import { FEATURE_WORDS, PERM_NAME, keyFailed, providerName, secsOf, tookMs, whyWords, type Tone } from './gauge';
@@ -167,6 +167,33 @@ export function fixLine(g: SetupGauge): { text: string; fix: SetupFix } | null {
       ? settings.fixline_key({ provider: providerName(g, f.provider), what })
       : settings.fixline_stopped({ what, why: first !== undefined ? whyWords(first, g) : '' });
   return { text, fix: f };
+}
+
+/** A role in the news line's act ('Use it for Titles'). */
+const ROLE_SHORT: Partial<Record<RoleId, string>> = { main: settings.role_main_name, agents: settings.short_agents, small: settings.short_small };
+
+/** The news line: a newer model the catalog declares for some roles ('opus 5.6 is out.' + 'Use
+ * it for the 3 roles on opus 5.5'), its role_set_many, and the news_seen list 'Not now' writes.
+ * None when there is no news, or he put this model off (`seen`: prefs' models.news_seen, the
+ * window's copy until the core's next gauge). Pure. */
+export function newsLine(
+  g: SetupGauge,
+  seen: readonly string[],
+): { text: string; act: string; model: string; use: AppCmd; notNow: string[] } | null {
+  const n = g.news;
+  if (n == null || n.roles.length === 0 || seen.includes(n.model)) return null;
+  const [one] = n.roles;
+  const act =
+    n.roles.length === 1 && one !== undefined
+      ? settings.news_use_one({ role: ROLE_SHORT[one as RoleId] ?? one })
+      : settings.news_use_more({ n: n.roles.length, old: n.replaces_name });
+  return {
+    text: settings.news_out({ name: n.name }),
+    act,
+    model: n.model,
+    use: { cmd: 'role_set_many', roles: [...n.roles], model: n.model },
+    notNow: [...seen, n.model],
+  };
 }
 
 /** The act a row with no model shows in its model's place ('Turn on', 'Add a Mistral key'); none

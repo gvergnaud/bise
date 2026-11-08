@@ -124,6 +124,14 @@ crate::words! { settings:
     part_thinks = "thinks";
     /// voice mode's sub-rows: the voice
     part_speaks = "speaks";
+    /// the news line (bise_catalog::news): a newer model is out
+    news_out(name) = "{name} is out.";
+    /// the news line's act: one role
+    news_use_one(role) = "Use it for {role}";
+    /// the news line's act: several roles on the model it replaces
+    news_use_more(n, old) = "Use it for the {n} roles on {old}";
+    /// the news line: put it off (it comes back for a later model)
+    news_not_now = "Not now";
     /// a role with no model yet: its picker's words
     part_pick = "Pick a model";
     /// the model that listens: its id, and where it changes today

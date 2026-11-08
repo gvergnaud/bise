@@ -13,7 +13,7 @@ import { cx } from '@/ds/cx';
 import { settings } from '@/proto/words.gen';
 import { Trouble, TryIt, fixButton, type GaugePorts } from './gauge';
 import { modelRow } from './hold';
-import { ABOUT, FALLBACK, ROW_NAME, actInPlace, fixLine, hasTrouble, listed, modelView, partName, partStatus, partsInOrder, pickSides, rowStatus, type Status } from './roleList';
+import { ABOUT, FALLBACK, ROW_NAME, actInPlace, fixLine, hasTrouble, listed, modelView, newsLine, partName, partStatus, partsInOrder, pickSides, rowStatus, type Status } from './roleList';
 
 export interface RoleListProps {
   g: SetupGauge;
@@ -24,7 +24,11 @@ export interface RoleListProps {
   ports: GaugePorts & {
     /** set a role: the command, and the model it sets (a model whose provider isn't set up waits: hold.ts) */
     set: (cmd: AppCmd, model: string | null) => void;
+    /** 'Not now' on the news line: prefs' models.news_seen, this list */
+    putOff: (seen: string[]) => void;
   };
+  /** the news models he put off (prefs' models.news_seen) */
+  seen: readonly string[];
   /** the row the route lands on (/voice: dictation) */
   at?: FeatureId | null;
 }
@@ -179,6 +183,7 @@ export function RoleList(props: RoleListProps) {
   const { g, ports, error = null } = props;
   const [opened, setOpened] = useState<ReadonlySet<FeatureId>>(new Set());
   const line = fixLine(g);
+  const news = newsLine(g, props.seen);
   const testing = (g.testing?.length ?? 0) > 0;
   return (
     <section className="st-list" data-testid="settings.roles">
@@ -190,6 +195,17 @@ export function RoleList(props: RoleListProps) {
           </Act>
         </span>
       </div>
+      {news !== null && (
+        <div className="st-news" data-testid="settings.news">
+          <span className="w">{news.text}</span>
+          <Act onClick={() => { ports.set(news.use, news.model); }} testId="settings.news.use">
+            {news.act}
+          </Act>
+          <Act onClick={() => { ports.putOff(news.notNow); }} testId="settings.news.not-now">
+            {settings.news_not_now}
+          </Act>
+        </div>
+      )}
       {line !== null && (
         <div className="st-fixline" data-testid="settings.fixline">
           <span className="w">
