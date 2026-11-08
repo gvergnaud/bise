@@ -127,7 +127,7 @@ function Row({ r, props, open, toggle }: { r: FeatureRow; props: RoleListProps; 
         </span>
         <span className="st-cell">
           {act !== null ? (
-            <Button kind="ghost" size="sm" onClick={() => { ports.fix(act, r.id); }} testId={`settings.feature.${r.id}.fix`}>
+            <Button size="sm" onClick={() => { ports.fix(act, r.id); }} testId={`settings.feature.${r.id}.fix`}>
               {fixButton(act, g)}
             </Button>
           ) : (
@@ -150,7 +150,14 @@ function Row({ r, props, open, toggle }: { r: FeatureRow; props: RoleListProps; 
           <div key={p.role} className="st-row st-part" data-testid={`settings.feature.${r.id}.${p.role}`}>
             <span className="st-name">{partName(p)}</span>
             <span className="st-cell">
-              <ModelCell r={r} p={p} props={props} testId={modelTestId(r, p)} />
+              {/* a part with no model: the row's act in its model's place, like a row's (ui-review m_57328) */}
+              {(p.name ?? '') === '' && r.fix != null && r.fix.t !== 'pick_model' ? (
+                <Button size="sm" onClick={() => { if (r.fix != null) ports.fix(r.fix, r.id); }} testId={`settings.feature.${r.id}.${p.role}.fix`}>
+                  {fixButton(r.fix, g)}
+                </Button>
+              ) : (
+                <ModelCell r={r} p={p} props={props} testId={modelTestId(r, p)} />
+              )}
             </span>
             <span className="st-status">
               <StatusMark s={partStatus(p, g)} testId={`settings.feature.${r.id}.${p.role}.mark`} {...(p.state === 'failed' && link !== undefined ? { toggle: link } : {})} />

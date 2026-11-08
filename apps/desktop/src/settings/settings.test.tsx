@@ -468,8 +468,14 @@ describe('settings · Setup: which model does what (page models-settings, pick A
       ...allOn(),
       rows: allOn().rows.map((r) => (r.id === 'dictation' ? { ...r, state: 'off' as const, fix: { t: 'add_key' as const, provider: 'mistral' }, parts: [{ role: 'voice' as const, model: '', source: 'default' as const, state: 'off' as const }] } : r)),
     };
-    view('setup', p, { gauge: noVoice });
+    const noVoiceNoSpeech: SetupGauge = {
+      ...noVoice,
+      rows: noVoice.rows.map((r) => (r.id === 'voice_mode' ? { ...r, state: 'off' as const, fix: { t: 'add_key' as const, provider: 'mistral' }, parts: r.parts.map((x) => (x.role === 'tts' ? { role: 'tts' as const, model: '', source: 'default' as const, state: 'off' as const } : x)) } : r)),
+    };
+    view('setup', p, { gauge: noVoiceNoSpeech });
     expect(screen.getByTestId('settings.feature.dictation.mark').textContent).toBe(settings.mark_off);
+    // a sub-row with no model: the same act in its model's place
+    expect(screen.getByTestId('settings.feature.voice_mode.tts.fix').textContent).toBe(settings.fix_add_key({ a: 'a', provider: 'Mistral' }));
     fireEvent.click(screen.getByTestId('settings.feature.dictation.fix'));
     expect(screen.getByTestId('settings.key.field')).toBeTruthy();
   });
