@@ -103,48 +103,68 @@ pub fn is_git_dir(dir: &Path) -> bool {
     matches!(crate::tools_env::git(), crate::tools_env::Git::Works { .. }) && in_work_tree(dir)
 }
 
-/// A git dir as git's discovery takes it: `HEAD`, and `objects` and
-/// `refs` in it or in the dir its `commondir` names (a linked worktree's
-/// admin dir under `<repo>/.git/worktrees/`).
-fn is_git_admin(d: &Path) -> bool {
-    if !d.join("HEAD").is_file() {
-        return false;
-    }
-    let common = std::fs::read_to_string(d.join("commondir")).map(|t| d.join(t.trim())).unwrap_or_else(|_| d.to_path_buf());
-    common.join("objects").is_dir() && common.join("refs").is_dir()
+/// The common dir of a git admin dir `d`: the one its `commondir` names (a
+/// linked worktree's admin dir under `<repo>/.git/worktrees/`), else `d`.
+fn common_of(d: &Path) -> PathBuf {
+    std::fs::read_to_string(d.join("commondir")).map(|t| d.join(t.trim())).unwrap_or_else(|_| d.to_path_buf())
 }
 
-/// `git rev-parse --is-inside-work-tree`'s answer by stat calls, walking up
-/// from `dir` as git's discovery does: a `.git` dir that is a git dir is a
-/// work tree (an empty or broken one is skipped); a `.git` file
-/// (`gitdir: <dir>`, a linked worktree or a submodule) is one when the dir
-/// it names is a git dir, and ends the walk either way; a folder that is
-/// itself a git dir (a bare repo, inside `.git`) is not; the walk stops at
-/// `/` and at a filesystem's edge (git's default). Not followed, as the hub
-/// never sets them: GIT_DIR, GIT_WORK_TREE, GIT_CEILING_DIRECTORIES,
-/// core.worktree, core.bare, safe.directory.
-pub fn in_work_tree(dir: &Path) -> bool {
+/// A git dir as git's discovery takes it: `HEAD`, and `objects` and
+/// `refs` in it or in its common dir.
+fn is_git_admin(d: &Path) -> bool {
+    let common = common_of(d);
+    d.join("HEAD").is_file() && common.join("objects").is_dir() && common.join("refs").is_dir()
+}
+
+/// The git dir of the work tree `dir` is in, by stat calls, walking up from
+/// `dir` as git's discovery does: a `.git` dir that is a git dir is it (an
+/// empty or broken one is skipped); a `.git` file (`gitdir: <dir>`, a
+/// linked worktree or a submodule) names it when that dir is a git dir, and
+/// ends the walk either way; a folder that is itself a git dir (a bare
+/// repo, inside `.git`) is in no work tree; the walk stops at `/` and at a
+/// filesystem's edge (git's default). Not followed, as the hub never sets
+/// them: GIT_DIR, GIT_WORK_TREE, GIT_CEILING_DIRECTORIES, core.worktree,
+/// core.bare, safe.directory.
+fn git_admin_of(dir: &Path) -> Option<PathBuf> {
     use std::os::unix::fs::MetadataExt;
-    let Ok(dir) = std::path::absolute(dir) else { return false };
-    let Ok(dev) = std::fs::metadata(&dir).map(|m| m.dev()) else { return false };
+    let dir = std::path::absolute(dir).ok()?;
+    let dev = std::fs::metadata(&dir).ok()?.dev();
     let mut at = dir.as_path();
     loop {
         let dotgit = at.join(".git");
         if dotgit.is_dir() && is_git_admin(&dotgit) {
-            return true;
+            return Some(dotgit);
         }
         if dotgit.is_file() {
             let named = std::fs::read_to_string(&dotgit).ok().and_then(|t| t.trim().strip_prefix("gitdir:").map(|d| at.join(d.trim())));
-            return named.is_some_and(|d| is_git_admin(&d));
+            return named.filter(|d| is_git_admin(d));
         }
         if is_git_admin(at) {
-            return false;
+            return None;
         }
-        match at.parent() {
-            Some(up) if std::fs::metadata(up).is_ok_and(|m| m.dev() == dev) => at = up,
-            _ => return false,
+        let up = at.parent()?;
+        if std::fs::metadata(up).ok()?.dev() != dev {
+            return None;
         }
+        at = up;
     }
+}
+
+/// `git rev-parse --is-inside-work-tree`'s answer, by stat calls
+/// ([`git_admin_of`]).
+pub fn in_work_tree(dir: &Path) -> bool {
+    git_admin_of(dir).is_some()
+}
+
+/// The repo `dir` is in: the folder of its git common dir (`<repo>` for
+/// `<repo>/.git`, from a linked worktree too), the common dir itself when
+/// it is not a `.git` (a submodule's `.git/modules/<name>`), or None
+/// outside a work tree. `git rev-parse --git-common-dir`'s answer by stat
+/// calls, never a process (it runs on the hub's loop: gate.rs).
+pub fn repo_root(dir: &Path) -> Option<PathBuf> {
+    let common = common_of(&git_admin_of(dir)?);
+    let common = std::fs::canonicalize(&common).unwrap_or(common);
+    Some(if common.ends_with(".git") { common.parent().map(Path::to_path_buf).unwrap_or(common) } else { common })
 }
 
 /// The admin dir a linked worktree's `.git` file names

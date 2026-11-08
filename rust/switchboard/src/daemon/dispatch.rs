@@ -292,6 +292,7 @@ impl Shell {
             Msg::WakeSeen(s) => self.wake_seen(s),
             Msg::Placed { name, ws, err } => self.step(Input::Placed { name, ws, err }),
             Msg::Unplaced { name, snapshot, err } => self.step(Input::Unplaced { name, snapshot, err }),
+            Msg::CommitStyle(style) => self.commit_style = style,
             Msg::XHub { token, stream, v } => self.xhub_op(token, stream, v),
             Msg::Version { mut stream, v, asker } => {
                 let from = v.get("from").and_then(|x| x.as_str()).unwrap_or("").to_string();
@@ -342,6 +343,8 @@ impl Shell {
                     if landed {
                         self.usage_count(bise_usage::CountKey::Land);
                         self.merged_all();
+                        // main moved: its commit style again, off the loop
+                        self.ask_commit_style();
                     }
                 }
                 self.state_now();

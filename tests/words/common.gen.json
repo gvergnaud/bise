@@ -12,6 +12,16 @@
     "one": null,
     "text": "all quiet"
   },
+  "common.core_refused": {
+    "args": [],
+    "one": null,
+    "text": "bise's core could not run it; try again"
+  },
+  "common.core_stopped": {
+    "args": [],
+    "one": null,
+    "text": "bise's core stopped on it; try again"
+  },
   "common.count_waiting": {
     "args": [
       "n"

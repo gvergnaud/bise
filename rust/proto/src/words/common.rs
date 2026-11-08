@@ -50,6 +50,13 @@ crate::words! { common:
     /// the way to send it again: an item's answer (inbox), his message in
     /// the thread (thread)
     try_again = "try again";
+    /// an input the hub's core died on twice, so dropped (c1-core-deadline):
+    /// the refusal its sender shows (composer: the failed send, inbox: the
+    /// failed answer); main's feed line and hub.log say why
+    core_stopped = "bise's core stopped on it; try again";
+    /// an input the hub's core answered with an error, so dropped
+    /// (c1-core-deadline): the refusal its sender shows (composer, inbox)
+    core_refused = "bise's core could not run it; try again";
     /// a link that opens an agent: an alarm's detail in the right bar
     /// (panel), a pause line's agent (thread)
     open_agent(agent) = "open {agent}";

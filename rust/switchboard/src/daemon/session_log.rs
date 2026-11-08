@@ -213,9 +213,16 @@ impl Shell {
     /// killed hub) go into its session log first, so the record and the
     /// next resume have them. Returns how many.
     pub(super) fn catch_up_wire(&mut self, dir: &str, adir: &Path) -> usize {
-        let Ok(bytes) = std::fs::read(adir.join("wire.log")) else { return 0 };
+        use std::io::{Read, Seek, SeekFrom};
         let done: u64 = std::fs::read_to_string(adir.join(EV_OFFSET)).ok().and_then(|s| s.trim().parse().ok()).unwrap_or(0);
-        let evs = pending_evs(&bytes, done);
+        // the bytes after the last recorded ev only, never the whole log on
+        // the loop (c4-loop-never-waits)
+        let Ok(mut f) = std::fs::File::open(adir.join("wire.log")) else { return 0 };
+        let mut after = Vec::new();
+        if f.seek(SeekFrom::Start(done)).and_then(|_| f.read_to_end(&mut after)).is_err() {
+            return 0;
+        }
+        let evs = pending_evs(&after, done);
         if evs.is_empty() {
             return 0;
         }
@@ -256,14 +263,15 @@ impl Shell {
 }
 
 /// The `ev:` lines of a wire log after `done` (the offset of the last one
-/// recorded), each with the offset just after it (`pump_wire`'s). A last
-/// line without its newline is not whole yet: left out.
-fn pending_evs(wire: &[u8], done: u64) -> Vec<(String, u64)> {
+/// recorded), each with the offset just after it (`pump_wire`'s): `after`
+/// is the log's bytes from `done` on (catch_up_wire reads only those). A
+/// last line without its newline is not whole yet: left out.
+fn pending_evs(after: &[u8], done: u64) -> Vec<(String, u64)> {
     let mut out = Vec::new();
-    let mut offset = 0u64;
-    for raw in wire.split_inclusive(|b| *b == b'\n') {
+    let mut offset = done;
+    for raw in after.split_inclusive(|b| *b == b'\n') {
         offset += raw.len() as u64;
-        if !raw.ends_with(b"\n") || offset <= done {
+        if !raw.ends_with(b"\n") {
             continue;
         }
         let line = String::from_utf8_lossy(raw).trim_end_matches(['\n', '\r']).to_string();
@@ -286,9 +294,9 @@ mod tests {
         let wire = b"  ev: {\"a\":1}\nhello\n  ev: {\"a\":2}\n  ev: {\"a\":3}\n  ev: {\"a\"";
         let first = "  ev: {\"a\":1}\n".len() as u64;
         assert_eq!(pending_evs(wire, 0).len(), 3);
-        let after = pending_evs(wire, first);
+        let after = pending_evs(&wire[first as usize..], first);
         assert_eq!(after.iter().map(|(l, _)| l.as_str()).collect::<Vec<_>>(), ["  ev: {\"a\":2}", "  ev: {\"a\":3}"]);
         assert_eq!(after[0].1, first + "hello\n".len() as u64 + "  ev: {\"a\":2}\n".len() as u64);
-        assert!(pending_evs(wire, wire.len() as u64).is_empty());
+        assert!(pending_evs(&wire[wire.len()..], wire.len() as u64).is_empty());
     }
 }

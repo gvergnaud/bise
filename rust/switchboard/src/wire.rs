@@ -119,9 +119,61 @@ pub fn patch_files(args: &str) -> Vec<String> {
     out
 }
 
+/// The first answer of `f` on the lines of `path` before byte `upto`,
+/// newest first: the file read backward in blocks, so a REPL's whole
+/// wire.log (MBs) is not read on the hub's loop to find its last state
+/// line (c4-loop-never-waits). A line cut by `upto` counts as a line.
+pub fn find_back<T>(path: &std::path::Path, upto: u64, mut f: impl FnMut(&str) -> Option<T>) -> Option<T> {
+    use std::io::{Read, Seek, SeekFrom};
+    const BLOCK: u64 = 64 * 1024;
+    let mut file = std::fs::File::open(path).ok()?;
+    let mut end = upto.min(file.metadata().ok()?.len());
+    // the bytes of a line not seen whole yet (its head is in an earlier block)
+    let mut tail: Vec<u8> = Vec::new();
+    while end > 0 {
+        let start = end.saturating_sub(BLOCK);
+        let mut block = vec![0u8; (end - start) as usize];
+        file.seek(SeekFrom::Start(start)).ok()?;
+        file.read_exact(&mut block).ok()?;
+        block.extend_from_slice(&tail);
+        // every line after the block's first newline is whole; before it, a
+        // line goes on in the earlier block (unless the file starts here)
+        let first = if start == 0 { 0 } else { block.iter().position(|b| *b == b'\n').map_or(block.len(), |i| i + 1) };
+        for line in block[first..].split(|b| *b == b'\n').rev().filter(|l| !l.is_empty()) {
+            if let Some(t) = f(&String::from_utf8_lossy(line)) {
+                return Some(t);
+            }
+        }
+        tail = block[..first].to_vec();
+        end = start;
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // the backward read sees each line once, newest first, across blocks
+    // and up to `upto` only
+    #[test]
+    fn find_back_reads_lines_newest_first_across_blocks() {
+        let p = std::env::temp_dir().join(format!("sb-find-back-{}-{}", std::process::id(), crate::util::now_ms()));
+        let lines: Vec<String> = (0..20_000).map(|i| format!("line {i:05} {}", "x".repeat(i % 37))).collect();
+        std::fs::write(&p, lines.join("\n") + "\n").unwrap();
+        let mut seen = Vec::new();
+        let none: Option<()> = find_back(&p, u64::MAX, |l| {
+            seen.push(l.to_string());
+            None
+        });
+        assert!(none.is_none());
+        seen.reverse();
+        assert_eq!(seen, lines, "every line once, in the file's order once reversed");
+        let upto = lines[..100].iter().map(|l| l.len() as u64 + 1).sum::<u64>();
+        assert_eq!(find_back(&p, upto, |l| Some(l.to_string())).as_deref(), Some(lines[99].as_str()));
+        assert_eq!(find_back(&p, u64::MAX, |l| l.starts_with("line 00007 ").then(|| l.to_string())).as_deref(), Some(lines[7].as_str()));
+        let _ = std::fs::remove_file(&p);
+    }
 
     #[test]
     fn edit_file_reads_the_path_of_a_whole_or_cut_line() {

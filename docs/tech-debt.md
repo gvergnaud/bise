@@ -203,6 +203,14 @@ Ranked by value: risk removed per hour spent.
   the row's words to `"archived"`. Fix: a typed `NoCopy` enum whose serde
   names are today's stored strings, with `Other(String)` for the failed
   copy's text (stored metas still read). cheap (S), no UX change.
+- A fake hub's state vanished mid-run, deleter unknown (c4, 2026-11-08):
+  scripts/hub_loop_bench.py's /tmp/sb-e2e-*/st lost hub.log, the journal
+  and agent.sock while its hub ran (only agent dirs made afterwards left,
+  then `sb: hub absent`), at load 33, 2 of 4 runs; not the drop code
+  (shared tasks), not disk_reclaim, e2e.py removes only its own mkdtemp.
+  Next time (tip gate or a bench): `sudo fs_usage -w -f filesys | grep
+  sb-e2e` next to it names the process, then it becomes a task (architect
+  m_56280).
 
 ## Progress
 

@@ -297,6 +297,7 @@ impl Msg {
             Msg::WakeSeen(s) => format!("wake seen {}", s.id),
             Msg::Placed { name, .. } => format!("placed {name}"),
             Msg::Unplaced { name, .. } => format!("unplaced {name}"),
+            Msg::CommitStyle(_) => "commit style".to_string(),
             _ => "a hub message".into(),
         }
     }

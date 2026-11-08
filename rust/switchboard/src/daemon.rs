@@ -234,6 +234,9 @@ enum Msg {
     Placed { name: String, ws: Value, err: String },
     /// A worktree removed off the loop (daemon/place_work.rs, issue 32 3b).
     Unplaced { name: String, snapshot: Option<String>, err: String },
+    /// The repo's commit style, read off the loop (`git log`, at the start
+    /// and after each land: Shell::ask_commit_style).
+    CommitStyle(Option<String>),
     /// A role-line call is over (BISE-126).
     RoleLine {
         dir: String,
@@ -452,6 +455,10 @@ struct Shell {
     /// The PR poller (pr-design §7, `forge::poll`), on its own thread;
     /// its answers come back as `Input::Prs`.
     prs: Option<crate::forge::poll::Poller>,
+    /// The repo's commit style for the roles (devflow::commit_style), read
+    /// off the loop at the start and after each land (`Msg::CommitStyle`);
+    /// None until then, or without git.
+    commit_style: Option<String>,
     /// computer use's events.jsonl: each stop, one line in main's feed
     cu: crate::computer_use::Watch,
     /// the data volume's free GB last sent to sb-core (daemon/disk_watch.rs)
@@ -525,6 +532,21 @@ fn log_line(paths: &Paths, s: &str) {
     {
         let _ = writeln!(f, "{} {}", now_ms(), s);
     }
+}
+
+/// The commit style of the repo in `ws` (devflow::commit_style, its last
+/// 50 subjects): a `git log`, so never on the loop (Shell::ask_commit_style).
+fn commit_style_of(ws: &Path) -> Option<String> {
+    let out = crate::tools_env::git_command()
+        .ok()?
+        .args(["log", "-50", "--format=%s"])
+        .current_dir(ws)
+        .stderr(std::process::Stdio::null())
+        .output()
+        .ok()
+        .filter(|o| o.status.success())?;
+    let text = String::from_utf8_lossy(&out.stdout).into_owned();
+    devflow::commit_style(&text.lines().collect::<Vec<_>>())
 }
 
 /// Write a file an agent depends on (its role, its wire log and offset):
@@ -1137,17 +1159,14 @@ impl Shell {
     }
 
     /// The commit message style of the repo, from its last 50 subjects.
-    fn commit_style(&self) -> Option<String> {
-        let out = crate::tools_env::git_command()
-            .ok()?
-            .args(["log", "-50", "--format=%s"])
-            .current_dir(&self.opts.paths.workspace)
-            .stderr(std::process::Stdio::null())
-            .output()
-            .ok()
-            .filter(|o| o.status.success())?;
-        let text = String::from_utf8_lossy(&out.stdout).into_owned();
-        devflow::commit_style(&text.lines().collect::<Vec<_>>())
+    /// The repo's commit style, read again off the loop (its last 50
+    /// subjects, a `git log`); it comes back as `Msg::CommitStyle`. At the
+    /// start and after a land that moved main: only lands change it.
+    fn ask_commit_style(&self) {
+        let (ws, tx) = (self.opts.paths.workspace.clone(), self.tx.clone());
+        std::thread::spawn(move || {
+            let _ = tx.send(Msg::CommitStyle(commit_style_of(&ws)));
+        });
     }
 
     /// `/flow`, `sb flow` (dev-flow §2, §7): show the flow and why, or
@@ -1193,7 +1212,7 @@ impl Shell {
         // stat calls, never a git on the loop per spawn (boot-speed)
         let git = crate::worktree::is_git_dir(&self.opts.paths.workspace);
         let flow = self.flow_now().filter(|_| git);
-        let style = self.commit_style();
+        let style = self.commit_style.clone();
         let ws = &self.opts.paths.workspace;
         let desktop = prompts::desktop_on(crate::paths::is_home(ws), crate::paths::is_registered(ws));
         if a.is_main && crate::paths::is_home(ws) {
@@ -1781,6 +1800,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
         lands: crate::land::Queue::default(),
         features: features::Features::load(&paths.state, &|n| paths.feature_diff(n)),
         prs: None,
+        commit_style: None,
         cu: crate::computer_use::Watch::new(&proc_hub),
         disk: disk_watch::DiskWatch::default(),
         pg: pages::PageState::load(&paths.state),
@@ -1879,6 +1899,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
     }
     // dev-flow §2: the repo's flow, detected off the loop (gh may be slow)
     sh.detect_flow();
+    sh.ask_commit_style();
     sh.booting = true;
     sh.step(Input::Boot);
     sh.booting = false;

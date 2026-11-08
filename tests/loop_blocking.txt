@@ -27,14 +27,9 @@ daemon/small_ask.rs::oneshot | 1 | off | Small::call, always on its own thread
 daemon/versions.rs::fetch | 1 | off | the release look's thread
 daemon/wake_look.rs::job | 1 | off | the wake look worker's thread
 daemon/xhub.rs::call | 1 | off | another hub's call, always on its own thread
+daemon.rs::commit_style_of | 1 | off | ask_commit_style's thread only (at the start, after a land)
 
 # ---- loop: the debt
-daemon.rs::commit_style | 1 | loop | git log on each land's message: land 5 (commit_style, wire.log read from the end)
-daemon/gate.rs::gate_restore | 1 | loop | reads a whole wire.log: land 5
-daemon/gate.rs::repo_of | 1 | loop | git rev-parse once per folder (cached): land 5
-daemon/repl.rs::busy_at | 1 | loop | reads a whole wire.log: land 5
-daemon/repl.rs::is_repl | 1 | loop | ps per adopted REPL, mostly at the start: land 5
-daemon/session_log.rs::catch_up_wire | 1 | loop | reads a whole wire.log before a fresh REPL: land 5
 daemon/proto/completion.rs::render | 1 | loop | a REPL run to render a request in another model: his own rare ask, not in c4
 daemon/versions.rs::recent_commits | 1 | loop | git log for /version: his own rare ask, not in c4
 daemon/versions.rs::version_op | 2 | loop | /version switch: his own rare ask, not in c4

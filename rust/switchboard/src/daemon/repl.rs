@@ -24,12 +24,11 @@ pub(super) struct ReplInfo {
 pub(super) use crate::procs::terminate as kill_pid;
 use crate::procs::alive as pid_alive;
 
+/// `pid` runs a REPL binary (`repl-live`, `repl-scripted`): its path says
+/// so, as its `ps` command line did; read from the kernel
+/// (bise_peer::table::exe), no `ps` process on the hub's loop.
 fn is_repl(pid: u32) -> bool {
-    Command::new("ps")
-        .args(["-p", &pid.to_string(), "-o", "command="])
-        .output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).contains("repl-"))
-        .unwrap_or(false)
+    bise_peer::table::exe(pid).is_some_and(|p| p.to_string_lossy().contains("repl-"))
 }
 
 /// A REPL a previous hub left running, when it can be adopted: its
@@ -50,19 +49,17 @@ pub(super) fn adoptable(adir: &Path) -> Option<ReplInfo> {
 /// Was a turn running at `offset` of the wire log? (the last
 /// `turn_started` comes after the last `--- idle`)
 pub(super) fn busy_at(wire: &Path, offset: u64) -> bool {
-    let Ok(bytes) = std::fs::read(wire) else {
-        return false;
-    };
-    let text = String::from_utf8_lossy(&bytes[..(offset as usize).min(bytes.len())]).to_string();
-    let mut busy = false;
-    for l in text.lines() {
+    // its last turn line before `offset`, read from the end (wire::find_back)
+    crate::wire::find_back(wire, offset, |l| {
         if l == "--- idle" {
-            busy = false;
+            Some(false)
         } else if crate::wire::parse(l) == crate::wire::Wire::TurnStarted {
-            busy = true;
+            Some(true)
+        } else {
+            None
         }
-    }
-    busy
+    })
+    .unwrap_or(false)
 }
 
 /// How a REPL process ended, as a fact for sb-core (hub/stall.bend

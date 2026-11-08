@@ -161,26 +161,29 @@ pub(super) fn parse_gate(rest: &str) -> Option<(String, Value)> {
 /// keeps the card): the last `gate <n> …` line the old hub read (before
 /// `offset`) with no `gate-done <n>` in the whole log. Its rest (`<n>
 /// <json>`), or None. A gate line after `offset` is the new hub's: the
-/// pump reads it again.
-pub(super) fn open_gate(wire: &str, offset: usize) -> Option<String> {
-    let cut = wire.get(..offset.min(wire.len())).unwrap_or(wire);
-    let mut open: Option<&str> = None;
-    for l in cut.lines() {
-        if let Some(rest) = l.strip_prefix("gate ") {
-            open = Some(rest);
-        } else if let Some(rest) = l.strip_prefix("gate-done ") {
-            let n = rest.split_whitespace().next().unwrap_or("");
-            if open.and_then(|o| o.split_whitespace().next()) == Some(n) {
-                open = None;
-            }
+/// pump reads it again. Read from the end before `offset` (the last gate
+/// line, and the gate-done lines after it), then the bytes after `offset`
+/// only, never the whole log on the loop (c4-loop-never-waits).
+pub(super) fn open_gate(wire: &Path, offset: u64) -> Option<String> {
+    use std::io::{Read, Seek, SeekFrom};
+    let done_n = |l: &str| l.strip_prefix("gate-done ").and_then(|r| r.split_whitespace().next()).map(str::to_string);
+    let mut done_since: std::collections::BTreeSet<String> = Default::default();
+    let rest = crate::wire::find_back(wire, offset, |l| match l.strip_prefix("gate ") {
+        Some(rest) => Some(rest.to_string()),
+        None => {
+            done_since.extend(done_n(l));
+            None
         }
+    })?;
+    let n = rest.split_whitespace().next()?.to_string();
+    if done_since.contains(&n) {
+        return None;
     }
-    let rest = open?;
-    let n = rest.split_whitespace().next()?;
-    let done = wire.lines().any(|l| {
-        l.strip_prefix("gate-done ").and_then(|r| r.split_whitespace().next()) == Some(n)
-    });
-    (!done).then(|| rest.to_string())
+    let mut after = String::new();
+    let mut f = std::fs::File::open(wire).ok()?;
+    f.seek(SeekFrom::Start(offset)).ok()?;
+    f.read_to_string(&mut after).ok()?;
+    (!after.lines().any(|l| done_n(l).as_deref() == Some(n.as_str()))).then_some(rest)
 }
 
 /// Identical calls share a card: tool, arguments, repo, a rerun or not.
@@ -396,15 +399,10 @@ fn rule_of(tool: &str, repo: &Path, text: &str, outside: bool, from: &str) -> ru
     r
 }
 
-/// The git common root of `dir` (its repo), or `dir`.
+/// The git common root of `dir` (its repo), or `dir`: stat calls, no
+/// process on the loop (worktree::repo_root).
 fn repo_of(dir: &str) -> PathBuf {
-    crate::tools_env::git_command()
-        .ok()
-        .and_then(|mut c| c.args(["-C", dir, "rev-parse", "--path-format=absolute", "--git-common-dir"]).output().ok())
-        .filter(|o| o.status.success())
-        .map(|o| PathBuf::from(String::from_utf8_lossy(&o.stdout).trim()))
-        .map(|g| if g.ends_with(".git") { g.parent().map(Path::to_path_buf).unwrap_or(g) } else { g })
-        .unwrap_or_else(|| PathBuf::from(dir))
+    crate::worktree::repo_root(Path::new(dir)).unwrap_or_else(|| PathBuf::from(dir))
 }
 
 impl Shell {
@@ -973,9 +971,7 @@ impl Shell {
     /// card; with no card yet (the checker ran), it is judged again.
     pub(super) fn gate_restore(&mut self, dir: &str, name: &str) {
         let adir = self.opts.paths.agent_dir(dir);
-        let wire = std::fs::read(adir.join("wire.log")).unwrap_or_default();
-        let wire = String::from_utf8_lossy(&wire);
-        let offset: usize = std::fs::read_to_string(adir.join("wire.offset"))
+        let offset: u64 = std::fs::read_to_string(adir.join("wire.offset"))
             .ok()
             .and_then(|s| s.trim().parse().ok())
             .unwrap_or(0);
@@ -987,7 +983,7 @@ impl Shell {
                 .map(|c| c.id)
                 .max()
         };
-        let Some(rest) = open_gate(&wire, offset) else {
+        let Some(rest) = open_gate(&adir.join("wire.log"), offset) else {
             // no wait left: a card of the old wait has nothing to answer
             while let Some(id) = card(self) {
                 self.step(Input::ConfirmClose { card: id, res: "interrupted".into() });
@@ -1201,15 +1197,26 @@ mod tests {
         let g1 = r#"gate 1 {"tool":"bash","args":"ls","nonce":"a"}"#;
         let g2 = r#"gate 2 {"tool":"bash","args":"npm publish","nonce":"b"}"#;
         let wire = format!("obs: turn_started\n{g1}\ngate-done 1 allow\n{g2}\n");
-        let all = wire.len();
-        assert_eq!(open_gate(&wire, all).as_deref(), Some(&g2[5..]));
+        let dir = std::env::temp_dir().join(format!("sb-open-gate-{}-{}", std::process::id(), crate::util::now_ms()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = |name: &str, text: &str| {
+            let p = dir.join(name);
+            std::fs::write(&p, text).unwrap();
+            p
+        };
+        let all = wire.len() as u64;
+        let w = file("wire", &wire);
+        assert_eq!(open_gate(&w, all).as_deref(), Some(&g2[5..]));
         // the old hub never read it: the pump reads it again
-        assert_eq!(open_gate(&wire, all - g2.len() - 1), None);
+        assert_eq!(open_gate(&w, all - g2.len() as u64 - 1), None);
         // answered, but the old hub died before its gate-done
         let done = format!("{wire}gate-done 2 allow\n");
+        let done = file("done", &done);
         assert_eq!(open_gate(&done, all), None);
-        assert_eq!(open_gate(&done, done.len()), None);
-        assert_eq!(open_gate("", 0), None);
-        assert_eq!(open_gate(&wire, all + 50).as_deref(), Some(&g2[5..]));
+        assert_eq!(open_gate(&done, u64::MAX), None);
+        assert_eq!(open_gate(&file("empty", ""), 0), None);
+        assert_eq!(open_gate(&dir.join("missing"), 10), None);
+        assert_eq!(open_gate(&w, all + 50).as_deref(), Some(&g2[5..]));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

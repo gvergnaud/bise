@@ -196,6 +196,29 @@ pub fn argv(_: u32) -> Option<Vec<String>> {
     None
 }
 
+/// The executable `pid` runs, from the kernel (no `ps` process: the hub
+/// checks an adopted REPL with it on its loop); None when it is gone or
+/// unreadable.
+#[cfg(target_os = "macos")]
+pub fn exe(pid: u32) -> Option<std::path::PathBuf> {
+    let mut buf = vec![0u8; 4096];
+    // SAFETY: proc_pidpath writes at most `buf.len()` bytes into `buf` and
+    // returns how many (<= 0: no such process, or no right to read it)
+    let n = unsafe { libc::proc_pidpath(pid as libc::c_int, buf.as_mut_ptr() as *mut libc::c_void, buf.len() as u32) };
+    (n > 0).then(|| std::path::PathBuf::from(String::from_utf8_lossy(&buf[..n as usize]).into_owned()))
+}
+
+/// The executable `pid` runs (`/proc/<pid>/exe`).
+#[cfg(target_os = "linux")]
+pub fn exe(pid: u32) -> Option<std::path::PathBuf> {
+    std::fs::read_link(std::path::Path::new("/proc").join(pid.to_string()).join("exe")).ok()
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+pub fn exe(_: u32) -> Option<std::path::PathBuf> {
+    None
+}
+
 #[cfg(target_os = "linux")]
 pub fn one(pid: u32) -> Option<Proc> {
     linux_proc(pid, &std::path::Path::new("/proc").join(pid.to_string()))

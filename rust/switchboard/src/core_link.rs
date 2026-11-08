@@ -54,7 +54,7 @@ impl Hub {
             for l in std::mem::take(&mut self.revived) {
                 fx.push(feed(MAIN, Feed::warn(l)));
             }
-            let Some(out) = out else { return dropped(fx, &step.input, client, "bise's core stopped on it; try again") };
+            let Some(out) = out else { return dropped(fx, &step.input, client, bise_proto::words::common::core_stopped) };
             let s = match core_fx::answer(&out) {
                 Answer::Need(ANeed { need: q }) => {
                     // sb every's wakes: their words and the local clock
@@ -82,7 +82,7 @@ impl Hub {
             let w = format!("sb-core could not run an input ({}): it was dropped. hub.log has each one", what);
             fx.push(feed(MAIN, Feed::warn(w)));
         }
-        dropped(fx, input, client, "bise's core could not run it; try again");
+        dropped(fx, input, client, bise_proto::words::common::core_refused);
     }
 
     /// One call to sb-core. It died: restart it on the journal and run
