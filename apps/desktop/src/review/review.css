@@ -130,6 +130,25 @@
   color: var(--c-text-3);
   font-variant-numeric: tabular-nums;
 }
+/* one line at 800 too: the place, the count and the modes keep their words, the guide's slot gives
+   way (cut with '…', its whole words in its tip) */
+.rv-place,
+.rv-viewed,
+.rv-bar > .b-filters {
+  flex: none;
+  white-space: nowrap;
+}
+.rv-bar > .rv-slot {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rv-slot > .b-btn {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .rv-bar-gap {
   flex: 1 1 auto;
 }

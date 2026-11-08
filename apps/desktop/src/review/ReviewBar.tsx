@@ -75,9 +75,11 @@ export function GuideSlot({ ev, shown, onRun, onShow, testId }: GuideSlotProps) 
       );
     case 'needs_click':
       return (
-        <Button kind="ghost" size="sm" onClick={onRun} title={pages.review_guide_write_tip} testId={`${id}.write`}>
-          {pages.review_guide_write({ tokens: aboutTokens(ev.tokens ?? 0), model: ev.model ?? '' })}
-        </Button>
+        <span className="rv-slot">
+          <Button kind="ghost" size="sm" onClick={onRun} title={pages.review_guide_write_tip} testId={`${id}.write`}>
+            {pages.review_guide_write({ tokens: aboutTokens(ev.tokens ?? 0), model: ev.model ?? '' })}
+          </Button>
+        </span>
       );
     case 'ready':
       return shown ? null : (
