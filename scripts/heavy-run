@@ -10,6 +10,15 @@
 # job and the reclaim of idle cargo targets (scripts/disk_reclaim.py,
 # --install puts it next to this file), a time limit per job (rc 124),
 # threads per slot, and a start held while the load is over 2 x cores.
+# Its knobs and disk_reclaim.py's, script-only (not in bise_home's VARS):
+#   HEAVY_DISK_WAIT_GB (10) the floor a job waits for; HEAVY_DISK_STOP_GB (5)
+#   a running job stops; HEAVY_RECLAIM_UNDER_GB (20) a running job's reclaim
+#   starts; HEAVY_IDLE_TARGET_H (6) a target unused that long goes;
+#   HEAVY_MIN_IDLE_MIN (30) the least idle a target is trimmed or deleted at;
+#   HEAVY_TRIM_GB (4) a green-marked target's own bytes past which it is
+#   trimmed; HEAVY_TMP_CAP_GB (2) an agent tmp's size printed once; tests:
+#   HEAVY_RECLAIM_ROOTS, HEAVY_RECLAIM_KEEP, HEAVY_TMP_ROOTS,
+#   HEAVY_FREE_KB_FILE, HEAVY_DISK_VOLUME, HEAVY_RECLAIM, HEAVY_RECLAIM_GAP.
 #   slot 1 = ~/.bise/run/heavy.lock (the old single lock: old callers still count)
 #   slot 2 = ~/.bise/run/heavy2.lock
 #   slots 3-4 = ~/.bise/run/heavy3.lock, heavy4.lock (AC power only)
