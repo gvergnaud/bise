@@ -767,7 +767,31 @@ export type SetupGauge = { rows: Array<FeatureRow>, on: number, of: number, next
 /**
  * models under test now (Test everything, Test again)
  */
-testing?: Array<string>, };
+testing?: Array<string>, 
+/**
+ * a newer model for some roles (the news line, bise_catalog::news):
+ * none when nothing the catalog declares newer is ready and not put off
+ */
+news?: ModelNews | null, };
+
+/**
+ * "opus 5.6 is out · use it for the 3 roles on opus 5.5" (page
+ * models-settings): `model` replaces `replaces` in `roles`, a fact the
+ * catalog declares (`replaces` in its table), never guessed from names.
+ */
+export type ModelNews = { 
+/**
+ * "provider/id"
+ */
+model: string, 
+/**
+ * its name for people (long_name)
+ */
+name: string, replaces: string, replaces_name: string, 
+/**
+ * the roles on `replaces`, their `[roles]` keys
+ */
+roles: Array<string>, };
 
 /**
  * How a slash command runs (C, architect m_10724): `hub` (his typed

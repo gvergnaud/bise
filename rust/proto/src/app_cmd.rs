@@ -257,6 +257,10 @@ pub enum AppCmd {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         effort: Option<String>,
     },
+    /// one model for several roles at once (the news line's 'use it for
+    /// the 3 roles', architect m_57407): all the roles or none, one
+    /// config write, then the model is tested once
+    RoleSetMany { roles: Vec<String>, model: String },
     /// check again (S.8, the TUI's `/setup`): `prefs`, `accounts` and
     /// `projects` come again, read fresh
     SetupCheck,
@@ -697,6 +701,7 @@ impl AppCmd {
         "setup_test",
         "helper_perms",
         "role_set",
+        "role_set_many",
         "computer",
         "shot",
         "send",

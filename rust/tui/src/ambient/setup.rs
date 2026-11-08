@@ -142,6 +142,8 @@ pub type PluginConnectFn = Box<dyn Fn(&str, Option<String>, Sender<Done>) -> Res
 pub type PluginsRefreshFn = Box<dyn Fn(Option<String>, Sender<Done>)>;
 /// (role, model, effort): config.toml's `[roles]` through the one locked writer
 pub type RoleSetFn = Box<dyn Fn(&str, Option<&str>, Option<&str>) -> Result<(), String>>;
+/// (roles, model): one model for those roles, one write
+pub type RoleSetManyFn = Box<dyn Fn(&[String], &str) -> Result<(), String>>;
 /// What runs now from computer use's page (the live test, a helper that reopens).
 pub type CuBusy = std::sync::Arc<std::sync::Mutex<crate::computer_use::Busy>>;
 /// The poll's start: its channel and its stop flag.
@@ -232,6 +234,9 @@ pub struct SetupPorts {
     /// a role's model and effort, checked ([`check_role_set`]) then
     /// written by bise_catalog's roles::save_role
     pub role_set: RoleSetFn,
+    /// one model for several roles (the news line): each checked, then
+    /// one write by roles::save_roles, all of them or none
+    pub role_set_many: RoleSetManyFn,
     /// the desktop app's release channel (stable or beta), for its updates
     /// (bar S.6): the binary wires its fetch; none here (a core without
     /// it never offers an update)
@@ -674,6 +679,16 @@ pub fn live(flow: FlowFn) -> SetupPorts {
             check_role_set(&bise_catalog::Setup::load(&file), role, model, effort)?;
             // the TUI's roles screen's own writer (locked, tmp + rename)
             bise_catalog::roles::save_role(&file, role, model, effort)
+        }),
+        role_set_many: Box::new(move |roles, model| {
+            let file = home().config_file();
+            let setup = bise_catalog::Setup::load(&file);
+            // every role checked first: one refused, nothing written
+            for r in roles {
+                check_role_set(&setup, r, Some(model), None)?;
+            }
+            let ids: Vec<&str> = roles.iter().map(String::as_str).collect();
+            bise_catalog::roles::save_roles(&file, &ids, model)
         }),
         plugin_login: Box::new(|ws, name, project, tx| {
             let ts = bend_plugins::login::targets(ws);

@@ -435,13 +435,24 @@ pub fn set_role(text: &str, id: &str, model: Option<&str>, effort: Option<&str>)
 /// `config.toml.lock` around the whole read-edit-write, a tmp name only
 /// this call uses, then a rename: two writers at once never lose a change.
 pub fn save_role(file: &std::path::Path, id: &str, model: Option<&str>, effort: Option<&str>) -> Result<(), String> {
+    write_locked(file, |text| set_role(text, id, model, effort))
+}
+
+/// `model` for each role of `ids` (the news line's 'use it for the 3
+/// roles', architect m_57407): one write, all of them or none.
+pub fn save_roles(file: &std::path::Path, ids: &[&str], model: &str) -> Result<(), String> {
+    write_locked(file, |text| ids.iter().fold(text.to_string(), |t, id| set_role(&t, id, Some(model), None)))
+}
+
+/// config.toml rewritten by `change`, under its lock (tmp + rename).
+fn write_locked(file: &std::path::Path, change: impl Fn(&str) -> String) -> Result<(), String> {
     if let Some(dir) = file.parent() {
         std::fs::create_dir_all(dir).map_err(|e| format!("couldn't write config.toml: {e}"))?;
     }
     let _lock = lock(&file.with_extension("toml.lock")).map_err(|e| format!("couldn't lock config.toml: {e}"))?;
     let text = std::fs::read_to_string(file).unwrap_or_default();
     let tmp = file.with_extension(format!("toml.tmp-{}-{}", std::process::id(), TMP.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
-    std::fs::write(&tmp, set_role(&text, id, model, effort)).map_err(|e| format!("couldn't write config.toml: {e}"))?;
+    std::fs::write(&tmp, change(&text)).map_err(|e| format!("couldn't write config.toml: {e}"))?;
     std::fs::rename(&tmp, file).map_err(|e| {
         let _ = std::fs::remove_file(&tmp);
         format!("couldn't write config.toml: {e}")

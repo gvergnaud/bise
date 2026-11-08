@@ -87,6 +87,7 @@ pub const TAGS: &[&str] = &[
     "setup_test",
     "helper_perms",
     "role_set",
+    "role_set_many",
     "app_version",
     "setup_first_cancel",
     "keychain",
@@ -582,6 +583,22 @@ impl Core {
                     }
                 }
                 ("role_set", res)
+            }
+            AppCmd::RoleSetMany { roles, model } => {
+                // the news line's one act: one write, then the model tested once
+                let (setup, _) = (p.gauge_input)();
+                let before: Vec<String> = roles.iter().map(|r| setup.role_model(r).0).collect();
+                let res = (p.role_set_many)(&roles, &model);
+                if res.is_ok() {
+                    self.emit_roles();
+                    if let (Some(role), true) = (roles.first(), before.iter().any(|b| *b != model)) {
+                        let was = before.first().cloned().unwrap_or_default();
+                        if let Err(e) = self.test_changed_role(role, &was) {
+                            self.setup_error("setup_test", &e);
+                        }
+                    }
+                }
+                ("role_set_many", res)
             }
             AppCmd::SetupCheck => {
                 self.app_start();

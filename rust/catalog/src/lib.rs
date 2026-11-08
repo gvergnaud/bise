@@ -31,6 +31,7 @@ pub mod live_efforts;
 pub mod live_fetch;
 pub mod openrouter_login;
 pub mod names;
+pub mod news;
 pub mod picks;
 pub mod plan_list;
 pub mod roles;
@@ -358,6 +359,9 @@ pub struct Model {
     pub api: Option<String>,
     /// `kind = "stt"`: a speech-to-text model (BISE-130), not a chat one
     pub stt: bool,
+    /// `replaces = "<provider/id>"`: the model this one succeeds, a fact
+    /// written when it is added (the news line, [`news`]); None: none
+    pub replaces: Option<String>,
     pub caps: PartialCaps,
     pub source: Source,
 }
@@ -774,8 +778,14 @@ impl Catalog {
                             let mut caps = PartialCaps::default();
                             let mut api = None;
                             let mut stt = None;
+                            let mut replaces = None;
                             for (fk, fv) in mt {
-                                if fk == "api" {
+                                if fk == "replaces" {
+                                    match fv.as_str().map(str::trim).filter(|r| split_name(r).is_some()) {
+                                        Some(r) => replaces = Some(r.to_string()),
+                                        None => warn(format!("{}.replaces: a model name, \"provider/model\"", where_)),
+                                    }
+                                } else if fk == "api" {
                                     match fv.as_str().map(str::trim) {
                                         Some(a) if FAMILIES.contains(&a) => api = Some(a.to_string()),
                                         _ => warn(format!("{}.api: one of {}", where_, FAMILIES.join(", "))),
@@ -794,12 +804,14 @@ impl Catalog {
                                 id: mid.to_string(),
                                 api: None,
                                 stt: false,
+                                replaces: None,
                                 caps: PartialCaps::default(),
                                 source: src,
                             });
                             m.source = src;
                             m.api = api.or(m.api);
                             m.stt = stt.unwrap_or(m.stt);
+                            m.replaces = replaces.or(m.replaces);
                             m.caps.merge(&caps);
                             models.push(m);
                         }

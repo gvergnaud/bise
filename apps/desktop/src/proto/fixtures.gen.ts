@@ -412,6 +412,7 @@ export const app_cmd: readonly AppCmd[] = [
   {"cmd":"setup_first_cancel"},
   {"cmd":"role_set","effort":"high","model":"mistral/devstral-medium-latest","role":"agents"},
   {"cmd":"role_set","role":"small"},
+  {"cmd":"role_set_many","model":"anthropic/claude-opus-5-6","roles":["main","agents"]},
   {"built":"2026-10-07T10:00:00Z","cmd":"app_version","id":"d25"},
   {"cmd":"bise_update"},
   {"cmd":"hub_retry","project":"shop-5e6f7a8b"},

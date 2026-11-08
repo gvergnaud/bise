@@ -94,7 +94,31 @@ pub fn keep_days(prefs: Option<&Value>) -> u64 {
 
 /// The top keys of `prefs.json` the window may set (`prefs_set`,
 /// architect m_9130): anything else is refused, never written.
-pub const WINDOW_KEYS: &[&str] = &["onboarded", "theme", "voice", "context", "excluded_apps", "quiet", "shots_keep_days", "desktop_channel", "bims", "bim", "seen", AUTO_UPDATE, "pins", "pins_art", "pins_sched", "pins_proc"];
+pub const WINDOW_KEYS: &[&str] = &["onboarded", "theme", "voice", "context", "excluded_apps", "quiet", "shots_keep_days", "desktop_channel", "bims", "bim", "seen", AUTO_UPDATE, "pins", "pins_art", "pins_sched", "pins_proc", "models"];
+
+/// `models.news_seen`: the models whose news line he put off ("Not now",
+/// page models-settings, architect m_57407), as "provider/id" ids. Only
+/// that path, a list of such ids (at most 200), or null. Set whole.
+pub const NEWS_SEEN: &str = "news_seen";
+
+fn models_key(parts: &[&str], v: &Value) -> Result<(), String> {
+    match parts {
+        ["models", NEWS_SEEN] => {
+            let ids = |a: &Vec<Value>| a.len() <= 200 && a.iter().all(|x| x.as_str().is_some_and(|s| (3..=256).contains(&s.len()) && s.contains('/')));
+            if v.is_null() || v.as_array().is_some_and(ids) {
+                Ok(())
+            } else {
+                Err(format!("models.{NEWS_SEEN} can't be {v}"))
+            }
+        }
+        _ => Err(format!("{} is not a models preference", parts.join("."))),
+    }
+}
+
+/// The models he put off, from `prefs.json`'s object (none: none). Pure.
+pub fn news_seen(prefs: &Value) -> Vec<String> {
+    prefs["models"][NEWS_SEEN].as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default()
+}
 
 /// The pins' top keys, one per kind (the desktop's app/pins.ts ROOTS:
 /// agents, artifacts, scheduled, processes).
@@ -237,6 +261,9 @@ pub fn set_dotted(obj: &Value, key: &str, value: Value) -> Result<Value, String>
     }
     if PIN_ROOTS.contains(&top) {
         pins_key(&parts, &value)?;
+    }
+    if top == "models" {
+        models_key(&parts, &value)?;
     }
     if parts.len() == 1 {
         if !value.is_null() {

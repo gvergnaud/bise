@@ -74,6 +74,7 @@
 {"cmd":"setup_first_cancel"}
 {"cmd":"role_set","role":"agents","model":"mistral/devstral-medium-latest","effort":"high"}
 {"cmd":"role_set","role":"small"}
+{"cmd":"role_set_many","roles":["main","agents"],"model":"anthropic/claude-opus-5-6"}
 {"cmd":"app_version","id":"d25","built":"2026-10-07T10:00:00Z"}
 {"cmd":"bise_update"}
 {"cmd":"hub_retry","project":"shop-5e6f7a8b"}

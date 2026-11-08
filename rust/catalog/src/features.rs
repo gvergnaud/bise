@@ -13,7 +13,7 @@
 //! between two, the fix that unlocks the most features.
 
 use crate::{roles, Setup};
-use bise_proto::app_rows::{CheckWhy, FeatureId, FeaturePart, FeatureRow, FeatureState, PartSource, PermGrant, RoleId, SetupFix, SetupGauge, SetupNext};
+use bise_proto::app_rows::{CheckWhy, FeatureId, FeaturePart, FeatureRow, FeatureState, ModelNews, PartSource, PermGrant, RoleId, SetupFix, SetupGauge, SetupNext};
 use bise_proto::helper::{Grant, Perm};
 
 /// A provider's key or sign-in, as the accounts say.
@@ -55,6 +55,8 @@ pub struct Facts<'a> {
     pub tts_model: Option<String>,
     /// models under test now
     pub testing: Vec<String>,
+    /// the news models he put off ("Not now": the `models.news_seen` pref)
+    pub news_seen: &'a [String],
 }
 
 /// The features, in the page's order.
@@ -84,7 +86,15 @@ pub fn gauge(setup: &Setup, f: &Facts) -> SetupGauge {
         })
         .collect();
     let on = rows.iter().filter(|r| r.state == FeatureState::On).count() as u32;
-    SetupGauge { of: rows.len() as u32, on, next: next(&rows), testing: f.testing.clone(), rows }
+    let ready = |p: &str| (f.access)(p) == Access::Ready;
+    let news = crate::news::newer(setup, &ready, f.news_seen).map(|n| ModelNews {
+        name: crate::names::long_name(&n.model),
+        replaces_name: crate::names::long_name(&n.replaces),
+        roles: n.roles.iter().map(|r| r.to_string()).collect(),
+        model: n.model,
+        replaces: n.replaces,
+    });
+    SetupGauge { of: rows.len() as u32, on, next: next(&rows), testing: f.testing.clone(), rows, news }
 }
 
 /// One model behind a feature, and its fix (failed or off).

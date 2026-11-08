@@ -512,6 +512,7 @@ impl Catalog {
                     id: ids[0].clone(),
                     api: None,
                     stt: true,
+                    replaces: None,
                     caps: Default::default(),
                     source: crate::Source::Builtin,
                 });

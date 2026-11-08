@@ -39,6 +39,8 @@ struct World {
     testing: Option<std::sync::mpsc::Sender<Done>>,
     /// V17: the role_set writes
     role_sets: Vec<(String, Option<String>, Option<String>)>,
+    /// the news line's role_set_many writes (each also lands in role_sets)
+    role_set_manys: usize,
     /// S.6: the release channel's reads (the channel of the last one)
     manifest_reads: usize,
     manifest: Option<std::sync::mpsc::Sender<Done>>,
@@ -87,6 +89,7 @@ fn setup(t: &mut T) -> Rc<RefCell<World>> {
     let (x, y, z, mt) = (w.clone(), w.clone(), w.clone(), w.clone());
     let mf = w.clone();
     let gi = w.clone();
+    let ym = w.clone();
     let sg = w.clone();
     let gr = w.clone();
     let gs = w.clone();
@@ -307,6 +310,14 @@ fn setup(t: &mut T) -> Rc<RefCell<World>> {
                 return Err("there's no role nope".into());
             }
             y.borrow_mut().role_sets.push((role.into(), model.map(String::from), effort.map(String::from)));
+            Ok(())
+        }),
+        role_set_many: Box::new(move |roles, model| {
+            let mut w = ym.borrow_mut();
+            w.role_set_manys += 1;
+            for r in roles {
+                w.role_sets.push((r.clone(), Some(model.into()), None));
+            }
             Ok(())
         }),
         own_built: Box::new(String::new),
@@ -1119,6 +1130,25 @@ fn a_role_is_tested_when_its_model_changes_and_a_newer_change_drops_the_older_te
     let talk = g["gauge"]["rows"].as_array().unwrap().iter().find(|r| r["id"] == "talk").cloned().unwrap();
     assert_eq!(talk["parts"][0]["model"], "anthropic/claude-haiku-4-5");
     assert_eq!(talk["parts"][0]["why"], "wrong_key", "the latest pick's own result: {talk:#}");
+}
+
+/// The news line's one act (architect m_57407): role_set_many writes once
+/// for all the roles, the roles come again, and the model is tested once.
+#[test]
+fn role_set_many_writes_once_and_tests_the_model_once() {
+    let mut t = T::new();
+    let w = setup(&mut t);
+    t.core.app_start();
+    t.until(|o| o.iter().any(|v| v["ev"] == "setup_gauge"));
+    app(&mut t, r#"{"cmd":"provider_use","id":"anthropic","key":"sk-fake-secret"}"#);
+    t.until(|o| evs(o, "provider_check").iter().any(|e| e["state"] == "works"));
+    t.take();
+    app(&mut t, r#"{"cmd":"role_set_many","roles":["main","agents"],"model":"anthropic/claude-opus-5-5"}"#);
+    let out = t.take();
+    assert_eq!(w.borrow().role_set_manys, 1, "one write");
+    assert!(!evs(&out, "roles").is_empty(), "the roles come again");
+    let tested: Vec<String> = w.borrow().model_tests.iter().map(|(m, _)| m.clone()).collect();
+    assert_eq!(tested, vec!["anthropic/claude-opus-5-5".to_string()], "one test, one paid call");
 }
 
 /// usage-metrics-plan step 6: an act is answered by `telemetry` (the id

@@ -89,7 +89,7 @@ impl GaugeLive {
     }
 
     /// The gauge of `setup` with these facts and `accounts`.
-    pub(crate) fn gauge(&mut self, setup: &bise_catalog::Setup, tts: Option<String>, accounts: &[Account], home_gone: Option<String>) -> SetupGauge {
+    pub(crate) fn gauge(&mut self, setup: &bise_catalog::Setup, tts: Option<String>, accounts: &[Account], home_gone: Option<String>, news_seen: &[String]) -> SetupGauge {
         self.observe(accounts);
         let access = |p: &str| access_of(accounts, &setup.catalog, p);
         let generation = |p: &str| self.generation(p);
@@ -103,6 +103,7 @@ impl GaugeLive {
             home_gone,
             tts_model: tts,
             testing: self.testing.clone(),
+            news_seen,
         };
         features::gauge(setup, &facts)
     }
@@ -133,6 +134,11 @@ impl GaugeLive {
     }
 }
 
+/// The news models he put off ("Not now": prefs' `models.news_seen`).
+fn news_seen(ports: &crate::ambient::setup::SetupPorts) -> Vec<String> {
+    (ports.prefs)().map(|p| bise_home::prefs::news_seen(&p)).unwrap_or_default()
+}
+
 /// bise's home folder, when it is gone (its path): the registry's home row.
 fn home_gone(ports: &crate::ambient::setup::SetupPorts) -> Option<String> {
     (ports.rows)().into_iter().find(|r| r.home).filter(|r| !r.path.exists()).map(|r| r.path.to_string_lossy().into_owned())
@@ -144,7 +150,7 @@ impl Core {
         let Some(s) = self.setup.as_mut() else { return };
         let (setup, tts) = (s.ports.gauge_input)();
         let accounts = (s.ports.accounts)();
-        let g = s.gauge.gauge(&setup, tts, &accounts, home_gone(&s.ports));
+        let g = s.gauge.gauge(&setup, tts, &accounts, home_gone(&s.ports), &news_seen(&s.ports));
         if s.gauge.sent.as_ref() == Some(&g) {
             return;
         }
@@ -157,7 +163,7 @@ impl Core {
         let s = self.setup.as_mut().ok_or("this core has no setup")?;
         let (setup, tts) = (s.ports.gauge_input)();
         let accounts = (s.ports.accounts)();
-        let g = s.gauge.gauge(&setup, tts, &accounts, home_gone(&s.ports));
+        let g = s.gauge.gauge(&setup, tts, &accounts, home_gone(&s.ports), &news_seen(&s.ports));
         for t in s.gauge.to_test(&g, only.as_deref()) {
             let pid = crate::ambient::model_test::provider_of(&setup, &t);
             let generation = s.gauge.generation(&pid);
@@ -261,7 +267,7 @@ mod tests {
         let setup = bise_catalog::Setup::from_text(Some("[roles]\nmain = \"chatgpt/gpt-6.1-sol\"\nvoice = \"groq/whisper-large-v3\"\nclassify = \"off\"\n"), &|_| None);
         let mut live = GaugeLive::default();
         let a = [acct("chatgpt", "signed_in"), acct("groq", "signed_in")];
-        let g = live.gauge(&setup, Some("mistral/voxtral-mini-tts-2603".into()), &a, None);
+        let g = live.gauge(&setup, Some("mistral/voxtral-mini-tts-2603".into()), &a, None, &[]);
         let models: Vec<String> = live.to_test(&g, None).into_iter().map(|t| t.model).collect();
         // main once (talk, agents, images, voice mode), small, the voice; the TTS has no key, the checker is off
         assert_eq!(models.iter().filter(|m| *m == "chatgpt/gpt-6.1-sol").count(), 1);

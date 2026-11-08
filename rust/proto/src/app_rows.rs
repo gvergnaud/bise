@@ -1012,6 +1012,26 @@ pub struct SetupGauge {
     /// models under test now (Test everything, Test again)
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub testing: Vec<String>,
+    /// a newer model for some roles (the news line, bise_catalog::news):
+    /// none when nothing the catalog declares newer is ready and not put off
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub news: Option<ModelNews>,
+}
+
+/// "opus 5.6 is out · use it for the 3 roles on opus 5.5" (page
+/// models-settings): `model` replaces `replaces` in `roles`, a fact the
+/// catalog declares (`replaces` in its table), never guessed from names.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct ModelNews {
+    /// "provider/id"
+    pub model: String,
+    /// its name for people (long_name)
+    pub name: String,
+    pub replaces: String,
+    pub replaces_name: String,
+    /// the roles on `replaces`, their `[roles]` keys
+    pub roles: Vec<String>,
 }
 
 /// How a slash command runs (C, architect m_10724): `hub` (his typed

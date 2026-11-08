@@ -72,6 +72,7 @@ pub(crate) fn of_cmd(c: &AppCmd) -> Counted {
         | AppCmd::KeyRemove { .. }
         | AppCmd::Keychain { .. }
         | AppCmd::RoleSet { .. }
+        | AppCmd::RoleSetMany { .. }
         | AppCmd::HelperPerms { .. }
         | AppCmd::PrefsSet { .. } => NotCounted,
         // his projects
