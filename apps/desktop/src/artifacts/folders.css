@@ -80,8 +80,12 @@
 .art-tiles.big{grid-template-columns:repeat(auto-fill,minmax(200px,1fr));margin:0 0 var(--s-4)}
 .art-tiles.small{grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:var(--s-2);margin:0 0 var(--s-6)}
 .art-tile{display:flex;flex-direction:column;min-width:0;text-align:left;border-radius:var(--r-2);color:var(--c-text)}
-.art-tile[data-over] .cover,.art-tile.small[data-over]{box-shadow:0 0 0 2px var(--c-text)}
-.art-tile .cover{display:grid;grid-template-columns:2fr 1fr;grid-template-rows:1fr 1fr;gap:var(--s-1);aspect-ratio:16/10;padding:var(--s-1);border-radius:var(--r-2);background:var(--c-sunken);overflow:hidden}
+.art-tile[data-over] .cover,.art-tile[data-over] .tab,.art-tile.small[data-over]{box-shadow:0 0 0 2px var(--c-text)}
+/* a theme's tile is a folder, never a card (page folder-tiles, pick A; designer m_55599, m_55602): a
+   tab on the top-left, 40 % wide, then the back (its top-left corner square under the tab) holding
+   the cover 4 in; both --c-sunken-2, a step past a card's thumb. Flat: no shadow, no sheets */
+.art-tile .tab{width:40%;height:var(--s-3);border-radius:var(--r-1) var(--r-1) 0 0;background:var(--c-sunken-2)}
+.art-tile .cover{display:grid;grid-template-columns:2fr 1fr;grid-template-rows:1fr 1fr;gap:var(--s-1);aspect-ratio:16/10;padding:var(--s-1);border-radius:0 var(--r-2) var(--r-2) var(--r-2);background:var(--c-sunken-2);overflow:hidden}
 .art-tile .cover[data-n="1"],.art-tile .cover[data-n="0"]{grid-template-columns:1fr;grid-template-rows:1fr}
 .art-tile .cover[data-n="2"]{grid-template-rows:1fr}
 .art-tile .pic{position:relative;min-width:0;min-height:0;border-radius:var(--r-1);background:var(--c-surface);overflow:hidden}
@@ -91,6 +95,7 @@
 /* an empty folder: the same tile, a 20 px folder glyph in text-3 at its centre (designer m_40850) */
 .art-tile .pic.none > svg{width:20px;height:auto}
 .art-tile .nm{display:flex;align-items:center;gap:var(--s-2);margin:var(--s-2) 0 0;font-size:var(--t-13);font-weight:500}
+.art-tile .nm > .b-app-icon{flex:none;color:var(--c-text-3)}
 .art-tile .nm .t,.art-tile.small .t{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .art-tile .nm .dot{flex:none;width:6px;height:6px;border-radius:50%;background:var(--c-accent)}
 .art-tile .ln{margin:0;font-size:var(--t-12);color:var(--c-text-3);font-variant-numeric:tabular-nums}

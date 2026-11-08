@@ -19,6 +19,8 @@
      the thread, where nothing may show through a chart or a map (designer m_51798) */
   --c-card: color-mix(in srgb, var(--p-raised) 72%, var(--p-bg));
   --c-sunken: var(--p-chip);
+  /* one step further from the page than --c-sunken: a folder tile's back and tab (designer m_55602) */
+  --c-sunken-2: color-mix(in srgb, var(--p-text) 12%, var(--p-chip));
   --c-overlay: color-mix(in srgb, var(--p-bg) 76%, transparent);
   --c-text: var(--p-text);
   --c-text-2: var(--p-dim);
@@ -175,6 +177,8 @@
   --c-solid: var(--p-bg);
   --c-card: color-mix(in srgb, var(--p-raised) 72%, var(--p-bg));
   --c-sunken: var(--p-chip);
+  /* one step further from the page than --c-sunken: a folder tile's back and tab (designer m_55602) */
+  --c-sunken-2: color-mix(in srgb, var(--p-text) 12%, var(--p-chip));
   --c-overlay: color-mix(in srgb, var(--p-bg) 76%, transparent);
   --c-text: var(--p-text);
   --c-text-2: var(--p-dim);

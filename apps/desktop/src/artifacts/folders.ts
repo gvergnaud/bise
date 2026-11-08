@@ -179,6 +179,13 @@ export function countWords(c: Count | undefined): string {
   return c.n === c.total ? String(c.total) : library.of_total({ n: c.n, total: c.total });
 }
 
+/** A folder tile's count: 'empty', '32 artifacts', '1 artifact', or '3 of 12' under a filter. Pure. */
+export function tileCountWords(c: Count | undefined): string {
+  const total = c?.total ?? 0;
+  if (c === undefined || total === 0) return library.tile_empty;
+  return c.n === total ? library.n_artifacts({ n: total }) : countWords(c);
+}
+
 /** A folder's name, '' when it is gone. */
 export function nameOf(lib: Library, id: string): string {
   return lib.byId.get(id)?.name ?? '';
