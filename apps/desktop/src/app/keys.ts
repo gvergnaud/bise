@@ -4,7 +4,7 @@
 //
 // ⌘B the sidebar · ⌥⌘B the panel ·
 // the rail's places (rail-keys, designer m_45492 / m_45497; PLACE_KEYS): ⌘0 bise · ⇧⌘I the inbox
-// page · ⌘Y scheduled · ⇧⌘A the artifacts library · ⇧⌘X plugins · ⌘, settings ·
+// page · ⌘Y scheduled · ⇧⌘A the artifacts library · ⇧⌘P processes · ⇧⌘X plugins · ⌘, settings ·
 // ⌘1-9 a project in his order (on the artifacts library: its rows, All artifacts, Recent, Unfiled,
 // then the folders) · ⌥0 the project's main · ⌥1-9
 // its agents in the panel's order (the right side's coins: ⌥⌘1-4) · ⌘K the agent palette · ⌘D the agent's
@@ -143,10 +143,12 @@ export function keyAction(e: KeyLike, c: KeyCtx): KeyAct | undefined {
   }
   if (only('meta') && e.code === 'Comma') return { go: { screen: 'settings' } };
   // the rail's places, each the key its button shows (PLACE_KEYS): ⇧⌘I the inbox page (⌘I stays the
-  // block in place, the Go menu's), ⌘Y scheduled, ⇧⌘A the artifacts library, ⇧⌘X plugins
+  // block in place, the Go menu's), ⌘Y scheduled, ⇧⌘A the artifacts library, ⇧⌘P processes (⌘P
+  // alone is the panel's picker), ⇧⌘X plugins
   if (only('meta', true) && e.code === 'KeyI') return { go: { screen: 'inbox' } };
   if (only('meta') && e.code === 'KeyY') return { go: { screen: 'scheduled' } };
   if (only('meta', true) && e.code === 'KeyA') return { go: { screen: 'artifacts', project: '' } };
+  if (only('meta', true) && e.code === 'KeyP') return { go: { screen: 'running' } };
   if (only('meta', true) && e.code === 'KeyX') return { go: { screen: 'plugins' } };
   if (only('meta') && e.code === 'KeyD') {
     const r = c.route;

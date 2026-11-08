@@ -25,7 +25,7 @@ import { RAIL_KEYS, SideRail } from './SideRail';
 
 afterEach(cleanup);
 
-const PLACES: readonly RailPlace[] = ['bise', 'inbox', 'scheduled', 'artifacts', 'plugins', 'settings'];
+const PLACES: readonly RailPlace[] = ['bise', 'inbox', 'scheduled', 'artifacts', 'processes', 'plugins', 'settings'];
 
 const row = (project: string, name: string, order: number, home = false): ProjectRow => ({ project, name, path: `/${name}`, git: !home, home, order, agents: 1, working: 0, waits: 0, running: true });
 const projects = [row('h', 'bise', 0, true), row('a', 'acme', 1)];
@@ -84,7 +84,7 @@ describe('each rail place has its own key, and it opens what a click opens', () 
 });
 
 describe('the Go menu and the ⌘/ list name the same keys', () => {
-  const GO: Record<GoAction, RailPlace> = { bise: 'bise', inboxPage: 'inbox', scheduled: 'scheduled', artifacts: 'artifacts', plugins: 'plugins' };
+  const GO: Record<GoAction, RailPlace> = { bise: 'bise', inboxPage: 'inbox', scheduled: 'scheduled', artifacts: 'artifacts', processes: 'processes', plugins: 'plugins' };
 
   // the Go item's half (its accelerator is PLACE_KEYS' glyph and sends its action) is
   // src/main/menu.test.ts's: src/main is the node project's, never imported from here

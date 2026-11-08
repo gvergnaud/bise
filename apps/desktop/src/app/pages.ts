@@ -50,7 +50,7 @@ export const SCREENS: Record<Screen, readonly Rule[]> = {
   inbox: [{ app: { name: 'inbox', glyph: '?', words: ['answered', 'history', 'questions'], key: PLACE_KEYS.inbox, route: { screen: 'inbox' } } }],
   scheduled: [{ app: { name: 'scheduled', glyph: '◷', words: ['timers', 'every'], key: PLACE_KEYS.scheduled, route: { screen: 'scheduled' } } }],
   plugins: [{ app: { name: panel.plugins, glyph: '⊞', words: ['skills', 'tools', 'MCP', 'connectors', 'Mistral'], key: PLACE_KEYS.plugins, route: { screen: 'plugins' } } }],
-  running: [{ app: { name: running.heading, glyph: '∿', words: running.find_words.split(' · '), route: { screen: 'running' } } }],
+  running: [{ app: { name: running.heading, glyph: '∿', words: running.find_words.split(' · '), key: PLACE_KEYS.processes, route: { screen: 'running' } } }],
   report: [{ no: 'the last crash report: only after a crash, from its line' }],
   settings: [{ app: { name: 'settings', glyph: '⚙', words: ['preferences'], key: PLACE_KEYS.settings, route: { screen: 'settings' } } }, { settings: true }],
   onboarding: [{ no: "the first run's; settings › setup checks it again" }],

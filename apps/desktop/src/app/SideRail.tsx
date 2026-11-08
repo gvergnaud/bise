@@ -1,6 +1,7 @@
 // The rail (bise fait mac, page native-mac §6, mockup 1): always there, 56 wide, transparent on the
-// window's vibrancy, under the bar. bise's ':*' (mono 15/600: its thread), inbox, scheduled,
-// artifacts, plugins; settings at the bottom. Buttons 36 × 36 r 8, 4 apart, 8 from the top and 16
+// window's vibrancy, under the bar. bise's ':*' (mono 15/600: its thread), inbox, artifacts,
+// scheduled, processes (every running route; no dot: nothing there waits on him, designer
+// m_55616), plugins; settings at the bottom. Buttons 36 × 36 r 8, 4 apart, 8 from the top and 16
 // from the bottom; the line icons 18 (ds AppIcon); the current place --c-active and --c-text, the
 // others text-2; inbox's accent dot (8, at 6/6) only while something waits on him; each button a
 // tip with its key, and ⌘ held (held.ts, its one delay) the key's cap in place of its icon, as the
@@ -25,6 +26,7 @@ export const RAIL_KEYS: Record<RailPlace, string> = {
   inbox: PLACE_KEYS.inbox,
   scheduled: PLACE_KEYS.scheduled,
   artifacts: PLACE_KEYS.artifacts,
+  processes: PLACE_KEYS.processes,
   plugins: PLACE_KEYS.plugins,
   settings: PLACE_KEYS.settings,
 };
@@ -34,6 +36,7 @@ const NAMES: Record<RailPlace, string> = {
   inbox: frame.inbox,
   scheduled: frame.scheduled,
   artifacts: frame.artifacts,
+  processes: frame.processes,
   plugins: frame.plugins,
   settings: frame.settings,
 };
@@ -76,9 +79,14 @@ const ICON: Record<Exclude<RailPlace, 'bise'>, AppIconName> = {
   inbox: 'inbox',
   scheduled: 'scheduled',
   artifacts: 'artifacts',
+  // the right side's processes tile's, so one icon means processes everywhere (designer m_55616)
+  processes: 'terminal',
   plugins: 'plugins',
   settings: 'settings',
 };
+
+/** The rail's places between bise's and settings, in order: the work places together (designer m_55616). */
+export const RAIL_MIDDLE = ['inbox', 'artifacts', 'scheduled', 'processes', 'plugins'] as const satisfies readonly RailPlace[];
 
 export function SideRail() {
   const at = railPlaceOf(useRoute());
@@ -90,7 +98,7 @@ export function SideRail() {
           :*
         </span>
       </RailButton>
-      {(['inbox', 'artifacts', 'scheduled', 'plugins'] as const).map((p) => (
+      {RAIL_MIDDLE.map((p) => (
         <RailButton key={p} place={p} on={at === p} {...(p === 'inbox' ? { dot: waits > 0, tip: waits > 0 ? `${railTip(p)} · ${waitsTip(waits, true)}` : railTip(p) } : {})}>
           <AppIcon name={ICON[p]} size={18} />
         </RailButton>

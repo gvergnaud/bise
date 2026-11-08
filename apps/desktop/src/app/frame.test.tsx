@@ -74,9 +74,31 @@ describe('the rail', () => {
   it("a thread is bise's place; every button has its tip", () => {
     const { v } = frame({ screen: 'thread', project: ACME, agent: 'perf' }, [agent('main'), agent('perf')]);
     expect(v.getByTestId('app.rail.bise').getAttribute('aria-current')).toBe('page');
-    for (const p of ['bise', 'inbox', 'scheduled', 'artifacts', 'plugins', 'settings']) expect(v.getByTestId(`app.rail.${p}`).getAttribute('data-tip')).not.toBe('');
+    for (const p of ['bise', 'inbox', 'scheduled', 'artifacts', 'processes', 'plugins', 'settings']) expect(v.getByTestId(`app.rail.${p}`).getAttribute('data-tip')).not.toBe('');
     // nothing waits: no dot
     expect(v.queryByTestId('app.rail.inbox.dot')).toBeNull();
+  });
+
+  // processes-rail (his m_55606, designer m_55616): the work places together, processes after
+  // scheduled; the right side's processes icon, its key in its tip, no dot; marked on every
+  // running route. Mutations: the button dropped or moved, another icon, 'running' not its place.
+  it('processes: after scheduled, the terminal icon, its tip and key, marked on every processes route, no dot', () => {
+    const { v, router } = frame({ screen: 'thread', project: ACME, agent: 'main' }, [agent('main')]);
+    const order = [...v.getByTestId('app.rail').querySelectorAll('[data-testid^="app.rail."]')].map((e) => e.getAttribute('data-testid'));
+    expect(order).toEqual(['bise', 'inbox', 'artifacts', 'scheduled', 'processes', 'plugins', 'settings'].map((p) => `app.rail.${p}`));
+    const b = v.getByTestId('app.rail.processes');
+    expect(b.querySelector('.b-app-icon')?.getAttribute('data-icon')).toBe('terminal');
+    expect(b.getAttribute('aria-label')).toBe(frameWords.processes);
+    expect(b.getAttribute('data-tip')).toBe(`${frameWords.processes} · ⇧⌘P`);
+    expect(b.getAttribute('aria-current')).toBeNull();
+    expect(v.queryByTestId('app.rail.processes.dot')).toBeNull();
+    fireEvent.click(b);
+    expect(router.get()).toEqual({ screen: 'running' });
+    for (const r of [{ screen: 'running' }, { screen: 'running', scope: { project: ACME } }, { screen: 'running', open: { project: ACME, agent: 'main', id: 'p1' } }] satisfies Route[]) {
+      act(() => router.go(r));
+      expect(v.getByTestId('app.rail.processes').getAttribute('aria-current'), JSON.stringify(r)).toBe('page');
+      expect(v.getByTestId('app.rail.bise').getAttribute('aria-current')).toBeNull();
+    }
   });
 });
 

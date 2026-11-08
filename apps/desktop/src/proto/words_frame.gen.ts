@@ -46,6 +46,8 @@ export const frame = {
   scheduled: "Scheduled",
   /** the rail's artifacts button */
   artifacts: "Artifacts",
+  /** the rail's processes button (the page of what his agents left running) */
+  processes: "Processes",
   /** the rail's plugins button */
   plugins: "Plugins",
   /** the '+' at the Projects label's end: its VoiceOver name and tip */

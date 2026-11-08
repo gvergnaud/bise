@@ -1913,6 +1913,11 @@
     "one": null,
     "text": "the previous / next item, round from the last to the first"
   },
+  "settings.key_processes": {
+    "args": [],
+    "one": null,
+    "text": "processes"
+  },
   "settings.key_project": {
     "args": [],
     "one": null,

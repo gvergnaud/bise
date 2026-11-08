@@ -1,6 +1,6 @@
 // The rail's places and the bise tab's way back (his m_49841): the ':*' button, ⌘0 and Go › bise
 // bring him back to the project or chat he was in before he went to a page (inbox, scheduled,
-// artifacts, plugins, settings), never to a default screen. The window remembers his last place
+// artifacts, processes, plugins, settings), never to a default screen. The window remembers his last place
 // in bise's tab (a project, a chat, its changes...) in its keep (keep.ts, no age: a relaunch
 // finds it too); from bise's tab itself the button is the tab's root, bise's own thread, as a
 // Mac tab bar's. A remembered place that is gone comes back as what of it is still there: an
@@ -11,9 +11,10 @@ import { keep, type Keep } from './keep';
 import { formatRoute, MAIN, parseRoute, type Route } from './route';
 
 /** A rail place: the route it goes to and the key that does too. */
-export type RailPlace = 'bise' | 'inbox' | 'scheduled' | 'artifacts' | 'plugins' | 'settings';
+export type RailPlace = 'bise' | 'inbox' | 'scheduled' | 'artifacts' | 'processes' | 'plugins' | 'settings';
 
-/** Which rail place a route sits in: the pages are theirs, every thread and project screen bise's. Pure. */
+/** Which rail place a route sits in: the pages are theirs (every processes route, all, scoped or one
+ *  open, is the processes place's), every thread and project screen bise's. Pure. */
 export function railPlaceOf(route: Route): RailPlace {
   switch (route.screen) {
     case 'inbox':
@@ -22,6 +23,8 @@ export function railPlaceOf(route: Route): RailPlace {
     case 'plugins':
     case 'settings':
       return route.screen;
+    case 'running':
+      return 'processes';
     default:
       return 'bise';
   }
@@ -33,6 +36,7 @@ export const RAIL_GO: Record<RailPlace, Route> = {
   inbox: { screen: 'inbox' },
   scheduled: { screen: 'scheduled' },
   artifacts: { screen: 'artifacts', project: '' },
+  processes: { screen: 'running' },
   plugins: { screen: 'plugins' },
   settings: { screen: 'settings' },
 };

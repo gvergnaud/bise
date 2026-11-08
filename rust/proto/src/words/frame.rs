@@ -2,7 +2,7 @@
 //! the desktop window's frame since bise fait mac (page native-mac §6,
 //! mockup 1): its bar, its rail, its sidebar (apps/desktop/src/app's
 //! Frame.tsx, SideRail.tsx, Sidebar.tsx, newagent.tsx). The places' own
-//! names (inbox, scheduled, artifacts, plugins, bise) are `panel`'s, read
+//! names (inbox, scheduled, artifacts, processes, plugins, bise) are `panel`'s, read
 //! there. Sentence case as the mockups say them; designer signs them.
 
 crate::words! { frame:
@@ -52,6 +52,8 @@ crate::words! { frame:
     scheduled = "Scheduled";
     /// the rail's artifacts button
     artifacts = "Artifacts";
+    /// the rail's processes button (the page of what his agents left running)
+    processes = "Processes";
     /// the rail's plugins button
     plugins = "Plugins";
     /// the '+' at the Projects label's end: its VoiceOver name and tip

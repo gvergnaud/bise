@@ -140,7 +140,7 @@ export function menuTemplate(o: MenuOptions): MenuItemConstructorOptions[] {
 
   // the rail's places, each with the key its button shows (rail-keys, designer m_45492 / m_45497;
   // settings/keys.ts PLACE_KEYS): bise ⌘0, the inbox block ⌘I and its page ⇧⌘I, Scheduled ⌘Y,
-  // Artifacts ⇧⌘A, Plugins ⇧⌘X. The window's own key acts first; its echo here goes to the same
+  // Artifacts ⇧⌘A, Processes ⇧⌘P, Plugins ⇧⌘X. The window's own key acts first; its echo here goes to the same
   // route, dropped (app/menu.ts)
   const go: MenuItemConstructorOptions = {
     label: menus.go_menu,
@@ -150,6 +150,7 @@ export function menuTemplate(o: MenuOptions): MenuItemConstructorOptions[] {
       item(menus.go_inbox_page, 'Shift+CmdOrCtrl+I', 'inboxPage'),
       item(menus.go_scheduled, 'CmdOrCtrl+Y', 'scheduled'),
       item(menus.go_artifacts, 'Shift+CmdOrCtrl+A', 'artifacts'),
+      item(menus.go_processes, 'Shift+CmdOrCtrl+P', 'processes'),
       item(menus.go_plugins, 'Shift+CmdOrCtrl+X', 'plugins'),
     ],
   };
@@ -198,7 +199,7 @@ export type MenuTarget = { readonly send: 'focused' } | { readonly open: string 
 
 /** The route a Go item opens the main window on when it does not have the keys (app/route.ts's
  *  paths; 'inbox' alone is the block's ask, so the page is 'inbox/all'). */
-const GO_OPENS: Readonly<Record<GoAction, string>> = { bise: 'bise', inboxPage: 'inbox/all', scheduled: 'scheduled', artifacts: 'artifacts', plugins: 'plugins' };
+const GO_OPENS: Readonly<Record<GoAction, string>> = { bise: 'bise', inboxPage: 'inbox/all', scheduled: 'scheduled', artifacts: 'artifacts', processes: 'running', plugins: 'plugins' };
 const isGo = (a: MenuAction): a is GoAction => a in GO_OPENS;
 
 /**

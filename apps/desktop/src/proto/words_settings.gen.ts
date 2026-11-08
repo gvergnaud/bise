@@ -648,6 +648,8 @@ export const settings = {
   key_inbox_page: "open the inbox page",
   /** ⌘Y: the rail's clock (History in Safari and Chrome) */
   key_scheduled: "scheduled",
+  /** ⇧⌘P: the rail's processes (what his agents left running) */
+  key_processes: "processes",
   /** ⇧⌘X: the rail's plugins (Extensions in VS Code) */
   key_plugins: "plugins",
   /** ⌘F */

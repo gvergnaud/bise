@@ -18,6 +18,8 @@ export const menus = {
   go_scheduled: "Scheduled",
   /** Go › the artifacts, ⇧⌘A */
   go_artifacts: "Artifacts",
+  /** Go › the processes page, ⇧⌘P */
+  go_processes: "Processes",
   /** Go › the plugins page, ⇧⌘X */
   go_plugins: "Plugins",
   /** rename the agent (its thread head takes the new name) */

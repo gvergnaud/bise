@@ -107,6 +107,11 @@
     "one": null,
     "text": "Plugins"
   },
+  "menus.go_processes": {
+    "args": [],
+    "one": null,
+    "text": "Processes"
+  },
   "menus.go_scheduled": {
     "args": [],
     "one": null,

@@ -74,6 +74,11 @@
     "one": null,
     "text": "Plugins"
   },
+  "frame.processes": {
+    "args": [],
+    "one": null,
+    "text": "Processes"
+  },
   "frame.projects": {
     "args": [],
     "one": null,

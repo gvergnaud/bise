@@ -469,7 +469,7 @@ export interface A11y {
 export type MenuAction = 'settings' | 'inbox' | 'find' | 'terminal' | 'save' | 'browser' | 'newProject' | 'newAgent' | 'sidebar' | 'panel' | 'panelFull' | 'reopenTab' | 'closeTab' | 'bims' | 'sideCard' | GoAction;
 
 /** The Go menu's places, the rail's (rail-keys): each a route of the main window (app/menu.ts routeOfMenu). */
-export type GoAction = 'bise' | 'inboxPage' | 'scheduled' | 'artifacts' | 'plugins';
+export type GoAction = 'bise' | 'inboxPage' | 'scheduled' | 'artifacts' | 'processes' | 'plugins';
 
 /** A window's two sides, shown or not: the View menu's Hide/Show labels (window.bise.viewMenu); and
  *  whether it shows an artifact with a primary action (File › Open in Browser ⌘⏎ lit, artifacts/front.ts). */

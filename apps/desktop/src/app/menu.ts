@@ -70,6 +70,8 @@ export function routeOfMenu(action: MenuAction): Route | undefined {
       return { screen: 'inbox' };
     case 'artifacts':
       return { screen: 'artifacts', project: '' };
+    case 'processes':
+      return { screen: 'running' };
     default:
       return undefined;
   }
