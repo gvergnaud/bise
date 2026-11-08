@@ -253,8 +253,8 @@ function ServerRow({ x, owner, onSet, onLogin }: { x: PluginPart; owner: boolean
         <div className="plg-tools" data-testid={`plugins.part.${x.id}.tools`}>
           {tools.map((t) => (
             <span key={t.id} className={`plg-tool${t.on ? '' : ' off'}`} data-testid={`plugins.part.${t.id}`}>
-              {/* a long name gives way (an ellipsis, the whole name in its tip), never its switch */}
-              <span className="plg-tool-name plg-mono" {...tipAttrs(t.name)}>{t.name}</span>
+              {/* a long name gives way (an ellipsis, the whole name in its tip, mono), never its switch */}
+              <span className="plg-tool-name plg-mono" {...tipAttrs(`\`${t.name}\``)}>{t.name}</span>
               {x.on && owner && <Toggle on={t.on} label={t.name} onChange={(on) => { onSet(t.id, on); }} testId={`plugins.part.${t.id}.toggle`} />}
             </span>
           ))}

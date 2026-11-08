@@ -198,4 +198,18 @@ describe('TipLayer', () => {
     expect(tip()?.style.left).toBe(`${String(1148 - 8)}px`);
     expect(tip()?.style.top).toBe('314px');
   });
+
+  it('a mono part breaks only after a _, never inside a word (designer m_55643)', () => {
+    // mutation: the mono part drawn whole turns it red (no break point)
+    const v = marks('`get_blendfile_summary_of_linked_libraries_for_cli`');
+    over(v.getByTestId('a'));
+    act(() => {
+      vi.advanceTimersByTime(400);
+    });
+    const mono = tip()?.querySelector('.m');
+    expect(mono?.textContent).toBe('get_blendfile_summary_of_linked_libraries_for_cli');
+    const parts = Array.from(mono?.childNodes ?? []).filter((n) => n.nodeName !== 'WBR').map((n) => n.textContent);
+    expect(parts).toEqual(['get_', 'blendfile_', 'summary_', 'of_', 'linked_', 'libraries_', 'for_', 'cli']);
+    expect(mono?.querySelectorAll('wbr').length).toBe(7);
+  });
 });

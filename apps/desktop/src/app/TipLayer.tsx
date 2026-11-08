@@ -8,7 +8,7 @@
 // (src/ds/tip.ts, pure). A mark's words that change while its tip shows (a turn's age) follow.
 // Hidden on a press, a key, a scroll, the pointer leaving the window or the window losing focus.
 // Owner: amb-win.
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { besideBox, clearBox, placeTip, tipWait, TIP_WARM_MS, type TipSide } from '@/ds';
 
@@ -169,11 +169,12 @@ export function TipLayer({ testId = 'tip' }: { testId?: string }) {
   return createPortal(
     <div ref={tipRef} className={shown.fade ? 'b-tip in' : 'b-tip'} role="tooltip" style={{ visibility: 'hidden' }} data-testid={testId}>
       <span className="w" data-testid={`${testId}.words`}>
-        {/* `…` parts mono in text (a branch, a folder: wt-sign's ψ words, designer m_24019) */}
+        {/* `…` parts mono in text (a branch, a folder: wt-sign's ψ words, designer m_24019); one
+            longer than the tip's line breaks after a '_', never inside a word (designer m_55643) */}
         {shown.words.split('`').map((t, i) =>
           i % 2 === 1 ? (
             <span key={i} className="m">
-              {t}
+              {t.split(/(?<=_)/).map((w, j) => (j === 0 ? w : <Fragment key={j}><wbr />{w}</Fragment>))}
             </span>
           ) : (
             t

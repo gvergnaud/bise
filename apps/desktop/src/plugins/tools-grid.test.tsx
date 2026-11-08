@@ -3,17 +3,19 @@
 // card and over the next column). Every switch stays at its cell's end inside the grid; a long
 // name gives way (an ellipsis, the whole name in its tip); the grid falls to one column when two
 // don't fit. happy-dom has no layout: the real rows are rendered, plugins.css's top-level rules
-// are cascaded onto them (the last matching rule wins), and their flex row is laid out here at the
-// card width a 1400 and an 800 px window give (the sidebar at its default width). A name's width
-// is its characters at the mono's 0.6 em.
-// Mutation: .plg-tool-name without min-width: 0 turns the 1400 row red (the longest name pushes
-// its switch out of its cell); the grid's 240 px column min at 400 turns the column counts red.
+// are cascaded onto them (the last matching rule wins), and their flex row is laid out here in the
+// main column a 1400 and an 800 px window give (the frame's own left: under 1000 px the sidebar
+// isn't docked), and at the main column's floor. A name's width is its characters at the mono's
+// 0.6 em.
+// Mutation: .plg-tool-name without min-width: 0 turns every case red (the longest name pushes its
+// switch out of its cell); the grid's 240 px column min at 400 turns the column counts red.
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Plugin } from '@/proto';
-import { SIDE } from '@/app/resize';
+import { leftWidthOf } from '@/app/frame-state';
+import { MAIN_MIN, SIDE } from '@/app/resize';
 import { PluginPage } from './PluginPage';
 
 afterEach(cleanup);
@@ -82,17 +84,19 @@ function words(v: string | undefined): string[] {
   return out;
 }
 
-/** The tools grid's card at a window's width: the shell column (--w-col) inside the main column's pads. */
-function cardAt(win: number): number {
-  const main = win - px('var(--w-rail)') - SIDE.def;
+/** The main column at a window's width, the right panel shut: the frame's left (the rail, the sidebar docked from 1000 px) taken off. */
+const mainAt = (win: number): number => win - leftWidthOf(win, { hidden: false, width: SIDE.def });
+
+/** The tools grid's card in a main column: the shell column (--w-col) inside its pads. */
+function cardIn(main: number): number {
   return Math.min(px('var(--w-col)'), main - 2 * px('var(--pad-column)'));
 }
 
 /** The grid's columns, each tool's cell, where its name ends and its switch's right edge. */
-function layout(win: number) {
+function layout(main: number) {
   const grid = screen.getByTestId(`plugins.part.${SERVER}.tools`);
   const pad = words(decl(grid, 'padding'));
-  const width = cardAt(win) - px(pad[1] ?? '') - px(pad[3] ?? '');
+  const width = cardIn(main) - px(pad[1] ?? '') - px(pad[3] ?? '');
   const colGap = px(words(decl(grid, 'gap'))[1] ?? '');
   const trackMin = Math.min(Number(/minmax\(min\((\d+)px, 100%\), 1fr\)/.exec(decl(grid, 'grid-template-columns') ?? '')?.[1]), width);
   const cols = Math.max(1, Math.floor((width + colGap) / (trackMin + colGap)));
@@ -112,21 +116,25 @@ function layout(win: number) {
 }
 
 describe("a server's unfolded tools", () => {
-  it.each([[1400, 2], [800, 1]])('at %i px: %i column(s), every switch at its cell\'s end inside the card, a long name cut with its tip', (win, cols) => {
+  it.each([
+    // two columns cut blender's longest names (49 characters, 353 px); one column shows them whole
+    ['a 1400 px window', mainAt(1400), 2, true],
+    ['an 800 px window (the sidebar not docked)', mainAt(800), 2, true],
+    ['the main column at its floor (the panel open)', MAIN_MIN, 1, false],
+  ])('in %s: %i px of main column, %i column(s), every switch at its cell\'s end, a long name cut (%s) with its tip', (_, main, cols, cut) => {
     render(<PluginPage p={BLENDER} ports={{ send: () => {}, back: () => {}, tryIt: () => {}, setUpComputer: () => {} }} />);
     fireEvent.click(screen.getByTestId(`plugins.part.${SERVER}.fold`));
-    const g = layout(win);
+    const g = layout(main);
     expect(g.cols).toBe(cols);
     for (const t of g.tools) {
       expect(t.toggleLast, t.name).toBe(true);
       expect(t.switchEnd, t.name).toBeLessThanOrEqual(g.cell + 0.5);
-      expect(t.nameEl.getAttribute('data-tip')).toBe(t.name);
+      expect(t.nameEl.getAttribute('data-tip')).toBe(`\`${t.name}\``);
       if (t.clipped) {
         expect(decl(t.nameEl, 'text-overflow'), t.name).toBe('ellipsis');
         expect(decl(t.nameEl, 'white-space'), t.name).toBe('nowrap');
       }
     }
-    // the longest names are cut at 1400 (two columns of 330); one column at 800 shows nearly all whole
-    expect(g.tools.some((t) => t.clipped)).toBe(true);
+    expect(g.tools.some((t) => t.clipped)).toBe(cut);
   });
 });
