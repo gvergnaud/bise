@@ -231,6 +231,11 @@ pub struct SetupPorts {
     /// one live test of a model (his click only), on its own thread,
     /// `Done::Tested` at its end with the generation given
     pub model_test: ModelTestFn,
+    /// checks.json's text, each model's last test from any screen
+    /// (bise_catalog::checks; "" when none)
+    pub checks: Box<dyn Fn() -> String>,
+    /// a test's result into checks.json, so the terminal's /models says it too
+    pub record_check: Box<dyn Fn(&bise_catalog::features::Test)>,
     /// a role's model and effort, checked ([`check_role_set`]) then
     /// written by bise_catalog's roles::save_role
     pub role_set: RoleSetFn,
@@ -673,6 +678,12 @@ pub fn live(flow: FlowFn) -> SetupPorts {
                 let ms = u64::try_from(t0.elapsed().as_millis()).unwrap_or(u64::MAX);
                 let _ = tx.send(Done::Tested { model: t.model, generation, res, ms });
             });
+        }),
+        checks: Box::new(move || std::fs::read_to_string(home().checks_file()).unwrap_or_default()),
+        record_check: Box::new(move |t| {
+            if let Err(e) = bise_catalog::checks::record(&home().checks_file(), t, t.at_ms) {
+                eprintln!("bise: {e}");
+            }
         }),
         role_set: Box::new(move |role, model, effort| {
             let file = home().config_file();

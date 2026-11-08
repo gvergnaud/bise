@@ -41,6 +41,8 @@ struct World {
     role_sets: Vec<(String, Option<String>, Option<String>)>,
     /// the news line's role_set_many writes (each also lands in role_sets)
     role_set_manys: usize,
+    /// checks.json's text (bise_catalog::checks): what the tests recorded, or another screen
+    checks: String,
     /// S.6: the release channel's reads (the channel of the last one)
     manifest_reads: usize,
     manifest: Option<std::sync::mpsc::Sender<Done>>,
@@ -90,6 +92,7 @@ fn setup(t: &mut T) -> Rc<RefCell<World>> {
     let mf = w.clone();
     let gi = w.clone();
     let ym = w.clone();
+    let (ck, rc) = (w.clone(), w.clone());
     let sg = w.clone();
     let gr = w.clone();
     let gs = w.clone();
@@ -316,6 +319,11 @@ fn setup(t: &mut T) -> Rc<RefCell<World>> {
             }
             y.borrow_mut().role_sets.push((role.into(), model.map(String::from), effort.map(String::from)));
             Ok(())
+        }),
+        checks: Box::new(move || ck.borrow().checks.clone()),
+        record_check: Box::new(move |t| {
+            let mut w = rc.borrow_mut();
+            w.checks = bise_catalog::checks::with(&w.checks, t, t.at_ms);
         }),
         role_set_many: Box::new(move |roles, model| {
             let mut w = ym.borrow_mut();
@@ -1154,6 +1162,42 @@ fn role_set_many_writes_once_and_tests_the_model_once() {
     assert!(!evs(&out, "roles").is_empty(), "the roles come again");
     let tested: Vec<String> = w.borrow().model_tests.iter().map(|(m, _)| m.clone()).collect();
     assert_eq!(tested, vec!["anthropic/claude-opus-5-5".to_string()], "one test, one paid call");
+}
+
+/// architect m_57509: each model's last test is kept in checks.json for
+/// both screens: one from another screen shows in the gauge, and a test
+/// that ends here is recorded there.
+#[test]
+fn the_gauge_reads_the_tests_kept_in_checks_and_records_its_own() {
+    use bise_catalog::features::Test;
+    use bise_proto::app_rows::CheckWhy;
+    let mut t = T::new();
+    let w = setup(&mut t);
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64;
+    // main on Anthropic (the fake's one account); the terminal's key check found its key refused
+    const OPUS: &str = "anthropic/claude-opus-5-5";
+    w.borrow_mut().role_sets.push(("main".into(), Some(OPUS.into()), None));
+    let refused = Test { model: OPUS.into(), generation: 0, failed: Some((CheckWhy::WrongKey, "401".into())), ms: 300, at_ms: now - 1000 };
+    w.borrow_mut().checks = bise_catalog::checks::with("", &refused, now);
+    // the key was there before this core started: the stored result counts on the key it first sees
+    w.borrow_mut().keys.push(("anthropic".into(), "sk-fake-secret".into()));
+    t.core.app_start();
+    t.until(|o| o.iter().any(|v| v["ev"] == "setup_gauge"));
+    let out = t.take();
+    let g = evs(&out, "setup_gauge").last().cloned().unwrap();
+    // agents follow main (bise's own row also says the fake's home is gone)
+    let agents = g["gauge"]["rows"].as_array().unwrap().iter().find(|r| r["id"] == "agents").cloned().unwrap();
+    assert_eq!((agents["state"].as_str(), agents["parts"][0]["why"].as_str()), (Some("failed"), Some("wrong_key")), "{agents:#}");
+    // a test here ends: it goes to checks.json for the terminal
+    app(&mut t, r#"{"cmd":"setup_test","models":["anthropic/claude-opus-5-5"]}"#);
+    let tx = w.borrow_mut().testing.take().unwrap();
+    for (m, g) in std::mem::take(&mut w.borrow_mut().model_tests) {
+        let _ = tx.send(Done::Tested { model: m, generation: g, res: Ok(()), ms: 420 });
+    }
+    t.until(|o| o.iter().any(|v| v["ev"] == "setup_gauge" && v["gauge"].get("testing").is_none()));
+    let kept = bise_catalog::checks::read(&w.borrow().checks, now);
+    assert_eq!(kept.len(), 1);
+    assert_eq!((kept[0].model.as_str(), kept[0].failed.clone(), kept[0].ms), (OPUS, None, 420));
 }
 
 /// architect m_57461: the first role already on the news model changed

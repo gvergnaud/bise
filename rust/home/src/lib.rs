@@ -392,6 +392,12 @@ impl Home {
         self.root.join("prefs.json")
     }
 
+    /// `checks.json`: each model's last live test, for Settings and the
+    /// terminal's /models (bise_catalog::checks).
+    pub fn checks_file(&self) -> PathBuf {
+        self.root.join("checks.json")
+    }
+
     /// Where one preference is kept: its key of `prefs.json`.
     pub fn pref(&self, p: Pref) -> Slot {
         Slot::key(self.prefs_file(), p.key())

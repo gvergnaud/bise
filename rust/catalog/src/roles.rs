@@ -446,16 +446,23 @@ pub fn save_roles(file: &std::path::Path, ids: &[&str], model: &str) -> Result<(
 
 /// config.toml rewritten by `change`, under its lock (tmp + rename).
 fn write_locked(file: &std::path::Path, change: impl Fn(&str) -> String) -> Result<(), String> {
+    rewrite_locked(file, change)
+}
+
+/// A file of bise's home rewritten by `change` (its text, "" when none),
+/// under `<name>.lock`, through `<name>.tmp-<pid>-<n>` and a rename: config.toml, checks.json.
+pub(crate) fn rewrite_locked(file: &std::path::Path, change: impl Fn(&str) -> String) -> Result<(), String> {
+    let name = file.file_name().map_or_else(String::new, |n| n.to_string_lossy().into_owned());
     if let Some(dir) = file.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| format!("couldn't write config.toml: {e}"))?;
+        std::fs::create_dir_all(dir).map_err(|e| format!("couldn't write {name}: {e}"))?;
     }
-    let _lock = lock(&file.with_extension("toml.lock")).map_err(|e| format!("couldn't lock config.toml: {e}"))?;
+    let _lock = lock(&file.with_file_name(format!("{name}.lock"))).map_err(|e| format!("couldn't lock {name}: {e}"))?;
     let text = std::fs::read_to_string(file).unwrap_or_default();
-    let tmp = file.with_extension(format!("toml.tmp-{}-{}", std::process::id(), TMP.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
-    std::fs::write(&tmp, change(&text)).map_err(|e| format!("couldn't write config.toml: {e}"))?;
+    let tmp = file.with_file_name(format!("{name}.tmp-{}-{}", std::process::id(), TMP.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
+    std::fs::write(&tmp, change(&text)).map_err(|e| format!("couldn't write {name}: {e}"))?;
     std::fs::rename(&tmp, file).map_err(|e| {
         let _ = std::fs::remove_file(&tmp);
-        format!("couldn't write config.toml: {e}")
+        format!("couldn't write {name}: {e}")
     })
 }
 

@@ -20,6 +20,7 @@ bise_home::test_home!();
 
 pub mod auth;
 pub mod auth_cli;
+pub mod checks;
 pub mod chatgpt;
 pub mod cli;
 pub mod config_cli;
