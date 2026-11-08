@@ -13,28 +13,28 @@ import { modelRow } from './hold';
 /** A row's name: bise's own row is bise (designer m_43851), the others the feature's. */
 export const ROW_NAME: Record<FeatureId, string> = { ...FEATURE_WORDS, talk: settings.role_main_name };
 
-/** A row's plain line: what it does. */
-export const ABOUT: Record<FeatureId, string> = {
+/** A row's plain line: what it does. The list shows the features named here, in the core's order:
+ * the approvals checker is not one (it leaves with the security branch's removal, main m_57194). */
+export const ABOUT: Partial<Record<FeatureId, string>> = {
   talk: settings.about_talk,
   agents: settings.about_agents,
   small: settings.about_small,
   vision: settings.about_vision,
   dictation: settings.about_dictation,
   voice_mode: settings.about_voice_mode,
-  approvals: settings.about_approvals,
-  unknown: '',
 };
 
+/** The rows the list shows. Pure. */
+export const listed = (g: SetupGauge): FeatureRow[] => g.rows.filter((r) => ABOUT[r.id] !== undefined);
+
 /** A row in the fix line's sentence ("Titles, Dictation and Voice mode stopped"). */
-const SHORT: Record<FeatureId, string> = {
+const SHORT: Partial<Record<FeatureId, string>> = {
   talk: settings.short_talk,
   agents: settings.short_agents,
   small: settings.short_small,
   vision: settings.short_vision,
   dictation: settings.short_dictation,
   voice_mode: settings.short_voice_mode,
-  approvals: settings.short_approvals,
-  unknown: '',
 };
 
 /** Voice mode's sub-rows, by the part's role. */
@@ -50,7 +50,7 @@ export function partsInOrder(r: FeatureRow): FeaturePart[] {
 }
 
 /** The roles role_set changes from this list (the voices have their own settings). */
-const PICKED: ReadonlySet<RoleId> = new Set<RoleId>(['main', 'agents', 'small', 'classify']);
+const PICKED: ReadonlySet<RoleId> = new Set<RoleId>(['main', 'agents', 'small']);
 
 /** "a, b and c". Pure. */
 export function joinAnd(items: readonly string[]): string {
@@ -159,7 +159,7 @@ export function fixLine(g: SetupGauge): { text: string; fix: SetupFix } | null {
   if (n == null) return null;
   const stopped = n.unlocks.filter((id) => g.rows.find((r) => r.id === id)?.state === 'failed');
   if (stopped.length === 0) return null;
-  const what = joinAnd(stopped.map((id) => SHORT[id]));
+  const what = joinAnd(stopped.flatMap((id) => SHORT[id] ?? []));
   const f = n.fix;
   const first = g.rows.find((r) => r.id === stopped[0]);
   const text =

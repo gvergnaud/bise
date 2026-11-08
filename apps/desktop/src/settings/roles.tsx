@@ -13,7 +13,7 @@ import { cx } from '@/ds/cx';
 import { settings } from '@/proto/words.gen';
 import { Trouble, TryIt, fixButton, type GaugePorts } from './gauge';
 import { modelRow } from './hold';
-import { ABOUT, FALLBACK, ROW_NAME, actInPlace, fixLine, hasTrouble, modelView, partName, partStatus, partsInOrder, pickGroups, rowStatus, type Status } from './roleList';
+import { ABOUT, FALLBACK, ROW_NAME, actInPlace, fixLine, hasTrouble, listed, modelView, partName, partStatus, partsInOrder, pickGroups, rowStatus, type Status } from './roleList';
 
 export interface RoleListProps {
   g: SetupGauge;
@@ -194,7 +194,7 @@ export function RoleList(props: RoleListProps) {
         </div>
       )}
       <div className="st-rows" data-testid="settings.features">
-        {g.rows.map((r) => (
+        {listed(g).map((r) => (
           <Row
             key={r.id}
             r={r}

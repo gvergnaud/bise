@@ -432,13 +432,14 @@ describe('settings · Setup: which model does what (page models-settings, pick A
   const gauge = () => ev('setup_gauge').gauge;
   const allOn = (): SetupGauge => ({ ...gauge(), on: 7, next: undefined, testing: [], rows: gauge().rows.map((r) => ({ ...r, state: 'on' as const, fix: undefined, parts: r.parts.map((x) => ({ ...x, state: 'on' as const, why: undefined, said: undefined })) })) });
 
-  it('the test world: one list, first; Voice mode stopped, its fix on top, each part its status; approvals off with its own fix', () => {
+  it('the test world: one list, first; Voice mode stopped, its fix on top, each part its status', () => {
     const p = ports();
     view('setup', p, { gauge: { ...gauge(), testing: [] } });
-    // the list is the page's first thing, one row per role in the core's order
+    // the list is the page's first thing, one row per role in the core's order; the approvals
+    // checker isn't one (the security branch removes it, main m_57194)
     expect(screen.getByTestId('settings.page.setup').querySelector('[data-testid]')?.getAttribute('data-testid')).toBe('settings.roles');
     expect([...document.querySelectorAll('.st-feature')].map((e) => e.getAttribute('data-testid'))).toEqual(
-      ['talk', 'agents', 'small', 'vision', 'dictation', 'voice_mode', 'approvals'].map((id) => `settings.feature.${id}`),
+      ['talk', 'agents', 'small', 'vision', 'dictation', 'voice_mode'].map((id) => `settings.feature.${id}`),
     );
     expect(screen.getByTestId('settings.feature.talk').textContent).toContain(settings.role_main_name + settings.about_talk);
     // the fix line: what stopped, and the one button (the row doesn't repeat it)
@@ -450,7 +451,6 @@ describe('settings · Setup: which model does what (page models-settings, pick A
     expect(screen.getByTestId('settings.feature.voice_mode.main.model').textContent).toContain(settings.part_same_as_bise);
     expect(screen.getByTestId('settings.feature.voice_mode.tts.mark').textContent).toBe(settings.stop_no_credit);
     expect(screen.queryByTestId('settings.feature.voice_mode.trouble')).toBeNull();
-    expect(screen.getByTestId('settings.feature.approvals.mark').textContent).toBe(settings.mark_off);
     // nothing tested on open: a test is his click
     expect(p.sent).toEqual([]);
     fireEvent.click(screen.getByTestId('settings.gauge.test'));
@@ -460,8 +460,18 @@ describe('settings · Setup: which model does what (page models-settings, pick A
     expect(screen.getByTestId('settings.feature.voice_mode.trouble').textContent).toContain('No credit left on this workspace');
     fireEvent.click(screen.getByTestId('settings.feature.voice_mode.trouble.again'));
     expect(p.sent.at(-1)).toEqual({ cmd: 'setup_test', models: ['groq/whisper-large-v3', 'mistral/voxtral-mini-tts-2603', 'chatgpt/gpt-6.1-sol'] });
-    fireEvent.click(screen.getByTestId('settings.feature.approvals.fix'));
-    expect(p.sent.at(-1)).toEqual({ cmd: 'role_set', role: 'classify' });
+  });
+
+  it("a role with no model shows its act in the model's place", () => {
+    const p = ports();
+    const noVoice: SetupGauge = {
+      ...allOn(),
+      rows: allOn().rows.map((r) => (r.id === 'dictation' ? { ...r, state: 'off' as const, fix: { t: 'add_key' as const, provider: 'mistral' }, parts: [{ role: 'voice' as const, model: '', source: 'default' as const, state: 'off' as const }] } : r)),
+    };
+    view('setup', p, { gauge: noVoice });
+    expect(screen.getByTestId('settings.feature.dictation.mark').textContent).toBe(settings.mark_off);
+    fireEvent.click(screen.getByTestId('settings.feature.dictation.fix'));
+    expect(screen.getByTestId('settings.key.field')).toBeTruthy();
   });
 
   it("images run bise's model: its name, 'same as bise', never a button", () => {
@@ -494,14 +504,14 @@ describe('settings · Setup: which model does what (page models-settings, pick A
   });
 
   it("an expired OpenRouter key: one fix line on top, '✗ key expired' on the row; Replace opens its field with the steps; a key that works tests the row again", () => {
-    const JEV = 'openrouter/typesafe/jev-1.13';
+    const SMALL = 'openrouter/mistralai/mistral-small';
     const KEYS = 'https://openrouter.ai/settings/keys';
     const failed: SetupGauge = {
       ...gauge(),
       testing: [],
       rows: gauge().rows.map((r) =>
-        r.id === 'approvals'
-          ? { id: 'approvals', state: 'failed' as const, fix: { t: 'add_key' as const, provider: 'openrouter', url: KEYS }, parts: [{ model: JEV, name: 'jev-1.13', provider: 'OpenRouter', role: 'classify' as const, source: 'config' as const, state: 'failed' as const, why: 'wrong_key' as const, said: 'API key expired.' }] }
+        r.id === 'small'
+          ? { id: 'small', state: 'failed' as const, fix: { t: 'add_key' as const, provider: 'openrouter', url: KEYS }, parts: [{ model: SMALL, name: 'mistral-small', provider: 'OpenRouter', role: 'small' as const, source: 'config' as const, state: 'failed' as const, why: 'wrong_key' as const, said: 'API key expired.' }] }
           : r,
       ),
     };
@@ -509,11 +519,11 @@ describe('settings · Setup: which model does what (page models-settings, pick A
     const acc: Account[] = [...accounts(), { id: 'openrouter', kind: 'key', label: 'OpenRouter', state: 'signed_in', provider: 'openrouter' }];
     const opened: string[] = [];
     const p = { ...ports(), open: (u: string) => opened.push(u) };
-    const failedNext: SetupGauge = { ...failed, next: { fix: { t: 'add_key', provider: 'openrouter', url: KEYS }, unlocks: ['approvals'] } };
+    const failedNext: SetupGauge = { ...failed, next: { fix: { t: 'add_key', provider: 'openrouter', url: KEYS }, unlocks: ['small'] } };
     const r = view('setup', p, { gauge: failedNext, accounts: acc });
-    expect(screen.getByTestId('settings.fixline').textContent).toContain(settings.fixline_key({ provider: 'OpenRouter', what: settings.short_approvals }));
-    expect(screen.getByTestId('settings.feature.approvals.mark').textContent).toBe(settings.stop_wrong_key);
-    expect(screen.queryByTestId('settings.feature.approvals.fix')).toBeNull();
+    expect(screen.getByTestId('settings.fixline').textContent).toContain(settings.fixline_key({ provider: 'OpenRouter', what: settings.short_small }));
+    expect(screen.getByTestId('settings.feature.small.mark').textContent).toBe(settings.stop_wrong_key);
+    expect(screen.queryByTestId('settings.feature.small.fix')).toBeNull();
     const add = screen.getByTestId('settings.fixline.fix');
     expect(add.textContent).toBe('Replace the OpenRouter key');
     fireEvent.click(add);
@@ -521,23 +531,23 @@ describe('settings · Setup: which model does what (page models-settings, pick A
     const guide = screen.getByTestId('settings.key.guide').textContent;
     expect(guide).toContain(settings.key_replace({ provider: 'OpenRouter' }));
     expect(guide).toContain(settings.key_step_create);
-    expect(screen.getByTestId('settings.key.after').textContent).toContain(settings.key_after_test({ what: 'auto approvals' }));
+    expect(screen.getByTestId('settings.key.after').textContent).toContain(settings.key_after_test({ what: 'titles and summaries' }));
     fireEvent.click(screen.getByTestId('settings.key.link'));
     expect(opened).toEqual([KEYS]);
-    // he pastes a new key: checked by the core, then it works, and approvals test again
+    // he pastes a new key: checked by the core, then it works, and titles test again
     const field = screen.getByTestId('settings.key.field');
     fireEvent.change(field, { target: { value: 'sk-or-v1-new' } });
     fireEvent.keyDown(field, { key: 'Enter' });
     expect(p.sent.at(-1)).toEqual({ cmd: 'provider_use', id: 'openrouter', key: 'sk-or-v1-new' });
-    const works = { ev: 'provider_check' as const, id: 'openrouter', name: 'OpenRouter', model: JEV, pasted: true, state: 'works' as const };
+    const works = { ev: 'provider_check' as const, id: 'openrouter', name: 'OpenRouter', model: SMALL, pasted: true, state: 'works' as const };
     r.rerender(<Settings page="setup" prefs={prefs()} accounts={acc} projects={projects()} found={found()} computerUse={null} perms={{}} ports={p} gauge={failedNext} check={works} />);
-    expect(p.sent.at(-1)).toEqual({ cmd: 'setup_test', models: [JEV] });
+    expect(p.sent.at(-1)).toEqual({ cmd: 'setup_test', models: [SMALL] });
   });
 
   it('no key yet: the fix adds one (its article by sound); a key that failed: it replaces it', () => {
     const row = (why: 'no_key' | 'wrong_key'): SetupGauge => ({
       ...gauge(),
-      rows: [{ id: 'approvals', state: 'failed', fix: { t: 'add_key', provider: 'openrouter' }, parts: [{ model: 'openrouter/typesafe/jev-1.13', provider: 'OpenRouter', role: 'classify', source: 'config', state: 'failed', why }] }],
+      rows: [{ id: 'small', state: 'failed', fix: { t: 'add_key', provider: 'openrouter' }, parts: [{ model: 'openrouter/mistralai/mistral-small', provider: 'OpenRouter', role: 'small', source: 'config', state: 'failed', why }] }],
     });
     const fix = { t: 'add_key' as const, provider: 'openrouter' };
     expect(fixButton(fix, row('no_key'))).toBe('Add an OpenRouter key');
@@ -558,7 +568,7 @@ describe('settings · Setup: which model does what (page models-settings, pick A
     expect(joinAnd(['Titles', 'Dictation', 'Voice mode'])).toBe(`Titles, Dictation ${settings.list_and} Voice mode`);
     expect(joinAnd(['Agents'])).toBe('Agents');
     // only something that stopped earns a line: a feature merely off doesn't
-    const off: SetupGauge = { ...allOn(), next: { fix: { t: 'turn_on', role: 'classify' }, unlocks: ['approvals'] } };
+    const off: SetupGauge = { ...allOn(), next: { fix: { t: 'allow_perm', perm: 'mic', open: false }, unlocks: ['dictation'] } };
     expect(fixLine(off)).toBeNull();
   });
 

@@ -118,8 +118,6 @@ crate::words! { settings:
     about_dictation = "turns your voice into text";
     /// the list: voice mode's line
     about_voice_mode = "talks with you out loud";
-    /// the list: auto approvals' line
-    about_approvals = "checks risky commands";
     /// voice mode's sub-rows: the model that listens
     part_hears = "hears";
     /// voice mode's sub-rows: the model that answers (bise's)
@@ -152,8 +150,6 @@ crate::words! { settings:
     short_dictation = "Dictation";
     /// a role in the fix line's sentence: voice mode
     short_voice_mode = "Voice mode";
-    /// a role in the fix line's sentence: auto approvals
-    short_approvals = "Auto approvals";
     /// the model picker: a model whose provider has no key or sign-in yet
     pick_setup_first = "set up first";
     /// a role's status: why it stopped, from its verdict (short, after ✗)

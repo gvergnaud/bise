@@ -5,11 +5,6 @@
     "one": null,
     "text": "runs your tasks"
   },
-  "settings.about_approvals": {
-    "args": [],
-    "one": null,
-    "text": "checks risky commands"
-  },
   "settings.about_dictation": {
     "args": [],
     "one": null,
@@ -5472,11 +5467,6 @@
     "args": [],
     "one": null,
     "text": "Agents"
-  },
-  "settings.short_approvals": {
-    "args": [],
-    "one": null,
-    "text": "Auto approvals"
   },
   "settings.short_dictation": {
     "args": [],
