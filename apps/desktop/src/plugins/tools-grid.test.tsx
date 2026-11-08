@@ -79,7 +79,7 @@ function words(v: string | undefined): string[] {
     depth += ch === '(' ? 1 : ch === ')' ? -1 : 0;
     if (/\s/.test(ch) && depth === 0) {
       if (out.at(-1) !== '') out.push('');
-    } else out[out.length - 1] += ch;
+    } else out[out.length - 1] = (out.at(-1) ?? '') + ch;
   }
   return out;
 }
