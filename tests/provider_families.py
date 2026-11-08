@@ -371,9 +371,12 @@ def part_d():
         t0 = time.time()
         out = turn("fakepatient/patient", "[[slow: 3]] hello patient")
         took = time.time() - t0
-        # The interrupted slow request can finish after the next turn starts.
-        recs = [json.loads(l) for l in open(F.LOG)][n:]
-        recs = [r for r in recs if r.get("model") == "patient"]
+        # The interrupted slow request can finish after the next turn starts. The fake
+        # writes a request's line after its answer is sent, so the turn can end first:
+        # wait for the line (the second race of provider_families, 70bf3c190's tip)
+        def patient_recs():
+            return [r for r in [json.loads(l) for l in open(F.LOG)][n:] if r.get("model") == "patient"]
+        recs = wait.until(patient_recs, 10, "the fake's line for the patient request")
         said = [l for l in out if obs_lines.kind(l) == "assistant"]
         check(not [l for l in out if "provider_retry" in l] and said and "ack: " in said[-1]
               and [r["status"] for r in recs] == [200] and took >= 3,
@@ -387,8 +390,12 @@ def part_d():
         t0 = time.time()
         out = turn("fakehang/m", "[[hang: 1]] hello hang")
         took = time.time() - t0
-        recs = [json.loads(l) for l in open(F.LOG)][n:]
-        recs = [r for r in recs if r.get("path", "").endswith("/chat/completions")]
+
+        def hang_recs():
+            recs = [r for r in [json.loads(l) for l in open(F.LOG)][n:] if r.get("path", "").endswith("/chat/completions")]
+            return recs if [r for r in recs if r.get("hang")] and [r for r in recs if not r.get("hang")] else None
+        # the retry's line comes after its answer, so after the turn's end may be: wait for it
+        recs = wait.until(hang_recs, 10, "the fake's lines for the hung request and its retry")
         evs = [json.loads(l.split("ev: ", 1)[1]) for l in open(os.path.join(tmp, "wire.log")).readlines()[wn:]
                if "ev: " in l and '"request_failed"' in l]
         said = [l for l in out if obs_lines.kind(l) == "assistant"]
