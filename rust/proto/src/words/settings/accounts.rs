@@ -58,7 +58,7 @@ crate::words! { settings:
     /// the key field's guide, step 1: a provider with no keys page known
     key_step_site(provider) = "On {provider}'s site, sign in and open your API keys.";
     /// the key field's guide, step 2
-    key_step_create = "Create a new key (name it bise), then copy it: it's often shown only once.";
+    key_step_create = "Create a key named bise and copy it: you only see it once.";
     /// the key field's guide, step 3
     key_step_paste = "Paste it in the field below and press ⏎.";
     /// the key field's guide: what happens after ⏎

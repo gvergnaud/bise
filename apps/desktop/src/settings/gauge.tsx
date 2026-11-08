@@ -60,6 +60,10 @@ export function markOf(r: FeatureRow, g: SetupGauge): { text: string; tone: Tone
   return { text: settings.mark_took({ secs: secsOf(ms) }), tone: 'ink', tip: better ?? settings.tip_took({ secs: secsOf(ms) }) };
 }
 
+/** A key of `provider` is there and failed (refused, expired): its fix replaces it. Pure. */
+export const keyFailed = (g: SetupGauge, provider: string): boolean =>
+  g.rows.some((r) => r.parts.some((p) => p.model.split('/')[0] === provider && p.state === 'failed' && p.why === 'wrong_key'));
+
 const PERM_NAME: Record<Perm, string> = { mic: settings.onb_perm_mic, accessibility: settings.onb_perm_accessibility, screen: settings.onb_perm_screen, unknown: '' };
 
 /** A fix's button words. Pure. */
@@ -67,7 +71,7 @@ export function fixButton(f: SetupFix, g: SetupGauge): string {
   switch (f.t) {
     case 'add_key': {
       const provider = providerName(g, f.provider);
-      return settings.fix_add_key({ a: article(provider), provider });
+      return keyFailed(g, f.provider) ? settings.fix_replace_key({ provider }) : settings.fix_add_key({ a: article(provider), provider });
     }
     case 'sign_in':
       return settings.fix_sign_in({ provider: providerName(g, f.provider) });
@@ -96,7 +100,9 @@ export function nextWords(g: SetupGauge): string {
   const f = n.fix;
   const act =
     f.t === 'add_key'
-      ? settings.next_add_key({ a: article(providerName(g, f.provider)), provider: providerName(g, f.provider) })
+      ? keyFailed(g, f.provider)
+        ? settings.next_replace_key({ provider: providerName(g, f.provider) })
+        : settings.next_add_key({ a: article(providerName(g, f.provider)), provider: providerName(g, f.provider) })
       : f.t === 'sign_in'
         ? settings.next_sign_in({ provider: providerName(g, f.provider) })
         : f.t === 'credit'

@@ -18,7 +18,7 @@ import { notifyRow } from './pages';
 import { capsOf, chromeCase, homeOf } from './chrome';
 import { stepOf } from './computer';
 import { focusOf } from './setupPage';
-import { TRY_MS } from './gauge';
+import { fixButton, TRY_MS } from './gauge';
 import { article } from './keycheck';
 import { FALLBACK } from './roles';
 import type { ComputerUse } from './computer';
@@ -478,7 +478,7 @@ describe('settings · Setup (page models-setup, pick B)', () => {
     const p = { ...ports(), open: (u: string) => opened.push(u) };
     const r = view('setup', p, { gauge: failed, accounts: acc });
     const add = screen.getByTestId('settings.feature.approvals.trouble.fix');
-    expect(add.textContent).toBe('Add an OpenRouter key');
+    expect(add.textContent).toBe('Replace the OpenRouter key');
     fireEvent.click(add);
     expect(screen.getByTestId('settings.key.field')).toBeTruthy();
     const guide = screen.getByTestId('settings.key.guide').textContent;
@@ -495,6 +495,16 @@ describe('settings · Setup (page models-setup, pick B)', () => {
     const works = { ev: 'provider_check' as const, id: 'openrouter', name: 'OpenRouter', model: JEV, pasted: true, state: 'works' as const };
     r.rerender(<Settings page="setup" prefs={prefs()} accounts={acc} projects={projects()} found={found()} computerUse={null} perms={{}} ports={p} gauge={failed} check={works} />);
     expect(p.sent.at(-1)).toEqual({ cmd: 'setup_test', models: [JEV] });
+  });
+
+  it('no key yet: the fix adds one (its article by sound); a key that failed: it replaces it', () => {
+    const row = (why: 'no_key' | 'wrong_key'): SetupGauge => ({
+      ...gauge(),
+      rows: [{ id: 'approvals', state: 'failed', fix: { t: 'add_key', provider: 'openrouter' }, parts: [{ model: 'openrouter/typesafe/jev-1.13', provider: 'OpenRouter', role: 'classify', source: 'config', state: 'failed', why }] }],
+    });
+    const fix = { t: 'add_key' as const, provider: 'openrouter' };
+    expect(fixButton(fix, row('no_key'))).toBe('Add an OpenRouter key');
+    expect(fixButton(fix, row('wrong_key'))).toBe('Replace the OpenRouter key');
   });
 
   it('a provider name takes its article by sound', () => {

@@ -297,7 +297,7 @@ function KeyGuide({ acc, ask, open }: { acc: Account | undefined; ask: KeyAsk | 
               {settings.key_step_open({ provider: name })}{' '}
               {open !== undefined ? (
                 <Act onClick={() => { open(url); }} testId="settings.key.link">
-                  {shown(url)}
+                  {`${shown(url)} ↗`}
                 </Act>
               ) : (
                 <span className="mono">{shown(url)}</span>

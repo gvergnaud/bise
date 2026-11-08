@@ -311,7 +311,7 @@ export const settings = {
   /** the key field's guide, step 1: a provider with no keys page known */
   key_step_site: (a: { provider: string | number }): string => "On " + String(a.provider) + "'s site, sign in and open your API keys.",
   /** the key field's guide, step 2 */
-  key_step_create: "Create a new key (name it bise), then copy it: it's often shown only once.",
+  key_step_create: "Create a key named bise and copy it: you only see it once.",
   /** the key field's guide, step 3 */
   key_step_paste: "Paste it in the field below and press ⏎.",
   /** the key field's guide: what happens after ⏎ */
@@ -1182,6 +1182,8 @@ export const settings = {
   part_env: (a: { var: string | number }): string => "from " + String(a.var),
   /** the fixing buttons */
   fix_add_key: (a: { a: string | number; provider: string | number }): string => "Add " + String(a.a) + " " + String(a.provider) + " key",
+  /** a fixing button: a key that's there failed (refused, expired) */
+  fix_replace_key: (a: { provider: string | number }): string => "Replace the " + String(a.provider) + " key",
   /** a fixing button: sign in */
   fix_sign_in: (a: { provider: string | number }): string => "Sign in to " + String(a.provider) + " again",
   /** a fixing button: credit */
@@ -1202,6 +1204,8 @@ export const settings = {
   fix_allow: (a: { perm: string | number }): string => "Allow " + String(a.perm),
   /** the next action's words (lowercase, after Next) */
   next_add_key: (a: { a: string | number; provider: string | number }): string => "add " + String(a.a) + " " + String(a.provider) + " key",
+  /** Next's action, lowercase after Next: a key that's there failed */
+  next_replace_key: (a: { provider: string | number }): string => "replace the " + String(a.provider) + " key",
   /** Next's action, lowercase after Next: sign in */
   next_sign_in: (a: { provider: string | number }): string => "sign in to " + String(a.provider) + " again",
   /** Next's action, lowercase after Next: credit */
