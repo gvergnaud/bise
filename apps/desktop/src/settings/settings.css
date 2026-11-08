@@ -38,8 +38,10 @@
 /* the key field and its caption are one block: 4 between them, then the group gap before the next title (designer m_21395) */
 /* the guide as wide as the accounts' text column; its notes on the steps' text indent (designer m_55792) */
 .settings-key { --key-in: 20px; margin: var(--s-3) 0 var(--gap-section); max-width: 560px; }
-/* past the ds's `.b-settings .b-help` padding (loaded after this file, same weight) */
-.settings-key .b-help, .b-settings .settings-key .b-help { margin-top: var(--gap-tight); padding: 0 0 0 var(--key-in); }
+/* the field's help on the title's edge; the guide's note under step 3 on the steps' text (designer
+   m_55918); both past the ds's `.b-settings .b-help` padding (loaded after this file, same weight) */
+.settings-key .b-help, .b-settings .settings-key .b-help { margin-top: var(--gap-tight); padding: 0; }
+.settings-key-guide .b-help, .b-settings .settings-key-guide .b-help { padding-left: var(--key-in); }
 /* the key field's guide: a title, three steps, what ⏎ does (Gabriel: take him by the hand) */
 .settings-key-guide { margin-bottom: var(--s-3); }
 .settings-key-title { margin: 0 0 var(--gap-tight); color: var(--c-text); }
