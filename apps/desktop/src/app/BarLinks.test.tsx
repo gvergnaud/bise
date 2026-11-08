@@ -5,10 +5,11 @@
 // this red.
 import { cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { Agent, Place } from '@/proto';
+import type { Agent, Card, Place } from '@/proto';
+import { panel } from '@/proto/words_panel.gen';
 import type { CorePort } from '@/shared/api';
 import { Store, StoreProvider } from '@/store';
-import { artifact, artifacts, ev, projects, row } from '../../tests/feature/inputs';
+import { artifact, artifacts, card, ev, projects, row } from '../../tests/feature/inputs';
 import { createRouter, RouterContext } from './router';
 import { BarLinks } from './BarLinks';
 
@@ -34,11 +35,11 @@ const URL_PR = 'https://github.com/o/r/pull/75286';
 const agent = (name: string): Agent => ({ name, dir: name, main: false, status: 'idle', archived: false, title: '', purpose: '', since_ms: 0, waits: 0, watching: [] });
 const place: Place = { id: 'wt:sb/perf', branch: 'sb/perf', agents: ['perf'], pr: { number: 75286, url: URL_PR, state: 'open', words: '' } as Place['pr'] };
 
-function bar(name: string) {
+function bar(name: string, cards: Card[] = []) {
   const port: CorePort = { send: () => undefined, onEvent: () => () => undefined, onState: () => () => undefined, state: () => Promise.resolve('up') };
   const store = new Store(port);
   store.setCore('up');
-  store.apply(projects(row({ project: P, name: 'acme' })));
+  store.apply(projects(row({ project: P, name: 'acme', cards })));
   store.apply(ev('agents', { project: P, agents: [agent('main'), agent('perf'), agent('docs')], places: [place] }));
   store.apply(artifacts(P, artifact({ id: 'pg', kind: 'page', agent: 'perf', title: 'perf notes', at_ms: 5 })));
   const router = createRouter({ screen: 'thread', project: P, agent: name });
@@ -65,6 +66,13 @@ describe('a thread\'s agent\'s links in the bar', () => {
     expect(doors.tab).toEqual([{ kind: 'artifact', project: P, id: 'pg' }]);
     fireEvent.click(v.getByTestId('app.bar.links.branch'));
     expect(router.get()).toEqual({ screen: 'branch', project: P, branch: 'sb/perf' });
+  });
+
+  it('his merge waits: the PR says it, in the accent (a merge card in the inbox for its place)', () => {
+    const merge = card({ project: P, id: 9, agent: 'perf', kind: 'merge', place: 'wt:sb/perf', question: 'merge #75286?', options: [], approval: false });
+    const pr = bar('perf', [merge]).v.getByTestId('app.bar.links.pr');
+    expect(pr.textContent).toBe(`#75286 · ${panel.pr_your_merge}`);
+    expect(pr.getAttribute('data-tone')).toBe('acc');
   });
 
   it('an agent with no PR, no worktree and no page: nothing', () => {
