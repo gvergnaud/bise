@@ -129,6 +129,16 @@ def pure():
     check(p["bise"] == "/h/.bise/dev/build/target/debug/bise" and p["app"].endswith("/apps/desktop/dist/mac-arm64/bise try.app")
           and p["helper"] == "/h/.bise/dev/build/desktop-try/bise-mac-helper", "try paths: %s" % p)
     check(T.app_exe(p["app"]).endswith("bise try.app/Contents/MacOS/bise try"), "the app's executable")
+    # what holds the bundle against a swap: the app, its helpers, its core and hubs; never the
+    # browsers' native host, which Chrome starts again within 2 s (chrome-host-swap)
+    app, bin_ = "/h/dist/bise try.app", "/h/dist/bise try.app/Contents/Resources/bin/bise"
+    held = {c: T.holds_bundle(c, app) for c in (
+        app + "/Contents/MacOS/bise try", app + "/Contents/Frameworks/bise try Helper.app/Contents/MacOS/bise try Helper --type=gpu",
+        bin_ + " core --desktop", bin_ + " daemon --repo /r", bin_ + " computer-use chrome-host chrome-extension://bogffepmbkbmbfejcadaipgphgkocgob/",
+        bin_ + " computer-use chrome-host", "/h/other.app/Contents/Resources/bin/bise computer-use chrome-host chrome-extension://x/",
+        "/h/.local/share/bise/versions/root-x/bise computer-use broker", "/h/dist/bise try.app.old/Contents/MacOS/bise try")}
+    check([c for c, h in held.items() if h] == list(held)[:4] + [bin_ + " computer-use chrome-host"],
+          "only the app's own processes hold it; the browsers' host (its exact argv) never: %s" % held)
     sc = T.build_script(p, "/h/sign")
     order = [sc.index(x) for x in ("cargo build -p bend-harness", "bins.sh repl-live repl-scripted sb-core", "native/mac/build.sh",
                                    "pnpm install --frozen-lockfile", "pnpm build", "pnpm dist")]

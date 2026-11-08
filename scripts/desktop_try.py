@@ -64,8 +64,8 @@ import sys
 import time
 
 from desktop_try_env import (GATE, SELF_CONTAINED, TryError, clone_names, config_for_try, guard, his_env,  # one module,
-                             his_bise, his_repos, homes, keep_old_root, live_build, not_swapped, self_contained, try_env,
-                             under)  # split for its size
+                             his_bise, his_repos, holds_bundle, homes, keep_old_root, live_build, not_swapped,
+                             self_contained, try_env, under)  # split for its size
 import cand_lock  # cand.sh's lock on a candidate, held by --promote
 from heavy_slot import HEAVY_RUN, heavy_argv, under_heavy_slot  # noqa: F401  (desktop_dmg, the tests read them here)
 from try_procs import hub_socks, stop_hub, try_pids  # split for its size
@@ -245,13 +245,14 @@ def write_stamp(paths, stamp):
 
 
 def bundle_procs(app):
-    """Every process running from that bundle (the app, its Electron helpers, its packed bise and
-    the hubs it started), by the bundle's path, any try home: (pid, command), read only, never killed here."""
+    """Every process that holds that bundle (the app, its Electron helpers, its packed bise and
+    the hubs it started; never the browsers' native host: holds_bundle), by the bundle's path, any
+    try home: (pid, command), read only, never killed here."""
     out = subprocess.run(["ps", "-axww", "-o", "pid=,command="], capture_output=True, text=True).stdout
-    pre, procs = app.rstrip("/") + "/Contents/", []
+    procs = []
     for l in out.splitlines():
         pid, _, cmd = l.strip().partition(" ")
-        if pid.isdigit() and cmd.startswith(pre) and int(pid) != os.getpid():
+        if pid.isdigit() and holds_bundle(cmd, app) and int(pid) != os.getpid():
             procs.append((int(pid), cmd))
     return procs
 

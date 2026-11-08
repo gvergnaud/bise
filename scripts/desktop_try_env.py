@@ -67,6 +67,22 @@ def keep_old_root(saved):
     return {"old_root": saved["old_root"]} if (saved or {}).get("old_root") else {}
 
 
+def holds_bundle(cmd, app):
+    """Whether a process (its `ps` command line) holds the bundle `app`: it runs from it, and it is
+    not the browsers' native host, `<packed bise> computer-use chrome-host chrome-extension://…`.
+    The host is exempt: a stateless relay (rust/computer-use/src/host.rs: frames to the broker's
+    socket; the broker is its own process, outside the bundle) that the browser starts through
+    ~/.bise/bin/bise-chrome-host and starts again within 2 s when killed, so no swap could wait it
+    out. A rename leaves it on its old inode, relaying frames as they come to the same broker, until
+    the browser starts it again, from the new bundle (same path): what the app's own updater does
+    to every user (apps/desktop/src/main/update/swap.ts renames with no process check). Pure."""
+    contents = app.rstrip("/") + "/Contents/"
+    if not cmd.startswith(contents):
+        return False
+    host = os.path.join(contents, "Resources", "bin", "bise") + " computer-use chrome-host chrome-extension://"
+    return not cmd.startswith(host)
+
+
 def not_swapped(staged, live, procs, most=6):
     """The loud line of --real when its staged build did not go live (ambient-lead m_21726): the
     OLD build reopens, and what held the bundle, each process's pid and command. Pure."""
