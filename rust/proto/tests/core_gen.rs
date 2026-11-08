@@ -842,6 +842,19 @@ def msgs_round(xs):
     case Con{Delivered{id, rel}, t}:
       %msgs_round(t) : {Delivered{id, rel} <> msgs(jmsgs(t)) == Delivered{id, rel} <> _ : List<&2, Delivered>}
       {==}
+
+law body_round:
+  for b: Body
+  {body_of(jbody(b)) == Some{b} : Maybe<&2, Body>}
+
+def body_round(b):
+  match b:
+    case BLit{t}:
+      {==}
+    case BText{id}:
+      {==}
+    case BParts{id}:
+      {==}
 "#;
 
 fn kit() -> String {
@@ -869,6 +882,8 @@ fn cases(k: FieldKind, v: &str) -> Vec<(String, Option<Rewrite>)> {
         StrOmit => vec![("SNil{}".into(), None), (format!("SCon{{h_{v}, t_{v}}}"), None)],
         OptStr | OptStrOmit | OptNat | OptNatOmit | OptBoolOmit | OptJsonOmit => vec![("None{}".into(), None), (format!("Some{{x_{v}}}"), None)],
         OptStrsOmit => vec![("None{}".into(), None), (format!("Some{{x_{v}}}"), Some(("strs", format!("x_{v}"), "Some{_}".into())))],
+        // a body reads back through K.body_round (its decode is a Maybe)
+        OptBodyOmit => vec![("None{}".into(), None), (format!("Some{{x_{v}}}"), Some(("body", format!("x_{v}"), "_".into())))],
         Strs => vec![(v.to_string(), Some(("strs", v.to_string(), "_".into())))],
         Nats => vec![(v.to_string(), Some(("nats", v.to_string(), "_".into())))],
         Msgs => vec![(v.to_string(), Some(("msgs", v.to_string(), "_".into())))],
@@ -880,6 +895,7 @@ fn rewritten(lemma: &str, x: &str, hole: &str) -> String {
     let (r, w) = match lemma {
         "strs" => ("K.strs", "K.jstrs"),
         "nats" => ("K.nats", "K.jnats"),
+        "body" => ("K.body_of", "K.jbody"),
         _ => ("K.msgs", "K.jmsgs"),
     };
     hole.replace('_', &format!("{r}({w}({x}))"))

@@ -1548,7 +1548,12 @@ law fx_FReply_round:
   {FX.of(FX.json(FX.FReply{token, body, message})) == FX.FReply{token, body, message} : FX.Fx}
 
 def fx_FReply_round(token, body, message):
-  {==}
+  match message:
+    case None{}:
+      {==}
+    case Some{x_message}:
+      %K.body_round(x_message) : {FX.of(FX.json(FX.FReply{token, body, Some{x_message}})) == FX.FReply{token, body, _} : FX.Fx}
+      {==}
 
 law fx_FSpoke_round:
   for token: Nat

@@ -291,6 +291,19 @@ def msgs_round(xs):
       %msgs_round(t) : {Delivered{id, rel} <> msgs(jmsgs(t)) == Delivered{id, rel} <> _ : List<&2, Delivered>}
       {==}
 
+law body_round:
+  for b: Body
+  {body_of(jbody(b)) == Some{b} : Maybe<&2, Body>}
+
+def body_round(b):
+  match b:
+    case BLit{t}:
+      {==}
+    case BText{id}:
+      {==}
+    case BParts{id}:
+      {==}
+
 # how long a view's card waits for him (bise_proto::view_rpc::VIEW_CARD_MS:
 # the shell's and the clients' bounds derive from it)
 def VIEW_CARD_MS() -> Nat:

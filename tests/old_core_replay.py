@@ -199,8 +199,9 @@ def stale_ids_skipped():
     message keeps its record, the later ones come back in send order."""
     out = subprocess.run(["bash", "scripts/bins.sh", "path", "sb-core"], cwd=ROOT, capture_output=True, text=True)
     core = Core(out.stdout.strip().splitlines()[-1])
-    reused = dict(msg(2, "user", "main"), msg=dict(msg(2, "user", "main")["msg"], text="reused"))
-    older = dict(msg(1, "user", "main"), msg=dict(msg(1, "user", "main")["msg"], text="older"))
+    # told apart by a header field: the state keeps no message's words (c6)
+    reused = dict(msg(2, "user", "main"), msg=dict(msg(2, "user", "main")["msg"], text="reused", created_ms=9002))
+    older = dict(msg(1, "user", "main"), msg=dict(msg(1, "user", "main")["msg"], text="older", created_ms=9001))
     evs = [msg(1, "user", "main"), msg(2, "user", "main"), reused, older, msg(3, "user", "main")]
     try:
         out = core.call({"t": "replay_many", "evs": evs})
@@ -210,8 +211,8 @@ def stale_ids_skipped():
         assert "skipped" in text, "a single replay of an older id says so: %r" % one
         view = core.call({"t": "view_all"})
         msgs = view.get("view", view).get("msgs", [])
-        got = [(m["msg"]["id"], m["msg"]["text"]) for m in msgs]
-        assert got == [(1, "m1"), (2, "m2"), (3, "m3")], "every message once, in send order: %r" % got
+        got = [(m["msg"]["id"], m["msg"]["created_ms"]) for m in msgs]
+        assert got == [(1, 1001), (2, 1002), (3, 1003)], "every message once, in send order: %r" % got
     finally:
         core.kill()
     print("ok   stale ids: a reused id and an older id are skipped, the messages stay in send order")
