@@ -1900,6 +1900,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
     sh.down = sh.down_dirs();
     sh.reap_procs(None);
     sh.start_prs();
+    let _ = bise_usage::hourly::spawn_hourly(sh.opts.home.clone(), sh.opts.app_root.clone(), false, { let p = paths.clone(); move |l: &str| log_line(&p, l) });
     boot.step("boot done (REPLs spawned)");
     boot.done();
 

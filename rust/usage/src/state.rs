@@ -31,6 +31,11 @@ pub struct LocalState {
     /// The milestones a packet the server took carried.
     #[serde(default)]
     pub sent: BTreeSet<Milestone>,
+    /// The server took a packet from this machine once: until then, a
+    /// "Delete my data" posts nothing (architect m_55984: a delete is
+    /// never bise's first contact with the server).
+    #[serde(default)]
+    pub ever_sent: bool,
 }
 
 /// The local state's view of one day, as a packet carries it.
@@ -58,6 +63,7 @@ impl LocalState {
             active: 0,
             milestones: BTreeMap::new(),
             sent: BTreeSet::new(),
+            ever_sent: false,
         }
     }
 

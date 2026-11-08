@@ -22,6 +22,8 @@ pub fn core(args: &[String]) -> std::io::Result<i32> {
     // its runtime is leased while this core runs: `bise update` never
     // prunes it (no ps line names it, the core runs from the .app)
     let _lease = hub.as_ref().ok().and_then(|(_, _, root)| bise_home::release::lease(root));
+    // the machine's one usage sender, as each hub's (bise_usage::hourly)
+    let usage_root = hub.as_ref().ok().map(|(_, _, root)| root.clone());
     let (projects, home_move, connect, broken) = match hub {
         Ok((app, exe, root)) => {
             let how = Connector::Hub { app, exe, root: root.clone() };
@@ -38,6 +40,9 @@ pub fn core(args: &[String]) -> std::io::Result<i32> {
     // the app's off-screen run (its offscreen.ts noAsks): the core never
     // opens the real mic, it decides fake or none (architect m_22483)
     let offscreen = args.iter().any(|a| a == "--offscreen");
+    if let Some(root) = usage_root {
+        let _ = bise_usage::hourly::spawn_hourly(bise_home::Home::from_env(), root, offscreen, |l| eprintln!("ambient-core: {l}"));
+    }
     Ok(bend_tui::ambient::core_main(workspace, connect, switchboard::model::user_kind, Some(projects), Some(ambient_setup()), home_move, broken, offscreen))
 }
 

@@ -30,15 +30,40 @@ the permit is the delete request.
 Under `~/.bise/usage/` (paths from `bise_home::Home::usage_*`): one folder
 per UTC day with one file per counting process (`hub-<8 hex>-<pid>.json`,
 `core-<pid>.json`, `tui-<8 hex>-<pid>.json`: the hex is the hub id's hash,
-never the project's name), `sent/`, `send.lock`, `state.json` and
-`install-id`.
+never the project's name), `sent/`, `send.lock`, `state.json`,
+`install-id`, `delete-request` and `retry.json`.
+
+## The sender
+
+Each hub and the app's core run `bise_usage::hourly` on a thread of its
+own; each hour it takes a non-blocking flock on `send.lock`, so one
+process of the machine sends (`bise_usage::sender::tick`). In order:
+
+- a pending "Delete my data" request (`delete-request`) is posted first,
+  without the permit; its id is deleted after a 2xx only. A delete is
+  queued only if the server ever took a packet from this Mac;
+- sharing off by his choice (his pref, `BISE_TELEMETRY=0`,
+  `DO_NOT_TRACK=1`) deletes the spool, `sent/`, `state.json` and the id
+  (`bise telemetry off` does it at once); off for another reason (the
+  switch, a dev build, a test, CI, the note not seen) changes nothing;
+- with the permit: the spool keeps 30 days (the oldest goes first),
+  `sent/` 7; the closed UTC days, 15 min after midnight, are sent oldest
+  first, at most 30 a body of at most 64 KB. A 2xx moves each packet to
+  `sent/<day sent>/<day>.json`; a 4xx drops them and the hub's log says
+  so; no answer keeps them and waits (`retry.json`: from a minute,
+  doubling up to 6 hours, with jitter).
+
+`bise telemetry show` prints whether sharing is on, the id, the next
+packets and those sent; `on` and `off` set `telemetry.share`.
 
 ## The body
 
 `POST /v1/packets` carries `{"packets": [...]}`, at most 30 packets, one
 per closed UTC day. `POST /v1/delete` carries `{"install_id": "<uuid>"}`.
-Both are plain JSON (`bise_usage::encode`); the transport may compress
-them.
+Both are plain JSON (`bise_usage::encode`), sent uncompressed by the
+system's curl (`bise_usage::curl`: no cookie, no user agent, his
+`~/.curlrc` not read, 10 s at most). The busiest day possible is about
+1.3 KB, so 30 days fit one body.
 
 ## A packet's fields
 

@@ -60,6 +60,19 @@ pub enum Off {
     NoteNotSeen,
 }
 
+impl Off {
+    /// He turned sharing off himself (his pref, `BISE_TELEMETRY=0`,
+    /// `DO_NOT_TRACK=1`): what he counted is deleted. Never for the other
+    /// reasons: a dev build's or a test's hub on his Mac must not delete
+    /// what his release counted.
+    pub fn his_choice(self) -> bool {
+        match self {
+            Off::Env | Off::DoNotTrack | Off::Pref => true,
+            Off::NotYet | Off::Ci | Off::TestHome | Off::Offscreen | Off::DevBuild | Off::NoteNotSeen => false,
+        }
+    }
+}
+
 /// The proof that sharing is allowed, made only by [`sharing_allowed`].
 #[derive(Debug)]
 pub struct Permit(());

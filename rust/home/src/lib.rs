@@ -335,8 +335,9 @@ impl Home {
 
     /// `<root>/usage`: the usage counts of this machine (bise_usage, the
     /// plan usage-metrics-plan): one folder per UTC day, `sent/`,
-    /// `send.lock`, `state.json`, `install-id`. All of it is deleted when
-    /// he turns sharing off.
+    /// `send.lock`, `state.json`, `install-id`, `delete-request`,
+    /// `retry.json`. All of it but a pending delete request is deleted
+    /// when he turns sharing off.
     pub fn usage_dir(&self) -> PathBuf {
         self.root.join("usage")
     }
@@ -367,6 +368,17 @@ impl Home {
     /// (never the host id).
     pub fn usage_install_id(&self) -> PathBuf {
         self.usage_dir().join("install-id")
+    }
+
+    /// `<usage>/delete-request`: the ids whose "Delete my data" request
+    /// the server has not taken yet; each is kept until it did.
+    pub fn usage_delete_request(&self) -> PathBuf {
+        self.usage_dir().join("delete-request")
+    }
+
+    /// `<usage>/retry.json`: the sender's backoff after a failed send.
+    pub fn usage_retry(&self) -> PathBuf {
+        self.usage_dir().join("retry.json")
     }
 
     /// The composer drafts, one file per workspace.

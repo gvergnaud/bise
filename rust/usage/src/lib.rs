@@ -5,9 +5,11 @@
 //!
 //! Pure, like bise_peer: the time (a [`Day`], unix seconds), the paths
 //! (from `bise_home::Home::usage_*`), the random bytes and the network (a
-//! [`send::Transport`]) come in as arguments. The edges are two small
-//! functions: [`sharing::Facts::read`] (prefs.json and the environment) and
-//! [`spool`] (a source's file, written whole, tmp then rename).
+//! [`send::Transport`]) come in as arguments. The edges are small:
+//! [`sharing::Facts::read`] (prefs.json and the environment), the files
+//! under `Home::usage_dir` ([`spool`], [`sent`], [`retry`], [`sender`]:
+//! written whole, tmp then rename), and the sender's thread with its curl
+//! ([`hourly`], [`curl`]).
 //!
 //! - [`key`]: the closed keys ([`CountKey`], [`MinutesKey`], [`HistKey`],
 //!   [`Milestone`]): never a key made of a string from outside;
@@ -24,32 +26,43 @@
 //!   delete request): the PII law reads these bytes;
 //! - [`send`]: the endpoint, the send fn through a transport port, the
 //!   backoff;
+//! - [`sender`]: the one sender of the machine (step 5): its flock, the
+//!   delete request, the wipe when he turns sharing off, the closed days'
+//!   batches, `sent/` ([`sent`]) and the retries ([`retry`]);
+//! - [`curl`]: the real transport, the system's curl; [`hourly`]: the
+//!   sender's thread, one call in each hub and in the app's core;
 //! - [`schema`]: the exported schema (snapshot `schema.json`, the doc
 //!   `docs/telemetry.md`, the server's allow list);
 //! - [`law`]: the PII law on a body and the no-wildcard check of a
 //!   mapping, for this crate's tests and the collectors' (steps 2 to 4).
 //!
 //! Not here: who counts what (the hub's journal projection, the core's
-//! AppCmd match, the TUI), the one sender's flock and its retries, the
-//! curl transport. Those are steps 2 to 5 of the plan.
+//! AppCmd match, the TUI): steps 2 to 4 of the plan.
 //!
 //! [`SENDING_ON`] is the global switch, off: until step 9 (Gabriel's go)
 //! nothing is counted, written or sent, whatever the settings say.
 
 #[macro_use]
 mod closed;
+pub mod curl;
 pub mod day;
 pub mod encode;
+pub mod hourly;
 pub mod install_id;
 pub mod key;
 pub mod law;
 pub mod packet;
+pub mod retry;
 pub mod schema;
 pub mod send;
+pub mod sender;
+pub mod sent;
 pub mod sharing;
 pub mod spool;
 pub mod state;
 pub mod tally;
+#[cfg(test)]
+mod sender_tests;
 
 pub use day::{Day, IsoWeek};
 pub use install_id::InstallId;

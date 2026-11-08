@@ -86,6 +86,7 @@ dependencies = [
  "bise-home",
  "bise-proto",
  "bise-session",
+ "bise-usage",
  "serde_json",
  "switchboard",
 ]
@@ -1849,6 +1850,7 @@ dependencies = [
  "bise-proto",
  "bise-secrets",
  "bise-session",
+ "bise-usage",
  "brush-parser",
  "libc",
  "serde",

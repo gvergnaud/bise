@@ -11,6 +11,8 @@ bise-catalog = { path = "../catalog" }
 # his attached images into the image store (attached.rs, daemon/fn_context.rs)
 bend-images = { path = "../images" }
 bise-home = { path = "../home" }
+# the machine's one usage sender (bise_usage::hourly, telemetry step 5)
+bise-usage = { path = "../usage" }
 # the secrets no agent reads (bise_secrets::held), the sandbox's list
 bise-secrets = { path = "../secrets" }
 # the process table, the peer's pid and the judge (procs, peer, docs/issues/16)

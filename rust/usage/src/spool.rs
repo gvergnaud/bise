@@ -7,14 +7,18 @@
 //! file, never a dead process's tally to go on from. The sender sums a
 //! closed day's files ([`read_day`], then [`Tally::sum`]).
 //!
+//! The spool keeps [`KEEP_DAYS`] days at most: [`prune`] deletes the older
+//! ones, the oldest first (the sender calls it each tick).
+//!
 //! The edge of this crate that touches files, with the paths as
-//! arguments; writing asks for a [`Permit`]. Not here: when to write, the
-//! 30 days' pruning, deleting everything when he turns sharing off
-//! (steps 2 to 5).
+//! arguments; writing asks for a [`Permit`]. Not here: when to write
+//! (steps 2 to 4), deleting everything when he turns sharing off
+//! ([`crate::sender::forget`]).
 
 use std::io;
 use std::path::Path;
 
+use crate::day::Day;
 use crate::sharing::Permit;
 use crate::tally::Tally;
 
@@ -91,13 +95,44 @@ pub fn write_source(_: &Permit, day_dir: &Path, source: &Source, tally: &Tally) 
     if text.len() > MAX_FILE {
         return Err(io::Error::other(format!("a usage source of {} bytes", text.len())));
     }
-    std::fs::create_dir_all(day_dir)?;
-    let path = day_dir.join(source.file_name());
-    let tmp = day_dir.join(format!(".{}.tmp", source.file_name()));
-    std::fs::write(&tmp, text)?;
-    std::fs::rename(&tmp, &path).inspect_err(|_| {
+    write_atomic(&day_dir.join(source.file_name()), text.as_bytes())
+}
+
+/// Write a file whole: a tmp file beside it, then a rename (its folder is
+/// made if missing).
+pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
+    let dir = path.parent().ok_or_else(|| io::Error::other("a path with no folder"))?;
+    std::fs::create_dir_all(dir)?;
+    let name = path.file_name().and_then(|n| n.to_str()).ok_or_else(|| io::Error::other("a path with no name"))?;
+    let tmp = dir.join(format!(".{name}.tmp"));
+    std::fs::write(&tmp, bytes)?;
+    std::fs::rename(&tmp, path).inspect_err(|_| {
         let _ = std::fs::remove_file(&tmp);
     })
+}
+
+/// The days of a folder that holds one sub-folder per day
+/// (`Home::usage_dir`, the spool; `Home::usage_sent_dir`), oldest first.
+pub fn days_in(dir: &Path) -> Vec<Day> {
+    let Ok(rd) = std::fs::read_dir(dir) else { return Vec::new() };
+    let mut days: Vec<Day> = rd
+        .flatten()
+        .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
+        .filter_map(|e| Day::parse(e.file_name().to_str()?))
+        .collect();
+    days.sort();
+    days
+}
+
+/// How many days the spool keeps, today included: an older day was never
+/// sent (offline for a month) and is deleted, the oldest first.
+pub const KEEP_DAYS: u32 = 30;
+
+/// Delete the day folders of `dir` older than `keep` days before `today`;
+/// the days deleted.
+pub fn prune(dir: &Path, today: Day, keep: u32) -> Vec<Day> {
+    let first_kept = Day(today.0.saturating_sub(keep - 1));
+    days_in(dir).into_iter().filter(|d| *d < first_kept).filter(|d| std::fs::remove_dir_all(dir.join(d.to_string())).is_ok()).collect()
 }
 
 /// Every source of a day, with its kind; files of another shape, too big
