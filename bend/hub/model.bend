@@ -240,7 +240,10 @@ def get_agent.of(never: Bool, +st: S.St, +n: String) -> Maybe<&2, S.Agent>:
       get_agent.or(agent_named(S.St.agents(st), n), st, n)
 
 # the agent named `n`: St.agents, then arch; none for a never_agent name
-# (law no_reserved_names), without a walk
+# (law no_reserved_names), without a walk. The skip stays (c6, architect
+# m_56925: no store for archived agents, so a miss walks both lists):
+# without it core_step_cost fails its SLACK (say x2.8, drop x1.7 at
+# 1,000 archived), as most lookups are of user / main / bise
 def get_agent(+st: S.St, +n: String) -> Maybe<&2, S.Agent>:
   get_agent.of(never_agent(n), st, n)
 
