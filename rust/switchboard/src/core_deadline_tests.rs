@@ -12,6 +12,13 @@ use std::time::{Duration, Instant};
 
 /// A hub on the fake sb-core, its revival on the test's journal, its
 /// hub.log lines in the returned list.
+/// A step's limit, at load 1 whatever the box's load: the deadline
+/// tests' limits are short on purpose, scaled by a loaded tip they
+/// passed lines that came late.
+fn limits(step: Duration) -> Limits {
+    Limits { step, load: Some(1.0), ..Limits::default() }
+}
+
 fn fake_hub() -> (T, Rc<RefCell<Vec<String>>>) {
     fake_hub_with(0.0)
 }
@@ -29,7 +36,7 @@ fn fake_hub_with(line_delay: f64) -> (T, Rc<RefCell<Vec<String>>>) {
     std::fs::write(&bin, format!("#!{}\n{}", python, script)).unwrap();
     std::fs::set_permissions(&bin, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
     let mut hub = Hub::with_core("/w", bin).unwrap_or_else(|e| panic!("the fake sb-core: {}", e));
-    hub.set_core_limits(Limits { step: Duration::from_millis(300), ..Limits::default() });
+    hub.set_core_limits(limits(Duration::from_millis(300)));
     let mut t = T::with_hub(hub);
     let journal = t.journal.clone();
     let logged = Rc::new(RefCell::new(Vec::<String>::new()));
@@ -129,7 +136,7 @@ fn three_line_view(t: &mut T) {
 #[test]
 fn a_slow_answer_in_lines_is_read_whole_within_its_limit() {
     let (mut t, _) = fake_hub_with(0.1);
-    t.hub.set_core_limits(Limits { step: Duration::from_secs(5), ..Limits::default() });
+    t.hub.set_core_limits(limits(Duration::from_secs(5)));
     three_line_view(&mut t);
     let t0 = Instant::now();
     t.hub.try_view_all().unwrap();
@@ -147,10 +154,10 @@ fn a_slow_answer_in_lines_is_read_whole_within_its_limit() {
 #[test]
 fn an_answer_in_lines_past_its_limit_is_late_though_each_line_is_not() {
     let (mut t, _) = fake_hub_with(0.25);
-    t.hub.set_core_limits(Limits { step: Duration::from_secs(5), ..Limits::default() });
+    t.hub.set_core_limits(limits(Duration::from_secs(5)));
     three_line_view(&mut t);
     t.hub.st.clear_msgs();
-    t.hub.set_core_limits(Limits { step: Duration::from_millis(400), ..Limits::default() });
+    t.hub.set_core_limits(limits(Duration::from_millis(400)));
     match t.hub.try_view_all() {
         Err(CoreError::Late { what, .. }) => assert_eq!(what, "view_all"),
         other => panic!("late, not {:?}", other.map(|_| ())),

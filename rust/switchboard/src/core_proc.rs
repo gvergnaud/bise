@@ -67,13 +67,17 @@ pub struct Limits {
     pub per_event: Duration,
     /// per MB of a `restore_photo` line
     pub per_mb: Duration,
+    /// the load factor the limits scale by; None: the machine's, read at
+    /// each input (crate::load::factor). A test fixes it: a limit that
+    /// moves with the box's load makes a deadline test a flake.
+    pub load: Option<f64>,
 }
 
 impl Default for Limits {
     /// His slowest healthy step is well under a second; a 112k-event
     /// replay batch of 250 under 0.1 s.
     fn default() -> Limits {
-        Limits { step: Duration::from_secs(30), per_event: Duration::from_millis(20), per_mb: Duration::from_secs(1) }
+        Limits { step: Duration::from_secs(30), per_event: Duration::from_millis(20), per_mb: Duration::from_secs(1), load: None }
     }
 }
 
@@ -172,7 +176,7 @@ impl CoreLink {
     /// last line.
     fn send(&mut self, v: &Value) -> Result<Limit, CoreError> {
         let line = line_of(v);
-        let limit = self.limits.of(v, line.len(), crate::load::factor());
+        let limit = self.limits.of(v, line.len(), self.limits.load.unwrap_or_else(crate::load::factor));
         let end = Instant::now() + limit;
         self.w.set_write_timeout(Some(limit)).map_err(CoreError::Gone)?;
         match self.w.write_all(line.as_bytes()) {
