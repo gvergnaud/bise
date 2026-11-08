@@ -101,6 +101,21 @@ def world(binary, archived, live):
     return c, tasks
 
 
+# main's process: its folder (dir `main`), on agent.sock; any other sender
+# is refused before the core reads the command
+MAIN = {"from": "main", "who": "agent", "dir": "main", "sock": "agent"}
+
+
+def speaks(token, cmd):
+    """the sender's verdict the shell asks for a command it serves itself (`sb list`)"""
+    return dict(MAIN, t="speaks", token=token, cmd=cmd)
+
+
+def req(token, cmd):
+    """a command sb-core serves (`sb drop`)"""
+    return dict(MAIN, t="req", token=token, req=cmd)
+
+
 def per_step(c, k, make):
     i0 = instructions(c.p.pid)
     for i in range(k):
@@ -108,16 +123,28 @@ def per_step(c, k, make):
     return (instructions(c.p.pid) - i0) / k
 
 
+def droppable(c, k):
+    """k more live tasks that ran, for main's `sb drop` (made after the other kinds ran, so they cost the same)"""
+    names = ["d%04d" % i for i in range(k)]
+    c.call({"t": "replay_many", "evs": [task(n, c.now + i) for i, n in enumerate(names)]})
+    for n in names:
+        ran(c, n)
+    return names
+
+
 def measure(binary, archived, live, k):
     c, tasks = world(binary, archived, live)
     try:
-        return {
+        got = {
             "tick": per_step(c, k, lambda i: {"t": "tick"}),
             "say": per_step(c, k, lambda i: {"t": "say", "focus": tasks[i % len(tasks)], "text": "bench %d" % i,
                                               "queued": True}),
-            "list": per_step(c, k, lambda i: {"t": "speaks", "token": 9000 + i, "from": "main", "cmd": "list",
-                                               "who": "agent", "dir": "/w"}),
+            "list": per_step(c, k, lambda i: speaks(9000 + i, "list")),
         }
+        # a drop archives one more each time: k of them move N by k at most
+        drops = droppable(c, k)
+        got["drop"] = per_step(c, k, lambda i: req(20000 + i, {"cmd": "drop", "agent": drops[i]}))
+        return got
     finally:
         c.close()
 

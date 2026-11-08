@@ -595,24 +595,9 @@ def wakes_ended(go: Bool, +s: S.St) -> Maybe<&2, List<&2, J.Json>>:
 # journal) changed the durable state (or all); the timers and the
 # watches when an event changed them (or all). cost-pause: `paused`
 # (null: it runs) in every view, a few bytes.
-def agent_or(m: Maybe<&2, S.Agent>, +rest: List<&2, S.Agent>) -> List<&2, S.Agent>:
-  match m:
-    case None{}:
-      rest
-    case Some{+a}:
-      a <> rest
 
-# the agents split (agents.bend): every agent, in creation order (St.order,
-# each looked up: St.agents, then arch), the ones in `names` or all
-def every_agents(ord: List<&2, String>, +s: S.St, +all: Bool, +names: List<&2, String>) -> List<&2, S.Agent>:
-  match ord:
-    case Nil{}:
-      Nil{}
-    case Con{+n, +t}:
-      LZ.pick(List<&2, S.Agent>, all || M.str_in(names, n),
-        u => agent_or(M.get_agent(s, n), every_agents(t, s, all, names)), u => every_agents(t, s, all, names))
-
-# a name of `names` is an archived agent's
+# a name of `names` is an archived agent's (a search per name, each
+# stops at its hit)
 def any_arch(ns: List<&2, String>, +s: S.St) -> Bool:
   match ns:
     case Nil{}:
@@ -620,19 +605,30 @@ def any_arch(ns: List<&2, String>, +s: S.St) -> Bool:
     case Con{+n, +t}:
       LZ.or(AG.has(S.St.arch(s), n), u => any_arch(t, s))
 
-# a step's agents: St.agents' changed ones when no archived agent changed
-# (a tick, a say: the archived ones are never walked), else every agent
-# in creation order (view_all, a step that archived or restored one)
-def view_agents(wide: Bool, +s: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>, +all: Bool, +names: List<&2, String>) -> List<&2, J.Json>:
-  match wide:
-    case True{}:
-      agents_json(every_agents(S.St.order(s), s, all, names), rts, ws, s, True{}, Nil{})
+# the archived agents in `names`: arch is walked only when the step
+# changed one (a drop, a restore); never for a tick or a say
+def arch_json(some: Bool, +names: List<&2, String>, +s: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>) -> List<&2, J.Json>:
+  match some:
     case False{}:
-      agents_json(S.St.agents(s), rts, ws, s, False{}, names)
+      Nil{}
+    case True{}:
+      agents_json(S.St.arch(s), rts, ws, s, False{}, names)
+
+# the agents split (agents.bend): every agent (`all`: view_all), else the
+# ones in `names` (a step's), each list walked once: St.agents, then arch.
+# The order of the list means nothing: the hub keys its agents by name and
+# reads the creation order in `order` (c4b's leftover: a step that archived
+# one walked St.order and looked each name up, O(N^2) in the archived)
+def view_agents(all: Bool, +s: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>, +names: List<&2, String>) -> List<&2, J.Json>:
+  match all:
+    case True{}:
+      List.append(&2, J.Json, agents_json(S.St.agents(s), rts, ws, s, True{}, Nil{}), agents_json(S.St.arch(s), rts, ws, s, True{}, Nil{}))
+    case False{}:
+      List.append(&2, J.Json, agents_json(S.St.agents(s), rts, ws, s, False{}, names), arch_json(any_arch(names, s), names, s, rts, ws))
 
 def view.go(+s: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>, +all: Bool, +ids: List<&2, Nat>, +names: List<&2, String>, +durable: Bool, +ordered: Bool, +timers: Bool, +ended: Bool, +wakes: Bool) -> J.Json:
   +xs = view_recs(s, all, ids)
-  V.view(view_agents(all || any_arch(names, s), s, rts, ws, all, names), all,
+  V.view(view_agents(all, s, rts, ws, names), all,
     msgs_json(all || Bool.not(List.is_empty(&2, Nat, ids)), xs, all, ids, S.St.next_msg(s)), all,
     colds_when(all, xs, S.St.next_msg(s)),
     S.St.next_msg(s), S.St.next_card(s), S.St.paused(s),

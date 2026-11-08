@@ -353,17 +353,38 @@ def mate.hit(m: Maybe<&2, S.Agent>, +name: String, +place: String, +live: Bool) 
       Bool.not(String.eq(S.Agent.name(b), name)) && M.ws_worktree(S.Agent.ws(b)) && Bool.not(M.ws_dropped(S.Agent.ws(b)))
         && String.eq(Agent.place(b), place) && Bool.pick(Bool, live, Bool.not(gone), gone)
 
-def mates(xs: List<&2, String>, +s: S.St, +name: String, +place: String, +live: Bool) -> List<&2, String>:
+def mates(xs: List<&2, S.Agent>, +name: String, +place: String, +live: Bool) -> List<&2, String>:
   match xs:
     case Nil{}:
       Nil{}
-    case Con{+n, +t}:
-      +rest = mates(t, s, name, place, live)
-      Bool.pick(List<&2, String>, mate.hit(M.get_agent(s, n), name, place, live), n <> rest, rest)
+    case Con{+b, +t}:
+      +rest = mates(t, name, place, live)
+      Bool.pick(List<&2, String>, mate.hit(Some{b}, name, place, live), S.Agent.name(b) <> rest, rest)
 
-# the other agents of a's worktree (none for the shared folder)
+# the names of `ord` (the creation order) that are in `hs`
+def in_order(ord: List<&2, String>, +hs: List<&2, String>) -> List<&2, String>:
+  match ord:
+    case Nil{}:
+      Nil{}
+    case Con{+n, +t}:
+      +rest = in_order(t, hs)
+      Bool.pick(List<&2, String>, M.str_in(hs, n), n <> rest, rest)
+
+def in_order.if(hs: List<&2, String>, +ord: List<&2, String>) -> List<&2, String>:
+  match hs:
+    case Nil{}:
+      Nil{}
+    case Con{+h, +t}:
+      in_order(ord, h <> t)
+
+# the other agents of a's worktree (none for the shared folder), in
+# creation order: the live ones are in St.agents, the archived ones in
+# arch (the agents split), so one walk of that list, not St.order with a
+# lookup per name (O(N^2) in the archived agents: c4b's leftover, every
+# sb drop paid it)
 def mates_of(+s: S.St, +a: S.Agent, +live: Bool) -> List<&2, String>:
-  mates(S.St.order(s), s, S.Agent.name(a), Agent.place(a), live)
+  +xs = Bool.pick(List<&2, S.Agent>, live, S.St.agents(s), S.St.arch(s))
+  in_order.if(mates(xs, S.Agent.name(a), Agent.place(a), live), S.St.order(s))
 
 def first_agent(+s: S.St, ns: List<&2, String>) -> Maybe<&2, S.Agent>:
   match ns:

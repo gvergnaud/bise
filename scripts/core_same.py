@@ -185,6 +185,11 @@ def canon(a):
     if rest["fx"] is None:
         rest.pop("fx")
     facts = {k: a[k] for k in ("view", "st") if k in a}
+    # a view's agents in any order (c6 5c: the hub keys them by name, the
+    # creation order is the view's `order`); an older binary sent them in it
+    v = facts.get("view")
+    if isinstance(v, dict) and isinstance(v.get("agents"), list):
+        facts["view"] = dict(v, agents=sorted(v["agents"], key=lambda x: x.get("name", "")))
     return json.dumps(rest, ensure_ascii=False) + "|" + json.dumps(wordless(facts), ensure_ascii=False, sort_keys=True)
 
 
@@ -229,12 +234,15 @@ def steps(old_bin, new_bin, capture):
             if any(i.get("t") == "restore_photo" for i in ins):
                 restored += 1
                 continue
-            words = {}
+            words, old_words = {}, {}
             for i in ins:
                 for ev in i.get("evs", []) if i.get("t") == "replay_many" else [i.get("ev", {})] if i.get("t") == "replay" else []:
                     keep_words(ev, words)
+                    keep_words(ev, old_words)
                 try:
-                    a, b = old.call(i), fill_answer(new.call(i), words)
+                    # an old binary from c6 on writes bodies too: filled the same way
+                    # (one from before writes the words: nothing to fill)
+                    a, b = fill_answer(old.call(i), old_words), fill_answer(new.call(i), words)
                 except EOFError:
                     old.kill(), new.kill()
                     old, new = Core(old_bin), Core(new_bin)
