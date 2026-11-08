@@ -167,7 +167,8 @@ def main():
         c.wait_status(dropped, "archived", 60)
         archive_took = time.time() - ts
         print("/archive done in %.2f s" % archive_took)
-        check(not os.path.exists(wt), "the dropped worktree's path is free at the answer")
+        # the removal runs off the loop (bdcd2b7dc): archived comes first
+        c.wait(lambda: not os.path.exists(wt), 60, "the dropped worktree's path is free")
         wait.until(lambda: "removed off the loop in" in hub_log(E), 120, "the trash removed its folder")
         print("  " + [l for l in hub_log(E).splitlines() if "removed off the loop in" in l][-1])
         marks["burst"] = round(time.time() - t0, 1)

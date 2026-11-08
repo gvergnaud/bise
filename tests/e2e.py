@@ -782,8 +782,10 @@ def t_worktree_drop_restore(E, c):
     check("1 unpushed commit is kept" in card["text"] and "1. archive it" in card["text"], card["text"])
     check("error" not in c.answer(card["id"], "1"), "the card is answered")
     c.wait_status("t4", "archived", 30)
-    check(not os.path.exists(wt), "worktree removed")
-    check(not os.path.exists(os.path.dirname(wt)), "and its folder")
+    # hub-loop (bdcd2b7dc): its worktree is removed off the hub's loop; the
+    # row says archived at once, its ws dropping until the removal ends
+    c.wait(lambda: not os.path.exists(wt), 60, "worktree removed")
+    c.wait(lambda: not os.path.exists(os.path.dirname(wt)), 60, "and its folder")
     refs = out(E.ws, "git for-each-ref --format='%(refname)' refs/switchboard")
     check("refs/switchboard/trash/t4/" in refs, "snapshot ref: " + refs)
     c.say("@t4 encore ?")
