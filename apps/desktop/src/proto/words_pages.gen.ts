@@ -154,6 +154,18 @@ export const pages = {
   review_open_pr_tip: (a: { n: string | number }): string => "open #" + String(a.n) + " in your browser",
   /** a change too big for one answer: its last files come with their names and counts only */
   review_cut_files: (a: { n: string | number }): string => String(a.n) + " more files are too much to show here: names and counts only",
+  /** the review's parts by kind (simple mode, page review-guided): the code that does something */
+  review_kind_code: "Code",
+  /** the review's part of tests and checks */
+  review_kind_tests: "Tests",
+  /** the review's part of docs, words and prose */
+  review_kind_docs: "Words and docs",
+  /** the review's part of generated files and lock files, folded */
+  review_kind_generated: "Generated",
+  /** a part's file count: 'Code · 3 files · +104 −18' */
+  review_part_files: (a: { n: number }): string => a.n === 1 ? String(a.n) + " file" : String(a.n) + " files",
+  /** a part's folder line for the files at the repo's root */
+  review_folder_root: "top level",
   /** the feature head's sub when it isn't known */
   feature_word: "feature",
   /** no such feature: the empty state's title */

@@ -57,6 +57,35 @@
   margin: 0 var(--pad-row-x) var(--gap-section);
 }
 
+/* the simple mode's parts (page review-guided): a kind's GroupLabel ('Code · 3 files · +104 −18'),
+   then each folder's line (the path, mono, dim) over its files; the first part's label sits at the
+   body's top, as the first file did */
+.rv-part:first-of-type > .b-glabel,
+.rv-part:first-of-type > .b-fold {
+  margin-top: 0;
+}
+/* a folder's files: the next folder's line a section's gap below the last file */
+.rv-group + .rv-group {
+  margin-top: var(--gap-block);
+}
+.rv-folder {
+  margin: 0 var(--pad-row-x) var(--gap-tight);
+  font: var(--t-12) var(--font-mono);
+  color: var(--c-text-3);
+}
+/* Generated, folded: one row at the label's place, its chevron on the text edge */
+.rv-part > .b-fold {
+  height: var(--h-group);
+  margin: var(--s-4) var(--pad-row-x) var(--gap-section);
+  padding-inline: var(--s-1);
+}
+.rv-part > .b-fold.open {
+  margin-bottom: var(--gap-tight);
+}
+.rv-fold-words {
+  font: 500 var(--f-meta);
+}
+
 /* the diff on its way: its words, dim, never a bare bar (designer m_15244) */
 .rv-wait {
   /* the same left edge as the head's title above it (designer's pixel nit on 5f70331d) */

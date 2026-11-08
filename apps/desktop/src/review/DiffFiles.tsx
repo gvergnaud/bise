@@ -6,12 +6,13 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
 import { copyText, QuotePop } from '@/quote/QuotePop';
 import { flatRows, handQuotes, quotesOf, range, type RowAt, type Sel } from './quote';
-import { Button, Diff, Empty, type DiffLine as DsLine } from '@/ds';
+import { Button, Diff, Empty, Fold, GroupLabel, type DiffLine as DsLine } from '@/ds';
 import { pages } from '@/proto/words_pages.gen';
 import { diffRuns, langOfPath } from './syntax';
 import { useRouter } from '@/app/router';
 import type { Diff as DiffEv } from '@/store';
 import { fileHead, linesOf } from './model';
+import { counts, framed, partsOf, shownOrder, type Kind, type Part } from './parts';
 import './review.css';
 
 export interface DiffFilesProps {
@@ -40,8 +41,15 @@ export function DiffFiles({ project, diff, loading, error, onRetry, none, to, fr
   useEffect(() => {
     body.current?.focus();
   }, []);
-  const fileLines = useMemo(() => diff?.files.map(linesOf) ?? [], [diff]);
-  const paths = useMemo(() => diff?.files.map((f) => f.path) ?? [], [diff]);
+  // the files in the parts' order (simple mode: parts.ts), a folded part's left out: the quote's
+  // rows, `starts` and the test ids all follow what is shown, never git's order
+  const [genOpen, setGenOpen] = useState(false);
+  const parts = useMemo(() => (diff === null ? [] : partsOf(diff.files)), [diff]);
+  const order = useMemo(() => shownOrder(parts, framed(parts) && !genOpen ? ['generated'] : []), [parts, genOpen]);
+  const shown = useMemo(() => order.flatMap((i) => diff?.files[i] ?? []), [diff, order]);
+  const shownAt = useMemo(() => new Map(order.map((fi, i) => [fi, i])), [order]);
+  const fileLines = useMemo(() => shown.map(linesOf), [shown]);
+  const paths = useMemo(() => shown.map((f) => f.path), [shown]);
   const rows = useMemo(() => flatRows(fileLines), [fileLines]);
   const starts = useMemo(() => fileLines.reduce<number[]>((acc, _ls, i) => [...acc, i === 0 ? 0 : (acc[i - 1] ?? 0) + (fileLines[i - 1]?.length ?? 0)], []), [fileLines]);
   const [sel, setSel] = useState<Sel | null>(null);
@@ -136,6 +144,39 @@ export function DiffFiles({ project, diff, loading, error, onRetry, none, to, fr
       onEscape();
     }
   };
+  // opening or folding the generated files moves the shown rows: a selection over them goes
+  const toggleGen = () => {
+    setSel(null);
+    at.current = -1;
+    setGenOpen((o) => !o);
+  };
+  const fileAt = (i: number) => {
+    const f = shown[i];
+    if (f === undefined) return null;
+    return (
+      <div key={f.path} className="rv-file">
+        {f.note != null && f.note !== '' && <p className="rv-note">{f.note}</p>}
+        <FileDiff
+          path={f.path}
+          head={fileHead(f)}
+          add={f.add}
+          rm={f.del}
+          lines={fileLines[i] ?? []}
+          picked={(li) => inSel(sel, (starts[i] ?? 0) + li)}
+          pop={sel !== null && !dragging && lastFileOf(sel, rows) === i ? <QuotePop to={to} testId={`${testId}.quote.pop`} onAsk={askClick} onCopy={copyClick} /> : undefined}
+          testId={`${testId}.file.${i}`}
+        />
+      </div>
+    );
+  };
+  // a part's folders: its folder line, then that folder's files (each at its shown index)
+  const groupsOf = (p: Part) =>
+    p.groups.map((g) => (
+      <div key={g.folder} className="rv-group">
+        <p className="rv-folder">{g.folder === '' ? pages.review_folder_root : g.folder}</p>
+        {g.files.map((fi) => fileAt(shownAt.get(fi) ?? -1))}
+      </div>
+    ));
 
   return (
     <div className="rv-body" data-testid={`${testId}.files`} tabIndex={-1} ref={body} onKeyDown={onKey} onMouseDown={onMouseDown} onMouseOver={onMouseOver} data-selecting={sel !== null || undefined}>
@@ -155,21 +196,28 @@ export function DiffFiles({ project, diff, loading, error, onRetry, none, to, fr
       ) : (
         <>
         {diff.cut_files != null && diff.cut_files > 0 && <p className="rv-note" data-testid={`${testId}.cut`}>{pages.review_cut_files({ n: diff.cut_files })}</p>}
-        {diff.files.map((f, i) => (
-          <div key={f.path} className="rv-file">
-            {f.note != null && f.note !== '' && <p className="rv-note">{f.note}</p>}
-            <FileDiff
-              path={f.path}
-              head={fileHead(f)}
-              add={f.add}
-              rm={f.del}
-              lines={fileLines[i] ?? []}
-              picked={(li) => inSel(sel, (starts[i] ?? 0) + li)}
-              pop={sel !== null && !dragging && lastFileOf(sel, rows) === i ? <QuotePop to={to} testId={`${testId}.quote.pop`} onAsk={askClick} onCopy={copyClick} /> : undefined}
-              testId={`${testId}.file.${i}`}
-            />
-          </div>
-        ))}
+        {!framed(parts)
+          ? shown.map((_f, i) => fileAt(i))
+          : parts.map((p) => {
+              const head = [kindWord[p.kind], pages.review_part_files({ n: p.files }), counts(p)].filter(Boolean).join(' · ');
+              if (p.kind === 'generated') {
+                const names = p.groups.flatMap((g) => g.files.map((i) => baseName(diff.files[i]?.path ?? '')));
+                return (
+                  <div key={p.kind} className="rv-part" data-testid={`${testId}.part.${p.kind}`}>
+                    <Fold open={genOpen} onToggle={() => { toggleGen(); }} testId={`${testId}.part.${p.kind}.fold`}>
+                      <span className="rv-fold-words">{genOpen ? head : [kindWord[p.kind], pages.review_part_files({ n: p.files }), names.join(', '), counts(p)].filter(Boolean).join(' · ')}</span>
+                    </Fold>
+                    {genOpen && groupsOf(p)}
+                  </div>
+                );
+              }
+              return (
+                <div key={p.kind} className="rv-part" data-testid={`${testId}.part.${p.kind}`}>
+                  <GroupLabel>{head}</GroupLabel>
+                  {groupsOf(p)}
+                </div>
+              );
+            })}
         </>
       )}
     </div>
@@ -202,6 +250,15 @@ function FileDiff({ path, head, add, rm, lines, picked, pop, testId }: FileDiffP
   });
   return <Diff file={head} add={add} rm={rm} lines={shown} pop={pop} testId={testId} />;
 }
+
+const kindWord: Record<Kind, string> = {
+  code: pages.review_kind_code,
+  tests: pages.review_kind_tests,
+  docs: pages.review_kind_docs,
+  generated: pages.review_kind_generated,
+};
+
+const baseName = (path: string) => path.slice(path.lastIndexOf('/') + 1);
 
 /** Row `i` of the flat list is in the selection. */
 function inSel(s: Sel | null, i: number): boolean {

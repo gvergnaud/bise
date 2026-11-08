@@ -174,6 +174,18 @@ crate::words! { pages:
     review_open_pr_tip(n) = "open #{n} in your browser";
     /// a change too big for one answer: its last files come with their names and counts only
     review_cut_files(n) = "{n} more files are too much to show here: names and counts only";
+    /// the review's parts by kind (simple mode, page review-guided): the code that does something
+    review_kind_code = "Code";
+    /// the review's part of tests and checks
+    review_kind_tests = "Tests";
+    /// the review's part of docs, words and prose
+    review_kind_docs = "Words and docs";
+    /// the review's part of generated files and lock files, folded
+    review_kind_generated = "Generated";
+    /// a part's file count: 'Code · 3 files · +104 −18'
+    review_part_files(n) = one "{n} file" | "{n} files";
+    /// a part's folder line for the files at the repo's root
+    review_folder_root = "top level";
 
     // ---- a feature (route feature)
     /// the feature head's sub when it isn't known

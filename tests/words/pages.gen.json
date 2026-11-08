@@ -191,6 +191,31 @@
     "one": null,
     "text": "couldn't load these changes"
   },
+  "pages.review_folder_root": {
+    "args": [],
+    "one": null,
+    "text": "top level"
+  },
+  "pages.review_kind_code": {
+    "args": [],
+    "one": null,
+    "text": "Code"
+  },
+  "pages.review_kind_docs": {
+    "args": [],
+    "one": null,
+    "text": "Words and docs"
+  },
+  "pages.review_kind_generated": {
+    "args": [],
+    "one": null,
+    "text": "Generated"
+  },
+  "pages.review_kind_tests": {
+    "args": [],
+    "one": null,
+    "text": "Tests"
+  },
   "pages.review_loading": {
     "args": [
       "agent"
@@ -238,6 +263,13 @@
     ],
     "one": null,
     "text": "open #{n} in your browser"
+  },
+  "pages.review_part_files": {
+    "args": [
+      "n"
+    ],
+    "one": "{n} file",
+    "text": "{n} files"
   },
   "pages.review_retry": {
     "args": [],
