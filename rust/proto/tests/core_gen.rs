@@ -138,6 +138,8 @@ fn bend_ty(k: FieldKind) -> &'static str {
         OptJsonsOmit => "Maybe<&2, List<&2, J.Json>>",
         Flag => "Bool",
         Rec(c) | Inline(c) | InlineOpt(c) => c.ty,
+        Body | BodyJson => "K.Body",
+        OptBodyOmit => "Maybe<&2, K.Body>",
     }
 }
 
@@ -176,6 +178,8 @@ fn decode(k: FieldKind, name: &str) -> String {
         Rec(c) => format!("{}.{}_of(K.get_j(i, \"{name}\"))", c.module, c.name),
         Inline(c) => format!("{}.{}_of(i)", c.module, c.name),
         InlineOpt(_) => unreachable!("{name}: read by its row's own def (journal_codec)"),
+        Body | BodyJson => format!("K.body_or(J.get(i, \"{name}\"))"),
+        OptBodyOmit => format!("K.opt_body(J.get(i, \"{name}\"))"),
     }
 }
 
@@ -193,6 +197,8 @@ fn default(k: FieldKind) -> &'static str {
         Recs(_) | OptJsonsOmit => unreachable!("a view field, never decoded (decodable)"),
         Flag => "False{}",
         Rec(_) | Inline(_) | InlineOpt(_) => unreachable!("a hand codec's default is its read of nothing (journal_laws)"),
+        Body | BodyJson => "K.BLit{\"\"}",
+        OptBodyOmit => "None{}",
     }
 }
 
@@ -221,6 +227,8 @@ fn encode(k: FieldKind, name: &str, v: &str) -> Result<String, String> {
         Flag => Err(format!("K.flag(\"{name}\", {v})")),
         Rec(c) => Ok(format!("J.kv(\"{name}\", {}.{}_json({v}))", c.module, c.name)),
         Inline(c) | InlineOpt(c) => Err(format!("{}.{}_kvs({v})", c.module, c.name)),
+        Body | BodyJson => Ok(format!("J.kv(\"{name}\", K.jbody({v}))")),
+        OptBodyOmit => Err(format!("K.omit_mbody(\"{name}\", {v})")),
     }
 }
 
@@ -659,6 +667,51 @@ def jnats(xs: List<&2, Nat>) -> List<&2, J.Json>:
       Nil{}
     case Con{+h, +t}:
       J.JNum{h} <> jnats(t)
+
+# c6: a message's words in a record (bise_proto::core::body::Body): the
+# words sb-core made, or a message's by its id; the shell fills them from
+# the journal before the record is written (body::fill)
+type Body is Data:
+  BLit{text: String}
+  BText{id: Nat}
+  BParts{id: Nat}
+
+def jbody(b: Body) -> J.Json:
+  match b:
+    case BLit{+t}:
+      J.obj([J.kv("body", J.JStr{"lit"}), J.kv("text", J.JStr{t})])
+    case BText{+id}:
+      J.obj([J.kv("body", J.JStr{"text"}), J.kv("id", J.JNum{id})])
+    case BParts{+id}:
+      J.obj([J.kv("body", J.JStr{"parts"}), J.kv("id", J.JNum{id})])
+
+# a body read back (the codecs' round laws; sb-core never reads one in a
+# step): none when it isn't one
+def body_of.go(+t: String, +j: J.Json) -> Maybe<&2, Body>:
+  +id = J.get_num_or(j, "id", 0n)
+  Bool.pick(Maybe<&2, Body>, String.eq(t, "lit"), Some{BLit{J.get_str_or(j, "text", "")}},
+    Bool.pick(Maybe<&2, Body>, String.eq(t, "text"), Some{BText{id}},
+      Bool.pick(Maybe<&2, Body>, String.eq(t, "parts"), Some{BParts{id}}, None{})))
+
+def body_of(+j: J.Json) -> Maybe<&2, Body>:
+  body_of.go(J.get_str_or(j, "body", ""), j)
+
+def opt_body(m: Maybe<&2, J.Json>) -> Maybe<&2, Body>:
+  match m:
+    case Some{+j}:
+      body_of(j)
+    case None{}:
+      None{}
+
+def body_or(m: Maybe<&2, J.Json>) -> Body:
+  Maybe.default(&2, Body, opt_body(m), BLit{""})
+
+def omit_mbody(+k: String, m: Maybe<&2, Body>) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
+  match m:
+    case None{}:
+      Nil{}
+    case Some{+b}:
+      [J.kv(k, jbody(b))]
 
 def jmsg(m: Delivered) -> J.Json:
   match m:

@@ -142,7 +142,7 @@ def sent1(+msgs: List<&2, S.MRec>, +m: S.Msg) -> List<&2, S.MRec>:
 def apply1(+msgs: List<&2, S.MRec>, e: M.Ev) -> List<&2, S.MRec>:
   match e:
     case M.EMsgSent{+m}:
-      sent1(msgs, m)
+      sent1(msgs, M.msg_of_sent(m))
     case M.EMsgState{+id, +s}:
       M.map_msg(msgs, id, M.OSt{s})
     case M.ESettled{+id}:

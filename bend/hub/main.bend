@@ -150,10 +150,6 @@ def handle.link(l: L.Link, +h: H.Hub, +i: J.Json) -> H.Hub & String:
       (h, J.stringify(L.answer_done()))
     case L.TView{}:
       (h, J.stringify(L.answer_view(V.view(H.Hub.d(h), X.R.rts(H.Hub.r(h)), X.R.waiters(H.Hub.r(h)), True{}, Nil{}, Nil{}, Nil{}))))
-    # view-all-perf: the bodies view_all left out, as a step's view of
-    # those messages (whole, no agent, nothing else)
-    case L.TMsgBodies{+ids}:
-      (h, J.stringify(L.answer_view(V.view(H.Hub.d(h), X.R.rts(H.Hub.r(h)), X.R.waiters(H.Hub.r(h)), False{}, ids, Nil{}, Nil{}))))
     case L.TPhoto{}:
       (h, J.stringify(photo.answer(PH.photo(h))))
     case L.TRestorePhoto{+st}:

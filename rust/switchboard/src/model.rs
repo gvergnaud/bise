@@ -4,6 +4,7 @@
 //! the runtime-only fields (`Agent::run`, `Agent::waiting`) are set by
 //! the core from REPL activity and are never journaled.
 
+use bise_proto::core::body::{Missing, Words};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// sb-core's records, declared once in bise_proto (core::state: the
@@ -151,14 +152,12 @@ pub struct State {
     ///
     /// Every message stays here, delivered and owing nothing included,
     /// as a [`Row`]: whole, or cold (view-all-perf: `view_all` sends a
-    /// cold one without its body; [`State::cold_of`] names them, the hub
-    /// asks sb-core for their bodies, core.rs `fetch_bodies`). Readers of
-    /// a cold one's body (issue 21): the delivery's text (core_link.rs
-    /// `deliver`: the step's own messages, always whole), main's
-    /// `<agent_threads>` (board.rs, through `threads`: fetched before
-    /// the build), a question card's note (core_snapshot.rs `card_note`)
-    /// and the `--attach m_<n>` of an old message (fetched first).
+    /// cold one as a compact row). Neither has its words (c6): sb-core
+    /// keeps none, [`State::words`] reads them in the journal.
     msgs: BTreeMap<u64, Row>,
+    /// where each message's words are in the journal (c6, bodies.rs):
+    /// filled by the daemon at the boot's read and after each append
+    pub bodies: crate::bodies::Bodies,
     msg_state: BTreeMap<u64, MsgState>,
     settled: BTreeSet<u64>,
     /// main's `<agent_threads>`, kept by the same writer (board::Threads)
@@ -202,11 +201,21 @@ impl State {
         st
     }
 
-    /// Message `id`, whole (its text and parts); None: unknown, or cold
-    /// (its body not fetched: [`State::cold_of`], then core.rs
-    /// `fetch_bodies`).
+    /// Message `id`, whole (its row as a step's view sends it: `via`,
+    /// `fwd`...); None: unknown, or cold.
     pub fn msg(&self, id: u64) -> Option<&Msg> {
         self.msgs.get(&id)?.whole()
+    }
+
+    /// Message `id`'s words (its text and parts), read in the journal
+    /// (bodies.rs); a [`Missing`] renders the same everywhere.
+    pub fn words(&self, id: u64) -> Result<Words, Missing> {
+        self.bodies.words(id)
+    }
+
+    /// Message `id`'s text, or the words that say it is missing.
+    pub fn text(&self, id: u64) -> String {
+        self.words(id).map(|w| w.text).unwrap_or_else(|m| m.text())
     }
 
     /// Message `id`'s row without its body, whole or cold.
@@ -229,13 +238,6 @@ impl State {
     /// The whole messages, by id (a cold one is left out).
     pub fn whole_msgs(&self) -> impl DoubleEndedIterator<Item = &Msg> + '_ {
         self.msgs.values().filter_map(Row::whole)
-    }
-
-    /// The cold messages of `ids` (their bodies to fetch), each once, in
-    /// order.
-    pub fn cold_of(&self, ids: impl IntoIterator<Item = u64>) -> Vec<u64> {
-        let set: BTreeSet<u64> = ids.into_iter().filter(|id| matches!(self.msgs.get(id), Some(Row::Cold(_)))).collect();
-        set.into_iter().collect()
     }
 
     /// Each message's delivery state, by id.
@@ -282,6 +284,13 @@ impl State {
         self.settled.clear();
         self.threads = Default::default();
         self.hot.clear();
+    }
+
+    /// Tests only: message `id`'s words, as its journal line has them
+    /// (the daemon's append, bodies.rs).
+    #[cfg(test)]
+    pub fn test_words(&mut self, id: u64, text: &str, parts: &str) {
+        self.bodies.keep(&serde_json::json!({"type": "message_sent", "msg": {"id": id, "text": text, "parts": parts}}));
     }
 
     /// Tests only: put_msg with sb-core's facts as model.bend's
@@ -362,18 +371,16 @@ impl State {
 }
 
 /// A message of the mirror (view-all-perf): whole, or cold: `view_all`
-/// sent its row without its body (`ViewMsg.whole` false). A cold one
-/// has no text the hub could show by mistake: its body comes from
-/// sb-core's `msg_bodies` (core.rs `fetch_bodies`), which makes it whole.
+/// sent its compact row (view.bend `cold_json`: no `via`, `fwd`...).
+/// Neither has its words: [`State::words`].
 #[derive(Clone, Debug, PartialEq)]
 pub enum Row {
     Whole(Msg),
     Cold(Head),
 }
 
-/// A cold message's row: what the hub reads of every message without
-/// its body (main's threads, a forward's time, `sb show`'s recipient, a
-/// card's note).
+/// A cold message's row: what the hub reads of every message (main's
+/// threads, a forward's time, `sb show`'s recipient, a card's note).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Head {
     pub id: u64,

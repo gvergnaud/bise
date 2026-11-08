@@ -7,14 +7,14 @@ import ../../vendor/json.bend as J
 
 import ./kit.bend as K
 
-def you(+text: String, +via: Maybe<&2, String>) -> J.Json:
-  J.obj(K.cat([[J.kv("sb", J.JStr{"you"})], [J.kv("text", J.JStr{text})], K.omit_ms("via", via)]))
+def you(+text: K.Body, +via: Maybe<&2, String>) -> J.Json:
+  J.obj(K.cat([[J.kv("sb", J.JStr{"you"})], [J.kv("text", K.jbody(text))], K.omit_ms("via", via)]))
 
 def you_id(+id: Nat) -> J.Json:
   J.obj([J.kv("sb", J.JStr{"you-id"}), J.kv("id", J.JNum{id})])
 
-def you_parts(+parts: J.Json) -> J.Json:
-  J.obj([J.kv("sb", J.JStr{"you-parts"}), J.kv("parts", parts)])
+def you_parts(+parts: K.Body) -> J.Json:
+  J.obj([J.kv("sb", J.JStr{"you-parts"}), J.kv("parts", K.jbody(parts))])
 
 def route_parts(+parts: J.Json) -> J.Json:
   J.obj([J.kv("sb", J.JStr{"route-parts"}), J.kv("parts", parts)])
@@ -22,11 +22,11 @@ def route_parts(+parts: J.Json) -> J.Json:
 def routed(+to: String, +name: String, +xid: Nat, +msg: Nat) -> J.Json:
   J.obj([J.kv("sb", J.JStr{"routed"}), J.kv("to", J.JStr{to}), J.kv("name", J.JStr{name}), J.kv("xid", J.JNum{xid}), J.kv("msg", J.JNum{msg})])
 
-def msg_parts(+id: Nat, +parts: J.Json) -> J.Json:
-  J.obj([J.kv("sb", J.JStr{"msg-parts"}), J.kv("id", J.JNum{id}), J.kv("parts", parts)])
+def msg_parts(+id: Nat, +parts: K.Body) -> J.Json:
+  J.obj([J.kv("sb", J.JStr{"msg-parts"}), J.kv("id", J.JNum{id}), J.kv("parts", K.jbody(parts))])
 
-def sent_parts(+id: Nat, +parts: J.Json) -> J.Json:
-  J.obj([J.kv("sb", J.JStr{"sent-parts"}), J.kv("id", J.JNum{id}), J.kv("parts", parts)])
+def sent_parts(+id: Nat, +parts: K.Body) -> J.Json:
+  J.obj([J.kv("sb", J.JStr{"sent-parts"}), J.kv("id", J.JNum{id}), J.kv("parts", K.jbody(parts))])
 
 def steered(+ids: List<&2, Nat>) -> J.Json:
   J.obj([J.kv("sb", J.JStr{"steered"}), J.kv("ids", J.JArr{K.jnats(ids)})])
@@ -37,23 +37,23 @@ def steer_rx(+ids: List<&2, Nat>) -> J.Json:
 def context(+context: J.Json) -> J.Json:
   J.obj([J.kv("sb", J.JStr{"context"}), J.kv("context", context)])
 
-def undelivered(+to: String, +text: String) -> J.Json:
-  J.obj([J.kv("sb", J.JStr{"undelivered"}), J.kv("to", J.JStr{to}), J.kv("text", J.JStr{text})])
+def undelivered(+to: String, +text: K.Body) -> J.Json:
+  J.obj([J.kv("sb", J.JStr{"undelivered"}), J.kv("to", J.JStr{to}), J.kv("text", K.jbody(text))])
 
-def msg_in(+from: String, +id: Maybe<&2, Nat>, +body: String, +view: Maybe<&2, String>) -> J.Json:
-  J.obj(K.cat([[J.kv("sb", J.JStr{"msg-in"})], [J.kv("from", J.JStr{from})], K.omit_mn("id", id), [J.kv("body", J.JStr{body})], K.omit_ms("view", view)]))
+def msg_in(+from: String, +id: Maybe<&2, Nat>, +body: K.Body, +view: Maybe<&2, String>) -> J.Json:
+  J.obj(K.cat([[J.kv("sb", J.JStr{"msg-in"})], [J.kv("from", J.JStr{from})], K.omit_mn("id", id), [J.kv("body", K.jbody(body))], K.omit_ms("view", view)]))
 
-def msg(+from: String, +to: String, +id: Maybe<&2, Nat>, +body: String) -> J.Json:
-  J.obj(K.cat([[J.kv("sb", J.JStr{"msg"})], [J.kv("from", J.JStr{from})], [J.kv("to", J.JStr{to})], K.omit_mn("id", id), [J.kv("body", J.JStr{body})]]))
+def msg(+from: String, +to: String, +id: Maybe<&2, Nat>, +body: K.Body) -> J.Json:
+  J.obj(K.cat([[J.kv("sb", J.JStr{"msg"})], [J.kv("from", J.JStr{from})], [J.kv("to", J.JStr{to})], K.omit_mn("id", id), [J.kv("body", K.jbody(body))]]))
 
-def sent(+to: String, +id: Nat, +ask: Bool, +body: String) -> J.Json:
-  J.obj([J.kv("sb", J.JStr{"sent"}), J.kv("to", J.JStr{to}), J.kv("id", J.JNum{id}), J.kv("ask", J.JBool{ask}), J.kv("body", J.JStr{body})])
+def sent(+to: String, +id: Nat, +ask: Bool, +body: K.Body) -> J.Json:
+  J.obj([J.kv("sb", J.JStr{"sent"}), J.kv("to", J.JStr{to}), J.kv("id", J.JNum{id}), J.kv("ask", J.JBool{ask}), J.kv("body", K.jbody(body))])
 
 def msg_you(+from: String, +body: String) -> J.Json:
   J.obj([J.kv("sb", J.JStr{"msg-you"}), J.kv("from", J.JStr{from}), J.kv("body", J.JStr{body})])
 
-def answered(+agent: String, +question: String, +answer: String, +why: String) -> J.Json:
-  J.obj([J.kv("sb", J.JStr{"answered"}), J.kv("agent", J.JStr{agent}), J.kv("question", J.JStr{question}), J.kv("answer", J.JStr{answer}), J.kv("why", J.JStr{why})])
+def answered(+agent: String, +question: K.Body, +answer: K.Body, +why: String) -> J.Json:
+  J.obj([J.kv("sb", J.JStr{"answered"}), J.kv("agent", J.JStr{agent}), J.kv("question", K.jbody(question)), J.kv("answer", K.jbody(answer)), J.kv("why", J.JStr{why})])
 
 def card(+id: Nat, +kind: String, +agent: String, +body: String) -> J.Json:
   J.obj([J.kv("sb", J.JStr{"card"}), J.kv("v", J.JNum{1n}), J.kv("id", J.JNum{id}), J.kv("kind", J.JStr{kind}), J.kv("agent", J.JStr{agent}), J.kv("body", J.JStr{body})])

@@ -116,6 +116,51 @@ def jnats(xs: List<&2, Nat>) -> List<&2, J.Json>:
     case Con{+h, +t}:
       J.JNum{h} <> jnats(t)
 
+# c6: a message's words in a record (bise_proto::core::body::Body): the
+# words sb-core made, or a message's by its id; the shell fills them from
+# the journal before the record is written (body::fill)
+type Body is Data:
+  BLit{text: String}
+  BText{id: Nat}
+  BParts{id: Nat}
+
+def jbody(b: Body) -> J.Json:
+  match b:
+    case BLit{+t}:
+      J.obj([J.kv("body", J.JStr{"lit"}), J.kv("text", J.JStr{t})])
+    case BText{+id}:
+      J.obj([J.kv("body", J.JStr{"text"}), J.kv("id", J.JNum{id})])
+    case BParts{+id}:
+      J.obj([J.kv("body", J.JStr{"parts"}), J.kv("id", J.JNum{id})])
+
+# a body read back (the codecs' round laws; sb-core never reads one in a
+# step): none when it isn't one
+def body_of.go(+t: String, +j: J.Json) -> Maybe<&2, Body>:
+  +id = J.get_num_or(j, "id", 0n)
+  Bool.pick(Maybe<&2, Body>, String.eq(t, "lit"), Some{BLit{J.get_str_or(j, "text", "")}},
+    Bool.pick(Maybe<&2, Body>, String.eq(t, "text"), Some{BText{id}},
+      Bool.pick(Maybe<&2, Body>, String.eq(t, "parts"), Some{BParts{id}}, None{})))
+
+def body_of(+j: J.Json) -> Maybe<&2, Body>:
+  body_of.go(J.get_str_or(j, "body", ""), j)
+
+def opt_body(m: Maybe<&2, J.Json>) -> Maybe<&2, Body>:
+  match m:
+    case Some{+j}:
+      body_of(j)
+    case None{}:
+      None{}
+
+def body_or(m: Maybe<&2, J.Json>) -> Body:
+  Maybe.default(&2, Body, opt_body(m), BLit{""})
+
+def omit_mbody(+k: String, m: Maybe<&2, Body>) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
+  match m:
+    case None{}:
+      Nil{}
+    case Some{+b}:
+      [J.kv(k, jbody(b))]
+
 def jmsg(m: Delivered) -> J.Json:
   match m:
     case Delivered{+id, +rel}:

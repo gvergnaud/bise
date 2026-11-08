@@ -608,8 +608,9 @@ law xhub_only_main_forwards:
   for +s: HS.St
   for +from: String
   for +id: Nat
+  for +text: String
   for e: {String.eq(from, HM.MAIN()) == False{} : Bool}
-  {HXB.forward(s, from, id) == HXB.FwdErr{"only main forwards to the projects"} : HXB.Fwd}
+  {HXB.forward(s, from, id, text) == HXB.FwdErr{"only main forwards to the projects"} : HXB.Fwd}
 
 # LAW: a message of his is forwarded once: with an outbox entry for it,
 # main's forward is refused.
@@ -617,8 +618,9 @@ law xhub_forward_once:
   for +s: HS.St
   for +id: Nat
   for +ob: HS.Out
+  for +text: String
   for e: {HXH.out_by_msg(HS.Xs.outbox(HS.St.x(s)), id) == Some{ob} : Maybe<&2, HS.Out>}
-  {HXB.forward(s, HM.MAIN(), id) == HXB.FwdErr{String.append(String.append(HXB.mid(id), " was already forwarded to "), HS.Out.project(ob))} : HXB.Fwd}
+  {HXB.forward(s, HM.MAIN(), id, text) == HXB.FwdErr{String.append(String.append(HXB.mid(id), " was already forwarded to "), HS.Out.project(ob))} : HXB.Fwd}
 
 # LAW: only his own words go by reference (architect's B): a message not
 # from the user is refused, whatever it says (bise's own question goes by
@@ -626,8 +628,9 @@ law xhub_forward_once:
 law xhub_forward_needs_his_message:
   for +m: HS.Msg
   for +id: Nat
+  for +text: String
   for e: {String.eq(HS.Msg.from(m), HM.USER()) == False{} : Bool}
-  {HXB.his.go(Some{m}, id) == HXB.FwdErr{String.append(HXB.mid(id), " is not a message the user sent you: forward his own words only (your own question: sb project ask)")} : HXB.Fwd}
+  {HXB.his.go(Some{m}, id, text) == HXB.FwdErr{String.append(HXB.mid(id), " is not a message the user sent you: forward his own words only (your own question: sb project ask)")} : HXB.Fwd}
 
 # LAW: bise's own question needs words: a blank one is refused, any other
 # may go (architect m_8864: the core's section validates nothing itself).
@@ -727,7 +730,7 @@ law route_fire_says_where:
   for +r: HS.Route
   for +id: Nat
   for +xid: Nat
-  {HC.route_fire.lines(o, cx, r, id, xid) == HC.feed(o, HC.you_parts(o, HC.feed(o, HC.feed(o, cx, HM.MAIN(), HFD.you(HS.Route.text(r), HXB.via_of(HS.Route.via(r)))), HM.MAIN(), HFD.you_id(id)), HM.MAIN(), HS.Route.parts(r)), HM.MAIN(), HFD.routed(HS.Route.to(r), HS.Route.name(r), xid, id)) : HX.Cx<o>}
+  {HC.route_fire.lines(o, cx, r, id, xid) == HC.feed(o, HC.you_parts(o, HC.feed(o, HC.feed(o, cx, HM.MAIN(), HFD.you(HK.BLit{HS.Route.text(r)}, HXB.via_of(HS.Route.via(r)))), HM.MAIN(), HFD.you_id(id)), HM.MAIN(), Bool.not(String.is_empty(HS.Route.parts(r))), HK.BLit{HS.Route.parts(r)}), HM.MAIN(), HFD.routed(HS.Route.to(r), HS.Route.name(r), xid, id)) : HX.Cx<o>}
 
 # ---- his parts go with his routed words (R41 (6), architect m_18164) ----
 
@@ -1061,7 +1064,7 @@ law view_msg_from_view:
   for +text: String
   for +id: Nat
   for +now: Nat
-  {HS.Msg.from(HC.view_msg_of(agent, plugin, text, id, now)) == HM.VIEW() : String}
+  {HS.Sent.from(HC.view_msg_of(agent, plugin, text, id, now)) == HM.VIEW() : String}
 
 # ...a name no agent can take, so no agent's message looks like a view's
 # and `sb send view` reaches no agent...
@@ -1076,7 +1079,7 @@ law view_msg_to_its_agent:
   for +text: String
   for +id: Nat
   for +now: Nat
-  {HS.Msg.to(HC.view_msg_of(agent, plugin, text, id, now)) == agent : String}
+  {HS.Sent.to(HC.view_msg_of(agent, plugin, text, id, now)) == agent : String}
 
 # ...queued (never steered into a turn)...
 law view_msg_queued:
@@ -1085,7 +1088,7 @@ law view_msg_queued:
   for +text: String
   for +id: Nat
   for +now: Nat
-  {HS.Msg.queued(HC.view_msg_of(agent, plugin, text, id, now)) == True{} : Bool}
+  {HS.Sent.queued(HC.view_msg_of(agent, plugin, text, id, now)) == True{} : Bool}
 
 # ...its plugin typed, as the input named it...
 law view_msg_plugin:
@@ -1094,7 +1097,7 @@ law view_msg_plugin:
   for +text: String
   for +id: Nat
   for +now: Nat
-  {HS.Msg.view(HC.view_msg_of(agent, plugin, text, id, now)) == Some{plugin} : Maybe<&2, String>}
+  {HS.Sent.view(HC.view_msg_of(agent, plugin, text, id, now)) == Some{plugin} : Maybe<&2, String>}
 
 # ...and only to an active agent: one stopped, archived or gone gets no
 # message (nothing is journaled, no EMsgSent).

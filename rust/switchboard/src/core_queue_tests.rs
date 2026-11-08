@@ -15,7 +15,7 @@ fn a_queued_message_steered_now_goes_into_the_turn_once_with_its_id() {
             _ => None,
         })
     };
-    let id_of = |t: &T, text: &str| t.hub.st.msgs().values().find(|m| m.text == text).unwrap().id;
+    let id_of = |t: &T, text: &str| t.hub.st.msgs().values().find(|m| t.hub.st.text(m.id) == text).unwrap().id;
     let mut t = T::new();
     t.spawn_task("a");
     t.user_queued("a", "steer me");

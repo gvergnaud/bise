@@ -385,7 +385,9 @@ impl Shell {
     pub(super) fn image_care(&mut self) {
         let home = self.opts.home.clone();
         let st = &self.hub.st;
-        let texts = st.hot().map(|(m, _)| m.text.as_str()).chain(st.open_cards().map(|c| c.text.as_str()));
+        // the hot messages' words, read in the journal (c6)
+        let hot: Vec<String> = st.hot().map(|(m, _)| st.text(m.id)).collect();
+        let texts = hot.iter().map(String::as_str).chain(st.open_cards().map(|c| c.text.as_str()));
         let paths = self.opts.paths.clone();
         let care = crate::image_care::tick(&self.opts.paths, &home.images_dir(), &home.prefs_file(), texts, now_ms(), move |r| {
             match r {

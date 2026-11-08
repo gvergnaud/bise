@@ -80,7 +80,7 @@ def needs(e: M.Ev) -> Needs():
     case M.EJobEnd{+name, _}:
       of_agent(name)
     case M.EMsgSent{+m}:
-      of_reply(S.Msg.reply_to(m))
+      of_reply(S.Msg.reply_to(M.msg_of_sent(m)))
     case M.EMsgState{+id, _}:
       of_msg(id)
     case M.ESettled{+id}:

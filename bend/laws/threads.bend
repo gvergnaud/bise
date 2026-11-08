@@ -19,6 +19,7 @@ import ../hub/picks.bend as HPK
 import ../hub/answers.bend as HA
 import ../hub/keyed.bend as HKL
 import ../hub/gen/feed.bend as HFD
+import ../hub/gen/kit.bend as HK
 import ../hub/said.bend as HSD
 
 # ---- a stopped turn is a typed fact (desktop reset, architect m_9650 D,
@@ -69,7 +70,7 @@ law task_send_says_sent_once:
   for +cx: HX.Cx<o>
   for +m: HS.Msg
   for e: {HC.is_task_send(o, cx, HS.Msg.from(m), HS.Msg.to(m)) == True{} : Bool}
-  {HC.feed_sender(o, cx, m) == HC.sent_parts(o, HC.feed(o, cx, HS.Msg.from(m), HFD.sent(HS.Msg.to(m), HS.Msg.id(m), HS.Msg.expect(m), HS.Msg.text(m))), HS.Msg.from(m), m) : HX.Cx<o>}
+  {HC.feed_sender(o, cx, m) == HC.sent_parts(o, HC.feed(o, cx, HS.Msg.from(m), HFD.sent(HS.Msg.to(m), HS.Msg.id(m), HS.Msg.expect(m), HK.BText{HS.Msg.id(m)})), HS.Msg.from(m), m) : HX.Cx<o>}
 
 # LAW: main's messages, the user's, a message to the user, and a message
 # from a name that isn't an agent of this hub write no 'sent' line.
@@ -150,15 +151,16 @@ law you_line_carries_its_id:
   for +cx: HX.Cx<o>
   for +name: String
   for +m: HS.Msg
-  for e: {String.is_empty(HS.Msg.parts(m)) == True{} : Bool}
+  for e: {HS.Msg.has_parts(m) == False{} : Bool}
   {HC.deliver.line(o, False{}, True{}, cx, name, m)
-    == HC.feed(o, HC.feed(o, cx, name, HFD.you(HS.Msg.text(m), HS.Msg.via(m))), name, HFD.you_id(HS.Msg.id(m))) : HX.Cx<o>}
+    == HC.feed(o, HC.feed(o, cx, name, HFD.you(HK.BText{HS.Msg.id(m)}, HS.Msg.via(m))), name, HFD.you_id(HS.Msg.id(m))) : HX.Cx<o>}
 
 # ---- his message's parts (msg-parts) ----
 # The clients send his message as typed parts (bise_proto::parts: his
 # words, quotes, pastes, images, files) beside the text the model gets.
-# sb-core keeps them on the message, opaque (Msg.parts, "" none), and
-# writes them at the delivery, so the clients draw his message from them.
+# sb-core keeps whether the message has some (Msg.has_parts; the parts
+# stay in the journal, c6) and writes their body at the delivery, so the
+# clients draw his message from them.
 
 # LAW: a message with parts writes them on one 'you-parts' line right
 # after its you-id (the clients put them on that entry); the you line
@@ -168,9 +170,9 @@ law you_parts_follow_the_id:
   for +cx: HX.Cx<o>
   for +name: String
   for +m: HS.Msg
-  for e: {String.is_empty(HS.Msg.parts(m)) == False{} : Bool}
+  for e: {HS.Msg.has_parts(m) == True{} : Bool}
   {HC.deliver.line(o, False{}, True{}, cx, name, m)
-    == HC.feed(o, HC.feed(o, HC.feed(o, cx, name, HFD.you(HS.Msg.text(m), HS.Msg.via(m))), name, HFD.you_id(HS.Msg.id(m))), name, HFD.you_parts(HC.parts_json(HS.Msg.parts(m)))) : HX.Cx<o>}
+    == HC.feed(o, HC.feed(o, HC.feed(o, cx, name, HFD.you(HK.BText{HS.Msg.id(m)}, HS.Msg.via(m))), name, HFD.you_id(HS.Msg.id(m))), name, HFD.you_parts(HK.BParts{HS.Msg.id(m)})) : HX.Cx<o>}
 
 # LAW: parts never change what he said: the same message with or without
 # parts writes the same lines (his text, its id), the parts only after
@@ -180,9 +182,9 @@ law parts_never_change_text:
   for +cx: HX.Cx<o>
   for +name: String
   for +m: HS.Msg
-  for +p: String
-  {HC.deliver.line(o, False{}, True{}, cx, name, HS.Msg.with_parts(m, p))
-    == HC.you_parts(o, HC.deliver.line(o, False{}, True{}, cx, name, HS.Msg.with_parts(m, "")), name, p) : HX.Cx<o>}
+  for p: Bool
+  {HC.deliver.line(o, False{}, True{}, cx, name, HS.Msg.with_has_parts(m, p))
+    == HC.you_parts(o, HC.deliver.line(o, False{}, True{}, cx, name, HS.Msg.with_has_parts(m, False{})), name, p, HK.BParts{HS.Msg.id(m)}) : HX.Cx<o>}
 
 # LAW: a line with no parts is no line: a route line (an answer to a card,
 # a message to another agent) with none is the route line alone.
@@ -565,7 +567,7 @@ law said_you_id:
   for +name: String
   for +m: HS.Msg
   {HC.deliver.line(o, False{}, True{}, cx, name, m)
-    == HC.you_parts(o, HC.feed(o, HC.feed(o, cx, name, HFD.you(HS.Msg.text(m), HS.Msg.via(m))), name, HFD.you_id(HS.Msg.id(m))), name, HS.Msg.parts(m)) : HX.Cx<o>}
+    == HC.you_parts(o, HC.feed(o, HC.feed(o, cx, name, HFD.you(HK.BText{HS.Msg.id(m)}, HS.Msg.via(m))), name, HFD.you_id(HS.Msg.id(m))), name, HS.Msg.has_parts(m), HK.BParts{HS.Msg.id(m)}) : HX.Cx<o>}
 
 law said_id_is_the_msg_id:
   for +m: HS.Msg

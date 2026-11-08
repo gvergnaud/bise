@@ -17,14 +17,9 @@ core_kinds! {
         ReplayMany = "replay_many" => TReplayMany { evs: Jsons },
         /// answers `{}`
         Ping = "ping" => TPing {},
-        /// the whole view (its cold messages without their body: `whole`
-        /// false, view-all-perf)
+        /// the whole view (its old messages as compact cold rows,
+        /// view-all-perf)
         ViewAll = "view_all" => TView {},
-        /// the messages `ids`, whole: answered like `view_all` (`{"view":
-        /// …}`), a view with only those messages (a step's view of them:
-        /// no agent, no order). The hub asks for the bodies `view_all`
-        /// left out, at most [`MSG_BODIES_MAX`] ids a call.
-        MsgBodies = "msg_bodies" => TMsgBodies { ids: Nats },
         /// the durable state as its photo (issue 36), answered `{"st":
         /// <St photo>}`; read-only, refused while an env query is pending
         Photo = "photo" => TPhoto {},
@@ -34,11 +29,6 @@ core_kinds! {
         RestorePhoto = "restore_photo" => TRestorePhoto { st: Json },
     }
 }
-
-/// The most ids one `msg_bodies` asks for: sb-core walks its cold
-/// messages down to the oldest id asked, each one checked against the
-/// ids, so a batch stays small.
-pub const MSG_BODIES_MAX: usize = 256;
 
 /// sb-core's answer line to one link request or step (main.bend's
 /// `answer`, `replay`, `replay_many`, `handle`). Untagged: its keys say

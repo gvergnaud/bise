@@ -30,7 +30,8 @@ pub const DECL: Codec = Codec {
     cases: &["None{}", "Some{S.DWorking{}}", "Some{S.DDone{}}", "Some{S.DBlocked{}}"],
 };
 pub const MST: Codec = Codec { module: "SC", name: "MSt.journal", ty: "S.MSt", cases: &["S.Queued{$r}", "S.Delivered{}", "S.Rejected{$e}", "S.Cancelled{}"] };
-pub const MSG: Codec = Codec { module: "SC", name: "Msg.journal", ty: "S.Msg", cases: &[] };
+/// a message and its words (c6: sb-core's state keeps the Msg only)
+pub const SENT: Codec = Codec { module: "SC", name: "Sent.journal", ty: "S.Sent", cases: &[] };
 pub const CARD: Codec = Codec { module: "SC", name: "Card.journal", ty: "S.Card", cases: &[] };
 /// his answer on a card's close: its keys sit in the line
 pub const ANS: Codec = Codec { module: "SC", name: "Ans.journal", ty: "S.Ans", cases: &[] };
@@ -79,7 +80,7 @@ pub const JOURNAL: Table = Table {
         // `from` of a live agent `to`; its hot messages to `from` (queued,
         // owed) are addressed to `to`, same ids (an older core skips it)
         k("msgs_moved", "MsgsMoved", "M.EMsgsMoved{from, to}", &[f("from", Str), f("to", Str)]),
-        k("message_sent", "MsgSent", "M.EMsgSent{msg}", &[f("msg", Rec(&MSG))]),
+        k("message_sent", "MsgSent", "M.EMsgSent{msg}", &[f("msg", Rec(&SENT))]),
         k("message_state", "MsgState", "M.EMsgState{id, state}", &[f("id", Nat), f("state", Inline(&MST))]),
         k("message_settled", "Settled", "M.ESettled{id}", &[f("id", Nat)]),
         k("card_opened", "CardOpened", "M.ECardOpened{card}", &[f("card", Rec(&CARD))]),

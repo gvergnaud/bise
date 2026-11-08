@@ -22,11 +22,6 @@ impl Hub {
     /// The pending contexts built: the changed ones as `Context` effects
     /// (none when nothing is pending).
     pub fn contexts_flush(&mut self, now: u64) -> Fx {
-        // view-all-perf: main's <agent_threads> quotes each thread's
-        // first message: a cold one's body first (contexts.rs `fresh`)
-        if self.contexts.pending() {
-            self.fetch_bodies(crate::board::thread_firsts(&self.st, crate::contexts::THREADS));
-        }
         let texts = self.contexts.flush(&self.st, now, &self.models);
         texts.into_iter().map(|(agent, text)| Effect::Context { agent, text }).collect()
     }

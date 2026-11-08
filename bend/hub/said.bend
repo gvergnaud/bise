@@ -11,7 +11,8 @@ import ./gen/state.bend as S
 
 def his_msg(e: M.Ev) -> Maybe<&2, S.Msg>:
   match e:
-    case M.EMsgSent{+m}:
+    case M.EMsgSent{+s}:
+      +m = M.msg_of_sent(s)
       Bool.pick(Maybe<&2, S.Msg>, String.eq(S.Msg.from(m), M.USER()), Some{m}, None{})
     case _:
       None{}

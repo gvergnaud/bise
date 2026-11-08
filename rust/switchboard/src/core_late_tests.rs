@@ -73,8 +73,8 @@ fn a_late_answer_keeps_his_parts() {
     answer(&mut t, card, "<selection from=\"main\">\nq\n</selection>\nv2", parts);
     let late = late_msgs(&t);
     assert_eq!(late.len(), 1);
-    let m = t.hub.st.whole_msgs().find(|m| m.text.starts_with("he answered #")).expect("main's message").clone();
-    assert_eq!(m.parts, parts);
+    let id = t.hub.st.whole_msgs().find(|m| t.hub.st.text(m.id).starts_with("he answered #")).expect("main's message").id;
+    assert_eq!(t.hub.st.words(id).unwrap().parts, parts);
 }
 
 /// A replay rebuilds the list: withdrawn, a restart, his answer still

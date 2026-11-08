@@ -459,7 +459,7 @@ def ail.go(+e: HM.Ev, +s: HS.St, +x: Nat, -r: HS.MRec, +n: {HM.nat_in(N.Needs.ms
     case HM.EMsgsMoved{f, t}:
       {==}
     case HM.EMsgSent{m}:
-      cs_sent_ev(s, x, r, m, n, u, k, o)
+      cs_sent_ev(s, x, r, HM.msg_of_sent(m), n, u, k, o)
     case HM.EMsgState{id, y}:
       cs_op_ev(s, x, r, id, HM.OSt{y}, PL1.hub_lor_false_l(Nat.is_eq(id, x), HM.nat_in(Nil{}, x), n), u, o)
     case HM.ESettled{id}:
@@ -606,7 +606,8 @@ def cs_keep.go(+e: HM.Ev, +s: HS.St, +x: Nat, -r: HS.MRec, +n: {HM.nat_in(N.Need
     +u: HI.Split(s), +k: HX.FreshEv(s, e), +o: {HM.rec_of(HS.St.old(s), x) == Some{r} : Maybe<&2, HS.MRec>})
     -> {HM.rec_of(HS.St.old(HM.apply(HS.St.open(s), e)), x) == Some{r} : Maybe<&2, HS.MRec>}:
   match e:
-    case HM.EMsgSent{m}:
+    case HM.EMsgSent{sent}:
+      +m = HM.msg_of_sent(sent)
       +hot = HS.St.hot(s)
       +old = HS.St.old(s)
       +nm = HS.St.next_msg(s)

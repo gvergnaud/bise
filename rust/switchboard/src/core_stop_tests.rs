@@ -12,7 +12,7 @@ fn stopped(agent: &str, row: u64) -> Input {
 
 /// What the hub said to `to` so far.
 fn told(t: &T, to: &str) -> Vec<String> {
-    t.hub.st.msgs().values().filter(|m| m.to == to && m.from == "switchboard").map(|m| m.text.clone()).collect()
+    t.hub.st.msgs().values().filter(|m| m.to == to && m.from == "switchboard").map(|m| t.hub.st.text(m.id)).collect()
 }
 
 fn spawns(fx: &[Effect]) -> bool {

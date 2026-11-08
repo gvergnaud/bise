@@ -75,9 +75,9 @@ fn an_idle_tick_on_a_big_history_is_small_and_cheap() {
 /// view-all-perf: view_all sends an old message that owes nothing as a
 /// cold row without its body (`cold`), the newest 256, a question not
 /// settled and a queued one whole; the mirror keeps the cold one's row
-/// (`peek`), never a text; msg_bodies makes it whole with its own words.
+/// (`peek`). No row has words (c6): the journal has them, whole or cold.
 #[test]
-fn view_all_sends_old_messages_cold_and_msg_bodies_makes_them_whole() {
+fn view_all_sends_old_messages_cold_and_the_journal_has_every_ones_words() {
     let ws = json!({"mode": "shared", "path": "/w", "branch": null, "base_commit": null, "dropped": false});
     let mut ev = vec![json!({"type": "task_created", "name": "a", "parent": "main", "ws": ws, "at_ms": 0, "brief": {"objective": "fake"}})];
     for id in 1..=400u64 {
@@ -99,28 +99,21 @@ fn view_all_sends_old_messages_cold_and_msg_bodies_makes_them_whole() {
     assert_eq!(colds[0], json!([1, 1, "main", "a", null, false, 1001, false, {"state": "delivered"}, false]));
     assert_eq!(h.st.msg(1), None);
     assert_eq!(h.st.peek(1).map(|m| (m.to, m.created_ms)), Some(("a", 1001)));
-    assert_eq!(h.st.msg(2).map(|m| m.text.as_str()), Some("fake 2"));
-    assert_eq!(h.st.msg(145).map(|m| m.text.as_str()), Some("fake 145"));
-    assert_eq!(h.st.cold_of(1..=400).len(), cold.len());
-    // the bodies, in batches of MSG_BODIES_MAX: every message whole
-    h.fetch_bodies(1..=400);
-    assert!(h.st.cold_of(1..=400).is_empty());
-    let m = h.st.msg(1).expect("whole");
-    assert_eq!((m.text.as_str(), m.parts.as_str()), ("fake 1", "[{\"type\":\"text\",\"text\":\"fake 1\"}]"));
-    assert_eq!(h.st.msg(144).map(|m| m.text.as_str()), Some("fake 144"));
-    assert_eq!(h.st.whole_msgs().count(), 400);
-    // msg_bodies' rows are view_all's rows, whole: the same facts
-    let bodies = h.raw(&json!({"t": "msg_bodies", "ids": [1, 200]}));
-    let got = bodies["view"]["msgs"].as_array().unwrap();
-    assert_eq!(got.len(), 2);
-    let old = ColdMsg::decode(&colds[0]).unwrap();
-    assert_eq!((&got[0]["state"], &got[0]["settled"], &got[0]["owes"]), (&old.state, &json!(old.settled), &json!(false)));
-    assert_eq!(got[0]["msg"]["text"], "fake 1");
-    assert_eq!(got[1], *rows.iter().find(|r| r["msg"]["id"] == 200).unwrap());
+    assert!(h.st.msg(2).is_some() && h.st.msg(145).is_some());
+    assert_eq!(h.st.whole_msgs().count(), 400 - cold.len());
+    // no row carries words: a whole one's keys are its header
+    assert!(rows.iter().all(|r| r["msg"].get("text").is_none() && r["msg"].get("parts").is_none()), "{}", rows[0]);
+    assert_eq!(rows.iter().find(|r| r["msg"]["id"] == 145).unwrap()["msg"]["has_parts"], false);
+    // the words of every one, whole or cold, from the journal
+    let w = h.st.words(1).unwrap();
+    assert_eq!((w.text.as_str(), w.parts.as_str()), ("fake 1", "[{\"type\":\"text\",\"text\":\"fake 1\"}]"));
+    assert_eq!(h.st.text(2), "fake 2");
+    assert_eq!(h.st.text(145), "fake 145");
+    assert_eq!(h.st.text(401), bise_proto::core::body::Missing(401).text());
 }
 
 /// view-all-perf: a question card's note cites main's message with its
-/// words even when view_all sent it cold (the snapshot fetches it).
+/// words even when view_all sent it cold (c6: read in the journal).
 #[test]
 fn a_card_note_on_a_cold_message_carries_its_words() {
     let ws = json!({"mode": "shared", "path": "/w", "branch": null, "base_commit": null, "dropped": false});
@@ -134,7 +127,7 @@ fn a_card_note_on_a_cold_message_carries_its_words() {
     }
     let mut h = Hub::new("/w");
     assert!(h.replay(&ev).is_empty());
-    assert_eq!(h.st.cold_of([1]), vec![1], "main's message is cold after view_all");
+    assert_eq!(h.st.msg(1), None, "main's message is cold after view_all");
     let snap = h.snapshot(2000);
     let card = snap.cards.iter().find(|c| c.id == 1).expect("the card");
     assert_eq!(card.note.as_deref(), Some("@main wrote to @a since then (m_1): fake 1"));

@@ -31,7 +31,7 @@ type Fx is Data:
   # feed
   FFeed{agent: String, rec: J.Json}
   # reply
-  FReply{token: Nat, body: J.Json}
+  FReply{token: Nat, body: J.Json, message: Maybe<&2, K.Body>}
   # spoke
   FSpoke{token: Nat, ok: Bool, why: String}
   # notice
@@ -107,7 +107,7 @@ def FFeed.of(+i: J.Json) -> Fx:
   FFeed{K.get_s(i, "agent"), K.get_j(i, "rec")}
 
 def FReply.of(+i: J.Json) -> Fx:
-  FReply{K.get_n(i, "token"), K.get_j(i, "body")}
+  FReply{K.get_n(i, "token"), K.get_j(i, "body"), K.opt_body(J.get(i, "message"))}
 
 def FSpoke.of(+i: J.Json) -> Fx:
   FSpoke{K.get_n(i, "token"), K.get_b(i, "ok"), K.get_s(i, "why")}
@@ -468,8 +468,8 @@ def kvs(x: Fx) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
       [J.kv("fx", J.JStr{"interrupt"}), J.kv("agent", J.JStr{agent})]
     case FFeed{+agent, +rec}:
       [J.kv("fx", J.JStr{"feed"}), J.kv("agent", J.JStr{agent}), J.kv("rec", rec)]
-    case FReply{+token, +body}:
-      [J.kv("fx", J.JStr{"reply"}), J.kv("token", J.JNum{token}), J.kv("body", body)]
+    case FReply{+token, +body, +message}:
+      K.cat([[J.kv("fx", J.JStr{"reply"}), J.kv("token", J.JNum{token}), J.kv("body", body)], K.omit_mbody("message", message)])
     case FSpoke{+token, +ok, +why}:
       K.cat([[J.kv("fx", J.JStr{"spoke"}), J.kv("token", J.JNum{token}), J.kv("ok", J.JBool{ok})], K.omit_s("why", why)])
     case FNotice{+text}:
@@ -548,8 +548,8 @@ def interrupt(+agent: String) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
 def feed(+agent: String, +rec: J.Json) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
   kvs(FFeed{agent, rec})
 
-def reply(+token: Nat, +body: J.Json) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
-  kvs(FReply{token, body})
+def reply(+token: Nat, +body: J.Json, +message: Maybe<&2, K.Body>) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
+  kvs(FReply{token, body, message})
 
 def spoke(+token: Nat, +ok: Bool, +why: String) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
   kvs(FSpoke{token, ok, why})

@@ -208,7 +208,9 @@ impl<'de> Deserialize<'de> for MsgState {
 }
 
 /// a message between two parties of the group (the sender or the recipient
-/// may be `user`)
+/// may be `user`), without its words (c6: the journal's `message_sent` line
+/// keeps them, a `Sent`; what sb-core writes of them is a body the shell
+/// fills, body.rs)
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 pub struct Msg {
     pub id: u64,
@@ -218,14 +220,12 @@ pub struct Msg {
     pub reply_to: Option<u64>,
     pub expect_reply: bool,
     pub auto: bool,
-    pub text: String,
     pub created_ms: u64,
     pub plain: bool,
     pub queued: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub via: Option<String>,
-    #[serde(skip_serializing_if = "String::is_empty")]
-    pub parts: String,
+    pub has_parts: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fwd: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -244,12 +244,11 @@ impl<'de> Deserialize<'de> for Msg {
             reply_to: field(&o, "reply_to"),
             expect_reply: field(&o, "expect_reply"),
             auto: field(&o, "auto"),
-            text: field(&o, "text"),
             created_ms: field(&o, "created_ms"),
             plain: field(&o, "plain"),
             queued: field(&o, "queued"),
             via: field(&o, "via"),
-            parts: field(&o, "parts"),
+            has_parts: field(&o, "has_parts"),
             fwd: field(&o, "fwd"),
             view: field(&o, "view"),
         })

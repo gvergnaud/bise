@@ -10,6 +10,7 @@ import ../hub/core.bend as HC
 import ../hub/picks.bend as HPK
 import ../hub/keyed.bend as HKL
 import ../hub/gen/feed.bend as HFD
+import ../hub/gen/kit.bend as HK
 import ../hub/said.bend as HSD
 import ../hub/lazy.bend as HLZ
 import ./lib/hub-1.bend as PL1
@@ -100,11 +101,11 @@ def Laws.req_interrupt_says_stopped_once(o, cx, token, agent, n, e):
   {==}
 
 def Laws.task_send_says_sent_once(o, cx, m, e):
-  %Equal.sym(Bool, HC.is_task_send(o, cx, HS.Msg.from(m), HS.Msg.to(m)), True{}, e) : {HLZ.pick(HX.Cx<o>, _, u => HC.sent_parts(o, HC.feed(o, cx, HS.Msg.from(m), HFD.sent(HS.Msg.to(m), HS.Msg.id(m), HS.Msg.expect(m), HS.Msg.text(m))), HS.Msg.from(m), m), u => cx) == HC.sent_parts(o, HC.feed(o, cx, HS.Msg.from(m), HFD.sent(HS.Msg.to(m), HS.Msg.id(m), HS.Msg.expect(m), HS.Msg.text(m))), HS.Msg.from(m), m) : HX.Cx<o>}
+  %Equal.sym(Bool, HC.is_task_send(o, cx, HS.Msg.from(m), HS.Msg.to(m)), True{}, e) : {HLZ.pick(HX.Cx<o>, _, u => HC.sent_parts(o, HC.feed(o, cx, HS.Msg.from(m), HFD.sent(HS.Msg.to(m), HS.Msg.id(m), HS.Msg.expect(m), HK.BText{HS.Msg.id(m)})), HS.Msg.from(m), m), u => cx) == HC.sent_parts(o, HC.feed(o, cx, HS.Msg.from(m), HFD.sent(HS.Msg.to(m), HS.Msg.id(m), HS.Msg.expect(m), HK.BText{HS.Msg.id(m)})), HS.Msg.from(m), m) : HX.Cx<o>}
   {==}
 
 def Laws.other_send_says_no_sent(o, cx, m, e):
-  %Equal.sym(Bool, HC.is_task_send(o, cx, HS.Msg.from(m), HS.Msg.to(m)), False{}, e) : {HLZ.pick(HX.Cx<o>, _, u => HC.sent_parts(o, HC.feed(o, cx, HS.Msg.from(m), HFD.sent(HS.Msg.to(m), HS.Msg.id(m), HS.Msg.expect(m), HS.Msg.text(m))), HS.Msg.from(m), m), u => cx) == cx : HX.Cx<o>}
+  %Equal.sym(Bool, HC.is_task_send(o, cx, HS.Msg.from(m), HS.Msg.to(m)), False{}, e) : {HLZ.pick(HX.Cx<o>, _, u => HC.sent_parts(o, HC.feed(o, cx, HS.Msg.from(m), HFD.sent(HS.Msg.to(m), HS.Msg.id(m), HS.Msg.expect(m), HK.BText{HS.Msg.id(m)})), HS.Msg.from(m), m), u => cx) == cx : HX.Cx<o>}
   {==}
 
 def Laws.task_card_shows_in_its_feed(o, cx, id, agent, text, e):
@@ -127,49 +128,22 @@ def Laws.main_card_answer_routes_once(o, cx, c, text, parts, via):
   {==}
 
 def Laws.you_line_carries_its_id(o, cx, name, m, e):
-  +ln = HC.feed(o, HC.feed(o, cx, name, HFD.you(HS.Msg.text(m), HS.Msg.via(m))), name, HFD.you_id(HS.Msg.id(m)))
-  %Equal.sym(Bool, String.is_empty(HS.Msg.parts(m)), True{}, e) : {HLZ.pick(HX.Cx<o>, _, u => ln, u => HC.feed(o, ln, name, HFD.you_parts(HC.parts_json(HS.Msg.parts(m))))) == ln : HX.Cx<o>}
+  +ln = HC.feed(o, HC.feed(o, cx, name, HFD.you(HK.BText{HS.Msg.id(m)}, HS.Msg.via(m))), name, HFD.you_id(HS.Msg.id(m)))
+  %Equal.sym(Bool, HS.Msg.has_parts(m), False{}, e) : {HLZ.pick(HX.Cx<o>, Bool.not(_), u => ln, u => HC.feed(o, ln, name, HFD.you_parts(HK.BParts{HS.Msg.id(m)}))) == ln : HX.Cx<o>}
   {==}
 
 def Laws.you_parts_follow_the_id(o, cx, name, m, e):
-  +ln = HC.feed(o, HC.feed(o, cx, name, HFD.you(HS.Msg.text(m), HS.Msg.via(m))), name, HFD.you_id(HS.Msg.id(m)))
-  +rec = HFD.you_parts(HC.parts_json(HS.Msg.parts(m)))
-  %Equal.sym(Bool, String.is_empty(HS.Msg.parts(m)), False{}, e) : {HLZ.pick(HX.Cx<o>, _, u => ln, u => HC.feed(o, ln, name, rec)) == HC.feed(o, ln, name, rec) : HX.Cx<o>}
+  +ln = HC.feed(o, HC.feed(o, cx, name, HFD.you(HK.BText{HS.Msg.id(m)}, HS.Msg.via(m))), name, HFD.you_id(HS.Msg.id(m)))
+  +rec = HFD.you_parts(HK.BParts{HS.Msg.id(m)})
+  %Equal.sym(Bool, HS.Msg.has_parts(m), True{}, e) : {HLZ.pick(HX.Cx<o>, Bool.not(_), u => ln, u => HC.feed(o, ln, name, rec)) == HC.feed(o, ln, name, rec) : HX.Cx<o>}
   {==}
 
-# his line with parts `p`: the getters of with_parts (no record written by position)
-def hub_wp_text(+m: HS.Msg, +p: String) -> {HS.Msg.text(HS.Msg.with_parts(m, p)) == HS.Msg.text(m) : String}:
-  %HSL.Msg.parts.eta(m, p) : {HS.Msg.text(_) == HS.Msg.text(m) : String}
-  {==}
-
-def hub_wp_via(+m: HS.Msg, +p: String) -> {HS.Msg.via(HS.Msg.with_parts(m, p)) == HS.Msg.via(m) : Maybe<&2, String>}:
-  %HSL.Msg.parts.eta(m, p) : {HS.Msg.via(_) == HS.Msg.via(m) : Maybe<&2, String>}
-  {==}
-
-def hub_wp_id(+m: HS.Msg, +p: String) -> {HS.Msg.id(HS.Msg.with_parts(m, p)) == HS.Msg.id(m) : Nat}:
-  %HSL.Msg.parts.eta(m, p) : {HS.Msg.id(_) == HS.Msg.id(m) : Nat}
-  {==}
-
-def hub_wp_line(-o: HS.St, +cx: HX.Cx<o>, +name: String, +m: HS.Msg, +p: String)
-    -> {HC.deliver.line(o, False{}, True{}, cx, name, HS.Msg.with_parts(m, p))
-      == HC.you_parts(o, HC.feed(o, HC.feed(o, cx, name, HFD.you(HS.Msg.text(m), HS.Msg.via(m))), name, HFD.you_id(HS.Msg.id(m))), name, p) : HX.Cx<o>}:
-  +w = HS.Msg.with_parts(m, p)
-  %Equal.sym(String, HS.Msg.text(w), HS.Msg.text(m), hub_wp_text(m, p)) : {HC.you_parts(o, HC.feed(o, HC.feed(o, cx, name, HFD.you(_, HS.Msg.via(w))), name, HFD.you_id(HS.Msg.id(w))), name, HS.Msg.parts(w))
-    == HC.you_parts(o, HC.feed(o, HC.feed(o, cx, name, HFD.you(HS.Msg.text(m), HS.Msg.via(m))), name, HFD.you_id(HS.Msg.id(m))), name, p) : HX.Cx<o>}
-  %Equal.sym(Maybe<&2, String>, HS.Msg.via(w), HS.Msg.via(m), hub_wp_via(m, p)) : {HC.you_parts(o, HC.feed(o, HC.feed(o, cx, name, HFD.you(HS.Msg.text(m), _)), name, HFD.you_id(HS.Msg.id(w))), name, HS.Msg.parts(w))
-    == HC.you_parts(o, HC.feed(o, HC.feed(o, cx, name, HFD.you(HS.Msg.text(m), HS.Msg.via(m))), name, HFD.you_id(HS.Msg.id(m))), name, p) : HX.Cx<o>}
-  %Equal.sym(Nat, HS.Msg.id(w), HS.Msg.id(m), hub_wp_id(m, p)) : {HC.you_parts(o, HC.feed(o, HC.feed(o, cx, name, HFD.you(HS.Msg.text(m), HS.Msg.via(m))), name, HFD.you_id(_)), name, HS.Msg.parts(w))
-    == HC.you_parts(o, HC.feed(o, HC.feed(o, cx, name, HFD.you(HS.Msg.text(m), HS.Msg.via(m))), name, HFD.you_id(HS.Msg.id(m))), name, p) : HX.Cx<o>}
-  %Equal.sym(String, HS.Msg.parts(w), p, HSL.Msg.parts.get_with(m, p)) : {HC.you_parts(o, HC.feed(o, HC.feed(o, cx, name, HFD.you(HS.Msg.text(m), HS.Msg.via(m))), name, HFD.you_id(HS.Msg.id(m))), name, _)
-    == HC.you_parts(o, HC.feed(o, HC.feed(o, cx, name, HFD.you(HS.Msg.text(m), HS.Msg.via(m))), name, HFD.you_id(HS.Msg.id(m))), name, p) : HX.Cx<o>}
-  {==}
-
+# the message opened: with_has_parts and its getters unfold, and the
+# line without parts adds nothing
 def Laws.parts_never_change_text(o, cx, name, m, p):
-  %Equal.sym(HX.Cx<o>, HC.deliver.line(o, False{}, True{}, cx, name, HS.Msg.with_parts(m, p)), HC.you_parts(o, HC.feed(o, HC.feed(o, cx, name, HFD.you(HS.Msg.text(m), HS.Msg.via(m))), name, HFD.you_id(HS.Msg.id(m))), name, p), hub_wp_line(o, cx, name, m, p))
-    : {_ == HC.you_parts(o, HC.deliver.line(o, False{}, True{}, cx, name, HS.Msg.with_parts(m, "")), name, p) : HX.Cx<o>}
-  %Equal.sym(HX.Cx<o>, HC.deliver.line(o, False{}, True{}, cx, name, HS.Msg.with_parts(m, "")), HC.you_parts(o, HC.feed(o, HC.feed(o, cx, name, HFD.you(HS.Msg.text(m), HS.Msg.via(m))), name, HFD.you_id(HS.Msg.id(m))), name, ""), hub_wp_line(o, cx, name, m, ""))
-    : {HC.you_parts(o, HC.feed(o, HC.feed(o, cx, name, HFD.you(HS.Msg.text(m), HS.Msg.via(m))), name, HFD.you_id(HS.Msg.id(m))), name, p) == HC.you_parts(o, _, name, p) : HX.Cx<o>}
-  {==}
+  match m:
+    case HS.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has, fwd, view}:
+      {==}
 
 def Laws.no_parts_no_line(o, cx, who, card, said):
   {==}

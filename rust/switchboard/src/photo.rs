@@ -7,7 +7,7 @@
 //! One file per sb-core build, `<state>/photo/<key>.json` (the key: a hash
 //! of the sb-core binary, so a photo of another state shape is never
 //! offered to this one), the last two builds kept (a rollback boots from
-//! the other). Its content: `{"v":1, "key", "events": k, "prefix",
+//! the other). Its content: `{"v":2, "key", "events": k, "prefix",
 //! "paths", "st"}`, where `k` is the number of journal events (every line
 //! the hub read, its own PR lines too) the photo holds, `prefix` a chained
 //! hash of events 1..k (the journal's first k events unchanged since the
@@ -28,8 +28,10 @@ use serde_json::Value;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-/// The photo file's shape version.
-pub const V: u64 = 1;
+/// The photo file's shape version. 2 (c6): sb-core's messages lost their
+/// text and parts (`has_parts` instead): an older hub refuses the new
+/// photo and replays the journal, which keeps every message's words.
+pub const V: u64 = 2;
 
 /// A photo is taken at most this often when the hub is idle (ms).
 pub const IDLE_EVERY_MS: u64 = 24 * 3600 * 1000;

@@ -16,17 +16,17 @@ law Msg.id.get_with:
 
 def Msg.id.get_with(r, v):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.id.eta:
   for r: S.Msg
   for v: Nat
-  {S.Msg{v, S.Msg.thread(r), S.Msg.from(r), S.Msg.to(r), S.Msg.reply_to(r), S.Msg.expect(r), S.Msg.auto(r), S.Msg.text(r), S.Msg.created(r), S.Msg.plain(r), S.Msg.queued(r), S.Msg.via(r), S.Msg.parts(r), S.Msg.fwd(r), S.Msg.view(r)} == S.Msg.with_id(r, v) : S.Msg}
+  {S.Msg{v, S.Msg.thread(r), S.Msg.from(r), S.Msg.to(r), S.Msg.reply_to(r), S.Msg.expect(r), S.Msg.auto(r), S.Msg.created(r), S.Msg.plain(r), S.Msg.queued(r), S.Msg.via(r), S.Msg.has_parts(r), S.Msg.fwd(r), S.Msg.view(r)} == S.Msg.with_id(r, v) : S.Msg}
 
 def Msg.id.eta(r, v):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.id.set_get:
@@ -35,7 +35,7 @@ law Msg.id.set_get:
 
 def Msg.id.set_get(r):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.id.set_set:
@@ -46,7 +46,7 @@ law Msg.id.set_set:
 
 def Msg.id.set_set(r, a, b):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.id.over:
@@ -56,7 +56,7 @@ law Msg.id.over:
 
 def Msg.id.over(r, g):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.thread.get_with:
@@ -66,17 +66,17 @@ law Msg.thread.get_with:
 
 def Msg.thread.get_with(r, v):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.thread.eta:
   for r: S.Msg
   for v: Nat
-  {S.Msg{S.Msg.id(r), v, S.Msg.from(r), S.Msg.to(r), S.Msg.reply_to(r), S.Msg.expect(r), S.Msg.auto(r), S.Msg.text(r), S.Msg.created(r), S.Msg.plain(r), S.Msg.queued(r), S.Msg.via(r), S.Msg.parts(r), S.Msg.fwd(r), S.Msg.view(r)} == S.Msg.with_thread(r, v) : S.Msg}
+  {S.Msg{S.Msg.id(r), v, S.Msg.from(r), S.Msg.to(r), S.Msg.reply_to(r), S.Msg.expect(r), S.Msg.auto(r), S.Msg.created(r), S.Msg.plain(r), S.Msg.queued(r), S.Msg.via(r), S.Msg.has_parts(r), S.Msg.fwd(r), S.Msg.view(r)} == S.Msg.with_thread(r, v) : S.Msg}
 
 def Msg.thread.eta(r, v):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.thread.set_get:
@@ -85,7 +85,7 @@ law Msg.thread.set_get:
 
 def Msg.thread.set_get(r):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.thread.set_set:
@@ -96,7 +96,7 @@ law Msg.thread.set_set:
 
 def Msg.thread.set_set(r, a, b):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.thread.over:
@@ -106,7 +106,7 @@ law Msg.thread.over:
 
 def Msg.thread.over(r, g):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.from.get_with:
@@ -116,17 +116,17 @@ law Msg.from.get_with:
 
 def Msg.from.get_with(r, v):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.from.eta:
   for r: S.Msg
   for v: String
-  {S.Msg{S.Msg.id(r), S.Msg.thread(r), v, S.Msg.to(r), S.Msg.reply_to(r), S.Msg.expect(r), S.Msg.auto(r), S.Msg.text(r), S.Msg.created(r), S.Msg.plain(r), S.Msg.queued(r), S.Msg.via(r), S.Msg.parts(r), S.Msg.fwd(r), S.Msg.view(r)} == S.Msg.with_from(r, v) : S.Msg}
+  {S.Msg{S.Msg.id(r), S.Msg.thread(r), v, S.Msg.to(r), S.Msg.reply_to(r), S.Msg.expect(r), S.Msg.auto(r), S.Msg.created(r), S.Msg.plain(r), S.Msg.queued(r), S.Msg.via(r), S.Msg.has_parts(r), S.Msg.fwd(r), S.Msg.view(r)} == S.Msg.with_from(r, v) : S.Msg}
 
 def Msg.from.eta(r, v):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.from.set_get:
@@ -135,7 +135,7 @@ law Msg.from.set_get:
 
 def Msg.from.set_get(r):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.from.set_set:
@@ -146,7 +146,7 @@ law Msg.from.set_set:
 
 def Msg.from.set_set(r, a, b):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.from.over:
@@ -156,7 +156,7 @@ law Msg.from.over:
 
 def Msg.from.over(r, g):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.to.get_with:
@@ -166,17 +166,17 @@ law Msg.to.get_with:
 
 def Msg.to.get_with(r, v):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.to.eta:
   for r: S.Msg
   for v: String
-  {S.Msg{S.Msg.id(r), S.Msg.thread(r), S.Msg.from(r), v, S.Msg.reply_to(r), S.Msg.expect(r), S.Msg.auto(r), S.Msg.text(r), S.Msg.created(r), S.Msg.plain(r), S.Msg.queued(r), S.Msg.via(r), S.Msg.parts(r), S.Msg.fwd(r), S.Msg.view(r)} == S.Msg.with_to(r, v) : S.Msg}
+  {S.Msg{S.Msg.id(r), S.Msg.thread(r), S.Msg.from(r), v, S.Msg.reply_to(r), S.Msg.expect(r), S.Msg.auto(r), S.Msg.created(r), S.Msg.plain(r), S.Msg.queued(r), S.Msg.via(r), S.Msg.has_parts(r), S.Msg.fwd(r), S.Msg.view(r)} == S.Msg.with_to(r, v) : S.Msg}
 
 def Msg.to.eta(r, v):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.to.set_get:
@@ -185,7 +185,7 @@ law Msg.to.set_get:
 
 def Msg.to.set_get(r):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.to.set_set:
@@ -196,7 +196,7 @@ law Msg.to.set_set:
 
 def Msg.to.set_set(r, a, b):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.to.over:
@@ -206,7 +206,7 @@ law Msg.to.over:
 
 def Msg.to.over(r, g):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.reply_to.get_with:
@@ -216,17 +216,17 @@ law Msg.reply_to.get_with:
 
 def Msg.reply_to.get_with(r, v):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.reply_to.eta:
   for r: S.Msg
   for v: Maybe<&2, Nat>
-  {S.Msg{S.Msg.id(r), S.Msg.thread(r), S.Msg.from(r), S.Msg.to(r), v, S.Msg.expect(r), S.Msg.auto(r), S.Msg.text(r), S.Msg.created(r), S.Msg.plain(r), S.Msg.queued(r), S.Msg.via(r), S.Msg.parts(r), S.Msg.fwd(r), S.Msg.view(r)} == S.Msg.with_reply_to(r, v) : S.Msg}
+  {S.Msg{S.Msg.id(r), S.Msg.thread(r), S.Msg.from(r), S.Msg.to(r), v, S.Msg.expect(r), S.Msg.auto(r), S.Msg.created(r), S.Msg.plain(r), S.Msg.queued(r), S.Msg.via(r), S.Msg.has_parts(r), S.Msg.fwd(r), S.Msg.view(r)} == S.Msg.with_reply_to(r, v) : S.Msg}
 
 def Msg.reply_to.eta(r, v):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.reply_to.set_get:
@@ -235,7 +235,7 @@ law Msg.reply_to.set_get:
 
 def Msg.reply_to.set_get(r):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.reply_to.set_set:
@@ -246,7 +246,7 @@ law Msg.reply_to.set_set:
 
 def Msg.reply_to.set_set(r, a, b):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.reply_to.over:
@@ -256,7 +256,7 @@ law Msg.reply_to.over:
 
 def Msg.reply_to.over(r, g):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.expect.get_with:
@@ -266,17 +266,17 @@ law Msg.expect.get_with:
 
 def Msg.expect.get_with(r, v):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.expect.eta:
   for r: S.Msg
   for v: Bool
-  {S.Msg{S.Msg.id(r), S.Msg.thread(r), S.Msg.from(r), S.Msg.to(r), S.Msg.reply_to(r), v, S.Msg.auto(r), S.Msg.text(r), S.Msg.created(r), S.Msg.plain(r), S.Msg.queued(r), S.Msg.via(r), S.Msg.parts(r), S.Msg.fwd(r), S.Msg.view(r)} == S.Msg.with_expect(r, v) : S.Msg}
+  {S.Msg{S.Msg.id(r), S.Msg.thread(r), S.Msg.from(r), S.Msg.to(r), S.Msg.reply_to(r), v, S.Msg.auto(r), S.Msg.created(r), S.Msg.plain(r), S.Msg.queued(r), S.Msg.via(r), S.Msg.has_parts(r), S.Msg.fwd(r), S.Msg.view(r)} == S.Msg.with_expect(r, v) : S.Msg}
 
 def Msg.expect.eta(r, v):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.expect.set_get:
@@ -285,7 +285,7 @@ law Msg.expect.set_get:
 
 def Msg.expect.set_get(r):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.expect.set_set:
@@ -296,7 +296,7 @@ law Msg.expect.set_set:
 
 def Msg.expect.set_set(r, a, b):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.expect.over:
@@ -306,7 +306,7 @@ law Msg.expect.over:
 
 def Msg.expect.over(r, g):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.auto.get_with:
@@ -316,17 +316,17 @@ law Msg.auto.get_with:
 
 def Msg.auto.get_with(r, v):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.auto.eta:
   for r: S.Msg
   for v: Bool
-  {S.Msg{S.Msg.id(r), S.Msg.thread(r), S.Msg.from(r), S.Msg.to(r), S.Msg.reply_to(r), S.Msg.expect(r), v, S.Msg.text(r), S.Msg.created(r), S.Msg.plain(r), S.Msg.queued(r), S.Msg.via(r), S.Msg.parts(r), S.Msg.fwd(r), S.Msg.view(r)} == S.Msg.with_auto(r, v) : S.Msg}
+  {S.Msg{S.Msg.id(r), S.Msg.thread(r), S.Msg.from(r), S.Msg.to(r), S.Msg.reply_to(r), S.Msg.expect(r), v, S.Msg.created(r), S.Msg.plain(r), S.Msg.queued(r), S.Msg.via(r), S.Msg.has_parts(r), S.Msg.fwd(r), S.Msg.view(r)} == S.Msg.with_auto(r, v) : S.Msg}
 
 def Msg.auto.eta(r, v):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.auto.set_get:
@@ -335,7 +335,7 @@ law Msg.auto.set_get:
 
 def Msg.auto.set_get(r):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.auto.set_set:
@@ -346,7 +346,7 @@ law Msg.auto.set_set:
 
 def Msg.auto.set_set(r, a, b):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.auto.over:
@@ -356,57 +356,7 @@ law Msg.auto.over:
 
 def Msg.auto.over(r, g):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
-      {==}
-
-law Msg.text.get_with:
-  for r: S.Msg
-  for v: String
-  {S.Msg.text(S.Msg.with_text(r, v)) == v : String}
-
-def Msg.text.get_with(r, v):
-  match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
-      {==}
-
-law Msg.text.eta:
-  for r: S.Msg
-  for v: String
-  {S.Msg{S.Msg.id(r), S.Msg.thread(r), S.Msg.from(r), S.Msg.to(r), S.Msg.reply_to(r), S.Msg.expect(r), S.Msg.auto(r), v, S.Msg.created(r), S.Msg.plain(r), S.Msg.queued(r), S.Msg.via(r), S.Msg.parts(r), S.Msg.fwd(r), S.Msg.view(r)} == S.Msg.with_text(r, v) : S.Msg}
-
-def Msg.text.eta(r, v):
-  match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
-      {==}
-
-law Msg.text.set_get:
-  for r: S.Msg
-  {S.Msg.with_text(r, S.Msg.text(r)) == r : S.Msg}
-
-def Msg.text.set_get(r):
-  match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
-      {==}
-
-law Msg.text.set_set:
-  for r: S.Msg
-  for a: String
-  for b: String
-  {S.Msg.with_text(S.Msg.with_text(r, a), b) == S.Msg.with_text(r, b) : S.Msg}
-
-def Msg.text.set_set(r, a, b):
-  match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
-      {==}
-
-law Msg.text.over:
-  for r: S.Msg
-  for g: String -> String
-  {S.Msg.over_text(r, g) == S.Msg.with_text(r, g(S.Msg.text(r))) : S.Msg}
-
-def Msg.text.over(r, g):
-  match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.created.get_with:
@@ -416,17 +366,17 @@ law Msg.created.get_with:
 
 def Msg.created.get_with(r, v):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.created.eta:
   for r: S.Msg
   for v: Nat
-  {S.Msg{S.Msg.id(r), S.Msg.thread(r), S.Msg.from(r), S.Msg.to(r), S.Msg.reply_to(r), S.Msg.expect(r), S.Msg.auto(r), S.Msg.text(r), v, S.Msg.plain(r), S.Msg.queued(r), S.Msg.via(r), S.Msg.parts(r), S.Msg.fwd(r), S.Msg.view(r)} == S.Msg.with_created(r, v) : S.Msg}
+  {S.Msg{S.Msg.id(r), S.Msg.thread(r), S.Msg.from(r), S.Msg.to(r), S.Msg.reply_to(r), S.Msg.expect(r), S.Msg.auto(r), v, S.Msg.plain(r), S.Msg.queued(r), S.Msg.via(r), S.Msg.has_parts(r), S.Msg.fwd(r), S.Msg.view(r)} == S.Msg.with_created(r, v) : S.Msg}
 
 def Msg.created.eta(r, v):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.created.set_get:
@@ -435,7 +385,7 @@ law Msg.created.set_get:
 
 def Msg.created.set_get(r):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.created.set_set:
@@ -446,7 +396,7 @@ law Msg.created.set_set:
 
 def Msg.created.set_set(r, a, b):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.created.over:
@@ -456,7 +406,7 @@ law Msg.created.over:
 
 def Msg.created.over(r, g):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.plain.get_with:
@@ -466,17 +416,17 @@ law Msg.plain.get_with:
 
 def Msg.plain.get_with(r, v):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.plain.eta:
   for r: S.Msg
   for v: Bool
-  {S.Msg{S.Msg.id(r), S.Msg.thread(r), S.Msg.from(r), S.Msg.to(r), S.Msg.reply_to(r), S.Msg.expect(r), S.Msg.auto(r), S.Msg.text(r), S.Msg.created(r), v, S.Msg.queued(r), S.Msg.via(r), S.Msg.parts(r), S.Msg.fwd(r), S.Msg.view(r)} == S.Msg.with_plain(r, v) : S.Msg}
+  {S.Msg{S.Msg.id(r), S.Msg.thread(r), S.Msg.from(r), S.Msg.to(r), S.Msg.reply_to(r), S.Msg.expect(r), S.Msg.auto(r), S.Msg.created(r), v, S.Msg.queued(r), S.Msg.via(r), S.Msg.has_parts(r), S.Msg.fwd(r), S.Msg.view(r)} == S.Msg.with_plain(r, v) : S.Msg}
 
 def Msg.plain.eta(r, v):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.plain.set_get:
@@ -485,7 +435,7 @@ law Msg.plain.set_get:
 
 def Msg.plain.set_get(r):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.plain.set_set:
@@ -496,7 +446,7 @@ law Msg.plain.set_set:
 
 def Msg.plain.set_set(r, a, b):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.plain.over:
@@ -506,7 +456,7 @@ law Msg.plain.over:
 
 def Msg.plain.over(r, g):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.queued.get_with:
@@ -516,17 +466,17 @@ law Msg.queued.get_with:
 
 def Msg.queued.get_with(r, v):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.queued.eta:
   for r: S.Msg
   for v: Bool
-  {S.Msg{S.Msg.id(r), S.Msg.thread(r), S.Msg.from(r), S.Msg.to(r), S.Msg.reply_to(r), S.Msg.expect(r), S.Msg.auto(r), S.Msg.text(r), S.Msg.created(r), S.Msg.plain(r), v, S.Msg.via(r), S.Msg.parts(r), S.Msg.fwd(r), S.Msg.view(r)} == S.Msg.with_queued(r, v) : S.Msg}
+  {S.Msg{S.Msg.id(r), S.Msg.thread(r), S.Msg.from(r), S.Msg.to(r), S.Msg.reply_to(r), S.Msg.expect(r), S.Msg.auto(r), S.Msg.created(r), S.Msg.plain(r), v, S.Msg.via(r), S.Msg.has_parts(r), S.Msg.fwd(r), S.Msg.view(r)} == S.Msg.with_queued(r, v) : S.Msg}
 
 def Msg.queued.eta(r, v):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.queued.set_get:
@@ -535,7 +485,7 @@ law Msg.queued.set_get:
 
 def Msg.queued.set_get(r):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.queued.set_set:
@@ -546,7 +496,7 @@ law Msg.queued.set_set:
 
 def Msg.queued.set_set(r, a, b):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.queued.over:
@@ -556,7 +506,7 @@ law Msg.queued.over:
 
 def Msg.queued.over(r, g):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.via.get_with:
@@ -566,17 +516,17 @@ law Msg.via.get_with:
 
 def Msg.via.get_with(r, v):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.via.eta:
   for r: S.Msg
   for v: Maybe<&2, String>
-  {S.Msg{S.Msg.id(r), S.Msg.thread(r), S.Msg.from(r), S.Msg.to(r), S.Msg.reply_to(r), S.Msg.expect(r), S.Msg.auto(r), S.Msg.text(r), S.Msg.created(r), S.Msg.plain(r), S.Msg.queued(r), v, S.Msg.parts(r), S.Msg.fwd(r), S.Msg.view(r)} == S.Msg.with_via(r, v) : S.Msg}
+  {S.Msg{S.Msg.id(r), S.Msg.thread(r), S.Msg.from(r), S.Msg.to(r), S.Msg.reply_to(r), S.Msg.expect(r), S.Msg.auto(r), S.Msg.created(r), S.Msg.plain(r), S.Msg.queued(r), v, S.Msg.has_parts(r), S.Msg.fwd(r), S.Msg.view(r)} == S.Msg.with_via(r, v) : S.Msg}
 
 def Msg.via.eta(r, v):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.via.set_get:
@@ -585,7 +535,7 @@ law Msg.via.set_get:
 
 def Msg.via.set_get(r):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.via.set_set:
@@ -596,7 +546,7 @@ law Msg.via.set_set:
 
 def Msg.via.set_set(r, a, b):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.via.over:
@@ -606,57 +556,57 @@ law Msg.via.over:
 
 def Msg.via.over(r, g):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
-law Msg.parts.get_with:
+law Msg.has_parts.get_with:
   for r: S.Msg
-  for v: String
-  {S.Msg.parts(S.Msg.with_parts(r, v)) == v : String}
+  for v: Bool
+  {S.Msg.has_parts(S.Msg.with_has_parts(r, v)) == v : Bool}
 
-def Msg.parts.get_with(r, v):
+def Msg.has_parts.get_with(r, v):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
-law Msg.parts.eta:
+law Msg.has_parts.eta:
   for r: S.Msg
-  for v: String
-  {S.Msg{S.Msg.id(r), S.Msg.thread(r), S.Msg.from(r), S.Msg.to(r), S.Msg.reply_to(r), S.Msg.expect(r), S.Msg.auto(r), S.Msg.text(r), S.Msg.created(r), S.Msg.plain(r), S.Msg.queued(r), S.Msg.via(r), v, S.Msg.fwd(r), S.Msg.view(r)} == S.Msg.with_parts(r, v) : S.Msg}
+  for v: Bool
+  {S.Msg{S.Msg.id(r), S.Msg.thread(r), S.Msg.from(r), S.Msg.to(r), S.Msg.reply_to(r), S.Msg.expect(r), S.Msg.auto(r), S.Msg.created(r), S.Msg.plain(r), S.Msg.queued(r), S.Msg.via(r), v, S.Msg.fwd(r), S.Msg.view(r)} == S.Msg.with_has_parts(r, v) : S.Msg}
 
-def Msg.parts.eta(r, v):
+def Msg.has_parts.eta(r, v):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
-law Msg.parts.set_get:
+law Msg.has_parts.set_get:
   for r: S.Msg
-  {S.Msg.with_parts(r, S.Msg.parts(r)) == r : S.Msg}
+  {S.Msg.with_has_parts(r, S.Msg.has_parts(r)) == r : S.Msg}
 
-def Msg.parts.set_get(r):
+def Msg.has_parts.set_get(r):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
-law Msg.parts.set_set:
+law Msg.has_parts.set_set:
   for r: S.Msg
-  for a: String
-  for b: String
-  {S.Msg.with_parts(S.Msg.with_parts(r, a), b) == S.Msg.with_parts(r, b) : S.Msg}
+  for a: Bool
+  for b: Bool
+  {S.Msg.with_has_parts(S.Msg.with_has_parts(r, a), b) == S.Msg.with_has_parts(r, b) : S.Msg}
 
-def Msg.parts.set_set(r, a, b):
+def Msg.has_parts.set_set(r, a, b):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
-law Msg.parts.over:
+law Msg.has_parts.over:
   for r: S.Msg
-  for g: String -> String
-  {S.Msg.over_parts(r, g) == S.Msg.with_parts(r, g(S.Msg.parts(r))) : S.Msg}
+  for g: Bool -> Bool
+  {S.Msg.over_has_parts(r, g) == S.Msg.with_has_parts(r, g(S.Msg.has_parts(r))) : S.Msg}
 
-def Msg.parts.over(r, g):
+def Msg.has_parts.over(r, g):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.fwd.get_with:
@@ -666,17 +616,17 @@ law Msg.fwd.get_with:
 
 def Msg.fwd.get_with(r, v):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.fwd.eta:
   for r: S.Msg
   for v: Maybe<&2, Nat>
-  {S.Msg{S.Msg.id(r), S.Msg.thread(r), S.Msg.from(r), S.Msg.to(r), S.Msg.reply_to(r), S.Msg.expect(r), S.Msg.auto(r), S.Msg.text(r), S.Msg.created(r), S.Msg.plain(r), S.Msg.queued(r), S.Msg.via(r), S.Msg.parts(r), v, S.Msg.view(r)} == S.Msg.with_fwd(r, v) : S.Msg}
+  {S.Msg{S.Msg.id(r), S.Msg.thread(r), S.Msg.from(r), S.Msg.to(r), S.Msg.reply_to(r), S.Msg.expect(r), S.Msg.auto(r), S.Msg.created(r), S.Msg.plain(r), S.Msg.queued(r), S.Msg.via(r), S.Msg.has_parts(r), v, S.Msg.view(r)} == S.Msg.with_fwd(r, v) : S.Msg}
 
 def Msg.fwd.eta(r, v):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.fwd.set_get:
@@ -685,7 +635,7 @@ law Msg.fwd.set_get:
 
 def Msg.fwd.set_get(r):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.fwd.set_set:
@@ -696,7 +646,7 @@ law Msg.fwd.set_set:
 
 def Msg.fwd.set_set(r, a, b):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.fwd.over:
@@ -706,7 +656,7 @@ law Msg.fwd.over:
 
 def Msg.fwd.over(r, g):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.view.get_with:
@@ -716,17 +666,17 @@ law Msg.view.get_with:
 
 def Msg.view.get_with(r, v):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.view.eta:
   for r: S.Msg
   for v: Maybe<&2, String>
-  {S.Msg{S.Msg.id(r), S.Msg.thread(r), S.Msg.from(r), S.Msg.to(r), S.Msg.reply_to(r), S.Msg.expect(r), S.Msg.auto(r), S.Msg.text(r), S.Msg.created(r), S.Msg.plain(r), S.Msg.queued(r), S.Msg.via(r), S.Msg.parts(r), S.Msg.fwd(r), v} == S.Msg.with_view(r, v) : S.Msg}
+  {S.Msg{S.Msg.id(r), S.Msg.thread(r), S.Msg.from(r), S.Msg.to(r), S.Msg.reply_to(r), S.Msg.expect(r), S.Msg.auto(r), S.Msg.created(r), S.Msg.plain(r), S.Msg.queued(r), S.Msg.via(r), S.Msg.has_parts(r), S.Msg.fwd(r), v} == S.Msg.with_view(r, v) : S.Msg}
 
 def Msg.view.eta(r, v):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.view.set_get:
@@ -735,7 +685,7 @@ law Msg.view.set_get:
 
 def Msg.view.set_get(r):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.view.set_set:
@@ -746,7 +696,7 @@ law Msg.view.set_set:
 
 def Msg.view.set_set(r, a, b):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.view.over:
@@ -756,7 +706,7 @@ law Msg.view.over:
 
 def Msg.view.over(r, g):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
       {==}
 
 law Msg.open_eq:
@@ -765,7 +715,768 @@ law Msg.open_eq:
 
 def Msg.open_eq(r):
   match r:
-    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+    case S.Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
+      {==}
+
+# ---- Sent ----
+
+law Sent.id.get_with:
+  for r: S.Sent
+  for v: Nat
+  {S.Sent.id(S.Sent.with_id(r, v)) == v : Nat}
+
+def Sent.id.get_with(r, v):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.id.eta:
+  for r: S.Sent
+  for v: Nat
+  {S.Sent{v, S.Sent.thread(r), S.Sent.from(r), S.Sent.to(r), S.Sent.reply_to(r), S.Sent.expect(r), S.Sent.auto(r), S.Sent.text(r), S.Sent.created(r), S.Sent.plain(r), S.Sent.queued(r), S.Sent.via(r), S.Sent.parts(r), S.Sent.fwd(r), S.Sent.view(r)} == S.Sent.with_id(r, v) : S.Sent}
+
+def Sent.id.eta(r, v):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.id.set_get:
+  for r: S.Sent
+  {S.Sent.with_id(r, S.Sent.id(r)) == r : S.Sent}
+
+def Sent.id.set_get(r):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.id.set_set:
+  for r: S.Sent
+  for a: Nat
+  for b: Nat
+  {S.Sent.with_id(S.Sent.with_id(r, a), b) == S.Sent.with_id(r, b) : S.Sent}
+
+def Sent.id.set_set(r, a, b):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.id.over:
+  for r: S.Sent
+  for g: Nat -> Nat
+  {S.Sent.over_id(r, g) == S.Sent.with_id(r, g(S.Sent.id(r))) : S.Sent}
+
+def Sent.id.over(r, g):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.thread.get_with:
+  for r: S.Sent
+  for v: Nat
+  {S.Sent.thread(S.Sent.with_thread(r, v)) == v : Nat}
+
+def Sent.thread.get_with(r, v):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.thread.eta:
+  for r: S.Sent
+  for v: Nat
+  {S.Sent{S.Sent.id(r), v, S.Sent.from(r), S.Sent.to(r), S.Sent.reply_to(r), S.Sent.expect(r), S.Sent.auto(r), S.Sent.text(r), S.Sent.created(r), S.Sent.plain(r), S.Sent.queued(r), S.Sent.via(r), S.Sent.parts(r), S.Sent.fwd(r), S.Sent.view(r)} == S.Sent.with_thread(r, v) : S.Sent}
+
+def Sent.thread.eta(r, v):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.thread.set_get:
+  for r: S.Sent
+  {S.Sent.with_thread(r, S.Sent.thread(r)) == r : S.Sent}
+
+def Sent.thread.set_get(r):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.thread.set_set:
+  for r: S.Sent
+  for a: Nat
+  for b: Nat
+  {S.Sent.with_thread(S.Sent.with_thread(r, a), b) == S.Sent.with_thread(r, b) : S.Sent}
+
+def Sent.thread.set_set(r, a, b):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.thread.over:
+  for r: S.Sent
+  for g: Nat -> Nat
+  {S.Sent.over_thread(r, g) == S.Sent.with_thread(r, g(S.Sent.thread(r))) : S.Sent}
+
+def Sent.thread.over(r, g):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.from.get_with:
+  for r: S.Sent
+  for v: String
+  {S.Sent.from(S.Sent.with_from(r, v)) == v : String}
+
+def Sent.from.get_with(r, v):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.from.eta:
+  for r: S.Sent
+  for v: String
+  {S.Sent{S.Sent.id(r), S.Sent.thread(r), v, S.Sent.to(r), S.Sent.reply_to(r), S.Sent.expect(r), S.Sent.auto(r), S.Sent.text(r), S.Sent.created(r), S.Sent.plain(r), S.Sent.queued(r), S.Sent.via(r), S.Sent.parts(r), S.Sent.fwd(r), S.Sent.view(r)} == S.Sent.with_from(r, v) : S.Sent}
+
+def Sent.from.eta(r, v):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.from.set_get:
+  for r: S.Sent
+  {S.Sent.with_from(r, S.Sent.from(r)) == r : S.Sent}
+
+def Sent.from.set_get(r):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.from.set_set:
+  for r: S.Sent
+  for a: String
+  for b: String
+  {S.Sent.with_from(S.Sent.with_from(r, a), b) == S.Sent.with_from(r, b) : S.Sent}
+
+def Sent.from.set_set(r, a, b):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.from.over:
+  for r: S.Sent
+  for g: String -> String
+  {S.Sent.over_from(r, g) == S.Sent.with_from(r, g(S.Sent.from(r))) : S.Sent}
+
+def Sent.from.over(r, g):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.to.get_with:
+  for r: S.Sent
+  for v: String
+  {S.Sent.to(S.Sent.with_to(r, v)) == v : String}
+
+def Sent.to.get_with(r, v):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.to.eta:
+  for r: S.Sent
+  for v: String
+  {S.Sent{S.Sent.id(r), S.Sent.thread(r), S.Sent.from(r), v, S.Sent.reply_to(r), S.Sent.expect(r), S.Sent.auto(r), S.Sent.text(r), S.Sent.created(r), S.Sent.plain(r), S.Sent.queued(r), S.Sent.via(r), S.Sent.parts(r), S.Sent.fwd(r), S.Sent.view(r)} == S.Sent.with_to(r, v) : S.Sent}
+
+def Sent.to.eta(r, v):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.to.set_get:
+  for r: S.Sent
+  {S.Sent.with_to(r, S.Sent.to(r)) == r : S.Sent}
+
+def Sent.to.set_get(r):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.to.set_set:
+  for r: S.Sent
+  for a: String
+  for b: String
+  {S.Sent.with_to(S.Sent.with_to(r, a), b) == S.Sent.with_to(r, b) : S.Sent}
+
+def Sent.to.set_set(r, a, b):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.to.over:
+  for r: S.Sent
+  for g: String -> String
+  {S.Sent.over_to(r, g) == S.Sent.with_to(r, g(S.Sent.to(r))) : S.Sent}
+
+def Sent.to.over(r, g):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.reply_to.get_with:
+  for r: S.Sent
+  for v: Maybe<&2, Nat>
+  {S.Sent.reply_to(S.Sent.with_reply_to(r, v)) == v : Maybe<&2, Nat>}
+
+def Sent.reply_to.get_with(r, v):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.reply_to.eta:
+  for r: S.Sent
+  for v: Maybe<&2, Nat>
+  {S.Sent{S.Sent.id(r), S.Sent.thread(r), S.Sent.from(r), S.Sent.to(r), v, S.Sent.expect(r), S.Sent.auto(r), S.Sent.text(r), S.Sent.created(r), S.Sent.plain(r), S.Sent.queued(r), S.Sent.via(r), S.Sent.parts(r), S.Sent.fwd(r), S.Sent.view(r)} == S.Sent.with_reply_to(r, v) : S.Sent}
+
+def Sent.reply_to.eta(r, v):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.reply_to.set_get:
+  for r: S.Sent
+  {S.Sent.with_reply_to(r, S.Sent.reply_to(r)) == r : S.Sent}
+
+def Sent.reply_to.set_get(r):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.reply_to.set_set:
+  for r: S.Sent
+  for a: Maybe<&2, Nat>
+  for b: Maybe<&2, Nat>
+  {S.Sent.with_reply_to(S.Sent.with_reply_to(r, a), b) == S.Sent.with_reply_to(r, b) : S.Sent}
+
+def Sent.reply_to.set_set(r, a, b):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.reply_to.over:
+  for r: S.Sent
+  for g: Maybe<&2, Nat> -> Maybe<&2, Nat>
+  {S.Sent.over_reply_to(r, g) == S.Sent.with_reply_to(r, g(S.Sent.reply_to(r))) : S.Sent}
+
+def Sent.reply_to.over(r, g):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.expect.get_with:
+  for r: S.Sent
+  for v: Bool
+  {S.Sent.expect(S.Sent.with_expect(r, v)) == v : Bool}
+
+def Sent.expect.get_with(r, v):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.expect.eta:
+  for r: S.Sent
+  for v: Bool
+  {S.Sent{S.Sent.id(r), S.Sent.thread(r), S.Sent.from(r), S.Sent.to(r), S.Sent.reply_to(r), v, S.Sent.auto(r), S.Sent.text(r), S.Sent.created(r), S.Sent.plain(r), S.Sent.queued(r), S.Sent.via(r), S.Sent.parts(r), S.Sent.fwd(r), S.Sent.view(r)} == S.Sent.with_expect(r, v) : S.Sent}
+
+def Sent.expect.eta(r, v):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.expect.set_get:
+  for r: S.Sent
+  {S.Sent.with_expect(r, S.Sent.expect(r)) == r : S.Sent}
+
+def Sent.expect.set_get(r):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.expect.set_set:
+  for r: S.Sent
+  for a: Bool
+  for b: Bool
+  {S.Sent.with_expect(S.Sent.with_expect(r, a), b) == S.Sent.with_expect(r, b) : S.Sent}
+
+def Sent.expect.set_set(r, a, b):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.expect.over:
+  for r: S.Sent
+  for g: Bool -> Bool
+  {S.Sent.over_expect(r, g) == S.Sent.with_expect(r, g(S.Sent.expect(r))) : S.Sent}
+
+def Sent.expect.over(r, g):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.auto.get_with:
+  for r: S.Sent
+  for v: Bool
+  {S.Sent.auto(S.Sent.with_auto(r, v)) == v : Bool}
+
+def Sent.auto.get_with(r, v):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.auto.eta:
+  for r: S.Sent
+  for v: Bool
+  {S.Sent{S.Sent.id(r), S.Sent.thread(r), S.Sent.from(r), S.Sent.to(r), S.Sent.reply_to(r), S.Sent.expect(r), v, S.Sent.text(r), S.Sent.created(r), S.Sent.plain(r), S.Sent.queued(r), S.Sent.via(r), S.Sent.parts(r), S.Sent.fwd(r), S.Sent.view(r)} == S.Sent.with_auto(r, v) : S.Sent}
+
+def Sent.auto.eta(r, v):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.auto.set_get:
+  for r: S.Sent
+  {S.Sent.with_auto(r, S.Sent.auto(r)) == r : S.Sent}
+
+def Sent.auto.set_get(r):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.auto.set_set:
+  for r: S.Sent
+  for a: Bool
+  for b: Bool
+  {S.Sent.with_auto(S.Sent.with_auto(r, a), b) == S.Sent.with_auto(r, b) : S.Sent}
+
+def Sent.auto.set_set(r, a, b):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.auto.over:
+  for r: S.Sent
+  for g: Bool -> Bool
+  {S.Sent.over_auto(r, g) == S.Sent.with_auto(r, g(S.Sent.auto(r))) : S.Sent}
+
+def Sent.auto.over(r, g):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.text.get_with:
+  for r: S.Sent
+  for v: String
+  {S.Sent.text(S.Sent.with_text(r, v)) == v : String}
+
+def Sent.text.get_with(r, v):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.text.eta:
+  for r: S.Sent
+  for v: String
+  {S.Sent{S.Sent.id(r), S.Sent.thread(r), S.Sent.from(r), S.Sent.to(r), S.Sent.reply_to(r), S.Sent.expect(r), S.Sent.auto(r), v, S.Sent.created(r), S.Sent.plain(r), S.Sent.queued(r), S.Sent.via(r), S.Sent.parts(r), S.Sent.fwd(r), S.Sent.view(r)} == S.Sent.with_text(r, v) : S.Sent}
+
+def Sent.text.eta(r, v):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.text.set_get:
+  for r: S.Sent
+  {S.Sent.with_text(r, S.Sent.text(r)) == r : S.Sent}
+
+def Sent.text.set_get(r):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.text.set_set:
+  for r: S.Sent
+  for a: String
+  for b: String
+  {S.Sent.with_text(S.Sent.with_text(r, a), b) == S.Sent.with_text(r, b) : S.Sent}
+
+def Sent.text.set_set(r, a, b):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.text.over:
+  for r: S.Sent
+  for g: String -> String
+  {S.Sent.over_text(r, g) == S.Sent.with_text(r, g(S.Sent.text(r))) : S.Sent}
+
+def Sent.text.over(r, g):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.created.get_with:
+  for r: S.Sent
+  for v: Nat
+  {S.Sent.created(S.Sent.with_created(r, v)) == v : Nat}
+
+def Sent.created.get_with(r, v):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.created.eta:
+  for r: S.Sent
+  for v: Nat
+  {S.Sent{S.Sent.id(r), S.Sent.thread(r), S.Sent.from(r), S.Sent.to(r), S.Sent.reply_to(r), S.Sent.expect(r), S.Sent.auto(r), S.Sent.text(r), v, S.Sent.plain(r), S.Sent.queued(r), S.Sent.via(r), S.Sent.parts(r), S.Sent.fwd(r), S.Sent.view(r)} == S.Sent.with_created(r, v) : S.Sent}
+
+def Sent.created.eta(r, v):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.created.set_get:
+  for r: S.Sent
+  {S.Sent.with_created(r, S.Sent.created(r)) == r : S.Sent}
+
+def Sent.created.set_get(r):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.created.set_set:
+  for r: S.Sent
+  for a: Nat
+  for b: Nat
+  {S.Sent.with_created(S.Sent.with_created(r, a), b) == S.Sent.with_created(r, b) : S.Sent}
+
+def Sent.created.set_set(r, a, b):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.created.over:
+  for r: S.Sent
+  for g: Nat -> Nat
+  {S.Sent.over_created(r, g) == S.Sent.with_created(r, g(S.Sent.created(r))) : S.Sent}
+
+def Sent.created.over(r, g):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.plain.get_with:
+  for r: S.Sent
+  for v: Bool
+  {S.Sent.plain(S.Sent.with_plain(r, v)) == v : Bool}
+
+def Sent.plain.get_with(r, v):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.plain.eta:
+  for r: S.Sent
+  for v: Bool
+  {S.Sent{S.Sent.id(r), S.Sent.thread(r), S.Sent.from(r), S.Sent.to(r), S.Sent.reply_to(r), S.Sent.expect(r), S.Sent.auto(r), S.Sent.text(r), S.Sent.created(r), v, S.Sent.queued(r), S.Sent.via(r), S.Sent.parts(r), S.Sent.fwd(r), S.Sent.view(r)} == S.Sent.with_plain(r, v) : S.Sent}
+
+def Sent.plain.eta(r, v):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.plain.set_get:
+  for r: S.Sent
+  {S.Sent.with_plain(r, S.Sent.plain(r)) == r : S.Sent}
+
+def Sent.plain.set_get(r):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.plain.set_set:
+  for r: S.Sent
+  for a: Bool
+  for b: Bool
+  {S.Sent.with_plain(S.Sent.with_plain(r, a), b) == S.Sent.with_plain(r, b) : S.Sent}
+
+def Sent.plain.set_set(r, a, b):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.plain.over:
+  for r: S.Sent
+  for g: Bool -> Bool
+  {S.Sent.over_plain(r, g) == S.Sent.with_plain(r, g(S.Sent.plain(r))) : S.Sent}
+
+def Sent.plain.over(r, g):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.queued.get_with:
+  for r: S.Sent
+  for v: Bool
+  {S.Sent.queued(S.Sent.with_queued(r, v)) == v : Bool}
+
+def Sent.queued.get_with(r, v):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.queued.eta:
+  for r: S.Sent
+  for v: Bool
+  {S.Sent{S.Sent.id(r), S.Sent.thread(r), S.Sent.from(r), S.Sent.to(r), S.Sent.reply_to(r), S.Sent.expect(r), S.Sent.auto(r), S.Sent.text(r), S.Sent.created(r), S.Sent.plain(r), v, S.Sent.via(r), S.Sent.parts(r), S.Sent.fwd(r), S.Sent.view(r)} == S.Sent.with_queued(r, v) : S.Sent}
+
+def Sent.queued.eta(r, v):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.queued.set_get:
+  for r: S.Sent
+  {S.Sent.with_queued(r, S.Sent.queued(r)) == r : S.Sent}
+
+def Sent.queued.set_get(r):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.queued.set_set:
+  for r: S.Sent
+  for a: Bool
+  for b: Bool
+  {S.Sent.with_queued(S.Sent.with_queued(r, a), b) == S.Sent.with_queued(r, b) : S.Sent}
+
+def Sent.queued.set_set(r, a, b):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.queued.over:
+  for r: S.Sent
+  for g: Bool -> Bool
+  {S.Sent.over_queued(r, g) == S.Sent.with_queued(r, g(S.Sent.queued(r))) : S.Sent}
+
+def Sent.queued.over(r, g):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.via.get_with:
+  for r: S.Sent
+  for v: Maybe<&2, String>
+  {S.Sent.via(S.Sent.with_via(r, v)) == v : Maybe<&2, String>}
+
+def Sent.via.get_with(r, v):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.via.eta:
+  for r: S.Sent
+  for v: Maybe<&2, String>
+  {S.Sent{S.Sent.id(r), S.Sent.thread(r), S.Sent.from(r), S.Sent.to(r), S.Sent.reply_to(r), S.Sent.expect(r), S.Sent.auto(r), S.Sent.text(r), S.Sent.created(r), S.Sent.plain(r), S.Sent.queued(r), v, S.Sent.parts(r), S.Sent.fwd(r), S.Sent.view(r)} == S.Sent.with_via(r, v) : S.Sent}
+
+def Sent.via.eta(r, v):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.via.set_get:
+  for r: S.Sent
+  {S.Sent.with_via(r, S.Sent.via(r)) == r : S.Sent}
+
+def Sent.via.set_get(r):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.via.set_set:
+  for r: S.Sent
+  for a: Maybe<&2, String>
+  for b: Maybe<&2, String>
+  {S.Sent.with_via(S.Sent.with_via(r, a), b) == S.Sent.with_via(r, b) : S.Sent}
+
+def Sent.via.set_set(r, a, b):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.via.over:
+  for r: S.Sent
+  for g: Maybe<&2, String> -> Maybe<&2, String>
+  {S.Sent.over_via(r, g) == S.Sent.with_via(r, g(S.Sent.via(r))) : S.Sent}
+
+def Sent.via.over(r, g):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.parts.get_with:
+  for r: S.Sent
+  for v: String
+  {S.Sent.parts(S.Sent.with_parts(r, v)) == v : String}
+
+def Sent.parts.get_with(r, v):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.parts.eta:
+  for r: S.Sent
+  for v: String
+  {S.Sent{S.Sent.id(r), S.Sent.thread(r), S.Sent.from(r), S.Sent.to(r), S.Sent.reply_to(r), S.Sent.expect(r), S.Sent.auto(r), S.Sent.text(r), S.Sent.created(r), S.Sent.plain(r), S.Sent.queued(r), S.Sent.via(r), v, S.Sent.fwd(r), S.Sent.view(r)} == S.Sent.with_parts(r, v) : S.Sent}
+
+def Sent.parts.eta(r, v):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.parts.set_get:
+  for r: S.Sent
+  {S.Sent.with_parts(r, S.Sent.parts(r)) == r : S.Sent}
+
+def Sent.parts.set_get(r):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.parts.set_set:
+  for r: S.Sent
+  for a: String
+  for b: String
+  {S.Sent.with_parts(S.Sent.with_parts(r, a), b) == S.Sent.with_parts(r, b) : S.Sent}
+
+def Sent.parts.set_set(r, a, b):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.parts.over:
+  for r: S.Sent
+  for g: String -> String
+  {S.Sent.over_parts(r, g) == S.Sent.with_parts(r, g(S.Sent.parts(r))) : S.Sent}
+
+def Sent.parts.over(r, g):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.fwd.get_with:
+  for r: S.Sent
+  for v: Maybe<&2, Nat>
+  {S.Sent.fwd(S.Sent.with_fwd(r, v)) == v : Maybe<&2, Nat>}
+
+def Sent.fwd.get_with(r, v):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.fwd.eta:
+  for r: S.Sent
+  for v: Maybe<&2, Nat>
+  {S.Sent{S.Sent.id(r), S.Sent.thread(r), S.Sent.from(r), S.Sent.to(r), S.Sent.reply_to(r), S.Sent.expect(r), S.Sent.auto(r), S.Sent.text(r), S.Sent.created(r), S.Sent.plain(r), S.Sent.queued(r), S.Sent.via(r), S.Sent.parts(r), v, S.Sent.view(r)} == S.Sent.with_fwd(r, v) : S.Sent}
+
+def Sent.fwd.eta(r, v):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.fwd.set_get:
+  for r: S.Sent
+  {S.Sent.with_fwd(r, S.Sent.fwd(r)) == r : S.Sent}
+
+def Sent.fwd.set_get(r):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.fwd.set_set:
+  for r: S.Sent
+  for a: Maybe<&2, Nat>
+  for b: Maybe<&2, Nat>
+  {S.Sent.with_fwd(S.Sent.with_fwd(r, a), b) == S.Sent.with_fwd(r, b) : S.Sent}
+
+def Sent.fwd.set_set(r, a, b):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.fwd.over:
+  for r: S.Sent
+  for g: Maybe<&2, Nat> -> Maybe<&2, Nat>
+  {S.Sent.over_fwd(r, g) == S.Sent.with_fwd(r, g(S.Sent.fwd(r))) : S.Sent}
+
+def Sent.fwd.over(r, g):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.view.get_with:
+  for r: S.Sent
+  for v: Maybe<&2, String>
+  {S.Sent.view(S.Sent.with_view(r, v)) == v : Maybe<&2, String>}
+
+def Sent.view.get_with(r, v):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.view.eta:
+  for r: S.Sent
+  for v: Maybe<&2, String>
+  {S.Sent{S.Sent.id(r), S.Sent.thread(r), S.Sent.from(r), S.Sent.to(r), S.Sent.reply_to(r), S.Sent.expect(r), S.Sent.auto(r), S.Sent.text(r), S.Sent.created(r), S.Sent.plain(r), S.Sent.queued(r), S.Sent.via(r), S.Sent.parts(r), S.Sent.fwd(r), v} == S.Sent.with_view(r, v) : S.Sent}
+
+def Sent.view.eta(r, v):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.view.set_get:
+  for r: S.Sent
+  {S.Sent.with_view(r, S.Sent.view(r)) == r : S.Sent}
+
+def Sent.view.set_get(r):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.view.set_set:
+  for r: S.Sent
+  for a: Maybe<&2, String>
+  for b: Maybe<&2, String>
+  {S.Sent.with_view(S.Sent.with_view(r, a), b) == S.Sent.with_view(r, b) : S.Sent}
+
+def Sent.view.set_set(r, a, b):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.view.over:
+  for r: S.Sent
+  for g: Maybe<&2, String> -> Maybe<&2, String>
+  {S.Sent.over_view(r, g) == S.Sent.with_view(r, g(S.Sent.view(r))) : S.Sent}
+
+def Sent.view.over(r, g):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      {==}
+
+law Sent.open_eq:
+  for r: S.Sent
+  {S.Sent.open(r) == r : S.Sent}
+
+def Sent.open_eq(r):
+  match r:
+    case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
       {==}
 
 # ---- MRec ----

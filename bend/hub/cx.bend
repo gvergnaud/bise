@@ -363,7 +363,7 @@ def journal(fx: List<&2, Fx>) -> List<&2, M.Ev>:
 def FreshEv(+s: S.St, e: M.Ev) -> Data:
   match e:
     case M.EMsgSent{+m}:
-      {S.Msg.id(m) == S.St.next_msg(s) : Nat}
+      {S.Msg.id(M.msg_of_sent(m)) == S.St.next_msg(s) : Nat}
     case M.ECardOpened{+c}:
       {S.Card.id(c) == S.St.next_card(s) : Nat}
     case M.ETaskCreated{+name, _, _, _, _}:
@@ -384,7 +384,7 @@ def Fresh(evs: List<&2, M.Ev>, +s: S.St) -> Data:
 def QuietEv(e: M.Ev) -> Data:
   match e:
     case M.EMsgSent{+m}:
-      {Bool.and(S.Msg.auto(m), S.Msg.expect(m)) == False{} : Bool}
+      {Bool.and(S.Msg.auto(M.msg_of_sent(m)), S.Msg.expect(M.msg_of_sent(m))) == False{} : Bool}
     case _:
       Unit
 

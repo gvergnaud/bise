@@ -118,6 +118,8 @@ impl T {
         for e in &fx {
             if let Effect::Journal(ev) = e {
                 self.journal.borrow_mut().push(ev.clone());
+                // the daemon's append: the mirror reads the words there (bodies.rs)
+                self.hub.st.bodies.keep(ev);
             }
         }
         // hub-loop: the shell's worktree, made at once here (FakeEnv)
@@ -400,7 +402,7 @@ fn ask_waits_for_the_reply() {
         .st
         .msgs()
         .values()
-        .find(|m| m.text == "v1 ou v2 ?")
+        .find(|m| t.hub.st.text(m.id) == "v1 ou v2 ?")
         .unwrap()
         .id;
     assert!(
@@ -460,7 +462,7 @@ fn a_waiting_agent_says_who_it_waits_on() {
     assert_eq!(docs.status, Status::Waiting);
     assert_eq!(docs.waiting_on.as_deref(), Some(MAIN), "{docs:?}");
     assert!(agent(&mut t, MAIN).waiting_on.is_none());
-    let id = t.hub.st.msgs().values().find(|m| m.text == "v1 ou v2 ?").unwrap().id;
+    let id = t.hub.st.msgs().values().find(|m| t.hub.st.text(m.id) == "v1 ou v2 ?").unwrap().id;
     let (_, fx) = t.req(
         MAIN,
         AgentReq::Send {
@@ -590,7 +592,8 @@ fn at_task_from_main_view_answers_there_and_notes_main() {
     let fx = t.user(MAIN, "et ensuite ?");
     let s = say_to(&fx, MAIN).unwrap();
     assert!(
-        s.contains("@docs answered the user (asked from @main's view: \"v1 ou v2 ?\"): \"la v2\""),
+        // c6 (architect m_56481): the question by its id, sb-core keeps no words
+        s.contains("@docs answered the user (asked from @main's view, m_3): \"la v2\""),
         "{}",
         s
     );
@@ -746,7 +749,7 @@ fn an_escalated_question_is_answered_by_the_user() {
         .st
         .msgs()
         .values()
-        .find(|m| m.text == "v1 ou v2 ?")
+        .find(|m| t.hub.st.text(m.id) == "v1 ou v2 ?")
         .unwrap()
         .id;
     let (_, fx) = t.req(
@@ -795,7 +798,7 @@ fn answering_in_the_task_view_answers_its_question() {
         .st
         .msgs()
         .values()
-        .find(|m| m.text == "v1 ou v2 ?")
+        .find(|m| t.hub.st.text(m.id) == "v1 ou v2 ?")
         .unwrap()
         .id;
     t.req(
@@ -843,7 +846,7 @@ fn a_crashing_repl_restarts_then_fails() {
     // BISE-299: a failure is main's to handle (a bise message), never a
     // card in the user's inbox
     assert!(t.hub.st.cards.is_empty());
-    assert!(t.hub.st.msgs().values().any(|m| m.to == MAIN && m.text.contains("agent @a failed")));
+    assert!(t.hub.st.msgs().values().any(|m| m.to == MAIN && t.hub.st.text(m.id).contains("agent @a failed")));
     // the user's message revives it
     let fx = t.user(MAIN, "@a réessaie");
     assert!(fx
@@ -1369,7 +1372,7 @@ fn a_queued_message_waits_for_the_end_of_the_turn() {
         .st
         .msgs()
         .values()
-        .find(|m| m.text == "later")
+        .find(|m| t.hub.st.text(m.id) == "later")
         .unwrap()
         .id;
     assert!(
@@ -1408,7 +1411,7 @@ fn the_users_queued_inputs_wait_for_the_end_of_the_turn() {
     t.user_queued("a", "@a second later");
     let ids: Vec<u64> = ["first later", "second later"]
         .iter()
-        .map(|x| t.hub.st.msgs().values().find(|m| m.text == *x).unwrap().id)
+        .map(|x| t.hub.st.msgs().values().find(|m| t.hub.st.text(m.id) == *x).unwrap().id)
         .collect();
     assert!(ids.iter().all(|i| t.hub.st.msgs()[i].queued && t.hub.st.msgs()[i].from == USER));
     let rows = crate::board::Waiting::of(&t.hub.st).queued_inputs("a");
@@ -1446,7 +1449,7 @@ fn a_take_back_and_the_turns_end_give_exactly_one_outcome_in_either_order() {
             _ => None,
         })
     };
-    let id_of = |t: &T, text: &str| t.hub.st.msgs().values().find(|m| m.text == text).unwrap().id;
+    let id_of = |t: &T, text: &str| t.hub.st.msgs().values().find(|m| t.hub.st.text(m.id) == text).unwrap().id;
     let taken = MsgState::Rejected { error: "taken_back".into() };
 
     // taken back first: the turn's end pumps nothing of it
@@ -1511,7 +1514,7 @@ fn a_queued_message_does_not_end_a_wait() {
         .st
         .msgs()
         .values()
-        .find(|m| m.text == "question")
+        .find(|m| t.hub.st.text(m.id) == "question")
         .unwrap()
         .id;
     let (wtok, _) = t.req(
@@ -1571,7 +1574,7 @@ fn docs_question_card(t: &mut T) -> (u64, u64) {
         .st
         .msgs()
         .values()
-        .find(|m| m.text == "v1 ou v2 ?")
+        .find(|m| t.hub.st.text(m.id) == "v1 ou v2 ?")
         .unwrap()
         .id;
     t.req(
@@ -1631,7 +1634,7 @@ fn main_cannot_answer_an_escalated_question_only_the_user_can() {
     let e = err_of(&fx, tok);
     assert!(e.contains("in the user's inbox") && e.contains("--withdraw"), "{e}");
     assert!(t.hub.st.cards.contains_key(&card));
-    assert!(!t.hub.st.msgs().values().any(|m| m.text == "v2"));
+    assert!(!t.hub.st.msgs().values().any(|m| t.hub.st.text(m.id) == "v2"));
     // a peer's too (no withdraw hint: it is not its card)
     t.spawn_task("peer");
     let (tok, fx) = t.req(
@@ -1654,7 +1657,7 @@ fn main_cannot_answer_an_escalated_question_only_the_user_can() {
     // the user's answer resolves it and goes to docs, as a reply to its question
     t.user(MAIN, &format!("/answer {} v2", card));
     assert!(t.hub.st.cards.is_empty());
-    let a = t.hub.st.whole_msgs().find(|m| m.text == "v2").expect("the user's answer");
+    let a = t.hub.st.whole_msgs().find(|m| t.hub.st.text(m.id) == "v2").expect("the user's answer");
     assert_eq!((a.from.as_str(), a.to.as_str(), a.reply_to), (USER, "docs", Some(id)));
 }
 
@@ -1694,7 +1697,7 @@ fn agent_traffic_never_reaches_the_user_inbox() {
     // wakes main with a message
     let snap = t.hub.snapshot(t.env.now);
     assert_eq!(snap.agent(MAIN).inbox, 2, "{:?}", snap.agent(MAIN));
-    assert!(t.hub.st.msgs().values().any(|m| m.to == MAIN && m.text.contains("@a is blocked: need a key")));
+    assert!(t.hub.st.msgs().values().any(|m| m.to == MAIN && t.hub.st.text(m.id).contains("@a is blocked: need a key")));
 }
 
 /// BISE-299: main withdraws its own card with a why (the user sees it);
@@ -1815,7 +1818,7 @@ fn question_then_reply(t: &mut T, queued: bool) -> (u64, u64) {
             fwd: None,
         },
     );
-    let q = t.hub.st.msgs().values().find(|m| m.text == "v1 ou v2 ?").unwrap().id;
+    let q = t.hub.st.msgs().values().find(|m| t.hub.st.text(m.id) == "v1 ou v2 ?").unwrap().id;
     t.req(
         MAIN,
         AgentReq::Send {
@@ -1830,7 +1833,7 @@ fn question_then_reply(t: &mut T, queued: bool) -> (u64, u64) {
             fwd: None,
         },
     );
-    let r = t.hub.st.msgs().values().find(|m| m.text == "v2").unwrap().id;
+    let r = t.hub.st.msgs().values().find(|m| t.hub.st.text(m.id) == "v2").unwrap().id;
     (q, r)
 }
 
@@ -2088,7 +2091,7 @@ fn a_message_queued_before_a_rename_reaches_the_new_name() {
     t.spawn_task("docs");
     t.hub.force_run("docs", Run::Starting);
     t.user(MAIN, "@docs change de plan");
-    let id = t.hub.st.msgs().values().find(|m| m.text == "change de plan").unwrap().id;
+    let id = t.hub.st.msgs().values().find(|m| t.hub.st.text(m.id) == "change de plan").unwrap().id;
     assert!(matches!(t.hub.st.msg_state().get(&id), Some(MsgState::Queued { .. })));
     t.user(MAIN, "/rename docs api");
     assert!(t.hub.st.agents.contains_key("api"));
@@ -3709,7 +3712,7 @@ mod prs {
     }
 
     fn from_github(t: &T, to: &str) -> Vec<String> {
-        t.hub.st.msgs().values().filter(|m| m.from == "github" && m.to == to).map(|m| m.text.clone()).collect()
+        t.hub.st.msgs().values().filter(|m| m.from == "github" && m.to == to).map(|m| t.hub.st.text(m.id)).collect()
     }
 
     /// main's `pr` records, as `state : number : url : text`
@@ -3775,7 +3778,7 @@ mod prs {
         assert!(card.text.contains("e2e still fails after 2 fixes by dark"), "{}", card.text);
         // the user's answer goes to the agent
         t.user(MAIN, &format!("/answer {} skip it, it's flaky", card.id));
-        assert!(t.hub.st.msgs().values().any(|m| m.from == "user" && m.to == "dark" && m.text == "skip it, it's flaky"));
+        assert!(t.hub.st.msgs().values().any(|m| m.from == "user" && m.to == "dark" && t.hub.st.text(m.id) == "skip it, it's flaky"));
         assert!(!t.hub.st.cards.contains_key(&card.id), "answered: closed");
         // /prs lists it
         let fx = t.user(MAIN, "/prs");
@@ -3993,7 +3996,8 @@ fn bise_forwards_his_message_once_and_settles_on_the_answer() {
     t.go(Input::XReply { xid: 1, name: "shop".into(), text: "fixed on sb/login".into() });
     let ans = t.hub.st.whole_msgs().find(|m| m.from == "@shop").expect("an answer from @shop");
     assert_eq!(ans.to, MAIN);
-    assert!(ans.text.contains("fixed on sb/login") && ans.text.contains(&format!("m_{}", his)), "{}", ans.text);
+    let said = t.hub.st.text(ans.id);
+    assert!(said.contains("fixed on sb/login") && said.contains(&format!("m_{}", his)), "{}", said);
     let n = t.hub.st.msgs().len();
     t.go(Input::XReply { xid: 1, name: "shop".into(), text: "again".into() });
     assert_eq!(t.hub.st.msgs().len(), n);
@@ -4590,7 +4594,7 @@ fn his_parts_follow_his_message_at_its_delivery() {
     // `a` is busy: queued, nothing written yet
     let fx = t.user_parts("a", text, parts, true);
     assert!(recs(&fx, "a").iter().all(|r| !r["sb"].as_str().unwrap_or("").starts_with("you")), "{:?}", fx);
-    let id = t.hub.st.msgs().values().find(|m| m.text == text).unwrap().id;
+    let id = t.hub.st.msgs().values().find(|m| t.hub.st.text(m.id) == text).unwrap().id;
     // the turn ends: said, his three lines in order
     let fx = t.go(Input::ReplIdle { agent: "a".into(), leftover: false });
     assert!(say_to(&fx, "a").is_some_and(|s| s.contains("<selection from=\"main\">")), "the model's text: {:?}", fx);
@@ -4617,7 +4621,7 @@ fn his_card_answer_keeps_its_parts() {
         "docs",
         AgentReq::Send { to: MAIN.into(), text: "v1 ou v2 ?".into(), expect_reply: true, reply_to: None, queued: false, why: String::new(), switch: None, parts: String::new(), attach: Vec::new(), fwd: None },
     );
-    let id = t.hub.st.msgs().values().find(|m| m.text == "v1 ou v2 ?").unwrap().id;
+    let id = t.hub.st.msgs().values().find(|m| t.hub.st.text(m.id) == "v1 ou v2 ?").unwrap().id;
     t.req(MAIN, AgentReq::Card { text: "La doc : v1 ou v2 ?".into(), for_msg: Some(id), page: None, artifact: None, open: Vec::new(), about: None });
     t.turn(MAIN, "J'ai demandé à l'utilisateur.");
     let card = *t.hub.st.cards.keys().next().unwrap();
@@ -4627,8 +4631,9 @@ fn his_card_answer_keeps_its_parts() {
     let ls = recs(&fx, MAIN);
     let at = ls.iter().position(|r| r["sb"] == "route" && r["who"] == "docs" && r["card"] == card).expect("the route line");
     assert_eq!(ls[at + 1], json!({"sb": "route-parts", "parts": serde_json::from_str::<Value>(parts).unwrap()}), "{ls:?}");
-    let answer = t.hub.st.whole_msgs().find(|m| m.text == text).expect("the asker's message");
-    assert_eq!(answer.parts, parts);
+    let answer = t.hub.st.whole_msgs().find(|m| t.hub.st.text(m.id) == text).expect("the asker's message");
+    assert_eq!(t.hub.st.words(answer.id).unwrap().parts, parts);
+    assert!(answer.has_parts);
 }
 
 /// c4b-core-step-flat (audit-core F7): a step's view carries the order

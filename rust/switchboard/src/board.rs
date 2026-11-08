@@ -90,13 +90,6 @@ pub fn user_board(st: &State, now: u64) -> String {
     lines.join("\n")
 }
 
-/// The first message of each of the `limit` newest threads of
-/// [`agent_threads`]: the bodies it shows (the hub fetches the cold
-/// ones first, view-all-perf).
-pub fn thread_firsts(st: &State, limit: usize) -> Vec<u64> {
-    st.threads().newest(limit).filter_map(|(_, ids)| ids.first().copied()).collect()
-}
-
 /// Threads between agents that the user is not part of, most recent
 /// first (RFC 0003 §9): the `limit` newest of [`Threads`], rendered.
 pub fn agent_threads(st: &State, limit: usize) -> Vec<String> {
@@ -106,10 +99,8 @@ pub fn agent_threads(st: &State, limit: usize) -> Vec<String> {
             let ms: Vec<Peek> = ids.iter().filter_map(|id| st.peek(*id)).collect();
             let parties = parties_of(&ms);
             let open = ms.iter().any(|m| m.expect_reply && !st.settled().contains(&m.id));
-            // the first message's words: the hub fetched the body of a
-            // cold one before the build ([`thread_firsts`]); one still
-            // cold (sb-core didn't answer) is shown without them
-            let first = st.msg(ms[0].id).map(|m| format!("  \"{}\"", clip(&one_line(&m.text), 60))).unwrap_or_default();
+            // the first message's words, read in the journal
+            let first = format!("  \"{}\"", clip(&one_line(&st.text(ms[0].id)), 60));
             format!(
                 "t_{} {}  {} message{}  {}{}",
                 t,
@@ -383,7 +374,7 @@ pub fn tasks_detail(st: &State, now: u64, models: &Models) -> String {
                 "owes a reply to {} (m_{}): \"{}\"",
                 m.from,
                 m.id,
-                clip(&one_line(&m.text), 120)
+                clip(&one_line(&st.text(m.id)), 120)
             ));
         }
         // whole ones only: sb-core sends every question not settled whole
@@ -396,7 +387,7 @@ pub fn tasks_detail(st: &State, now: u64, models: &Models) -> String {
                 "waits for a reply from {} (m_{}): \"{}\"",
                 m.to,
                 m.id,
-                clip(&one_line(&m.text), 120)
+                clip(&one_line(&st.text(m.id)), 120)
             ));
         }
         if !a.files.is_empty() {
@@ -533,10 +524,10 @@ fn push_block(s: &mut String, tag: &str, lines: &[String]) {
 }
 
 /// The delivered messages still waiting for their recipient's reply.
-pub fn questions_for(unanswered: &[&Msg]) -> Vec<String> {
+pub fn questions_for(st: &State, unanswered: &[&Msg]) -> Vec<String> {
     unanswered
         .iter()
-        .map(|m| format!("m_{} from {}: \"{}\"", m.id, m.from, clip(&one_line(&m.text), 80)))
+        .map(|m| format!("m_{} from {}: \"{}\"", m.id, m.from, clip(&one_line(&st.text(m.id)), 80)))
         .collect()
 }
 
@@ -549,13 +540,15 @@ pub fn queued_count(st: &State, name: &str) -> usize {
 /// sb-core's view says of each, `State::hot`): those queued for it, and
 /// the delivered ones it owes a reply to. Oldest first, as in `st.msgs()`.
 pub struct Waiting<'a> {
+    /// their words' source (the journal, [`State::words`])
+    st: &'a State,
     queued: BTreeMap<&'a str, Vec<&'a Msg>>,
     unanswered: BTreeMap<&'a str, Vec<&'a Msg>>,
 }
 
 impl<'a> Waiting<'a> {
     pub fn of(st: &'a State) -> Waiting<'a> {
-        let mut w = Waiting { queued: BTreeMap::new(), unanswered: BTreeMap::new() };
+        let mut w = Waiting { st, queued: BTreeMap::new(), unanswered: BTreeMap::new() };
         for (m, h) in st.hot() {
             if h.queued {
                 w.queued.entry(m.to.as_str()).or_default().push(m);
@@ -583,7 +576,13 @@ impl<'a> Waiting<'a> {
             .flatten()
             .filter(|m| m.queued && m.from == USER)
             // his parts (msg-parts): a client edits it back from them
-            .map(|m| bise_proto::draft::Queued { id: m.id, text: m.text.clone(), created_ms: m.created_ms, parts: m.parts_list() })
+            .map(|m| {
+                let (text, parts) = match self.st.words(m.id) {
+                    Ok(w) => (w.text.clone(), w.parts_list()),
+                    Err(e) => (e.text(), Vec::new()),
+                };
+                bise_proto::draft::Queued { id: m.id, text, created_ms: m.created_ms, parts }
+            })
             .collect()
     }
 
@@ -596,7 +595,7 @@ impl<'a> Waiting<'a> {
     /// Each agent's `<questions_for_you>` lines ([`questions_for`]), for
     /// every agent that owes a reply.
     pub fn questions(&self) -> BTreeMap<String, Vec<String>> {
-        self.unanswered.iter().map(|(n, ms)| (n.to_string(), questions_for(ms))).collect()
+        self.unanswered.iter().map(|(n, ms)| (n.to_string(), questions_for(self.st, ms))).collect()
     }
 }
 
@@ -622,21 +621,21 @@ mod tests {
     fn a_queued_row_carries_his_parts() {
         let mut st = state();
         let parts = r#"[{"kind":"paste","n":1,"text":"long"},{"kind":"text","text":" why?"}]"#;
-        let m = |id: u64, parts: &str| Msg {
+        let m = |id: u64| Msg {
             id,
             thread: id,
             from: USER.into(),
             to: "docs".into(),
-            text: format!("m{id}"),
             created_ms: id,
             plain: true,
             queued: true,
-            parts: parts.into(),
             ..Default::default()
         };
         let busy = || Some(MsgState::Queued { reason: "busy".into() });
-        st.put_msg_judged(m(1, parts), busy(), false);
-        st.put_msg_judged(m(2, ""), busy(), false);
+        st.test_words(1, "m1", parts);
+        st.test_words(2, "m2", "");
+        st.put_msg_judged(m(1), busy(), false);
+        st.put_msg_judged(m(2), busy(), false);
         let rows = Waiting::of(&st).queued_inputs("docs");
         assert_eq!(serde_json::to_value(&rows[0].parts).unwrap(), serde_json::from_str::<serde_json::Value>(parts).unwrap());
         assert!(rows[1].parts.is_empty(), "{:?}", rows[1]);
@@ -684,17 +683,17 @@ mod tests {
                 from: "docs".into(),
                 to: "auth-fix".into(),
                 expect_reply: true,
-                text: "v1 ou v2 ?".into(),
                 created_ms: 1,
                 ..Default::default()
             },
             Some(MsgState::Queued { reason: "new".into() }),
             false,
         );
+        st.test_words(1, "v1 ou v2 ?", "");
         let t = agent_threads(&st, 8);
         assert_eq!(t.len(), 1);
         assert!(
-            t[0].contains("docs ↔ auth-fix") && t[0].contains("open"),
+            t[0].contains("docs ↔ auth-fix") && t[0].contains("open") && t[0].contains("\"v1 ou v2 ?\""),
             "{}",
             t[0]
         );
@@ -707,10 +706,16 @@ mod tests {
             from: from.into(),
             to: to.into(),
             expect_reply,
-            text: format!("m{id}"),
             created_ms: id,
             queued,
             ..Default::default()
+        }
+    }
+
+    /// `msg`'s words in the journal: "m<id>"
+    fn words(st: &mut State, ids: impl IntoIterator<Item = u64>) {
+        for id in ids {
+            st.test_words(id, &format!("m{id}"), "");
         }
     }
 
@@ -792,6 +797,7 @@ mod tests {
             MsgState::Delivered,
         ];
         let names = [MAIN, "auth-fix", "docs", USER];
+        words(&mut st, 1..=60);
         for id in 1..=60u64 {
             let (from, to) = (names[(id % 4) as usize], names[((id + 1) % 4) as usize]);
             st.put_msg_judged(msg(id, from, to, id % 2 == 0, id % 5 == 0), Some(states[(id % 3) as usize].clone()), id == 4);
@@ -805,7 +811,7 @@ mod tests {
                 .msgs()
                 .values()
                 .filter(|m| m.to == n && m.queued && m.from == USER && st.is_queued(m))
-                .map(|m| bise_proto::draft::Queued { id: m.id, text: m.text.clone(), created_ms: m.created_ms, parts: Vec::new() })
+                .map(|m| bise_proto::draft::Queued { id: m.id, text: st.text(m.id), created_ms: m.created_ms, parts: Vec::new() })
                 .collect();
             assert_eq!(w.queued_inputs(n), inputs, "{n}");
         }
@@ -819,7 +825,8 @@ mod tests {
     fn a_task_context_has_the_roster_it_sees_and_its_questions() {
         let mut st = state();
         st.put_msg_judged(msg(1, "auth-fix", "docs", true, false), Some(MsgState::Delivered), false);
-        let c = task_context("docs", &Group::of(&st, 0, &Models::new()), &questions_for(Waiting::of(&st).unanswered("docs")));
+        words(&mut st, [1]);
+        let c = task_context("docs", &Group::of(&st, 0, &Models::new()), &questions_for(&st, Waiting::of(&st).unanswered("docs")));
         let mut want = String::from("<group>\n");
         for l in roster(&st, "docs", 0, &Models::new()) {
             want.push_str(&l);

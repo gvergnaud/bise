@@ -18,8 +18,6 @@ type Link is Data:
   TPing{}
   # view_all
   TView{}
-  # msg_bodies
-  TMsgBodies{ids: List<&2, Nat>}
   # photo
   TPhoto{}
   # restore_photo
@@ -44,9 +42,6 @@ def TPing.of(i: J.Json) -> Link:
 def TView.of(i: J.Json) -> Link:
   TView{}
 
-def TMsgBodies.of(+i: J.Json) -> Link:
-  TMsgBodies{K.get_ns(i, "ids")}
-
 def TPhoto.of(i: J.Json) -> Link:
   TPhoto{}
 
@@ -62,16 +57,7 @@ def of.t0(c: Cmp, +t: String, +i: J.Json) -> Link:
     case GT{}:
       TStep{}
 
-def of.t1(c: Cmp, +t: String, +i: J.Json) -> Link:
-  match c:
-    case LT{}:
-      of.t0(String.order(t, "init"), t, i)
-    case EQ{}:
-      TMsgBodies.of(i)
-    case GT{}:
-      TStep{}
-
-def of.t3(c: Cmp, +t: String, +i: J.Json) -> Link:
+def of.t2(c: Cmp, +t: String, +i: J.Json) -> Link:
   match c:
     case LT{}:
       TStep{}
@@ -80,16 +66,16 @@ def of.t3(c: Cmp, +t: String, +i: J.Json) -> Link:
     case GT{}:
       TStep{}
 
-def of.t2(c: Cmp, +t: String, +i: J.Json) -> Link:
+def of.t1(c: Cmp, +t: String, +i: J.Json) -> Link:
   match c:
     case LT{}:
-      of.t1(String.order(t, "msg_bodies"), t, i)
+      of.t0(String.order(t, "init"), t, i)
     case EQ{}:
       TPhoto.of(i)
     case GT{}:
-      of.t3(String.order(t, "ping"), t, i)
+      of.t2(String.order(t, "ping"), t, i)
 
-def of.t5(c: Cmp, +t: String, +i: J.Json) -> Link:
+def of.t4(c: Cmp, +t: String, +i: J.Json) -> Link:
   match c:
     case LT{}:
       TStep{}
@@ -98,7 +84,7 @@ def of.t5(c: Cmp, +t: String, +i: J.Json) -> Link:
     case GT{}:
       TStep{}
 
-def of.t7(c: Cmp, +t: String, +i: J.Json) -> Link:
+def of.t6(c: Cmp, +t: String, +i: J.Json) -> Link:
   match c:
     case LT{}:
       TStep{}
@@ -107,28 +93,28 @@ def of.t7(c: Cmp, +t: String, +i: J.Json) -> Link:
     case GT{}:
       TStep{}
 
-def of.t6(c: Cmp, +t: String, +i: J.Json) -> Link:
+def of.t5(c: Cmp, +t: String, +i: J.Json) -> Link:
   match c:
     case LT{}:
-      of.t5(String.order(t, "replay_many"), t, i)
+      of.t4(String.order(t, "replay_many"), t, i)
     case EQ{}:
       TRestorePhoto.of(i)
     case GT{}:
-      of.t7(String.order(t, "view_all"), t, i)
+      of.t6(String.order(t, "view_all"), t, i)
 
-def of.t4(c: Cmp, +t: String, +i: J.Json) -> Link:
+def of.t3(c: Cmp, +t: String, +i: J.Json) -> Link:
   match c:
     case LT{}:
-      of.t2(String.order(t, "photo"), t, i)
+      of.t1(String.order(t, "photo"), t, i)
     case EQ{}:
       TReplay.of(i)
     case GT{}:
-      of.t6(String.order(t, "restore_photo"), t, i)
+      of.t5(String.order(t, "restore_photo"), t, i)
 
-# the record of a tag (a binary search over the 8 sorted tags); any
+# the record of a tag (a binary search over the 7 sorted tags); any
 # other tag: TStep
 def of_tag(+t: String, +i: J.Json) -> Link:
-  of.t4(String.order(t, "replay"), t, i)
+  of.t3(String.order(t, "replay"), t, i)
 
 # one Link from its JSON object
 def of(+i: J.Json) -> Link:
@@ -148,8 +134,6 @@ def kvs(x: Link) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
       [J.kv("t", J.JStr{"ping"})]
     case TView{}:
       [J.kv("t", J.JStr{"view_all"})]
-    case TMsgBodies{+ids}:
-      [J.kv("t", J.JStr{"msg_bodies"}), J.kv("ids", J.JArr{K.jnats(ids)})]
     case TPhoto{}:
       [J.kv("t", J.JStr{"photo"})]
     case TRestorePhoto{+st}:

@@ -8,7 +8,6 @@ fn msg(id: u64, from: &str, to: &str, expect_reply: bool, thread: u64) -> Msg {
         from: from.into(),
         to: to.into(),
         expect_reply,
-        text: format!("m{id} from {from}"),
         created_ms: id,
         ..Default::default()
     }
@@ -124,6 +123,7 @@ fn step(st: &mut State, r: &mut Rng, now: &mut u64, models: &mut Models, n: &mut
             st.next_msg += 1;
             let thread = if id > 1 && r.below(2) == 0 { 1 + r.below(id as usize - 1) as u64 } else { id };
             let state = [MsgState::Delivered, MsgState::Queued { reason: "busy".into() }][r.below(2)].clone();
+            st.test_words(id, &format!("m{id} from {from}"), "");
             st.put_msg_judged(msg(id, &from, &to, r.below(2) == 0, thread), Some(state), false);
         }
         10 => {

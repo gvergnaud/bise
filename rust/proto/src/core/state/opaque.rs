@@ -134,14 +134,3 @@ pub struct Report {
     pub result: Option<Value>,
 }
 
-impl super::Msg {
-    /// His parts (msg-parts), read from their JSON (sb-core keeps them
-    /// as an opaque string); none for a message without (or an
-    /// unreadable one, as the fold reads it).
-    pub fn parts_list(&self) -> Vec<crate::parts::Part> {
-        match self.parts.is_empty() {
-            true => Vec::new(),
-            false => serde_json::from_str(&self.parts).unwrap_or_default(),
-        }
-    }
-}

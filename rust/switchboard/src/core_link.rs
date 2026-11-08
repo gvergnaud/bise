@@ -10,6 +10,7 @@
 
 use super::core_fx::{self, Plain};
 use super::*;
+use bise_proto::core::body::{self, Words};
 use bise_proto::core::link::{ANeed, AStep, Answer};
 use bise_proto::core::{fx as cfx, Fx as CoreFx, In};
 
@@ -54,7 +55,10 @@ impl Hub {
             for l in std::mem::take(&mut self.revived) {
                 fx.push(feed(MAIN, Feed::warn(l)));
             }
-            let Some(out) = out else { return dropped(fx, &step.input, client, bise_proto::words::common::core_stopped) };
+            let Some(mut out) = out else { return dropped(fx, &step.input, client, bise_proto::words::common::core_stopped) };
+            // c6: the words its effects name, filled before they decode
+            let own = own_words(&out);
+            self.fill_bodies(&mut out, &own);
             let s = match core_fx::answer(&out) {
                 Answer::Need(ANeed { need: q }) => {
                     // sb every's wakes: their words and the local clock
@@ -68,7 +72,30 @@ impl Hub {
                 other => return eprintln!("sb-core: not a step's answer (skipped): {}", other.to_value()),
             };
             self.error_told = false;
-            return self.apply_step(fx, env, client, k0, s);
+            return self.apply_step(fx, env, client, k0, s, &own);
+        }
+    }
+
+    /// c6 (architect m_56402): the [`Body`](bise_proto::core::body::Body)
+    /// fields of a step's effects (a feed record's text or parts, the
+    /// message of `sb wait`'s reply) made the words they name, in place:
+    /// `own`, the step's own messages, first (the daemon journals them
+    /// after the step), else the journal (bodies.rs). An effect whose
+    /// body doesn't read is logged and left as it is (its decode skips it).
+    fn fill_bodies(&self, out: &mut Value, own: &BTreeMap<u64, Words>) {
+        let mut errors = Vec::new();
+        let st = &self.st;
+        let mut get = |id: u64| own.get(&id).cloned().map_or_else(|| st.words(id), Ok);
+        // `get_mut`: an answer without fx (a need) stays without the key
+        for f in out.get_mut("fx").and_then(Value::as_array_mut).into_iter().flatten() {
+            let r = match f["fx"].as_str() {
+                Some("feed") => body::fill(&bise_proto::core::Feed::TABLE, &mut f["rec"], &mut get),
+                _ => body::fill(&CoreFx::TABLE, f, &mut get),
+            };
+            errors.extend(r.err());
+        }
+        for e in errors {
+            self.log(&format!("sb-core: an effect's body (skipped): {e}"));
         }
     }
 
@@ -121,7 +148,8 @@ impl Hub {
     /// A committed step's answer: its view into the mirror, then its
     /// effects. A view that doesn't decode is logged (load_view): the
     /// effects still run, the journal's included.
-    pub(super) fn apply_step(&mut self, fx: &mut Fx, env: &mut dyn Env, client: Option<ClientId>, k0: usize, s: AStep) {
+    /// `own`: the words of the step's own messages (a delivery's text).
+    pub(super) fn apply_step(&mut self, fx: &mut Fx, env: &mut dyn Env, client: Option<ClientId>, k0: usize, s: AStep, own: &BTreeMap<u64, Words>) {
         if s.dirty {
             self.dirty = true;
         }
@@ -135,7 +163,7 @@ impl Hub {
             match core_fx::read(f) {
                 Plain::Effect(e) => fx.push(e),
                 Plain::Nothing => {}
-                Plain::Hub(f) => self.effect(fx, env, client, f),
+                Plain::Hub(f) => self.effect(fx, env, client, f, own),
                 Plain::Skip(why) => eprintln!("{}", why),
             }
         }
@@ -168,7 +196,7 @@ impl Hub {
 
     /// One effect of sb-core on the hub's state (the plain ones are
     /// core_fx.rs's).
-    fn effect(&mut self, fx: &mut Fx, env: &mut dyn Env, client: Option<ClientId>, f: CoreFx) {
+    fn effect(&mut self, fx: &mut Fx, env: &mut dyn Env, client: Option<ClientId>, f: CoreFx, own: &BTreeMap<u64, Words>) {
         match f {
             // an event that is not an object: never in the journal, never a panic
             CoreFx::Journal(j) if !j.ev.is_object() => self.log(&format!("sb-core: a bad journal event (skipped): {}", clip(&j.ev.to_string(), 200))),
@@ -183,7 +211,13 @@ impl Hub {
                 let by = self.interrupt_by.clone().unwrap_or_else(|| "bise".into());
                 fx.push(Effect::Interrupt { agent: i.agent, by })
             }
-            CoreFx::Reply(cfx::Reply { token, body }) => match self.spawn_asks.remove(&token) {
+            // the reply to `sb wait`: its `message`, the words fill_bodies
+            // read, goes in the body here, the one place (fx.rs Reply)
+            CoreFx::Reply(cfx::Reply { token, mut body, message: Some(m) }) => {
+                body["message"] = json!(m);
+                fx.push(Effect::Reply { token, body })
+            }
+            CoreFx::Reply(cfx::Reply { token, body, message: None }) => match self.spawn_asks.remove(&token) {
                 // issue #4: a spawn that asked for a model: the daemon
                 // picks it, writes the task's choice, then answers
                 Some(ask) if body["ok"] == json!(true) && body["name"].is_string() => {
@@ -191,7 +225,7 @@ impl Hub {
                 }
                 _ => fx.push(Effect::Reply { token, body }),
             },
-            CoreFx::Deliver(d) => self.deliver(fx, env, d),
+            CoreFx::Deliver(d) => self.deliver(fx, env, d, own),
             // the user's digit on a hub item (merge.rs)
             CoreFx::CardChoice(c) => self.card_choice(fx, env, c),
             CoreFx::Notice(n) => {
@@ -228,13 +262,14 @@ impl Hub {
 
     /// The text a delivery puts in the agent's context (core_fx::delivery),
     /// as a new turn or as steering.
-    fn deliver(&mut self, fx: &mut Fx, env: &mut dyn Env, d: cfx::Deliver) {
+    fn deliver(&mut self, fx: &mut Fx, env: &mut dyn Env, d: cfx::Deliver, own: &BTreeMap<u64, Words>) {
         let status = d.status.then(|| board::status_block(&self.st, env.now()));
+        let text = |id: u64| own.get(&id).map(|w| w.text.clone()).unwrap_or_else(|| self.st.text(id));
         let msgs = d
             .msgs
             .iter()
             // the step's own messages: its view sent them whole
-            .filter_map(|m| Some(prompts::tagged(self.st.msg(m.id)?, &m.rel)))
+            .filter_map(|m| Some(prompts::tagged(self.st.msg(m.id)?, &text(m.id), &m.rel)))
             .collect();
         let text = core_fx::delivery(&d.notes, status, msgs);
         let agent = d.agent;
@@ -244,6 +279,11 @@ impl Hub {
             fx.push(Effect::Say { agent, text });
         }
     }
+}
+
+/// The words of a step's own messages (its `message_sent` events), by id.
+fn own_words(out: &Value) -> BTreeMap<u64, Words> {
+    out["fx"].as_array().into_iter().flatten().filter(|f| f["fx"] == "journal").filter_map(|f| Words::of_journal(&f["ev"])).collect()
 }
 
 /// An input sb-core did not run: whoever sent it hears it in plain

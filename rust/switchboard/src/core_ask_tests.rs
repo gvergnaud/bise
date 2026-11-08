@@ -17,7 +17,7 @@ fn a_reply_still_pending_after_the_hold_is_a_pause() {
     let asked_at = t.env.now;
     let ask = |t: &mut T, text: &str| t.req("a", AgentReq::Ask { to: "b".into(), text: text.into(), timeout_s: 600 }).0;
     let tok = ask(&mut t, "which port?");
-    let id = t.hub.st.msgs().values().find(|m| m.text == "which port?").unwrap().id;
+    let id = t.hub.st.msgs().values().find(|m| t.hub.st.text(m.id) == "which port?").unwrap().id;
     assert_eq!(watching(&mut t, "a"), json!([]), "held: no watch yet");
     t.env.now += 26_000;
     let r = reply(&t.go(Input::Tick), tok).expect("the hold ends at 25 s");

@@ -75,10 +75,10 @@ core_records! {
             msgs: Recs(ViewMsg),
             /// true: `msgs` are every message (drop the ones not in it)
             all_msgs: Bool,
-            /// view-all-perf: `view_all`'s cold messages, each a
-            /// [`ColdMsg`] row without its body (sb-core decides which,
-            /// view.bend `ships_whole`); `msgs` holds the others, whole.
-            /// The hub asks the link's `msg_bodies` for a cold one's body.
+            /// view-all-perf: `view_all`'s cold messages, each a compact
+            /// [`ColdMsg`] row (sb-core decides which, view.bend
+            /// `ships_whole`); `msgs` holds the others, whole. No message
+            /// carries its words (c6: the hub reads them in the journal).
             /// Absent in a step's view and from an older sb-core.
             cold: OptJsonsOmit,
             next_msg: Nat = 1,

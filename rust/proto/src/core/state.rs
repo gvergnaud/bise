@@ -347,7 +347,56 @@ pub const STATE: State = State {
     records: &[
         Record {
             name: "Msg",
-            doc: "a message between two parties of the group (the sender or the recipient may be `user`)",
+            doc: "a message between two parties of the group (the sender or the recipient may be `user`), without its words (c6: the journal's `message_sent` line keeps them, a `Sent`; what sb-core writes of them is a body the shell fills, body.rs)",
+            fields: &[
+                f("id", Nat),
+                f("thread", Nat),
+                f("from", Str),
+                f("to", Str),
+                f("reply_to", OptNat),
+                f("expect", Bool),
+                f("auto", Bool),
+                f("created", Nat),
+                f("plain", Bool),
+                f("queued", Bool),
+                f("via", OptStr),
+                // it has parts (msg-parts): its msg-parts and sent-parts
+                // lines are written; the parts are in its Sent line
+                f("has_parts", Bool),
+                // msg-forward: the message this one forwards (`sb send
+                // --forward m_<n>`), none for any other; its text says it
+                // for the model, this field for every other reader
+                f("fwd", OptNat),
+                // mcp-apps: the plugin whose view wrote it (`from` is
+                // the fixed sender `view`); none for any other message
+                f("view", OptStr),
+            ],
+            // no journal line carries a Msg (message_sent carries a
+            // Sent): this is the shape the view and the photo write
+            shapes: &[Shape {
+                name: "journal",
+                read: true,
+                keys: &[
+                    k("id", W::Nat),
+                    k("thread", W::Nat),
+                    k("from", W::Str),
+                    k("to", W::Str),
+                    k("reply_to", W::OptNat),
+                    kn("expect", "expect_reply", W::Bool),
+                    k("auto", W::Bool),
+                    kn("created", "created_ms", W::Nat),
+                    k("plain", W::Bool),
+                    k("queued", W::Bool),
+                    k("via", W::OptStrOmit),
+                    k("has_parts", W::Bool),
+                    k("fwd", W::OptNatOmit),
+                    k("view", W::OptStrOmit),
+                ],
+            }],
+        },
+        Record {
+            name: "Sent",
+            doc: "a message as its `message_sent` journal line carries it: its Msg and its words (`text`, `parts` as JSON, \"\" none). sb-core makes it, journals it and keeps the Msg (c6): the words stay in the journal",
             fields: &[
                 f("id", Nat),
                 f("thread", Nat),
@@ -363,12 +412,7 @@ pub const STATE: State = State {
                 f("via", OptStr),
                 // his message's parts as JSON (msg-parts); "" none
                 f("parts", Str),
-                // msg-forward: the message this one forwards (`sb send
-                // --forward m_<n>`), none for any other; its text says it
-                // for the model, this field for every other reader
                 f("fwd", OptNat),
-                // mcp-apps: the plugin whose view wrote it (`from` is
-                // the fixed sender `view`); none for any other message
                 f("view", OptStr),
             ],
             shapes: &[Shape {

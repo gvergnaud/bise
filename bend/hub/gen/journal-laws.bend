@@ -94,7 +94,7 @@ def journal_msgs_moved_bare():
   {==}
 
 law journal_message_sent_bare:
-  {GJ.of(J.obj([J.kv("type", J.JStr{"message_sent"})])) == Some{M.EMsgSent{SC.Msg.journal_of(J.JNull{})}} : Maybe<&2, M.Ev>}
+  {GJ.of(J.obj([J.kv("type", J.JStr{"message_sent"})])) == Some{M.EMsgSent{SC.Sent.journal_of(J.JNull{})}} : Maybe<&2, M.Ev>}
 
 def journal_message_sent_bare():
   {==}
@@ -439,11 +439,11 @@ def journal_msgs_moved_round(from, to):
   {==}
 
 law journal_message_sent_round:
-  for msg: S.Msg
+  for msg: S.Sent
   {GJ.of(GJ.json(M.EMsgSent{msg})) == Some{M.EMsgSent{msg}} : Maybe<&2, M.Ev>}
 
 def journal_message_sent_round(msg):
-  %SC.Msg.journal_round(msg) : {GJ.of(GJ.json(M.EMsgSent{msg})) == Some{M.EMsgSent{_}} : Maybe<&2, M.Ev>}
+  %SC.Sent.journal_round(msg) : {GJ.of(GJ.json(M.EMsgSent{msg})) == Some{M.EMsgSent{_}} : Maybe<&2, M.Ev>}
   {==}
 
 law journal_message_state_round:

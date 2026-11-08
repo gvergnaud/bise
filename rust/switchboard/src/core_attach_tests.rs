@@ -32,8 +32,9 @@ fn an_agents_parts_ride_on_its_message() {
     // main → a: a's msg-in then its parts; main's own feed likewise
     let text = rendered("look");
     let (_, fx) = t.req(MAIN, send("a", &text, &parts_of("look")));
-    let m = t.hub.st.whole_msgs().find(|m| m.text == text).expect("sent").clone();
-    assert_eq!(m.parts, parts_of("look"), "kept on the message");
+    let m = t.hub.st.whole_msgs().find(|m| t.hub.st.text(m.id) == text).expect("sent").clone();
+    assert_eq!(t.hub.st.words(m.id).unwrap().parts, parts_of("look"), "kept in its journal line");
+    assert!(m.has_parts);
     assert!(say_to(&fx, "a").is_some_and(|s| s.contains("<image name=\"[Image #1]\"")), "the model's text has the marker: {fx:?}");
     let want = json!({"sb": "msg-parts", "id": m.id, "parts": serde_json::from_str::<Value>(&parts_of("look")).unwrap()});
     let ls = recs(&fx, "a");
@@ -43,7 +44,7 @@ fn an_agents_parts_ride_on_its_message() {
     // a task → another: the sender's `sent` then sent-parts
     let text = rendered("for you");
     let (_, fx) = t.req("a", send("b", &text, &parts_of("for you")));
-    let id = t.hub.st.msgs().values().find(|m| m.text == text).unwrap().id;
+    let id = t.hub.st.msgs().values().find(|m| t.hub.st.text(m.id) == text).unwrap().id;
     let ls = recs(&fx, "a");
     let at = ls.iter().position(|r| r["sb"] == "sent").expect("its sent line");
     assert_eq!(ls[at + 1]["sb"], "sent-parts");
@@ -77,7 +78,8 @@ fn a_brief_keeps_its_parts_with_the_head_in_front() {
             fwd: None,
         },
     );
-    let m = t.hub.st.whole_msgs().find(|m| m.to == "a").expect("its brief").clone();
+    let id = t.hub.st.whole_msgs().find(|m| m.to == "a").expect("its brief").id;
+    let m = t.hub.st.words(id).unwrap();
     let got: Vec<bise_proto::parts::Part> = serde_json::from_str(&m.parts).expect("its parts");
     assert_eq!(got[0], bise_proto::parts::Part::Text { text: "# Task `a`\n\n".into() });
     assert_eq!(bise_proto::parts::render(&got), m.text, "the text is their render");

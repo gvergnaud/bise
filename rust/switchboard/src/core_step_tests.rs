@@ -23,7 +23,7 @@ fn a_step_whose_view_does_not_decode_still_applies_its_effects() {
         ..Default::default()
     };
     let mut fx = Vec::new();
-    t.hub.apply_step(&mut fx, &mut t.env, None, 0, s);
+    t.hub.apply_step(&mut fx, &mut t.env, None, 0, s, &Default::default());
     assert!(fx.contains(&Effect::Kill { agent: "fake".into() }), "{:?}", fx);
     assert!(fx.iter().any(|e| matches!(e, Effect::Journal(ev) if ev["text"] == "fake")), "{:?}", fx);
     assert_eq!((&t.hub.st.agents, &t.hub.st.order), (&agents, &order), "the mirror kept");
@@ -64,7 +64,7 @@ fn an_answer_by_number_names_its_option_in_both_feeds() {
         "docs",
         AgentReq::Send { to: MAIN.into(), text: "where?".into(), expect_reply: true, reply_to: None, queued: false, why: String::new(), switch: None, parts: String::new(), attach: Vec::new(), fwd: None },
     );
-    let id = t.hub.st.msgs().values().find(|m| m.text == "where?").unwrap().id;
+    let id = t.hub.st.msgs().values().find(|m| t.hub.st.text(m.id) == "where?").unwrap().id;
     t.req(MAIN, AgentReq::Card { text: "where does the balance show?\n1. at every step\n2. only at checkout".into(), for_msg: Some(id), page: None, artifact: None, open: Vec::new(), about: None });
     t.turn(MAIN, "asked");
     let card = *t.hub.st.cards.keys().next().unwrap();
@@ -74,7 +74,7 @@ fn an_answer_by_number_names_its_option_in_both_feeds() {
     let a = t.hub.answered.take().expect("the step answers his answer");
     assert_eq!((a.agent.as_str(), a.said.as_str(), a.pick.as_deref()), ("docs", "2", Some("only at checkout")));
     assert!(a.question.starts_with("where does the balance show?") && a.notice == "you answered docs: only at checkout", "{a:?}");
-    let answer = t.hub.st.msgs().values().find(|m| m.text == "2").expect("the asker's message, as he said it").id;
+    let answer = t.hub.st.msgs().values().find(|m| t.hub.st.text(m.id) == "2").expect("the asker's message, as he said it").id;
     for feed in [MAIN, "docs"] {
         let rs: Vec<Value> = recs(&fx, feed).into_iter().filter(|r| r["sb"] == "route").collect();
         assert_eq!(rs, vec![json!({"sb": "route", "who": "docs", "card": card, "said": "2", "msg": answer, "pick_n": 2, "pick": "only at checkout"})], "{feed}: {fx:?}");

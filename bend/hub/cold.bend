@@ -65,7 +65,7 @@ def reply_at(+st: S.St, +id: Nat, +replier: String) -> Maybe<&2, S.Msg>:
 def replay_fresh(+st: S.St, e: M.Ev) -> Bool:
   match e:
     case M.EMsgSent{+m}:
-      Nat.is_ge(S.Msg.id(m), S.St.next_msg(st))
+      Nat.is_ge(S.Msg.id(M.msg_of_sent(m)), S.St.next_msg(st))
     case _:
       True{}
 

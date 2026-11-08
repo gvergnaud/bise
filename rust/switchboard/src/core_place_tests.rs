@@ -75,7 +75,7 @@ fn a_failed_feature_answer_is_handed_to_main_once() {
         let open = ci::CardOpen { kind: kind.into(), agent: MAIN.into(), text: text.into(), place: Some(place.clone()), pr: None };
         t.hub.core(&mut Vec::new(), &mut t.env, None, In::CardOpen(open));
         let id = *t.hub.st.cards.keys().max().unwrap();
-        let msgs = |t: &T| t.hub.st.msgs().values().filter(|m| m.to == MAIN).map(|m| m.text.clone()).collect::<Vec<_>>();
+        let msgs = |t: &T| t.hub.st.msgs().values().filter(|m| m.to == MAIN).map(|m| t.hub.st.text(m.id)).collect::<Vec<_>>();
         let before = msgs(&t).len();
         // an agent's own step failed: its stream said it; nothing here
         let line = Some(Feed::warn("bims: sync did not go through: x"));

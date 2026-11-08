@@ -114,7 +114,7 @@ fn a_rename_takes_a_freed_old_name_and_its_holder_keeps_its_things() {
         AgentReq::Send { to: "marketing".into(), text: "hi".into(), expect_reply: false, reply_to: None, queued: false, why: String::new(), switch: None, parts: String::new(), attach: Vec::new(), fwd: None },
     );
     assert!(reply(&fx, tok).is_some(), "{fx:?}");
-    assert!(t.hub.st.msgs().values().any(|m| m.text == "hi" && m.to == "marketing"));
+    assert!(t.hub.st.msgs().values().any(|m| t.hub.st.text(m.id) == "hi" && m.to == "marketing"));
 }
 
 #[test]
@@ -130,7 +130,7 @@ fn a_live_holders_queued_and_owed_messages_move_to_it() {
             AgentReq::Send { to: "marketing".into(), text: text.into(), expect_reply: expect, reply_to: None, queued: !expect, why: String::new(), switch: None, parts: String::new(), attach: Vec::new(), fwd: None },
         );
         assert!(reply(&fx, tok).is_some(), "{fx:?}");
-        t.hub.st.msgs().values().find(|m| m.text == text).unwrap().id
+        t.hub.st.msgs().values().find(|m| t.hub.st.text(m.id) == text).unwrap().id
     };
     let owed = send(&mut t, "status?", true);
     // ...and busy with it: the next one waits in its queue
@@ -172,7 +172,7 @@ fn a_reply_the_archived_agent_owed_is_never_the_new_ones() {
         MAIN,
         AgentReq::Send { to: "x".into(), text: "status?".into(), expect_reply: true, reply_to: None, queued: false, why: String::new(), switch: None, parts: String::new(), attach: Vec::new(), fwd: None },
     );
-    let id = t.hub.st.msgs().values().find(|m| m.text == "status?").unwrap().id;
+    let id = t.hub.st.msgs().values().find(|m| t.hub.st.text(m.id) == "status?").unwrap().id;
     // archived mid-turn: the reply is still owed (an idle turn's end
     // would have answered it for x)
     t.user(MAIN, "/archive x --force");

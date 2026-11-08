@@ -965,6 +965,10 @@ impl Hub {
     /// revival go through `rebuild`.
     #[cfg(test)]
     pub fn replay(&mut self, events: &[Value]) -> Vec<Value> {
+        // the boot's journal read: the mirror reads the words there (bodies.rs)
+        for ev in events {
+            self.st.bodies.keep(ev);
+        }
         self.replay_with(events, &mut |_, _| {}).unwrap_or_else(|e| panic!("sb-core: {}", e))
     }
 
@@ -1004,19 +1008,6 @@ impl Hub {
     fn view_all(&mut self) {
         if let Some(out) = self.call(&Link::ViewAll(cl::ViewAll {}).to_value()) {
             self.load_answer_view(&out);
-        }
-    }
-
-    /// view-all-perf: the bodies of the cold messages of `ids` (view_all
-    /// sent them without), asked of sb-core (`msg_bodies`, at most
-    /// MSG_BODIES_MAX ids a call) and loaded: they are whole after. A
-    /// whole or unknown id costs nothing; on the loop only, like a step.
-    pub fn fetch_bodies(&mut self, ids: impl IntoIterator<Item = u64>) {
-        let cold = self.st.cold_of(ids);
-        for batch in cold.chunks(cl::MSG_BODIES_MAX) {
-            if let Some(out) = self.call(&Link::MsgBodies(cl::MsgBodies { ids: batch.to_vec() }).to_value()) {
-                self.load_answer_view(&out);
-            }
         }
     }
 
@@ -2145,7 +2136,8 @@ impl Hub {
             }
             // desktop S2: the project's hub id (sb-core never reads the registry)
             AgentReq::ProjectSend { project, msg } => match env.project_hub(&project) {
-                Ok(hub) => json!({"cmd": "project_send", "project": hub, "msg": msg}),
+                // its words (c6): sb-core keeps none
+                Ok(hub) => json!({"cmd": "project_send", "project": hub, "msg": msg, "orig": crate::forward::orig(&self.st, msg)}),
                 Err(e) => json!({"cmd": "project_send", "pre_err": e}),
             },
             AgentReq::ProjectAsk { project, text } => match env.project_hub(&project) {

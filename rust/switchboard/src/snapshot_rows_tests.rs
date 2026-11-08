@@ -8,7 +8,6 @@ fn msg(id: u64, from: &str, to: &str, queued: bool) -> Msg {
         from: from.into(),
         to: to.into(),
         expect_reply: true,
-        text: format!("m{id}"),
         created_ms: id,
         queued,
         ..Default::default()

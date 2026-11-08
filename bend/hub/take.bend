@@ -45,6 +45,8 @@ import ./gen/fx.bend as F
 
 import ./gen/feed.bend as FD
 
+import ./gen/kit.bend as K
+
 def feed(-o: S.St, +cx: X.Cx<o>, +agent: String, +rec: J.Json) -> X.Cx<o>:
   X.out(o, cx, J.obj(F.feed(agent, rec)))
 
@@ -73,7 +75,7 @@ def take.queued(-o: S.St, ms: List<&2, S.Msg>, +cx: X.Cx<o>) -> X.Cx<o>:
       cx
     case Con{+m, +rest}:
       +cx2 = X.emit(o, cx, M.EMsgState{S.Msg.id(m), S.Rejected{"recipient_unavailable"}}, Unit{}, Unit{}, Unit{})
-      +cx3 = Bool.pick(X.Cx<o>, String.eq(S.Msg.from(m), M.USER()), feed(o, cx2, M.MAIN(), FD.undelivered(S.Msg.to(m), S.Msg.text(m))), cx2)
+      +cx3 = Bool.pick(X.Cx<o>, String.eq(S.Msg.from(m), M.USER()), feed(o, cx2, M.MAIN(), FD.undelivered(S.Msg.to(m), K.BText{S.Msg.id(m)})), cx2)
       take.queued(o, rest, cx3)
 
 def take.owed(-o: S.St, ms: List<&2, S.Msg>, +cx: X.Cx<o>) -> X.Cx<o>:

@@ -155,7 +155,7 @@ def hc_StOk(+s: HS.St, e: HM.Ev) -> Data:
 def hc_GeEv(+s: HS.St, e: HM.Ev) -> Data:
   match e:
     case HM.EMsgSent{+m}:
-      {Nat.is_ge(HS.Msg.id(m), HS.St.next_msg(s)) == True{} : Bool}
+      {Nat.is_ge(HS.Msg.id(HM.msg_of_sent(m)), HS.St.next_msg(s)) == True{} : Bool}
     case _:
       Unit
 
@@ -187,7 +187,7 @@ def hc_apply.go(+e: HM.Ev, +s: HS.St, sp: HI.Split(s), k: hc_GeEv(s, e)) -> hc_S
     case HM.EMsgsMoved{f, t}:
       PC5.hm_split(HS.St.hot(s), HS.St.old(s), HS.St.next_msg(s), f, t, sp)
     case HM.EMsgSent{m}:
-      hc_sent(HS.St.hot(s), HS.St.old(s), HS.St.next_msg(s), m, sp, k)
+      hc_sent(HS.St.hot(s), HS.St.old(s), HS.St.next_msg(s), HM.msg_of_sent(m), sp, k)
     case HM.EMsgState{id, x}:
       hc_ev_op(HS.St.hot(s), HS.St.old(s), HS.St.next_msg(s), id, HM.OSt{x}, sp)
     case HM.ESettled{id}:
@@ -265,7 +265,7 @@ def hc_ge_refl(+n: Nat) -> {Nat.is_ge(n, n) == True{} : Bool}:
 def hc_fresh_ge(+s: HS.St, e: HM.Ev, k: HX.FreshEv(s, e)) -> hc_GeEv(s, e):
   match e:
     case HM.EMsgSent{+m}:
-      %Equal.sym(Nat, HS.Msg.id(m), HS.St.next_msg(s), k) : {Nat.is_ge(_, HS.St.next_msg(s)) == True{} : Bool}
+      %Equal.sym(Nat, HS.Msg.id(HM.msg_of_sent(m)), HS.St.next_msg(s), k) : {Nat.is_ge(_, HS.St.next_msg(s)) == True{} : Bool}
       hc_ge_refl(HS.St.next_msg(s))
     case HM.ETaskCreated{a, b, c, d, f}:
       Unit{}
@@ -449,7 +449,8 @@ def hc_replay_batch(+ms: List<&2, Maybe<&2, HM.Ev>>, +st: HS.St, +i: Nat, +sk: L
 # the one-list event keeps the ids, in order (a new one comes last)
 def hc_kept1(+xs: List<&2, HS.MRec>, e: HM.Ev) -> HI.IsPrefix(HI.ids(xs), HI.ids(HI.apply1(xs, e))):
   match e:
-    case HM.EMsgSent{+m}:
+    case HM.EMsgSent{+sent}:
+      +m = HM.msg_of_sent(sent)
       +r0 = hc_new(m)
       +ys = HM.snoc(HS.MRec, xs, r0)
       PL1.hub_prefix_tr(HI.ids(xs), HI.ids(HI.settle1(HS.Msg.reply_to(m), ys, HS.Msg.from(m))), HM.snoc(Nat, HI.ids(xs), HS.Msg.id(m)),

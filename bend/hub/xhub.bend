@@ -46,27 +46,29 @@ type Fwd is Data:
 def mid(+n: Nat) -> String:
   String.append("m_", Nat.show(n))
 
-def his.go(m: Maybe<&2, S.Msg>, +id: Nat) -> Fwd:
+# `text`: his message's words, as the shell read them from the journal
+# (the request's `orig`, c6: the state keeps no words)
+def his.go(m: Maybe<&2, S.Msg>, +id: Nat, +text: String) -> Fwd:
   match m:
     case None{}:
       FwdErr{String.append("no message ", mid(id))}
     case Some{+msg}:
       Bool.pick(Fwd, String.eq(S.Msg.from(msg), M.USER()) && String.eq(S.Msg.to(msg), M.MAIN()),
-        FwdOk{S.Msg.text(msg)},
+        FwdOk{text},
         FwdErr{String.append(mid(id), " is not a message the user sent you: forward his own words only (your own question: sb project ask)")})
 
-def forward.done(m: Maybe<&2, S.Out>, +s: S.St, +id: Nat) -> Fwd:
+def forward.done(m: Maybe<&2, S.Out>, +s: S.St, +id: Nat, +text: String) -> Fwd:
   match m:
     case Some{+o}:
       FwdErr{String.append(String.append(mid(id), " was already forwarded to "), S.Out.project(o))}
     case None{}:
-      his.go(M.msg_of(s, id), id)
+      his.go(M.msg_of(s, id), id, text)
 
 # `sb project send --input m_<id>` by `from`: only main, only a message
 # the user sent main, once per message (law xhub_forward_needs_his_message)
-def forward(+s: S.St, +from: String, +id: Nat) -> Fwd:
+def forward(+s: S.St, +from: String, +id: Nat, +text: String) -> Fwd:
   Bool.pick(Fwd, String.eq(from, M.MAIN()),
-    forward.done(XH.out_by_msg(S.Xs.outbox(S.St.x(s)), id), s, id),
+    forward.done(XH.out_by_msg(S.Xs.outbox(S.St.x(s)), id), s, id, text),
     FwdErr{"only main forwards to the projects"})
 
 # bise's own question (`sb project ask`): words, never a blank (law
@@ -233,10 +235,10 @@ def via_of(+v: String) -> Maybe<&2, String>:
 
 # his routed words as his plain message to main: id `id` (its own thread),
 # its text, via and parts from the route (core.bend route_said)
-def msg_of_route(+r: S.Route, +id: Nat, +now: Nat) -> S.Msg:
-  +m = S.Msg.with_to(S.Msg.with_from(S.Msg.with_thread(S.Msg.with_id(S.Msg.empty(), id), id), M.USER()), M.MAIN())
-  +m2 = S.Msg.with_plain(S.Msg.with_created(S.Msg.with_text(m, S.Route.text(r)), now), True{})
-  S.Msg.with_parts(S.Msg.with_via(m2, via_of(S.Route.via(r))), S.Route.parts(r))
+def msg_of_route(+r: S.Route, +id: Nat, +now: Nat) -> S.Sent:
+  +m = S.Sent.with_to(S.Sent.with_from(S.Sent.with_thread(S.Sent.with_id(S.Sent.empty(), id), id), M.USER()), M.MAIN())
+  +m2 = S.Sent.with_plain(S.Sent.with_created(S.Sent.with_text(m, S.Route.text(r)), now), True{})
+  S.Sent.with_parts(S.Sent.with_via(m2, via_of(S.Route.via(r))), S.Route.parts(r))
 
 # ---- a held route with no target ----
 # Only an older hub's route model held one (S2 step 5, gone: only his

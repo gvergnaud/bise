@@ -796,18 +796,18 @@ law RSt.opt_journal_round:
 def RSt.opt_journal_round(m):
   RSt.opt_round(m)
 
-# ---- Msg, its journal shape: id, thread, from, to, reply_to, expect_reply, auto, text, created_ms, plain, queued, via, parts, fwd, view ----
+# ---- Msg, its journal shape: id, thread, from, to, reply_to, expect_reply, auto, created_ms, plain, queued, via, has_parts, fwd, view ----
 
 def Msg.journal_kvs(r: S.Msg) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
   match r:
-    case S.Msg{+id, +thread, +from, +to, +reply_to, +expect, +auto, +text, +created, +plain, +queued, +via, +parts, +fwd, +view}:
-      K.cat([[J.kv("id", J.JNum{id}), J.kv("thread", J.JNum{thread}), J.kv("from", J.JStr{from}), J.kv("to", J.JStr{to}), J.kv("reply_to", K.jmaybe_n(reply_to)), J.kv("expect_reply", J.JBool{expect}), J.kv("auto", J.JBool{auto}), J.kv("text", J.JStr{text}), J.kv("created_ms", J.JNum{created}), J.kv("plain", J.JBool{plain}), J.kv("queued", J.JBool{queued})], K.omit_ms("via", via), K.omit_s("parts", parts), K.omit_mn("fwd", fwd), K.omit_ms("view", view)])
+    case S.Msg{+id, +thread, +from, +to, +reply_to, +expect, +auto, +created, +plain, +queued, +via, +has_parts, +fwd, +view}:
+      K.cat([[J.kv("id", J.JNum{id}), J.kv("thread", J.JNum{thread}), J.kv("from", J.JStr{from}), J.kv("to", J.JStr{to}), J.kv("reply_to", K.jmaybe_n(reply_to)), J.kv("expect_reply", J.JBool{expect}), J.kv("auto", J.JBool{auto}), J.kv("created_ms", J.JNum{created}), J.kv("plain", J.JBool{plain}), J.kv("queued", J.JBool{queued})], K.omit_ms("via", via), [J.kv("has_parts", J.JBool{has_parts})], K.omit_mn("fwd", fwd), K.omit_ms("view", view)])
 
 def Msg.journal_json(r: S.Msg) -> J.Json:
   J.obj(Msg.journal_kvs(r))
 
 def Msg.journal_of(+j: J.Json) -> S.Msg:
-  S.Msg{rd.n(J.get(j, "id")), rd.n(J.get(j, "thread")), rd.s(J.get(j, "from")), rd.s(J.get(j, "to")), K.opt_n(J.get(j, "reply_to")), rd.b(J.get(j, "expect_reply")), rd.b(J.get(j, "auto")), rd.s(J.get(j, "text")), rd.n(J.get(j, "created_ms")), rd.b(J.get(j, "plain")), rd.b(J.get(j, "queued")), K.opt_s(J.get(j, "via")), rd.s(J.get(j, "parts")), K.opt_n(J.get(j, "fwd")), K.opt_s(J.get(j, "view"))}
+  S.Msg{rd.n(J.get(j, "id")), rd.n(J.get(j, "thread")), rd.s(J.get(j, "from")), rd.s(J.get(j, "to")), K.opt_n(J.get(j, "reply_to")), rd.b(J.get(j, "expect_reply")), rd.b(J.get(j, "auto")), rd.n(J.get(j, "created_ms")), rd.b(J.get(j, "plain")), rd.b(J.get(j, "queued")), K.opt_s(J.get(j, "via")), rd.b(J.get(j, "has_parts")), K.opt_n(J.get(j, "fwd")), K.opt_s(J.get(j, "view"))}
 
 law Msg.journal.id:
   for +id: Nat
@@ -817,17 +817,16 @@ law Msg.journal.id:
   for +reply_to: Maybe<&2, Nat>
   for +expect: Bool
   for +auto: Bool
-  for +text: String
   for +created: Nat
   for +plain: Bool
   for +queued: Bool
   for +via: Maybe<&2, String>
-  for +parts: String
+  for +has_parts: Bool
   for +fwd: Maybe<&2, Nat>
   for +view: Maybe<&2, String>
-  {rd.n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "id")) == id : Nat}
+  {rd.n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "id")) == id : Nat}
 
-def Msg.journal.id(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view):
+def Msg.journal.id(id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view):
   {==}
 
 law Msg.journal.thread:
@@ -838,17 +837,16 @@ law Msg.journal.thread:
   for +reply_to: Maybe<&2, Nat>
   for +expect: Bool
   for +auto: Bool
-  for +text: String
   for +created: Nat
   for +plain: Bool
   for +queued: Bool
   for +via: Maybe<&2, String>
-  for +parts: String
+  for +has_parts: Bool
   for +fwd: Maybe<&2, Nat>
   for +view: Maybe<&2, String>
-  {rd.n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "thread")) == thread : Nat}
+  {rd.n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "thread")) == thread : Nat}
 
-def Msg.journal.thread(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view):
+def Msg.journal.thread(id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view):
   {==}
 
 law Msg.journal.from:
@@ -859,17 +857,16 @@ law Msg.journal.from:
   for +reply_to: Maybe<&2, Nat>
   for +expect: Bool
   for +auto: Bool
-  for +text: String
   for +created: Nat
   for +plain: Bool
   for +queued: Bool
   for +via: Maybe<&2, String>
-  for +parts: String
+  for +has_parts: Bool
   for +fwd: Maybe<&2, Nat>
   for +view: Maybe<&2, String>
-  {rd.s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "from")) == from : String}
+  {rd.s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "from")) == from : String}
 
-def Msg.journal.from(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view):
+def Msg.journal.from(id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view):
   {==}
 
 law Msg.journal.to:
@@ -880,17 +877,16 @@ law Msg.journal.to:
   for +reply_to: Maybe<&2, Nat>
   for +expect: Bool
   for +auto: Bool
-  for +text: String
   for +created: Nat
   for +plain: Bool
   for +queued: Bool
   for +via: Maybe<&2, String>
-  for +parts: String
+  for +has_parts: Bool
   for +fwd: Maybe<&2, Nat>
   for +view: Maybe<&2, String>
-  {rd.s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "to")) == to : String}
+  {rd.s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "to")) == to : String}
 
-def Msg.journal.to(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view):
+def Msg.journal.to(id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view):
   {==}
 
 law Msg.journal.reply_to:
@@ -901,17 +897,16 @@ law Msg.journal.reply_to:
   for +reply_to: Maybe<&2, Nat>
   for +expect: Bool
   for +auto: Bool
-  for +text: String
   for +created: Nat
   for +plain: Bool
   for +queued: Bool
   for +via: Maybe<&2, String>
-  for +parts: String
+  for +has_parts: Bool
   for +fwd: Maybe<&2, Nat>
   for +view: Maybe<&2, String>
-  {K.opt_n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "reply_to")) == reply_to : Maybe<&2, Nat>}
+  {K.opt_n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "reply_to")) == reply_to : Maybe<&2, Nat>}
 
-def Msg.journal.reply_to(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view):
+def Msg.journal.reply_to(id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view):
   match reply_to:
     case None{}:
       {==}
@@ -926,17 +921,16 @@ law Msg.journal.expect:
   for +reply_to: Maybe<&2, Nat>
   for +expect: Bool
   for +auto: Bool
-  for +text: String
   for +created: Nat
   for +plain: Bool
   for +queued: Bool
   for +via: Maybe<&2, String>
-  for +parts: String
+  for +has_parts: Bool
   for +fwd: Maybe<&2, Nat>
   for +view: Maybe<&2, String>
-  {rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "expect_reply")) == expect : Bool}
+  {rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "expect_reply")) == expect : Bool}
 
-def Msg.journal.expect(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view):
+def Msg.journal.expect(id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view):
   {==}
 
 law Msg.journal.auto:
@@ -947,38 +941,16 @@ law Msg.journal.auto:
   for +reply_to: Maybe<&2, Nat>
   for +expect: Bool
   for +auto: Bool
-  for +text: String
   for +created: Nat
   for +plain: Bool
   for +queued: Bool
   for +via: Maybe<&2, String>
-  for +parts: String
+  for +has_parts: Bool
   for +fwd: Maybe<&2, Nat>
   for +view: Maybe<&2, String>
-  {rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "auto")) == auto : Bool}
+  {rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "auto")) == auto : Bool}
 
-def Msg.journal.auto(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view):
-  {==}
-
-law Msg.journal.text:
-  for +id: Nat
-  for +thread: Nat
-  for +from: String
-  for +to: String
-  for +reply_to: Maybe<&2, Nat>
-  for +expect: Bool
-  for +auto: Bool
-  for +text: String
-  for +created: Nat
-  for +plain: Bool
-  for +queued: Bool
-  for +via: Maybe<&2, String>
-  for +parts: String
-  for +fwd: Maybe<&2, Nat>
-  for +view: Maybe<&2, String>
-  {rd.s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "text")) == text : String}
-
-def Msg.journal.text(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view):
+def Msg.journal.auto(id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view):
   {==}
 
 law Msg.journal.created:
@@ -989,17 +961,16 @@ law Msg.journal.created:
   for +reply_to: Maybe<&2, Nat>
   for +expect: Bool
   for +auto: Bool
-  for +text: String
   for +created: Nat
   for +plain: Bool
   for +queued: Bool
   for +via: Maybe<&2, String>
-  for +parts: String
+  for +has_parts: Bool
   for +fwd: Maybe<&2, Nat>
   for +view: Maybe<&2, String>
-  {rd.n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "created_ms")) == created : Nat}
+  {rd.n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "created_ms")) == created : Nat}
 
-def Msg.journal.created(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view):
+def Msg.journal.created(id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view):
   {==}
 
 law Msg.journal.plain:
@@ -1010,17 +981,16 @@ law Msg.journal.plain:
   for +reply_to: Maybe<&2, Nat>
   for +expect: Bool
   for +auto: Bool
-  for +text: String
   for +created: Nat
   for +plain: Bool
   for +queued: Bool
   for +via: Maybe<&2, String>
-  for +parts: String
+  for +has_parts: Bool
   for +fwd: Maybe<&2, Nat>
   for +view: Maybe<&2, String>
-  {rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "plain")) == plain : Bool}
+  {rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "plain")) == plain : Bool}
 
-def Msg.journal.plain(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view):
+def Msg.journal.plain(id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view):
   {==}
 
 law Msg.journal.queued:
@@ -1031,17 +1001,16 @@ law Msg.journal.queued:
   for +reply_to: Maybe<&2, Nat>
   for +expect: Bool
   for +auto: Bool
-  for +text: String
   for +created: Nat
   for +plain: Bool
   for +queued: Bool
   for +via: Maybe<&2, String>
-  for +parts: String
+  for +has_parts: Bool
   for +fwd: Maybe<&2, Nat>
   for +view: Maybe<&2, String>
-  {rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "queued")) == queued : Bool}
+  {rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "queued")) == queued : Bool}
 
-def Msg.journal.queued(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view):
+def Msg.journal.queued(id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view):
   {==}
 
 law Msg.journal.via:
@@ -1052,27 +1021,158 @@ law Msg.journal.via:
   for +reply_to: Maybe<&2, Nat>
   for +expect: Bool
   for +auto: Bool
-  for +text: String
   for +created: Nat
   for +plain: Bool
   for +queued: Bool
   for +via: Maybe<&2, String>
-  for +parts: String
+  for +has_parts: Bool
   for +fwd: Maybe<&2, Nat>
   for +view: Maybe<&2, String>
-  {K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "via")) == via : Maybe<&2, String>}
+  {K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "via")) == via : Maybe<&2, String>}
 
-def Msg.journal.via(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view):
+def Msg.journal.via(id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view):
   match via:
     case None{}:
-      %skip_s("parts", parts, [K.omit_mn("fwd", fwd), K.omit_ms("view", view)], "via", {==}) : {K.opt_s(_) == None{} : Maybe<&2, String>}
       %skip_mn("fwd", fwd, [K.omit_ms("view", view)], "via", {==}) : {K.opt_s(_) == None{} : Maybe<&2, String>}
       %skip_ms("view", view, [], "via", {==}) : {K.opt_s(_) == None{} : Maybe<&2, String>}
       {==}
     case Some{via_x}:
       {==}
 
-law Msg.journal.parts:
+law Msg.journal.has_parts:
+  for +id: Nat
+  for +thread: Nat
+  for +from: String
+  for +to: String
+  for +reply_to: Maybe<&2, Nat>
+  for +expect: Bool
+  for +auto: Bool
+  for +created: Nat
+  for +plain: Bool
+  for +queued: Bool
+  for +via: Maybe<&2, String>
+  for +has_parts: Bool
+  for +fwd: Maybe<&2, Nat>
+  for +view: Maybe<&2, String>
+  {rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "has_parts")) == has_parts : Bool}
+
+def Msg.journal.has_parts(id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view):
+  %skip_ms("via", via, [[J.kv("has_parts", J.JBool{has_parts})], K.omit_mn("fwd", fwd), K.omit_ms("view", view)], "has_parts", {==}) : {rd.b(_) == has_parts : Bool}
+  {==}
+
+law Msg.journal.fwd:
+  for +id: Nat
+  for +thread: Nat
+  for +from: String
+  for +to: String
+  for +reply_to: Maybe<&2, Nat>
+  for +expect: Bool
+  for +auto: Bool
+  for +created: Nat
+  for +plain: Bool
+  for +queued: Bool
+  for +via: Maybe<&2, String>
+  for +has_parts: Bool
+  for +fwd: Maybe<&2, Nat>
+  for +view: Maybe<&2, String>
+  {K.opt_n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "fwd")) == fwd : Maybe<&2, Nat>}
+
+def Msg.journal.fwd(id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view):
+  match fwd:
+    case None{}:
+      %skip_ms("via", via, [[J.kv("has_parts", J.JBool{has_parts})], K.omit_mn("fwd", None{}), K.omit_ms("view", view)], "fwd", {==}) : {K.opt_n(_) == None{} : Maybe<&2, Nat>}
+      %skip_ms("view", view, [], "fwd", {==}) : {K.opt_n(_) == None{} : Maybe<&2, Nat>}
+      {==}
+    case Some{fwd_x}:
+      %skip_ms("via", via, [[J.kv("has_parts", J.JBool{has_parts})], K.omit_mn("fwd", Some{fwd_x}), K.omit_ms("view", view)], "fwd", {==}) : {K.opt_n(_) == Some{fwd_x} : Maybe<&2, Nat>}
+      {==}
+
+law Msg.journal.view:
+  for +id: Nat
+  for +thread: Nat
+  for +from: String
+  for +to: String
+  for +reply_to: Maybe<&2, Nat>
+  for +expect: Bool
+  for +auto: Bool
+  for +created: Nat
+  for +plain: Bool
+  for +queued: Bool
+  for +via: Maybe<&2, String>
+  for +has_parts: Bool
+  for +fwd: Maybe<&2, Nat>
+  for +view: Maybe<&2, String>
+  {K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "view")) == view : Maybe<&2, String>}
+
+def Msg.journal.view(id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view):
+  match view:
+    case None{}:
+      %skip_ms("via", via, [[J.kv("has_parts", J.JBool{has_parts})], K.omit_mn("fwd", fwd), K.omit_ms("view", None{})], "view", {==}) : {K.opt_s(_) == None{} : Maybe<&2, String>}
+      %skip_mn("fwd", fwd, [K.omit_ms("view", None{})], "view", {==}) : {K.opt_s(_) == None{} : Maybe<&2, String>}
+      {==}
+    case Some{view_x}:
+      %skip_ms("via", via, [[J.kv("has_parts", J.JBool{has_parts})], K.omit_mn("fwd", fwd), K.omit_ms("view", Some{view_x})], "view", {==}) : {K.opt_s(_) == Some{view_x} : Maybe<&2, String>}
+      %skip_mn("fwd", fwd, [K.omit_ms("view", Some{view_x})], "view", {==}) : {K.opt_s(_) == Some{view_x} : Maybe<&2, String>}
+      {==}
+
+# the fields it carries come back (the others at their default)
+law Msg.journal_round_by_fields:
+  for +id: Nat
+  for +thread: Nat
+  for +from: String
+  for +to: String
+  for +reply_to: Maybe<&2, Nat>
+  for +expect: Bool
+  for +auto: Bool
+  for +created: Nat
+  for +plain: Bool
+  for +queued: Bool
+  for +via: Maybe<&2, String>
+  for +has_parts: Bool
+  for +fwd: Maybe<&2, Nat>
+  for +view: Maybe<&2, String>
+  {Msg.journal_of(Msg.journal_json(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})) == S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view} : S.Msg}
+
+def Msg.journal_round_by_fields(id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view):
+  %Equal.sym(Nat, rd.n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "id")), id, Msg.journal.id(id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view)) : {S.Msg{_, rd.n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "thread")), rd.s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "from")), rd.s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "to")), K.opt_n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "reply_to")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "expect_reply")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "auto")), rd.n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "created_ms")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "plain")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "queued")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "via")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "has_parts")), K.opt_n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "fwd")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "view"))} == S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view} : S.Msg}
+  %Equal.sym(Nat, rd.n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "thread")), thread, Msg.journal.thread(id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view)) : {S.Msg{id, _, rd.s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "from")), rd.s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "to")), K.opt_n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "reply_to")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "expect_reply")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "auto")), rd.n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "created_ms")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "plain")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "queued")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "via")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "has_parts")), K.opt_n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "fwd")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "view"))} == S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view} : S.Msg}
+  %Equal.sym(String, rd.s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "from")), from, Msg.journal.from(id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view)) : {S.Msg{id, thread, _, rd.s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "to")), K.opt_n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "reply_to")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "expect_reply")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "auto")), rd.n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "created_ms")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "plain")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "queued")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "via")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "has_parts")), K.opt_n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "fwd")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "view"))} == S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view} : S.Msg}
+  %Equal.sym(String, rd.s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "to")), to, Msg.journal.to(id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view)) : {S.Msg{id, thread, from, _, K.opt_n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "reply_to")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "expect_reply")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "auto")), rd.n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "created_ms")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "plain")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "queued")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "via")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "has_parts")), K.opt_n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "fwd")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "view"))} == S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view} : S.Msg}
+  %Equal.sym(Maybe<&2, Nat>, K.opt_n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "reply_to")), reply_to, Msg.journal.reply_to(id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view)) : {S.Msg{id, thread, from, to, _, rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "expect_reply")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "auto")), rd.n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "created_ms")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "plain")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "queued")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "via")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "has_parts")), K.opt_n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "fwd")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "view"))} == S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view} : S.Msg}
+  %Equal.sym(Bool, rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "expect_reply")), expect, Msg.journal.expect(id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view)) : {S.Msg{id, thread, from, to, reply_to, _, rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "auto")), rd.n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "created_ms")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "plain")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "queued")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "via")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "has_parts")), K.opt_n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "fwd")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "view"))} == S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view} : S.Msg}
+  %Equal.sym(Bool, rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "auto")), auto, Msg.journal.auto(id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view)) : {S.Msg{id, thread, from, to, reply_to, expect, _, rd.n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "created_ms")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "plain")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "queued")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "via")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "has_parts")), K.opt_n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "fwd")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "view"))} == S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view} : S.Msg}
+  %Equal.sym(Nat, rd.n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "created_ms")), created, Msg.journal.created(id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view)) : {S.Msg{id, thread, from, to, reply_to, expect, auto, _, rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "plain")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "queued")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "via")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "has_parts")), K.opt_n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "fwd")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "view"))} == S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view} : S.Msg}
+  %Equal.sym(Bool, rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "plain")), plain, Msg.journal.plain(id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view)) : {S.Msg{id, thread, from, to, reply_to, expect, auto, created, _, rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "queued")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "via")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "has_parts")), K.opt_n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "fwd")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "view"))} == S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view} : S.Msg}
+  %Equal.sym(Bool, rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "queued")), queued, Msg.journal.queued(id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view)) : {S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, _, K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "via")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "has_parts")), K.opt_n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "fwd")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "view"))} == S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view} : S.Msg}
+  %Equal.sym(Maybe<&2, String>, K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "via")), via, Msg.journal.via(id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view)) : {S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, _, rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "has_parts")), K.opt_n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "fwd")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "view"))} == S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view} : S.Msg}
+  %Equal.sym(Bool, rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "has_parts")), has_parts, Msg.journal.has_parts(id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view)) : {S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, _, K.opt_n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "fwd")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "view"))} == S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view} : S.Msg}
+  %Equal.sym(Maybe<&2, Nat>, K.opt_n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "fwd")), fwd, Msg.journal.fwd(id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view)) : {S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, _, K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "view"))} == S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view} : S.Msg}
+  %Equal.sym(Maybe<&2, String>, K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view})), "view")), view, Msg.journal.view(id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view)) : {S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, _} == S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view} : S.Msg}
+  {==}
+
+law Msg.journal_round:
+  for x: S.Msg
+  {Msg.journal_of(Msg.journal_json(x)) == x : S.Msg}
+
+def Msg.journal_round(x):
+  match x:
+    case S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view}:
+      Msg.journal_round_by_fields(id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has_parts, fwd, view)
+
+# ---- Sent, its journal shape: id, thread, from, to, reply_to, expect_reply, auto, text, created_ms, plain, queued, via, parts, fwd, view ----
+
+def Sent.journal_kvs(r: S.Sent) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
+  match r:
+    case S.Sent{+id, +thread, +from, +to, +reply_to, +expect, +auto, +text, +created, +plain, +queued, +via, +parts, +fwd, +view}:
+      K.cat([[J.kv("id", J.JNum{id}), J.kv("thread", J.JNum{thread}), J.kv("from", J.JStr{from}), J.kv("to", J.JStr{to}), J.kv("reply_to", K.jmaybe_n(reply_to)), J.kv("expect_reply", J.JBool{expect}), J.kv("auto", J.JBool{auto}), J.kv("text", J.JStr{text}), J.kv("created_ms", J.JNum{created}), J.kv("plain", J.JBool{plain}), J.kv("queued", J.JBool{queued})], K.omit_ms("via", via), K.omit_s("parts", parts), K.omit_mn("fwd", fwd), K.omit_ms("view", view)])
+
+def Sent.journal_json(r: S.Sent) -> J.Json:
+  J.obj(Sent.journal_kvs(r))
+
+def Sent.journal_of(+j: J.Json) -> S.Sent:
+  S.Sent{rd.n(J.get(j, "id")), rd.n(J.get(j, "thread")), rd.s(J.get(j, "from")), rd.s(J.get(j, "to")), K.opt_n(J.get(j, "reply_to")), rd.b(J.get(j, "expect_reply")), rd.b(J.get(j, "auto")), rd.s(J.get(j, "text")), rd.n(J.get(j, "created_ms")), rd.b(J.get(j, "plain")), rd.b(J.get(j, "queued")), K.opt_s(J.get(j, "via")), rd.s(J.get(j, "parts")), K.opt_n(J.get(j, "fwd")), K.opt_s(J.get(j, "view"))}
+
+law Sent.journal.id:
   for +id: Nat
   for +thread: Nat
   for +from: String
@@ -1088,9 +1188,272 @@ law Msg.journal.parts:
   for +parts: String
   for +fwd: Maybe<&2, Nat>
   for +view: Maybe<&2, String>
-  {rd.s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "parts")) == parts : String}
+  {rd.n(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "id")) == id : Nat}
 
-def Msg.journal.parts(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view):
+def Sent.journal.id(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view):
+  {==}
+
+law Sent.journal.thread:
+  for +id: Nat
+  for +thread: Nat
+  for +from: String
+  for +to: String
+  for +reply_to: Maybe<&2, Nat>
+  for +expect: Bool
+  for +auto: Bool
+  for +text: String
+  for +created: Nat
+  for +plain: Bool
+  for +queued: Bool
+  for +via: Maybe<&2, String>
+  for +parts: String
+  for +fwd: Maybe<&2, Nat>
+  for +view: Maybe<&2, String>
+  {rd.n(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "thread")) == thread : Nat}
+
+def Sent.journal.thread(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view):
+  {==}
+
+law Sent.journal.from:
+  for +id: Nat
+  for +thread: Nat
+  for +from: String
+  for +to: String
+  for +reply_to: Maybe<&2, Nat>
+  for +expect: Bool
+  for +auto: Bool
+  for +text: String
+  for +created: Nat
+  for +plain: Bool
+  for +queued: Bool
+  for +via: Maybe<&2, String>
+  for +parts: String
+  for +fwd: Maybe<&2, Nat>
+  for +view: Maybe<&2, String>
+  {rd.s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "from")) == from : String}
+
+def Sent.journal.from(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view):
+  {==}
+
+law Sent.journal.to:
+  for +id: Nat
+  for +thread: Nat
+  for +from: String
+  for +to: String
+  for +reply_to: Maybe<&2, Nat>
+  for +expect: Bool
+  for +auto: Bool
+  for +text: String
+  for +created: Nat
+  for +plain: Bool
+  for +queued: Bool
+  for +via: Maybe<&2, String>
+  for +parts: String
+  for +fwd: Maybe<&2, Nat>
+  for +view: Maybe<&2, String>
+  {rd.s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "to")) == to : String}
+
+def Sent.journal.to(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view):
+  {==}
+
+law Sent.journal.reply_to:
+  for +id: Nat
+  for +thread: Nat
+  for +from: String
+  for +to: String
+  for +reply_to: Maybe<&2, Nat>
+  for +expect: Bool
+  for +auto: Bool
+  for +text: String
+  for +created: Nat
+  for +plain: Bool
+  for +queued: Bool
+  for +via: Maybe<&2, String>
+  for +parts: String
+  for +fwd: Maybe<&2, Nat>
+  for +view: Maybe<&2, String>
+  {K.opt_n(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "reply_to")) == reply_to : Maybe<&2, Nat>}
+
+def Sent.journal.reply_to(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view):
+  match reply_to:
+    case None{}:
+      {==}
+    case Some{reply_to_x}:
+      {==}
+
+law Sent.journal.expect:
+  for +id: Nat
+  for +thread: Nat
+  for +from: String
+  for +to: String
+  for +reply_to: Maybe<&2, Nat>
+  for +expect: Bool
+  for +auto: Bool
+  for +text: String
+  for +created: Nat
+  for +plain: Bool
+  for +queued: Bool
+  for +via: Maybe<&2, String>
+  for +parts: String
+  for +fwd: Maybe<&2, Nat>
+  for +view: Maybe<&2, String>
+  {rd.b(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "expect_reply")) == expect : Bool}
+
+def Sent.journal.expect(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view):
+  {==}
+
+law Sent.journal.auto:
+  for +id: Nat
+  for +thread: Nat
+  for +from: String
+  for +to: String
+  for +reply_to: Maybe<&2, Nat>
+  for +expect: Bool
+  for +auto: Bool
+  for +text: String
+  for +created: Nat
+  for +plain: Bool
+  for +queued: Bool
+  for +via: Maybe<&2, String>
+  for +parts: String
+  for +fwd: Maybe<&2, Nat>
+  for +view: Maybe<&2, String>
+  {rd.b(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "auto")) == auto : Bool}
+
+def Sent.journal.auto(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view):
+  {==}
+
+law Sent.journal.text:
+  for +id: Nat
+  for +thread: Nat
+  for +from: String
+  for +to: String
+  for +reply_to: Maybe<&2, Nat>
+  for +expect: Bool
+  for +auto: Bool
+  for +text: String
+  for +created: Nat
+  for +plain: Bool
+  for +queued: Bool
+  for +via: Maybe<&2, String>
+  for +parts: String
+  for +fwd: Maybe<&2, Nat>
+  for +view: Maybe<&2, String>
+  {rd.s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "text")) == text : String}
+
+def Sent.journal.text(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view):
+  {==}
+
+law Sent.journal.created:
+  for +id: Nat
+  for +thread: Nat
+  for +from: String
+  for +to: String
+  for +reply_to: Maybe<&2, Nat>
+  for +expect: Bool
+  for +auto: Bool
+  for +text: String
+  for +created: Nat
+  for +plain: Bool
+  for +queued: Bool
+  for +via: Maybe<&2, String>
+  for +parts: String
+  for +fwd: Maybe<&2, Nat>
+  for +view: Maybe<&2, String>
+  {rd.n(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "created_ms")) == created : Nat}
+
+def Sent.journal.created(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view):
+  {==}
+
+law Sent.journal.plain:
+  for +id: Nat
+  for +thread: Nat
+  for +from: String
+  for +to: String
+  for +reply_to: Maybe<&2, Nat>
+  for +expect: Bool
+  for +auto: Bool
+  for +text: String
+  for +created: Nat
+  for +plain: Bool
+  for +queued: Bool
+  for +via: Maybe<&2, String>
+  for +parts: String
+  for +fwd: Maybe<&2, Nat>
+  for +view: Maybe<&2, String>
+  {rd.b(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "plain")) == plain : Bool}
+
+def Sent.journal.plain(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view):
+  {==}
+
+law Sent.journal.queued:
+  for +id: Nat
+  for +thread: Nat
+  for +from: String
+  for +to: String
+  for +reply_to: Maybe<&2, Nat>
+  for +expect: Bool
+  for +auto: Bool
+  for +text: String
+  for +created: Nat
+  for +plain: Bool
+  for +queued: Bool
+  for +via: Maybe<&2, String>
+  for +parts: String
+  for +fwd: Maybe<&2, Nat>
+  for +view: Maybe<&2, String>
+  {rd.b(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "queued")) == queued : Bool}
+
+def Sent.journal.queued(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view):
+  {==}
+
+law Sent.journal.via:
+  for +id: Nat
+  for +thread: Nat
+  for +from: String
+  for +to: String
+  for +reply_to: Maybe<&2, Nat>
+  for +expect: Bool
+  for +auto: Bool
+  for +text: String
+  for +created: Nat
+  for +plain: Bool
+  for +queued: Bool
+  for +via: Maybe<&2, String>
+  for +parts: String
+  for +fwd: Maybe<&2, Nat>
+  for +view: Maybe<&2, String>
+  {K.opt_s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "via")) == via : Maybe<&2, String>}
+
+def Sent.journal.via(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view):
+  match via:
+    case None{}:
+      %skip_s("parts", parts, [K.omit_mn("fwd", fwd), K.omit_ms("view", view)], "via", {==}) : {K.opt_s(_) == None{} : Maybe<&2, String>}
+      %skip_mn("fwd", fwd, [K.omit_ms("view", view)], "via", {==}) : {K.opt_s(_) == None{} : Maybe<&2, String>}
+      %skip_ms("view", view, [], "via", {==}) : {K.opt_s(_) == None{} : Maybe<&2, String>}
+      {==}
+    case Some{via_x}:
+      {==}
+
+law Sent.journal.parts:
+  for +id: Nat
+  for +thread: Nat
+  for +from: String
+  for +to: String
+  for +reply_to: Maybe<&2, Nat>
+  for +expect: Bool
+  for +auto: Bool
+  for +text: String
+  for +created: Nat
+  for +plain: Bool
+  for +queued: Bool
+  for +via: Maybe<&2, String>
+  for +parts: String
+  for +fwd: Maybe<&2, Nat>
+  for +view: Maybe<&2, String>
+  {rd.s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "parts")) == parts : String}
+
+def Sent.journal.parts(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view):
   match parts:
     case SNil{}:
       %skip_ms("via", via, [K.omit_s("parts", SNil{}), K.omit_mn("fwd", fwd), K.omit_ms("view", view)], "parts", {==}) : {rd.s(_) == SNil{} : String}
@@ -1101,7 +1464,7 @@ def Msg.journal.parts(id, thread, from, to, reply_to, expect, auto, text, create
       %skip_ms("via", via, [K.omit_s("parts", SCon{parts_h, parts_t}), K.omit_mn("fwd", fwd), K.omit_ms("view", view)], "parts", {==}) : {rd.s(_) == SCon{parts_h, parts_t} : String}
       {==}
 
-law Msg.journal.fwd:
+law Sent.journal.fwd:
   for +id: Nat
   for +thread: Nat
   for +from: String
@@ -1117,9 +1480,9 @@ law Msg.journal.fwd:
   for +parts: String
   for +fwd: Maybe<&2, Nat>
   for +view: Maybe<&2, String>
-  {K.opt_n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "fwd")) == fwd : Maybe<&2, Nat>}
+  {K.opt_n(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "fwd")) == fwd : Maybe<&2, Nat>}
 
-def Msg.journal.fwd(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view):
+def Sent.journal.fwd(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view):
   match fwd:
     case None{}:
       %skip_ms("via", via, [K.omit_s("parts", parts), K.omit_mn("fwd", None{}), K.omit_ms("view", view)], "fwd", {==}) : {K.opt_n(_) == None{} : Maybe<&2, Nat>}
@@ -1131,7 +1494,7 @@ def Msg.journal.fwd(id, thread, from, to, reply_to, expect, auto, text, created,
       %skip_s("parts", parts, [K.omit_mn("fwd", Some{fwd_x}), K.omit_ms("view", view)], "fwd", {==}) : {K.opt_n(_) == Some{fwd_x} : Maybe<&2, Nat>}
       {==}
 
-law Msg.journal.view:
+law Sent.journal.view:
   for +id: Nat
   for +thread: Nat
   for +from: String
@@ -1147,9 +1510,9 @@ law Msg.journal.view:
   for +parts: String
   for +fwd: Maybe<&2, Nat>
   for +view: Maybe<&2, String>
-  {K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "view")) == view : Maybe<&2, String>}
+  {K.opt_s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "view")) == view : Maybe<&2, String>}
 
-def Msg.journal.view(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view):
+def Sent.journal.view(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view):
   match view:
     case None{}:
       %skip_ms("via", via, [K.omit_s("parts", parts), K.omit_mn("fwd", fwd), K.omit_ms("view", None{})], "view", {==}) : {K.opt_s(_) == None{} : Maybe<&2, String>}
@@ -1163,7 +1526,7 @@ def Msg.journal.view(id, thread, from, to, reply_to, expect, auto, text, created
       {==}
 
 # the fields it carries come back (the others at their default)
-law Msg.journal_round_by_fields:
+law Sent.journal_round_by_fields:
   for +id: Nat
   for +thread: Nat
   for +from: String
@@ -1179,34 +1542,34 @@ law Msg.journal_round_by_fields:
   for +parts: String
   for +fwd: Maybe<&2, Nat>
   for +view: Maybe<&2, String>
-  {Msg.journal_of(Msg.journal_json(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})) == S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view} : S.Msg}
+  {Sent.journal_of(Sent.journal_json(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})) == S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view} : S.Sent}
 
-def Msg.journal_round_by_fields(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view):
-  %Equal.sym(Nat, rd.n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "id")), id, Msg.journal.id(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view)) : {S.Msg{_, rd.n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "thread")), rd.s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "from")), rd.s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "to")), K.opt_n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "reply_to")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "expect_reply")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "auto")), rd.s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "text")), rd.n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "created_ms")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "plain")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "queued")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "via")), rd.s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "parts")), K.opt_n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "fwd")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "view"))} == S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view} : S.Msg}
-  %Equal.sym(Nat, rd.n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "thread")), thread, Msg.journal.thread(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view)) : {S.Msg{id, _, rd.s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "from")), rd.s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "to")), K.opt_n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "reply_to")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "expect_reply")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "auto")), rd.s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "text")), rd.n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "created_ms")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "plain")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "queued")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "via")), rd.s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "parts")), K.opt_n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "fwd")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "view"))} == S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view} : S.Msg}
-  %Equal.sym(String, rd.s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "from")), from, Msg.journal.from(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view)) : {S.Msg{id, thread, _, rd.s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "to")), K.opt_n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "reply_to")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "expect_reply")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "auto")), rd.s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "text")), rd.n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "created_ms")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "plain")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "queued")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "via")), rd.s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "parts")), K.opt_n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "fwd")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "view"))} == S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view} : S.Msg}
-  %Equal.sym(String, rd.s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "to")), to, Msg.journal.to(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view)) : {S.Msg{id, thread, from, _, K.opt_n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "reply_to")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "expect_reply")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "auto")), rd.s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "text")), rd.n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "created_ms")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "plain")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "queued")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "via")), rd.s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "parts")), K.opt_n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "fwd")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "view"))} == S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view} : S.Msg}
-  %Equal.sym(Maybe<&2, Nat>, K.opt_n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "reply_to")), reply_to, Msg.journal.reply_to(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view)) : {S.Msg{id, thread, from, to, _, rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "expect_reply")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "auto")), rd.s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "text")), rd.n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "created_ms")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "plain")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "queued")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "via")), rd.s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "parts")), K.opt_n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "fwd")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "view"))} == S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view} : S.Msg}
-  %Equal.sym(Bool, rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "expect_reply")), expect, Msg.journal.expect(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view)) : {S.Msg{id, thread, from, to, reply_to, _, rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "auto")), rd.s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "text")), rd.n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "created_ms")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "plain")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "queued")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "via")), rd.s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "parts")), K.opt_n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "fwd")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "view"))} == S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view} : S.Msg}
-  %Equal.sym(Bool, rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "auto")), auto, Msg.journal.auto(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view)) : {S.Msg{id, thread, from, to, reply_to, expect, _, rd.s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "text")), rd.n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "created_ms")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "plain")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "queued")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "via")), rd.s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "parts")), K.opt_n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "fwd")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "view"))} == S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view} : S.Msg}
-  %Equal.sym(String, rd.s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "text")), text, Msg.journal.text(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view)) : {S.Msg{id, thread, from, to, reply_to, expect, auto, _, rd.n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "created_ms")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "plain")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "queued")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "via")), rd.s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "parts")), K.opt_n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "fwd")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "view"))} == S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view} : S.Msg}
-  %Equal.sym(Nat, rd.n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "created_ms")), created, Msg.journal.created(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view)) : {S.Msg{id, thread, from, to, reply_to, expect, auto, text, _, rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "plain")), rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "queued")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "via")), rd.s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "parts")), K.opt_n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "fwd")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "view"))} == S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view} : S.Msg}
-  %Equal.sym(Bool, rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "plain")), plain, Msg.journal.plain(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view)) : {S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, _, rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "queued")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "via")), rd.s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "parts")), K.opt_n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "fwd")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "view"))} == S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view} : S.Msg}
-  %Equal.sym(Bool, rd.b(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "queued")), queued, Msg.journal.queued(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view)) : {S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, _, K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "via")), rd.s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "parts")), K.opt_n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "fwd")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "view"))} == S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view} : S.Msg}
-  %Equal.sym(Maybe<&2, String>, K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "via")), via, Msg.journal.via(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view)) : {S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, _, rd.s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "parts")), K.opt_n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "fwd")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "view"))} == S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view} : S.Msg}
-  %Equal.sym(String, rd.s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "parts")), parts, Msg.journal.parts(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view)) : {S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, _, K.opt_n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "fwd")), K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "view"))} == S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view} : S.Msg}
-  %Equal.sym(Maybe<&2, Nat>, K.opt_n(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "fwd")), fwd, Msg.journal.fwd(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view)) : {S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, _, K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "view"))} == S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view} : S.Msg}
-  %Equal.sym(Maybe<&2, String>, K.opt_s(J.get(J.obj(Msg.journal_kvs(S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "view")), view, Msg.journal.view(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view)) : {S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, _} == S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view} : S.Msg}
+def Sent.journal_round_by_fields(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view):
+  %Equal.sym(Nat, rd.n(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "id")), id, Sent.journal.id(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view)) : {S.Sent{_, rd.n(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "thread")), rd.s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "from")), rd.s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "to")), K.opt_n(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "reply_to")), rd.b(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "expect_reply")), rd.b(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "auto")), rd.s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "text")), rd.n(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "created_ms")), rd.b(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "plain")), rd.b(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "queued")), K.opt_s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "via")), rd.s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "parts")), K.opt_n(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "fwd")), K.opt_s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "view"))} == S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view} : S.Sent}
+  %Equal.sym(Nat, rd.n(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "thread")), thread, Sent.journal.thread(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view)) : {S.Sent{id, _, rd.s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "from")), rd.s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "to")), K.opt_n(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "reply_to")), rd.b(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "expect_reply")), rd.b(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "auto")), rd.s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "text")), rd.n(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "created_ms")), rd.b(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "plain")), rd.b(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "queued")), K.opt_s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "via")), rd.s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "parts")), K.opt_n(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "fwd")), K.opt_s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "view"))} == S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view} : S.Sent}
+  %Equal.sym(String, rd.s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "from")), from, Sent.journal.from(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view)) : {S.Sent{id, thread, _, rd.s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "to")), K.opt_n(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "reply_to")), rd.b(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "expect_reply")), rd.b(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "auto")), rd.s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "text")), rd.n(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "created_ms")), rd.b(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "plain")), rd.b(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "queued")), K.opt_s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "via")), rd.s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "parts")), K.opt_n(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "fwd")), K.opt_s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "view"))} == S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view} : S.Sent}
+  %Equal.sym(String, rd.s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "to")), to, Sent.journal.to(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view)) : {S.Sent{id, thread, from, _, K.opt_n(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "reply_to")), rd.b(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "expect_reply")), rd.b(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "auto")), rd.s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "text")), rd.n(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "created_ms")), rd.b(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "plain")), rd.b(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "queued")), K.opt_s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "via")), rd.s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "parts")), K.opt_n(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "fwd")), K.opt_s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "view"))} == S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view} : S.Sent}
+  %Equal.sym(Maybe<&2, Nat>, K.opt_n(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "reply_to")), reply_to, Sent.journal.reply_to(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view)) : {S.Sent{id, thread, from, to, _, rd.b(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "expect_reply")), rd.b(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "auto")), rd.s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "text")), rd.n(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "created_ms")), rd.b(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "plain")), rd.b(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "queued")), K.opt_s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "via")), rd.s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "parts")), K.opt_n(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "fwd")), K.opt_s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "view"))} == S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view} : S.Sent}
+  %Equal.sym(Bool, rd.b(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "expect_reply")), expect, Sent.journal.expect(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view)) : {S.Sent{id, thread, from, to, reply_to, _, rd.b(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "auto")), rd.s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "text")), rd.n(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "created_ms")), rd.b(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "plain")), rd.b(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "queued")), K.opt_s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "via")), rd.s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "parts")), K.opt_n(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "fwd")), K.opt_s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "view"))} == S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view} : S.Sent}
+  %Equal.sym(Bool, rd.b(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "auto")), auto, Sent.journal.auto(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view)) : {S.Sent{id, thread, from, to, reply_to, expect, _, rd.s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "text")), rd.n(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "created_ms")), rd.b(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "plain")), rd.b(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "queued")), K.opt_s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "via")), rd.s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "parts")), K.opt_n(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "fwd")), K.opt_s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "view"))} == S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view} : S.Sent}
+  %Equal.sym(String, rd.s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "text")), text, Sent.journal.text(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view)) : {S.Sent{id, thread, from, to, reply_to, expect, auto, _, rd.n(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "created_ms")), rd.b(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "plain")), rd.b(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "queued")), K.opt_s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "via")), rd.s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "parts")), K.opt_n(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "fwd")), K.opt_s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "view"))} == S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view} : S.Sent}
+  %Equal.sym(Nat, rd.n(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "created_ms")), created, Sent.journal.created(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view)) : {S.Sent{id, thread, from, to, reply_to, expect, auto, text, _, rd.b(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "plain")), rd.b(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "queued")), K.opt_s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "via")), rd.s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "parts")), K.opt_n(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "fwd")), K.opt_s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "view"))} == S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view} : S.Sent}
+  %Equal.sym(Bool, rd.b(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "plain")), plain, Sent.journal.plain(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view)) : {S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, _, rd.b(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "queued")), K.opt_s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "via")), rd.s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "parts")), K.opt_n(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "fwd")), K.opt_s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "view"))} == S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view} : S.Sent}
+  %Equal.sym(Bool, rd.b(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "queued")), queued, Sent.journal.queued(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view)) : {S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, _, K.opt_s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "via")), rd.s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "parts")), K.opt_n(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "fwd")), K.opt_s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "view"))} == S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view} : S.Sent}
+  %Equal.sym(Maybe<&2, String>, K.opt_s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "via")), via, Sent.journal.via(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view)) : {S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, _, rd.s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "parts")), K.opt_n(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "fwd")), K.opt_s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "view"))} == S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view} : S.Sent}
+  %Equal.sym(String, rd.s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "parts")), parts, Sent.journal.parts(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view)) : {S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, _, K.opt_n(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "fwd")), K.opt_s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "view"))} == S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view} : S.Sent}
+  %Equal.sym(Maybe<&2, Nat>, K.opt_n(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "fwd")), fwd, Sent.journal.fwd(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view)) : {S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, _, K.opt_s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "view"))} == S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view} : S.Sent}
+  %Equal.sym(Maybe<&2, String>, K.opt_s(J.get(J.obj(Sent.journal_kvs(S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view})), "view")), view, Sent.journal.view(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view)) : {S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, _} == S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view} : S.Sent}
   {==}
 
-law Msg.journal_round:
-  for x: S.Msg
-  {Msg.journal_of(Msg.journal_json(x)) == x : S.Msg}
+law Sent.journal_round:
+  for x: S.Sent
+  {Sent.journal_of(Sent.journal_json(x)) == x : S.Sent}
 
-def Msg.journal_round(x):
+def Sent.journal_round(x):
   match x:
-    case S.Msg{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view}:
-      Msg.journal_round_by_fields(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view)
+    case S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view}:
+      Sent.journal_round_by_fields(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view)
 
 # ---- MRec, its photo shape: msg, st, settled ----
 
@@ -5165,7 +5528,7 @@ def WatchEnd.view_pinned():
 # ---- missing keys read their defaults, pinned on fixtures/core_state_defaults.jsonl (Rust reads the same lines) ----
 
 law Msg.defaults_pinned_0:
-  {Msg.journal_json(Msg.journal_of(J.obj([J.kv("id", J.JNum{9n}), J.kv("thread", J.JNum{9n}), J.kv("from", J.JStr{"user"}), J.kv("to", J.JStr{"main"}), J.kv("queued", J.JNum{1n})]))) == J.obj([J.kv("id", J.JNum{9n}), J.kv("thread", J.JNum{9n}), J.kv("from", J.JStr{"user"}), J.kv("to", J.JStr{"main"}), J.kv("reply_to", J.JNull{}), J.kv("expect_reply", J.JBool{False{}}), J.kv("auto", J.JBool{False{}}), J.kv("text", J.JStr{""}), J.kv("created_ms", J.JNum{0n}), J.kv("plain", J.JBool{False{}}), J.kv("queued", J.JBool{False{}})]) : J.Json}
+  {Msg.journal_json(Msg.journal_of(J.obj([J.kv("id", J.JNum{9n}), J.kv("thread", J.JNum{9n}), J.kv("from", J.JStr{"user"}), J.kv("to", J.JStr{"main"}), J.kv("queued", J.JNum{1n})]))) == J.obj([J.kv("id", J.JNum{9n}), J.kv("thread", J.JNum{9n}), J.kv("from", J.JStr{"user"}), J.kv("to", J.JStr{"main"}), J.kv("reply_to", J.JNull{}), J.kv("expect_reply", J.JBool{False{}}), J.kv("auto", J.JBool{False{}}), J.kv("created_ms", J.JNum{0n}), J.kv("plain", J.JBool{False{}}), J.kv("queued", J.JBool{False{}}), J.kv("has_parts", J.JBool{False{}})]) : J.Json}
 
 def Msg.defaults_pinned_0():
   {==}

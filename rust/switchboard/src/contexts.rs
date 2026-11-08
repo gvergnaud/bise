@@ -89,7 +89,7 @@ pub fn fresh(st: &State, now: u64, models: &Models) -> BTreeMap<String, String> 
         .values()
         .filter(|a| a.lifecycle == Lifecycle::Active)
         .map(|a| {
-            let questions = board::questions_for(waiting.unanswered(&a.name));
+            let questions = board::questions_for(st, waiting.unanswered(&a.name));
             let text = if a.name == MAIN {
                 board::main_context(st, now, &threads, &questions)
             } else {

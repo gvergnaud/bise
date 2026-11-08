@@ -69,7 +69,6 @@ impl Hub {
             agents.push(self.rows.row(i));
         }
         self.rows.keep_only(self.st.agents.keys());
-        self.fetch_card_notes();
         self.snapshot_with(agents, now)
     }
 
@@ -125,9 +124,8 @@ impl Hub {
     /// reply to the question: maybe answered another way (the card
     /// stays open, the view says so).
     fn card_note(&self, c: &Card) -> Option<String> {
-        // whole: `snapshot` fetched a cold one's body first
-        let m = self.st.msg(self.card_note_msg(c)?)?;
-        Some(format!("@main wrote to @{} since then (m_{}): {}", c.agent, m.id, clip(&one_line(&m.text), 120)))
+        let id = self.card_note_msg(c)?;
+        Some(format!("@main wrote to @{} since then (m_{}): {}", c.agent, id, clip(&one_line(&self.st.text(id)), 120)))
     }
 
     /// The message a question card's note cites: main's newest to the
@@ -142,13 +140,5 @@ impl Hub {
             .take_while(|m| m.created_ms >= c.created_ms)
             .find(|m| m.from == MAIN && m.to == c.agent && m.reply_to != c.for_msg)
             .map(|m| m.id)
-    }
-
-    /// view-all-perf: the bodies the open cards' notes cite, fetched
-    /// when cold (a card older than view_all's newest whole messages),
-    /// so a note always carries main's words.
-    fn fetch_card_notes(&mut self) {
-        let ids: Vec<u64> = self.st.open_cards().filter_map(|c| self.card_note_msg(c)).collect();
-        self.fetch_bodies(ids);
     }
 }

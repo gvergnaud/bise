@@ -22,7 +22,9 @@ fn tables() -> [(Table, Rw); 4] {
 fn full(k: FieldKind, name: &str) -> Value {
     use FieldKind::*;
     match k {
-        Str | StrOmit | OptStr | OptStrOmit => json!(format!("{name}-x")),
+        // a body: as the shell filled it (body.rs), what serde reads
+        Str | StrOmit | OptStr | OptStrOmit | Body | OptBodyOmit => json!(format!("{name}-x")),
+        BodyJson => json!([{"kind": "text", "text": "t"}]),
         Nat | OptNat | OptNatOmit => json!(42),
         Bool | OptBoolOmit => json!(true),
         Json | OptJsonOmit => json!({"k": [1, "two", null]}),
@@ -62,13 +64,14 @@ fn full_field(f: &Field) -> Value {
 fn empty(k: FieldKind) -> Option<Value> {
     use FieldKind::*;
     match k {
-        Str => Some(json!("")),
+        Str | Body => Some(json!("")),
+        BodyJson => Some(Value::Null),
         Nat => Some(json!(0)),
         Bool => Some(json!(false)),
         OptStr | OptNat | Json => Some(Value::Null),
         Strs | Nats | Jsons | Msgs | Recs(_) => Some(json!([])),
         Ver => Some(json!(1)),
-        StrOmit | OptStrOmit | OptNatOmit | OptBoolOmit | OptStrsOmit | OptJsonsOmit | OptJsonOmit => None,
+        StrOmit | OptStrOmit | OptBodyOmit | OptNatOmit | OptBoolOmit | OptStrsOmit | OptJsonsOmit | OptJsonOmit => None,
         Flag | Rec(_) | Inline(_) | InlineOpt(_) => unreachable!("a journal field: no serde type (journal.rs)"),
     }
 }
@@ -361,7 +364,11 @@ fn the_state_types_read_and_write_back_the_fixtures() {
     let (view, journal) = (read("core_view.jsonl"), read("core_journal.jsonl"));
     let mut n = std::collections::BTreeMap::new();
     for l in view.lines().chain(journal.lines()).filter(|l| l.starts_with('{')) {
-        *n.entry("msg").or_insert(0) += pin::<Msg>(l, "msg");
+        // a view's message; a journal line carries a Sent (its words
+        // too, c6), which no Rust type reads
+        if !l.contains("\"type\":\"message_sent\"") {
+            *n.entry("msg").or_insert(0) += pin::<Msg>(l, "msg");
+        }
         *n.entry("card").or_insert(0) += pin::<Card>(l, "card") + pin::<Card>(l, "cards");
         // a view row's message state (the journal's message_state is flat)
         if l.contains("\"msgs\":[{") {

@@ -288,9 +288,9 @@ pub const USER_ID_PREFIX: &str = "m_";
 /// An MCP App view's message (docs/mcp-apps.md, C5): what a view the
 /// user uses wrote to its agent, wrapped like a page note: its plugin
 /// and id, never `user_message` (the view wrote it, not him).
-pub fn view_message(m: &Msg, plugin: &str) -> String {
+pub fn view_message(m: &Msg, text: &str, plugin: &str) -> String {
     let tag = bise_proto::envelope::VIEW_MESSAGE;
-    format!("<{tag} plugin=\"{plugin}\" id=\"{USER_ID_PREFIX}{}\">\n{}\n</{tag}>", m.id, m.text.trim())
+    format!("<{tag} plugin=\"{plugin}\" id=\"{USER_ID_PREFIX}{}\">\n{}\n</{tag}>", m.id, text.trim())
 }
 
 /// A message of the user as an agent reads it: every one of his messages,
@@ -298,27 +298,28 @@ pub fn view_message(m: &Msg, plugin: &str) -> String {
 /// one `sb send --forward`, `sb spawn --forward` and bise's `sb project
 /// send --input` take; law: the id shown is the id accepted), and its
 /// view when he wrote from one.
-pub fn user_message(m: &Msg) -> String {
+pub fn user_message(m: &Msg, text: &str) -> String {
     let tag = bise_proto::envelope::USER_MESSAGE;
     let id = format!(" id=\"{USER_ID_PREFIX}{}\"", m.id);
     match m.via.as_deref() {
-        Some(view) => format!("<{tag}{id} via=\"{view}\">\n{}\n</{tag}>", m.text.trim()),
-        None => format!("<{tag}{id}>\n{}\n</{tag}>", m.text.trim()),
+        Some(view) => format!("<{tag}{id} via=\"{view}\">\n{}\n</{tag}>", text.trim()),
+        None => format!("<{tag}{id}>\n{}\n</{tag}>", text.trim()),
     }
 }
 
 /// One message as the recipient reads it (RFC 0003 §5): his words with
 /// their id ([`user_message`]); his answer to an agent's question stays an
 /// agent_message `from="user"` with its `reply_to` (its id there too).
-pub fn tagged(m: &Msg, relation: &str) -> String {
+/// `text`: its words (c6: read in the journal, the mirror has none).
+pub fn tagged(m: &Msg, text: &str, relation: &str) -> String {
     if m.from == USER && (m.plain || m.via.is_some()) {
-        return user_message(m);
+        return user_message(m, text);
     }
     if m.plain {
-        return m.text.clone();
+        return text.to_string();
     }
     if let (true, Some(plugin)) = (m.from == crate::model::VIEW, m.view.as_deref()) {
-        return view_message(m, plugin);
+        return view_message(m, text, plugin);
     }
     let mut attrs = format!(
         "from=\"{}\" relation=\"{}\" id=\"m_{}\" thread=\"t_{}\"",
@@ -332,7 +333,7 @@ pub fn tagged(m: &Msg, relation: &str) -> String {
         attrs.push_str(" auto=\"true\"");
     }
     let tag = bise_proto::envelope::AGENT_MESSAGE;
-    format!("<{tag} {}>\n{}\n</{tag}>", attrs, m.text.trim())
+    format!("<{tag} {}>\n{}\n</{tag}>", attrs, text.trim())
 }
 
 #[cfg(test)]
@@ -349,10 +350,12 @@ mod tests {
             to: "auth".into(),
             reply_to: Some(40),
             expect_reply: true,
-            text: "v1 ou v2 ?".into(),
             ..Default::default()
         }
     }
+
+    /// msg()'s words
+    const Q: &str = "v1 ou v2 ?";
 
     /// Pin (architect m_41684): each envelope the real writers build
     /// classifies to its kind in `/debug`'s charts, so renaming a tag can't
@@ -361,9 +364,9 @@ mod tests {
     fn each_envelope_classifies_to_its_kind() {
         use bise_proto::log::CompKind;
         use bise_session::completion::groups::text_kind;
-        assert_eq!(text_kind(&tagged(&msg(), "peer")), (CompKind::AgentMessage, vec!["docs".to_string()]));
+        assert_eq!(text_kind(&tagged(&msg(), Q, "peer")), (CompKind::AgentMessage, vec!["docs".to_string()]));
         let his = Msg { from: USER.into(), plain: true, ..msg() };
-        assert_eq!(text_kind(&tagged(&his, "user")).0, CompKind::Words);
+        assert_eq!(text_kind(&tagged(&his, Q, "user")).0, CompKind::Words);
         assert_eq!(text_kind(&main_role("/w", "/t", FLOW, true)).0, CompKind::Preamble);
         let st = crate::model::State::new("/w");
         let group = crate::board::Group::of(&st, 0, &crate::board::Models::new());
@@ -372,7 +375,7 @@ mod tests {
 
     #[test]
     fn the_tag_carries_the_correlation() {
-        let t = tagged(&msg(), "peer");
+        let t = tagged(&msg(), Q, "peer");
         assert_eq!(
             t,
             "<agent_message from=\"docs\" relation=\"peer\" id=\"m_42\" thread=\"t_9\" reply_to=\"m_40\" expects_reply=\"true\">\nv1 ou v2 ?\n</agent_message>"
@@ -381,13 +384,13 @@ mod tests {
             plain: true,
             ..msg()
         };
-        assert_eq!(tagged(&plain, "user"), "v1 ou v2 ?");
+        assert_eq!(tagged(&plain, Q, "user"), "v1 ou v2 ?");
         let via = Msg {
             from: USER.into(),
             via: Some(MAIN.into()),
             ..msg()
         };
-        assert_eq!(tagged(&via, "user"), "<user_message id=\"m_42\" via=\"main\">\nv1 ou v2 ?\n</user_message>");
+        assert_eq!(tagged(&via, Q, "user"), "<user_message id=\"m_42\" via=\"main\">\nv1 ou v2 ?\n</user_message>");
     }
 
     // msg-forward (architect m_41072; desktop S2 m_8524 before it): every
@@ -397,15 +400,15 @@ mod tests {
     #[test]
     fn every_agent_reads_his_message_ids() {
         let plain = Msg { from: USER.into(), plain: true, ..msg() };
-        let t = tagged(&plain, "user");
+        let t = tagged(&plain, Q, "user");
         assert_eq!(t, "<user_message id=\"m_42\">\nv1 ou v2 ?\n</user_message>");
         let via = Msg { from: USER.into(), via: Some("capsule".into()), ..msg() };
-        assert_eq!(tagged(&via, "user"), "<user_message id=\"m_42\" via=\"capsule\">\nv1 ou v2 ?\n</user_message>");
+        assert_eq!(tagged(&via, Q, "user"), "<user_message id=\"m_42\" via=\"capsule\">\nv1 ou v2 ?\n</user_message>");
         let shown = t.split('"').nth(1).unwrap();
         assert!(shown.starts_with(USER_ID_PREFIX));
         assert_eq!(crate::core::parse_msg_id(shown), Some(plain.id));
         // an agent's message is unchanged
-        assert!(tagged(&msg(), "peer").starts_with("<agent_message from=\"docs\""));
+        assert!(tagged(&msg(), Q, "peer").starts_with("<agent_message from=\"docs\""));
     }
 
     #[test]
@@ -474,7 +477,7 @@ mod tests {
         assert!(!main_role("/w", "/t", crate::devflow::NO_GIT_SECTION, true).contains("You are bise"));
         // the id the prompt points at is the one bise's main reads (architect
         // m_8525): user_message renders <user_message id="m_<n>"…> for it
-        let shown = user_message(&Msg { id: 12, from: USER.into(), text: "why does p99 rise".into(), ..msg() });
+        let shown = user_message(&Msg { id: 12, from: USER.into(), ..msg() }, "why does p99 rise");
         assert!(shown.starts_with(&format!("<user_message id=\"{USER_ID_PREFIX}12\"")), "{shown}");
         assert!(r.contains(&format!("<user_message id=\"{USER_ID_PREFIX}<n>\">")));
         // it reads the projects' threads with amb-hub's step 3 (C, 175eb516)

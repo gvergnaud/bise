@@ -27,15 +27,19 @@ fn msg_pos_none_when_not_there() {
 #[test]
 fn keys_carry_the_id_and_the_originals_time() {
     let mut st = State::new("/w");
-    st.put_msg_judged(crate::model::Msg { id: 5, from: "user".into(), to: "main".into(), text: "hi".into(), created_ms: 0, ..Default::default() }, None, false);
+    st.put_msg_judged(crate::model::Msg { id: 5, from: "user".into(), to: "main".into(), created_ms: 0, ..Default::default() }, None, false);
+    st.test_words(5, "hi", "[1]");
     let mut q = json!({"cmd": "send"});
     keys(&st, &mut q, Some(5));
     assert_eq!(q["fwd"], json!(5));
     assert_eq!(q["fwd_at"], json!("1970-01-01 00:00 UTC"));
+    // its words from the journal (c6: sb-core keeps none)
+    assert_eq!(q["orig"], json!({"text": "hi", "parts": "[1]"}));
     // not in the mirror: no time, the id still goes (sb-core's door decides)
     let mut q = json!({"cmd": "send"});
     keys(&st, &mut q, Some(9));
     assert_eq!((q["fwd"].clone(), q["fwd_at"].clone()), (json!(9), json!("")));
+    assert_eq!(q["orig"], json!({"text": bise_proto::core::body::Missing(9).text(), "parts": ""}));
     // no forward: the line is what it was
     let mut q = json!({"cmd": "send"});
     keys(&st, &mut q, None);

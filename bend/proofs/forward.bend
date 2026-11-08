@@ -10,12 +10,12 @@ import ../hub/forward.bend as HFW
 import ../vendor/json.bend as J
 import ../laws/forward.bend as Laws
 
-def Laws.forward_records_source(s, m, at):
+def Laws.forward_records_source(s, m, w, at):
   match s:
     case HC.Snd{from, to, text, expect, reply_to, plain, auto, queued, via, parts, fwd}:
       {==}
 
-def Laws.forward_brief_records_source(t, m, at):
+def Laws.forward_brief_records_source(t, m, w, at):
   match t:
     case HC.NewTask{parent, base, brief, brief_text, objective, worktree, with_changes, parts, fwd}:
       {==}
@@ -31,7 +31,7 @@ def Laws.forward_own_passes(names, m, id, e):
 def Laws.forward_unknown(names, id):
   {==}
 
-def Laws.forward_keeps_text(note, m, by, at):
+def Laws.forward_keeps_text(note, m, w, by, at):
   {==}
 
 def Laws.forward_no_note(m, by, at):
@@ -40,9 +40,9 @@ def Laws.forward_no_note(m, by, at):
 def Laws.forward_names_source(m, by):
   {==}
 
-def Laws.forward_no_note_parts(m, by, at):
+def Laws.forward_no_note_parts(m, w, by, at):
   {==}
 
-def Laws.forward_plain_original(m, e):
-  %Equal.sym(String, HS.Msg.parts(m), "", e) : {HFW.orig.of(J.parse(_), m) == [HFW.text_part(HS.Msg.text(m))] : List<&2, J.Json>}
+def Laws.forward_plain_original(w, e):
+  %Equal.sym(String, HFW.Orig.parts(w), "", e) : {HFW.orig.of(J.parse(_), w) == [HFW.text_part(HFW.Orig.text(w))] : List<&2, J.Json>}
   {==}

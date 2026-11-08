@@ -336,9 +336,14 @@ impl Shell {
                 use crate::model::MsgState;
                 let queued = |sh: &Self| matches!(sh.hub.st.msg_state().get(&msg), Some(MsgState::Queued { .. }));
                 let was = queued(self);
-                // a queued one is hot, so whole; fetched in case (view-all-perf)
-                self.hub.fetch_bodies([msg]);
-                let (text, parts) = self.hub.st.msg(msg).map(|m| (m.text.clone(), m.parts_list())).unwrap_or_default();
+                // its words, read in the journal before sb-core takes it back
+                let (text, parts) = match self.hub.st.words(msg) {
+                    Ok(w) => {
+                        let parts = w.parts_list();
+                        (w.text, parts)
+                    }
+                    Err(m) => (m.text(), Vec::new()),
+                };
                 self.step_typed(id, &tag, Input::ClientUnqueue { client: id, id: msg });
                 let taken = matches!(self.hub.st.msg_state().get(&msg), Some(MsgState::Rejected { error }) if error == "taken_back");
                 if was && taken {

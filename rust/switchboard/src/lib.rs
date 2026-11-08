@@ -45,6 +45,7 @@ pub mod artifacts_turns;
 pub mod attach;
 pub mod attached;
 pub mod board;
+pub mod bodies;
 pub mod boot;
 pub mod card_link;
 pub mod cli;

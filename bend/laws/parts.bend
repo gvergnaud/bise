@@ -32,14 +32,14 @@ law agent_no_parts_no_line:
   for +cx: HX.Cx<o>
   for +agent: String
   for +m: HS.Msg
-  {HC.msg_parts(o, cx, agent, HS.Msg.with_parts(m, "")) == cx : HX.Cx<o>}
+  {HC.msg_parts(o, cx, agent, HS.Msg.with_has_parts(m, False{})) == cx : HX.Cx<o>}
 
 law agent_no_parts_no_sent_line:
   for -o: HS.St
   for +cx: HX.Cx<o>
   for +agent: String
   for +m: HS.Msg
-  {HC.sent_parts(o, cx, agent, HS.Msg.with_parts(m, "")) == cx : HX.Cx<o>}
+  {HC.sent_parts(o, cx, agent, HS.Msg.with_has_parts(m, False{})) == cx : HX.Cx<o>}
 
 # LAW: a brief without parts has none (its message is the one it always
 # was); with them, the task's head goes in front as a text part.

@@ -261,17 +261,18 @@ def parts_json(+s: String) -> J.Json:
 
 # his message's parts after his you-id (msg-parts); none when he sent
 # none, so those lines are what they always were (law no_parts_no_line)
-def you_parts(-o: S.St, +cx: X.Cx<o>, +agent: String, +parts: String) -> X.Cx<o>:
-  LZ.pick(X.Cx<o>, String.is_empty(parts), u => cx, u => feed(o, cx, agent, FD.you_parts(parts_json(parts))))
+# (`has`: he sent some; `b` their body: his message's, or a route's own)
+def you_parts(-o: S.St, +cx: X.Cx<o>, +agent: String, has: Bool, +b: K.Body) -> X.Cx<o>:
+  LZ.pick(X.Cx<o>, Bool.not(has), u => cx, u => feed(o, cx, agent, FD.you_parts(b)))
 
 # an agent's message parts (send-parts: `sb send --attach`) in `agent`'s
 # feed, after its msg-in (`sent`: after its sent line), by its id; none
 # when it has none (law agent_no_parts_no_line)
 def msg_parts(-o: S.St, +cx: X.Cx<o>, +agent: String, +m: S.Msg) -> X.Cx<o>:
-  LZ.pick(X.Cx<o>, String.is_empty(S.Msg.parts(m)), u => cx, u => feed(o, cx, agent, FD.msg_parts(S.Msg.id(m), parts_json(S.Msg.parts(m)))))
+  LZ.pick(X.Cx<o>, Bool.not(S.Msg.has_parts(m)), u => cx, u => feed(o, cx, agent, FD.msg_parts(S.Msg.id(m), K.BParts{S.Msg.id(m)})))
 
 def sent_parts(-o: S.St, +cx: X.Cx<o>, +agent: String, +m: S.Msg) -> X.Cx<o>:
-  LZ.pick(X.Cx<o>, String.is_empty(S.Msg.parts(m)), u => cx, u => feed(o, cx, agent, FD.sent_parts(S.Msg.id(m), parts_json(S.Msg.parts(m)))))
+  LZ.pick(X.Cx<o>, Bool.not(S.Msg.has_parts(m)), u => cx, u => feed(o, cx, agent, FD.sent_parts(S.Msg.id(m), K.BParts{S.Msg.id(m)})))
 
 # a route's parts after it, likewise
 def route_parts.at(-o: S.St, +cx: X.Cx<o>, +at: String, +parts: String) -> X.Cx<o>:
@@ -287,7 +288,7 @@ def route_line(-o: S.St, +cx: X.Cx<o>, +who: String, +card: Maybe<&2, Nat>, +sai
 
 
 def reply(-o: S.St, +cx: X.Cx<o>, +token: Nat, +body: J.Json) -> X.Cx<o>:
-  out(o, cx, F.reply(token, body))
+  out(o, cx, F.reply(token, body, None{}))
 
 def reply_err(-o: S.St, +cx: X.Cx<o>, +token: Nat, +e: String) -> X.Cx<o>:
   reply(o, cx, token, err_body(e))
@@ -462,16 +463,21 @@ def spawn(-o: S.St, +cx: X.Cx<o>, +n: String, +resume: Bool) -> X.Cx<o>:
 
 # ---- waiters ----
 
-# a wait gets its message (the message is not marked delivered here)
-def waiter_reply(-o: S.St, +cx: X.Cx<o>, +w: X.Waiter, +m: S.Msg, +kind: String) -> X.Cx<o>:
-  +cx3 = reply(o, cx, X.Waiter.token(w), ok_body([
+# the reply a wait gets: its message's facts; its words go in the reply's
+# `message` body, the shell writes them into `message` (c6, architect
+# m_56453; law waiter_reply_names_its_message)
+def waiter_reply.fx(+w: X.Waiter, +m: S.Msg, +kind: String) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
+  F.reply(X.Waiter.token(w), ok_body([
     J.kv("type", J.JStr{kind}), J.kv("from", J.JStr{S.Msg.from(m)}),
     J.kv("message_id", J.JStr{mid(S.Msg.id(m))}),
     J.kv("thread", J.JStr{String.append("t_", ns(S.Msg.thread(m)))}),
     J.kv("expects_reply", J.JBool{S.Msg.expect(m)}), J.kv("auto", J.JBool{S.Msg.auto(m)}),
-    J.kv("asked", J.JStr{mid(X.Waiter.msg(w))}),
-    J.kv("message", J.JStr{S.Msg.text(m)})]))
-  +cx4 = msg_parts(o, feed(o, cx3, X.Waiter.agent(w), FD.msg_in(S.Msg.from(m), Some{S.Msg.id(m)}, S.Msg.text(m), S.Msg.view(m))), X.Waiter.agent(w), m)
+    J.kv("asked", J.JStr{mid(X.Waiter.msg(w))})]), Some{K.BText{S.Msg.id(m)}})
+
+# a wait gets its message (the message is not marked delivered here)
+def waiter_reply(-o: S.St, +cx: X.Cx<o>, +w: X.Waiter, +m: S.Msg, +kind: String) -> X.Cx<o>:
+  +cx3 = out(o, cx, waiter_reply.fx(w, m, kind))
+  +cx4 = msg_parts(o, feed(o, cx3, X.Waiter.agent(w), FD.msg_in(S.Msg.from(m), Some{S.Msg.id(m)}, K.BText{S.Msg.id(m)}, S.Msg.view(m))), X.Waiter.agent(w), m)
   +still = X.any_waiter(X.R.waiters(rr(o, cx4)), X.Waiter.agent(w))
   +x = X.Rt.with_waiting(rt(o, cx4, X.Waiter.agent(w)), still)
   dirty(o, upd_rt(o, cx4, x))
@@ -536,10 +542,10 @@ def deliver.line(-o: S.St, again: Bool, you: Bool, +cx: X.Cx<o>, +name: String, 
     # his parts when he sent some (msg-parts: written at the delivery, so
     # a queued or steered message gets them when it is said)
     case False{} True{}:
-      +cx2 = feed(o, feed(o, cx, name, FD.you(S.Msg.text(m), S.Msg.via(m))), name, FD.you_id(S.Msg.id(m)))
-      you_parts(o, cx2, name, S.Msg.parts(m))
+      +cx2 = feed(o, feed(o, cx, name, FD.you(K.BText{S.Msg.id(m)}, S.Msg.via(m))), name, FD.you_id(S.Msg.id(m)))
+      you_parts(o, cx2, name, S.Msg.has_parts(m), K.BParts{S.Msg.id(m)})
     case False{} False{}:
-      msg_parts(o, feed(o, cx, name, FD.msg_in(S.Msg.from(m), Some{S.Msg.id(m)}, S.Msg.text(m), S.Msg.view(m))), name, m)
+      msg_parts(o, feed(o, cx, name, FD.msg_in(S.Msg.from(m), Some{S.Msg.id(m)}, K.BText{S.Msg.id(m)}, S.Msg.view(m))), name, m)
 
 def deliver_each(-o: S.St, batch: List<&2, S.Msg>, +cx: X.Cx<o>, +name: String, +acc: List<&2, K.Delivered>) -> X.Cx<o> & List<&2, K.Delivered>:
   match batch:
@@ -683,22 +689,27 @@ def quiet_ok(a: Bool, e: Bool) -> {Bool.and(a, Bool.and(e, Bool.not(a))) == Fals
     case False{} _:
       {==}
 
-# a send's message, by name from its Snd: an automatic reply never asks (law auto_never_asks);
-# the id is the next free one (law msg_ids_fresh); his parts kept as sent (parts_never_change_text)
-def msg_of_snd(+s: Snd, +id: Nat, +thread: Nat, +now: Nat) -> S.Msg:
+# a send's message and its words (its message_sent line), by name from
+# its Snd: an automatic reply never asks (law auto_never_asks); the id is
+# the next free one (law msg_ids_fresh); his parts kept as sent
+# (parts_never_change_text)
+def sent_of_snd(+s: Snd, +id: Nat, +thread: Nat, +now: Nat) -> S.Sent:
   match s:
     case Snd{+from, +to, +text, +expect, +reply_to, +plain, +auto, +queued, +via, +parts, +fwd}:
-      +m = S.Msg.with_reply_to(S.Msg.with_to(S.Msg.with_from(S.Msg.with_thread(S.Msg.with_id(S.Msg.empty(), id), thread), from), to), reply_to)
-      +m2 = S.Msg.with_created(S.Msg.with_text(S.Msg.with_auto(S.Msg.with_expect(m, Bool.and(expect, Bool.not(auto))), auto), text), now)
-      S.Msg.with_fwd(S.Msg.with_parts(S.Msg.with_via(S.Msg.with_queued(S.Msg.with_plain(m2, plain), queued), via), parts), fwd)
+      S.Sent{id, thread, from, to, reply_to, Bool.and(expect, Bool.not(auto)), auto, text, now, plain, queued, via, parts, fwd, None{}}
+
+# the message a send leaves in the state (its words in the journal)
+def msg_of_snd(+s: Snd, +id: Nat, +thread: Nat, +now: Nat) -> S.Msg:
+  M.msg_of_sent(sent_of_snd(s, id, thread, now))
 
 def send.emit(-o: S.St, +cx: X.Cx<o>, +s: Snd, +thread: Nat) -> X.Cx<o> & SendR:
   match s:
     case Snd{+from, +to, +text, +expect, +reply_to, +plain, +auto, +queued, +via, +parts, _}:
-      +m = msg_of_snd(s, S.St.next_msg(st(o, cx)), thread, now(o, cx))
+      +sent = sent_of_snd(s, S.St.next_msg(st(o, cx)), thread, now(o, cx))
+      +m = M.msg_of_sent(sent)
       # a card is closed by the user's answer only (answer_card): no reply
       # here touches the user's inbox (BISE-299)
-      +cx1 = emit(o, cx, M.EMsgSent{m}, {==}, quiet_ok(auto, expect), Unit{})
+      +cx1 = emit(o, cx, M.EMsgSent{sent}, {==}, quiet_ok(auto, expect), Unit{})
       # the reply watch it answers ends now (ask-wait), whoever gets it
       +cx2 = reply_answered(o, cx1, from, to, reply_to)
       # paused: no waiter gets it either (it would wake an agent): queued
@@ -873,7 +884,7 @@ def send.user(-o: S.St, user: Bool, +cx: X.Cx<o>, +s: Snd) -> X.Cx<o> & SendR:
 # C2 amendment (BISE-86): a message from the user that cannot reach its
 # agent (stopped, dropped, archived) says so in the feed where the user
 # wrote it: an `undelivered` record {to, text} (the TUI marks it ✗)
-def undelivered.if(-o: S.St, gone: Bool, +cx: X.Cx<o>, +view: String, +name: String, +text: String) -> X.Cx<o>:
+def undelivered.if(-o: S.St, gone: Bool, +cx: X.Cx<o>, +view: String, +name: String, +text: K.Body) -> X.Cx<o>:
   match gone:
     case True{}:
       feed(o, cx, view, FD.undelivered(name, text))
@@ -897,7 +908,7 @@ def undelivered_msgs(-o: S.St, xs: List<&2, S.Msg>, +cx: X.Cx<o>) -> X.Cx<o>:
     case Con{+m, +rest}:
       +to = S.Msg.to(m)
       undelivered_msgs(o, rest, undelivered.if(o, String.eq(S.Msg.from(m), M.USER()), cx,
-        undelivered.feed(S.Msg.via(m), to), to, S.Msg.text(m)))
+        undelivered.feed(S.Msg.via(m), to), to, K.BText{S.Msg.id(m)}))
 
 def unavailable_err(+e: String) -> Bool:
   String.starts_with(e, "recipient_unavailable")
@@ -918,12 +929,12 @@ def asked_main(q: Maybe<&2, S.Msg>, +to: String) -> Bool:
     case Some{+x}:
       String.eq(S.Msg.from(x), to) && String.eq(S.Msg.to(x), M.MAIN()) && S.Msg.expect(x)
 
-def question_text(q: Maybe<&2, S.Msg>) -> String:
+def question_text(q: Maybe<&2, S.Msg>) -> K.Body:
   match q:
     case None{}:
-      ""
+      K.BLit{""}
     case Some{+x}:
-      S.Msg.text(x)
+      K.BText{S.Msg.id(x)}
 
 # main's feed shows every message between agents (including between two
 # tasks), so what happened stays readable: `msg : from → to m_<n> : text`
@@ -938,9 +949,9 @@ def feed_main(-o: S.St, +cx: X.Cx<o>, +m: S.Msg, +why: String) -> X.Cx<o>:
   +answered = String.eq(from, M.MAIN()) && asked_main(q, to)
   +agents = Bool.not(String.eq(from, M.USER())) && Bool.not(String.eq(to, M.MAIN()))
   LZ.pick(X.Cx<o>, answered,
-    u => feed(o, cx, M.MAIN(), FD.answered(to, question_text(q), S.Msg.text(m), why)),
+    u => feed(o, cx, M.MAIN(), FD.answered(to, question_text(q), K.BText{S.Msg.id(m)}, why)),
     u => LZ.pick(X.Cx<o>, agents,
-      v => msg_parts(o, feed(o, cx, M.MAIN(), FD.msg(from, to, Some{S.Msg.id(m)}, S.Msg.text(m))), M.MAIN(), m),
+      v => msg_parts(o, feed(o, cx, M.MAIN(), FD.msg(from, to, Some{S.Msg.id(m)}, K.BText{S.Msg.id(m)})), M.MAIN(), m),
       v => cx))
 
 # What a task sent is a fact of its own thread (desktop bar A.3, S16;
@@ -958,7 +969,7 @@ def feed_sender(-o: S.St, +cx: X.Cx<o>, +m: S.Msg) -> X.Cx<o>:
   +from = S.Msg.from(m)
   +to = S.Msg.to(m)
   LZ.pick(X.Cx<o>, is_task_send(o, cx, from, to),
-    u => sent_parts(o, feed(o, cx, from, FD.sent(to, S.Msg.id(m), S.Msg.expect(m), S.Msg.text(m))), from, m),
+    u => sent_parts(o, feed(o, cx, from, FD.sent(to, S.Msg.id(m), S.Msg.expect(m), K.BText{S.Msg.id(m)})), from, m),
     u => cx)
 
 def send.fed(-o: S.St, p: X.Cx<o> & SendR, +why: String) -> X.Cx<o> & SendR:
@@ -995,17 +1006,17 @@ def fst(-o: S.St, p: X.Cx<o> & SendR) -> X.Cx<o>:
 def view_snd(+agent: String, +text: String) -> Snd:
   Snd{M.VIEW(), agent, text, False{}, None{}, False{}, False{}, True{}, None{}, "", None{}}
 
-# the message a view's text becomes: msg_of_snd's, with its plugin
-def view_msg_of(+agent: String, +plugin: String, +text: String, +id: Nat, +now: Nat) -> S.Msg:
-  S.Msg.with_view(msg_of_snd(view_snd(agent, text), id, id, now), Some{plugin})
+# the message a view's text becomes: sent_of_snd's, with its plugin
+def view_msg_of(+agent: String, +plugin: String, +text: String, +id: Nat, +now: Nat) -> S.Sent:
+  S.Sent.with_view(sent_of_snd(view_snd(agent, text), id, id, now), Some{plugin})
 
 def view_message.go(-o: S.St, ok: Bool, +cx: X.Cx<o>, +agent: String, +plugin: String, +text: String) -> X.Cx<o>:
   match ok:
     case False{}:
       notice(o, cx, cat(["the view's message didn't reach @", agent, ": it is not active"]))
     case True{}:
-      +m = view_msg_of(agent, plugin, text, S.St.next_msg(st(o, cx)), now(o, cx))
-      fst(o, send.waiter(o, None{}, emit(o, cx, M.EMsgSent{m}, {==}, {==}, Unit{}), m))
+      +sent = view_msg_of(agent, plugin, text, S.St.next_msg(st(o, cx)), now(o, cx))
+      fst(o, send.waiter(o, None{}, emit(o, cx, M.EMsgSent{sent}, {==}, {==}, Unit{}), M.msg_of_sent(sent)))
 
 # an agent of the hub, not archived, stopped nor failed
 def live_agent(m: Maybe<&2, S.Agent>) -> Bool:
@@ -2103,7 +2114,7 @@ def says.trace(-o: S.St, +cx: X.Cx<o>, +from: String, +to: String, +id: Nat, +te
 def says.sent(-o: S.St, p: X.Cx<o> & SendR, +to: String, +text: String, +from: String, +parts: String) -> X.Cx<o>:
   match p:
     case (+cx, SErr{+e}):
-      undelivered.if(o, unavailable_err(e), notice(o, cx, e), to, to, text)
+      undelivered.if(o, unavailable_err(e), notice(o, cx, e), to, to, K.BLit{text})
     case (+cx, SOk{+m}):
       +cx2 = says.trace(o, cx, from, to, S.Msg.id(m), text, parts)
       LZ.pick(X.Cx<o>, String.eq(to, M.MAIN()), u => cx2, u => user_sent(o, cx2, text))
@@ -2126,7 +2137,7 @@ def user_says(-o: S.St, +cx: X.Cx<o>, +to: String, +text: String, +queued: Bool,
 def route.sent(-o: S.St, p: X.Cx<o> & SendR, +name: String, +text: String, +focus: String, +parts: String) -> X.Cx<o>:
   match p:
     case (+cx, SErr{+e}):
-      undelivered.if(o, unavailable_err(e), notice(o, cx, e), focus, name, text)
+      undelivered.if(o, unavailable_err(e), notice(o, cx, e), focus, name, K.BLit{text})
     case (+cx, SOk{+m}):
       +cx2 = route_line(o, cx, name, None{}, text, parts)
       +cx3 = LZ.pick(X.Cx<o>, Bool.not(String.eq(focus, M.MAIN())) || Bool.not(String.eq(name, focus)),
@@ -2458,7 +2469,7 @@ def req_xsend(-o: S.St, pre: Maybe<&2, String>, +cx: X.Cx<o>, +token: Nat, +q: J
     case Some{+e}:
       reply_err(o, cx, token, e)
     case None{}:
-      xsend.fwd(o, XB.forward(st(o, cx), M.MAIN(), K.get_n(q, "msg")), cx, token, K.get_s(q, "project"), K.get_n(q, "msg"))
+      xsend.fwd(o, XB.forward(st(o, cx), M.MAIN(), K.get_n(q, "msg"), FW.Orig.text(FW.orig_of(q))), cx, token, K.get_s(q, "project"), K.get_n(q, "msg"))
 
 def req_xask.go(-o: S.St, err: Maybe<&2, String>, +cx: X.Cx<o>, +token: Nat, +q: J.Json) -> X.Cx<o>:
   match err:
@@ -2555,8 +2566,9 @@ def route_plain(-o: S.St, +cx: X.Cx<o>, +r: S.Route) -> X.Cx<o>:
 # its id, his parts, then where they went (the window and the TUI fold
 # the `routed` record onto his entry by the id; law route_fire_says_where)
 def route_fire.lines(-o: S.St, +cx: X.Cx<o>, +r: S.Route, +id: Nat, +xid: Nat) -> X.Cx<o>:
-  +cx2 = feed(o, feed(o, cx, M.MAIN(), FD.you(S.Route.text(r), XB.via_of(S.Route.via(r)))), M.MAIN(), FD.you_id(id))
-  feed(o, you_parts(o, cx2, M.MAIN(), S.Route.parts(r)), M.MAIN(), FD.routed(S.Route.to(r), S.Route.name(r), xid, id))
+  +cx2 = feed(o, feed(o, cx, M.MAIN(), FD.you(K.BLit{S.Route.text(r)}, XB.via_of(S.Route.via(r)))), M.MAIN(), FD.you_id(id))
+  +parts = S.Route.parts(r)
+  feed(o, you_parts(o, cx2, M.MAIN(), Bool.not(String.is_empty(parts)), K.BLit{parts}), M.MAIN(), FD.routed(S.Route.to(r), S.Route.name(r), xid, id))
 
 def route_fire.sent(-o: S.St, +cx: X.Cx<o>, +r: S.Route, +id: Nat) -> X.Cx<o>:
   +cx2 = emit(o, mark_delivered(o, cx, id), M.ESettled{id}, Unit{}, Unit{}, Unit{})
@@ -2916,17 +2928,17 @@ def open_question(+s: S.St, +asker: String, +me: String) -> Maybe<&2, Nat>:
 # the forward of `m` as the sender's message: its note (the text it
 # typed) and the header before m's text, the parts likewise, and m's id
 # on the message (law forward_records_source)
-def fwd_snd(+s: Snd, +m: S.Msg, +at: String) -> Snd:
+def fwd_snd(+s: Snd, +m: S.Msg, +w: FW.Orig, +at: String) -> Snd:
   +note = Snd.text(s)
   +by = Snd.from(s)
-  Snd.with_fwd(Snd.with_parts(Snd.with_text(s, FW.text(note, m, by, at)), FW.parts(note, m, by, at)), Some{S.Msg.id(m)})
+  Snd.with_fwd(Snd.with_parts(Snd.with_text(s, FW.text(note, m, w, by, at)), FW.parts(note, m, w, by, at)), Some{S.Msg.id(m)})
 
 def req_send.door(-o: S.St, d: FW.Door, +cx: X.Cx<o>, +token: Nat, +s: Snd, +q: J.Json) -> X.Cx<o>:
   match d:
     case FW.FErr{+e}:
       reply_err(o, cx, token, e)
     case FW.FOk{+m}:
-      req_send.res(o, send_why(o, cx, fwd_snd(s, m, K.get_s(q, "fwd_at")), K.get_s(q, "why")), token)
+      req_send.res(o, send_why(o, cx, fwd_snd(s, m, FW.orig_of(q), K.get_s(q, "fwd_at")), K.get_s(q, "why")), token)
 
 # msg-forward: `sb send --forward m_<n>`: the message the sender got or
 # sent, through FW.door; with `--attach` too: refused (v1)
@@ -3224,17 +3236,17 @@ def new_task(+parent: String, +q: J.Json) -> NewTask:
 # msg-forward: `sb spawn --forward m_<n>`: the brief gets the message main
 # got or sent as its last section, its parts behind the brief's (law
 # forward_brief_records_source: the brief's message carries the id)
-def new_task.fwd(t: NewTask, +m: S.Msg, +at: String) -> NewTask:
+def new_task.fwd(t: NewTask, +m: S.Msg, +w: FW.Orig, +at: String) -> NewTask:
   match t:
     case NewTask{+parent, +base, +brief, +brief_text, +objective, +worktree, +with_changes, _, _}:
-      NewTask{parent, base, brief, FW.brief(brief_text, m, parent, at), objective, worktree, with_changes, FW.brief_parts(brief_text, m, parent, at), Some{S.Msg.id(m)}}
+      NewTask{parent, base, brief, FW.brief(brief_text, m, w, parent, at), objective, worktree, with_changes, FW.brief_parts(brief_text, m, w, parent, at), Some{S.Msg.id(m)}}
 
 def req_spawn.door(-o: S.St, d: FW.Door, +cx: X.Cx<o>, +token: Nat, +q: J.Json) -> X.Cx<o>:
   match d:
     case FW.FErr{+e}:
       reply_err(o, cx, token, e)
     case FW.FOk{+m}:
-      req_spawn.res(o, create_req(o, cx, new_task.fwd(new_task(M.MAIN(), q), m, K.get_s(q, "fwd_at")), q), token)
+      req_spawn.res(o, create_req(o, cx, new_task.fwd(new_task(M.MAIN(), q), m, FW.orig_of(q), K.get_s(q, "fwd_at")), q), token)
 
 def req_spawn.fwd(-o: S.St, f: Maybe<&2, Nat>, bare: Bool, +cx: X.Cx<o>, +token: Nat, +q: J.Json) -> X.Cx<o>:
   match f bare:
@@ -3943,8 +3955,10 @@ def auto_reply.local(-o: S.St, via: Maybe<&2, String>, +cx: X.Cx<o>, +agent: Str
       +cx2 = emit(o, cx, M.ESettled{S.Msg.id(m)}, Unit{}, Unit{}, Unit{})
       # an agent writing to the user (C2 `msg-you`, level 2)
       +cx3 = feed(o, cx2, view, FD.msg_you(agent, body))
-      note_main(o, cx3, cat(["@", agent, " answered the user (asked from @", view, "'s view: \"", T.clip(T.one_line(S.Msg.text(m)), 500n),
-        "\"): \"", T.clip_tail(T.one_line(body), 2000n), "\""]))
+      # the question by its id (c6: the state keeps no words; main has
+      # `sb show m_<n>` for them, architect m_56481)
+      note_main(o, cx3, cat(["@", agent, " answered the user (asked from @", view, "'s view, ", mid(S.Msg.id(m)),
+        "): \"", T.clip_tail(T.one_line(body), 2000n), "\""]))
 
 # a message bise sent this hub (S2) is answered back to bise's hub
 def auto_reply.x(-o: S.St, r: Maybe<&2, S.XIn>, via: Maybe<&2, String>, +cx: X.Cx<o>, +agent: String, +m: S.Msg, +body: String) -> X.Cx<o>:

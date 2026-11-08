@@ -11,9 +11,9 @@
 //! run (core_link.rs `apply_step`).
 //!
 //! view-all-perf: `view_all` sends its old messages that owe nothing as
-//! cold rows (`View.cold`, no body): the mirror keeps them as
-//! `Row::Cold`, and core.rs `fetch_bodies` asks sb-core's `msg_bodies`
-//! for a body a reader needs (a step's view and msg_bodies send whole).
+//! compact cold rows (`View.cold`): the mirror keeps them as `Row::Cold`.
+//! No message carries its words (c6): a reader gets them from the
+//! journal (`State::words`, bodies.rs).
 
 use super::*;
 

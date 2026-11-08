@@ -78,7 +78,9 @@ fn a_torn_or_old_photo_is_none_and_a_crash_tmp_goes_at_boot() {
     let d = tmp("bad");
     std::fs::write(d.join("k1.json"), "{\"v\":1,\"key\":\"k1\",\"ev").unwrap();
     assert!(read(&d, "k1").is_none(), "torn");
-    std::fs::write(d.join("k2.json"), "{\"v\":0,\"key\":\"k2\",\"events\":1,\"prefix\":\"0\",\"paths\":\"0\",\"st\":{}}").unwrap();
+    // a released hub's photo (v 1, before c6: its messages carried their
+    // words): refused, the boot replays the journal
+    std::fs::write(d.join("k2.json"), "{\"v\":1,\"key\":\"k2\",\"events\":1,\"prefix\":\"0\",\"paths\":\"0\",\"st\":{}}").unwrap();
     assert!(read(&d, "k2").is_none(), "another file version");
     std::fs::write(d.join("k3.json.tmp"), "half").unwrap();
     clean(&d);

@@ -27,12 +27,12 @@ core_kinds! {
     pub enum Feed, tag "sb" {
         /// his message (`via`: the view that brought it, `bise` when bise
         /// routed his words here; none on older lines)
-        You = "you" => RYou { text: Str, via: OptStrOmit },
+        You = "you" => RYou { text: Body, via: OptStrOmit },
         /// the id of the `you` record right before it (same step)
         YouId = "you-id" => RYouId { id: Nat },
         /// the parts of the `you` record before it (msg-parts, a
         /// `Vec<parts::Part>`)
-        YouParts = "you-parts" => RYouParts { parts: Json },
+        YouParts = "you-parts" => RYouParts { parts: BodyJson },
         /// the parts of the route record right before it
         RouteParts = "route-parts" => RRouteParts { parts: Json },
         /// bise's home hub: his message `msg` went to the project `to`
@@ -41,10 +41,10 @@ core_kinds! {
         /// the parts of message `id` the feed's owner received (send-parts:
         /// `sb send --attach`), after its msg-in; the fold puts them on
         /// the entry of that id
-        MsgParts = "msg-parts" => RMsgParts { id: Nat, parts: Json },
+        MsgParts = "msg-parts" => RMsgParts { id: Nat, parts: BodyJson },
         /// the parts of message `id` the feed's owner sent, after its sent
         /// line; likewise by id
-        SentParts = "sent-parts" => RSentParts { id: Nat, parts: Json },
+        SentParts = "sent-parts" => RSentParts { id: Nat, parts: BodyJson },
         /// the agent read these steered messages here, mid-turn
         Steered = "steered" => RSteered { ids: Nats },
         /// the agent's runtime received these steered messages
@@ -52,18 +52,18 @@ core_kinds! {
         /// his fn context (S9), the FnContext JSON
         Context = "context" => RContext { context: Json },
         /// his message could not reach `to` (stopped, dropped, archived)
-        Undelivered = "undelivered" => RUndelivered { to: Str, text: Str },
+        Undelivered = "undelivered" => RUndelivered { to: Str, text: Body },
         /// what the feed's owner received (`id` none: older lines);
         /// `view`: the plugin whose MCP App view wrote it (from `view`)
-        MsgIn = "msg-in" => RMsgIn { from: Str, id: OptNatOmit, body: Str, view: OptStrOmit },
+        MsgIn = "msg-in" => RMsgIn { from: Str, id: OptNatOmit, body: Body, view: OptStrOmit },
         /// a message between two others (`id` none: before BISE-110)
-        Msg = "msg" => RMsg { from: Str, to: Str, id: OptNatOmit, body: Str },
+        Msg = "msg" => RMsg { from: Str, to: Str, id: OptNatOmit, body: Body },
         /// what the feed's owner sent (`ask`: it awaits a reply)
-        Sent = "sent" => RSent { to: Str, id: Nat, ask: Bool, body: Str },
+        Sent = "sent" => RSent { to: Str, id: Nat, ask: Bool, body: Body },
         /// an agent writing to the user
         MsgYou = "msg-you" => RMsgYou { from: Str, body: Str },
         /// main answered an agent for the user
-        Answered = "answered" => RAnswered { agent: Str, question: Str, answer: Str, why: Str },
+        Answered = "answered" => RAnswered { agent: Str, question: Body, answer: Body, why: Str },
         /// an attention card opened
         Card = "card" => RCard { v: Ver, id: Nat, kind: Str, agent: Str, body: Str },
         /// the approvals gate of the running call: `check`, `card`, `done`

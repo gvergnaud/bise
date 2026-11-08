@@ -1171,12 +1171,6 @@ law link_view_all_bare:
 def link_view_all_bare():
   {==}
 
-law link_msg_bodies_bare:
-  {LINK.of(J.obj([J.kv("t", J.JStr{"msg_bodies"})])) == LINK.TMsgBodies{Nil{}} : LINK.Link}
-
-def link_msg_bodies_bare():
-  {==}
-
 law link_photo_bare:
   {LINK.of(J.obj([J.kv("t", J.JStr{"photo"})])) == LINK.TPhoto{} : LINK.Link}
 
@@ -1232,14 +1226,6 @@ law link_TView_round:
   {LINK.of(LINK.json(LINK.TView{})) == LINK.TView{} : LINK.Link}
 
 def link_TView_round():
-  {==}
-
-law link_TMsgBodies_round:
-  for ids: List<&2, Nat>
-  {LINK.of(LINK.json(LINK.TMsgBodies{ids})) == LINK.TMsgBodies{ids} : LINK.Link}
-
-def link_TMsgBodies_round(ids):
-  %K.nats_round(ids) : {LINK.of(LINK.json(LINK.TMsgBodies{ids})) == LINK.TMsgBodies{_} : LINK.Link}
   {==}
 
 law link_TPhoto_round:
@@ -1324,7 +1310,7 @@ def fx_feed_bare():
   {==}
 
 law fx_reply_bare:
-  {FX.of(J.obj([J.kv("fx", J.JStr{"reply"})])) == FX.FReply{0n, J.JNull{}} : FX.Fx}
+  {FX.of(J.obj([J.kv("fx", J.JStr{"reply"})])) == FX.FReply{0n, J.JNull{}, None{}} : FX.Fx}
 
 def fx_reply_bare():
   {==}
@@ -1558,9 +1544,10 @@ def fx_FFeed_round(agent, rec):
 law fx_FReply_round:
   for token: Nat
   for body: J.Json
-  {FX.of(FX.json(FX.FReply{token, body})) == FX.FReply{token, body} : FX.Fx}
+  for message: Maybe<&2, K.Body>
+  {FX.of(FX.json(FX.FReply{token, body, message})) == FX.FReply{token, body, message} : FX.Fx}
 
-def fx_FReply_round(token, body):
+def fx_FReply_round(token, body, message):
   {==}
 
 law fx_FSpoke_round:

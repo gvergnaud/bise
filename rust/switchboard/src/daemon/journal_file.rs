@@ -15,36 +15,62 @@ use serde_json::Value;
 use std::io::Write;
 use std::path::Path;
 
+/// The journal as [`read`] finds it.
+#[derive(Debug, Default, PartialEq)]
+pub(super) struct Read {
+    pub events: Vec<Value>,
+    /// where each event's line starts (a byte offset), by event: the
+    /// mirror reads a message's words there (bodies.rs)
+    pub offsets: Vec<u64>,
+    /// the (1-based) numbers of the lines that are not UTF-8 or not a
+    /// JSON object
+    pub bad: Vec<usize>,
+}
+
 /// The journal at `path` (no file: an empty journal), as [`parse`].
-pub(super) fn read(path: &Path) -> (Vec<Value>, Vec<usize>) {
+pub(super) fn read(path: &Path) -> Read {
     parse(&std::fs::read(path).unwrap_or_default())
 }
 
-/// The journal's events, and the (1-based) numbers of the lines that are
-/// not UTF-8 or not a JSON object (a half-written last line, a cut
-/// multi-byte char...): they are never dropped in silence, the caller
-/// logs them. The Rust side does not decode the events
-/// (hub/gen/journal.bend does), so a kind it does not know still reaches
-/// sb-core.
-pub(super) fn parse(bytes: &[u8]) -> (Vec<Value>, Vec<usize>) {
-    let mut events = Vec::new();
-    let mut bad = Vec::new();
-    for (i, l) in bytes.split(|b| *b == b'\n').enumerate() {
+/// The journal's events, and the lines that are not UTF-8 or not a JSON
+/// object (a half-written last line, a cut multi-byte char...): they are
+/// never dropped in silence, the caller logs them. The Rust side does not
+/// decode the events (hub/gen/journal.bend does), so a kind it does not
+/// know still reaches sb-core.
+pub(super) fn parse(bytes: &[u8]) -> Read {
+    let mut r = Read::default();
+    let mut off = 0u64;
+    for (i, raw) in bytes.split(|b| *b == b'\n').enumerate() {
+        let at = off;
+        off += raw.len() as u64 + 1;
         // as str::lines: a "\r\n" ending is one line ending
-        let l = l.strip_suffix(b"\r").unwrap_or(l);
+        let l = raw.strip_suffix(b"\r").unwrap_or(raw);
         let Ok(s) = std::str::from_utf8(l) else {
-            bad.push(i + 1);
+            r.bad.push(i + 1);
             continue;
         };
         if s.trim().is_empty() {
             continue;
         }
         match serde_json::from_str::<Value>(s) {
-            Ok(v) if v.is_object() => events.push(v),
-            _ => bad.push(i + 1),
+            Ok(v) if v.is_object() => {
+                r.events.push(v);
+                r.offsets.push(at);
+            }
+            _ => r.bad.push(i + 1),
         }
     }
-    (events, bad)
+    r
+}
+
+/// The message bodies of the journal at `path`, as [`read`] found it
+/// (bodies.rs): each message's line, by its id.
+pub(super) fn bodies(path: &Path, r: &Read) -> crate::bodies::Bodies {
+    let mut b = crate::bodies::Bodies::file(path.to_path_buf());
+    for (ev, off) in r.events.iter().zip(&r.offsets) {
+        b.index(ev, *off);
+    }
+    b
 }
 
 /// The first line numbers of a list, for a log line.
@@ -61,28 +87,52 @@ pub(super) fn lines_list(ns: &[usize]) -> String {
 /// file may hold half a line or miss one, so no photo trusts it until a
 /// restart; the next boot reads it line by line, logs the torn line, does
 /// a full replay and takes a fresh photo.
-pub(super) struct Out<W: Write = std::fs::File> {
+pub(super) struct Out<W: Sink = std::fs::File> {
     w: W,
     ok: bool,
 }
 
-impl<W: Write> Out<W> {
+/// What the journal is written to: a writer that knows its end (where
+/// the next line starts: a file in append mode writes there whatever a
+/// failed write left before it).
+pub(super) trait Sink: Write {
+    fn end(&self) -> Option<u64>;
+}
+
+impl Sink for std::fs::File {
+    fn end(&self) -> Option<u64> {
+        self.metadata().ok().map(|m| m.len())
+    }
+}
+
+/// One [`Out::append`]: where its line starts when it reached the file
+/// (the mirror reads a message's words there, bodies.rs), and the
+/// hub.log line of the session's first failed write.
+#[derive(Debug, PartialEq)]
+pub(super) struct Written {
+    pub at: Option<u64>,
+    pub log: Option<String>,
+}
+
+impl<W: Sink> Out<W> {
     pub(super) fn new(w: W) -> Self {
         Out { w, ok: true }
     }
 
     /// Append one line and flush it. On the session's first failed write
     /// or flush: `ok` goes false for good and the hub.log line comes back;
-    /// a later failure returns None (one log line, not one per event).
-    pub(super) fn append(&mut self, line: &str) -> Option<String> {
+    /// a later failure has none (one log line, not one per event).
+    pub(super) fn append(&mut self, line: &str) -> Written {
+        let at = self.w.end();
         let res = writeln!(self.w, "{}", line).and_then(|_| self.w.flush());
         match res {
-            Ok(()) => None,
+            Ok(()) => Written { at, log: None },
             Err(e) if self.ok => {
                 self.ok = false;
-                Some(format!("journal: a write failed ({e}): the journal may miss a line from here; journal_ok false until the hub restarts"))
+                let log = format!("journal: a write failed ({e}): the journal may miss a line from here; journal_ok false until the hub restarts");
+                Written { at: None, log: Some(log) }
             }
-            Err(_) => None,
+            Err(_) => Written { at: None, log: None },
         }
     }
 
@@ -110,10 +160,12 @@ mod tests {
     #[test]
     fn the_journal_keeps_unknown_kinds_and_counts_unreadable_lines() {
         let text = "{\"type\":\"main_notes_flushed\"}\n{\"type\":\"from_a_newer_hub\",\"x\":1}\n\n42\n{\"type\":\"main_no";
-        let (events, bad) = parse(text.as_bytes());
-        assert_eq!(events.len(), 2);
-        assert_eq!(events[1]["type"], "from_a_newer_hub");
-        assert_eq!(bad, vec![4, 5]);
+        let r = parse(text.as_bytes());
+        assert_eq!(r.events.len(), 2);
+        assert_eq!(r.events[1]["type"], "from_a_newer_hub");
+        assert_eq!(r.bad, vec![4, 5]);
+        // each event's line starts where the bodies read it (bodies.rs)
+        assert_eq!(r.offsets, vec![0, text.find("{\"type\":\"from").unwrap() as u64]);
         assert_eq!(lines_list(&(1..=12).collect::<Vec<_>>()), "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, ...");
     }
 
@@ -129,13 +181,15 @@ mod tests {
         bytes.extend_from_slice(b"{\"type\":\"b\",\"text\":\"caf\xC3");
         bytes.extend_from_slice(b"\n{\"type\":\"c\"}\n");
         std::fs::write(&p, &bytes).unwrap();
-        let (events, bad) = read(&p);
-        let kinds: Vec<&str> = events.iter().map(|e| e["type"].as_str().unwrap()).collect();
+        let r = read(&p);
+        let kinds: Vec<&str> = r.events.iter().map(|e| e["type"].as_str().unwrap()).collect();
         assert_eq!(kinds, vec!["a", "c"]);
-        assert_eq!(events[0]["text"], "café");
-        assert_eq!(bad, vec![2]);
+        assert_eq!(r.events[0]["text"], "café");
+        assert_eq!(r.bad, vec![2]);
+        // a "\r\n" line and a torn one count their bytes: "c" starts after them
+        assert_eq!(r.offsets[1] as usize, bytes.len() - "{\"type\":\"c\"}\n".len());
         // no file: an empty journal, as before
-        assert_eq!(read(&d.join("none.jsonl")), (vec![], vec![]));
+        assert_eq!(read(&d.join("none.jsonl")), Read::default());
         let _ = std::fs::remove_dir_all(&d);
     }
 
@@ -148,15 +202,19 @@ mod tests {
         let p = d.join("journal.jsonl");
         std::fs::write(&p, "").unwrap();
         let mut good = Out::new(std::fs::OpenOptions::new().append(true).open(&p).unwrap());
-        assert_eq!(good.append("{\"type\":\"a\"}"), None);
+        assert_eq!(good.append("{\"type\":\"a\"}"), Written { at: Some(0), log: None });
+        // the next line starts at the file's end
+        assert_eq!(good.append("{\"type\":\"b\"}").at, Some(13));
         assert!(good.ok());
-        assert_eq!(std::fs::read_to_string(&p).unwrap(), "{\"type\":\"a\"}\n");
+        assert_eq!(std::fs::read_to_string(&p).unwrap(), "{\"type\":\"a\"}\n{\"type\":\"b\"}\n");
 
         let mut out = Out::new(std::fs::File::open(&p).unwrap());
-        let log = out.append("{\"type\":\"b\"}").expect("a failed write is logged");
+        let w = out.append("{\"type\":\"b\"}");
+        let log = w.log.expect("a failed write is logged");
         assert!(log.starts_with("journal: a write failed ("), "{log}");
+        assert_eq!(w.at, None, "a line that never reached the file has no place");
         assert!(!out.ok());
-        assert_eq!(out.append("{\"type\":\"c\"}"), None, "one log line per session");
+        assert_eq!(out.append("{\"type\":\"c\"}"), Written { at: None, log: None }, "one log line per session");
         assert!(!out.ok());
         let _ = std::fs::remove_dir_all(&d);
     }
@@ -174,11 +232,16 @@ mod tests {
                 if self.1 { Err(std::io::Error::other("disk full")) } else { Ok(()) }
             }
         }
+        impl Sink for NoFlush {
+            fn end(&self) -> Option<u64> {
+                Some(self.0.len() as u64)
+            }
+        }
         let mut out = Out::new(NoFlush(vec![], false));
-        assert_eq!(out.append("x"), None);
+        assert_eq!(out.append("x"), Written { at: Some(0), log: None });
         assert!(out.ok());
         out.w.1 = true;
-        assert!(out.append("y").unwrap().contains("disk full"));
+        assert!(out.append("y").log.unwrap().contains("disk full"));
         assert!(!out.ok());
     }
 }

@@ -13,7 +13,7 @@ fn fwd(to: &str, note: &str, n: u64) -> AgentReq {
 }
 
 fn his_id(t: &T, text: &str) -> u64 {
-    t.hub.st.msgs().values().find(|m| m.from == USER && m.text == text).expect("his message").id
+    t.hub.st.msgs().values().find(|m| m.from == USER && t.hub.st.text(m.id) == text).expect("his message").id
 }
 
 #[test]
@@ -38,7 +38,7 @@ fn main_forwards_his_message_whole_with_a_note() {
     assert_eq!(m.fwd, Some(n));
     // a plain original goes as one text part after the forwarded part
     // (architect m_41547): every client draws a forward from its parts
-    let got: Vec<Part> = serde_json::from_str(&m.parts).expect("its parts");
+    let got: Vec<Part> = serde_json::from_str(&t.hub.st.words(m.id).unwrap().parts).expect("its parts");
     assert!(matches!(&got[1], Part::Forwarded { id, from, to, by, .. } if *id == n && from == USER && to == MAIN && by == MAIN), "{got:?}");
     assert_eq!(got.last(), Some(&Part::Text { text: "tiens au fait, forward my words".into() }));
 }
@@ -57,14 +57,15 @@ fn a_file_chip_mid_sentence_is_a_link_and_a_forward_keeps_it() {
     let link = "demande d'update [The Bot.md](/u/vibebot/The Bot.md) pour interpoler";
     assert_eq!(text, link);
     t.req(MAIN, AgentReq::Send { to: "docs".into(), text: text.clone(), expect_reply: false, reply_to: None, queued: false, why: String::new(), switch: None, parts: parts.into(), attach: Vec::new(), fwd: None });
-    let n = t.hub.st.msgs().values().find(|m| m.text == text).expect("the message").id;
+    let n = t.hub.st.msgs().values().find(|m| t.hub.st.text(m.id) == text).expect("the message").id;
     t.spawn_task("b");
     t.turn("b", "ok");
     let (tok, fx) = t.req("docs", fwd("b", "", n));
     assert_eq!(reply(&fx, tok).unwrap()["ok"], true, "{fx:?}");
     let s = say_to(&fx, "b").expect("b reads it");
     assert!(s.contains(link), "the receiver's view:\n{s}");
-    let m = t.hub.st.whole_msgs().filter(|m| m.fwd == Some(n)).max_by_key(|m| m.id).expect("the forward").clone();
+    let id = t.hub.st.whole_msgs().filter(|m| m.fwd == Some(n)).max_by_key(|m| m.id).expect("the forward").id;
+    let m = t.hub.st.words(id).unwrap();
     let got: Vec<Part> = serde_json::from_str(&m.parts).expect("its parts");
     assert!(got.contains(&Part::File { path: "/u/vibebot/The Bot.md".into(), name: "[File #1]".into(), missing: false }), "{got:?}");
     assert_eq!(bise_proto::parts::render(&got), m.text);
@@ -88,12 +89,13 @@ fn a_forwards_parts_render_to_its_text() {
     let p: Vec<Part> = serde_json::from_str(&rich).unwrap();
     let text = bise_proto::parts::render(&p);
     t.req(MAIN, AgentReq::Send { to: "a".into(), text: text.clone(), expect_reply: false, reply_to: None, queued: false, why: String::new(), switch: None, parts: rich, attach: Vec::new(), fwd: None });
-    let rich = t.hub.st.msgs().values().find(|m| m.text == text).unwrap().id;
+    let rich = t.hub.st.msgs().values().find(|m| t.hub.st.text(m.id) == text).unwrap().id;
     let check = |t: &T, n: u64| {
-        let m = t.hub.st.whole_msgs().filter(|m| m.fwd == Some(n)).max_by_key(|m| m.id).expect("the forward").clone();
+        let id = t.hub.st.whole_msgs().filter(|m| m.fwd == Some(n)).max_by_key(|m| m.id).expect("the forward").id;
+        let m = t.hub.st.words(id).unwrap();
         let got: Vec<Part> = serde_json::from_str(&m.parts).expect("its parts");
         assert_eq!(bise_proto::parts::render(&got), m.text, "the parts render to the text the model reads");
-        m.id
+        id
     };
     for (who, to, note, n) in [(MAIN, "a", "see", plain), (MAIN, "b", "", plain), ("a", "b", "", rich), ("a", "b", "look at it", rich)] {
         let (tok, fx) = t.req(who, fwd(to, note, n));
@@ -153,10 +155,10 @@ fn a_forward_carries_the_originals_images() {
     let text = bise_proto::parts::render(&p);
     let send = AgentReq::Send { to: "a".into(), text: text.clone(), expect_reply: false, reply_to: None, queued: false, why: String::new(), switch: None, parts, attach: Vec::new(), fwd: None };
     t.req(MAIN, send);
-    let n = t.hub.st.msgs().values().find(|m| m.text == text).unwrap().id;
+    let n = t.hub.st.msgs().values().find(|m| t.hub.st.text(m.id) == text).unwrap().id;
     let (_, fx) = t.req("a", fwd("b", "see", n));
     assert!(say_to(&fx, "b").is_some_and(|s| s.contains("<image name=\"[Image #1]\"")), "the model sees the image: {fx:?}");
-    let m = t.hub.st.whole_msgs().find(|m| m.fwd == Some(n)).unwrap().clone();
+    let m = t.hub.st.words(t.hub.st.whole_msgs().find(|m| m.fwd == Some(n)).unwrap().id).unwrap();
     let got: Vec<bise_proto::parts::Part> = serde_json::from_str(&m.parts).expect("its parts");
     assert_eq!(bise_proto::parts::render(&got), m.text, "the parts render to the text");
 }
@@ -182,8 +184,9 @@ fn a_spawn_brief_carries_the_forward_last() {
             fwd: Some(n),
         },
     );
-    let m = t.hub.st.whole_msgs().find(|m| m.to == "fw").expect("its brief").clone();
-    assert_eq!(m.fwd, Some(n));
+    let brief = t.hub.st.whole_msgs().find(|m| m.to == "fw").expect("its brief").clone();
+    assert_eq!(brief.fwd, Some(n));
+    let m = t.hub.st.words(brief.id).unwrap();
     assert!(m.text.starts_with("# Task `fw`"), "{}", m.text);
     assert!(m.text.contains(&format!("## Forwarded message\n\n[forwarded m_{n} · from the user to main")), "{}", m.text);
     assert!(m.text.ends_with("build the forward"), "{}", m.text);

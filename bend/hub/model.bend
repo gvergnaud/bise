@@ -36,7 +36,8 @@ type Ev is Data:
   ERenamed{name: String, new_name: String}
   # name-free: a live agent's hot messages to its old name `from` (taken)
   EMsgsMoved{from: String, to: String}
-  EMsgSent{msg: S.Msg}
+  # a message and its words (c6: the state keeps its Msg, msg_of_sent)
+  EMsgSent{msg: S.Sent}
   EMsgState{id: Nat, st: S.MSt}
   ESettled{id: Nat}
   ECardOpened{card: S.Card}
@@ -450,6 +451,14 @@ def any_from_user(xs: List<&2, S.Msg>) -> Bool:
 def MRec.to(+r: S.MRec, +to: String) -> S.MRec:
   S.MRec.with_msg(r, S.Msg.with_to(S.MRec.msg(r), to))
 # a sent message's record: queued ("new"), not settled
+# the message a message_sent line leaves in the state: its header and
+# whether it has parts; its words stay in the journal (c6, architect
+# m_56402: what sb-core writes of them is a body the shell fills)
+def msg_of_sent(s: S.Sent) -> S.Msg:
+  match s:
+    case S.Sent{+id, +thread, +from, +to, +reply_to, +expect, +auto, _, +created, +plain, +queued, +via, +parts, +fwd, +view}:
+      S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, Bool.not(String.is_empty(parts)), fwd, view}
+
 def new_rec(+m: S.Msg) -> S.MRec:
   S.MRec.with_st(S.MRec.with_msg(S.MRec.empty(), m), S.Queued{"new"})
 # a delivered message that expects a reply its recipient has not given:
@@ -740,7 +749,8 @@ def apply(+st: S.St, e: Ev) -> S.St:
     # every message, the same as one list's snoc, map_msg, settle)
     # (both lists change together: taken out first, so the state no longer
     # holds them and each keeps one owner, like over_f's field)
-    case EMsgSent{+m}:
+    case EMsgSent{+sent}:
+      +m = msg_of_sent(sent)
       +nm = Nat.max(Nat.max(S.St.next_msg(st), 1n+S.Msg.id(m)), 1n+S.Msg.thread(m))
       +h = S.St.hot(st)
       +o = S.St.old(st)

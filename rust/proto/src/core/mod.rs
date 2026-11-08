@@ -37,6 +37,7 @@
 //! The wire rule binds here as everywhere (lib.rs): a field is only added,
 //! a new tag only goes into an enum with `Unknown` (all four have it).
 
+pub mod body;
 pub mod feed;
 pub mod fx;
 pub mod input;
@@ -119,6 +120,16 @@ pub enum FieldKind {
     /// like [`FieldKind::Inline`], but its read may fail and the whole line
     /// is then skipped (an `every_set` without a schedule).
     InlineOpt(&'static Codec),
+    /// a message's words, a `String` once the shell filled it: sb-core
+    /// writes a [`body::Body`] (Bend `K.Body`), [`body::fill`] makes it
+    /// the text (c6: no message body in sb-core's state).
+    Body,
+    /// likewise, a `Value` once filled: a message's parts
+    /// ([`body::Body::Parts`]).
+    BodyJson,
+    /// `Option<String>`, absent when none: a [`FieldKind::Body`] only some
+    /// records of a kind carry (the reply to `sb wait`'s `message`).
+    OptBodyOmit,
 }
 
 /// A codec of one of sb-core's records: its module's alias in the
@@ -341,6 +352,15 @@ macro_rules! core_fields {
     };
     (@go $m:tt $name:ident [$($done:tt)*] $(#[$fm:meta])* $f:ident : StrOmit $(, $($rest:tt)*)?) => {
         $crate::core::core_fields!(@go $m $name [$($done)* $(#[$fm])* #[serde(default, skip_serializing_if = "String::is_empty")] pub $f: String,] $($($rest)*)?);
+    };
+    (@go $m:tt $name:ident [$($done:tt)*] $(#[$fm:meta])* $f:ident : Body $(, $($rest:tt)*)?) => {
+        $crate::core::core_fields!(@go $m $name [$($done)* $(#[$fm])* #[serde(default)] pub $f: String,] $($($rest)*)?);
+    };
+    (@go $m:tt $name:ident [$($done:tt)*] $(#[$fm:meta])* $f:ident : OptBodyOmit $(, $($rest:tt)*)?) => {
+        $crate::core::core_fields!(@go $m $name [$($done)* $(#[$fm])* #[serde(default, skip_serializing_if = "Option::is_none")] pub $f: Option<String>,] $($($rest)*)?);
+    };
+    (@go $m:tt $name:ident [$($done:tt)*] $(#[$fm:meta])* $f:ident : BodyJson $(, $($rest:tt)*)?) => {
+        $crate::core::core_fields!(@go $m $name [$($done)* $(#[$fm])* #[serde(default)] pub $f: serde_json::Value,] $($($rest)*)?);
     };
     (@go $m:tt $name:ident [$($done:tt)*] $(#[$fm:meta])* $f:ident : Nat $(, $($rest:tt)*)?) => {
         $crate::core::core_fields!(@go $m $name [$($done)* $(#[$fm])* #[serde(default)] pub $f: u64,] $($($rest)*)?);

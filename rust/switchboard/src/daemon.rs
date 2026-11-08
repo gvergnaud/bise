@@ -888,8 +888,12 @@ impl Shell {
     fn run(&mut self, e: Effect) {
         match e {
             Effect::Journal(ev) => {
-                if let Some(l) = self.journal.append(&ev.to_string()) {
+                let w = self.journal.append(&ev.to_string());
+                if let Some(l) = w.log {
                     log_line(&self.env.paths, &l);
+                }
+                if let Some(at) = w.at {
+                    self.hub.st.bodies.index(&ev, at);
                 }
                 self.photos.journaled(&ev);
                 self.answers_journaled(&ev);
@@ -1680,7 +1684,10 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
     let workspace = paths.workspace.to_string_lossy().to_string();
     let mut hub = Hub::with_core(&workspace, opts.core_bin.clone())?;
     boot.core(hub.core_pid());
-    let (mut events, unreadable) = journal_file::read(&paths.journal());
+    let read = journal_file::read(&paths.journal());
+    // c6: sb-core keeps no message's words; the mirror reads them in the journal
+    hub.st.bodies = journal_file::bodies(&paths.journal(), &read);
+    let journal_file::Read { mut events, bad: unreadable, .. } = read;
     // BISE-230: the task worktrees of the old place (<state>/worktrees/)
     // move to <home>/worktrees/<id>/<task>/, and the journal follows
     let legacy = paths.legacy_worktrees();
@@ -1706,7 +1713,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
         &paths,
         &photos,
         Box::new(move || {
-            let (mut events, _) = journal_file::read(&jp.journal());
+            let mut events = journal_file::read(&jp.journal()).events;
             crate::sweep::follow_moves(&mut events, &jp.worktrees);
             events
         }),

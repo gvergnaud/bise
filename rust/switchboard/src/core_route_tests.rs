@@ -5,6 +5,18 @@
 
 use super::*;
 
+/// `h`'s step: its journal events kept as the daemon's append keeps them
+/// (T::go's, for a hub driven alone): the mirror reads its words there.
+fn step(h: &mut Hub, env: &mut FakeEnv, i: Input) -> Vec<Effect> {
+    let fx = h.handle(i, env);
+    for e in &fx {
+        if let Effect::Journal(ev) = e {
+            h.st.bodies.keep(ev);
+        }
+    }
+    fx
+}
+
 #[test]
 fn at_task_to_a_busy_task_steers_and_answers_at_turn_end() {
     let mut t = T::new();
@@ -39,7 +51,7 @@ fn a_say_typed_in_another_thread_leaves_one_route_row_there() {
     assert_eq!(rows.len(), 1, "{fx:?}");
     assert_eq!((&rows[0]["who"], &rows[0]["said"], rows[0].get("card")), (&json!("docs"), &json!("fais une map"), None));
     let id = rows[0]["msg"].as_u64().expect("the message's id");
-    assert!(t.hub.st.msgs().values().any(|m| m.id == id && m.to == "docs" && m.text == "fais une map"), "the message itself went to docs");
+    assert!(t.hub.st.msgs().values().any(|m| m.id == id && m.to == "docs" && t.hub.st.text(m.id) == "fais une map"), "the message itself went to docs");
     assert!(recs_of(&fx, "docs", "route").is_empty(), "never in docs's own feed");
     for from in ["", "docs", "nobody"] {
         let fx = t.user_from("docs", "encore", from);
@@ -164,7 +176,7 @@ fn a_held_route_goes_at_two_seconds_once_with_no_turn() {
     assert!(say_to(&fx, MAIN).is_none() && steer_to(&fx, MAIN).is_none(), "no turn: {:?}", fx);
     let his = last_msg(&t);
     let m = &t.hub.st.msgs()[&his];
-    assert_eq!((m.from.as_str(), m.to.as_str(), m.text.as_str()), (crate::model::USER, MAIN, "@shop why does p99 rise"));
+    assert_eq!((m.from.as_str(), m.to.as_str(), t.hub.st.text(his).as_str()), (crate::model::USER, MAIN, "@shop why does p99 rise"));
     let note = t.hub.st.main_notes.last().expect("a note for main");
     assert!(note.contains(&format!("m_{his}")) && note.contains("shop"), "{note}");
     // forwarded already: main can't send it a second time
@@ -262,7 +274,7 @@ fn a_routed_message_carries_his_context_to_the_project() {
     h.replay(&journal);
     let mut env = FakeEnv::new();
     env.now = t.env.now + 2_500;
-    let fx = h.handle(Input::Tick, &mut env);
+    let fx = step(&mut h, &mut env, Input::Tick);
     let sent: Vec<(String, String)> = fx
         .iter()
         .filter_map(|e| match e {
@@ -274,7 +286,7 @@ fn a_routed_message_carries_his_context_to_the_project() {
     assert_eq!(sent[0].0, "@shop why does p99 rise");
     assert_eq!(serde_json::from_str::<Value>(&sent[0].1).unwrap(), ctx);
     let his = *h.st.msgs().keys().max().unwrap();
-    assert_eq!(h.st.msgs()[&his].text, "@shop why does p99 rise", "no context on the home hub");
+    assert_eq!(h.st.text(his), "@shop why does p99 rise", "no context on the home hub");
     // a forward or an ask carries none
     let (_, fx) = t.req(MAIN, AgentReq::ProjectAsk { project: "shop".into(), text: "status?".into() });
     assert!(fx.iter().any(|e| matches!(e, Effect::XDeliver { context, .. } if context.is_empty())), "{:?}", fx);
@@ -293,7 +305,7 @@ fn a_routed_message_carries_his_parts_to_the_project() {
     h.replay(&journal);
     let mut env = FakeEnv::new();
     env.now = t.env.now + 2_500;
-    let fx = h.handle(Input::Tick, &mut env);
+    let fx = step(&mut h, &mut env, Input::Tick);
     let sent: Vec<String> = fx
         .iter()
         .filter_map(|e| match e {
@@ -303,13 +315,14 @@ fn a_routed_message_carries_his_parts_to_the_project() {
         .collect();
     assert_eq!(sent, vec![parts.to_string()], "{:?}", fx);
     let his = *h.st.msgs().keys().max().unwrap();
-    assert_eq!(h.st.msgs()[&his].parts, parts, "his message at home keeps them");
+    assert_eq!(h.st.words(his).unwrap().parts, parts, "his message at home keeps them");
     // a cancel: his words to main with his parts
     let mut t = T::new();
     ask_with(&mut t, "@shop look", None, parts);
     t.go(Input::RouteCancel { client: None, rid: 1 });
     let his = last_msg(&t);
-    assert_eq!((t.hub.st.msgs()[&his].text.as_str(), t.hub.st.msgs()[&his].parts.as_str()), ("@shop look", parts));
+    let w = t.hub.st.words(his).unwrap();
+    assert_eq!((w.text.as_str(), w.parts.as_str()), ("@shop look", parts));
     // no parts: the forward carries none (the out JSON has no key)
     let mut t = T::new();
     hold(&mut t, "why does p99 rise");
@@ -321,10 +334,11 @@ fn a_routed_message_carries_his_parts_to_the_project() {
     let mut t = T::new();
     t.go(Input::XIn { token: 900, hub: "home-1".into(), xid: 7, kind: "input".into(), text: "look".into(), name: String::new(), parts: parts.into() });
     let his = last_msg(&t);
-    assert_eq!(t.hub.st.msgs()[&his].parts, parts);
+    assert_eq!(t.hub.st.words(his).unwrap().parts, parts);
     t.go(Input::XIn { token: 901, hub: "home-1".into(), xid: 8, kind: "ask".into(), text: "status?".into(), name: String::new(), parts: parts.into() });
     let q = last_msg(&t);
-    assert!(t.hub.st.msgs()[&q].parts.is_empty(), "bise's own question has no parts");
+    assert!(t.hub.st.words(q).unwrap().parts.is_empty(), "bise's own question has no parts");
+    assert!(!t.hub.st.msgs()[&q].has_parts);
 }
 
 // a restart mid-hold: the act is in the journal, it fires once after

@@ -14,12 +14,23 @@ use crate::model::State;
 use bise_proto::thread::lines::{read, Hub, Rec};
 use serde_json::{json, Value};
 
-/// `fwd` and `fwd_at` on sb-core's `send` / `spawn` input; none: unchanged
-/// (an older core reads the same line as before).
+/// `fwd`, `fwd_at` and `orig` on sb-core's `send` / `spawn` input; none:
+/// unchanged (an older core reads the same line as before).
 pub fn keys(st: &State, q: &mut Value, fwd: Option<u64>) {
     let Some(n) = fwd else { return };
     q["fwd"] = json!(n);
     q["fwd_at"] = json!(st.peek(n).map(|m| crate::search::fmt_utc(m.created_ms)).unwrap_or_default());
+    q["orig"] = orig(st, n);
+}
+
+/// Message n's words for sb-core (c6, architect m_56402: its state keeps
+/// none; forward.bend `orig_of`): `{text, parts}` from the journal, a
+/// missing one its [`Missing`](bise_proto::core::body::Missing) text.
+pub fn orig(st: &State, n: u64) -> Value {
+    match st.words(n) {
+        Ok(w) => json!({"text": w.text, "parts": w.parts}),
+        Err(m) => json!({"text": m.text(), "parts": ""}),
+    }
 }
 
 /// The position (from 1, as `transcript.rs`) of message n's entry in a

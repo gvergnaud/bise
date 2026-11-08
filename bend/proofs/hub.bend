@@ -449,16 +449,16 @@ def Laws.busy_batch_has_no_queued(xs):
 
 # ---- bise's cross-hub messages (desktop S2, hub/xhub.bend) ----
 
-def Laws.xhub_only_main_forwards(s, from, id, e):
-  %Equal.sym(Bool, String.eq(from, HM.MAIN()), False{}, e) : {Bool.pick(HXB.Fwd, _, HXB.forward.done(HXH.out_by_msg(HS.Xs.outbox(HS.St.x(s)), id), s, id), HXB.FwdErr{"only main forwards to the projects"}) == HXB.FwdErr{"only main forwards to the projects"} : HXB.Fwd}
+def Laws.xhub_only_main_forwards(s, from, id, text, e):
+  %Equal.sym(Bool, String.eq(from, HM.MAIN()), False{}, e) : {Bool.pick(HXB.Fwd, _, HXB.forward.done(HXH.out_by_msg(HS.Xs.outbox(HS.St.x(s)), id), s, id, text), HXB.FwdErr{"only main forwards to the projects"}) == HXB.FwdErr{"only main forwards to the projects"} : HXB.Fwd}
   {==}
 
-def Laws.xhub_forward_once(s, id, ob, e):
-  %Equal.sym(Maybe<&2, HS.Out>, HXH.out_by_msg(HS.Xs.outbox(HS.St.x(s)), id), Some{ob}, e) : {HXB.forward.done(_, s, id) == HXB.FwdErr{String.append(String.append(HXB.mid(id), " was already forwarded to "), HS.Out.project(ob))} : HXB.Fwd}
+def Laws.xhub_forward_once(s, id, ob, text, e):
+  %Equal.sym(Maybe<&2, HS.Out>, HXH.out_by_msg(HS.Xs.outbox(HS.St.x(s)), id), Some{ob}, e) : {HXB.forward.done(_, s, id, text) == HXB.FwdErr{String.append(String.append(HXB.mid(id), " was already forwarded to "), HS.Out.project(ob))} : HXB.Fwd}
   {==}
 
-def Laws.xhub_forward_needs_his_message(m, id, e):
-  %Equal.sym(Bool, String.eq(HS.Msg.from(m), HM.USER()), False{}, e) : {Bool.pick(HXB.Fwd, Bool.and(_, String.eq(HS.Msg.to(m), HM.MAIN())), HXB.FwdOk{HS.Msg.text(m)}, HXB.FwdErr{String.append(HXB.mid(id), " is not a message the user sent you: forward his own words only (your own question: sb project ask)")}) == HXB.FwdErr{String.append(HXB.mid(id), " is not a message the user sent you: forward his own words only (your own question: sb project ask)")} : HXB.Fwd}
+def Laws.xhub_forward_needs_his_message(m, id, text, e):
+  %Equal.sym(Bool, String.eq(HS.Msg.from(m), HM.USER()), False{}, e) : {Bool.pick(HXB.Fwd, Bool.and(_, String.eq(HS.Msg.to(m), HM.MAIN())), HXB.FwdOk{text}, HXB.FwdErr{String.append(HXB.mid(id), " is not a message the user sent you: forward his own words only (your own question: sb project ask)")}) == HXB.FwdErr{String.append(HXB.mid(id), " is not a message the user sent you: forward his own words only (your own question: sb project ask)")} : HXB.Fwd}
   {==}
 
 def Laws.xhub_outbox_settles_once(x, xid):

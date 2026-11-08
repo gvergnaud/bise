@@ -42,7 +42,11 @@ core_kinds! {
         /// with its `sb` tag, written as `sb <kind> :: <json>`
         Feed = "feed" => FFeed { agent: Str, rec: Json },
         /// the answer to an agent's request
-        Reply = "reply" => FReply { token: Nat, body: Json },
+        /// the answer to an agent's request; `message`: the words of the
+        /// message a `sb wait` gets (c6, architect m_56453: sb-core writes
+        /// its body, the shell fills it, then sets `body.message` to it,
+        /// core_link.rs; absent for every other reply)
+        Reply = "reply" => FReply { token: Nat, body: Json, message: OptBodyOmit },
         /// sb-core's word on a request's sender (issue 37 #2): the answer
         /// to `speaks`, and a `req` refused before it runs (then nothing
         /// else); `why` the line `sb` prints when not `ok`

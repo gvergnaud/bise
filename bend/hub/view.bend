@@ -84,13 +84,12 @@ def agents_json(xs: List<&2, S.Agent>, +rts: List<&2, X.Rt>, +ws: List<&2, X.Wai
 def RECENT() -> Nat:
   256n
 
-# view-all-perf: a message view_all sends whole (its text and parts): a
-# hot one (queued, owing a reply), a question not settled, or one of the
-# RECENT newest (`next`: the next message id). Every other one is cold:
-# its compact row in the view's `cold` (cold_json), without its body;
-# the hub asks msg_bodies when it needs one (on a big hub the bodies were
-# ~85 % of view_all, the rows' keys most of the rest). A step's view and
-# msg_bodies send every message whole.
+# view-all-perf: a message view_all sends whole (its full row): a hot one
+# (queued, owing a reply), a question not settled, or one of the RECENT
+# newest (`next`: the next message id). Every other one is cold: its
+# compact row in the view's `cold` (cold_json; the rows' keys were most
+# of a big hub's view_all). A step's view sends every message whole. No
+# message carries its words (c6): the hub reads them in the journal.
 def ships_whole(+r: S.MRec, +next: Nat) -> Bool:
   +m = S.MRec.msg(r)
   M.MRec.is_hot(r) || (S.Msg.expect(m) && Bool.not(S.MRec.settled(r))) || Nat.is_le(next, Nat.add(S.Msg.id(m), RECENT()))
@@ -254,7 +253,7 @@ def opt_list(m: Maybe<&2, Nat>) -> List<&2, Nat>:
 def ev_ids(e: M.Ev) -> List<&2, Nat>:
   match e:
     case M.EMsgSent{+m}:
-      S.Msg.id(m) <> opt_list(S.Msg.reply_to(m))
+      S.Sent.id(m) <> opt_list(S.Sent.reply_to(m))
     case M.EMsgState{+id, _}:
       [id]
     case M.ESettled{+id}:

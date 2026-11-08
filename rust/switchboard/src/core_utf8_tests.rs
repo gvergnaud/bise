@@ -14,7 +14,7 @@ fn a_200_kb_message_keeps_every_char_across_sb_cores_recvs() {
     let text: String = "é─😀".repeat(200_000 / 9);
     let (_, fx) = t.req(MAIN, AgentReq::Send { to: "a".into(), text: text.clone(), expect_reply: false, reply_to: None, queued: false, why: String::new(), switch: None, attach: Vec::new(), parts: String::new(), fwd: None });
     assert!(!fx.is_empty());
-    let m = t.hub.st.msgs().values().find(|m| m.to == "a" && m.text.len() > 100_000).map(|m| m.text.clone());
+    let m = t.hub.st.msgs().values().find(|m| m.to == "a" && t.hub.st.text(m.id).len() > 100_000).map(|m| t.hub.st.text(m.id));
     let m = m.expect("the message to a");
     assert!(!m.contains('\u{fffd}'), "a char became U+FFFD");
     assert_eq!(m, text);
