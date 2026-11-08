@@ -33,7 +33,7 @@ INTERNAL = (
 
 TEST = (
     "BEND_CLIPBOARD_FILE", "BEND_CLIPBOARD_IMAGE_FILE", "BEND_JSRT_BIN", "BISE_AMBIENT_FAKE_VOICE", "BISE_COMPUTER_USE",
-    "BISE_CU_EXTENSION", "BISE_CU_HELPER", "BISE_DETECT_KEYCHAIN", "BISE_DIST_URL_DESKTOP",
+    "BISE_CU_EXTENSION", "BISE_CU_HELPER", "BISE_DETECT_KEYCHAIN", "BISE_DISK_FREE_GB", "BISE_DIST_URL_DESKTOP",
     "BISE_DIST_URL_DESKTOP_BETA", "BISE_GITHUB_API", "BISE_HOME_WORKSPACE",
     "BISE_MISTRAL_URL", "BISE_OPENROUTER_AUTH", "BISE_OPEN_RECORD", "BISE_PROBATION_SECS", "BISE_PROTO_BLESS", "BISE_RELEASE_CHECK_SECS", "BISE_RELEASE_LOOK_SECS", "BISE_RELEASE_SCRIPT", "BISE_TELEMETRY_URL", "BISE_TEST_HOME", "BISE_TEST_KEYCHAIN", "BISE_TEST_KEYCHAIN_LOCKED",
     "BISE_USAGE_BLESS", "BISE_VOICE_FAKE", "BISE_VOICE_FAKE_HEARD", "BISE_VOICE_FAKE_HEARD_MS", "SB_BENCH_JOURNAL", "SB_BENCH_LINES", "SB_BENCH_TRANSCRIPT",
@@ -145,11 +145,14 @@ def clean_env(**extra):
     caller's path overrides (OWN_PATHS: his ~/.bise paths), XDG homes and
     real keys (is_real_key_var, unless real_accounts()), on a throwaway
     HOME (test_home; cargo keeps its real CARGO_HOME and RUSTUP_HOME),
-    plus `extra` (a test's own HOME wins)."""
+    plus `extra` (a test's own HOME wins). Its hub never reads the host's
+    disk (BISE_DISK_FREE_GB=off, unless `extra` fakes a reading): the real
+    Mac's free GB reached a test main as a note (tui_reload_tmux)."""
     drop = NOT_INHERITED + OWN_PATHS
     keys = not real_accounts()
     env = on_test_home({k: v for k, v in os.environ.items()
                         if k not in drop and not (keys and is_real_key_var(k))})
+    env["BISE_DISK_FREE_GB"] = "off"
     env.update(extra)
     return env
 
@@ -270,6 +273,14 @@ def _self_test():
     assert os.path.isfile(os.path.join(env["HOME"], ".gitconfig"))
     assert not [k for k in env if is_place_var(k)], "clean_env keeps an XDG home"
     assert clean_env(HOME="/t/h")["HOME"] == "/t/h"
+    # the disk law: a test hub never reads the host's disk, whatever the
+    # caller exports; a test may fake a reading
+    os.environ["BISE_DISK_FREE_GB"] = "5"
+    try:
+        assert clean_env()["BISE_DISK_FREE_GB"] == "off", "clean_env lets a test hub read the host's disk"
+    finally:
+        del os.environ["BISE_DISK_FREE_GB"]
+    assert clean_env(BISE_DISK_FREE_GB="30")["BISE_DISK_FREE_GB"] == "30"
     for bad in ({}, {"HOME": real_home()}, {"HOME": "/t/h", "XDG_STATE_HOME": os.path.join(real_home(), ".local/state")}):
         try:
             refuse_real_home(bad)

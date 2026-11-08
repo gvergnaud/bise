@@ -151,6 +151,7 @@ pub const VARS: &[Var] = &[
     test("BISE_CU_HELPER", "the computer-use helper app (tests)"),
     test("BISE_DETECT_KEYCHAIN", "the keychain probe's knob (tests)"),
     user("BISE_DEV", "/log outside the dev build"),
+    test("BISE_DISK_FREE_GB", "the hub's free-disk reading (tests): a number fakes it, `off` reads nothing; unset = the host's volume"),
     user("BISE_DIST_URL", "the release channel's download URL"),
     test("BISE_DIST_URL_DESKTOP", "the desktop app's release channel, where its desktop.json is (tests; the core reads it, so never a BISE_DESKTOP_ name: the app keeps those)"),
     test("BISE_DIST_URL_DESKTOP_BETA", "the desktop app's beta channel, where its desktop.json is (tests; as BISE_DIST_URL_DESKTOP)"),

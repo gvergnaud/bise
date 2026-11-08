@@ -1793,7 +1793,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
         prs: None,
         commit_style: None,
         cu: crate::computer_use::Watch::new(&proc_hub),
-        disk: disk_watch::DiskWatch::default(),
+        disk: disk_watch::DiskWatch::from_env(),
         pg: pages::PageState::load(&paths.state),
         fn_ctx: None,
         idle: crate::idle::Watch::new(
