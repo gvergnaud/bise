@@ -162,22 +162,14 @@ impl Hub {
         self.st.agents.get(name).map(|a| onto(&a.ws))
     }
 
-    /// `sb spawn --feature <f>` (dev-flow §5.1): the task's name as sb-core
-    /// will pick it (the next free one, `fix-2`), then its worktree from
-    /// the feature's tip, made now so sb-core takes it as the place to
-    /// join.
-    pub(super) fn feature_worktree(
-        &self,
-        env: &mut dyn Env,
-        name: Option<&str>,
-        brief: &Brief,
-        feature: &str,
-    ) -> Result<Workspace, String> {
+    /// `sb spawn --feature <f>` (dev-flow §5.1): refused in a PR-flow repo;
+    /// else sb-core creates the task placing and its fx `worktree_create`
+    /// makes the worktree from the feature's tip, off the loop (issue 32
+    /// 3c).
+    pub(super) fn feature_allowed(&self) -> Result<(), String> {
         if self.flow == Some(crate::flow::FlowMode::Pr) {
             return Err("this repo ships through pull requests: a feature is a PR's branch here (`--place new`)".into());
         }
-        let base = new_task(name, brief, "", true, false)?.base;
-        let free = unique_name(&self.st, &base);
-        env.worktree_feature(&free, feature)
+        Ok(())
     }
 }

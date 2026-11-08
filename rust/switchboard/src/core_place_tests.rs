@@ -150,7 +150,7 @@ fn a_join_while_placing_waits_for_its_place() {
             assert!(t.env.dropped.is_empty());
             continue;
         }
-        let made = crate::place_job::placed_now(&mut t.env, &Effect::Place(crate::place_job::Job::Create { name: "a".into(), with_changes: false })).unwrap();
+        let made = crate::place_job::placed_now(&mut t.env, &Effect::Place(crate::place_job::Job::Create { name: "a".into(), with_changes: false, feature: String::new() })).unwrap();
         let fx = t.go(made);
         assert!(t.env.dropped.is_empty());
         let (wa, wb) = (t.hub.st.agents["a"].ws.clone(), t.hub.st.agents["b"].ws.clone());

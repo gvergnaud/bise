@@ -1,11 +1,9 @@
 //! Small pure helpers of core.rs's handlers (moved out of core.rs to keep
 //! it under its line ratchet, architect m_27675): the direct-exchange
-//! note, a new task's free name, the `sb` commands that need git, a
-//! message id's and a JSON field's reading. No hub
-//! state: arguments in, words or a name out.
+//! note, the `sb` commands that need git, a message id's and a JSON
+//! field's reading. No hub state: arguments in, words out.
 
 use super::AgentReq;
-use crate::model::{State, MAIN};
 use crate::util::{clip_tail, one_line};
 use serde_json::Value;
 
@@ -39,24 +37,6 @@ pub(super) fn direct_exchange(task: &str, sent: &[String], reply: &str) -> (Stri
         clip_tail(&one_line(reply), 2000)
     );
     (note, format!("You talked to @{} ({} message{})", task, n, s))
-}
-
-/// The name sb-core gives a new task of base name `base` (hub/core.bend
-/// `unique_name`): `base` when free, else `base-2`, `base-3`… cut to 24
-/// characters, trailing dashes off before the suffix.
-pub(super) fn unique_name(st: &State, base: &str) -> String {
-    let taken = |n: &str| n == MAIN || n == "user" || n == "hub" || st.resolve(n).is_some();
-    if !taken(base) {
-        return base.to_string();
-    }
-    (2..1002)
-        .map(|i| {
-            let suffix = format!("-{}", i);
-            let head: String = base.chars().take(24usize.saturating_sub(suffix.len())).collect();
-            format!("{}{}", head.trim_end_matches('-'), suffix)
-        })
-        .find(|c| !taken(c))
-        .unwrap_or_else(|| base.to_string())
 }
 
 /// The `sb` commands that need git: off in a workspace without it (the

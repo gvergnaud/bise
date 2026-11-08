@@ -151,23 +151,13 @@ impl Hub {
     /// A git query of sb-core (RFC 0002), on the workspace the mirror
     /// knows for the task.
     fn query(&mut self, env: &mut dyn Env, q: &Value) -> Value {
-        let name = jstr(q, "name");
         let ws: Option<Workspace> = serde_json::from_value(q["ws"].clone()).ok();
-        let res = |r: Result<Value, String>| match r {
-            Ok(v) => json!({"ok": v}),
-            Err(e) => json!({"err": e}),
-        };
         // its share of the loop's message, by query (spent.rs)
         let _t = self.spent.part(match jstr(q, "q").as_str() {
-            "worktree_create" => "git worktree_create",
             "worktree_loss" => "git worktree_loss",
             _ => "git query",
         });
         match jstr(q, "q").as_str() {
-            "worktree_create" => {
-                let wc = q.get("with_changes").and_then(|x| x.as_bool()).unwrap_or(false);
-                res(env.worktree_create(&name, wc).map(|w| json!(w)))
-            }
             "worktree_loss" => {
                 let l = ws.map(|w| env.worktree_loss(&w)).unwrap_or_default();
                 json!({"dirty": l.dirty, "unpushed": l.unpushed})

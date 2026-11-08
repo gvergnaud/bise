@@ -40,15 +40,24 @@ law placed_create_once:
   {HPL.is_ok(HPL.placed_of.agent(Some{a}, n, ws, err)) == False{} : Bool}
 
 # LAW: a worktree that could not be made fails its live placing task
-# (not a restore's: placed_of.made's None), with git's words, and names
-# its spawner.
+# (a new one's, BNew), with git's words, and names its spawner.
 law placed_err_fails:
   for +a: HS.Agent
   for +n: String
   for +ws: J.Json
   for +err: String
   for e: {String.is_empty(err) == False{} : Bool}
-  {HPL.placed_of.made(None{}, a, n, ws, err) == HPL.PErr{n, err, HPL.parent_of(HS.Agent.parent(a))} : HPL.Do}
+  {HPL.placed_of.made(HPL.BNew{}, a, n, ws, err) == HPL.PErr{n, err, HPL.parent_of(HS.Agent.parent(a)), HPL.BNew{}} : HPL.Do}
+
+# LAW: a new task's worktree made: the journal's line, main's line, then
+# its REPL starts fresh.
+law placed_new_starts:
+  for -o: HS.St
+  for +cx: HX.Cx<o>
+  for +n: String
+  for +ws: J.Json
+  {HC.placed(o, HPL.POk{n, ws, HPL.BNew{}}, cx)
+    == HC.spawn(o, HC.feed(o, HC.emit(o, cx, HM.EPlaced{n, ws, ""}, Unit{}, Unit{}, Unit{}), HM.MAIN(), FD.info(HPL.ready_text(n, ws))), n, False{}) : HX.Cx<o>}
 
 # LAW: that failure is one stop (as failed, with git's words) and one
 # word to the spawner (placed.tell: a message, or main's feed for his
@@ -59,7 +68,7 @@ law placed_err_tells_once:
   for +n: String
   for +err: String
   for +parent: String
-  {HC.placed(o, HPL.PErr{n, err, parent}, cx)
+  {HC.placed(o, HPL.PErr{n, err, parent, HPL.BNew{}}, cx)
     == HC.placed.tell(o, String.eq(parent, HM.USER()),
       HC.stop_noted(o, HC.emit(o, cx, HM.EPlaced{n, J.JNull{}, err}, Unit{}, Unit{}, Unit{}), n, HS.LFailed{}, err),
       parent, HPL.err_text(n, err)) : HX.Cx<o>}
@@ -111,8 +120,9 @@ law place_join_shares:
   for +b: String
   for +n: String
   for +ws: J.Json
+  for +bk: HPL.Back
   for +err: String
-  {HPL.placed_of.made(None{}, a, b, HPL.join.ws(HPL.POk{n, ws}), HPL.join.err(HPL.POk{n, ws}, err)) == HPL.POk{b, ws} : HPL.Do}
+  {HPL.placed_of.made(HPL.BNew{}, a, b, HPL.join.ws(HPL.POk{n, ws, bk}), HPL.join.err(HPL.POk{n, ws, bk}, err)) == HPL.POk{b, ws, HPL.BNew{}} : HPL.Do}
 
 # LAW: A's worktree not made, a live placing joiner fails too, with the
 # same words, and its spawner is told (PErr, then placed_err_tells_once).
@@ -122,10 +132,11 @@ law place_join_err_fails_both:
   for +n: String
   for +e: String
   for +p: String
+  for +bk: HPL.Back
   for +err: String
   for h: {String.is_empty(e) == False{} : Bool}
-  {HPL.placed_of.made(None{}, a, b, HPL.join.ws(HPL.PErr{n, e, p}), HPL.join.err(HPL.PErr{n, e, p}, err))
-    == HPL.PErr{b, e, HPL.parent_of(HS.Agent.parent(a))} : HPL.Do}
+  {HPL.placed_of.made(HPL.BNew{}, a, b, HPL.join.ws(HPL.PErr{n, e, p, bk}), HPL.join.err(HPL.PErr{n, e, p, bk}, err))
+    == HPL.PErr{b, e, HPL.parent_of(HS.Agent.parent(a)), HPL.BNew{}} : HPL.Do}
 
 # ---- a drop off the loop (issue 32 3b: `worktree_drop`, `unplaced`) ----
 
@@ -204,14 +215,14 @@ law restore_off_asks_once:
     == HC.restore.go.as(o, HC.out(o, HC.emit(o, cx, HM.EWorkspace{HS.Agent.name(a), HPL.restoring_ws(HS.Agent.ws(a))}, Unit{}, Unit{}, Unit{}),
       HF.worktree_restore(HS.Agent.name(a), HS.Agent.ws(a), HS.Agent.snap(a))), a, HPL.restoring_note()) : HX.Cx<o> & HC.TaskR}
 
-# LAW: a restore's worktree made: PRestored (its REPL resumes); not made:
-# PUnrestored, back to the dropped ws it came from, with git's words.
+# LAW: a restore's worktree made: POk with its Back (its REPL resumes);
+# not made: PErr with its Back (back to the dropped ws), git's words.
 law placed_restored:
   for +a: HS.Agent
   for +n: String
   for +ws: J.Json
   for +from: J.Json
-  {HPL.placed_of.made(Some{from}, a, n, ws, "") == HPL.PRestored{n, ws} : HPL.Do}
+  {HPL.placed_of.made(HPL.BRestore{from}, a, n, ws, "") == HPL.POk{n, ws, HPL.BRestore{from}} : HPL.Do}
 
 law placed_unrestored:
   for +a: HS.Agent
@@ -220,7 +231,7 @@ law placed_unrestored:
   for +from: J.Json
   for +err: String
   for e: {String.is_empty(err) == False{} : Bool}
-  {HPL.placed_of.made(Some{from}, a, n, ws, err) == HPL.PUnrestored{n, err, from} : HPL.Do}
+  {HPL.placed_of.made(HPL.BRestore{from}, a, n, ws, err) == HPL.PErr{n, err, HPL.parent_of(HS.Agent.parent(a)), HPL.BRestore{from}} : HPL.Do}
 
 # LAW: a restore made again: its ws, its saved work used (no snapshot
 # left), then its REPL resumes.
@@ -229,7 +240,8 @@ law restore_ok_clears_snapshot:
   for +cx: HX.Cx<o>
   for +n: String
   for +ws: J.Json
-  {HC.placed(o, HPL.PRestored{n, ws}, cx)
+  for +from: J.Json
+  {HC.placed(o, HPL.POk{n, ws, HPL.BRestore{from}}, cx)
     == HC.spawn(o, HC.feed(o, HC.emit(o, HC.emit(o, cx, HM.EPlaced{n, ws, ""}, Unit{}, Unit{}, Unit{}), HM.ESnapshot{n, None{}}, Unit{}, Unit{}, Unit{}),
       HM.MAIN(), FD.info(HPL.ready_text(n, ws))), n, True{}) : HX.Cx<o>}
 
@@ -241,20 +253,69 @@ law restore_err_keeps_archived:
   for +cx: HX.Cx<o>
   for +n: String
   for +e: String
+  for +p: String
   for +from: J.Json
-  {HC.placed(o, HPL.PUnrestored{n, e, from}, cx)
+  {HC.placed(o, HPL.PErr{n, e, p, HPL.BRestore{from}}, cx)
     == HC.feed(o, HC.stop_noted(o, HC.emit(o, HC.emit(o, cx, HM.EPlaced{n, J.JNull{}, e}, Unit{}, Unit{}, Unit{}), HM.EWorkspace{n, from}, Unit{}, Unit{}, Unit{}),
       n, HS.LArchived{}, e), HM.MAIN(), FD.warn(HPL.unrestored_text(n, e))) : HX.Cx<o>}
 
 # LAW: a hub stopped mid-restore asks for it again at its boot (a mate
-# that joined it waits for the same: restore_of skips it).
+# that joined it waits for the same: boot_back skips it).
 law boot_reemits_stuck_restore:
   for -o: HS.St
   for +cx: HX.Cx<o>
   for +a: HS.Agent
   for +from: J.Json
-  {HC.boot.place(o, Some{from}, cx, a) == HC.out(o, cx, HF.worktree_restore(HS.Agent.name(a), from, HS.Agent.snap(a))) : HX.Cx<o>}
+  {HC.boot.place(o, HPL.BRestore{from}, cx, a) == HC.out(o, cx, HF.worktree_restore(HS.Agent.name(a), from, HS.Agent.snap(a))) : HX.Cx<o>}
 
 law boot_skips_restore_joiner:
   for +ws: J.Json
-  {HPL.restore_of.go(True{}, ws) == None{} : Maybe<&2, J.Json>}
+  {HPL.boot_back.go(True{}, ws) == HPL.BNew{} : HPL.Back}
+
+# ---- an isolate and a feature off the loop (issue 32 3c) ----
+
+# LAW: /isolate stops the REPL, makes its ws placing (no REPL until
+# placed: no_repl_before_placed), then asks the shell for the worktree;
+# its answer says so, nothing waits on git.
+law isolate_off_asks_once:
+  for -o: HS.St
+  for +cx: HX.Cx<o>
+  for +a: HS.Agent
+  {HC.isolate.off(o, cx, a)
+    == (HC.feed(o, HC.out(o, HC.emit(o, HC.upd_rt(o, HC.out(o, cx, HF.kill(HS.Agent.name(a))), HX.Rt.with_run(HC.rt(o, HC.out(o, cx, HF.kill(HS.Agent.name(a))), HS.Agent.name(a)), HS.RDown{})),
+        HM.EWorkspace{HS.Agent.name(a), HPL.isolating_ws(HS.Agent.ws(a))}, Unit{}, Unit{}, Unit{}), HF.worktree_create(HS.Agent.name(a), False{}, "")),
+      HM.MAIN(), FD.info(HPL.isolating_text(HS.Agent.name(a)))), HC.TOk{HS.Agent.name(a)}) : HX.Cx<o> & HC.TaskR}
+
+# LAW: an isolate's worktree made: its REPL resumes there, then is told
+# its new folder.
+law isolate_ok_resumes_there:
+  for -o: HS.St
+  for +cx: HX.Cx<o>
+  for +n: String
+  for +ws: J.Json
+  for +from: J.Json
+  {HC.placed(o, HPL.POk{n, ws, HPL.BIsolate{from}}, cx)
+    == HC.fst(o, HC.send(o, HC.spawn(o, HC.feed(o, HC.emit(o, cx, HM.EPlaced{n, ws, ""}, Unit{}, Unit{}, Unit{}), HM.MAIN(), FD.info(HPL.isolated_text(n, ws))), n, True{}),
+      HC.msg(HM.USER(), n, HPL.isolated_note(ws), False{}, None{}, True{}, False{}))) : HX.Cx<o>}
+
+# LAW: an isolate's worktree not made: back in the shared ws it had, its
+# REPL resumed there, git's words in main's feed.
+law isolate_err_back_shared:
+  for -o: HS.St
+  for +cx: HX.Cx<o>
+  for +n: String
+  for +e: String
+  for +p: String
+  for +from: J.Json
+  {HC.placed(o, HPL.PErr{n, e, p, HPL.BIsolate{from}}, cx)
+    == HC.spawn(o, HC.feed(o, HC.emit(o, HC.emit(o, cx, HM.EPlaced{n, J.JNull{}, e}, Unit{}, Unit{}, Unit{}), HM.EWorkspace{n, from}, Unit{}, Unit{}, Unit{}),
+      HM.MAIN(), FD.warn(HPL.unisolated_text(n, e))), n, True{}) : HX.Cx<o>}
+
+# LAW: a placing ws's worktree_create carries its feature (`sb spawn
+# --feature`: from the feature's tip; "": main's).
+law feature_rides_the_fx:
+  for -o: HS.St
+  for +cx: HX.Cx<o>
+  for +n: String
+  for +ws: J.Json
+  {HC.place.ask(o, True{}, cx, n, ws) == HC.out(o, cx, HF.worktree_create(n, J.get_bool_or(ws, "with_changes", False{}), HPL.ws_feature(ws))) : HX.Cx<o>}

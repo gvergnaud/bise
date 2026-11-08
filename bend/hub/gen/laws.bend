@@ -1269,7 +1269,7 @@ def fx_kill_bare():
   {==}
 
 law fx_worktree_create_bare:
-  {FX.of(J.obj([J.kv("fx", J.JStr{"worktree_create"})])) == FX.FWorktreeCreate{"", False{}} : FX.Fx}
+  {FX.of(J.obj([J.kv("fx", J.JStr{"worktree_create"})])) == FX.FWorktreeCreate{"", False{}, ""} : FX.Fx}
 
 def fx_worktree_create_bare():
   {==}
@@ -1482,9 +1482,10 @@ def fx_FKill_round(agent):
 law fx_FWorktreeCreate_round:
   for name: String
   for with_changes: Bool
-  {FX.of(FX.json(FX.FWorktreeCreate{name, with_changes})) == FX.FWorktreeCreate{name, with_changes} : FX.Fx}
+  for feature: String
+  {FX.of(FX.json(FX.FWorktreeCreate{name, with_changes, feature})) == FX.FWorktreeCreate{name, with_changes, feature} : FX.Fx}
 
-def fx_FWorktreeCreate_round(name, with_changes):
+def fx_FWorktreeCreate_round(name, with_changes, feature):
   {==}
 
 law fx_FWorktreeDrop_round:

@@ -72,7 +72,7 @@ pub(super) fn plain(f: CoreFx) -> Plain {
         CoreFx::Rt(_) => return Plain::Nothing,
         CoreFx::Spawn(s) => Effect::Spawn { agent: s.agent, resume: s.resume, crash_note: s.crash_note, wait_load: s.wait_load },
         CoreFx::Kill(k) => Effect::Kill { agent: k.agent },
-        CoreFx::WorktreeCreate(w) => Effect::Place(Job::Create { name: w.name, with_changes: w.with_changes }),
+        CoreFx::WorktreeCreate(w) => Effect::Place(Job::Create { name: w.name, with_changes: w.with_changes, feature: w.feature }),
         CoreFx::WorktreeDrop(w) => Effect::Place(Job::Drop { name: w.name, ws: w.ws, dirty: w.dirty, unpushed: w.unpushed }),
         CoreFx::WorktreeRestore(w) => Effect::Place(Job::Restore { name: w.name, ws: w.ws, snapshot: w.snapshot }),
         CoreFx::Say(s) => Effect::Say { agent: s.agent, text: s.text },

@@ -1002,7 +1002,7 @@ def notify_main(-o: S.St, +cx: X.Cx<o>, +text: String) -> X.Cx<o>:
 def place.ask(-o: S.St, placing: Bool, +cx: X.Cx<o>, +name: String, +ws: J.Json) -> X.Cx<o>:
   match placing:
     case True{}:
-      out(o, cx, F.worktree_create(name, J.get_bool_or(ws, "with_changes", False{})))
+      out(o, cx, F.worktree_create(name, J.get_bool_or(ws, "with_changes", False{}), PL.ws_feature(ws)))
     case False{}:
       cx
 
@@ -1039,20 +1039,21 @@ def NewTask.with_changes(x: NewTask) -> Bool:
     case NewTask{_, _, _, _, _, _, +with_changes, _, _}:
       with_changes
 
-def create.git(-o: S.St, git: Bool, +cx: X.Cx<o>, +t: NewTask, +name: String) -> X.Cx<o> & TaskR:
+# hub-loop: `ws` placing, the shell makes its worktree off its loop
+# (place.bend)
+def create.git(-o: S.St, git: Bool, +cx: X.Cx<o>, +t: NewTask, +name: String, +ws: J.Json) -> X.Cx<o> & TaskR:
   match git:
     case False{}:
       (cx, TErr{"the workspace is not a git repository: no worktree possible"})
     case True{}:
-      # hub-loop: the shell makes it off its loop (place.bend)
-      create.go(o, cx, t, name, PL.placing_ws(NewTask.with_changes(t)))
+      create.go(o, cx, t, name, ws)
 
 def create.wt(-o: S.St, wt: Bool, +cx: X.Cx<o>, +t: NewTask, +name: String) -> X.Cx<o> & TaskR:
   match wt:
     case False{}:
       create.go(o, cx, t, name, PL.shared_ws(X.R.workspace(rr(o, cx))))
     case True{}:
-      create.git(o, X.R.git(rr(o, cx)), cx, t, name)
+      create.git(o, X.R.git(rr(o, cx)), cx, t, name, PL.placing_ws(NewTask.with_changes(t)))
 
 def NewTask.worktree(x: NewTask) -> Bool:
   match x:
@@ -1092,6 +1093,28 @@ def create_in(-o: S.St, +cx: X.Cx<o>, +t: NewTask, j: Maybe<&2, J.Json>) -> X.Cx
       create_in.go(o, String.is_empty(NewTask.base(t)), cx, t, kvs)
     case _:
       create_task(o, cx, t)
+
+def create_feature.go(-o: S.St, empty: Bool, +cx: X.Cx<o>, +t: NewTask, +f: String) -> X.Cx<o> & TaskR:
+  match empty:
+    case True{}:
+      (cx, TErr{"a new task needs a name"})
+    case False{}:
+      +ws = PL.ws_with_feature(PL.placing_ws(NewTask.with_changes(t)), f)
+      create.git(o, X.R.git(rr(o, cx)), cx, t, NT.unique_name(st(o, cx), NewTask.base(t)), ws)
+
+# `sb spawn --feature <f>` (dev-flow §5.1, issue 32 3c): its own worktree
+# from f's tip, made off the loop like any (place.ask's fx carries f);
+# no feature: create_in
+def create_feature(-o: S.St, none: Bool, +cx: X.Cx<o>, +t: NewTask, j: Maybe<&2, J.Json>, +f: String) -> X.Cx<o> & TaskR:
+  match none:
+    case True{}:
+      create_in(o, cx, t, j)
+    case False{}:
+      create_feature.go(o, String.is_empty(NewTask.base(t)), cx, t, f)
+
+# a spawn request's task: in a place (`join`), from a feature, or new
+def create_req(-o: S.St, +cx: X.Cx<o>, +t: NewTask, +q: J.Json) -> X.Cx<o> & TaskR:
+  create_feature(o, String.is_empty(K.get_s(q, "feature")), cx, t, J.get(q, "join"), K.get_s(q, "feature"))
 
 # ---- timers (`sb every`, hub/timers.bend) ----
 # The steps of the timers, wired around timers.bend's pure decisions.
@@ -1714,40 +1737,24 @@ def restore.agent(-o: S.St, m: Maybe<&2, S.Agent>, +cx: X.Cx<o>, +name: String) 
 def restore_task(-o: S.St, +cx: X.Cx<o>, +name: String) -> X.Cx<o> & TaskR:
   restore.agent(o, agent_of(st(o, cx), M.resolve(st(o, cx), name)), cx, name)
 
-def isolate.sent(-o: S.St, p: X.Cx<o> & SendR, +n: String, +branch: String) -> X.Cx<o> & TaskR:
-  match p:
-    case (+cx, SErr{+e}):
-      (cx, TErr{e})
-    case (+cx, SOk{_}):
-      (feed(o, cx, M.MAIN(), FD.info(cat(["@", n, " now works in the worktree ", branch]))), TOk{n})
+# issue 32 3c: its worktree is made off the loop: its REPL stops now (it
+# takes its new BEND_WORKDIR at its next spawn), its ws placing (its
+# messages wait), then the shell's `placed` resumes it (placed.ok/err:
+# BIsolate)
+def isolate.off(-o: S.St, +cx: X.Cx<o>, +a: S.Agent) -> X.Cx<o> & TaskR:
+  +n = S.Agent.name(a)
+  +cx2 = out(o, cx, F.kill(n))
+  +cx3 = upd_rt(o, cx2, X.Rt.with_run(rt(o, cx2, n), S.RDown{}))
+  +cx4 = emit(o, cx3, M.EWorkspace{n, PL.isolating_ws(S.Agent.ws(a))}, Unit{}, Unit{}, Unit{})
+  +cx5 = out(o, cx4, F.worktree_create(n, False{}, ""))
+  (feed(o, cx5, M.MAIN(), FD.info(PL.isolating_text(n))), TOk{n})
 
-def isolate.res(-o: S.St, r: Result<&2, &2, String, J.Json>, +cx: X.Cx<o>, +n: String) -> X.Cx<o> & TaskR:
-  match r:
-    case Fail{+e}:
-      (cx, TErr{e})
-    case Done{+ws}:
-      +path = M.ws_path(ws)
-      +branch = J.get_str_or(ws, "branch", "")
-      +cx2 = emit(o, cx, M.EWorkspace{n, ws}, Unit{}, Unit{}, Unit{})
-      # the REPL takes its new BEND_WORKDIR at the next spawn
-      +cx3 = out(o, cx2, F.kill(n))
-      +cx4 = spawn(o, upd_rt(o, cx3, X.Rt.with_run(rt(o, cx3, n), S.RDown{})), n, True{})
-      +text = cat(["[bise] Your working directory is now the isolated git worktree `", path, "` (branch `", branch, "`). Work only there from now on."])
-      isolate.sent(o, send(o, cx4, msg(M.USER(), n, text, False{}, None{}, True{}, False{})), n, branch)
-
-def isolate.ans(-o: S.St, p: X.Cx<o> & Maybe<&2, J.Json>, +n: String) -> X.Cx<o> & TaskR:
-  match p:
-    case (+cx, None{}):
-      (cx, THalt{})
-    case (+cx, Some{+ans}):
-      isolate.res(o, PL.ans_ok(ans), cx, n)
-
-def isolate.pre(-o: S.St, pre: Maybe<&2, String>, +cx: X.Cx<o>, +n: String) -> X.Cx<o> & TaskR:
+def isolate.pre(-o: S.St, pre: Maybe<&2, String>, +cx: X.Cx<o>, +a: S.Agent) -> X.Cx<o> & TaskR:
   match pre:
     case Some{+e}:
       (cx, TErr{e})
     case None{}:
-      isolate.ans(o, ask(o, cx, J.obj([J.kv("q", J.JStr{"worktree_create"}), J.kv("name", J.JStr{n}), J.kv("with_changes", J.JBool{False{}})])), n)
+      isolate.off(o, cx, a)
 
 def isolate.agent(-o: S.St, m: Maybe<&2, S.Agent>, +cx: X.Cx<o>, +name: String) -> X.Cx<o> & TaskR:
   match m:
@@ -1760,7 +1767,7 @@ def isolate.agent(-o: S.St, m: Maybe<&2, S.Agent>, +cx: X.Cx<o>, +name: String) 
           Some{cat(["@", n, " already changed files of the workspace (", String.join(List.take(&2, String, S.Agent.files(a), 3n), ", "), "): its work cannot be separated from yours"])},
           Bool.pick(Maybe<&2, String>, is_busy(X.Rt.run(rt(o, cx, n))), Some{cat(["@", n, " is mid-turn: wait for the end of its turn"])},
             Bool.pick(Maybe<&2, String>, X.R.git(rr(o, cx)), None{}, Some{"the workspace is not a git repository"}))))
-      isolate.pre(o, pre, cx, n)
+      isolate.pre(o, pre, cx, a)
 
 def isolate_task(-o: S.St, +cx: X.Cx<o>, +name: String) -> X.Cx<o> & TaskR:
   isolate.agent(o, agent_of(st(o, cx), M.resolve(st(o, cx), name)), cx, name)
@@ -3202,12 +3209,12 @@ def req_spawn.door(-o: S.St, d: FW.Door, +cx: X.Cx<o>, +token: Nat, +q: J.Json) 
     case FW.FErr{+e}:
       reply_err(o, cx, token, e)
     case FW.FOk{+m}:
-      req_spawn.res(o, create_in(o, cx, new_task.fwd(new_task(M.MAIN(), q), m, K.get_s(q, "fwd_at")), J.get(q, "join")), token)
+      req_spawn.res(o, create_req(o, cx, new_task.fwd(new_task(M.MAIN(), q), m, K.get_s(q, "fwd_at")), q), token)
 
 def req_spawn.fwd(-o: S.St, f: Maybe<&2, Nat>, bare: Bool, +cx: X.Cx<o>, +token: Nat, +q: J.Json) -> X.Cx<o>:
   match f bare:
     case None{} _:
-      req_spawn.res(o, create_in(o, cx, new_task(M.MAIN(), q), J.get(q, "join")), token)
+      req_spawn.res(o, create_req(o, cx, new_task(M.MAIN(), q), q), token)
     case Some{_} False{}:
       reply_err(o, cx, token, "--forward and --attach go in two messages")
     case Some{+id} True{}:
@@ -3782,19 +3789,20 @@ def boot.live(-o: S.St, live: Bool, +cx: X.Cx<o>, +n: String) -> X.Cx<o>:
       cx
 
 # issue 32: a task a stopped hub was still placing gets its fx again (a
-# joiner waits for its place's): its worktree_create, or its restore's
-# worktree_restore; its REPL starts at its `placed`
-def boot.place(-o: S.St, r: Maybe<&2, J.Json>, +cx: X.Cx<o>, +a: S.Agent) -> X.Cx<o>:
-  match r:
-    case None{}:
-      place.ask(o, PL.makes(S.Agent.ws(a)), cx, S.Agent.name(a), S.Agent.ws(a))
-    case Some{+from}:
+# joiner waits for its place's): its worktree_create (a new task's, an
+# isolate's), or its restore's worktree_restore; its REPL starts at its
+# `placed`
+def boot.place(-o: S.St, b: PL.Back, +cx: X.Cx<o>, +a: S.Agent) -> X.Cx<o>:
+  match b:
+    case PL.BRestore{+from}:
       out(o, cx, F.worktree_restore(S.Agent.name(a), from, S.Agent.snap(a)))
+    case _:
+      place.ask(o, PL.makes(S.Agent.ws(a)), cx, S.Agent.name(a), S.Agent.ws(a))
 
 def boot.placing(-o: S.St, placing: Bool, +cx: X.Cx<o>, +a: S.Agent) -> X.Cx<o>:
   match placing:
     case True{}:
-      boot.place(o, PL.restore_of(S.Agent.ws(a)), cx, a)
+      boot.place(o, PL.boot_back(S.Agent.ws(a)), cx, a)
     case False{}:
       boot.live(o, is_active(S.Agent.life(a)), cx, S.Agent.name(a))
 
@@ -4039,25 +4047,45 @@ def placed.tell(-o: S.St, user: Bool, +cx: X.Cx<o>, +parent: String, +text: Stri
     case False{}:
       fst(o, send(o, cx, msg(M.HUB(), parent, text, False{}, None{}, False{}, False{})))
 
+# its worktree made (the journal's line first): a new task starts; a
+# restore's resumes, its saved work used; an isolate's resumes there, told
+# its new folder
+def placed.ok(-o: S.St, b: PL.Back, +cx: X.Cx<o>, +n: String, +ws: J.Json) -> X.Cx<o>:
+  match b:
+    case PL.BNew{}:
+      spawn(o, feed(o, cx, M.MAIN(), FD.info(PL.ready_text(n, ws))), n, False{})
+    case PL.BRestore{_}:
+      +cx2 = emit(o, cx, M.ESnapshot{n, None{}}, Unit{}, Unit{}, Unit{})
+      spawn(o, feed(o, cx2, M.MAIN(), FD.info(PL.ready_text(n, ws))), n, True{})
+    case PL.BIsolate{_}:
+      +cx2 = spawn(o, feed(o, cx, M.MAIN(), FD.info(PL.isolated_text(n, ws))), n, True{})
+      fst(o, send(o, cx2, msg(M.USER(), n, PL.isolated_note(ws), False{}, None{}, True{}, False{})))
+
+# its worktree not made (the journal's line first): a new task fails, its
+# spawner told once; a restore's goes back archived in its dropped ws; an
+# isolate's back to the shared folder, its REPL resumed there
+def placed.err(-o: S.St, b: PL.Back, +cx: X.Cx<o>, +n: String, +e: String, +parent: String) -> X.Cx<o>:
+  match b:
+    case PL.BNew{}:
+      placed.tell(o, String.eq(parent, M.USER()), stop_noted(o, cx, n, S.LFailed{}, e), parent, PL.err_text(n, e))
+    case PL.BRestore{+from}:
+      +cx2 = emit(o, cx, M.EWorkspace{n, from}, Unit{}, Unit{}, Unit{})
+      feed(o, stop_noted(o, cx2, n, S.LArchived{}, e), M.MAIN(), FD.warn(PL.unrestored_text(n, e)))
+    case PL.BIsolate{+from}:
+      +cx2 = emit(o, cx, M.EWorkspace{n, from}, Unit{}, Unit{}, Unit{})
+      spawn(o, feed(o, cx2, M.MAIN(), FD.warn(PL.unisolated_text(n, e))), n, True{})
+
 # the shell's `placed` (place.bend's placed_of decided it)
 def placed(-o: S.St, d: PL.Do, +cx: X.Cx<o>) -> X.Cx<o>:
   match d:
-    case PL.POk{+n, +ws}:
-      +cx2 = feed(o, emit(o, cx, M.EPlaced{n, ws, ""}, Unit{}, Unit{}, Unit{}), M.MAIN(), FD.info(PL.ready_text(n, ws)))
-      spawn(o, cx2, n, False{})
-    case PL.PErr{+n, +e, +parent}:
-      +cx2 = stop_noted(o, emit(o, cx, M.EPlaced{n, J.JNull{}, e}, Unit{}, Unit{}, Unit{}), n, S.LFailed{}, e)
-      placed.tell(o, String.eq(parent, M.USER()), cx2, parent, PL.err_text(n, e))
+    case PL.POk{+n, +ws, +b}:
+      placed.ok(o, b, emit(o, cx, M.EPlaced{n, ws, ""}, Unit{}, Unit{}, Unit{}), n, ws)
+    case PL.PErr{+n, +e, +parent, +b}:
+      placed.err(o, b, emit(o, cx, M.EPlaced{n, J.JNull{}, e}, Unit{}, Unit{}, Unit{}), n, e, parent)
     case PL.POrphan{+n, +ws}:
       out(o, cx, F.worktree_drop(n, ws, 0n, 0n))
     case PL.PNone{}:
       cx
-    case PL.PRestored{+n, +ws}:
-      +cx2 = emit(o, emit(o, cx, M.EPlaced{n, ws, ""}, Unit{}, Unit{}, Unit{}), M.ESnapshot{n, None{}}, Unit{}, Unit{}, Unit{})
-      spawn(o, feed(o, cx2, M.MAIN(), FD.info(PL.ready_text(n, ws))), n, True{})
-    case PL.PUnrestored{+n, +e, +from}:
-      +cx2 = emit(o, emit(o, cx, M.EPlaced{n, J.JNull{}, e}, Unit{}, Unit{}, Unit{}), M.EWorkspace{n, from}, Unit{}, Unit{}, Unit{})
-      feed(o, stop_noted(o, cx2, n, S.LArchived{}, e), M.MAIN(), FD.warn(PL.unrestored_text(n, e)))
 
 # then its joiners (`sb spawn --place` while it was placing): the same
 def placed.join(-o: S.St, ns: List<&2, String>, +cx: X.Cx<o>, +d: PL.Do, +err: String) -> X.Cx<o>:

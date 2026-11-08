@@ -27,7 +27,10 @@ def Laws.placed_create_once(a, n, ws, err, e):
   place_pick_not_ok(String.is_empty(err), n, ws)
 
 def Laws.placed_err_fails(a, n, ws, err, e):
-  %Equal.sym(Bool, String.is_empty(err), False{}, e) : {Bool.pick(HPL.Do, _, HPL.POk{n, ws}, HPL.PErr{n, err, HPL.parent_of(HS.Agent.parent(a))}) == HPL.PErr{n, err, HPL.parent_of(HS.Agent.parent(a))} : HPL.Do}
+  %Equal.sym(Bool, String.is_empty(err), False{}, e) : {Bool.pick(HPL.Do, _, HPL.POk{n, ws, HPL.BNew{}}, HPL.PErr{n, err, HPL.parent_of(HS.Agent.parent(a)), HPL.BNew{}}) == HPL.PErr{n, err, HPL.parent_of(HS.Agent.parent(a)), HPL.BNew{}} : HPL.Do}
+  {==}
+
+def Laws.placed_new_starts(o, cx, n, ws):
   {==}
 
 def Laws.placed_err_tells_once(o, cx, n, err, parent):
@@ -46,10 +49,10 @@ def Laws.place_join_no_create(o, cx, n, ws, p, e):
 def Laws.place_join_waits(o, cx, b, r, e):
   Laws.no_repl_before_placed(o, cx, b, r, e)
 
-def Laws.place_join_shares(a, b, n, ws, err):
+def Laws.place_join_shares(a, b, n, ws, bk, err):
   {==}
 
-def Laws.place_join_err_fails_both(a, b, n, e, p, err, h):
+def Laws.place_join_err_fails_both(a, b, n, e, p, bk, err, h):
   Laws.placed_err_fails(a, b, J.JNull{}, e, h)
 
 def Laws.drop_fx_after_archive(o, cx, a, d, u):
@@ -80,17 +83,29 @@ def Laws.placed_restored(a, n, ws, from):
   {==}
 
 def Laws.placed_unrestored(a, n, ws, from, err, e):
-  %Equal.sym(Bool, String.is_empty(err), False{}, e) : {Bool.pick(HPL.Do, _, HPL.PRestored{n, ws}, HPL.PUnrestored{n, err, from}) == HPL.PUnrestored{n, err, from} : HPL.Do}
+  %Equal.sym(Bool, String.is_empty(err), False{}, e) : {Bool.pick(HPL.Do, _, HPL.POk{n, ws, HPL.BRestore{from}}, HPL.PErr{n, err, HPL.parent_of(HS.Agent.parent(a)), HPL.BRestore{from}}) == HPL.PErr{n, err, HPL.parent_of(HS.Agent.parent(a)), HPL.BRestore{from}} : HPL.Do}
   {==}
 
-def Laws.restore_ok_clears_snapshot(o, cx, n, ws):
+def Laws.restore_ok_clears_snapshot(o, cx, n, ws, from):
   {==}
 
-def Laws.restore_err_keeps_archived(o, cx, n, e, from):
+def Laws.restore_err_keeps_archived(o, cx, n, e, p, from):
   {==}
 
 def Laws.boot_reemits_stuck_restore(o, cx, a, from):
   {==}
 
 def Laws.boot_skips_restore_joiner(ws):
+  {==}
+
+def Laws.isolate_off_asks_once(o, cx, a):
+  {==}
+
+def Laws.isolate_ok_resumes_there(o, cx, n, ws, from):
+  {==}
+
+def Laws.isolate_err_back_shared(o, cx, n, e, p, from):
+  {==}
+
+def Laws.feature_rides_the_fx(o, cx, n, ws):
   {==}

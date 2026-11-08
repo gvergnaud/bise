@@ -2048,14 +2048,18 @@ impl Hub {
                 }
                 let name = Some(name.as_str()).filter(|n| !n.is_empty());
                 let join = match (place.as_str(), feature.as_str()) {
-                    // dev-flow §5.1: its own worktree, from the feature's tip
-                    (_, f) if !f.is_empty() => self.feature_worktree(env, name, &brief, f).map(Some),
+                    // dev-flow §5.1: its own worktree from the feature's tip,
+                    // made off the loop by sb-core's fx (issue 32 3c)
+                    (_, f) if !f.is_empty() => self.feature_allowed().map(|_| None),
                     ("" | "new" | crate::place::SHARED, _) => Ok(None),
                     (p, _) => crate::place::find_worktree(&self.st, p).map(Some),
                 };
                 match join.and_then(|j| new_task(name, &brief, &parts, worktree || place == "new", with_changes).map(|v| (j, json!(v)))) {
                     Ok((join, mut v)) => {
                         v["cmd"] = json!("spawn");
+                        if !feature.is_empty() {
+                            v["feature"] = json!(feature);
+                        }
                         if !parts.is_empty() {
                             v["brief_parts"] = json!(parts);
                         }
@@ -2158,7 +2162,7 @@ impl Hub {
 mod pure;
 pub(crate) use pure::not_in_a_repo;
 pub use pure::Loss;
-use pure::{direct_exchange, force_run_input, git_only, jstr, unique_name};
+use pure::{direct_exchange, force_run_input, git_only, jstr};
 
 #[path = "core_link.rs"]
 mod link;

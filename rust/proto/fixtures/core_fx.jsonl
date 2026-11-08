@@ -14,7 +14,7 @@
 {"fx": "job_end", "agent": "perf", "state": "done", "label": "objective of perf", "summary": "p99 down 31%", "key": 1000000, "hub": "home-1"}
 {"fx": "journal", "ev": {"type": "act_done", "id": 1}}
 {"fx": "kill", "agent": "g"}
-{"fx": "worktree_create", "name": "g", "with_changes": false}
+{"fx": "worktree_create", "name": "g", "with_changes": false, "feature": "pay"}
 {"fx": "worktree_drop", "name": "g", "ws": {"mode": "worktree", "path": "/w/wt/g", "branch": "sb/g"}, "dirty": 0, "unpushed": 0}
 {"fx": "worktree_restore", "name": "g", "ws": {"mode": "worktree", "path": "/w/wt/g", "branch": "sb/g", "dropped": true}, "snapshot": "refs/switchboard/trash/g/1"}
 {"fx": "notice", "text": "no open card #999"}

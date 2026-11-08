@@ -50,12 +50,9 @@ fn worker(rx: Receiver<Job>, paths: Paths, to_loop: Sender<Msg>) {
     for j in rx {
         let mut env = git_env(&paths);
         match j {
-            Job::Create { name, with_changes } => {
+            Job::Create { name, with_changes, feature } => {
                 let t0 = now_ms();
-                let (ws, err) = match env.worktree_create(&name, with_changes) {
-                    Ok(ws) => (serde_json::to_value(ws).unwrap_or(Value::Null), String::new()),
-                    Err(e) => (Value::Null, e),
-                };
+                let (ws, err) = crate::place_job::create(&mut env, &name, with_changes, &feature);
                 log_line(&paths, &format!("worktree of {} made off the loop in {} ms{}", name, now_ms().saturating_sub(t0), if err.is_empty() { String::new() } else { format!(": {err}") }));
                 if to_loop.send(Msg::Placed { name, ws, err }).is_err() {
                     return;

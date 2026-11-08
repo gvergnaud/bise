@@ -17,7 +17,7 @@ type Fx is Data:
   # kill
   FKill{agent: String}
   # worktree_create
-  FWorktreeCreate{name: String, with_changes: Bool}
+  FWorktreeCreate{name: String, with_changes: Bool, feature: String}
   # worktree_drop
   FWorktreeDrop{name: String, ws: J.Json, dirty: Nat, unpushed: Nat}
   # worktree_restore
@@ -86,7 +86,7 @@ def FKill.of(+i: J.Json) -> Fx:
   FKill{K.get_s(i, "agent")}
 
 def FWorktreeCreate.of(+i: J.Json) -> Fx:
-  FWorktreeCreate{K.get_s(i, "name"), K.get_b(i, "with_changes")}
+  FWorktreeCreate{K.get_s(i, "name"), K.get_b(i, "with_changes"), K.get_s(i, "feature")}
 
 def FWorktreeDrop.of(+i: J.Json) -> Fx:
   FWorktreeDrop{K.get_s(i, "name"), K.get_j(i, "ws"), K.get_n(i, "dirty"), K.get_n(i, "unpushed")}
@@ -454,8 +454,8 @@ def kvs(x: Fx) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
       [J.kv("fx", J.JStr{"spawn"}), J.kv("agent", J.JStr{agent}), J.kv("resume", J.JBool{resume}), J.kv("crash_note", K.jmaybe_s(crash_note)), J.kv("wait_load", J.JBool{wait_load})]
     case FKill{+agent}:
       [J.kv("fx", J.JStr{"kill"}), J.kv("agent", J.JStr{agent})]
-    case FWorktreeCreate{+name, +with_changes}:
-      [J.kv("fx", J.JStr{"worktree_create"}), J.kv("name", J.JStr{name}), J.kv("with_changes", J.JBool{with_changes})]
+    case FWorktreeCreate{+name, +with_changes, +feature}:
+      [J.kv("fx", J.JStr{"worktree_create"}), J.kv("name", J.JStr{name}), J.kv("with_changes", J.JBool{with_changes}), J.kv("feature", J.JStr{feature})]
     case FWorktreeDrop{+name, +ws, +dirty, +unpushed}:
       [J.kv("fx", J.JStr{"worktree_drop"}), J.kv("name", J.JStr{name}), J.kv("ws", ws), J.kv("dirty", J.JNum{dirty}), J.kv("unpushed", J.JNum{unpushed})]
     case FWorktreeRestore{+name, +ws, +snapshot}:
@@ -527,8 +527,8 @@ def spawn(+agent: String, +resume: Bool, +crash_note: Maybe<&2, String>, +wait_l
 def kill(+agent: String) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
   kvs(FKill{agent})
 
-def worktree_create(+name: String, +with_changes: Bool) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
-  kvs(FWorktreeCreate{name, with_changes})
+def worktree_create(+name: String, +with_changes: Bool, +feature: String) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
+  kvs(FWorktreeCreate{name, with_changes, feature})
 
 def worktree_drop(+name: String, +ws: J.Json, +dirty: Nat, +unpushed: Nat) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
   kvs(FWorktreeDrop{name, ws, dirty, unpushed})

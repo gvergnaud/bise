@@ -23,8 +23,10 @@ core_kinds! {
         Spawn = "spawn" => FSpawn { agent: Str, resume: Bool, crash_note: OptStr, wait_load: Bool },
         Kill = "kill" => FKill { agent: Str },
         /// hub-loop: make the worktree of task `name` off the hub's loop,
-        /// then send input `placed` (its REPL starts after it)
-        WorktreeCreate = "worktree_create" => FWorktreeCreate { name: Str, with_changes: Bool },
+        /// then send input `placed` (its REPL starts after it); `feature`
+        /// (`sb spawn --feature`, dev-flow §5.1): from that feature's tip,
+        /// "": from main's
+        WorktreeCreate = "worktree_create" => FWorktreeCreate { name: Str, with_changes: Bool, feature: Str },
         /// hub-loop: save (when `dirty`/`unpushed`) and remove the
         /// worktree `ws` of task `name`, off the hub's loop
         WorktreeDrop = "worktree_drop" => FWorktreeDrop { name: Str, ws: Json, dirty: Nat, unpushed: Nat },

@@ -25,6 +25,12 @@
 # of its own ([`makes`]) and waits; A's `placed` then places its
 # [`joiners`] the same way: A's ws, or A's failure (A gone: theirs too).
 #
+# A /restore (3b) and an /isolate (3c) place a task the same way: its ws
+# placing with where it came from ([`ws_back`]: BRestore, BIsolate), so
+# its `placed` resumes it, or puts it back, instead of starting or
+# failing a new one. `sb spawn --feature` is a new one whose fx carries
+# the feature ([`ws_feature`]).
+#
 # core.bend's `placed` runs these decisions (it holds emit, spawn, send).
 # Laws in bend/laws/place.bend.
 import Base
@@ -43,15 +49,41 @@ def placing_ws(+with_changes: Bool) -> J.Json:
     J.kv("branch", J.JNull{}), J.kv("base_commit", J.JNull{}), J.kv("dropped", J.JBool{False{}}),
     J.kv("with_changes", J.JBool{with_changes})])
 
-# ws.restore / ws.restore_joined (issue 32 3b): untyped, c9 types them
-# with ws. The only reads and writes of these two keys (architect m_55528).
+# ws.restore / ws.isolate / ws.restore_joined / ws.feature on a placing
+# ws (issue 32 3b, 3c): untyped, c9 types them with ws. The only reads and
+# writes of these keys (architect m_55528, m_55706).
 
-# a restoring ws's dropped ws, the one it goes back to (restoring_ws)
-def ws_restore(+ws: J.Json) -> Maybe<&2, J.Json>:
-  J.get(ws, "restore")
+# where a placing ws came from: a new worktree, a /restore's (the dropped
+# ws it goes back to), an /isolate's (the shared ws it goes back to)
+type Back is Data:
+  BNew{}
+  BRestore{from: J.Json}
+  BIsolate{from: J.Json}
+
+def ws_back.of(r: Maybe<&2, J.Json>, i: Maybe<&2, J.Json>) -> Back:
+  match r i:
+    case Some{+from} _:
+      BRestore{from}
+    case None{} Some{+from}:
+      BIsolate{from}
+    case None{} None{}:
+      BNew{}
+
+def ws_back(+ws: J.Json) -> Back:
+  ws_back.of(J.get(ws, "restore"), J.get(ws, "isolate"))
 
 def ws_with_restore(+ws: J.Json, +from: J.Json) -> J.Json:
   J.set(ws, "restore", from)
+
+def ws_with_isolate(+ws: J.Json, +from: J.Json) -> J.Json:
+  J.set(ws, "isolate", from)
+
+# `sb spawn --feature <f>` (dev-flow §5.1): its worktree from f's tip
+def ws_feature(+ws: J.Json) -> String:
+  J.get_str_or(ws, "feature", "")
+
+def ws_with_feature(+ws: J.Json, +f: String) -> J.Json:
+  J.set(ws, "feature", J.JStr{f})
 
 # a mate that joined a restore (joined_ws): it waits for the same worktree
 def ws_restore_joined(+ws: J.Json) -> Bool:
@@ -89,20 +121,16 @@ def ans_ok(+j: J.Json) -> Result<&2, &2, String, J.Json>:
 
 # what one `placed` input does
 type Do is Data:
-  # the worktree is made: the task's workspace, then its REPL
-  POk{name: String, ws: J.Json}
-  # it could not be made: the task fails, `parent` is told once
-  PErr{name: String, err: String, parent: String}
+  # the worktree is made: the task's workspace, then its REPL (`back`:
+  # a restore's resumes with its saved work used, an isolate's resumes)
+  POk{name: String, ws: J.Json, back: Back}
+  # it could not be made: a new task fails, `parent` told once; a
+  # restore's goes back archived, an isolate's back to the shared folder
+  PErr{name: String, err: String, parent: String, back: Back}
   # made for a task gone or no longer placing: it goes again
   POrphan{name: String, ws: J.Json}
   # an error for a task not placing: nothing to undo
   PNone{}
-  # issue 32 3b: a restore's worktree made again: its ws, its saved work
-  # used (no snapshot left), then its REPL resumes
-  PRestored{name: String, ws: J.Json}
-  # not made again: the task goes back archived in `from`, the dropped ws
-  # it had (its saved work kept), git's words in main's feed
-  PUnrestored{name: String, err: String, from: J.Json}
 
 def parent_of(m: Maybe<&2, String>) -> String:
   match m:
@@ -111,20 +139,16 @@ def parent_of(m: Maybe<&2, String>) -> String:
     case None{}:
       M.MAIN()
 
-# a live placing task's worktree: made or not; `restore` (a /restore's
-# ws, restoring_ws): the dropped ws it came from
-def placed_of.made(restore: Maybe<&2, J.Json>, +a: S.Agent, +name: String, +ws: J.Json, +err: String) -> Do:
-  match restore:
-    case None{}:
-      Bool.pick(Do, String.is_empty(err), POk{name, ws}, PErr{name, err, parent_of(S.Agent.parent(a))})
-    case Some{+from}:
-      Bool.pick(Do, String.is_empty(err), PRestored{name, ws}, PUnrestored{name, err, from})
+# a live placing task's worktree: made or not; `back`: where its placing
+# ws came from (ws_back)
+def placed_of.made(+back: Back, +a: S.Agent, +name: String, +ws: J.Json, +err: String) -> Do:
+  Bool.pick(Do, String.is_empty(err), POk{name, ws, back}, PErr{name, err, parent_of(S.Agent.parent(a)), back})
 
 # the task found, `live`: placing and not archived
 def placed_of.live(live: Bool, +a: S.Agent, +name: String, +ws: J.Json, +err: String) -> Do:
   match live:
     case True{}:
-      placed_of.made(ws_restore(S.Agent.ws(a)), a, name, ws, err)
+      placed_of.made(ws_back(S.Agent.ws(a)), a, name, ws, err)
     case False{}:
       Bool.pick(Do, String.is_empty(err), POrphan{name, ws}, PNone{})
 
@@ -228,7 +252,7 @@ def dropping_text(+n: String) -> String:
 
 # ---- a restore off the loop (issue 32 3b): the task is active at once,
 # its ws placing while the shell makes its dropped worktree again (fx
-# worktree_restore); the shell's `placed` ends it (PRestored, PUnrestored)
+# worktree_restore); the shell's `placed` ends it (POk, PErr: BRestore)
 
 # the ws of a task whose dropped worktree the shell makes again: placing
 # (no REPL yet, its messages wait), `restore` the dropped ws to go back to
@@ -237,26 +261,27 @@ def restoring_ws(+ws: J.Json) -> J.Json:
 
 # a mate's /restore while its place is being made again (restore.join):
 # it waits for the same worktree, marked so a boot asks for it once
-def joined_ws.of(r: Maybe<&2, J.Json>, +ws: J.Json) -> J.Json:
-  match r:
-    case None{}:
-      ws
-    case Some{_}:
+def joined_ws.of(b: Back, +ws: J.Json) -> J.Json:
+  match b:
+    case BRestore{_}:
       ws_with_restore_joined(ws)
+    case _:
+      ws
 
 def joined_ws(+ws: J.Json) -> J.Json:
-  joined_ws.of(ws_restore(ws), ws)
+  joined_ws.of(ws_back(ws), ws)
 
-def restore_of.go(joined: Bool, +ws: J.Json) -> Maybe<&2, J.Json>:
+def boot_back.go(joined: Bool, +ws: J.Json) -> Back:
   match joined:
     case False{}:
-      ws_restore(ws)
+      ws_back(ws)
     case True{}:
-      None{}
+      BNew{}
 
-# the dropped ws a boot makes again: a restoring ws's own, not a joiner's
-def restore_of(+ws: J.Json) -> Maybe<&2, J.Json>:
-  restore_of.go(ws_restore_joined(ws), ws)
+# what a boot asks again for a placing ws: its own restore, never a
+# joiner's (it waits for the same worktree), else as a new one (place.ask)
+def boot_back(+ws: J.Json) -> Back:
+  boot_back.go(ws_restore_joined(ws), ws)
 
 # the restore's line in main's feed while it runs
 def restoring_note() -> String:
@@ -266,10 +291,35 @@ def restoring_note() -> String:
 def unrestored_text(+n: String, +err: String) -> String:
   String.concat(["@", n, " could not be restored: its worktree was not made again: ", err, ". it stays archived, its saved work kept"])
 
+# ---- an isolate off the loop (issue 32 3c): `/isolate x` stops x's
+# REPL, its ws placing while the shell makes its worktree (fx
+# worktree_create); the shell's `placed` ends it (POk, PErr: BIsolate) ----
+
+# the ws of a task the shell isolates: a new worktree's placing ws,
+# `isolate` the shared ws it goes back to if git fails
+def isolating_ws(+ws: J.Json) -> J.Json:
+  ws_with_isolate(placing_ws(False{}), ws)
+
+# main's line now, and when its worktree is made
+def isolating_text(+n: String) -> String:
+  String.concat(["@", n, " is being isolated: its worktree is being made"])
+
+def isolated_text(+n: String, +ws: J.Json) -> String:
+  String.concat(["@", n, " now works in the worktree ", J.get_str_or(ws, "branch", "")])
+
+# the isolated agent's own word on its new folder
+def isolated_note(+ws: J.Json) -> String:
+  String.concat(["[bise] Your working directory is now the isolated git worktree `", M.ws_path(ws), "` (branch `",
+    J.get_str_or(ws, "branch", ""), "`). Work only there from now on."])
+
+# main's feed when the shell could not make it (git's words)
+def unisolated_text(+n: String, +err: String) -> String:
+  String.concat(["@", n, " could not be isolated: its worktree was not made: ", err, ". it goes on in the shared folder"])
+
 # a `placed` that starts the task (laws: placed_create_once)
 def is_ok(d: Do) -> Bool:
   match d:
-    case POk{_, _}:
+    case POk{_, _, _}:
       True{}
     case _:
       False{}
@@ -365,9 +415,7 @@ def joiners(+s: S.St, +name: String) -> List<&2, String>:
 # a joiner's `placed`: the ws its place's got (none when it failed) ...
 def join.ws(d: Do) -> J.Json:
   match d:
-    case POk{_, +ws}:
-      ws
-    case PRestored{_, +ws}:
+    case POk{_, +ws, _}:
       ws
     case _:
       J.JNull{}
@@ -375,15 +423,11 @@ def join.ws(d: Do) -> J.Json:
 # ... and the error: "" when made, else its place's words (`err`, git's)
 def join.err(d: Do, +err: String) -> String:
   match d:
-    case POk{_, _}:
+    case POk{_, _, _}:
       ""
-    case PErr{_, +e, _}:
+    case PErr{_, +e, _, _}:
       e
     case POrphan{+n, _}:
       String.concat(["@", n, " left before its worktree was made"])
     case PNone{}:
       err
-    case PRestored{_, _}:
-      ""
-    case PUnrestored{_, +e, _}:
-      e

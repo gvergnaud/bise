@@ -11,13 +11,19 @@ bend/laws/place.bend; bdcd2b7dc). 3b's restore in with land 4b: fx
 `worktree_restore`, answered by `placed` (PRestored: its saved work
 used, its REPL resumes; PUnrestored: back archived in its dropped ws,
 git's words in main's feed), a boot that asks again for a stuck restore;
-the `worktree_restore` need is gone. ws.restore / ws.restore_joined:
-untyped, c9 types them with ws (their only reads and writes are
-place.bend's ws_restore, ws_with_restore, ws_restore_joined,
-ws_with_restore_joined). Next: 3c
-(`sb spawn --feature`, `sb isolate`, deleting the `worktree_create` NEED,
-tests/hub_loop_e2e.py into run_all) (4c). Their signed plan is the last
-section. Label: hub, loop.
+the `worktree_restore` need is gone (9c725f4a9). 3c in with land 4c
+(architect m_55706): `sb spawn --feature` makes its worktree through fx
+`worktree_create{feature}` (Rust keeps only the PR-flow refusal); `sb
+isolate` stops the REPL, its ws placing, fx `worktree_create`; `placed`
+is POk{n, ws, back} / PErr{n, err, parent, back} with one typed Back
+(BNew, BRestore{from}, BIsolate{from}) read from the ws by place.bend's
+ws_back; the `worktree_create` need is gone, so sb-core asks the loop
+for git only `worktree_loss` (a read); tests/hub_loop_e2e.py is in
+tests/run_all.sh. ws.restore / ws.isolate / ws.restore_joined /
+ws.feature on a placing ws: untyped, c9 types them with ws (their only
+reads and writes are place.bend's ws_back, ws_with_restore,
+ws_with_isolate, ws_restore_joined, ws_with_restore_joined, ws_feature,
+ws_with_feature). Label: hub, loop.
 
 ## The problem
 
