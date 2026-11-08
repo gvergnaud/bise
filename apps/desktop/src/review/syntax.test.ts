@@ -2,9 +2,17 @@
 // as one text, so a − line takes the old side's colors and a + line the new side's.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { DiffLine } from '@/ds';
 import { diffRuns, langOfPath } from './syntax';
+
+// the real tokenizer, counted: how many texts a diff hands to prism
+const codeLinesSpy = vi.hoisted(() => vi.fn());
+vi.mock('@/thread/Code', async (real) => {
+  const mod = await real<typeof import('@/thread/Code')>();
+  codeLinesSpy.mockImplementation(mod.codeLines);
+  return { ...mod, codeLines: codeLinesSpy };
+});
 
 // the ds's own values: the palettes (tokens.css, md-tokens.css) and the diff's tints (thread.css)
 type Rgb = readonly [number, number, number];
@@ -83,11 +91,16 @@ describe('a diff colored by its language', () => {
     expect(lows).toEqual([]);
   });
 
-  it('colors a 2 000-line diff fast enough to stay fluid', () => {
-    const lines: DiffLine[] = [{ text: '@@ -1,1000 +1,1000 @@', sign: '', head: true }];
-    for (let i = 0; i < 2000; i++) lines.push({ text: `  const x${String(i)} = await f(\`a \${String(i)}\`, { k: [1, 2] }); // n`, sign: i % 3 === 0 ? '-' : i % 3 === 1 ? '+' : '' });
-    const t = Date.now();
-    diffRuns(lines, 'typescript');
-    expect(Date.now() - t).toBeLessThan(400);
+  // what keeps a long diff fluid, without a wall clock (main m_55745): prism runs twice per hunk,
+  // its old side and its new side as two texts, never once per line, so a diff's cost is linear
+  it('tokenizes a 2 000-line diff as two texts per hunk, never one per line', () => {
+    const hunk = (from: number): DiffLine[] => [
+      { text: `@@ -${String(from)},1000 +${String(from)},1000 @@`, sign: '', head: true },
+      ...Array.from({ length: 1000 }, (_, i): DiffLine => ({ text: `  const x${String(i)} = f(${String(i)}); // n`, sign: i % 3 === 0 ? '-' : i % 3 === 1 ? '+' : '' })),
+    ];
+    codeLinesSpy.mockClear();
+    const runs = diffRuns([...hunk(1), ...hunk(2000)], 'typescript');
+    expect(codeLinesSpy).toHaveBeenCalledTimes(4);
+    expect(runs.filter((r) => r !== null)).toHaveLength(2000);
   });
 });
