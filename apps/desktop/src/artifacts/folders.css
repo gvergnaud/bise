@@ -85,6 +85,9 @@
    tab on the top-left, 40 % wide, then the back (its top-left corner square under the tab) holding
    the cover 4 in; both --c-sunken-2, a step past a card's thumb. Flat: no shadow, no sheets */
 .art-tile .tab{width:40%;height:var(--s-3);border-radius:var(--r-1) var(--r-1) 0 0;background:var(--c-sunken-2)}
+/* a drop rings the folder as one shape (designer m_55860): the tab's ring loses its bottom (clipped),
+   and the tab, positioned, paints over the back's ring where they meet, so no line runs between them */
+.art-tile[data-over] .tab{position:relative;clip-path:inset(-2px -2px 0 -2px)}
 .art-tile .cover{display:grid;grid-template-columns:2fr 1fr;grid-template-rows:1fr 1fr;gap:var(--s-1);aspect-ratio:16/10;padding:var(--s-1);border-radius:0 var(--r-2) var(--r-2) var(--r-2);background:var(--c-sunken-2);overflow:hidden}
 .art-tile .cover[data-n="1"],.art-tile .cover[data-n="0"]{grid-template-columns:1fr;grid-template-rows:1fr}
 .art-tile .cover[data-n="2"]{grid-template-rows:1fr}
