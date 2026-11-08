@@ -2834,10 +2834,15 @@
     "one": null,
     "text": "allow"
   },
-  "settings.pick_setup_first": {
+  "settings.pick_add_key": {
     "args": [],
     "one": null,
-    "text": "set up first"
+    "text": "add a key"
+  },
+  "settings.pick_back": {
+    "args": [],
+    "one": null,
+    "text": "‹ Providers"
   },
   "settings.plugins_about": {
     "args": [],

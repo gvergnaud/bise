@@ -13,11 +13,11 @@
 // Their state (open, place) and effects (the outside press, esc, a resize, the focus back) are
 // hooks.ts's useOpen and usePop (purity.mts): the floating is the ds's, written once. The lint
 // (ds/lint.ts menuDrawn) refuses a menu built anywhere else. css/dropdown.css.
-import { useRef, type KeyboardEvent, type MouseEventHandler, type ReactNode, type Ref, type RefObject } from "react";
+import { useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEventHandler, type ReactNode, type Ref, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { cx } from "./cx";
 import { useOpen, usePop } from "./hooks";
-import { Picker, type PickerProps } from "./picker";
+import { Picker, PickerPair, type PickerPairProps, type PickerProps } from "./picker";
 import { tipAttrs } from "./tip";
 
 /** The trigger's caret: an 8x5 chevron, stroke 1.5, text-3 (designer m_24786). */
@@ -103,6 +103,66 @@ export interface DropdownProps extends Omit<PickerPopProps, "anchor" | "onClose"
   testId?: string;
   menuTestId?: string;
 }
+/** PickerPair's width with its shell (192 + 208, the rule, the padding). */
+const PAIR_W = 192 + 208 + 1 + 2 * 4 + 4;
+
+/** Where a PickerPair opens from a trigger (designer m_57374): right edges aligned; no room on the
+ *  left for its width: from the trigger's left edge; no room either way: one column. Pure. */
+export function pairPlace(trigger: { left: number; right: number }, winWidth: number): { align: "start" | "end"; narrow: boolean } {
+  if (trigger.right - 8 >= PAIR_W) return { align: "end", narrow: false };
+  if (winWidth - trigger.left - 8 >= PAIR_W) return { align: "start", narrow: false };
+  return { align: trigger.right - 8 >= winWidth - trigger.left - 8 ? "end" : "start", narrow: true };
+}
+
+export interface DropdownPairProps extends Omit<PickerPairProps, "narrow" | "onClose" | "style" | "maxHeight" | "testId"> {
+  label: ReactNode;
+  extra?: string;
+  name?: string;
+  tip?: string;
+  /** narrow (one column): the back row's words ('‹ Providers') */
+  back: ReactNode;
+  testId?: string;
+}
+/** A trigger and its PickerPair under it: a pick or a press away closes it. */
+export function DropdownPair({ label, extra, name, tip, back, testId, onPick, ...pair }: DropdownPairProps) {
+  const trigger = useRef<HTMLButtonElement>(null);
+  const { open, toggle, close } = useOpen();
+  // where it opens, read from the trigger at his click (never during a render)
+  const [at, setAt] = useState<{ align: "start" | "end"; narrow: boolean }>({ align: "end", narrow: false });
+  const onClick = () => {
+    const r = trigger.current?.getBoundingClientRect();
+    if (r !== undefined) setAt(pairPlace(r, window.innerWidth));
+    toggle();
+  };
+  return (
+    <>
+      <PickerTrigger ref={trigger} look="chip" extra={extra} open={open} label={name} tip={tip} onClick={onClick} testId={testId}>
+        {label}
+      </PickerTrigger>
+      {open && (
+        <PairPop anchor={trigger} align={at.align} onClose={close}>
+          {(place) => (
+            <PickerPair {...pair} {...(at.narrow ? { narrow: back } : {})} style={place.style} maxHeight={place.maxHeight} onClose={close}
+              onPick={(id) => { close(); onPick(id); }} {...(testId !== undefined ? { testId: `${testId}.menu` } : {})} />
+          )}
+        </PairPop>
+      )}
+    </>
+  );
+}
+
+/** The floating of a PickerPair: usePop's, like PickerPop's. */
+function PairPop({ anchor, align, onClose, children }: { anchor: RefObject<HTMLElement | null>; align: "start" | "end"; onClose: () => void; children: (place: { style: CSSProperties; maxHeight: number }) => ReactNode }) {
+  const { place, mount, focus, layer } = usePop(anchor, { box: undefined, align, side: "below", match: false }, onClose);
+  return createPortal(
+    <div ref={mount} className="b-picker-pop" onFocus={focus.onFocus} onBlur={focus.onBlur}
+      onKeyDown={(e: KeyboardEvent<HTMLDivElement>) => { e.stopPropagation(); }}>
+      {place !== null && children(place)}
+    </div>,
+    layer,
+  );
+}
+
 /** A trigger and its menu: a click opens it under the trigger, a pick or a press away closes it. */
 export function Dropdown({ label, look, extra, name, tip, placeholder, disabled, testId, menuTestId, onPick, match, ...pop }: DropdownProps) {
   const trigger = useRef<HTMLButtonElement>(null);

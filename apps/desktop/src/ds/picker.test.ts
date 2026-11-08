@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { cutWords, glyphColumn, pickerPlace, stepActive, typeahead, walkable } from "./picker";
+import { cutWords, glyphColumn, pairKey, pairStart, pickerPlace, stepActive, typeahead, walkable } from "./picker";
+import { pairPlace } from "./dropdown";
 
 describe("ds/picker", () => {
   const groups = [
@@ -100,5 +101,37 @@ describe("ds/picker", () => {
       expect(cutWords(long, fits)).toBe(slow(long, (t) => t.length <= room));
       expect(tries).toBeLessThanOrEqual(11);
     }
+  });
+});
+
+describe("ds/picker · PickerPair (designer m_57374)", () => {
+  const sides = [
+    { id: "A", name: "Anthropic", rows: [{ id: "a/opus", name: "opus" }, { id: "a/sonnet", name: "sonnet", current: true }] },
+    { id: "M", name: "Mistral", rows: [{ id: "m/small", name: "small" }] },
+  ];
+  const top = { id: "(fallback)", name: "Same as bise · opus" };
+
+  it("opens on the current row's side, that row active; else on the first side", () => {
+    expect(pairStart({ top, sides })).toEqual({ col: "right", side: "A", on: "a/sonnet" });
+    expect(pairStart({ top, sides: sides.map((s) => ({ ...s, rows: s.rows.map((r) => ({ ...r, current: false })) })) })).toEqual({ col: "left", side: "A", on: "A" });
+  });
+
+  it("↑↓ on the left choose the side as they go, → opens its rows, ← goes back, ⏎ picks", () => {
+    const left = { col: "left" as const, side: "A", on: "A" };
+    expect(pairKey({ top, sides }, left, "ArrowDown")?.at).toEqual({ col: "left", side: "M", on: "M" });
+    // the top row is walked, but isn't a side: the side stays
+    expect(pairKey({ top, sides }, left, "ArrowUp")?.at).toEqual({ col: "left", side: "A", on: "(fallback)" });
+    expect(pairKey({ top, sides }, { col: "left", side: "A", on: "(fallback)" }, "Enter")?.pick).toBe("(fallback)");
+    expect(pairKey({ top, sides }, left, "ArrowRight")?.at).toEqual({ col: "right", side: "A", on: "a/sonnet" });
+    const right = { col: "right" as const, side: "A", on: "a/sonnet" };
+    expect(pairKey({ top, sides }, right, "ArrowLeft")?.at).toEqual({ col: "left", side: "A", on: "A" });
+    expect(pairKey({ top, sides }, right, "Enter")?.pick).toBe("a/sonnet");
+    expect(pairKey({ top, sides }, right, "ArrowDown")?.at.on).toBe("a/opus");
+  });
+
+  it("opens with right edges aligned, from the left edge without room, one column with neither", () => {
+    expect(pairPlace({ left: 700, right: 900 }, 1280)).toEqual({ align: "end", narrow: false });
+    expect(pairPlace({ left: 100, right: 300 }, 1280)).toEqual({ align: "start", narrow: false });
+    expect(pairPlace({ left: 200, right: 380 }, 560)).toEqual({ align: "end", narrow: true });
   });
 });

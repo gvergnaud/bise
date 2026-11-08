@@ -214,3 +214,46 @@
   background: color-mix(in srgb, var(--c-text) 9%, transparent);
   color: var(--c-text);
 }
+/* PickerPair (picker.tsx, designer m_57374): two lists in one shell, 192 + 208 with a 1 px rule
+   between, each scrolling on its own; the chosen side has the 9 % selection; the top row (the
+   fallback) a 1 px rule under it; the footer under both. Narrow: one column of 400, a back row. */
+.b-picker.b-pair {
+  width: auto;
+  min-width: 0;
+  max-width: none;
+}
+.b-pair-cols {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+.b-pair-col {
+  overflow-y: auto;
+}
+.b-pair-col.l {
+  width: 192px;
+}
+.b-pair-col.r {
+  width: 208px;
+  margin-left: var(--s-1);
+  padding-left: var(--s-1);
+  border-left: 1px solid var(--c-line);
+}
+.b-pair.narrow .b-pair-col.l,
+.b-pair.narrow .b-pair-col.r {
+  width: 400px;
+  margin-left: 0;
+  padding-left: 0;
+  border-left: 0;
+}
+.b-pair-top {
+  margin-bottom: var(--s-1);
+  padding-bottom: var(--s-1);
+  border-bottom: 1px solid var(--c-line);
+}
+.b-picker-row.sel {
+  background: color-mix(in srgb, var(--c-text) 9%, transparent);
+}
+.b-pair-back {
+  color: var(--c-text-2);
+}

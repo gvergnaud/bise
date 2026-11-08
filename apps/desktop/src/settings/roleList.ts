@@ -5,7 +5,7 @@
 // The core decides what works, what failed and what fixes it (bise_catalog::features); this file
 // only words it. Pure. Owner: setup-page.
 import type { FeatureId, FeaturePart, FeatureRow, Model, RoleId, RoleRow, SetupFix, SetupGauge } from '@/proto';
-import type { PickerGroup } from '@/ds';
+import type { PickerRow, PickerSide } from '@/ds';
 import { settings } from '@/proto/words.gen';
 import { FEATURE_WORDS, PERM_NAME, keyFailed, providerName, secsOf, tookMs, whyWords, type Tone } from './gauge';
 import { modelRow } from './hold';
@@ -186,17 +186,18 @@ export function hasTrouble(r: FeatureRow): boolean {
 /** the picker's id for "back to its fallback" (role_set with no model): a word no model id can be */
 export const FALLBACK = '(fallback)';
 
-/** The picker of a role: its fallback first (the model it resolves to), then the models under
- * their provider; a model whose provider isn't set up yet says so (picking it opens that setup:
- * hold.ts). Pure. */
-export function pickGroups(role: RoleRow, roles: readonly RoleRow[], models: readonly Model[]): PickerGroup[] {
+/** A role's picker (page models-settings, mock-a): its fallback on top with the model it resolves
+ * to ('Same as bise · opus 5.5'), then each provider (✓ set up, 'add a key' when not) with its
+ * models on the right, ✓ on the current one. Picking a model whose provider isn't set up holds the
+ * pick and opens that setup (hold.ts). Pure. */
+export function pickSides(role: RoleRow, roles: readonly RoleRow[], models: readonly Model[]): { top: PickerRow; sides: PickerSide[] } {
   const follows = role.follows != null && role.follows !== '' ? roles.find((x) => x.role === role.follows) : undefined;
   const fallbackModel = follows !== undefined ? follows.model : role.source === 'default' ? role.model : '';
   const fallbackName = modelRow(fallbackModel, models)?.label ?? fallbackModel;
-  const fallback = {
+  const fallbackWords = follows !== undefined ? settings.role_as({ role: follows.role === 'main' ? settings.role_main_name : follows.name }) : settings.role_default;
+  const top: PickerRow = {
     id: FALLBACK,
-    name: follows !== undefined ? settings.role_as({ role: follows.role === 'main' ? settings.role_main_name : follows.name }) : settings.role_default,
-    ...(fallbackName !== '' ? { secondary: fallbackName } : {}),
+    name: fallbackName !== '' ? `${fallbackWords} · ${fallbackName}` : fallbackWords,
     current: role.source === 'default',
   };
   const byProvider = new Map<string, Model[]>();
@@ -204,18 +205,11 @@ export function pickGroups(role: RoleRow, roles: readonly RoleRow[], models: rea
     if (m.alias_of != null && m.alias_of !== '') continue;
     byProvider.set(m.provider, [...(byProvider.get(m.provider) ?? []), m]);
   }
-  return [
-    { id: 'fallback', rows: [fallback] },
-    ...[...byProvider].map(([provider, ms]) => ({
-      id: provider,
-      head: provider,
-      rows: ms.map((m) => ({
-        id: m.id,
-        name: m.label,
-        current: role.source !== 'default' && role.model === m.id,
-        tip: m.id,
-        ...(m.key_ready === false ? { trailing: settings.pick_setup_first } : {}),
-      })),
-    })),
-  ];
+  const sides = [...byProvider].map(([provider, ms]) => ({
+    id: provider,
+    name: provider,
+    trailing: ms.some((m) => m.key_ready !== false) ? '✓' : settings.pick_add_key,
+    rows: ms.map((m) => ({ id: m.id, name: m.label, current: role.source !== 'default' && role.model === m.id, tip: m.id })),
+  }));
+  return { top, sides };
 }

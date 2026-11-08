@@ -8,12 +8,12 @@
 // Owner: setup-page.
 import { useState, type ReactNode } from 'react';
 import type { AppCmd, FeatureId, FeaturePart, FeatureRow, Model, RoleRow, SetupGauge } from '@/proto';
-import { Act, Button, Dropdown, Help, PickerSeg, Press, tipAttrs } from '@/ds';
+import { Act, Button, DropdownPair, Help, PickerSeg, Press, tipAttrs } from '@/ds';
 import { cx } from '@/ds/cx';
 import { settings } from '@/proto/words.gen';
 import { Trouble, TryIt, fixButton, type GaugePorts } from './gauge';
 import { modelRow } from './hold';
-import { ABOUT, FALLBACK, ROW_NAME, actInPlace, fixLine, hasTrouble, listed, modelView, partName, partStatus, partsInOrder, pickGroups, rowStatus, type Status } from './roleList';
+import { ABOUT, FALLBACK, ROW_NAME, actInPlace, fixLine, hasTrouble, listed, modelView, partName, partStatus, partsInOrder, pickSides, rowStatus, type Status } from './roleList';
 
 export interface RoleListProps {
   g: SetupGauge;
@@ -75,13 +75,13 @@ function ModelCell({ r, p, props, testId }: { r: FeatureRow; p: FeaturePart; pro
   const effort = role.effort ?? modelRow(role.model, models)?.default_effort ?? null;
   return (
     <span className="st-model-pick">
-      <Dropdown
+      <DropdownPair
         label={words}
         extra="st-pick"
         name={settings.role_model({ role: ROW_NAME[r.id] })}
         tip={v?.tip ?? settings.part_pick}
-        align="end"
-        groups={pickGroups(role, roles, models)}
+        back={settings.pick_back}
+        {...pickSides(role, roles, models)}
         {...(efforts.length > 0
           ? {
               footer: (

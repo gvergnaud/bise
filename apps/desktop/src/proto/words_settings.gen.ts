@@ -1354,8 +1354,10 @@ export const settings = {
   short_dictation: "Dictation",
   /** a role in the fix line's sentence: voice mode */
   short_voice_mode: "Voice mode",
-  /** the model picker: a model whose provider has no key or sign-in yet */
-  pick_setup_first: "set up first",
+  /** the model picker: a provider with no key or sign-in yet */
+  pick_add_key: "add a key",
+  /** the model picker in one column: back to the providers */
+  pick_back: "‹ Providers",
   /** a role's status: why it stopped, from its verdict (short, after ✗) */
   stop_no_key: "✗ no key",
   /** a role's status: the key was refused or the sign-in expired */

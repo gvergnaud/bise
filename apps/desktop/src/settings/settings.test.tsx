@@ -25,9 +25,11 @@ import type { ComputerUse } from './computer';
 import { settings } from '@/proto/words.gen';
 
 /** a role's model picker (the ds Select): open it, then pick that option */
-function pickRole(role: string, value: string): void {
+/** Open a role's picker, choose `side` (a provider) when given, pick `value`. */
+function pickRole(role: string, value: string, side?: string): void {
   const id = `settings.role.${role}.model`;
   fireEvent.click(screen.getByTestId(id));
+  if (side !== undefined) fireEvent.click(screen.getByTestId(`${id}.menu.side.${side}`));
   fireEvent.click(screen.getByTestId(`${id}.menu.${value}`));
 }
 
@@ -701,7 +703,11 @@ describe('which model does what (V17) and a model with no key (L5)', () => {
     const p = ports();
     const held: Held[] = [];
     const r = view('models', { ...p, hold: (h) => held.push(h) }, { gauge: GAUGE, roles: ROLES, models: MODELS, accounts: ACCOUNTS });
-    pickRole('main', 'mistral/devstral-medium-latest');
+    // Mistral has no key: its side says 'add a key'; its model is held, the key field opens
+    fireEvent.click(screen.getByTestId('settings.role.main.model'));
+    expect(screen.getByTestId('settings.role.main.model.menu.side.Mistral').textContent).toContain(settings.pick_add_key);
+    fireEvent.click(screen.getByTestId('settings.role.main.model'));
+    pickRole('main', 'mistral/devstral-medium-latest', 'Mistral');
     expect(p.sent).toEqual([]);
     expect(held).toEqual([{ provider: 'mistral', providerName: 'Mistral', model: 'devstral medium', cmd: { cmd: 'role_set', role: 'main', model: 'mistral/devstral-medium-latest' } }]);
     r.rerender(<Settings page="models" prefs={prefs()} accounts={ACCOUNTS} projects={projects()} found={found()} computerUse={null} perms={{}} ports={p} gauge={GAUGE} roles={ROLES} models={MODELS} held={held[0] ?? null} />);

@@ -12,7 +12,7 @@
 // whatever `maxHeight` says); the list scrolls inside, the current row in view on open. Placement:
 // pickerPlace (8 px from the trigger, clamped in the window); a menu that opens from a trigger is
 // PickerPop or Dropdown (dropdown.tsx), never a Picker placed by a screen. css/picker.css.
-import { useRef, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { cx, sub } from "./cx";
 import { useFitText, usePickerList } from "./hooks";
 import { PICKER_CAP } from "./place";
@@ -167,6 +167,27 @@ export function PickerCut({ text }: { text: string }) {
   );
 }
 
+/** One row of a picker list (Picker's, PickerPair's): glyph | name (+ secondary) | ✓ or its trailing
+ *  item; the pointer on it makes it active, a click picks it (a disabled row neither). */
+function RowView({ r, on, glyphs, inline, sel, testId, onPoint, onPick }: { r: PickerRow; on: boolean; glyphs: boolean; inline: boolean; sel?: boolean; testId: string | undefined; onPoint: () => void; onPick: () => void }) {
+  const dis = r.disabled === true;
+  return (
+    <div data-row={r.id} role="menuitemradio" aria-checked={r.current === true} aria-disabled={dis || undefined}
+      className={cx("b-picker-row", r.secondary != null && !inline && "two", on && "on", sel === true && "sel", dis && "dis")}
+      data-tip={r.tip === undefined || r.tip === "" ? undefined : r.tip}
+      onMouseMove={dis ? undefined : onPoint}
+      onClick={dis ? undefined : onPick}
+      data-testid={testId}>
+      {glyphs && <span className="g">{r.glyph}</span>}
+      <span className="t">
+        <span className="n">{r.name}</span>
+        {r.secondary != null && (inline && typeof r.secondary === "string" ? <PickerCut text={r.secondary} /> : <span className="s">{r.secondary}</span>)}
+      </span>
+      {r.current === true ? <span className="ok" aria-hidden="true">✓</span> : r.trailing != null && <span className="k">{r.trailing}</span>}
+    </div>
+  );
+}
+
 /** The list you pick from. */
 export function Picker({ title, titleKeys, groups, footer, keyline, empty, active, ownKeys = false, onPick, onClose, wide, inline = false, maxHeight, style, testId }: PickerProps) {
   const ids = walkable(groups);
@@ -222,22 +243,8 @@ export function Picker({ title, titleKeys, groups, footer, keyline, empty, activ
           <div key={g.id} className={cx("b-picker-group", g.look)} role="group">
             {g.head != null && <div className="b-picker-ghead">{g.head}</div>}
             {g.rows.map((r) => (
-              <div key={r.id} data-row={r.id} role="menuitemradio" aria-checked={r.current === true} aria-disabled={r.disabled === true || undefined}
-                className={cx("b-picker-row", r.secondary != null && !inline && "two", r.id === on && "on", r.disabled === true && "dis")}
-                data-tip={r.tip === undefined || r.tip === "" ? undefined : r.tip}
-                onMouseMove={() => {
-                  if (r.disabled === true || on === r.id) return;
-                  point(r.id);
-                }}
-                onClick={r.disabled === true ? undefined : () => { onPick(r.id); }}
-                data-testid={r.testId ?? sub(testId, r.id)}>
-                {glyphs && <span className="g">{r.glyph}</span>}
-                <span className="t">
-                  <span className="n">{r.name}</span>
-                  {r.secondary != null && (inline && typeof r.secondary === "string" ? <PickerCut text={r.secondary} /> : <span className="s">{r.secondary}</span>)}
-                </span>
-                {r.current === true ? <span className="ok" aria-hidden="true">✓</span> : r.trailing != null && <span className="k">{r.trailing}</span>}
-              </div>
+              <RowView key={r.id} r={r} on={r.id === on} glyphs={glyphs} inline={inline} testId={r.testId ?? sub(testId, r.id)}
+                onPoint={() => { if (on !== r.id) point(r.id); }} onPick={() => { onPick(r.id); }} />
             ))}
           </div>
         ))}
@@ -249,6 +256,137 @@ export function Picker({ title, titleKeys, groups, footer, keyline, empty, activ
 }
 
 /** A footer's segmented row (the model's effort: low medium high max), the picked one in the 9% tint. */
+/** One row of PickerPair's left column (a provider) and the rows it shows on the right (its models). */
+export interface PickerSide {
+  id: string;
+  name: ReactNode;
+  /** text-3 12 at its right ('✓' set up, 'add a key') */
+  trailing?: ReactNode;
+  tip?: string;
+  rows: readonly PickerRow[];
+}
+export interface PickerPairProps {
+  /** a row above the sides, a 1 px rule under it ('Same as bise · opus 5.5'): picked like a model */
+  top?: PickerRow;
+  sides: readonly PickerSide[];
+  /** a control under both columns, the full width (the model's effort) */
+  footer?: ReactNode;
+  /** one column (no room for two): the sides, then a side's rows under a back row with these words */
+  narrow?: ReactNode;
+  onPick: (id: string) => void;
+  onClose?: () => void;
+  maxHeight?: number;
+  style?: CSSProperties;
+  testId?: string;
+}
+
+/** PickerPair's walk: which column has the keys, which side is chosen, the active row. Pure. */
+export interface PairAt {
+  col: "left" | "right";
+  side: string | null;
+  on: string | null;
+}
+
+/** Where PickerPair opens: on the current row's side, its current row active (else the first side). Pure. */
+export function pairStart(p: Pick<PickerPairProps, "top" | "sides">): PairAt {
+  const cur = p.sides.find((s) => s.rows.some((r) => r.current === true));
+  if (cur !== undefined) return { col: "right", side: cur.id, on: cur.rows.find((r) => r.current === true)?.id ?? null };
+  const side = p.sides[0]?.id ?? null;
+  return { col: "left", side, on: p.top?.current === true ? p.top.id : side };
+}
+
+/** A key on PickerPair: ↑↓ walk the column (the left one chooses its side as it goes), → or ⏎ on a
+ *  side opens its rows, ← goes back; `pick` when ⏎ picks a row. Pure. */
+export function pairKey(p: Pick<PickerPairProps, "top" | "sides">, at: PairAt, key: string): { at: PairAt; pick?: string } | null {
+  const side = p.sides.find((s) => s.id === at.side);
+  const leftIds = [...(p.top !== undefined ? [p.top.id] : []), ...p.sides.map((s) => s.id)];
+  const rightIds = (side?.rows ?? []).filter((r) => r.disabled !== true).map((r) => r.id);
+  const toRight = (): PairAt | null => (side === undefined || rightIds.length === 0 ? null : { col: "right", side: side.id, on: side.rows.find((r) => r.current === true)?.id ?? rightIds[0] ?? null });
+  if (at.col === "left") {
+    if (key === "Enter" && p.top !== undefined && at.on === p.top.id) return { at, pick: p.top.id };
+    if (key === "ArrowRight" || key === "Enter") {
+      const r = toRight();
+      return r === null ? null : { at: r };
+    }
+    const next = stepActive(leftIds, at.on, key);
+    if (next === null) return null;
+    return { at: { col: "left", side: p.sides.some((s) => s.id === next) ? next : at.side, on: next } };
+  }
+  if (key === "ArrowLeft") return { at: { col: "left", side: at.side, on: at.side } };
+  if (key === "Enter") return at.on === null ? null : { at, pick: at.on };
+  const next = stepActive(rightIds, at.on, key);
+  return next === null ? null : { at: { ...at, on: next } };
+}
+
+/** Two lists in one picker shell (designer m_57374): the sides on the left (a provider: the pointer or
+ *  ↑↓ choose it, its rows show on the right at once; a click or → moves there), the chosen side's rows
+ *  on the right (a click or ⏎ picks one), the footer under both. `narrow`: one column, a side's rows
+ *  under a back row. Keys as Picker's (it takes the focus), plus ← →. */
+export function PickerPair({ top, sides, footer, narrow, onPick, onClose, maxHeight, style, testId }: PickerPairProps) {
+  const [at, setAt] = useState<PairAt>(() => pairStart({ top, sides }));
+  const shell = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    shell.current?.focus();
+  }, []);
+  const side = sides.find((s) => s.id === at.side);
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      onClose?.();
+      return;
+    }
+    const r = pairKey({ top, sides }, at, e.key);
+    if (r === null) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setAt(r.at);
+    if (r.pick !== undefined) onPick(r.pick);
+  };
+  const open = (s: PickerSide) => {
+    const first = s.rows.find((r) => r.current === true)?.id ?? s.rows.find((r) => r.disabled !== true)?.id ?? null;
+    setAt({ col: "right", side: s.id, on: first });
+  };
+  const topRow = top !== undefined && (
+    <div className="b-pair-top">
+      <RowView r={top} on={at.col === "left" && at.on === top.id} glyphs={false} inline={false} testId={top.testId ?? sub(testId, top.id)}
+        onPoint={() => { setAt({ ...at, col: "left", on: top.id }); }} onPick={() => { onPick(top.id); }} />
+    </div>
+  );
+  const left = (
+    <div className="b-picker-list b-pair-col l" role="group">
+      {topRow}
+      {sides.map((s) => (
+        <RowView key={s.id} r={{ id: s.id, name: s.name, ...(s.trailing !== undefined ? { trailing: s.trailing } : {}), ...(s.tip !== undefined ? { tip: s.tip } : {}) }}
+          on={at.col === "left" && at.on === s.id} sel={!narrow && s.id === at.side} glyphs={false} inline={false} testId={sub(testId, `side.${s.id}`)}
+          onPoint={() => { if (narrow == null) setAt({ col: "left", side: s.id, on: s.id }); else setAt({ ...at, on: s.id }); }}
+          onPick={() => { open(s); }} />
+      ))}
+    </div>
+  );
+  const right = side !== undefined && (
+    <div className="b-picker-list b-pair-col r" role="group">
+      {narrow != null && (
+        <div className="b-picker-row b-pair-back" role="menuitem" onClick={() => { setAt({ col: "left", side: side.id, on: side.id }); }} data-testid={sub(testId, "back")}>
+          <span className="t"><span className="n">{narrow}</span></span>
+        </div>
+      )}
+      {side.rows.map((r) => (
+        <RowView key={r.id} r={r} on={at.col === "right" && at.on === r.id} glyphs={false} inline={false} testId={r.testId ?? sub(testId, r.id)}
+          onPoint={() => { setAt({ col: "right", side: side.id, on: r.id }); }} onPick={() => { onPick(r.id); }} />
+      ))}
+    </div>
+  );
+  return (
+    <div ref={shell} className={cx("b-picker", "b-pair", narrow != null && "narrow")} role="menu" tabIndex={-1} onKeyDown={onKeyDown}
+      style={maxHeight === undefined ? style : { ...style, maxHeight: `min(${String(PICKER_CAP * 100)}vh, ${String(maxHeight)}px)` }}
+      onMouseDown={(e) => { e.preventDefault(); }} data-testid={testId}>
+      <div className="b-pair-cols">{narrow != null ? (at.col === "right" ? right : left) : <>{left}{right}</>}</div>
+      {footer != null && <div className="b-picker-foot">{footer}</div>}
+    </div>
+  );
+}
+
 export function PickerSeg({ head, items, on, onPick, testId }: { head?: ReactNode; items: readonly string[]; on: string | null; onPick: (item: string) => void; testId?: string }) {
   return (
     <div className="b-picker-seg">
