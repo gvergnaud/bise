@@ -182,6 +182,13 @@ Ranked by value: risk removed per hour spent.
   Python copy gives, and the copies name that test.
 - **risk:** none.
 
+### 13. Three callers spawn the system's curl, each its own way — cheap (S)
+
+- **where:** `harness/src/update.rs` (`curl`, downloads), `switchboard/src/approvals/check.rs` (the judge), `usage/src/curl.rs` (the usage sender).
+- **why:** the flags that matter (`-q` so `~/.curlrc` is not read, timeouts, headers on stdin) drift between the three.
+- **fix:** one curl wrapper in a shared crate, used by all three (architect m_56063).
+- **risk:** low; each caller's tests cover its use.
+
 ### 12. Other notes (no action proposed now)
 
 - `lock().unwrap()`: 29 sites outside tests. A panic under a lock poisons
