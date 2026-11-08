@@ -4,7 +4,7 @@
 // hello (Onboarding.tsx) and, once, docked over the home's composer for an install that never
 // saw it (HomeNote). Drawing it marks it seen (telemetry {act: note_seen}): without that, bise
 // counts nothing. The words live once in bise_proto (words/settings/setup.rs). Owner: telemetry.
-import { Fragment, useEffect, useId, useState, type ReactNode } from 'react';
+import { Fragment, useCallback, useEffect, useId, useState, type ReactNode } from 'react';
 import type { AppCmd } from '@/proto';
 import { Act, Button, Sheet, Toggle } from '@/ds';
 import { settings } from '@/proto/words.gen';
@@ -132,7 +132,9 @@ export function useHomeNote(prefs: Prefs | null): readonly [boolean, () => void]
   const [state, setState] = useState<'unknown' | 'show' | 'gone'>('unknown');
   // latched at the first prefs (state set while rendering: React's derived-state pattern)
   if (state === 'unknown' && prefs !== null) setState(homeNoteDue(prefs) ? 'show' : 'gone');
-  return [state === 'show', () => { setState('gone'); }];
+  // stable: the thread's onSent holds it, and a new one each render would re-render the composer
+  const dismiss = useCallback(() => { setState('gone'); }, []);
+  return [state === 'show', dismiss];
 }
 
 /** An install that went through (or skipped) the first launch and never saw the note. Pure. */

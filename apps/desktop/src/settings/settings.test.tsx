@@ -194,7 +194,8 @@ describe('Settings', () => {
     const p = ports();
     view('privacy', p);
     fireEvent.click(screen.getByTestId('settings.app.com.apple.MobileSMS'));
-    expect(p.sent).toEqual([{ cmd: 'prefs_set', key: 'excluded_apps', value: ['1Password', 'com.apple.MobileSMS'] }]);
+    // the page also asks the usage counts' view once (telemetry.tsx): not this list's
+    expect(p.sent.filter((c) => c.cmd !== 'telemetry')).toEqual([{ cmd: 'prefs_set', key: 'excluded_apps', value: ['1Password', 'com.apple.MobileSMS'] }]);
   });
 
   it('models: sign in on his click only, a key is sent once and never shown', () => {

@@ -104,7 +104,7 @@
 .tm-note .tm-t { font-weight: 600; margin-bottom: var(--gap-tight); }
 .tm-note p { margin: 0 0 var(--gap-rows); }
 .tm-note code, .tm-why code { font-family: var(--font-mono); font-size: var(--t-13); }
-.tm-share { display: flex; align-items: center; justify-content: space-between; gap: var(--gap-inline); padding-top: var(--s-2); margin-top: var(--s-2); border-top: 1px solid var(--c-line); cursor: pointer; }
+.tm-share { display: flex; align-items: center; justify-content: space-between; gap: var(--gap-inline); padding-top: var(--s-2); margin-top: var(--s-2); border-top: 1px solid var(--c-line); }
 .tm-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--gap-inline); margin-top: var(--s-2); min-height: var(--s-6); }
 .tm-sign { color: var(--c-text-3); }
 .tm-why p { margin: 0 0 var(--gap-block); font: var(--f-read); }
