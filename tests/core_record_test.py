@@ -94,6 +94,7 @@ def main():
     # the usage counts' view holds the install id: never recorded, by its kind (architect m_56355)
     view = {"jsonrpc": "2.0", "method": "core/telemetry", "params": {"share": True, "id": "0b6b3a4e-9f1c-4d2a-8e5f-2c7d9a1b3e4f"}}
     check("a core/telemetry line is never recorded", not core_record.recordable(view))
+    check("the never-recorded methods are app_rpc's NO_LOG", "core/telemetry" in core_record.never_recorded() and "core/provider_use" in core_record.never_recorded(), core_record.never_recorded())
     check("another event is", core_record.recordable({"jsonrpc": "2.0", "method": "core/prefs", "params": {}}))
     if FAILS:
         print("core_record_test: %d failed: %s" % (len(FAILS), ", ".join(FAILS)))

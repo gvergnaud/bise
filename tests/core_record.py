@@ -175,12 +175,16 @@ def quiet(core, seconds=3, timeout=120):
     wait.stable(lambda: len(core.evs), timeout, "the core quiet for %d s" % seconds, quiet=seconds)
 
 
-NEVER_RECORDED = ("core/telemetry",)
+def never_recorded():
+    """bise_proto's app_rpc::NO_LOG, from its generated copy: the one list of the methods whose
+    params never reach a log or a capture (a key, a still, core/telemetry's install id)."""
+    return tuple(json.loads(_gen_const("NO_LOG")))
 
 
-def recordable(line):
-    """False for a line of a method never captured, by its kind (core/telemetry: the install id)."""
-    return not (isinstance(line, dict) and line.get("method") in NEVER_RECORDED)
+def recordable(line, never=None):
+    """False for a line of a NO_LOG method, by its kind, never by its text."""
+    never = never_recorded() if never is None else never
+    return not (isinstance(line, dict) and line.get("method") in never)
 
 
 def drive(out, timeout):
@@ -191,9 +195,11 @@ def drive(out, timeout):
     err = open(os.path.join(out, "core.err"), "a")
     lock = threading.Lock()
 
+    never = never_recorded()
+
     def rec(line):
-        # the usage counts' view holds the install id: never in a capture (architect m_56355)
-        if not recordable(line):
+        # a NO_LOG line (core/telemetry's install id, a key, a still): never in a capture (architect m_56355)
+        if not recordable(line, never):
             return
         with lock:
             f.write(json.dumps(line, ensure_ascii=False) + "\n")
