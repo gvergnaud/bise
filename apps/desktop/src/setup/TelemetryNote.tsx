@@ -67,8 +67,9 @@ export function TelemetryNote({ share, send, done, testId }: TelemetryNoteProps)
   return (
     <div className="tm-note" data-testid={testId}>
       <p>
-        {/* 'why?' right after the line, held to it by a no-break space */}
-        {settings.onb_telemetry_line}{'\u00a0'}
+        {/* 'why?' right after the line: the Act's own padding is the one space (designer m_56806), and
+            no space between them holds it to the last word */}
+        {settings.onb_telemetry_line}
         <Act onClick={() => { setWhy(true); }} testId={`${testId}.why`}>
           {settings.onb_telemetry_why}
         </Act>

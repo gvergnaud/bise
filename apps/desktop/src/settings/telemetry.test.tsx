@@ -67,7 +67,7 @@ describe("Gabriel's note", () => {
     const send = vi.fn();
     render(<TelemetryNote share send={send} testId="note" />);
     expect(send).toHaveBeenCalledWith({ cmd: 'telemetry', act: 'note_seen' });
-    expect(screen.getByTestId('note').querySelector('p')?.textContent).toBe(`${settings.onb_telemetry_line}\u00a0${settings.onb_telemetry_why}`);
+    expect(screen.getByTestId('note').querySelector('p')?.textContent).toBe(`${settings.onb_telemetry_line}${settings.onb_telemetry_why}`);
     const disable = screen.getByTestId('note.disable');
     expect(disable.getAttribute('aria-checked')).toBe('false');
     expect(disable.textContent).toContain(settings.onb_telemetry_disable);
