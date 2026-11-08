@@ -41,6 +41,7 @@ pub mod feed;
 pub mod fx;
 pub mod input;
 pub mod journal;
+pub mod journal_kind;
 pub mod link;
 pub mod state;
 pub mod view;
@@ -49,6 +50,7 @@ pub use feed::Feed;
 pub use fx::Fx;
 pub use input::{In, Step};
 pub use journal::JOURNAL;
+pub use journal_kind::JournalKind;
 pub use link::{Answer, Link};
 pub use view::{ColdMsg, Declaration, View, ViewAgent, ViewMsg, VIEW};
 

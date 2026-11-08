@@ -70,6 +70,7 @@ mod state_gate;
 mod contexts;
 mod tindex;
 mod usage;
+mod usage_spool;
 mod view_out;
 mod views;
 mod wake_look;
@@ -413,6 +414,8 @@ struct Shell {
     recycle: recycling::Recycle,
     /// What the project's calls cost, per agent and model (daemon/usage.rs).
     usage: usage::Usage,
+    /// The hub's usage counts for the telemetry spool (daemon/usage_spool.rs).
+    usage_spool: usage_spool::UsageSpool,
     /// The project's pulse: its turns, main's entries for him, its news
     /// (daemon/pulse.rs).
     pulse: pulse::PulseState,
@@ -868,6 +871,7 @@ impl Shell {
                 }
                 self.photos.journaled(&ev);
                 self.answers_journaled(&ev);
+                self.usage_journal(&ev);
                 // /drop (design §7.3): its tab group closes too
                 if let Some(name) = crate::computer_use::archived(&ev) {
                     crate::computer_use::drop_agent(&self.proc_hub, name);
@@ -1487,6 +1491,7 @@ impl Shell {
         }
         self.recycle_line(dir, line);
         self.usage_line(&name, line);
+        self.usage_repl_line(dir, line);
         // the answer as it streams in: memory and clients, never the feed
         if line.starts_with("partial #") {
             return self.on_partial(&name, line);
@@ -1756,6 +1761,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
         plugins_checked: None,
         recycle: recycling::Recycle::from_env(),
         usage: Default::default(),
+        usage_spool: usage_spool::UsageSpool::new(&home, &paths.workspace, now_ms()),
         pulse: Default::default(),
         small_broken: Default::default(),
         config: config_watch::ConfigWatch::new(&home, &paths),

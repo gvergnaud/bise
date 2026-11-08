@@ -179,6 +179,10 @@ mod core_forward_tests;
 #[path = "core_mcp_view_tests.rs"]
 mod core_mcp_view_tests;
 
+/// usage step 2's: a boot replay counts nothing.
+#[path = "core_usage_tests.rs"]
+mod core_usage_tests;
+
 /// issue 36 chunk 3's: photo / restore_photo, only on a fresh hub.
 #[path = "core_photo_tests.rs"]
 mod core_photo_tests;

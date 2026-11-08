@@ -111,6 +111,31 @@ observation per hub and day, in the buckets 1, 2, 3-4, 5-8, 9-16, 17+.
 `milestones`: `setup`, `first_agent`, `first_artifact`, `first_land`, each
 with its delay: `under_1h`, `under_1d`, `under_7d`, `later`.
 
+## Who counts what
+
+The hub (`switchboard::usage_count`, pure; its shell
+`daemon/usage_spool.rs`) counts from facts already decided, live only (a
+boot replay of the journal runs no effect, so a restart counts nothing
+twice):
+
+- sb-core's journal effects, by an exhaustive match on the line's kind
+  (`bise_proto::core::JournalKind`): `task_created` by its parent (him,
+  main, another agent), `message_sent` from him, `card_opened`,
+  `card_closed` with his answer, `every_set`, `every_fired` (delivered),
+  `wake_set`, `wake_end` on its event (`hit`), `worktree_placed` without
+  an error; every other kind is "not counted" in so many words;
+- the live REPL lines (never the week's transcripts), exhaustive on the
+  observation: `turn_done` completed or failed (interrupted: neither),
+  `turn_stalled`, `compaction_started`, `provider_retry`; `agent_work` is
+  the time between an agent's lines inside a turn, a silence over 15 min
+  taken out; `peak_agents` is the day's most agents in a turn at once;
+- the shell where it happens: a land that moved a ref, a page published.
+
+It writes its tally every 5 minutes and at a clean stop, with the permit
+read again each time (off: the counts are dropped). Not counted by the
+hub: `connector_call`, `computer_use_call` (a typed obs line from the
+runtime, plan step 10), `crash_hub` (step 10), `search` (the desktop).
+
 ## What is never sent
 
 No text: no prompt, message, brief, file, path, name of a project or an

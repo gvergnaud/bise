@@ -43,7 +43,7 @@ use std::path::{Path, PathBuf};
 
 #[path = "core_gen/journal.rs"]
 mod journal;
-use journal::{journal_codec, journal_laws};
+use journal::{journal_codec, journal_kind_rust, journal_laws};
 
 #[path = "core_gen/state.rs"]
 mod state;
@@ -942,6 +942,7 @@ fn files() -> BTreeMap<String, String> {
     out.insert("bend/hub/gen/laws.bend".into(), laws());
     out.insert("bend/hub/gen/journal.bend".into(), journal_codec());
     out.insert("bend/hub/gen/journal-laws.bend".into(), journal_laws());
+    out.insert("rust/proto/src/core/journal_kind.rs".into(), journal_kind_rust());
     out.insert("bend/hub/gen/state.bend".into(), state_types());
     out.insert("bend/hub/gen/state-laws.bend".into(), state_laws());
     out.insert("bend/hub/gen/state-codec.bend".into(), state_codec());

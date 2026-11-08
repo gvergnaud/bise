@@ -283,6 +283,7 @@ impl Shell {
                 let was_public = p.id.as_deref().and_then(|i| pages.store.meta(i)).is_some_and(|m| m.public);
                 match pages.publish(&p, now_ms(), &is_gone) {
                     Ok((meta, unknown)) => {
+                        self.usage_count(bise_usage::CountKey::PagePublished);
                         // a public page changed (or was taken back): the static export, then the
                         // user's mirror if he set one (pages/mirror.rs); nothing else ever leaves
                         if meta.public || was_public {

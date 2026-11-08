@@ -23,6 +23,9 @@
 //! - `doing`, `activity`: les bims' facts, pure: an agent's `doing` from
 //!   its REPL lines, `hub/activity` from sb-core's journal effects (their
 //!   hub side: `core_doing.rs`);
+//! - `usage_count`: the hub's usage counts (telemetry), pure, from
+//!   sb-core's journal effects and the live REPL lines (its shell:
+//!   `daemon/usage_spool.rs`);
 //! - `transcript`: reading a thread (positions, cursors, origin);
 //! - `cli`: the `sb` command the agents call through their bash tool;
 //! - `client`: how a client (TUI, headless test) reaches the hub.
@@ -108,6 +111,7 @@ pub mod transcript;
 pub mod trunk;
 pub mod spent;
 pub mod store_gen;
+pub mod usage_count;
 pub mod usage_ledger;
 pub mod util;
 pub mod view;

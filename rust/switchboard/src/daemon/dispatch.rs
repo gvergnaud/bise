@@ -83,6 +83,8 @@ impl Shell {
         if self.state_gate.pending() {
             self.push_state();
         }
+        // a clean stop: the day's counts so far
+        self.usage_write(now_ms());
         keep
     }
 
@@ -143,6 +145,8 @@ impl Shell {
                     self.plan_prs();
                     w.phase("pulse");
                     self.pulse_check();
+                    w.phase("usage");
+                    self.usage_check();
                     w.phase("idle check");
                     self.idle_check();
                     w.phase("photo");
@@ -334,6 +338,7 @@ impl Shell {
                     // a land moved main or a feature: the features' facts again
                     self.refresh_features();
                     if landed {
+                        self.usage_count(bise_usage::CountKey::Land);
                         self.merged_all();
                     }
                 }
@@ -357,6 +362,7 @@ impl Shell {
         let stops = self.start_gone(&dir, cause);
         self.gens.remove(&dir);
         self.repls.remove(&dir);
+        self.usage_gone(&dir);
         self.gate_forget(&dir);
         self.pids.remove(&dir);
         // a dead REPL's port names no route, even for a moment: a view's
