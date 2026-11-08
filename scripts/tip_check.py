@@ -156,7 +156,7 @@ def save_seed(wt, log):
     (a land changed Cargo.lock or a Cargo.toml), so new task targets clone their deps warm instead of
     an older seed's (disk-hygiene, architect m_55867: deps only, one seed kept; gate.sh seed-save)"""
     for t in (os.path.join(wt, "rust", "target"), os.path.join(os.path.dirname(wt), "target")):
-        if os.path.isdir(t):
+        if os.path.exists(os.path.join(t, ".rustc_info.json")):  # a built target, never one disk_reclaim emptied
             with open(log, "a") as out:
                 subprocess.run(["bash", "tests/gate.sh", "seed-save", t], cwd=wt, stdout=out, stderr=subprocess.STDOUT,
                                stdin=subprocess.DEVNULL)

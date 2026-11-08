@@ -76,19 +76,22 @@ def protected(path, keep):
     return any(p == k or p.startswith(k.rstrip(os.sep) + os.sep) for k in keep)
 
 
-def plan(targets, free_gb, want_gb, now, idle_h, min_idle_min):
+def plan(targets, free_gb, want_gb, now, idle_h, min_idle_min, strays=frozenset()):
     """The targets to delete, in order, with why.
 
     targets: [(path, last_used_epoch, busy)]. Returns [(path, reason)]:
-    first every idle one (unused >= idle_h), then, only while free_gb is
+    first the strays (a rust/target in a task worktree whose task builds in
+    <task>/target) unused >= min_idle_min, then every idle one (unused >= idle_h), then, only while free_gb is
     under want_gb, the least recently used of the rest unused >= min_idle_min.
     The caller deletes them in that order and stops the 'low' ones as soon
     as the disk has want_gb free (it re-reads the free space after each)."""
     free = [(p, t) for p, t, busy in targets if not busy]
-    idle = sorted([(t, p) for p, t in free if now - t >= idle_h * 3600])
-    out = [(p, "idle") for t, p in idle]
+    # a second target of a task (strays): unused min_idle_min is enough
+    out = [(p, "stray") for t, p in sorted((t, p) for p, t in free if p in strays and now - t >= min_idle_min * 60)]
+    idle = sorted([(t, p) for p, t in free if p not in strays and now - t >= idle_h * 3600])
+    out += [(p, "idle") for t, p in idle]
     if free_gb < want_gb:
-        done = {p for t, p in idle}
+        done = {p for t, p in idle} | {p for p, _ in out}
         lru = sorted([(t, p) for p, t in free if p not in done and now - t >= min_idle_min * 60])
         out += [(p, "low") for t, p in lru]
     return out
@@ -126,6 +129,8 @@ def _self_test():
     assert plan(t, 10, 25, now, 6, 1) == [("/a", "idle"), ("/e", "low"), ("/b", "low"), ("/c", "low")]
     assert plan([], 1, 25, now, 6, 30) == []
     assert all(p != "/d" for p, _ in plan(t, 0, 99, now, 0, 0)), "a busy target is never planned"
+    assert plan(t, 50, 25, now, 6, 30, {"/b", "/c", "/d"}) == [("/b", "stray"), ("/a", "idle")], "a stray goes after 30 min"
+    assert plan(t, 10, 25, now, 6, 30, {"/b"}) == [("/b", "stray"), ("/a", "idle"), ("/e", "low")], "once"
     import tempfile
     with tempfile.TemporaryDirectory() as d:
         build = os.path.join(d, "state", "build")
@@ -185,6 +190,16 @@ def roots():
     # the task folders (.land-check's too: a dot project), and the tip check's tree
     return [os.path.join(base, h, a) for h in _ls(base) for a in _ls(os.path.join(base, h))] \
         + [os.path.expanduser("~/.bise/run/tip-check")]
+
+
+def stray(t):
+    """A rust/target in a task worktree (<project>/<task>/<repo>/rust/target, <task>/owner there,
+    not a dot project's): the task builds in <task>/target (the hub's CARGO_TARGET_DIR)."""
+    rust = os.path.dirname(t)
+    wt = os.path.dirname(rust)
+    task = os.path.dirname(wt)
+    return (os.path.basename(rust) == "rust" and os.path.isfile(os.path.join(task, "owner"))
+            and os.path.exists(os.path.join(wt, ".git")) and not os.path.basename(os.path.dirname(task)).startswith("."))
 
 
 def is_target(p):
@@ -335,7 +350,8 @@ def reclaim_one(t, reason, idle_min, log):
     shutil.rmtree(away, ignore_errors=True)
     gb = max(0, free_kb() - before) / (GB / 1024)
     stamp = time.strftime("%Y-%m-%d %H:%M")
-    why = ("unused %.1f h" % (idle_min / 60.0)) + (", the disk was low" if reason == "low" else "")
+    why = ("unused %.1f h" % (idle_min / 60.0)) + {"low": ", the disk was low",
+                                                   "stray": ", a second target: the task builds in <task dir>/target"}.get(reason, "")
     with open(os.path.join(t, "RECLAIMED.txt"), "w") as fh:
         fh.write("heavy-run: this cargo target was deleted at %s by scripts/disk_reclaim.py (%s, %.1f GB freed): "
                  "its next build is cold.\n" % (stamp, why, gb))
@@ -563,7 +579,7 @@ def main():
                 print("disk_reclaim: dropped %s's incremental dirs (%.1f GB)" % (t, gb))
     if not a.dry_run:
         log_tmps(run, now)
-    todo = plan(ts, free_kb() / (GB / 1024), a.want, now, a.idle_h, a.min_idle_min)
+    todo = plan(ts, free_kb() / (GB / 1024), a.want, now, a.idle_h, a.min_idle_min, {t for t, _, _ in ts if stray(t)})
     for t, reason in todo:
         if t in trimmed or not os.path.isdir(t):
             continue  # trimmed in this pass: its use dates are stale

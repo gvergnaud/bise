@@ -167,6 +167,8 @@ seed_mark() {  # the marks of a target cloned from a seed (disk-hygiene, archite
   printf 'Signature: 8a477f597d28d172789f06886806bc55\n# This file is a cache directory tag created by cargo.\n' >"$1/CACHEDIR.TAG" \
     && rm -f "$1/.idle-since" "$1/RECLAIMED.txt" && : >"$1/.seeded"
 }
+# a target disk_reclaim.py emptied: its RECLAIMED.txt alone left (the next build would be cold)
+emptied() { [ -d "$1" ] && [ -z "$(ls -A "$1" | grep -vx RECLAIMED.txt)" ]; }
 seed_clone() {  # in the repo root: $2 (absent) becomes an APFS clone of the seed $1, the deps only, marked
   rm -rf "$2.tmp"
   cp -cR "$1" "$2.tmp" 2>/dev/null && seed_strip "$2.tmp" && seed_mark "$2.tmp" && mv "$2.tmp" "$2" && return 0
@@ -321,9 +323,13 @@ if [ "$mode" = seed ]; then
   # clone holds only that placement. A failed setup fails the spawn
   # (worktree.rs prepare returns Err), so this never fails: no seed, a clone
   # that fails, a target already there, CARGO_TARGET_DIR set: a line, exit 0.
+  # In a task folder (<task dir>/<repo>, its <task dir>/owner) the clone is
+  # <task dir>/target, the CARGO_TARGET_DIR the hub gives the task's agent
+  # (switchboard sweep::task_target): one target a task (disk-hygiene).
   cd "$(git rev-parse --show-toplevel 2>/dev/null || echo "$(dirname "$0")/..")" || exit 0
   t=rust/target
-  if [ -n "${CARGO_TARGET_DIR:-}" ] || [ -e "$t" ] || [ ! -d rust ]; then
+  [ -f .git ] && [ -f ../owner ] && t="$(cd .. && pwd)/target"
+  if { [ -n "${CARGO_TARGET_DIR:-}" ] && [ "$CARGO_TARGET_DIR" != "$t" ]; } || [ -e "$t" ] || [ ! -d rust ]; then
     echo "seed: nothing to do (${CARGO_TARGET_DIR:+CARGO_TARGET_DIR set}${CARGO_TARGET_DIR:-$t there or no rust/})"; exit 0
   fi
   from="$(seed_from 2>/dev/null)"
@@ -518,16 +524,18 @@ if [ "$mode" = land ]; then
   [ "$land_steps" = 1 ] || { echo "GATE land GREEN (0s): no step for these paths"; exit 0; }
 fi
 share_machine
-# a task worktree the hub made (<task dir>/<repo>, its <task dir>/owner)
-# with no CARGO_TARGET_DIR and no rust/target yet: its target is
+# a task worktree the hub made (<task dir>/<repo>, its <task dir>/owner),
+# whose agent the hub gives CARGO_TARGET_DIR=<task dir>/target (sweep::task_target),
+# or with no CARGO_TARGET_DIR and no rust/target yet: its target is
 # <task dir>/target, a clone of the warm seed (0 bytes, ~3 s), like
 # gate.sh new's, instead of a cold rust/target (3-13 GB and 2-5 min a task;
 # 5 of them filled the disk on 2026-10-11). The hub's task dirs are removed
 # with the task, target included. One disk_reclaim.py emptied (its
 # RECLAIMED.txt alone left) is cloned again too, not built cold.
-if [ -z "${CARGO_TARGET_DIR:-}" ] && [ -f "$root/.git" ] && [ -f "$(dirname "$root")/owner" ] && [ ! -d "$root/rust/target" ]; then
-  tdir="$(dirname "$root")/target"
-  [ -d "$tdir" ] && [ -z "$(ls -A "$tdir" | grep -vx RECLAIMED.txt)" ] && rm -f "$tdir/RECLAIMED.txt" && rmdir "$tdir"
+tdir="$(dirname "$root")/target"
+if [ -f "$root/.git" ] && [ -f "$(dirname "$root")/owner" ] \
+  && { [ "${CARGO_TARGET_DIR:-}" = "$tdir" ] || { [ -z "${CARGO_TARGET_DIR:-}" ] && { [ ! -d "$root/rust/target" ] || emptied "$root/rust/target"; }; }; }; then
+  emptied "$tdir" && rm -f "$tdir/RECLAIMED.txt" && rmdir "$tdir"
   if [ ! -d "$tdir" ]; then
     s=$SECONDS sd="$(seeds_dir)" k="$(seed_key)" from="$(seed_from)"
     if [ -n "$from" ] && seed_clone "$from" "$tdir"; then

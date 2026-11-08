@@ -83,12 +83,18 @@ const fn test_offscreen_core(name: &'static str, what: &'static str) -> Var {
     Var { name, kind: Kind::Test, what, kept_in_tests: false, offscreen_core: true }
 }
 
+/// The names of an agent's temp folder (switchboard's `tools_env::temp_env`).
+pub const TEMP_NAMES: &[&str] = &["TMPDIR", "TMP", "TEMP", "TMUX_TMPDIR"];
+
 /// The names, not bise's, that the hub sets per agent in its REPL's
-/// environment (its temp folder, switchboard's `tools_env::temp_env`):
-/// the one list of them. They differ from agent to agent and configure
+/// environment: the one list of them. Its temp folder ([`TEMP_NAMES`]),
+/// and a worktree task's cargo target, `<task dir>/target`
+/// (`CARGO_TARGET_DIR`, switchboard's `sweep::task_target`: one target a
+/// task, a clone of the gate seed, never a cold `rust/target` in the
+/// worktree; disk-hygiene). They differ from agent to agent and configure
 /// no MCP server, so the plugins' tools cache leaves them out of its key
 /// (bend_plugins::tools_cache).
-pub const PER_CHILD_NAMES: &[&str] = &["TMPDIR", "TMP", "TEMP", "TMUX_TMPDIR"];
+pub const PER_CHILD_NAMES: &[&str] = &["TMPDIR", "TMP", "TEMP", "TMUX_TMPDIR", "CARGO_TARGET_DIR"];
 
 /// Every bise variable, sorted by name.
 pub const VARS: &[Var] = &[

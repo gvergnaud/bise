@@ -335,6 +335,10 @@ impl Shell {
         let keys = self.opts.spawn_env.map(|f| f()).unwrap_or_default();
         self.spawn_keys.insert(dir.clone(), hash_keys(&keys));
         let ws = PathBuf::from(&a.ws.path);
+        // a worktree task's one cargo target, <task dir>/target (sweep::task_target)
+        if let Some(t) = crate::sweep::task_target(&self.opts.paths.worktrees, &ws) {
+            env.set("CARGO_TARGET_DIR", t);
+        }
         // the desktop's rules, read once at this start like the prompt's
         // (role_of): bise-pages (prompts/skills-all) only where they're on
         let desktop = bise_home::projects::desktop_for(&self.opts.paths.workspace);

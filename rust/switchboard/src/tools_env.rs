@@ -469,11 +469,11 @@ pub fn session_note(path: &str, workspace: &Path) -> String {
 /// `TMUX_TMPDIR` only when a tmux socket fits there: tmux puts it at
 /// `<realpath>/tmux-<uid>/<name>` and a unix socket path is at most 103
 /// bytes on macOS; a folder too deep leaves tmux on /tmp, as before.
-/// The four names are `bise_home::env::PER_CHILD_NAMES`, the one list of
-/// them (the plugins' tools cache leaves them out of its key).
+/// The four names are `bise_home::env::TEMP_NAMES`, in its
+/// `PER_CHILD_NAMES` (the plugins' tools cache leaves them out of its key).
 pub fn temp_env(tmp: &Path, run: &Path) -> Vec<(&'static str, PathBuf)> {
     let fits = tmux_fits(tmp);
-    let mut v: Vec<(&'static str, PathBuf)> = bise_home::env::PER_CHILD_NAMES
+    let mut v: Vec<(&'static str, PathBuf)> = bise_home::env::TEMP_NAMES
         .iter()
         .filter(|k| fits || **k != "TMUX_TMPDIR")
         .map(|k| (*k, tmp.to_path_buf()))

@@ -232,6 +232,17 @@ pub fn free_task_dir(root: &Path, name: &str) -> PathBuf {
         .unwrap()
 }
 
+/// The cargo target of an agent working in `ws`: `<task>/target` when `ws`
+/// is a task worktree `root/<task>/<repo>` (the hub sets it as the agent's
+/// `CARGO_TARGET_DIR`, and `gate.sh seed` clones the warm seed there), so a
+/// task has one target, never a cold `rust/target` in its worktree too
+/// (disk-hygiene: inbox-answered's 9.9 GB, c4's two). `None` elsewhere (the
+/// shared folder, another place).
+pub fn task_target(root: &Path, ws: &Path) -> Option<PathBuf> {
+    let task = ws.parent()?;
+    (task.parent()? == root && ws.file_name().is_some_and(|n| n != "target" && n != OWNER)).then(|| task.join("target"))
+}
+
 /// The name a project's worktrees get in their task folder.
 pub fn repo_name(workspace: &Path) -> String {
     workspace
@@ -384,6 +395,18 @@ mod tests {
 
     fn listed(repo: &Path, p: &Path) -> bool {
         git(repo, &["worktree", "list", "--porcelain"]).unwrap().contains(&*p.to_string_lossy())
+    }
+
+    /// A task worktree's cargo target is its task folder's `target`; the
+    /// shared folder, a deeper path or the folder itself have none.
+    #[test]
+    fn a_task_worktree_builds_in_its_task_target() {
+        let root = Path::new("/h/worktrees/p-1");
+        assert_eq!(task_target(root, &root.join("fix/harness")), Some(root.join("fix/target")));
+        assert_eq!(task_target(root, Path::new("/code/harness")), None, "the shared folder");
+        assert_eq!(task_target(root, &root.join("fix")), None, "the task folder itself");
+        assert_eq!(task_target(root, &root.join("fix/harness/rust")), None, "inside the worktree");
+        assert_eq!(task_target(root, &root.join("fix/target")), None, "its target is no worktree");
     }
 
     /// The start's sweep: an archived task's clean folder goes (worktree,
