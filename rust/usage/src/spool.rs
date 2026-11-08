@@ -11,15 +11,20 @@
 //! ones, the oldest first (the sender calls it each tick).
 //!
 //! The edge of this crate that touches files, with the paths as
-//! arguments; writing asks for a [`Permit`]. Not here: when to write
+//! arguments; writing asks for a [`Permit`]. A collector that runs for
+//! long (the TUI, the app's core) writes through a [`sink`], which asks
+//! for the permit again at each write. Not here: when to write
 //! (steps 2 to 4), deleting everything when he turns sharing off
 //! ([`crate::sender::forget`]).
 
 use std::io;
 use std::path::Path;
 
+use bise_home::Home;
+
 use crate::day::Day;
-use crate::sharing::Permit;
+use crate::packet::Channel;
+use crate::sharing::{sharing_allowed, Facts, Permit};
 use crate::tally::Tally;
 
 closed! {
@@ -98,6 +103,25 @@ pub fn write_source(_: &Permit, day_dir: &Path, source: &Source, tally: &Tally) 
     write_atomic(&day_dir.join(source.file_name()), text.as_bytes())
 }
 
+/// Where a counting process writes a day's tally: its source's file in
+/// that day's folder. Tests give a recording one.
+pub type Sink = Box<dyn FnMut(Day, &Tally) -> io::Result<()> + Send>;
+
+/// The spool's sink of `source`, built only when [`sharing_allowed`]
+/// gives a permit now: None, the process counts nothing. Each write asks
+/// again (he may turn sharing off while a TUI or the core runs for days):
+/// refused, nothing is written. `app_root`: the runtime the process runs
+/// from ([`Channel::of_root`]: a dev tree never shares).
+pub fn sink(home: Home, source: Source, app_root: &Path, offscreen: bool) -> Option<Sink> {
+    let channel = Channel::of_root(app_root);
+    let permit = move |home: &Home| sharing_allowed(&Facts::read(home, &|k| std::env::var(k).ok(), channel, offscreen)).ok();
+    permit(&home)?;
+    Some(Box::new(move |day, tally| match permit(&home) {
+        Some(p) => write_source(&p, &home.usage_day_dir(&day.to_string()), &source, tally),
+        None => Ok(()),
+    }))
+}
+
 /// Write a file whole: a tmp file beside it, then a rename (its folder is
 /// made if missing).
 pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
@@ -168,6 +192,13 @@ mod tests {
         for (name, kind) in [("hub-3f9a2b1c-4242.json", Some(SourceKind::Hub)), ("core-9.json", Some(SourceKind::Core)), ("core-3f9a2b1c-9.json", None), ("hub-camille-1.json", None), ("x.json", None), (".hub-3f9a2b1c-1.json.tmp", None)] {
             assert_eq!(Source::kind_of_file(name), kind, "{name}");
         }
+    }
+
+    /// A test process is a test home: no sink, so nothing is counted.
+    #[test]
+    fn a_test_process_gets_no_sink() {
+        let home = Home::at(std::env::temp_dir().join(format!("bise-usage-sink-{}", std::process::id())));
+        assert!(sink(home, Source::core(1), Path::new("/Applications/bise.app"), false).is_none());
     }
 
     #[test]

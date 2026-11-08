@@ -22,7 +22,7 @@
 use std::cell::{Cell, RefCell};
 use std::io::Write;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Mutex, Once};
 use std::thread::ThreadId;
 
@@ -35,6 +35,9 @@ static NOTES: Mutex<Vec<String>> = Mutex::new(Vec::new());
 /// the disk).
 static LOGS: AtomicUsize = AtomicUsize::new(0);
 const MAX_LOGS: usize = 20;
+/// Log files written since the last [`take_logged`]: the TUI's usage
+/// counts them (`crash_tui`, usage_count.rs), never their text.
+static LOGGED: AtomicU32 = AtomicU32::new(0);
 /// Tests: never touch the real terminal.
 static DRY_RUN: AtomicBool = AtomicBool::new(false);
 
@@ -116,7 +119,13 @@ fn write_log(text: &str) -> Option<PathBuf> {
     let path = dir.join(format!("tui-panic-{secs}-{}-{n}.log", std::process::id()));
     let mut f = std::fs::File::create(&path).ok()?;
     f.write_all(text.as_bytes()).ok()?;
+    LOGGED.fetch_add(1, Ordering::SeqCst);
     Some(path)
+}
+
+/// How many panic logs this process wrote since the last call.
+pub(crate) fn take_logged() -> u32 {
+    LOGGED.swap(0, Ordering::SeqCst)
 }
 
 /// Gives the terminal back: every mode the TUI turned on, off. Safe to

@@ -399,6 +399,7 @@ fn run_switchboard(args: &[String], debug: bool) -> std::io::Result<()> {
         tui_socket(&paths),
         paths.workspace.to_string_lossy().to_string(),
         debug,
+        &root,
     )?;
     // the hub refused this client: it runs in an agent's process (docs/issues/16)
     if let Some(why) = bend_tui::take_refused() {

@@ -579,12 +579,18 @@ fn ui_loop(app: &mut App, terminal: &mut crate::links::Tui) -> io::Result<()> {
         if app.sb.reload_wait.due(std::time::Instant::now()) {
             app.should_quit = true;
         }
-        sb::setup::pump(app);
-        // background lines: /plugins login's, "needs a login", /keychain's
-        crate::plugins::pump(app);
-        crate::keychain::pump(app);
+        pump_rest(app);
     }
     Ok(())
+}
+
+/// The end of a loop: the setup's, /plugins login's, "needs a login",
+/// /keychain's background lines; the usage counts' time (usage_count.rs).
+fn pump_rest(app: &mut App) {
+    sb::setup::pump(app);
+    crate::plugins::pump(app);
+    crate::keychain::pump(app);
+    crate::usage_count::tick(app);
 }
 
 #[cfg(test)]

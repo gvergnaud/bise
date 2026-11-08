@@ -169,12 +169,14 @@ pub(super) fn sb_app(
     App::new(sb, rx, debug, area_w, voice)
 }
 
-/// `bise switchboard`: the client of a workspace's hub.
+/// `bise switchboard`: the client of a workspace's hub. `app_root`: the
+/// runtime this TUI runs from (its build's channel, for the usage counts).
 pub fn run_switchboard(
     stream: UnixStream,
     socket: std::path::PathBuf,
     workspace: String,
     debug: bool,
+    app_root: &std::path::Path,
 ) -> io::Result<()> {
     let reader = stream.try_clone()?;
     crate::logview::set_hub_dir(&socket);
@@ -195,6 +197,7 @@ pub fn run_switchboard(
     if !line_mode_now() {
         // BISE-120a: the drafts and the sent prompts come back
         super::drafts::restore(&mut app);
+        app.usage_count = crate::usage_count::Live::start(&app.sb.project(), app_root);
         let r = run_tui(&mut app);
         super::drafts::flush(&app);
         r

@@ -135,6 +135,7 @@ mod scheduled_watch;
 mod inbox_list;
 mod inbox_screen;
 mod usage_screen;
+mod usage_count;
 mod diffbranches;
 mod diffquote;
 mod diffview;

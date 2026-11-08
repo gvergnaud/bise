@@ -136,6 +136,15 @@ read again each time (off: the counts are dropped). Not counted by the
 hub: `connector_call`, `computer_use_call` (a typed obs line from the
 runtime, plan step 10), `crash_hub` (step 10), `search` (the desktop).
 
+A TUI attached to a hub (`bend_tui`'s `usage_count`, its source
+`tui-<8 hex>-<pid>.json`) counts its own time and nothing it reads:
+`tui_attached`, the time its loop ran (a span that held the loop counts
+5 min at most), `tui_focused`, the part of it its terminal had the focus
+(focus reporting), and `crash_tui`, the panic logs it wrote to `crashes/`
+(a log never leaves). It writes every 5 minutes and when it ends, a panic
+included, through `bise_usage::spool::sink`, which asks for the permit at
+each write.
+
 ## What is never sent
 
 No text: no prompt, message, brief, file, path, name of a project or an
