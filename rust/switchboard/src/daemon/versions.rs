@@ -141,18 +141,6 @@ pub(super) fn update_now(rev: &str, since: std::time::Instant) -> Value {
     json!({"ev": "update", "state": "building", "rev": rev, "elapsed": since.elapsed().as_secs()})
 }
 
-/// How often an installed hub looks at `current` (an update installed
-/// by `bise update` or the daily check).
-const UPDATE_LOOK: std::time::Duration = std::time::Duration::from_secs(30);
-
-/// update-flow: how often a hub reads the machine's release offer
-/// (`BISE_RELEASE_LOOK_SECS`, else [`UPDATE_LOOK`]).
-fn release_look_every() -> std::time::Duration {
-    bise_home::env::test_setting("BISE_RELEASE_LOOK_SECS")
-        .and_then(|s| s.trim().parse().ok())
-        .map_or(UPDATE_LOOK, std::time::Duration::from_secs)
-}
-
 /// The release `bise update` last read (`~/.bise/cache/latest.json`),
 /// in words, with what to do: None when it is the running version.
 fn release_line(home: &bise_home::Home, inst: &Install, running_id: &str) -> Option<String> {
@@ -781,14 +769,11 @@ impl Shell {
         "looking for the latest release (bise update), then switching to it — nothing is interrupted".into()
     }
 
-    /// An installed hub, on its tick (BISE-172): when `current` points at
-    /// another version than this hub runs (`bise update`, the daily
-    /// check), tell main and the user once: `/restart` switches.
+    /// An installed hub, on its tick, every 30 s (BISE-172,
+    /// daemon/tick.rs): when `current` points at another version than
+    /// this hub runs (`bise update`, the daily check), tell main and the
+    /// user once: `/restart` switches.
     pub(super) fn announce_update(&mut self) {
-        if self.update_checked.is_some_and(|t| t.elapsed() < UPDATE_LOOK) {
-            return;
-        }
-        self.update_checked = Some(std::time::Instant::now());
         let Some(inst) = Install::of_root(&self.opts.app_root) else { return };
         let running = self.opts.app_root.canonicalize().ok();
         let Some(cur) = inst.current() else { return };
@@ -810,7 +795,7 @@ impl Shell {
 
     /// update-flow: this hub's look at the machine's release offer, on a
     /// thread, given to the hub as `Input::Release`: every 30 s on the
-    /// tick (`asked` None; the channel itself fetched at most once an
+    /// tick (daemon/tick.rs; `asked` None; the channel itself fetched at most once an
     /// hour for the whole machine), or now for `/update` (it fetches,
     /// forgets `later` and opens the card in that client). Only an installed bise:
     /// never bise's source tree; the tick never with `BISE_NO_UPDATE=1`.
@@ -823,10 +808,9 @@ impl Shell {
         };
         if asked.is_none() {
             let off = std::env::var(bise_home::release::NO_UPDATE_ENV).is_ok_and(|v| !v.is_empty() && v != "0");
-            if off || self.release_checked.is_some_and(|t| t.elapsed() < release_look_every()) {
+            if off {
                 return;
             }
-            self.release_checked = Some(std::time::Instant::now());
         }
         let (tx, home) = (self.tx.clone(), self.opts.home.clone());
         std::thread::spawn(move || {
@@ -871,7 +855,8 @@ impl Shell {
         let running = self.opts.app_root.canonicalize().unwrap_or_else(|_| self.opts.app_root.clone());
         let home = self.opts.home.clone();
         let busy = self.hub.st.agents.values().any(|a| a.run == crate::model::Run::Busy);
-        let spawned = self.release_switched.is_some_and(|t| t.elapsed() < release_look_every() * 2);
+        let look = std::time::Duration::from_millis(self.tick.every_ms(super::tick::RELEASE));
+        let spawned = self.release_switched.is_some_and(|t| t.elapsed() < look * 2);
         if dir == running
             || busy
             || spawned

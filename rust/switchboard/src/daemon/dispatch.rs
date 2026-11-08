@@ -121,46 +121,15 @@ impl Shell {
                 }
                 self.step(i);
                 if tick {
-                    // each part named on a busy line (daemon/loop_watch.rs)
+                    // the periodic jobs (daemon/tick.rs), each named on a
+                    // busy line (daemon/loop_watch.rs)
                     let w = self.loop_watch.clone();
-                    // the trunk's name and the features' facts, off the loop
-                    if self.features.due(now_ms()) {
-                        self.refresh_features();
-                    }
-                    w.phase("page waits");
-                    self.page_waits_check();
-                    w.phase("views");
-                    self.views_tick();
-                    // the wake worker's copy (daemon/wake_look.rs)
-                    self.wakes_sync();
-                    w.phase("starts");
-                    self.check_starts(tick_queued.sent_ms.load(Ordering::Acquire));
-                    w.phase("plugins");
-                    self.plugins_changed(false);
-                    w.phase("switches");
-                    self.switch_idle_repls();
-                    w.phase("updates");
-                    self.announce_update();
-                    self.release_check(None);
-                    self.plan_prs();
-                    w.phase("pulse");
-                    self.pulse_check();
-                    w.phase("usage");
-                    self.usage_check();
-                    w.phase("idle check");
-                    self.idle_check();
-                    w.phase("photo");
-                    self.photo_idle();
-                    w.phase("images");
-                    self.image_care();
-                    w.phase("library");
-                    self.library_watch();
-                    w.phase("disk");
-                    self.disk_check();
-                    w.phase("computer use");
-                    // computer use (design §7.3): each stop, one line in main's feed
-                    for l in self.cu.poll() {
-                        self.feed_rec(crate::model::MAIN, Feed::Computer(bise_proto::core::feed::Computer { text: l }));
+                    let at = super::tick::At { sent_ms: tick_queued.sent_ms.load(Ordering::Acquire) };
+                    for (i, job) in super::tick::JOBS.iter().enumerate() {
+                        if self.tick.take(i, now_ms()) {
+                            w.phase(job.name);
+                            (job.run)(self, &at);
+                        }
                     }
                 }
             }
@@ -413,7 +382,7 @@ impl Shell {
     /// The image store's care on the tick (crate::image_care, D14): the
     /// images this hub's hot messages and open cards name are touched
     /// hourly, the store pruned at most once a day; hub.log says so.
-    fn image_care(&mut self) {
+    pub(super) fn image_care(&mut self) {
         let home = self.opts.home.clone();
         let st = &self.hub.st;
         let texts = st.hot().map(|(m, _)| m.text.as_str()).chain(st.open_cards().map(|c| c.text.as_str()));

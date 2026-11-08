@@ -333,6 +333,14 @@ impl Shell {
         self.hub.trying = trying;
     }
 
+    /// On the tick (daemon/tick.rs): the facts again when they are older
+    /// than [`FACTS_EVERY_MS`].
+    pub(super) fn features_tick(&self) {
+        if self.features.due(crate::util::now_ms()) {
+            self.refresh_features();
+        }
+    }
+
     /// The facts again, off the loop (after a land: main or a feature
     /// moved), then the views.
     pub(super) fn refresh_features(&self) {

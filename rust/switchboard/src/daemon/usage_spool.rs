@@ -11,7 +11,8 @@
 //! the week's transcripts); a REPL gone; a land that moved a ref and a
 //! page published ([`Shell::usage_count`]).
 //!
-//! Written: every [`WRITE_MS`] from the tick, and at a clean stop. The
+//! Written: every 5 min from the tick (its period: daemon/tick.rs; a
+//! crash loses at most that), and at a clean stop. The
 //! permit (`bise_usage::sharing_allowed`) is read again at each write:
 //! without one nothing is counted, and what was counted is dropped.
 
@@ -21,9 +22,6 @@ use bise_usage::packet::Channel;
 use bise_usage::spool::{self, Source};
 use bise_usage::{sharing_allowed, CountKey, Facts, Permit};
 
-/// How often the day's tally is written: 5 min (a crash loses at most that).
-pub(super) const WRITE_MS: u64 = 5 * 60_000;
-
 /// The hub's counter, its spool source and whether sharing is on.
 pub(super) struct UsageSpool {
     counter: Counter,
@@ -31,14 +29,13 @@ pub(super) struct UsageSpool {
     source: Option<Source>,
     /// sharing allowed at the last read (the start, then each write)
     on: bool,
-    written_ms: u64,
 }
 
 impl UsageSpool {
     /// At the hub's start: nothing counted yet, sharing read once.
     pub(super) fn new(opts: &Opts, workspace: &Path, now: u64) -> UsageSpool {
         let source = Source::hub(&bise_home::hub_id(workspace), std::process::id());
-        UsageSpool { counter: Counter::new(now), on: permit(opts).is_some() && source.is_some(), source, written_ms: now }
+        UsageSpool { counter: Counter::new(now), on: permit(opts).is_some() && source.is_some(), source }
     }
 }
 
@@ -81,19 +78,11 @@ impl Shell {
         }
     }
 
-    /// At each tick: the day's tally written every [`WRITE_MS`].
-    pub(super) fn usage_check(&mut self) {
-        let now = now_ms();
-        if now >= self.usage_spool.written_ms + WRITE_MS {
-            self.usage_write(now);
-        }
-    }
-
     /// Write what is due (the closed days, then today's), sharing read
     /// again first: off, the counts are dropped and nothing is written.
+    /// Every 5 min on the tick (daemon/tick.rs), and at a clean stop.
     pub(super) fn usage_write(&mut self, now: u64) {
         let u = &mut self.usage_spool;
-        u.written_ms = now;
         let (Some(permit), Some(source)) = (permit(&self.opts), u.source.as_ref()) else {
             u.on = false;
             u.counter.clear(now);

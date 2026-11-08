@@ -25,9 +25,6 @@ use crate::pulse::{self, Said, Turns};
 use bise_proto::rows::{News, NewsWhat, Pulse};
 use bise_proto::thread::Ctx;
 
-/// At most one check (and one send) per this many ms.
-const CHECK_MS: u64 = 60_000;
-
 /// What the week's read gave, back from the fill's thread.
 #[derive(Debug, Default)]
 pub(super) struct Week {
@@ -57,9 +54,6 @@ pub(super) struct PulseState {
     landed: Option<News>,
     /// the artifacts (at_ms, id, title), from the last `artifacts` push
     arts: Option<Vec<(u64, String, String)>>,
-    checked_ms: u64,
-    /// the time between two checks ([`CHECK_MS`]; `SB_PULSE_MS` in tests)
-    every_ms: Option<u64>,
     sent: Option<Pulse>,
     value: Option<Pulse>,
 }
@@ -109,7 +103,7 @@ impl Shell {
         self.pulse.said = said;
         self.pulse.filled = true;
         // the next tick sends it
-        self.pulse.checked_ms = 0;
+        self.tick.again(super::tick::PULSE);
     }
 
     /// The `artifacts` push's rows (daemon/proto/emit.rs): kept for the
@@ -118,16 +112,12 @@ impl Shell {
         self.pulse.arts = Some(items.iter().map(|a| (a.at_ms, a.id.clone(), a.title.clone())).collect());
     }
 
-    /// At each tick: the fill starts at the first one; at most once a
-    /// minute, the pulse to every typed connection when it changed.
+    /// On the tick, at most once a minute (daemon/tick.rs): the fill
+    /// starts at the first one; the pulse to every typed connection when
+    /// it changed.
     pub(super) fn pulse_check(&mut self) {
         self.week_fill_start();
         let now = now_ms();
-        let every = *self.pulse.every_ms.get_or_insert_with(|| bise_home::env::test_setting("SB_PULSE_MS").and_then(|v| v.parse().ok()).unwrap_or(CHECK_MS));
-        if now < self.pulse.checked_ms + every {
-            return;
-        }
-        self.pulse.checked_ms = now;
         let p = self.pulse_now(now);
         if self.pulse.sent.as_ref() == Some(&p) {
             return;

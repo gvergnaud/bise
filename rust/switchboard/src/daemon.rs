@@ -73,6 +73,7 @@ mod tindex;
 mod usage;
 mod usage_spool;
 mod view_out;
+mod tick;
 mod views;
 mod wake_look;
 mod place_work;
@@ -379,13 +380,9 @@ struct Shell {
     updating: Option<(String, std::time::Instant)>,
     /// The `/release-bise` running (BISE-235).
     release: Option<release::ReleaseRun>,
-    /// An installed bise (BISE-172): when `current` was last looked at,
-    /// and the version already announced as ready.
-    update_checked: Option<std::time::Instant>,
+    /// An installed bise (BISE-172): the version already announced as
+    /// ready.
     update_told: Option<std::path::PathBuf>,
-    /// update-card: when this hub last looked at the machine's release
-    /// offer (None: not yet, the first tick looks).
-    release_checked: Option<std::time::Instant>,
     /// update-flow: when this hub last started its switch to the
     /// machine's `update now` release (no second one while it starts).
     release_switched: Option<std::time::Instant>,
@@ -423,8 +420,8 @@ struct Shell {
     /// The project's pulse: its turns, main's entries for him, its news
     /// (daemon/pulse.rs).
     pulse: pulse::PulseState,
-    /// The last plugins check (every 2 s on the tick).
-    plugins_checked: Option<std::time::Instant>,
+    /// The periodic jobs' periods and last runs (daemon/tick.rs).
+    tick: tick::Clock,
     /// The small model failed and agent_model answered: role lines use
     /// agent_model for the rest of this hub's life (BISE-126).
     small_broken: std::sync::Arc<std::sync::atomic::AtomicBool>,
@@ -1330,15 +1327,11 @@ impl Shell {
     /// The plugins or skills of a live REPL changed since it was spawned
     /// (design: docs/plugins.md "Reload on change"): it relaunches at its
     /// next idle, same session and port, like a key change; a busy one
-    /// finishes its turn first. On the tick (`now` false, at most every
-    /// 2 s) only the plugins are compared; when an agent goes idle (`now`)
-    /// the skill folders too (no timer for them: they are checked again
-    /// right before a turn, `skills_before_turn`).
+    /// finishes its turn first. On the tick (`now` false, every 2 s:
+    /// daemon/tick.rs) only the plugins are compared; when an agent goes
+    /// idle (`now`) the skill folders too (no timer for them: they are
+    /// checked again right before a turn, `skills_before_turn`).
     fn plugins_changed(&mut self, now: bool) {
-        if !now && self.plugins_checked.is_some_and(|t| t.elapsed() < std::time::Duration::from_secs(2)) {
-            return;
-        }
-        self.plugins_checked = Some(std::time::Instant::now());
         let skip = |d: &str| !self.repls.contains_key(d) || self.switching.contains_key(d) || self.reload_repls.contains(d);
         let (app_root, paths) = (self.opts.app_root.clone(), self.opts.paths.clone());
         let mut skills = |fp: &PromptInputs| skills_fingerprint(&paths, &skill_roots(&fp.ws, &app_root, fp.main, fp.desktop));
@@ -1771,9 +1764,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
         building: BTreeSet::new(),
         updating: None,
         release: None,
-        update_checked: None,
         update_told: None,
-        release_checked: None,
         release_switched: None,
         resume_turn: BTreeSet::new(),
         recorders: BTreeMap::new(),
@@ -1781,7 +1772,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
         reload_repls: BTreeSet::new(),
         spawn_keys: BTreeMap::new(),
         spawn_plugins: BTreeMap::new(),
-        plugins_checked: None,
+        tick: tick::Clock::new(now_ms()),
         recycle: recycling::Recycle::from_env(),
         usage: Default::default(),
         usage_spool: spool,
