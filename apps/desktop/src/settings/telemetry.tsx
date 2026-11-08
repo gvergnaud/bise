@@ -180,6 +180,15 @@ export function SeenSheet({ open, view, onClose }: { open: boolean; view: Teleme
   );
 }
 
+/** A packet as he reads it: 2-space indent, one key a line; not JSON (never expected): as is. Pure. */
+export function pretty(json: string): string {
+  try {
+    return JSON.stringify(JSON.parse(json) as unknown, null, 2);
+  } catch {
+    return json;
+  }
+}
+
 function Packet({ head, json, copy, testId }: { head?: string; json: string; copy: (text: string) => void; testId: string }) {
   return (
     <div className="tm-packet" data-testid={testId}>
@@ -189,7 +198,7 @@ function Packet({ head, json, copy, testId }: { head?: string; json: string; cop
           {settings.seen_copy}
         </Act>
       </div>
-      <pre>{json}</pre>
+      <pre>{pretty(json)}</pre>
     </div>
   );
 }

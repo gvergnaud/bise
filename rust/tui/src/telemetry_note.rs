@@ -26,7 +26,7 @@ pub(crate) const OFF_ENV: &str = "BISE_TELEMETRY=0";
 pub(crate) fn rows(width: usize) -> Vec<Line<'static>> {
     let text = Style::default().fg(theme::text());
     let code = text.add_modifier(Modifier::BOLD);
-    let mut v = vec![Line::from(Span::styled(settings::onb_telemetry_title.to_lowercase(), Style::default().fg(theme::dim())))];
+    let mut v = vec![Line::from(Span::styled(settings::onb_telemetry_title, Style::default().fg(theme::dim())))];
     let para = format!("{} {} {}", settings::onb_telemetry_why_line, settings::onb_telemetry_what, settings::onb_telemetry_never);
     v.extend(crate::wrap_line(Line::from(Span::styled(para, text)), width));
     // the way out: the words around the two holes, the holes in bold
@@ -99,7 +99,7 @@ mod tests {
         // the wrap keeps the space it broke at; the words fit
         assert!(text_of(&r).lines().all(|l| l.trim_end().width() <= 76), "{}", text_of(&r));
         let t = text_of(&r);
-        assert!(t.starts_with("a note from me, gabriel"));
+        assert!(t.starts_with("a note from me, Gabriel"), "a name keeps its capital: {t}");
         assert!(t.contains("Never what you write or own"));
         let last: Vec<&Span> = r.iter().flat_map(|l| l.spans.iter()).collect();
         let bold: Vec<&str> = last.iter().filter(|s| s.style.add_modifier.contains(Modifier::BOLD)).map(|s| s.content.as_ref()).collect();

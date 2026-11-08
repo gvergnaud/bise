@@ -200,4 +200,4 @@ button.st-next:hover { color: var(--c-text); }
 .tm-seen .tm-dim, .tm-packet .tm-dim { color: var(--c-text-2); font-size: var(--t-12); }
 .tm-packet { margin-bottom: var(--gap-rows); }
 .tm-packet-head { display: flex; align-items: center; justify-content: space-between; gap: var(--gap-inline); }
-.tm-packet pre { margin: var(--gap-tight) 0 0; padding: var(--s-2) var(--s-3); border-radius: var(--r-2); background: var(--c-sunken); font-family: var(--font-mono); font-size: var(--t-12); line-height: 1.5; white-space: pre-wrap; word-break: break-all; max-height: 240px; overflow: auto; user-select: text; }
+.tm-packet pre { margin: var(--gap-tight) 0 0; padding: var(--s-2) var(--s-3); border-radius: var(--r-2); background: var(--c-sunken); font-family: var(--font-mono); font-size: var(--t-12); line-height: 1.5; white-space: pre; overflow-wrap: normal; max-height: 240px; overflow: auto; user-select: text; }

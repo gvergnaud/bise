@@ -71,7 +71,8 @@ export function TelemetryNote({ share, send, done, testId }: TelemetryNoteProps)
       <p>{settings.onb_telemetry_what}</p>
       <p>{settings.onb_telemetry_never}</p>
       <p>
-        <Coded parts={holes(settings.onb_telemetry_off({ env: HOLES[0] }), [OFF_ENV])} />{' '}
+        {/* 'why?' right after the last sentence, held to it by a no-break space */}
+        <Coded parts={holes(settings.onb_telemetry_off({ env: HOLES[0] }), [OFF_ENV])} />{'\u00a0'}
         <Act onClick={() => { setWhy(true); }} testId={`${testId}.why`}>
           {settings.onb_telemetry_why}
         </Act>

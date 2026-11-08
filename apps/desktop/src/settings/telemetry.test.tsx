@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { AppCmd } from '@/proto';
 import { settings } from '@/proto/words.gen';
-import { deleteSub, forcedOff, shareSub, TelemetryGroup, type TelemetryView } from './telemetry';
+import { deleteSub, forcedOff, pretty, shareSub, TelemetryGroup, type TelemetryView } from './telemetry';
 import { HOLES, holes, homeNoteDue, OFF_CMD, OFF_ENV, TelemetryNote } from '@/setup/TelemetryNote';
 
 afterEach(cleanup);
@@ -22,6 +22,9 @@ describe('usage counts in Settings › Privacy', () => {
     expect(shareSub(view({ off: 'not_yet' }))).toBe(settings.privacy_not_yet);
     expect(deleteSub('asked')).toBe(settings.privacy_delete_asked);
     expect(deleteSub(undefined)).toBe(settings.privacy_delete_sub);
+    // a packet reads one key a line, never cut inside a token (designer m_56524)
+    expect(pretty('{"day":"2026-11-08","n":{"agents_started":3}}')).toBe('{\n  "day": "2026-11-08",\n  "n": {\n    "agents_started": 3\n  }\n}');
+    expect(pretty('not json')).toBe('not json');
   });
 
   it('asks the view once, and each control sends its act; delete only after its confirm', () => {

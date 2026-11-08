@@ -2666,7 +2666,7 @@
       "env"
     ],
     "one": null,
-    "text": "It's on by default. You can see exactly what's sent, and turn it off, in Settings → Privacy. In the terminal: {cmd}, or {env}."
+    "text": "It's on by default. You can see exactly what's sent, and turn it off, in Settings › Context and privacy. In the terminal: {cmd}, or {env}."
   },
   "settings.onb_telemetry_b_title": {
     "args": [],
@@ -2698,7 +2698,7 @@
       "env"
     ],
     "one": null,
-    "text": "Turn it off in Settings → Privacy, or with {env}."
+    "text": "Turn it off in Settings › Context and privacy, or with {env}."
   },
   "settings.onb_telemetry_off_tui": {
     "args": [
@@ -2716,7 +2716,7 @@
   "settings.onb_telemetry_title": {
     "args": [],
     "one": null,
-    "text": "A note from me, Gabriel"
+    "text": "a note from me, Gabriel"
   },
   "settings.onb_telemetry_what": {
     "args": [],

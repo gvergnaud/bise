@@ -51,6 +51,8 @@
 {"ev":"computer_peek","key":"9f2c4e1a7b3d5e60.docs","why":"not_found"}
 {"ev":"keychain","store":"file","moving":false}
 {"ev":"keychain","store":"keychain","moving":false,"lines":["moved 3 items to the macOS keychain: auth.json's 2 sign-ins, 1 MCP login"]}
+{"ev":"telemetry","share":true,"off":"not_yet","id":"0b6b3a4e-9f1c-4d2a-8e5f-2c7d9a1b3e4f","pending":1,"next":["{\n  \"day\": \"2026-11-07\"\n}"],"sent":[{"on":"2026-11-07","day":"2026-11-06","json":"{\"day\":\"2026-11-06\"}"}],"done":"reset"}
+{"ev":"telemetry","share":false,"off":"pref"}
 {"ev":"keychain","store":"file","moving":true}
 {"ev":"broken","reason":"bise's runtime is missing: no repl-live in /Applications/bise.app/Contents/Resources/bin. reinstall bise"}
 {"ev":"state","agents":[{"name":"perf","status":"working","title":"the p99 bench","purpose":"make the query fast","since_ms":1791100000000,"waits":1,"followed":false,"archived":false,"note":"","report":"","working":true,"turn_ms":10000}],"cards":[{"id":3,"kind":"question","agent":"perf","text":"which index?","options":[{"n":1,"label":"btree"},{"n":2,"label":"hash"}],"urgent":false},{"id":4,"kind":"question","agent":"main","text":"ship it?","options":[],"urgent":false,"label":"? main needs you","page":{"id":"weekly-update","url":"http://127.0.0.1:7841/p/weekly-update","block":"q1"}}],"pages":[{"id":"weekly-update","title":"Weekly update","agent":"main","version":2,"url":"http://127.0.0.1:7841/p/weekly-update","at_ms":1791100000000,"state":"ready"}],"pages_url":"http://127.0.0.1:7841/p"}

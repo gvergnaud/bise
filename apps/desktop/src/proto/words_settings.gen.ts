@@ -789,7 +789,7 @@ export const settings = {
   /** onboarding, hello: a ready-made look's name (its tip and VoiceOver) */
   onb_me_look: (a: { n: string | number }): string => "look " + String(a.n) + " of 12",
   /** Gabriel's note about the usage counts (page usage-metrics-plan, A): its title, on hello, the home and the TUI */
-  onb_telemetry_title: "A note from me, Gabriel",
+  onb_telemetry_title: "a note from me, Gabriel",
   /** the note: why it exists */
   onb_telemetry_why_line: "I'm building bise alone. I want to know if it's useful and how you use it, so I can learn and make it better.",
   /** the note: what is sent */
@@ -797,7 +797,7 @@ export const settings = {
   /** the note: what never is, and the ID */
   onb_telemetry_never: "Never what you write or own: no prompts, messages, files, paths or names. Your IP address is not stored. A random ID lets me see how use changes over time; it's deleted when you turn this off.",
   /** the note's last line on the desktop; {env} is BISE_TELEMETRY=0, drawn as code */
-  onb_telemetry_off: (a: { env: string | number }): string => "Turn it off in Settings → Privacy, or with " + String(a.env) + ".",
+  onb_telemetry_off: (a: { env: string | number }): string => "Turn it off in Settings › Context and privacy, or with " + String(a.env) + ".",
   /** the note's last line in the TUI; {cmd} and {env} drawn as code */
   onb_telemetry_off_tui: (a: { cmd: string | number; env: string | number }): string => "Turn it off with " + String(a.cmd) + ", or " + String(a.env) + ".",
   /** the note: signed */
@@ -817,7 +817,7 @@ export const settings = {
   /** the long note: the ID */
   onb_telemetry_b_id: "To see how use changes over time, bise picks a random ID on your Mac. It isn't tied to you, your Mac or any account, and it's renewed at least every 13 months. Turning this off deletes it, and \"Delete my data\" also deletes what I have.",
   /** the long note: the way out; {cmd} and {env} drawn as code */
-  onb_telemetry_b_off: (a: { cmd: string | number; env: string | number }): string => "It's on by default. You can see exactly what's sent, and turn it off, in Settings → Privacy. In the terminal: " + String(a.cmd) + ", or " + String(a.env) + ".",
+  onb_telemetry_b_off: (a: { cmd: string | number; env: string | number }): string => "It's on by default. You can see exactly what's sent, and turn it off, in Settings › Context and privacy. In the terminal: " + String(a.cmd) + ", or " + String(a.env) + ".",
   /** fn's permissions sheet (the capsule, his first fn hold with one missing): its title */
   onb_perms_title: "to hear you from any app",
   /** fn's permissions sheet: its line */

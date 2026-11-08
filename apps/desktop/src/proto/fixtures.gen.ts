@@ -297,6 +297,8 @@ export const core_ev: readonly CoreEv[] = [
   {"ev":"computer_peek","key":"9f2c4e1a7b3d5e60.docs","why":"not_found"},
   {"ev":"keychain","moving":false,"store":"file"},
   {"ev":"keychain","lines":["moved 3 items to the macOS keychain: auth.json's 2 sign-ins, 1 MCP login"],"moving":false,"store":"keychain"},
+  {"done":"reset","ev":"telemetry","id":"0b6b3a4e-9f1c-4d2a-8e5f-2c7d9a1b3e4f","next":["{\n  \"day\": \"2026-11-07\"\n}"],"off":"not_yet","pending":1,"sent":[{"day":"2026-11-06","json":"{\"day\":\"2026-11-06\"}","on":"2026-11-07"}],"share":true},
+  {"ev":"telemetry","off":"pref","share":false},
   {"ev":"keychain","moving":true,"store":"file"},
   {"ev":"broken","reason":"bise's runtime is missing: no repl-live in /Applications/bise.app/Contents/Resources/bin. reinstall bise"},
   {"agents":[{"archived":false,"followed":false,"name":"perf","note":"","purpose":"make the query fast","report":"","since_ms":1791100000000,"status":"working","title":"the p99 bench","turn_ms":10000,"waits":1,"working":true}],"cards":[{"agent":"perf","id":3,"kind":"question","options":[{"label":"btree","n":1},{"label":"hash","n":2}],"text":"which index?","urgent":false},{"agent":"main","id":4,"kind":"question","label":"? main needs you","options":[],"page":{"block":"q1","id":"weekly-update","url":"http://127.0.0.1:7841/p/weekly-update"},"text":"ship it?","urgent":false}],"ev":"state","pages":[{"agent":"main","at_ms":1791100000000,"id":"weekly-update","state":"ready","title":"Weekly update","url":"http://127.0.0.1:7841/p/weekly-update","version":2}],"pages_url":"http://127.0.0.1:7841/p"},
@@ -443,6 +445,8 @@ export const app_cmd: readonly AppCmd[] = [
   {"cmd":"helper_perms"},
   {"cmd":"usage_time","engaged_s":30,"focused_s":42,"gestures":["inbox_opened","artifact_doc","crash_core"],"open_s":60},
   {"cmd":"usage_time","engaged_s":0,"focused_s":0,"open_s":60},
+  {"act":"show","cmd":"telemetry"},
+  {"act":"note_seen","cmd":"telemetry"},
 ];
 
 /** rust/proto/fixtures/draft_hub_cmd.jsonl */

@@ -111,3 +111,5 @@
 {"cmd":"helper_perms"}
 {"cmd":"usage_time","open_s":60,"focused_s":42,"engaged_s":30,"gestures":["inbox_opened","artifact_doc","crash_core"]}
 {"cmd":"usage_time","open_s":60,"focused_s":0,"engaged_s":0}
+{"cmd":"telemetry","act":"show"}
+{"cmd":"telemetry","act":"note_seen"}
