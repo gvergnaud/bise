@@ -30,6 +30,13 @@ export function countGesture(g: AppGesture): void {
   usage()?.gesture(g);
 }
 
+/**
+ * The hub's artifact kinds (switchboard artifacts.rs link_kind and path_kind) with no gesture of
+ * their own: they count as artifact_other. The kind is a string on the wire, so usage.test.ts
+ * reads artifacts.rs: a new kind there fails it until it gets its gesture or joins this list.
+ */
+export const ARTIFACT_OTHER_KINDS: readonly string[] = ['pr', 'release', 'site', 'folder', 'video', 'sound'];
+
 /** The gesture of an artifact opened, by its kind (the hub's: switchboard artifacts.rs). Pure. */
 export function artifactGesture(kind: string): AppGesture {
   switch (kind) {
