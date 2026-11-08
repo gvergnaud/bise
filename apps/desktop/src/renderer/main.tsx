@@ -5,11 +5,14 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from '@/app/App';
 import { CapsuleRoot } from '@/capsule';
+import { wireUsageInput } from '@/app/usage';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('index.html has no #root');
 // every surface in the DS's UI type (base.css .b-ui), never the browser's Times (ambient m_10689)
 document.body.classList.add('b-ui');
+// his input as a signal with no content, for the app's engaged minutes (app/usage.ts)
+wireUsageInput();
 
 createRoot(root).render(
   <StrictMode>

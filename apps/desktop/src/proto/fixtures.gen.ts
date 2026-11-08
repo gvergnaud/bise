@@ -441,6 +441,8 @@ export const app_cmd: readonly AppCmd[] = [
   {"cmd":"setup_test","models":["mistral/voxtral-mini-tts-2603"]},
   {"accessibility":"allowed","cmd":"helper_perms","mic":"denied","screen":"ask"},
   {"cmd":"helper_perms"},
+  {"cmd":"usage_time","engaged_s":30,"focused_s":42,"gestures":["inbox_opened","artifact_doc","crash_core"],"open_s":60},
+  {"cmd":"usage_time","engaged_s":0,"focused_s":0,"open_s":60},
 ];
 
 /** rust/proto/fixtures/draft_hub_cmd.jsonl */

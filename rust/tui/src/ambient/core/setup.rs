@@ -338,6 +338,9 @@ impl Core {
         s.using.remove(&used.id);
         let ms = u64::try_from(t0.elapsed().as_millis()).unwrap_or(u64::MAX);
         let state = if used.res.is_ok() { CheckState::Works } else { CheckState::Failed };
+        if let Some(u) = self.usage.as_mut() {
+            u.count(super::usage::of_check(used.res.as_ref().map(drop).map_err(|f| f.why)));
+        }
         self.emit(provider_check(&used.id, &used.name, state, &used.model, used.pasted, Some((used.res.as_ref(), ms))));
         if used.res.is_ok() {
             self.emit_accounts();

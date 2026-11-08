@@ -45,6 +45,7 @@ import { applyGlass, barDoubleClick, MainWindow, OwnWindows, windowTarget } from
 import { a11yTestMode, onA11yChange } from './a11y';
 import { fenceOffscreen, isOffscreen, noAsks, OFFSCREEN_DISABLED_BLINK, OFFSCREEN_DISABLED_FEATURES, offscreenActivation } from './offscreen';
 import { Notifier } from './notify/run';
+import { flushUsage, startUsage } from './usage/wire';
 import { langOf } from './notify/plan';
 
 const testMode = process.env[TEST_ENV] === '1';
@@ -188,6 +189,8 @@ void app.whenReady().then(() => {
     ipcMain.removeHandler(CORE_IPC.snapshot);
     startCore();
   });
+  // the app's usage counts (main/usage): never in an off-screen run, nothing of his Mac is read there
+  if (!offscreen) startUsage(sendToCore);
   // the notifier comes after the windows; Help's test item reaches it once it exists
   let notifierRef: Notifier | null = null;
   // the menu bar, with the Agent menu of the focused window's agent (agentmenu.ts)
@@ -392,6 +395,8 @@ app.on('will-quit', () => {
   // the app goes (Chromium writes it lazily; the keep itself is a file, src/main/keep.ts)
   session.defaultSession.flushStorageData();
   terms?.stopAll();
+  // the last minute's usage, before the core's clean exit writes its counts
+  flushUsage();
   stopCore();
 });
 

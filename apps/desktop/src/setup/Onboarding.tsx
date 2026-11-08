@@ -28,6 +28,7 @@ import type { Perms } from './perms';
 import { ReadyLooks } from '@/settings/me';
 import type { Look } from '@/bims/render/look';
 import { settings } from '@/proto/words.gen';
+import { countGesture } from '@/app/usage';
 import './setup.css';
 
 export interface OnboardingPorts {
@@ -76,6 +77,10 @@ export function Onboarding({ accounts, claudePlan = false, found, perms, fn = nu
   const [opened] = useState(() => Date.now());
   const now = pinned ?? opened;
   const [st, setSt] = useState<OnbState>(START);
+  // the app's usage: the first run's onboarding shown, on hello (app/usage.ts)
+  useEffect(() => {
+    countGesture('setup_started');
+  }, []);
   // his bim's ready-made look picked on hello (page bim-pick); none: one at random when he leaves hello
   const [me, setMe] = useState<Look | null>(null);
   const pickMe = (l: Look) => {

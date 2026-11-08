@@ -26,7 +26,7 @@ pub mod stdio;
 #[cfg(test)]
 mod tests;
 
-pub use self::core::{branch_of_head, peer_hub, Cmd, Core, ProjectFacts, ProjectPorts, Ports, Spawn};
+pub use self::core::{branch_of_head, peer_hub, Cmd, Core, ProjectFacts, ProjectPorts, Ports, Spawn, Usage, UsageSink};
 pub use self::hub::{Connect, Hub, HubIn};
 pub use self::stdio::Stdio;
 
@@ -240,21 +240,7 @@ pub fn run(core: &mut Core, rx: mpsc::Receiver<In>, out: &mut impl Write, log: &
                     continue;
                 }
                 let now = match stdio.line_in(&l) {
-                    stdio::Took::Cmd { line, id } => {
-                        // the answer goes before the events it causes: a
-                        // refusal at once, a command's own answer from the
-                        // core (a hub's command once its hub said)
-                        match Cmd::parse(&line) {
-                            Err(e) => {
-                                let _ = writeln!(log, "{}", stdio::log_of(&e, &line));
-                                vec![stdio.answer(id, Err(e))]
-                            }
-                            Ok(c) => {
-                                core.request(c, id, Instant::now());
-                                stdio::replies(core.take_replies())
-                            }
-                        }
-                    }
+                    stdio::Took::Cmd { line, id } => command(core, &mut stdio, log, &line, id),
                     stdio::Took::Write(w) => w,
                     stdio::Took::Refused { write, log: why } => {
                         let _ = writeln!(log, "{why}");
@@ -287,6 +273,23 @@ pub fn run(core: &mut Core, rx: mpsc::Receiver<In>, out: &mut impl Write, log: &
     let _ = write_lines(out, stdio.out(core.take_out()));
 }
 
+/// One command line of the app, request `id`: the lines to write. The
+/// answer goes before the events it causes: a refusal at once, a
+/// command's own answer from the core (a hub's command once its hub said).
+fn command(core: &mut Core, stdio: &mut Stdio, log: &mut impl Write, line: &str, id: bise_proto::rpc::Id) -> Vec<String> {
+    match Cmd::parse_counted(line) {
+        Err(e) => {
+            let _ = writeln!(log, "{}", stdio::log_of(&e, line));
+            vec![stdio.answer(id, Err(e))]
+        }
+        Ok((c, counted)) => {
+            core.took(&c, counted);
+            core.request(c, id, Instant::now());
+            stdio::replies(core.take_replies())
+        }
+    }
+}
+
 /// `bise ambient-core --workspace <ws>`: `connect` reaches the
 /// workspace's hub (the binary's: the first call may start it),
 /// `user_kind` is the hub's (`switchboard::model::user_kind`).
@@ -301,6 +304,8 @@ pub type ConnectFor = Box<dyn Fn(&std::path::Path) -> Connect>;
 /// with those words (every hub's row says them).
 /// `offscreen`: the app's `--offscreen` (an off-screen run): never the
 /// real mic, the fake voice or none ([`voice_of`]).
+/// `usage`: where the app's usage counts go (core/usage.rs), given only
+/// when sharing is allowed; none: nothing is counted.
 #[allow(clippy::too_many_arguments)]
 pub fn core_main(
     workspace: String,
@@ -311,6 +316,7 @@ pub fn core_main(
     home_move: Option<HomeMove>,
     broken: Option<String>,
     offscreen: bool,
+    usage: Option<UsageSink>,
 ) -> i32 {
     let (tx, rx) = mpsc::channel::<In>();
     let hub = Hub::start(connect, tx.clone(), In::Hub, RETRY);
@@ -366,6 +372,10 @@ pub fn core_main(
     if let Some(s) = setup {
         core.set_setup(s);
         core.app_start();
+    }
+    if let Some(sink) = usage {
+        let unix_s = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+        core.count_usage(Usage::new(sink, unix_s, Instant::now()));
     }
     // one line per start in core.log, so an empty log never reads as a
     // healthy core (ambient-lead m_18943: 0 bytes in both of his launches)

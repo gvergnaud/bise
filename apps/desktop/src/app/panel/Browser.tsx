@@ -18,6 +18,7 @@ import { browserUrl } from '@/artifacts/Open';
 import { PRIMARY_KEY } from '@/artifacts/front';
 import { useModHeld } from '@/app/held';
 import { useEntityMenu } from '@/app/menus/use';
+import { artifactGesture, countGesture } from '@/app/usage';
 import { closeTabId, openWhat, takeOpened } from './state';
 import { launchEnter, launchMatches, stepAt } from './launch';
 import { PickRow } from './Launcher';
@@ -28,6 +29,14 @@ import { frameEsc } from '@/app/escape';
 export function Browser({ project, id, tabId }: { project: string; id: string; tabId: string }) {
   const a = useAllArtifacts(project).find((x) => x.a.id === id)?.a;
   const menu = useEntityMenu({ kind: 'artifact', project, id });
+  // the app's usage: an artifact opened, by its kind, once per id this tab shows (app/usage.ts)
+  const counted = useRef<string | null>(null);
+  const kind = a?.kind;
+  useEffect(() => {
+    if (kind === undefined || counted.current === id) return;
+    counted.current = id;
+    countGesture(artifactGesture(kind));
+  }, [id, kind]);
   // ↻: the page mounts again (its frame loads it again)
   const [load, setLoad] = useState(0);
   // the address is the version picker (the head's 'page · v2 ⌄' it replaces)

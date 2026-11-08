@@ -120,6 +120,14 @@ impl Core {
         self.tick_index(now);
         self.setup_tick();
         self.tick_computer(now);
+        self.tick_usage(now);
+    }
+
+    /// The usage counts written every 5 minutes and at a new UTC day (core/usage.rs).
+    fn tick_usage(&mut self, now: Instant) {
+        if let Some(u) = self.usage.as_mut() {
+            u.tick(now, super::now_ms() / 1000);
+        }
     }
 
     fn tick_talk(&mut self, now: Instant) {

@@ -12,6 +12,7 @@ mod computer;
 mod dictate;
 mod gauge;
 mod takes;
+mod usage;
 mod thread_cache;
 mod hub_rpc;
 mod home;
@@ -29,6 +30,7 @@ mod voice;
 mod voice_mode;
 
 pub use self::cmd::Cmd;
+pub use self::usage::{Counted, Usage, UsageSink};
 pub use self::computer::{peer_hub, ComputerPorts};
 pub use self::hubs::{branch_of_head, ProjectFacts, ProjectPorts, Spawn};
 pub use self::voice_mode::OpenVoiceMode;
@@ -333,6 +335,8 @@ pub struct Core {
     quiet: bool,
     /// the settings' voice answers are off: no voice
     voice_off: bool,
+    /// the app's usage counts (core/usage.rs): None, nothing is counted
+    usage: Option<Usage>,
 }
 
 impl Core {
@@ -388,6 +392,20 @@ impl Core {
             pages_url: None,
             quiet: false,
             voice_off: false,
+            usage: None,
+        }
+    }
+
+    /// Counts the app's usage into `usage` (its binary gives one only
+    /// when sharing is allowed, core/usage.rs).
+    pub fn count_usage(&mut self, usage: Usage) {
+        self.usage = Some(usage);
+    }
+
+    /// An app command taken (Cmd::parse_counted): counted when this core counts.
+    pub fn took(&mut self, c: &Cmd, counted: Counted) {
+        if let Some(u) = self.usage.as_mut() {
+            u.took(c, counted);
         }
     }
 
@@ -540,6 +558,8 @@ impl Core {
                 Some(w) => w.set(&text),
                 None => self.error("fake_words: the fake voice is off (harness A only)."),
             },
+            // counted when taken (Core::took)
+            Cmd::UsageTime(_) => {}
         }
     }
 
@@ -659,6 +679,9 @@ impl Core {
     /// Stdin closed: the app is gone. The unsent still goes; the sent ones
     /// stay with his messages.
     pub fn shutdown(&mut self) {
+        if let Some(u) = self.usage.as_mut() {
+            u.write(Instant::now());
+        }
         self.write_thread_copies(Instant::now(), true);
         self.voice_mode_off(Instant::now(), Some("bise stopped"));
         self.close_projects();

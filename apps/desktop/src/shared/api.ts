@@ -4,7 +4,7 @@
 // the two can't drift. Owner: amb-core (the core channel lands here next);
 // other chunks ask amb-core to add a member.
 
-import type { AppCmd, DraftHubCmd, HelperCmd, HelperEv, HubCmd } from '../proto';
+import type { AppCmd, AppGesture, DraftHubCmd, HelperCmd, HelperEv, HubCmd } from '../proto';
 import type { Springing } from './springing';
 import type { ViewPerm } from './viewperms';
 
@@ -195,6 +195,14 @@ export interface BiseApi {
     readonly openSettings: () => void;
     /** The inbox lists bise's notifications ask now (inbox/waiting.ts): the Dock's badge and the title count it too, one number. */
     readonly listed?: (on: boolean) => void;
+  };
+  /**
+   * The app's usage counts (page usage-metrics-plan, step 3): his input, a signal with no content,
+   * and a gesture by its closed name. Main keeps the time; the core counts only when sharing is allowed.
+   */
+  readonly usage?: {
+    readonly input: () => void;
+    readonly gesture: (g: AppGesture) => void;
   };
   /** Voice mode's failed line (designer's voice-window (1)): 'open settings' opens System Settings ›
    *  Privacy › Microphone (test mode: EXTERNAL_LINE with its URL on stdout, nothing opens). */
@@ -586,6 +594,10 @@ export const IPC = {
   micSettings: 'bise:mic-settings',
   /** a window -> main: one line for app.log next to core.log (the field's dictation; never his words) */
   appLog: 'bise:app-log',
+  /** a window -> main: he typed, clicked or scrolled (no argument, no content: main/usage/clock.ts) */
+  usageInput: 'bise:usage-input',
+  /** a window -> main: one of his gestures by its closed name (bise_proto's AppGesture, main/usage/batch.ts) */
+  usageGesture: 'bise:usage-gesture',
   openWindow: 'bise:open-window',
   barDoubleClick: 'bise:bar-double-click',
   popupMenu: 'bise:popup-menu',

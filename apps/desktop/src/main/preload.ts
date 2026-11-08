@@ -190,6 +190,15 @@ const api: BiseApi = {
       ipcRenderer.send(IPC.notifyListed, on);
     },
   },
+  usage: {
+    // a signal and a closed name only, never what he typed or opened (main/usage)
+    input: () => {
+      ipcRenderer.send(IPC.usageInput);
+    },
+    gesture: (g) => {
+      ipcRenderer.send(IPC.usageGesture, g);
+    },
+  },
   voice: {
     openMicSettings: () => {
       ipcRenderer.send(IPC.micSettings);

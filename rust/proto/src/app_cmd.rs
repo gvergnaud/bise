@@ -19,6 +19,38 @@ pub struct FolderItem {
     pub from: Option<String>,
 }
 
+/// A gesture of his the core doesn't see (page usage-metrics-plan, step
+/// 3), counted by the window or Electron's main and carried by
+/// `usage_time`: a closed name, never what he opened or wrote. A newer
+/// app's gesture reads `unknown` here and is not counted.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum AppGesture {
+    /// his inbox opened
+    InboxOpened,
+    /// an artifact opened, by the app's kind of artifact
+    ArtifactPage,
+    ArtifactDoc,
+    ArtifactSheet,
+    ArtifactSlides,
+    ArtifactImage,
+    ArtifactLink,
+    ArtifactCode,
+    /// any other kind (a site, a video, a sound, a folder, a PR...)
+    ArtifactOther,
+    /// the first run's onboarding shown (its hello step)
+    SetupStarted,
+    /// the app's renderer process went away (Electron's render-process-gone)
+    CrashRenderer,
+    /// one of the app's child processes went away (child-process-gone)
+    CrashChild,
+    /// the core crashed (a fatal signal or a panic, main/core/exit.ts)
+    CrashCore,
+    #[serde(other)]
+    Unknown,
+}
+
 /// What the app asks the core itself (never forwarded to a hub).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -465,6 +497,20 @@ pub enum AppCmd {
     },
     /// `/restore <agent>`: back in his list
     Unarchive { agent: String },
+    /// the app's usage since its last one, from Electron's main once a
+    /// minute (page usage-metrics-plan, step 3): seconds open, focused
+    /// and engaged (main's clock, main/usage/clock.ts), and the gestures
+    /// the core doesn't see. Integers and closed names only. The core
+    /// counts them only when sharing is allowed; an older core reads it
+    /// as Unknown and refuses it
+    UsageTime {
+        open_s: u32,
+        focused_s: u32,
+        engaged_s: u32,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        #[cfg_attr(feature = "ts", ts(optional, as = "Option<Vec<AppGesture>>"))]
+        gestures: Vec<AppGesture>,
+    },
     #[serde(skip)]
     Unknown { tag: String, raw: Value },
 }
@@ -641,6 +687,7 @@ impl AppCmd {
         "stop",
         "archive",
         "unarchive",
+        "usage_time",
     ];
 
     pub fn decode(line: &str) -> Result<AppCmd, String> {

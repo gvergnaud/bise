@@ -20,6 +20,7 @@ import { DictationRoutes, type Route } from './dictation';
 import { SubRoutes } from './subs';
 import { installViewCalls, isViewCmd, viewAnswered, viewRefused, viewsCoreGone } from '../views';
 import { stampViewGesture } from '../viewframes';
+import { countGesture } from '../usage/wire';
 import { answeredEv, diffRefusedEv, lateAnsweredEv, refusedEv, RESTARTED_WORDS, sendRefusedEv } from '../../shared/local';
 
 let core: CoreProcess | null = null;
@@ -292,6 +293,7 @@ export function startCore(env: Readonly<Record<string, string | undefined>> = pr
       },
       onExit: (e) => {
         lastExit = e;
+        if (e.crash) countGesture('crash_core');
         crashed(e);
         log(`core: ended ${e.how}${e.code === null ? '' : ` ${String(e.code)}`}${e.signal === null ? '' : ` ${e.signal}`}${e.crash ? ' (crash)' : ''}`);
       },

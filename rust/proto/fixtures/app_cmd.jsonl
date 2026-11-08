@@ -109,3 +109,5 @@
 {"cmd":"setup_test","models":["mistral/voxtral-mini-tts-2603"]}
 {"cmd":"helper_perms","mic":"denied","accessibility":"allowed","screen":"ask"}
 {"cmd":"helper_perms"}
+{"cmd":"usage_time","open_s":60,"focused_s":42,"engaged_s":30,"gestures":["inbox_opened","artifact_doc","crash_core"]}
+{"cmd":"usage_time","open_s":60,"focused_s":0,"engaged_s":0}

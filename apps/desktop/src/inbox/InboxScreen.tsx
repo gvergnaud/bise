@@ -6,7 +6,8 @@
 // very entry (its record's pos: the store reads the page around it, however old) with one
 // th-flash, a history step (answered-link's openAnswer, the one jump), or the page in the window
 // at its block (notif-open's useOptAct). Owner: inbox-screen.
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
+import { countGesture } from '@/app/usage';
 import { useProjects, useStore } from '@/store';
 import { useRouter } from '@/app/router';
 import { useKeptScroll } from '@/app/keep';
@@ -23,6 +24,9 @@ export function InboxScreen() {
   const store = useStore();
   const router = useRouter();
   const records = useInboxRecords(rows);
+  useEffect(() => {
+    countGesture('inbox_opened');
+  }, []);
   useKeptScroll('inbox', () => document.querySelector<HTMLElement>('[data-testid="inbox.list"]'));
   // the block's own list, bise's notifications ask included: one inbox, one number (designer m_25639)
   const cards = useWaitingList();

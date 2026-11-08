@@ -44,7 +44,7 @@ fn spooled_day(dir: &std::path::Path) -> Vec<(SourceKind, Tally)> {
     write_source(&permit, dir, &Source::hub("taxes-2026-3f9a2b1c", 4242).unwrap(), &hub).unwrap();
     // a newer bise's core wrote keys this build doesn't know: his words as keys
     let newer = serde_json::json!({
-        "counts": { "artifact_opened": 2, "/Users/camille/projects/taxes-2026": 9, "camille.martin@example.com": 1 },
+        "counts": { "artifact_opened_doc": 2, "/Users/camille/projects/taxes-2026": 9, "camille.martin@example.com": 1 },
         "seconds": { "app_open": 5000, "sk-fake-7f3a9c2e1b": 60 },
         "hist": { "refactor the invoice parser": [1] },
         "brief": "refactor the invoice parser",
@@ -90,7 +90,7 @@ fn law_pii_a_body_holds_nothing_of_the_fixture() {
     // what the packet kept: its known keys, capped and rounded
     let p = &batch[0];
     assert_eq!(p.counts[&CountKey::TurnDone], 999);
-    assert_eq!(p.counts[&CountKey::ArtifactOpened], 2);
+    assert_eq!(p.counts[&CountKey::ArtifactOpenedDoc], 2);
     assert_eq!(p.minutes[&MinutesKey::AgentWork], 420);
     assert_eq!(p.minutes[&MinutesKey::AppOpen], 85);
     assert_eq!(p.surface, Surface::Desktop);
@@ -131,7 +131,7 @@ fn law_pii_catches_each_kind_of_leak() {
 
 #[test]
 fn a_wildcard_arm_is_found() {
-    let src = "fn key_of(c: &Cmd) -> Option<CountKey> {\n    match c {\n        Cmd::Open { .. } => Some(CountKey::ArtifactOpened),\n        Cmd::Quit => None, // not counted\n    }\n}\nfn other() {\n    match x {\n        _ => {}\n    }\n}\n";
+    let src = "fn key_of(c: &Cmd) -> Option<CountKey> {\n    match c {\n        Cmd::Open { .. } => Some(CountKey::ArtifactOpenedPage),\n        Cmd::Quit => None, // not counted\n    }\n}\nfn other() {\n    match x {\n        _ => {}\n    }\n}\n";
     assert_eq!(wildcard_arms(src, "key_of"), Ok(vec![]));
     let bad = src.replace("Cmd::Quit => None", "_ => None");
     assert_eq!(wildcard_arms(&bad, "key_of"), Ok(vec![4]));

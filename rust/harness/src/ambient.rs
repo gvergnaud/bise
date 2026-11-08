@@ -40,10 +40,12 @@ pub fn core(args: &[String]) -> std::io::Result<i32> {
     // the app's off-screen run (its offscreen.ts noAsks): the core never
     // opens the real mic, it decides fake or none (architect m_22483)
     let offscreen = args.iter().any(|a| a == "--offscreen");
+    // the app's usage counts: only when sharing is allowed (page usage-metrics-plan, step 3)
+    let usage = usage_root.as_ref().and_then(|root| bise_usage::spool::sink(bise_home::Home::from_env(), bise_usage::spool::Source::core(std::process::id()), root, offscreen));
     if let Some(root) = usage_root {
         let _ = bise_usage::hourly::spawn_hourly(bise_home::Home::from_env(), root, offscreen, |l| eprintln!("ambient-core: {l}"));
     }
-    Ok(bend_tui::ambient::core_main(workspace, connect, switchboard::model::user_kind, Some(projects), Some(ambient_setup()), home_move, broken, offscreen))
+    Ok(bend_tui::ambient::core_main(workspace, connect, switchboard::model::user_kind, Some(projects), Some(ambient_setup()), home_move, broken, offscreen, usage))
 }
 
 /// How the core reaches a hub: through `client::open` with this bise

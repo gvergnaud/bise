@@ -22,6 +22,7 @@ import { fnToWindow } from './fnroute';
 import type { HelperConfig } from './config';
 import { decodeEv, encodeCmd, evForWindow, HelperState, LineSplitter, restartDelay, talkOpen, windowMaySend } from './lines';
 import { noAsks } from '../offscreen';
+import { usageInput } from '../usage/wire';
 
 export const HELPER_ENV = 'BISE_DESKTOP_HELPER';
 const BINARY = 'bise-mac-helper';
@@ -132,7 +133,10 @@ export class Helper {
       front.webContents.send(IPC.fnVoice, null);
       return;
     }
+    const was = this.talking;
     this.talking = talkOpen(this.talking, ev);
+    // his fn talk is his input too (the engaged minutes, main/usage)
+    if (this.talking && !was) usageInput();
     // his selection (fn space's ❝) to the capsule alone (evForWindow)
     for (const w of BrowserWindow.getAllWindows()) w.webContents.send(IPC.helperEv, evForWindow(ev, isCapsule(w)));
   }

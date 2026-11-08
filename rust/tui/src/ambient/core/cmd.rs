@@ -5,6 +5,8 @@ use bise_proto::hub::Mode;
 use serde_json::Value;
 use std::path::PathBuf;
 
+use super::usage::{of_cmd, AppTime, Counted};
+
 /// A command of the app (stdin), §4.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Cmd {
@@ -97,6 +99,8 @@ pub enum Cmd {
     /// Harness A: the words the fake voice hears at the next talk (only
     /// with the fake voice on; an error otherwise).
     FakeWords { text: String },
+    /// the app's usage since its last one (core/usage.rs)
+    UsageTime(AppTime),
 }
 
 impl Cmd {
@@ -105,17 +109,29 @@ impl Cmd {
     /// bise-proto's `AppCmd` (or a project hub's `HubCmd`), then the
     /// rules that are not its shape (an agent's name, absolute files).
     pub fn parse(line: &str) -> Result<Cmd, String> {
+        Cmd::parse_counted(line).map(|(c, _)| c)
+    }
+
+    /// [`Cmd::parse`], with what the command counts (core/usage.rs
+    /// `of_cmd`: a project hub's command is its hub's to count).
+    pub fn parse_counted(line: &str) -> Result<(Cmd, Counted), String> {
         let v: Value = serde_json::from_str(line).map_err(|e| format!("not JSON: {e}"))?;
         let cmd = v.get("cmd").and_then(Value::as_str).unwrap_or("").to_string();
         // a hub's command with its project: the window's (bise-proto)
         if v.get("project").is_some() && bise_proto::hub::HubCmd::TAGS.contains(&cmd.as_str()) {
-            return Ok(Cmd::Typed(v));
+            return Ok((Cmd::Typed(v), Counted::NotCounted));
         }
         if !AppCmd::TAGS.contains(&cmd.as_str()) || bise_proto::app_rpc::NOT_SERVED.contains(&cmd.as_str()) {
             return Err(format!("unknown cmd {cmd:?}"));
         }
         let typed = AppCmd::decode(line).map_err(|e| format!("{cmd}: {e}"))?;
-        if super::setup::TAGS.contains(&cmd.as_str()) {
+        let counted = of_cmd(&typed);
+        Ok((Cmd::of_app(&cmd, typed)?, counted))
+    }
+
+    /// An app command as the core takes it; Err: the rules it breaks.
+    fn of_app(cmd: &str, typed: AppCmd) -> Result<Cmd, String> {
+        if super::setup::TAGS.contains(&cmd) {
             return Ok(Cmd::App(typed));
         }
         let no_id = || Err(format!("{cmd}: no id"));
@@ -168,6 +184,7 @@ impl Cmd {
             AppCmd::Stop { agent } => Cmd::Stop { agent: agent_name(&cmd, &agent)? },
             AppCmd::Archive { agent, stop_first } => Cmd::Archive { agent: agent_name(&cmd, &agent)?, stop_first },
             AppCmd::Unarchive { agent } => Cmd::Unarchive { agent: agent_name(&cmd, &agent)? },
+            AppCmd::UsageTime { open_s, focused_s, engaged_s, gestures } => Cmd::UsageTime(AppTime { open_s, focused_s, engaged_s, gestures }),
             other => return Err(format!("{cmd}: decoded as {other:?}")),
         })
     }

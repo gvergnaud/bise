@@ -49,8 +49,24 @@ closed! {
         WorktreePlaced = "worktree_placed",
         /// A land on main.
         Land = "land",
-        /// An artifact opened.
-        ArtifactOpened = "artifact_opened",
+        /// His inbox opened in the app.
+        InboxOpened = "inbox_opened",
+        /// A page opened (an html artifact, a bise page).
+        ArtifactOpenedPage = "artifact_opened_page",
+        /// A document opened (markdown, pdf, docx...).
+        ArtifactOpenedDoc = "artifact_opened_doc",
+        /// A spreadsheet opened.
+        ArtifactOpenedSheet = "artifact_opened_sheet",
+        /// A deck opened.
+        ArtifactOpenedSlides = "artifact_opened_slides",
+        /// An image opened.
+        ArtifactOpenedImage = "artifact_opened_image",
+        /// A link opened.
+        ArtifactOpenedLink = "artifact_opened_link",
+        /// Code opened (a source file, a diff).
+        ArtifactOpenedCode = "artifact_opened_code",
+        /// Any other artifact opened (a site, a video, a sound, a folder, a PR...).
+        ArtifactOpenedOther = "artifact_opened_other",
         /// A plugin turned on.
         PluginEnabled = "plugin_enabled",
         /// A connector call.

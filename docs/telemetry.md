@@ -97,7 +97,11 @@ A day is active when he wrote to an agent or answered a card.
 - turns: `turn_done`, `turn_failed`, `turn_stalled`, `compaction`, `provider_retry`
 - schedules and triggers: `schedule_set`, `schedule_fired`, `trigger_set`, `trigger_fired`
 - work: `page_published`, `worktree_placed`, `land`
-- features: `artifact_opened`, `plugin_enabled`, `connector_call`, `voice_started`, `dictation_started`, `computer_use_call`, `search`
+- the inbox: `inbox_opened`
+- artifacts opened, by the app's kind of artifact: `artifact_opened_page`, `artifact_opened_doc`,
+  `artifact_opened_sheet`, `artifact_opened_slides`, `artifact_opened_image`,
+  `artifact_opened_link`, `artifact_opened_code`, `artifact_opened_other` (any other kind)
+- features: `plugin_enabled`, `connector_call`, `voice_started`, `dictation_started`, `computer_use_call`, `search`
 - setup: `setup_started`, `setup_done`, `setup_failed_auth`, `setup_failed_network`, `setup_failed_other`
 - crashes: `crash_tui`, `crash_app_renderer`, `crash_app_child`, `crash_core`, `crash_hub`
 
@@ -144,6 +148,29 @@ A TUI attached to a hub (`bend_tui`'s `usage_count`, its source
 (a log never leaves). It writes every 5 minutes and when it ends, a panic
 included, through `bise_usage::spool::sink`, which asks for the permit at
 each write.
+
+## The app's counts
+
+The app's core (`bise ambient-core`) counts with a `Usage`
+(`rust/tui/src/ambient/core/usage.rs`), given only when
+`sharing_allowed` says yes (`bise_usage::spool::sink`, its source
+`core-<pid>.json`, which asks for the permit at each write):
+
+- each app command by its name, through one match with no `_ =>`
+  (`of_cmd`: the palette is `search`, a plugin turned on `plugin_enabled`,
+  fn's talk and voice mode `voice_started`, the mic `dictation_started`;
+  his words and answers are the hub's to count);
+- the setup's provider check at its end (`of_check`): `setup_done`, or its
+  failure's class;
+- `usage_time`, a command Electron's main sends once a minute and before
+  quit: the seconds open, focused and engaged from its clock
+  (`apps/desktop/src/main/usage/clock.ts`: open = the Mac awake and
+  unlocked, focused = a bise window in front, engaged = focused with his
+  input in the last 60 s), and the gestures the core doesn't see (the
+  inbox, an artifact by kind, the onboarding shown, a renderer, child
+  process or core crash). The window sends main only a signal for his
+  input (no key, no content) and a gesture's closed name
+  (`apps/desktop/src/app/usage.ts`). An off-screen run starts none of it.
 
 ## What is never sent
 

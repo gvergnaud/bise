@@ -12,6 +12,7 @@ import { routeOfOpen, type Route } from '@/app/route';
 import { useRouter } from '@/app/router';
 import { useStore } from '@/store';
 import { leaves, type Leaving } from './model';
+import { artifactGesture, countGesture } from '@/app/usage';
 
 export { inApp, leaves, LEAVES, type Leaving } from './model';
 
@@ -38,9 +39,11 @@ export function useGoArtifact(): (project: string, id: string, known?: Leaving) 
   const store = useStore();
   return useCallback(
     (project, id, known) => {
-      const plan = artifactGo(store.artifacts(project).find((x) => x.id === id) ?? known, project, id);
+      const a = store.artifacts(project).find((x) => x.id === id) ?? known;
+      const plan = artifactGo(a, project, id);
       const go = openExternal();
       if (plan.browser !== undefined && go !== undefined) {
+        countGesture(artifactGesture(a?.kind ?? ''));
         void go(plan.browser);
         return;
       }

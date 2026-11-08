@@ -50,7 +50,28 @@
         "agent_created_by_user": {
           "max": 999
         },
-        "artifact_opened": {
+        "artifact_opened_code": {
+          "max": 999
+        },
+        "artifact_opened_doc": {
+          "max": 999
+        },
+        "artifact_opened_image": {
+          "max": 999
+        },
+        "artifact_opened_link": {
+          "max": 999
+        },
+        "artifact_opened_other": {
+          "max": 999
+        },
+        "artifact_opened_page": {
+          "max": 999
+        },
+        "artifact_opened_sheet": {
+          "max": 999
+        },
+        "artifact_opened_slides": {
           "max": 999
         },
         "card_answered": {
@@ -84,6 +105,9 @@
           "max": 999
         },
         "dictation_started": {
+          "max": 999
+        },
+        "inbox_opened": {
           "max": 999
         },
         "land": {
