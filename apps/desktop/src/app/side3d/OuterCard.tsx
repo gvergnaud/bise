@@ -245,7 +245,7 @@ export function lineTip(r: Pick<BarRow, 'name' | 'main'>, job: string): string {
   return r.main === true ? `${r.name} · ${panel.role_lead}` : r.name;
 }
 
-/** One agent's line: mark · head · name · ψ, then the end's column: pin mark · age · PR; an ask opens in place under it. */
+/** One agent's line: mark · head · name · ψ, then the end's column: pin mark · PR · age; an ask opens in place under it. */
 function AgentLine({ r, pr, wt, job, card, at, now, here, group, pinned, open, onToggle, onOpen, onOpenPr, lit, onLit }: LineProps) {
   const store = useStore();
   const menu = useEntityMenu({ kind: 'agent', project: r.project, agent: r.agent ?? '' });
@@ -279,18 +279,19 @@ function AgentLine({ r, pr, wt, job, card, at, now, here, group, pinned, open, o
         <span className="s3-orow-name" data-testid={`${id}.name`}>{g.project !== '' && <span className="s3-group">{g.project}</span>}{g.name}</span>
         {/* the ψ says where it works: right after the name, never under the hover pin (designer m_55493) */}
         {wt !== null && <span className="s3-orow-wt" {...tipAttrs(wt)} data-testid={`${id}.wt`}>ψ</span>}
-        {/* the end's column (pin mark, age, PR) stays right-aligned past this */}
+        {/* the end's column (pin mark, PR, age) stays right-aligned past this */}
         <span className="s3-orow-gap" aria-hidden="true" />
         {pinned && <PinMark testId={`${id}.pinned`} />}
-        {age !== '' && <span className="s3-orow-age" {...tipAttrs(st?.tip)} data-testid={`${id}.age`}>{age}</span>}
+        {/* the PR before the age: the hover pin covers only the age, never the PR's click (designer m_57214) */}
         {pr !== undefined && (
           <span className="s3-orow-pr" role="button" {...tipAttrs(r.mark?.tip ?? `#${String(pr)}`)} onClick={(e) => {
             e.stopPropagation();
             onOpenPr(r);
           }} data-testid={`${id}.pr`}><AppIcon name="branch" size={14} />#{String(pr)}</span>
         )}
+        {age !== '' && <span className="s3-orow-age" {...tipAttrs(st?.tip)} data-testid={`${id}.age`}>{age}</span>}
       </Press>
-      {/* the hover pin over the line's last thing, no room kept at rest (designer m_49518); main leads anyway, never pinned here */}
+      {/* the hover pin over the line's last thing when nothing there takes a click (side3d.css .s3-pin); main leads anyway, never pinned here */}
       {pinnable && <PinButton pin={{ kind: 'agent', project: r.project, id: r.agent ?? '', on: pinned }} look="s3-pin s3-opin" testId={`${id}.pin`} />}
       {open && card !== undefined && b !== null && (
         <div className="s3-orow-ask" data-testid={`${id}.ask`}>

@@ -793,11 +793,20 @@
   opacity: 1;
   pointer-events: auto;
 }
-.s3-row:is(:hover, :has(> .s3-pin:focus-within)) .s3-row-end > :last-child,
+/* it covers only words: an end item that takes a click (a PR, a port: role button or link) is never
+   hidden nor under it (his m_57202, designer m_57214) */
+.s3-row:is(:hover, :has(> .s3-pin:focus-within)) .s3-row-end > :last-child:not(:is([role='button'], [role='link'])),
 .s3-row:is(:hover, :has(> .s3-pin:focus-within)) .s3-row-end > .b-pinmark,
-.s3-orow:is(:hover, :has(> .s3-pin:focus-within)) .s3-orow-open > :is(.s3-orow-age, .s3-orow-pr):last-child,
+.s3-orow:is(:hover, :has(> .s3-pin:focus-within)) .s3-orow-open > .s3-orow-age:last-child,
 .s3-orow:is(:hover, :has(> .s3-pin:focus-within)) .s3-orow-open > .b-pinmark {
   visibility: hidden;
+}
+/* a row whose end's last item takes a click (an agent's PR with no age after it, a port with no ∿):
+   the pin's room kept at rest, that item ending 4 before the pin's box, so a hover moves nothing
+   (designer m_57214) */
+.s3-row:has(> .s3-pin):has(.s3-port):not(:has(.s3-wave)) .s3-row-body,
+.s3-orow:has(> .s3-pin):has(.s3-orow-pr):not(:has(.s3-orow-age)) .s3-orow-open {
+  padding-right: calc(var(--s-8) + var(--s-1));
 }
 /* a row with nothing at its end (a watch, an agent's line with no age, PR, pin mark nor ψ): while
    the hover pin shows, its words' last 32 (the 24 box and 8) fade out under it, never reflowed nor
@@ -1551,8 +1560,12 @@
 .s3-orow[data-back] .s3-orow-head {
   opacity: 0.55;
 }
+/* the end's last column: wide enough for '34 d' and right-aligned, so the ages line up on every row
+   and the PR chips before them line up with each other (designer m_57214) */
 .s3-orow-age {
   flex: none;
+  min-width: 4ch;
+  text-align: right;
   font: 400 var(--f-meta);
   font-variant-numeric: tabular-nums;
   color: var(--c-text-3);
