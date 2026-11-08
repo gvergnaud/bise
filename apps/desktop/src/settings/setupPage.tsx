@@ -1,28 +1,24 @@
-// settings · Setup (page models-setup, pick B): Models and Setup in one page. On top the gauge,
-// Next and Test everything; then the features (gauge.tsx); under them, folded, the roles table
-// (which model does what) and his accounts and keys. /models opens it with the roles unfolded,
-// /voice at Dictation and fn (the route's page: 'models', 'dictation'). The page remembers whether
-// the roles are open (this window's localStorage: view state, never a setting). A fix is his click:
-// a key opens its field in the accounts (added or replaced, with the steps to get one; once it
-// works, the features it fixes test again), a model the roles, a permission the helper, a test
-// setup_test. Owner: setup-page.
+// settings · Setup (page models-settings, Gabriel's pick A): which model does what, open and first
+// (roles.tsx: one row per role, its model a button, one status, the fix line on top), then, folded,
+// his accounts and keys. /models opens it on the list (it is the top), /voice at Dictation and fn
+// (the route's page: 'models', 'dictation'). A fix is his click: a key opens its field in the
+// accounts (added or replaced, with the steps to get one; once it works, the roles it fixes test
+// again), a permission the helper, a test setup_test. Owner: setup-page.
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Account, AppCmd, FeatureId, SetupFix, SetupGauge } from '@/proto';
 import { Press } from '@/ds';
 import { settings } from '@/proto/words.gen';
 import { Accounts, keyAccountOf, type KeyAsk } from './accounts';
-import { Roles } from './roles';
+import { RoleList } from './roles';
 import { modelRow, needsSetup } from './hold';
-import { FEATURE_WORDS, GaugeView, providerName, type GaugePorts } from './gauge';
+import { FEATURE_WORDS, providerName, type GaugePorts } from './gauge';
 import { keyField, type ProviderCheck } from './keycheck';
 import type { SettingsData, SettingsPorts } from './Settings';
 import { KeychainRow } from './keychain';
 
-/** Where the route opens the page: the roles unfolded (/models), a feature's row (/voice). Pure. */
-export function focusOf(page: string | undefined): { roles: boolean; at: FeatureId | null } {
-  if (page === 'models') return { roles: true, at: null };
-  if (page === 'dictation') return { roles: false, at: 'dictation' };
-  return { roles: false, at: null };
+/** The row the route lands on: /voice at Dictation and fn; /models at the top, the list. Pure. */
+export function focusOf(page: string | undefined): FeatureId | null {
+  return page === 'dictation' ? 'dictation' : null;
 }
 
 /** A key the add_key fix asked for: what the accounts' field shows (`ask`), the account it goes
@@ -49,24 +45,6 @@ export function askOf(g: SetupGauge, provider: string, url: string, accounts: re
   };
 }
 
-const ROLES_OPEN = 'bise.settings.setup.roles';
-
-function rolesOpenKept(): boolean {
-  try {
-    return window.localStorage.getItem(ROLES_OPEN) === '1';
-  } catch {
-    return false;
-  }
-}
-
-function keepRolesOpen(on: boolean): void {
-  try {
-    window.localStorage.setItem(ROLES_OPEN, on ? '1' : '0');
-  } catch {
-    // no storage (a test): the page forgets it
-  }
-}
-
 /** A folded part: its head opens and closes it. */
 function Fold({ title, open, onToggle, testId, children }: { title: string; open: boolean; onToggle: () => void; testId: string; children: ReactNode }) {
   return (
@@ -81,21 +59,13 @@ function Fold({ title, open, onToggle, testId, children }: { title: string; open
 }
 
 export function SetupPage({ data, ports, page }: { data: SettingsData; ports: SettingsPorts; page?: string | undefined }) {
-  const focus = focusOf(page);
-  const [rolesOpen, setRolesOpen] = useState(() => focus.roles || rolesOpenKept());
+  const at = focusOf(page);
   const [accountsOpen, setAccountsOpen] = useState(false);
-  const rolesRef = useRef<HTMLDivElement>(null);
   const accountsRef = useRef<HTMLDivElement>(null);
-  // /models lands on the roles, /voice on Dictation and fn: scrolled into view once, at arrival
+  // /voice lands on Dictation and fn: scrolled into view once, at arrival (/models: the list is the top)
   useEffect(() => {
-    const el = focus.roles ? rolesRef.current : focus.at !== null ? document.querySelector(`[data-testid="settings.feature.${focus.at}"]`) : null;
-    el?.scrollIntoView({ block: 'start' });
-  }, [focus.roles, focus.at]);
-  const openRoles = () => {
-    setRolesOpen(true);
-    keepRolesOpen(true);
-    requestAnimationFrame(() => rolesRef.current?.scrollIntoView({ block: 'start' }));
-  };
+    if (at !== null) document.querySelector(`[data-testid="settings.feature.${at}"]`)?.scrollIntoView({ block: 'start' });
+  }, [at]);
   const openAccounts = () => {
     setAccountsOpen(true);
     requestAnimationFrame(() => accountsRef.current?.scrollIntoView({ block: 'start' }));
@@ -129,9 +99,12 @@ export function SetupPage({ data, ports, page }: { data: SettingsData; ports: Se
         return;
       }
       case 'pick_model':
-      case 'remove_env':
-        openRoles();
+      case 'remove_env': {
+        // the row's own model button picks another (an env var: its troubleshooting says the step)
+        const row = g?.rows.find((r) => r.fix != null && JSON.stringify(r.fix) === JSON.stringify(f));
+        if (row !== undefined) document.querySelector(`[data-testid="settings.feature.${row.id}"]`)?.scrollIntoView({ block: 'nearest' });
         return;
+      }
       case 'allow_perm':
         ports.perm?.(f.perm, f.open ? 'open' : 'ask');
         return;
@@ -150,44 +123,24 @@ export function SetupPage({ data, ports, page }: { data: SettingsData; ports: Se
     test: (models) => {
       ports.send(models === undefined ? { cmd: 'setup_test' } : { cmd: 'setup_test', models: [...models] });
     },
-    roles: openRoles,
     ...(ports.copy ? { copy: ports.copy } : {}),
     ...(ports.tryIt ? { tryIt: ports.tryIt } : {}),
   };
   const models = data.models ?? [];
   const held = data.held ?? null;
+  // a model whose provider isn't set up waits for it (hold.ts); the others go at once
+  const set = (cmd: AppCmd, model: string | null) => {
+    const provider = model !== null ? needsSetup(model, models) : null;
+    if (provider !== null && model !== null && ports.hold) {
+      const row = modelRow(model, models);
+      ports.hold({ provider, providerName: row?.provider ?? provider, model: row?.label ?? model, cmd });
+    } else {
+      ports.send(cmd);
+    }
+  };
   return (
     <>
-      {g !== null && (
-        <GaugeView g={g} ports={gp} at={focus.at} />
-      )}
-      <div ref={rolesRef}>
-        <Fold
-          title={settings.fold_roles}
-          open={rolesOpen}
-          onToggle={() => {
-            setRolesOpen(!rolesOpen);
-            keepRolesOpen(!rolesOpen);
-          }}
-          testId="settings.fold.roles"
-        >
-          <Roles
-            titled={false}
-            roles={data.roles ?? []}
-            models={models}
-            error={data.roleError ?? null}
-            set={(cmd: AppCmd, model) => {
-              const provider = model !== null ? needsSetup(model, models) : null;
-              if (provider !== null && model !== null && ports.hold) {
-                const row = modelRow(model, models);
-                ports.hold({ provider, providerName: row?.provider ?? provider, model: row?.label ?? model, cmd });
-              } else {
-                ports.send(cmd);
-              }
-            }}
-          />
-        </Fold>
-      </div>
+      {g !== null && <RoleList g={g} roles={data.roles ?? []} models={models} error={data.roleError ?? null} ports={{ ...gp, set }} at={at} />}
       <div ref={accountsRef}>
         <Fold title={settings.fold_accounts} open={accountsOpen || held !== null} onToggle={() => { setAccountsOpen(!accountsOpen); }} testId="settings.fold.accounts">
           <Accounts

@@ -140,26 +140,41 @@
 .me-ready { display: grid; grid-template-columns: repeat(6, var(--s-16)); gap: var(--s-2); justify-content: center; margin: var(--s-4) 0 var(--s-2); }
 .me-tile { width: var(--s-16); height: var(--s-16); box-shadow: inset 0 0 0 1px var(--c-line); }
 .me-more { margin: 0 0 var(--s-4); text-align: center; font: var(--t-12) var(--font-ui); color: var(--c-text-3); }
-/* settings · Setup (setupPage.tsx, gauge.tsx; page models-setup, designer's rules): the gauge's head
-   (a 40 ring in ink, N/7, Next in the accent with its fixing button, Test everything secondary),
-   the features in one box with 52 px rows (4/8 gaps), the marks ✓ ink · ✗ red · ○ faint (no green
-   dot), a failed feature's troubleshooting on a neutral surface with a 2 px red rule on its left,
-   and the folded roles and accounts under them. Pink only for what waits on him. */
-.st-head { display: flex; align-items: center; gap: var(--s-2); margin-bottom: var(--s-3); }
-.st-count { flex: none; display: inline-flex; align-items: center; gap: var(--s-2); }
-.st-count .n { font: 600 var(--t-15, 15px) var(--font-ui); color: var(--c-ink); font-variant-numeric: tabular-nums; }
-.st-ring { flex: none; }
-.st-test { flex: none; display: inline-flex; }
-.st-ring circle { fill: none; stroke-width: 3; }
-.st-ring .track { stroke: var(--c-line); }
-.st-ring .used { stroke: var(--c-ink); stroke-linecap: round; }
-.st-next { flex: 1 1 auto; min-width: 0; padding: 0; border: 0; background: none; text-align: left; font: var(--t-13) var(--font-ui); color: var(--c-text-2); }
-button.st-next:hover { color: var(--c-text); }
-.st-next b { font-weight: 600; color: var(--c-accent); }
-.st-rows { display: flex; flex-direction: column; border-radius: var(--r-menu); background: var(--c-raised); box-shadow: inset 0 0 0 1px var(--c-line); margin-bottom: var(--gap-section); }
+/* settings · Setup (setupPage.tsx, roles.tsx; page models-settings pick A, designer's mock-a): which
+   model does what, first: its head (the title, Test everything quiet), the fix line only when
+   something stopped (Next in the accent, its one primary), then one box of rows on one grid (the
+   rows and Voice mode's parts are subgrids): name and line · the model button · the status, right
+   aligned in one column · a row's own fix. Marks ✓ ink · ✗ red · ○ faint (no green dot); a failed
+   row's troubleshooting on a neutral surface with a 2 px red rule on its left; the folded accounts
+   under it. Pink only for what waits on him. */
+.st-list { margin-bottom: var(--gap-section); }
+.st-list-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s-2); margin-bottom: var(--s-2); }
+.st-list-title { margin: 0; font: 600 var(--t-13) var(--font-ui); color: var(--c-text); }
+.st-fixline { display: flex; align-items: center; gap: var(--s-2); margin-bottom: var(--s-2); font: var(--t-13) var(--font-ui); color: var(--c-text-2); }
+.st-fixline .w { flex: 1 1 auto; min-width: 0; }
+.st-fixline b { font-weight: 600; color: var(--c-accent); }
+.st-rows { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, max-content) max-content max-content; border-radius: var(--r-menu); background: var(--c-raised); box-shadow: inset 0 0 0 1px var(--c-line); margin-bottom: var(--s-2); }
+.st-feature { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; }
 .st-feature + .st-feature { border-top: 1px solid var(--c-line); }
 .st-feature.is-at { box-shadow: inset 0 0 0 1px var(--c-focus); border-radius: var(--r-menu); }
-.st-row { box-sizing: border-box; display: flex; align-items: center; gap: var(--s-2); min-height: var(--h-list-row); padding: var(--s-1) var(--s-3); }
+.st-row { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; box-sizing: border-box; align-items: center; column-gap: var(--s-3); min-height: var(--h-list-row); padding: var(--s-1) var(--s-3); }
+/* Voice mode's parts: under its row, their names indented, shorter */
+.st-row.st-part { min-height: var(--s-8); padding-left: var(--s-6); }
+.st-row.st-part .st-name { color: var(--c-text-2); }
+.st-cell { min-width: 0; display: flex; }
+/* the one status column: right aligned, so every mark lines up (Dictation's Try it included) */
+.st-status { display: flex; align-items: center; justify-content: flex-end; gap: var(--s-2); }
+.st-act { display: flex; align-items: center; justify-content: flex-end; gap: var(--s-2); }
+.st-act:empty { display: none; }
+.st-trouble { grid-column: 1 / -1; }
+/* a model: its name, then its provider (or why it isn't a button) faint */
+.st-model, .b-ptrig.st-pick .w { display: inline-flex; align-items: baseline; gap: var(--s-1); min-width: 0; overflow: hidden; white-space: nowrap; font: var(--t-13) var(--font-ui); }
+.st-model { padding: 0 var(--s-2); color: var(--c-text); }
+.st-mn { color: var(--c-text); overflow: hidden; text-overflow: ellipsis; }
+.st-mp { flex: none; font-size: var(--t-12); color: var(--c-text-3); }
+.st-model-pick { display: inline-flex; min-width: 0; }
+.b-ptrig.st-pick { max-width: 100%; }
+.st-help { margin: 0; font: var(--t-12) var(--font-ui); color: var(--c-text-3); }
 /* a row hovered: the list's 6 % tint (designer) */
 .st-row:hover { background: var(--c-hover); }
 .st-feature:first-child .st-row:hover { border-radius: var(--r-menu) var(--r-menu) 0 0; }

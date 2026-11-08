@@ -68,10 +68,6 @@ crate::words! { settings:
     /// the key field's guide: replacing a key
     key_old_stays = "Your old key stays until the new one works.";
 
-    /// a role's model: set in settings
-    role_set_here = "set here";
-    /// a role's model: from his environment
-    role_from_env = "from your environment";
     /// a role's model: the default
     role_default = "the default";
     /// a role's picker label
@@ -80,21 +76,11 @@ crate::words! { settings:
     role_as(role) = "as {role}";
     /// settings › models: the main role's row title (in the window, main is called bise; designer m_43851)
     role_main_name = "bise";
-    /// settings › models: the main role's line
-    role_main_about = "your lead in every project";
-    /// settings › models: the agents role's line
-    role_agents_about = "the agents bise starts";
-    /// a model whose provider needs its setup first
-    role_setup_first(provider) = "{provider}: set up first";
     /// the roles' group
     roles_title = "Which model does what";
     /// the roles' help
     roles_help = "the terminal's /models shows the same";
 
-    /// setup check: a permission allowed
-    perm_allowed = "allowed";
-    /// setup check: a permission not asked
-    perm_not_asked = "not asked yet";
     /// setup check: ask a permission
     perm_allow = "allow";
     /// setup check: bise's home gone

@@ -16,4 +16,3 @@ export { KEY_SECTIONS } from './keys';
 export { SettingsScreen, prefsOf, useCmdError } from './screen';
 export { SettingsNav, leaveSettings } from './nav';
 export { needsSetup, modelOrSetup, modelRow, holdForSetup, releaseHeld, useHeld, heldReady, type Held } from './hold';
-export { Roles, roleSource, effortsOf, effortOf } from './roles';

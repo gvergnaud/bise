@@ -1,13 +1,14 @@
-// settings · Setup (page models-setup, Gabriel's pick B): the gauge (N/7), Next, Test everything,
-// the features with their marks, and a failed feature's troubleshooting. Everything it shows comes
-// from the core's setup_gauge (bise_catalog::features): on, failed or off, the fix, Next and its
-// order are the core's; this file only words and draws them (one owner, architect m_53985). A test
-// is a real call: only on his click (Test everything, Test again), never at open. Owner: setup-page.
+// settings · Setup's gauge words and parts (page models-setup, then models-settings pick A): the
+// features' names, a fix's button, why a feature failed, the report Copy report copies, dictation's
+// Try it and a failed row's troubleshooting. Everything comes from the core's setup_gauge
+// (bise_catalog::features): on, failed or off, the fix, Next and its order are the core's; this
+// file only words and draws them (one owner, architect m_53985). The list that shows them is
+// roles.tsx. A test is a real call: only on his click (Test everything, Test again) or when a role
+// changes (the core's), never at open. Owner: setup-page.
 import { useState, type ReactNode } from 'react';
 import type { FeatureId, FeaturePart, FeatureRow, Perm, RoleId, SetupFix, SetupGauge } from '@/proto';
-import { Act, Button, Press, tipAttrs } from '@/ds';
+import { Act, Button } from '@/ds';
 import { settings } from '@/proto/words.gen';
-import { cx } from '@/ds/cx';
 import { article } from './keycheck';
 
 /** A feature's name. */
@@ -42,29 +43,12 @@ export function tookMs(r: FeatureRow): number | null {
 
 export type Tone = 'ink' | 'err' | 'faint';
 
-/** A feature's mark: ✓ (and how long its check took) in ink, ✗ failed in red, ○ off faint; voice
- * mode's tip says its voice has no test of its own yet (architect m_54103). Pure. */
-export function markOf(r: FeatureRow, g: SetupGauge): { text: string; tone: Tone; tip: string } {
-  if (r.state === 'failed') return { text: settings.mark_failed, tone: 'err', tip: whyWords(r, g) };
-  if (r.state !== 'on') {
-    const main = r.parts[0];
-    const tip = r.id === 'vision' && main !== undefined && r.fix?.t === 'pick_model' ? settings.tip_no_images({ model: main.model }) : settings.tip_off;
-    return { text: settings.mark_off, tone: 'faint', tip };
-  }
-  const ms = tookMs(r);
-  // voice mode: the same mark as every row; its tip says only the key is checked (architect m_54103)
-  const tts = r.id === 'voice_mode' ? r.parts.find((p) => p.role === 'tts') : undefined;
-  if (tts !== undefined) return { text: ms === null ? settings.mark_on : settings.mark_took({ secs: secsOf(ms) }), tone: 'ink', tip: settings.tip_key_only({ provider: tts.provider ?? '' }) };
-  const better = r.better != null && r.better.t === 'add_key' ? settings.tip_better({ provider: providerName(g, r.better.provider) }) : null;
-  if (ms === null) return { text: settings.mark_on, tone: 'ink', tip: better ?? settings.tip_untested };
-  return { text: settings.mark_took({ secs: secsOf(ms) }), tone: 'ink', tip: better ?? settings.tip_took({ secs: secsOf(ms) }) };
-}
-
 /** A key of `provider` is there and failed (refused, expired): its fix replaces it. Pure. */
 export const keyFailed = (g: SetupGauge, provider: string): boolean =>
   g.rows.some((r) => r.parts.some((p) => p.model.split('/')[0] === provider && p.state === 'failed' && p.why === 'wrong_key'));
 
-const PERM_NAME: Record<Perm, string> = { mic: settings.onb_perm_mic, accessibility: settings.onb_perm_accessibility, screen: settings.onb_perm_screen, unknown: '' };
+/** A permission's name for people. */
+export const PERM_NAME: Record<Perm, string> = { mic: settings.onb_perm_mic, accessibility: settings.onb_perm_accessibility, screen: settings.onb_perm_screen, unknown: '' };
 
 /** A fix's button words. Pure. */
 export function fixButton(f: SetupFix, g: SetupGauge): string {
@@ -91,38 +75,6 @@ export function fixButton(f: SetupFix, g: SetupGauge): string {
     default:
       return settings.fix_test_again;
   }
-}
-
-/** Next's words: the action, then what it brings back or turns on. Pure. */
-export function nextWords(g: SetupGauge): string {
-  const n = g.next;
-  if (n == null) return settings.gauge_all_set;
-  const f = n.fix;
-  const act =
-    f.t === 'add_key'
-      ? keyFailed(g, f.provider)
-        ? settings.next_replace_key({ provider: providerName(g, f.provider) })
-        : settings.next_add_key({ a: article(providerName(g, f.provider)), provider: providerName(g, f.provider) })
-      : f.t === 'sign_in'
-        ? settings.next_sign_in({ provider: providerName(g, f.provider) })
-        : f.t === 'credit'
-          ? settings.next_credit({ provider: providerName(g, f.provider) })
-          : f.t === 'pick_model'
-            ? settings.next_pick_model
-            : f.t === 'remove_env'
-              ? settings.next_remove_env({ var: f.var })
-              : f.t === 'allow_perm'
-                ? f.perm === 'mic'
-                  ? settings.next_allow_mic
-                  : settings.next_allow({ perm: PERM_NAME[f.perm] })
-                : f.t === 'restart'
-                  ? settings.next_restart
-                  : f.t === 'turn_on'
-                    ? settings.next_turn_on({ what: FEATURE_WORDS.approvals.toLowerCase() })
-                    : settings.next_test_again;
-  const what = n.unlocks.map((id) => FEATURE_WORDS[id].toLowerCase()).join(', ');
-  const failed = n.unlocks.some((id) => g.rows.find((r) => r.id === id)?.state === 'failed');
-  return `${act} ${failed ? settings.gauge_brings_back({ what }) : settings.gauge_turns_on({ what })}`;
 }
 
 /** Why a feature failed, from its verdict (keycheck::Why), in plain words. Pure. */
@@ -181,8 +133,6 @@ export interface GaugePorts {
   fix: (f: SetupFix, row: FeatureId | null) => void;
   /** setup_test: every model (none), or these */
   test: (models?: readonly string[]) => void;
-  /** open the roles table (another way) */
-  roles: () => void;
   copy?: (text: string) => void;
   /** dictation's Try it: its own path (the store's dictateStart / dictateStop and useDictation);
    * none: no Try it (no core mic in this run) */
@@ -202,25 +152,15 @@ export const TRY_MS = 3000;
 /** Dictation's Try it (his click only): 3 s of mic through dictation's own path, then what it
  * heard. It owns the row's mark (designer m_54627): while it listens no ✓ (nothing is done yet) and
  * the instruction in the text colour; heard words bring the ✓ back; nothing heard is ✗ in red. */
-function TryIt({ port, mark }: { port: TryPort; mark: ReactNode }) {
+export function TryIt({ port, mark }: { port: TryPort; mark: ReactNode }) {
   const [id, setId] = useState<string | null>(null);
   const heard = port.useHeard(id);
   const listening = id !== null && heard !== null && !heard.final;
   const nothing = id !== null && heard?.final === true && (heard.error !== null || heard.text.trim() === '');
   const words = id !== null && heard?.final === true && !nothing ? heard.text.trim() : null;
+  // Try it before the mark: the mark keeps the status column's right edge, like every row's
   return (
     <>
-      {listening ? (
-        <span className="st-listen" data-testid="settings.feature.dictation.heard">
-          {settings.try_listening}
-        </span>
-      ) : nothing ? (
-        <span className="st-mark err" data-testid="settings.feature.dictation.heard">
-          {heard.error ?? settings.try_nothing}
-        </span>
-      ) : (
-        mark
-      )}
       <span className="st-try" data-busy={id !== null || undefined}>
         {words !== null && (
           <span className="st-heard" data-testid="settings.feature.dictation.heard">
@@ -242,146 +182,25 @@ function TryIt({ port, mark }: { port: TryPort; mark: ReactNode }) {
           {settings.try_it}
         </Act>
       </span>
-    </>
-  );
-}
-
-/** The gauge's ring, 40 px, in ink: on/of. */
-function GaugeRing({ on, of }: { on: number; of: number }) {
-  const r = 17;
-  const around = 2 * Math.PI * r;
-  const len = of === 0 ? 0 : (on / of) * around;
-  return (
-    <svg className="st-ring" viewBox="0 0 40 40" width="40" height="40" aria-hidden="true">
-      <circle className="track" cx="20" cy="20" r={r} />
-      {len > 0 && <circle className="used" cx="20" cy="20" r={r} strokeDasharray={`${len.toFixed(2)} ${(around - len).toFixed(2)}`} transform="rotate(-90 20 20)" />}
-    </svg>
-  );
-}
-
-export function GaugeHead({ g, ports, onNext }: { g: SetupGauge; ports: GaugePorts; onNext: (id: FeatureId) => void }) {
-  const testing = (g.testing?.length ?? 0) > 0;
-  const n = g.next;
-  const first = n?.unlocks[0];
-  return (
-    <div className="st-head" data-testid="settings.gauge">
-      <span className="st-count" {...tipAttrs(settings.gauge_tip({ on: String(g.on), of: String(g.of) }), undefined, 'below', undefined, 'start')} data-testid="settings.gauge.count">
-        <GaugeRing on={g.on} of={g.of} />
-        <span className="n">{settings.gauge_count({ on: String(g.on), of: String(g.of) })}</span>
-      </span>
-      {/* one primary per screen (designer m_54523): Next is a link to its row, whose panel holds the fix */}
-      {first !== undefined ? (
-        <Press look="st-next" onClick={() => { onNext(first); }} data-testid="settings.gauge.next">
-          <b>{settings.gauge_next}</b> {nextWords(g)} ›
-        </Press>
-      ) : (
-        <span className="st-next" data-testid="settings.gauge.next">
-          {nextWords(g)}
+      {listening ? (
+        <span className="st-listen" data-testid="settings.feature.dictation.heard">
+          {settings.try_listening}
         </span>
+      ) : nothing ? (
+        <span className="st-mark err" data-testid="settings.feature.dictation.heard">
+          {heard.error ?? settings.try_nothing}
+        </span>
+      ) : (
+        mark
       )}
-      <span className="st-test" {...tipAttrs(settings.gauge_test_tip, undefined, 'below')}>
-        <Button onClick={() => { ports.test(); }} disabled={testing} testId="settings.gauge.test">
-          {testing ? settings.gauge_testing : settings.gauge_test_all}
-        </Button>
-      </span>
-    </div>
-  );
-}
-
-/** The gauge and its features: Next opens its row's troubleshooting and scrolls to it. */
-export function GaugeView({ g, ports, at }: { g: SetupGauge; ports: GaugePorts; at?: FeatureId | null }) {
-  const [shut, setShut] = useState<ReadonlySet<FeatureId>>(new Set());
-  return (
-    <>
-      <GaugeHead
-        g={g}
-        ports={ports}
-        onNext={(id) => {
-          const next = new Set(shut);
-          next.delete(id);
-          setShut(next);
-          document.querySelector(`[data-testid="settings.feature.${id}"]`)?.scrollIntoView({ block: 'nearest' });
-        }}
-      />
-      <FeatureRows g={g} ports={ports} at={at ?? null} shut={shut} setShut={setShut} />
     </>
   );
 }
 
-/** A feature's sub line: its models and where they come from, its permissions. */
-function subOf(r: FeatureRow): string {
-  const seen = new Set<string>();
-  const models = r.parts
-    .filter((p) => p.model !== '' && !seen.has(p.model) && seen.add(p.model))
-    .map((p) => (p.var != null ? `${p.model} · ${settings.part_env({ var: p.var })}` : p.model));
-  const perms = (r.perms ?? []).map((p) => `${PERM_NAME[p.perm]} ${p.grant === 'allowed' ? settings.perm_allowed : p.grant === 'denied' ? settings.perm_refused : settings.perm_not_asked}`);
-  return [...models, ...perms].join(' · ');
-}
-
-/** The features; a failed one opens its troubleshooting unless he closed it (`shut`). */
-export function FeatureRows({ g, ports, at, shut, setShut }: { g: SetupGauge; ports: GaugePorts; at?: FeatureId | null; shut: ReadonlySet<FeatureId>; setShut: (s: ReadonlySet<FeatureId>) => void }) {
-  return (
-    <div className="st-rows" data-testid="settings.features">
-      {g.rows.map((r) => {
-        const m = markOf(r, g);
-        const open = r.state === 'failed' && !shut.has(r.id);
-        const testing = r.parts.some((p) => g.testing?.includes(p.model) === true);
-        const markEl = (
-          <span className={cx('st-mark', testing ? 'faint' : m.tone)} {...tipAttrs(m.tip)} data-testid={`settings.feature.${r.id}.mark`}>
-            {testing ? settings.gauge_testing : m.text}
-          </span>
-        );
-        return (
-          <div key={r.id} className={cx('st-feature', at === r.id && 'is-at')} data-state={r.state} data-testid={`settings.feature.${r.id}`}>
-            <div
-              className="st-row"
-              role={r.state === 'failed' ? 'button' : undefined}
-              onClick={
-                r.state === 'failed'
-                  ? () => {
-                      const next = new Set(shut);
-                      if (open) next.add(r.id);
-                      else next.delete(r.id);
-                      setShut(next);
-                    }
-                  : undefined
-              }
-            >
-              <span className="st-name">
-                {FEATURE_WORDS[r.id]}
-                <span className="st-sub">{subOf(r)}</span>
-              </span>
-              {r.id === 'dictation' && r.state === 'on' && ports.tryIt !== undefined ? (
-                <TryIt port={ports.tryIt} mark={markEl} />
-              ) : (
-                markEl
-              )}
-              {r.fix != null && !open && (
-                <Button
-                  kind={r.state === 'failed' ? 'pri' : undefined}
-                  onClick={() => { if (r.fix != null) ports.fix(r.fix, r.id); }}
-                  testId={`settings.feature.${r.id}.fix`}
-                >
-                  {fixButton(r.fix, g)}
-                </Button>
-              )}
-              {r.fix === undefined && r.better != null && r.better.t === 'allow_perm' && (
-                <Act onClick={() => { if (r.better != null) ports.fix(r.better, r.id); }} testId={`settings.feature.${r.id}.better`}>
-                  {fixButton(r.better, g)}
-                </Act>
-              )}
-            </div>
-            {open && <Trouble r={r} g={g} ports={ports} />}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-/** A failed feature's troubleshooting: why, the provider's own words, when, the fix, another way,
- * Copy report, Test again. A neutral surface with a 2 px red rule (designer). */
-function Trouble({ r, g, ports }: { r: FeatureRow; g: SetupGauge; ports: GaugePorts }) {
+/** A failed feature's troubleshooting: why, the provider's own words, when, the fix, Copy report,
+ * Test again (another model: the row's own button). A neutral surface with a 2 px red rule
+ * (designer). */
+export function Trouble({ r, g, ports }: { r: FeatureRow; g: SetupGauge; ports: GaugePorts }) {
   const [copied, setCopied] = useState(false);
   const p = firstFailed(r);
   const still = stillWorks(r);
@@ -401,11 +220,6 @@ function Trouble({ r, g, ports }: { r: FeatureRow; g: SetupGauge; ports: GaugePo
         {r.fix != null && (
           <Button kind="pri" onClick={() => { if (r.fix != null) ports.fix(r.fix, r.id); }} testId={`settings.feature.${r.id}.trouble.fix`}>
             {fixButton(r.fix, g)}
-          </Button>
-        )}
-        {r.parts.length > 0 && r.fix?.t !== 'pick_model' && (
-          <Button kind="ghost" onClick={ports.roles} testId={`settings.feature.${r.id}.trouble.other`}>
-            {settings.trouble_other}
           </Button>
         )}
         {ports.copy !== undefined && (

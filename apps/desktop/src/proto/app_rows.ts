@@ -687,6 +687,11 @@ export type FeaturePart = { role: RoleId,
  */
 model: string, 
 /**
+ * the model's name for people ("opus 5.5", bise_catalog's
+ * long_name); "" when `model` is ""
+ */
+name?: string, 
+/**
  * its provider's name for people ("Mistral")
  */
 provider?: string, source: PartSource, 

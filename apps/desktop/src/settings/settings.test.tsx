@@ -20,7 +20,7 @@ import { stepOf } from './computer';
 import { focusOf } from './setupPage';
 import { fixButton, TRY_MS } from './gauge';
 import { article } from './keycheck';
-import { FALLBACK } from './roles';
+import { FALLBACK, fixLine, joinAnd } from './roleList';
 import type { ComputerUse } from './computer';
 import { settings } from '@/proto/words.gen';
 
@@ -28,7 +28,7 @@ import { settings } from '@/proto/words.gen';
 function pickRole(role: string, value: string): void {
   const id = `settings.role.${role}.model`;
   fireEvent.click(screen.getByTestId(id));
-  fireEvent.click(screen.getByTestId(`${id}.opt.${value}`));
+  fireEvent.click(screen.getByTestId(`${id}.menu.${value}`));
 }
 
 afterEach(cleanup);
@@ -428,40 +428,72 @@ describe('computer use', () => {
   });
 });
 
-describe('settings · Setup (page models-setup, pick B)', () => {
+describe('settings · Setup: which model does what (page models-settings, pick A)', () => {
   const gauge = () => ev('setup_gauge').gauge;
   const allOn = (): SetupGauge => ({ ...gauge(), on: 7, next: undefined, testing: [], rows: gauge().rows.map((r) => ({ ...r, state: 'on' as const, fix: undefined, parts: r.parts.map((x) => ({ ...x, state: 'on' as const, why: undefined, said: undefined })) })) });
 
-  it('the test world: 5/7, Next adds credit on Mistral, voice mode failed and open, approvals off', () => {
+  it('the test world: one list, first; Voice mode stopped, its fix on top, each part its status; approvals off with its own fix', () => {
     const p = ports();
     view('setup', p, { gauge: { ...gauge(), testing: [] } });
-    expect(screen.getByTestId('settings.gauge.count').textContent).toContain('5/7');
-    expect(screen.getByTestId('settings.gauge.next').textContent).toContain(settings.next_credit({ provider: 'Mistral' }));
-    expect(screen.getByTestId('settings.feature.voice_mode').getAttribute('data-state')).toBe('failed');
-    expect(screen.getByTestId('settings.feature.voice_mode.trouble').textContent).toContain('No credit left on this workspace');
-    // one primary per screen: the fix is in the panel, Next is a link to it
-    expect(screen.queryByTestId('settings.gauge.next.fix')).toBeNull();
+    // the list is the page's first thing, one row per role in the core's order
+    expect(screen.getByTestId('settings.page.setup').querySelector('[data-testid]')?.getAttribute('data-testid')).toBe('settings.roles');
+    expect([...document.querySelectorAll('.st-feature')].map((e) => e.getAttribute('data-testid'))).toEqual(
+      ['talk', 'agents', 'small', 'vision', 'dictation', 'voice_mode', 'approvals'].map((id) => `settings.feature.${id}`),
+    );
+    expect(screen.getByTestId('settings.feature.talk').textContent).toContain(settings.role_main_name + settings.about_talk);
+    // the fix line: what stopped, and the one button (the row doesn't repeat it)
+    expect(screen.getByTestId('settings.fixline').textContent).toContain(settings.fixline_stopped({ what: settings.short_voice_mode }));
+    expect(screen.getByTestId('settings.fixline.fix').textContent).toBe(settings.fix_credit({ provider: 'Mistral' }));
     expect(screen.getAllByText(settings.fix_credit({ provider: 'Mistral' }))).toHaveLength(1);
+    // Voice mode: hears / thinks / speaks, each its model and status; no wall of red
+    expect(screen.getByTestId('settings.feature.voice_mode.voice.model').textContent).toContain('whisper-large-v3');
+    expect(screen.getByTestId('settings.feature.voice_mode.main.model').textContent).toContain(settings.part_same_as_bise);
+    expect(screen.getByTestId('settings.feature.voice_mode.tts.mark').textContent).toBe(settings.stop_no_credit);
+    expect(screen.queryByTestId('settings.feature.voice_mode.trouble')).toBeNull();
     expect(screen.getByTestId('settings.feature.approvals.mark').textContent).toBe(settings.mark_off);
     // nothing tested on open: a test is his click
     expect(p.sent).toEqual([]);
     fireEvent.click(screen.getByTestId('settings.gauge.test'));
     expect(p.sent).toEqual([{ cmd: 'setup_test' }]);
+    // a failed row opens its troubleshooting on his click
+    fireEvent.click(screen.getByTestId('settings.feature.voice_mode').querySelector('.st-row') as Element);
+    expect(screen.getByTestId('settings.feature.voice_mode.trouble').textContent).toContain('No credit left on this workspace');
     fireEvent.click(screen.getByTestId('settings.feature.voice_mode.trouble.again'));
     expect(p.sent.at(-1)).toEqual({ cmd: 'setup_test', models: ['groq/whisper-large-v3', 'mistral/voxtral-mini-tts-2603', 'chatgpt/gpt-6.1-sol'] });
     fireEvent.click(screen.getByTestId('settings.feature.approvals.fix'));
     expect(p.sent.at(-1)).toEqual({ cmd: 'role_set', role: 'classify' });
   });
 
+  it("images run bise's model: its name, 'same as bise', never a button", () => {
+    view('setup', ports(), { gauge: gauge() });
+    const cell = screen.getByTestId('settings.feature.vision.model');
+    expect(cell.textContent).toBe(`gpt-6.1-sol${settings.part_same_as_bise}`);
+    expect(cell.getAttribute('data-tip')).toBe(settings.tip_same_as_bise);
+    expect(cell.closest('button')).toBeNull();
+  });
+
+  it('a permission shows only when it is missing', () => {
+    const withMic = (grant: 'allowed' | 'denied'): SetupGauge => ({
+      ...allOn(),
+      rows: allOn().rows.map((r) => (r.id === 'dictation' ? { ...r, state: grant === 'allowed' ? ('on' as const) : ('failed' as const), perms: [{ perm: 'mic' as const, grant }] } : r)),
+    });
+    const r = view('setup', ports(), { gauge: withMic('allowed') });
+    expect(screen.getByTestId('settings.feature.dictation').textContent).not.toContain(settings.onb_perm_mic);
+    r.unmount();
+    view('setup', ports(), { gauge: withMic('denied') });
+    expect(screen.getByTestId('settings.feature.dictation.mark').textContent).toBe(settings.stop_perm({ perm: settings.onb_perm_mic }));
+  });
+
   it('copy report has the providers\' words and never a key', () => {
     const copied: string[] = [];
     view('setup', { ...ports(), copy: (t) => copied.push(t) }, { gauge: gauge() });
+    fireEvent.click(screen.getByTestId('settings.feature.voice_mode').querySelector('.st-row') as Element);
     fireEvent.click(screen.getByTestId('settings.feature.voice_mode.trouble.copy'));
     expect(copied[0]).toContain('no_credit');
     expect(copied[0]).not.toMatch(/sk-|Bearer/);
   });
 
-  it("an expired OpenRouter key: Add an OpenRouter key opens its field to replace it, with the steps; a key that works tests the row again", () => {
+  it("an expired OpenRouter key: one fix line on top, '✗ key expired' on the row; Replace opens its field with the steps; a key that works tests the row again", () => {
     const JEV = 'openrouter/typesafe/jev-1.13';
     const KEYS = 'https://openrouter.ai/settings/keys';
     const failed: SetupGauge = {
@@ -477,8 +509,12 @@ describe('settings · Setup (page models-setup, pick B)', () => {
     const acc: Account[] = [...accounts(), { id: 'openrouter', kind: 'key', label: 'OpenRouter', state: 'signed_in', provider: 'openrouter' }];
     const opened: string[] = [];
     const p = { ...ports(), open: (u: string) => opened.push(u) };
-    const r = view('setup', p, { gauge: failed, accounts: acc });
-    const add = screen.getByTestId('settings.feature.approvals.trouble.fix');
+    const failedNext: SetupGauge = { ...failed, next: { fix: { t: 'add_key', provider: 'openrouter', url: KEYS }, unlocks: ['approvals'] } };
+    const r = view('setup', p, { gauge: failedNext, accounts: acc });
+    expect(screen.getByTestId('settings.fixline').textContent).toContain(settings.fixline_key({ provider: 'OpenRouter', what: settings.short_approvals }));
+    expect(screen.getByTestId('settings.feature.approvals.mark').textContent).toBe(settings.stop_wrong_key);
+    expect(screen.queryByTestId('settings.feature.approvals.fix')).toBeNull();
+    const add = screen.getByTestId('settings.fixline.fix');
     expect(add.textContent).toBe('Replace the OpenRouter key');
     fireEvent.click(add);
     expect(screen.getByTestId('settings.key.field')).toBeTruthy();
@@ -494,7 +530,7 @@ describe('settings · Setup (page models-setup, pick B)', () => {
     fireEvent.keyDown(field, { key: 'Enter' });
     expect(p.sent.at(-1)).toEqual({ cmd: 'provider_use', id: 'openrouter', key: 'sk-or-v1-new' });
     const works = { ev: 'provider_check' as const, id: 'openrouter', name: 'OpenRouter', model: JEV, pasted: true, state: 'works' as const };
-    r.rerender(<Settings page="setup" prefs={prefs()} accounts={acc} projects={projects()} found={found()} computerUse={null} perms={{}} ports={p} gauge={failed} check={works} />);
+    r.rerender(<Settings page="setup" prefs={prefs()} accounts={acc} projects={projects()} found={found()} computerUse={null} perms={{}} ports={p} gauge={failedNext} check={works} />);
     expect(p.sent.at(-1)).toEqual({ cmd: 'setup_test', models: [JEV] });
   });
 
@@ -512,12 +548,18 @@ describe('settings · Setup (page models-setup, pick B)', () => {
     expect(['OpenRouter', 'Anthropic', 'xAI', 'Mistral', 'Groq', 'Unify'].map((n) => `${article(n)} ${n}`)).toEqual(['an OpenRouter', 'an Anthropic', 'an xAI', 'a Mistral', 'a Groq', 'a Unify']);
   });
 
-  it('all green: 7/7, no Next, every mark in ink', () => {
+  it('all green: no fix line, every status in ink', () => {
     view('setup', ports(), { gauge: allOn() });
-    expect(screen.getByTestId('settings.gauge.count').textContent).toContain('7/7');
-    expect(screen.getByTestId('settings.gauge.next').textContent).toBe(settings.gauge_all_set);
-    expect(screen.queryByTestId('settings.gauge.next.fix')).toBeNull();
+    expect(screen.queryByTestId('settings.fixline')).toBeNull();
     expect(document.querySelectorAll('.st-mark.err')).toHaveLength(0);
+  });
+
+  it('the fix line names the roles a fix brings back, joined in words', () => {
+    expect(joinAnd(['Titles', 'Dictation', 'Voice mode'])).toBe(`Titles, Dictation ${settings.list_and} Voice mode`);
+    expect(joinAnd(['Agents'])).toBe('Agents');
+    // only something that stopped earns a line: a feature merely off doesn't
+    const off: SetupGauge = { ...allOn(), next: { fix: { t: 'turn_on', role: 'classify' }, unlocks: ['approvals'] } };
+    expect(fixLine(off)).toBeNull();
   });
 
   it('Try it on dictation: the mic on his click only, stopped after 3 s, then what it heard', () => {
@@ -551,11 +593,12 @@ describe('settings · Setup (page models-setup, pick B)', () => {
     vi.useRealTimers();
   });
 
-  it('/models opens Setup with the roles unfolded; the nav has no Models page any more', () => {
+  it('/models opens Setup on the list (its top); /voice at Dictation and fn', () => {
     view('models', ports(), { gauge: gauge(), roles: [] });
     expect(screen.getByTestId('settings.page.setup')).toBeTruthy();
-    expect(screen.getByTestId('settings.fold.roles').getAttribute('data-open')).toBe('true');
-    expect(focusOf('dictation')).toEqual({ roles: false, at: 'dictation' });
+    expect(screen.getByTestId('settings.roles')).toBeTruthy();
+    expect(focusOf('models')).toBeNull();
+    expect(focusOf('dictation')).toBe('dictation');
   });
 });
 
@@ -597,33 +640,55 @@ describe('which model does what (V17) and a model with no key (L5)', () => {
     releaseHeld();
   });
 
-  it("each role shows its model, where it comes from, and its effort; setting main's effort sends role_set", () => {
+  const OPUS = { model: 'anthropic/claude-opus-5-5', name: 'opus 5.5', provider: 'Anthropic', state: 'on' as const, ms: 1300 };
+  const GAUGE: SetupGauge = {
+    on: 3,
+    of: 3,
+    testing: [],
+    rows: [
+      { id: 'talk', state: 'on', parts: [{ ...OPUS, role: 'main', source: 'config' }] },
+      { id: 'agents', state: 'on', parts: [{ ...OPUS, role: 'agents', source: 'default', follows: 'main' }] },
+      { id: 'dictation', state: 'on', parts: [{ role: 'voice', model: 'mistral/voxtral-mini-latest', name: 'voxtral-mini', provider: 'Mistral', source: 'env', var: 'MISTRAL_VOICE', state: 'on', ms: 400 }] },
+    ],
+  };
+
+  it("each role's model by name, provider faint, raw id in the tip; its picker: the fallback first, the models by provider, the effort in its footer", () => {
     const p = ports();
-    view('models', p, { roles: ROLES, models: MODELS, accounts: ACCOUNTS });
-    const roles = screen.getByTestId('settings.roles');
-    // in the window main is called bise (designer m_43851): its row, agents' line and its fallback say so
-    expect(roles.textContent).toContain(`${settings.role_main_name}${settings.role_main_about} · set here`);
-    expect(roles.textContent).toContain(`${settings.role_agents_about} · ${settings.role_as({ role: settings.role_main_name })}`);
-    expect(roles.textContent).toContain('from your environment');
-    expect(screen.getByTestId('settings.role.main.model').textContent).toContain('opus 5.5');
-    expect(screen.getByTestId('settings.role.agents.model').textContent).toContain(settings.role_as({ role: settings.role_main_name }));
-    expect(screen.getByTestId('settings.role.voice.model').textContent).toBe('mistral/voxtral-mini-latest');
-    expect(screen.getByTestId('settings.role.main.effort.2').className).toContain('on');
-    fireEvent.click(screen.getByTestId('settings.role.main.effort.3'));
-    expect(p.sent).toEqual([{ cmd: 'role_set', role: 'main', effort: 'max' }]);
-    // back to its fallback: no model
-    pickRole('main', FALLBACK);
-    expect(p.sent[1]).toEqual({ cmd: 'role_set', role: 'main', model: null });
+    view('models', p, { gauge: GAUGE, roles: ROLES, models: MODELS, accounts: ACCOUNTS });
+    const main = screen.getByTestId('settings.role.main.model');
+    expect(main.textContent).toBe('opus 5.5Anthropic');
+    expect(main.getAttribute('data-tip')).toBe('anthropic/claude-opus-5-5');
+    expect(screen.getByTestId('settings.feature.talk.mark').textContent).toBe(settings.mark_took({ secs: '1.3' }));
+    // an env var's model: not a button, it says so and the tip has the step
+    const voice = screen.getByTestId('settings.role.voice.model');
+    expect(voice.textContent).toBe(`voxtral-mini${settings.part_set_by({ var: 'MISTRAL_VOICE' })}`);
+    expect(voice.getAttribute('data-tip')).toBe(settings.tip_set_by({ var: 'MISTRAL_VOICE' }));
+    expect(voice.closest('button')).toBeNull();
+    // agents follow bise: their fallback row says so, with the model it resolves to
+    fireEvent.click(screen.getByTestId('settings.role.agents.model'));
+    expect(screen.getByTestId(`settings.role.agents.model.menu.${FALLBACK}`).textContent).toContain(settings.role_as({ role: settings.role_main_name }));
+    fireEvent.click(screen.getByTestId(`settings.role.agents.model.menu.${FALLBACK}`));
+    expect(p.sent).toEqual([{ cmd: 'role_set', role: 'agents', model: null }]);
+    // main's effort: in the picker's footer
+    fireEvent.click(screen.getByTestId('settings.role.main.model'));
+    expect(screen.getByTestId('settings.role.main.model.effort.high').getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(screen.getByTestId('settings.role.main.model.effort.max'));
+    expect(p.sent.at(-1)).toEqual({ cmd: 'role_set', role: 'main', effort: 'max' });
+  });
+
+  it("an effort that isn't its model's default shows on the button", () => {
+    view('models', ports(), { gauge: GAUGE, roles: ROLES.map((r) => (r.role === 'main' ? { ...r, effort: 'max' } : r)), models: MODELS, accounts: ACCOUNTS });
+    expect(screen.getByTestId('settings.role.main.model').textContent).toBe('opus 5.5Anthropic· max');
   });
 
   it('L5: a model whose provider has no key is held, not sent; the setup asks for that provider, its key field open', () => {
     const p = ports();
     const held: Held[] = [];
-    const r = view('models', { ...p, hold: (h) => held.push(h) }, { roles: ROLES, models: MODELS, accounts: ACCOUNTS });
+    const r = view('models', { ...p, hold: (h) => held.push(h) }, { gauge: GAUGE, roles: ROLES, models: MODELS, accounts: ACCOUNTS });
     pickRole('main', 'mistral/devstral-medium-latest');
     expect(p.sent).toEqual([]);
     expect(held).toEqual([{ provider: 'mistral', providerName: 'Mistral', model: 'devstral medium', cmd: { cmd: 'role_set', role: 'main', model: 'mistral/devstral-medium-latest' } }]);
-    r.rerender(<Settings page="models" prefs={prefs()} accounts={ACCOUNTS} projects={projects()} found={found()} computerUse={null} perms={{}} ports={p} roles={ROLES} models={MODELS} held={held[0] ?? null} />);
+    r.rerender(<Settings page="models" prefs={prefs()} accounts={ACCOUNTS} projects={projects()} found={found()} computerUse={null} perms={{}} ports={p} gauge={GAUGE} roles={ROLES} models={MODELS} held={held[0] ?? null} />);
     expect(screen.getByTestId('settings.models.want').textContent).toBe("devstral medium needs Mistral: sign in or add its key here, then it's set.");
     expect(screen.getByTestId<HTMLInputElement>('settings.key.field').type).toBe('password');
     const f = screen.getByTestId<HTMLInputElement>('settings.key.field');
@@ -633,7 +698,7 @@ describe('which model does what (V17) and a model with no key (L5)', () => {
   });
 
   it("a role_set the core refused says so in its words", () => {
-    view('models', ports(), { roles: ROLES, models: MODELS, accounts: ACCOUNTS, roleError: 'no model named x' });
+    view('models', ports(), { gauge: GAUGE, roles: ROLES, models: MODELS, accounts: ACCOUNTS, roleError: 'no model named x' });
     expect(screen.getByTestId('settings.roles.error').textContent).toBe('no model named x');
   });
 });

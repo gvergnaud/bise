@@ -6,22 +6,14 @@
 crate::words! { settings:
     /// the gauge: features that work of all, its ring's label and the nav's badge
     gauge_count(on, of) = "{on}/{of}";
-    /// the gauge's hover tip
-    gauge_tip(on, of) = "{on} of {of} features work";
     /// Test everything's tip: what a test costs
     gauge_test_tip = "a test is one small real call per model: only when you click";
     /// the button that tests every model once (secondary)
     gauge_test_all = "Test everything";
     /// while a test runs
     gauge_testing = "testing…";
-    /// before the next action's words
+    /// before the fix line's words
     gauge_next = "Next";
-    /// every feature works: nothing next
-    gauge_all_set = "everything works.";
-    /// the next action brings back a feature that failed
-    gauge_brings_back(what) = "to bring back {what}";
-    /// the next action turns on a feature that is off
-    gauge_turns_on(what) = "to turn on {what}";
     /// a feature: talk to bise (main's model)
     feat_talk = "Talk to bise";
     /// a feature: the agents main starts
@@ -54,12 +46,6 @@ crate::words! { settings:
     tip_no_images(model) = "off · {model} doesn't read images: pick a model that does";
     /// a mark's tip: on, but better with this (the checker on Jev)
     tip_better(provider) = "works with your small jobs model · Jev through {provider} decides better";
-    /// voice mode's voice: what its check proves
-    tip_key_only(provider) = "the {provider} key answers · the voice itself isn't tested yet";
-    /// a feature's sub line: a permission refused
-    perm_refused = "refused";
-    /// a part's model: where it comes from, an env var
-    part_env(var) = "from {var}";
     /// the fixing buttons
     fix_add_key(a, provider) = "Add {a} {provider} key";
     /// a fixing button: a key that's there failed (refused, expired)
@@ -82,28 +68,6 @@ crate::words! { settings:
     fix_restart = "Restart bise";
     /// a fixing button: allow
     fix_allow(perm) = "Allow {perm}";
-    /// the next action's words (lowercase, after Next)
-    next_add_key(a, provider) = "add {a} {provider} key";
-    /// Next's action, lowercase after Next: a key that's there failed
-    next_replace_key(provider) = "replace the {provider} key";
-    /// Next's action, lowercase after Next: sign in
-    next_sign_in(provider) = "sign in to {provider} again";
-    /// Next's action, lowercase after Next: credit
-    next_credit(provider) = "add credit on {provider}";
-    /// Next's action, lowercase after Next: pick model
-    next_pick_model = "pick another model";
-    /// Next's action, lowercase after Next: remove env
-    next_remove_env(var) = "remove {var}";
-    /// Next's action, lowercase after Next: allow mic
-    next_allow_mic = "allow the microphone";
-    /// Next's action, lowercase after Next: turn on
-    next_turn_on(what) = "turn on {what}";
-    /// Next's action, lowercase after Next: test again
-    next_test_again = "test again";
-    /// Next's action, lowercase after Next: restart
-    next_restart = "restart bise";
-    /// Next's action, lowercase after Next: allow
-    next_allow(perm) = "allow {perm}";
     /// troubleshooting: why, from the check's verdict (keycheck::Why)
     why_no_key(provider) = "there's no {provider} key.";
     /// a word of the gauge: wrong key
@@ -130,8 +94,6 @@ crate::words! { settings:
     trouble_still(what, provider) = "{what} still work: it goes through {provider}.";
     /// troubleshooting: an env var wins over the setting, and where to remove it
     trouble_env(var) = "{var} is set in your environment and wins over this setting. remove it from your shell's profile (~/.zshrc or ~/.zprofile), then restart bise.";
-    /// troubleshooting: another way (the roles table)
-    trouble_other = "Change the model";
     /// troubleshooting: copy a report (never a key nor a token in it)
     trouble_copy = "Copy report";
     /// after the copy
@@ -144,8 +106,80 @@ crate::words! { settings:
     try_heard(text) = "heard: “{text}”";
     /// Try it heard no word
     try_nothing = "✗ heard nothing";
-    /// the folded parts under the features
-    fold_roles = "Which model does what";
+    /// the list (page models-settings, pick A): what each role does, its plain line
+    about_talk = "talks with you and starts the agents";
+    /// the list: agents' line
+    about_agents = "runs your tasks";
+    /// the list: small jobs' line
+    about_small = "names threads, sums them up";
+    /// the list: images' line
+    about_vision = "reads screens and images";
+    /// the list: dictation's line
+    about_dictation = "turns your voice into text";
+    /// the list: voice mode's line
+    about_voice_mode = "talks with you out loud";
+    /// the list: auto approvals' line
+    about_approvals = "checks risky commands";
+    /// voice mode's sub-rows: the model that listens
+    part_hears = "hears";
+    /// voice mode's sub-rows: the model that answers (bise's)
+    part_thinks = "thinks";
+    /// voice mode's sub-rows: the voice
+    part_speaks = "speaks";
+    /// a role with no model (the checker off)
+    part_none = "none";
+    /// a model that runs bise's model, after its name (faint)
+    part_same_as_bise = "same as bise";
+    /// its tip
+    tip_same_as_bise = "uses bise's model: change it on bise's row";
+    /// a model an env var sets, on its row
+    part_set_by(var) = "set by {var}";
+    /// its tip: the step that hands it back to settings
+    tip_set_by(var) = "to change it here, remove {var} from your shell and restart bise";
+    /// a role in the fix line's sentence: bise's own
+    short_talk = "bise";
+    /// a role in the fix line's sentence: agents
+    short_agents = "Agents";
+    /// a role in the fix line's sentence: small jobs
+    short_small = "Titles";
+    /// a role in the fix line's sentence: images
+    short_vision = "Images";
+    /// a role in the fix line's sentence: dictation
+    short_dictation = "Dictation";
+    /// a role in the fix line's sentence: voice mode
+    short_voice_mode = "Voice mode";
+    /// a role in the fix line's sentence: auto approvals
+    short_approvals = "Auto approvals";
+    /// the model picker: a model whose provider has no key or sign-in yet
+    pick_setup_first = "set up first";
+    /// a role's status: why it stopped, from its verdict (short, after ✗)
+    stop_no_key = "✗ no key";
+    /// a role's status: the key was refused or the sign-in expired
+    stop_wrong_key = "✗ key expired";
+    /// a role's status: no credit left
+    stop_no_credit = "✗ no credit";
+    /// a role's status: the model is gone
+    stop_model = "✗ model gone";
+    /// a role's status: the key may not use the model
+    stop_no_access = "✗ no access";
+    /// a role's status: the provider didn't answer
+    stop_unreachable = "✗ no answer";
+    /// a role's status: the provider needs a setting
+    stop_config = "✗ needs a setting";
+    /// a role's status: no model picked
+    stop_no_model = "✗ no model";
+    /// a role's status: a permission refused (its name)
+    stop_perm(perm) = "✗ {perm} refused";
+    /// a role's status: bise's home folder is gone
+    stop_home_gone = "✗ home folder gone";
+    /// a role's status: a permission not asked yet (its name)
+    off_perm(perm) = "○ needs {perm}";
+    /// the fix line on top, a key that failed: the roles it stops
+    fixline_key(provider, what) = "your {provider} key expired: {what} stopped.";
+    /// the fix line on top: the roles that stopped
+    fixline_stopped(what) = "{what} stopped.";
+    /// a list's last joint ("Titles, Dictation and Voice mode")
+    list_and = "and";
     /// a word of the gauge: accounts
     fold_accounts = "Accounts and keys";
 }

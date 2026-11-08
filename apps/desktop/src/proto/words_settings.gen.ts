@@ -13,7 +13,7 @@ export const settings = {
   /** the nav's page: setup */
   page_setup: "Setup",
   /** setup's hero sentence */
-  page_setup_sub: "what works in bise, what's left, and the one thing that turns on the most.",
+  page_setup_sub: "which model each part of bise uses, and how it answers.",
   /** the nav's page: voice */
   page_voice: "fn and dictation",
   /** voice's hero sentence */
@@ -386,10 +386,6 @@ export const settings = {
   key_after_test: (a: { what: string | number }): string => "bise checks it with one small call and saves it only if it works, then tests " + String(a.what) + " again.",
   /** the key field's guide: replacing a key */
   key_old_stays: "Your old key stays until the new one works.",
-  /** a role's model: set in settings */
-  role_set_here: "set here",
-  /** a role's model: from his environment */
-  role_from_env: "from your environment",
   /** a role's model: the default */
   role_default: "the default",
   /** a role's picker label */
@@ -398,20 +394,10 @@ export const settings = {
   role_as: (a: { role: string | number }): string => "as " + String(a.role),
   /** settings › models: the main role's row title (in the window, main is called bise; designer m_43851) */
   role_main_name: "bise",
-  /** settings › models: the main role's line */
-  role_main_about: "your lead in every project",
-  /** settings › models: the agents role's line */
-  role_agents_about: "the agents bise starts",
-  /** a model whose provider needs its setup first */
-  role_setup_first: (a: { provider: string | number }): string => String(a.provider) + ": set up first",
   /** the roles' group */
   roles_title: "Which model does what",
   /** the roles' help */
   roles_help: "the terminal's /models shows the same",
-  /** setup check: a permission allowed */
-  perm_allowed: "allowed",
-  /** setup check: a permission not asked */
-  perm_not_asked: "not asked yet",
   /** setup check: ask a permission */
   perm_allow: "allow",
   /** setup check: bise's home gone */
@@ -1224,22 +1210,14 @@ export const settings = {
   first_open_failed: (a: { url: string | number }): string => "could not open " + String(a.url),
   /** the gauge: features that work of all, its ring's label and the nav's badge */
   gauge_count: (a: { on: string | number; of: string | number }): string => String(a.on) + "/" + String(a.of),
-  /** the gauge's hover tip */
-  gauge_tip: (a: { on: string | number; of: string | number }): string => String(a.on) + " of " + String(a.of) + " features work",
   /** Test everything's tip: what a test costs */
   gauge_test_tip: "a test is one small real call per model: only when you click",
   /** the button that tests every model once (secondary) */
   gauge_test_all: "Test everything",
   /** while a test runs */
   gauge_testing: "testing…",
-  /** before the next action's words */
+  /** before the fix line's words */
   gauge_next: "Next",
-  /** every feature works: nothing next */
-  gauge_all_set: "everything works.",
-  /** the next action brings back a feature that failed */
-  gauge_brings_back: (a: { what: string | number }): string => "to bring back " + String(a.what),
-  /** the next action turns on a feature that is off */
-  gauge_turns_on: (a: { what: string | number }): string => "to turn on " + String(a.what),
   /** a feature: talk to bise (main's model) */
   feat_talk: "Talk to bise",
   /** a feature: the agents main starts */
@@ -1272,12 +1250,6 @@ export const settings = {
   tip_no_images: (a: { model: string | number }): string => "off · " + String(a.model) + " doesn't read images: pick a model that does",
   /** a mark's tip: on, but better with this (the checker on Jev) */
   tip_better: (a: { provider: string | number }): string => "works with your small jobs model · Jev through " + String(a.provider) + " decides better",
-  /** voice mode's voice: what its check proves */
-  tip_key_only: (a: { provider: string | number }): string => "the " + String(a.provider) + " key answers · the voice itself isn't tested yet",
-  /** a feature's sub line: a permission refused */
-  perm_refused: "refused",
-  /** a part's model: where it comes from, an env var */
-  part_env: (a: { var: string | number }): string => "from " + String(a.var),
   /** the fixing buttons */
   fix_add_key: (a: { a: string | number; provider: string | number }): string => "Add " + String(a.a) + " " + String(a.provider) + " key",
   /** a fixing button: a key that's there failed (refused, expired) */
@@ -1300,28 +1272,6 @@ export const settings = {
   fix_restart: "Restart bise",
   /** a fixing button: allow */
   fix_allow: (a: { perm: string | number }): string => "Allow " + String(a.perm),
-  /** the next action's words (lowercase, after Next) */
-  next_add_key: (a: { a: string | number; provider: string | number }): string => "add " + String(a.a) + " " + String(a.provider) + " key",
-  /** Next's action, lowercase after Next: a key that's there failed */
-  next_replace_key: (a: { provider: string | number }): string => "replace the " + String(a.provider) + " key",
-  /** Next's action, lowercase after Next: sign in */
-  next_sign_in: (a: { provider: string | number }): string => "sign in to " + String(a.provider) + " again",
-  /** Next's action, lowercase after Next: credit */
-  next_credit: (a: { provider: string | number }): string => "add credit on " + String(a.provider),
-  /** Next's action, lowercase after Next: pick model */
-  next_pick_model: "pick another model",
-  /** Next's action, lowercase after Next: remove env */
-  next_remove_env: (a: { var: string | number }): string => "remove " + String(a.var),
-  /** Next's action, lowercase after Next: allow mic */
-  next_allow_mic: "allow the microphone",
-  /** Next's action, lowercase after Next: turn on */
-  next_turn_on: (a: { what: string | number }): string => "turn on " + String(a.what),
-  /** Next's action, lowercase after Next: test again */
-  next_test_again: "test again",
-  /** Next's action, lowercase after Next: restart */
-  next_restart: "restart bise",
-  /** Next's action, lowercase after Next: allow */
-  next_allow: (a: { perm: string | number }): string => "allow " + String(a.perm),
   /** troubleshooting: why, from the check's verdict (keycheck::Why) */
   why_no_key: (a: { provider: string | number }): string => "there's no " + String(a.provider) + " key.",
   /** a word of the gauge: wrong key */
@@ -1348,8 +1298,6 @@ export const settings = {
   trouble_still: (a: { what: string | number; provider: string | number }): string => String(a.what) + " still work: it goes through " + String(a.provider) + ".",
   /** troubleshooting: an env var wins over the setting, and where to remove it */
   trouble_env: (a: { var: string | number }): string => String(a.var) + " is set in your environment and wins over this setting. remove it from your shell's profile (~/.zshrc or ~/.zprofile), then restart bise.",
-  /** troubleshooting: another way (the roles table) */
-  trouble_other: "Change the model",
   /** troubleshooting: copy a report (never a key nor a token in it) */
   trouble_copy: "Copy report",
   /** after the copy */
@@ -1362,8 +1310,80 @@ export const settings = {
   try_heard: (a: { text: string | number }): string => "heard: “" + String(a.text) + "”",
   /** Try it heard no word */
   try_nothing: "✗ heard nothing",
-  /** the folded parts under the features */
-  fold_roles: "Which model does what",
+  /** the list (page models-settings, pick A): what each role does, its plain line */
+  about_talk: "talks with you and starts the agents",
+  /** the list: agents' line */
+  about_agents: "runs your tasks",
+  /** the list: small jobs' line */
+  about_small: "names threads, sums them up",
+  /** the list: images' line */
+  about_vision: "reads screens and images",
+  /** the list: dictation's line */
+  about_dictation: "turns your voice into text",
+  /** the list: voice mode's line */
+  about_voice_mode: "talks with you out loud",
+  /** the list: auto approvals' line */
+  about_approvals: "checks risky commands",
+  /** voice mode's sub-rows: the model that listens */
+  part_hears: "hears",
+  /** voice mode's sub-rows: the model that answers (bise's) */
+  part_thinks: "thinks",
+  /** voice mode's sub-rows: the voice */
+  part_speaks: "speaks",
+  /** a role with no model (the checker off) */
+  part_none: "none",
+  /** a model that runs bise's model, after its name (faint) */
+  part_same_as_bise: "same as bise",
+  /** its tip */
+  tip_same_as_bise: "uses bise's model: change it on bise's row",
+  /** a model an env var sets, on its row */
+  part_set_by: (a: { var: string | number }): string => "set by " + String(a.var),
+  /** its tip: the step that hands it back to settings */
+  tip_set_by: (a: { var: string | number }): string => "to change it here, remove " + String(a.var) + " from your shell and restart bise",
+  /** a role in the fix line's sentence: bise's own */
+  short_talk: "bise",
+  /** a role in the fix line's sentence: agents */
+  short_agents: "Agents",
+  /** a role in the fix line's sentence: small jobs */
+  short_small: "Titles",
+  /** a role in the fix line's sentence: images */
+  short_vision: "Images",
+  /** a role in the fix line's sentence: dictation */
+  short_dictation: "Dictation",
+  /** a role in the fix line's sentence: voice mode */
+  short_voice_mode: "Voice mode",
+  /** a role in the fix line's sentence: auto approvals */
+  short_approvals: "Auto approvals",
+  /** the model picker: a model whose provider has no key or sign-in yet */
+  pick_setup_first: "set up first",
+  /** a role's status: why it stopped, from its verdict (short, after ✗) */
+  stop_no_key: "✗ no key",
+  /** a role's status: the key was refused or the sign-in expired */
+  stop_wrong_key: "✗ key expired",
+  /** a role's status: no credit left */
+  stop_no_credit: "✗ no credit",
+  /** a role's status: the model is gone */
+  stop_model: "✗ model gone",
+  /** a role's status: the key may not use the model */
+  stop_no_access: "✗ no access",
+  /** a role's status: the provider didn't answer */
+  stop_unreachable: "✗ no answer",
+  /** a role's status: the provider needs a setting */
+  stop_config: "✗ needs a setting",
+  /** a role's status: no model picked */
+  stop_no_model: "✗ no model",
+  /** a role's status: a permission refused (its name) */
+  stop_perm: (a: { perm: string | number }): string => "✗ " + String(a.perm) + " refused",
+  /** a role's status: bise's home folder is gone */
+  stop_home_gone: "✗ home folder gone",
+  /** a role's status: a permission not asked yet (its name) */
+  off_perm: (a: { perm: string | number }): string => "○ needs " + String(a.perm),
+  /** the fix line on top, a key that failed: the roles it stops */
+  fixline_key: (a: { provider: string | number; what: string | number }): string => "your " + String(a.provider) + " key expired: " + String(a.what) + " stopped.",
+  /** the fix line on top: the roles that stopped */
+  fixline_stopped: (a: { what: string | number }): string => String(a.what) + " stopped.",
+  /** a list's last joint ("Titles, Dictation and Voice mode") */
+  list_and: "and",
   /** a word of the gauge: accounts */
   fold_accounts: "Accounts and keys",
   /** a key not removed */

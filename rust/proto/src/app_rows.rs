@@ -928,6 +928,10 @@ pub struct FeaturePart {
     pub role: RoleId,
     /// "provider/id"; "" none (voice mode's voice when no provider speaks)
     pub model: String,
+    /// the model's name for people ("opus 5.5", bise_catalog's
+    /// long_name); "" when `model` is ""
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub name: String,
     /// its provider's name for people ("Mistral")
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub provider: String,

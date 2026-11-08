@@ -12,7 +12,7 @@ crate::words! { settings:
     /// the nav's page: setup
     page_setup = "Setup";
     /// setup's hero sentence
-    page_setup_sub = "what works in bise, what's left, and the one thing that turns on the most.";
+    page_setup_sub = "which model each part of bise uses, and how it answers.";
     /// the nav's page: voice
     page_voice = "fn and dictation";
     /// voice's hero sentence

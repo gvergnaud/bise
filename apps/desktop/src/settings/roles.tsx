@@ -1,121 +1,224 @@
-// Which model does what (bar V17, the TUI's /models roles screen, onboarding/roles.rs): one row
-// per role (main, agents, voice...) with its model and its reasoning effort, set through the
-// core's role_set (it writes config.toml's [roles]; the roles event comes back after each set, so
-// the TUI's /models shows the same). A chat model whose provider has no key opens that provider's
-// setup first (bar L5, hold.ts). Pure: draws the core's roles and models. Owner: amb-kit.
-import type { AppCmd, Model, RoleRow } from '@/proto';
-import { Group, Help, Seg, Select, type GroupItem } from '@/ds';
+// Which model does what (page models-settings, Gabriel's pick A): settings · Setup's one list, open
+// and first. One row per role: its name and a plain line, its model by name (provider faint, the
+// raw id in the tip) as a button that opens the picker in place, one right-aligned status; Voice
+// mode as hears / thinks / speaks. On top, only when something stopped, one fix line (the core's
+// Next); each row it stops says why in its status. A failed row opens its troubleshooting on his
+// click. Nothing is tested at open: Test everything is his click, a role is tested when it changes
+// (the core's role_set). The words are roleList.ts's; the TUI's /models says the same.
+// Owner: setup-page.
+import { useState, type ReactNode } from 'react';
+import type { AppCmd, FeatureId, FeaturePart, FeatureRow, Model, RoleRow, SetupFix, SetupGauge } from '@/proto';
+import { Act, Button, Dropdown, Help, PickerSeg, tipAttrs } from '@/ds';
+import { cx } from '@/ds/cx';
 import { settings } from '@/proto/words.gen';
+import { Trouble, TryIt, fixButton, type GaugePorts } from './gauge';
 import { modelRow } from './hold';
-import { chromeCase } from './chrome';
+import { ABOUT, FALLBACK, ROW_NAME, fixLine, modelView, ownFix, partName, partStatus, partsInOrder, pickGroups, rowStatus, type Status } from './roleList';
 
-/**
- * A role's name in the window, from its id (typed): main is called bise there (designer m_43851);
- * the other roles keep the core's name. Pure.
- */
-export function roleName(id: string, core: string): string {
-  return id === 'main' ? settings.role_main_name : core;
-}
-
-/** A role's line in the window, from its id: main's and agents' say who bise is; the others the core's. Pure. */
-export function roleAbout(r: RoleRow): string {
-  if (r.role === 'main') return settings.role_main_about;
-  if (r.role === 'agents') return settings.role_agents_about;
-  return r.about;
-}
-
-/** Where a role's model comes from, in his words ('as bise' when it follows main). */
-export function roleSource(r: RoleRow): string {
-  if (r.source === 'config') return settings.role_set_here;
-  if (r.source === 'env') return settings.role_from_env;
-  return r.follows != null && r.follows !== '' ? settings.role_as({ role: roleName(r.follows, r.follows) }) : settings.role_default;
-}
-
-/** The efforts a role can take: its model's (none: the model takes no effort). */
-export function effortsOf(r: RoleRow, models: readonly Model[]): readonly string[] {
-  return r.kind === 'chat' ? (modelRow(r.model, models)?.efforts ?? []) : [];
-}
-
-/** The effort a role runs: its own, else its model's default. */
-export function effortOf(r: RoleRow, models: readonly Model[]): string | null {
-  return r.effort ?? modelRow(r.model, models)?.default_effort ?? null;
-}
-
-/** the picker's value for "back to its fallback" (role_set with no model); Radix Select takes no
- * empty value, so it is a word no model id can be */
-export const FALLBACK = '(fallback)';
-
-export interface RolesProps {
+export interface RoleListProps {
+  g: SetupGauge;
   roles: readonly RoleRow[];
   models: readonly Model[];
   /** a role_set the core refused (its words) */
   error?: string | null;
-  /** set a role: the command, and the model's name when it sets a model (L5 checks its provider) */
-  set: (cmd: AppCmd, model: string | null) => void;
-  /** its group's own head (none under a fold that says it: settings · Setup) */
-  titled?: boolean;
+  ports: GaugePorts & {
+    /** set a role: the command, and the model it sets (a model whose provider isn't set up waits: hold.ts) */
+    set: (cmd: AppCmd, model: string | null) => void;
+  };
+  /** the row the route lands on (/voice: dictation) */
+  at?: FeatureId | null;
 }
 
-export function Roles({ roles, models, error = null, set, titled = true }: RolesProps) {
-  if (roles.length === 0) return null;
-  const items: GroupItem[] = roles.map((r) => {
-    const efforts = effortsOf(r, models);
-    const effort = effortOf(r, models);
-    const chat = r.kind === 'chat';
-    const known = models.some((m) => m.id === r.model);
-    return {
-      id: r.role,
-      // the core's role name is a row title: sentence case on screen (ui-review m_43805), bise as written (designer m_43882)
-      label: chromeCase(roleName(r.role, r.name)),
-      sub: `${roleAbout(r)} · ${roleSource(r)}`,
-      control: (
-        <span className="settings-row-acts">
-          {chat ? (
-            <span className="settings-pick">
-              <Select
-                label={settings.role_model({ role: roleName(r.role, r.name) })}
-                value={r.source === 'default' ? FALLBACK : r.model}
-                options={[
-                  { value: FALLBACK, label: r.follows != null && r.follows !== '' ? settings.role_as({ role: roleName(r.follows, r.follows) }) : settings.role_default },
-                  ...(!known && r.source !== 'default' ? [{ value: r.model, label: r.model }] : []),
-                  ...models
-                    .filter((m) => m.alias_of == null || m.alias_of === '')
-                    .map((m) => ({ value: m.id, label: m.label, hint: m.key_ready === false ? settings.role_setup_first({ provider: m.provider }) : undefined })),
-                ]}
-                onChange={(v) => {
-                  set({ cmd: 'role_set', role: r.role, model: v === FALLBACK ? null : v }, v === FALLBACK ? null : v);
-                }}
-                testId={`settings.role.${r.role}.model`}
-              />
-            </span>
-          ) : (
-            <span className="v" data-testid={`settings.role.${r.role}.model`}>
-              {r.model}
-            </span>
-          )}
-          {efforts.length > 0 && (
-            <Seg
-              items={efforts}
-              on={Math.max(0, efforts.indexOf(effort ?? ''))}
-              onPick={(i) => {
-                const e = efforts[i];
-                if (e !== undefined && e !== effort) set({ cmd: 'role_set', role: r.role, effort: e }, null);
+/** A status cell: its words in its tone, its tip. */
+function StatusMark({ s, testId }: { s: Status; testId: string }) {
+  return (
+    <span className={cx('st-mark', s.tone)} {...tipAttrs(s.tip)} data-testid={testId}>
+      {s.text}
+    </span>
+  );
+}
+
+/** A role's model: a button that opens its picker in place when the row owns the role, else its
+ * name with why it isn't one (bise's model, an env var), the raw id or the step in the tip. */
+function ModelCell({ r, p, props, testId }: { r: FeatureRow; p: FeaturePart; props: RoleListProps; testId: string }) {
+  const { roles, models, ports } = props;
+  const v = modelView(r, p, roles, models);
+  const role = v.role === null ? undefined : roles.find((x) => x.role === v.role);
+  const words: ReactNode = (
+    <>
+      <span className="st-mn">{v.name}</span>
+      {v.faint !== '' && <span className="st-mp">{v.faint}</span>}
+      {v.effort !== null && <span className="st-mp">· {v.effort}</span>}
+    </>
+  );
+  if (role === undefined) {
+    return (
+      <span className="st-model" {...tipAttrs(v.tip)} data-testid={testId}>
+        {words}
+      </span>
+    );
+  }
+  const efforts = modelRow(role.model, models)?.efforts ?? [];
+  const effort = role.effort ?? modelRow(role.model, models)?.default_effort ?? null;
+  return (
+    <span className="st-model-pick">
+      <Dropdown
+        label={words}
+        extra="st-pick"
+        name={settings.role_model({ role: ROW_NAME[r.id] })}
+        tip={v.tip}
+        align="end"
+        groups={pickGroups(role, roles, models)}
+        {...(efforts.length > 0
+          ? {
+              footer: (
+                <PickerSeg
+                  head={settings.roles_effort_title}
+                  items={efforts}
+                  on={effort}
+                  onPick={(e) => {
+                    if (e !== effort) ports.set({ cmd: 'role_set', role: role.role, effort: e }, null);
+                  }}
+                  testId={`${testId}.effort`}
+                />
+              ),
+            }
+          : {})}
+        onPick={(id) => {
+          const model = id === FALLBACK ? null : id;
+          ports.set({ cmd: 'role_set', role: role.role, model }, model);
+        }}
+        testId={testId}
+      />
+    </span>
+  );
+}
+
+/** One row: name and line, model, status, its own fix; Voice mode's parts under it. */
+function Row({ r, props, line, open, toggle }: { r: FeatureRow; props: RoleListProps; line: { fix: SetupFix } | null; open: boolean; toggle: () => void }) {
+  const { g, ports } = props;
+  const one = r.parts.length === 1 ? r.parts[0] : undefined;
+  const status = rowStatus(r, g);
+  const mark = status !== null ? <StatusMark s={status} testId={`settings.feature.${r.id}.mark`} /> : null;
+  const fix = ownFix(r, line);
+  const better = r.fix == null && r.better != null && r.better.t === 'allow_perm' ? r.better : null;
+  const failed = r.state === 'failed';
+  return (
+    <div className={cx('st-feature', props.at === r.id && 'is-at')} data-state={r.state} data-testid={`settings.feature.${r.id}`}>
+      <div
+        className="st-row"
+        role={failed ? 'button' : undefined}
+        aria-expanded={failed ? open : undefined}
+        onClick={
+          failed
+            ? (e) => {
+                // the row's own controls (its model and picker, a portal React bubbles through, its fix) never toggle it
+                const t = e.target as Element;
+                if (e.currentTarget.contains(t) && t.closest('.st-cell, .st-act') === null) toggle();
+              }
+            : undefined
+        }
+      >
+        <span className="st-name">
+          {ROW_NAME[r.id]}
+          <span className="st-sub">{ABOUT[r.id]}</span>
+        </span>
+        <span className="st-cell">{one !== undefined && <ModelCell r={r} p={one} props={props} testId={modelTestId(r, one)} />}</span>
+        <span className="st-status">
+          {r.id === 'dictation' && r.state === 'on' && ports.tryIt !== undefined ? <TryIt port={ports.tryIt} mark={mark} /> : mark}
+        </span>
+        <span className="st-act">
+          {fix !== null && !open && (
+            <Button
+              size="sm"
+              onClick={() => {
+                // an env var's model: the troubleshooting says where to remove it
+                if (fix.t === 'remove_env') toggle();
+                else ports.fix(fix, r.id);
               }}
-              testId={`settings.role.${r.role}.effort`}
-            />
+              testId={`settings.feature.${r.id}.fix`}
+            >
+              {fixButton(fix, g)}
+            </Button>
+          )}
+          {better !== null && (
+            <Act onClick={() => { ports.fix(better, r.id); }} testId={`settings.feature.${r.id}.better`}>
+              {fixButton(better, g)}
+            </Act>
           )}
         </span>
-      ),
-    };
-  });
+      </div>
+      {one === undefined &&
+        partsInOrder(r).map((p) => (
+          <div key={p.role} className="st-row st-part" data-testid={`settings.feature.${r.id}.${p.role}`}>
+            <span className="st-name">{partName(p)}</span>
+            <span className="st-cell">
+              <ModelCell r={r} p={p} props={props} testId={modelTestId(r, p)} />
+            </span>
+            <span className="st-status">
+              <StatusMark s={partStatus(p, g)} testId={`settings.feature.${r.id}.${p.role}.mark`} />
+            </span>
+            <span className="st-act" />
+          </div>
+        ))}
+      {open && <Trouble r={r} g={g} ports={ports} />}
+    </div>
+  );
+}
+
+/** A model cell's test id: the role's own picker (settings.role.<role>.model), else the row's. */
+function modelTestId(r: FeatureRow, p: FeaturePart): string {
+  if (r.parts.length > 1) return `settings.feature.${r.id}.${p.role}.model`;
+  return r.id === 'vision' ? `settings.feature.${r.id}.model` : `settings.role.${p.role}.model`;
+}
+
+export function RoleList(props: RoleListProps) {
+  const { g, ports, error = null } = props;
+  const [opened, setOpened] = useState<ReadonlySet<FeatureId>>(new Set());
+  const line = fixLine(g);
+  const testing = (g.testing?.length ?? 0) > 0;
   return (
-    <>
-      <Group {...(titled ? { title: settings.roles_title } : {})} testId="settings.roles" items={items} help={settings.roles_help} />
+    <section className="st-list" data-testid="settings.roles">
+      <div className="st-list-head">
+        <h3 className="st-list-title">{settings.roles_title}</h3>
+        <span {...tipAttrs(settings.gauge_test_tip, undefined, 'below')}>
+          <Act disabled={testing} onClick={() => { ports.test(); }} testId="settings.gauge.test">
+            {testing ? settings.gauge_testing : settings.gauge_test_all}
+          </Act>
+        </span>
+      </div>
+      {line !== null && (
+        <div className="st-fixline" data-testid="settings.fixline">
+          <span className="w">
+            <b>{settings.gauge_next}</b> {line.text}
+          </span>
+          <Button kind="pri" size="sm" onClick={() => { ports.fix(line.fix, null); }} testId="settings.fixline.fix">
+            {fixButton(line.fix, g)}
+          </Button>
+        </div>
+      )}
+      <div className="st-rows" data-testid="settings.features">
+        {g.rows.map((r) => (
+          <Row
+            key={r.id}
+            r={r}
+            props={props}
+            line={line}
+            open={opened.has(r.id)}
+            toggle={() => {
+              const next = new Set(opened);
+              if (!next.delete(r.id)) next.add(r.id);
+              setOpened(next);
+            }}
+          />
+        ))}
+      </div>
       {error !== null && (
         <Help err testId="settings.roles.error">
           {error}
         </Help>
       )}
-    </>
+      <p className="st-help">{settings.roles_help}</p>
+    </section>
   );
 }

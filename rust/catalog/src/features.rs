@@ -157,8 +157,10 @@ fn part(setup: &Setup, f: &Facts, r: RoleId) -> Part {
     let (model, source, var, follows) = model_of(setup, f, r);
     let c = &setup.catalog;
     let required = matches!(r, RoleId::Main | RoleId::Agents | RoleId::Small);
-    let mut row = FeaturePart { role: r, model: model.clone(), provider: String::new(), source, var, follows, state: FeatureState::On, why: None, said: None, ms: None, tested_at: None };
     let off = model.trim().is_empty() || model == roles::CHECKER_OFF || model == "none";
+    // the model's name for people: none when there is no model
+    let name = if off { String::new() } else { crate::names::long_name(&model) };
+    let mut row = FeaturePart { role: r, model: model.clone(), name, provider: String::new(), source, var, follows, state: FeatureState::On, why: None, said: None, ms: None, tested_at: None };
     if off {
         row.state = FeatureState::Off;
         let fix = match r {

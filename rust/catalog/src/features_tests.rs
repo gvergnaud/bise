@@ -52,6 +52,10 @@ fn the_test_world_is_5_of_7_and_next_adds_credit_on_mistral() {
     let vm = g.rows.iter().find(|r| r.id == F::VoiceMode).unwrap();
     let tts = vm.parts.iter().find(|p| p.role == RoleId::Tts).unwrap();
     assert_eq!((tts.why, tts.said.as_deref(), tts.ms), (Some(CheckWhy::NoCredit), Some("no credit left"), Some(300)));
+    // each part's model by its name for people (names::long_name), the checker off has none
+    assert_eq!(tts.name, crate::names::long_name("mistral/voxtral-mini-tts-2603"));
+    let approvals = g.rows.iter().find(|r| r.id == F::Approvals).unwrap();
+    assert_eq!(approvals.parts[0].name, "", "the checker off has no model, so no name");
 }
 
 #[test]
