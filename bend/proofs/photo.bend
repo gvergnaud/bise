@@ -35,14 +35,32 @@ def append_split(+p: List<&2, Maybe<&2, HM.Ev>>, +t: List<&2, Maybe<&2, HM.Ev>>,
       append_split(rest, t, CO.replay_one(CO.replay_fresh(st, e), st, e), 1n+i, Bool.pick(List<&2, Nat>, CO.replay_fresh(st, e), sk, i <> sk))
 
 def Laws.photo_is_the_state(d, r, f, q):
-  %Equal.sym(Maybe<&2, J.Json>, HX.R.need(r), None{}, q) : {P.photo.go(_, d) == Some{HSC.St.photo_json(d)} : Maybe<&2, J.Json>}
+  %Equal.sym(Maybe<&2, J.Json>, HX.R.need(r), None{}, q) : {P.photo.go(_, d) == Some{d} : Maybe<&2, HS.St>}
   {==}
 
 def Laws.restore_keeps_the_state(d, x, r):
-  %HSC.St.photo_round(d) : {P.restore(HC.Hub{x, r, True{}}, HSC.St.photo_json(d)) == Some{HC.Hub{_, P.fresh(HX.R.workspace(r)), False{}}} : Maybe<&2, HC.Hub>}
+  %HSC.St.photo_round(d) : {P.restore(HC.Hub{x, r, HC.Fresh{}}, HSC.St.photo_json(d)) == Some{HC.Hub{_, P.fresh(HX.R.workspace(r)), HC.Restored{}}} : Maybe<&2, HC.Hub>}
   {==}
 
 def Laws.restore_only_fresh(x, r, j):
+  {==}
+
+def Laws.restore_once(x, r, j):
+  {==}
+
+def Laws.restore_more_prepends(a, x, r):
+  %HSC.St.photo_round(a) : {P.restore_more(HC.Hub{x, r, HC.Restored{}}, HSC.St.photo_json(a)) == Some{HC.Hub{HSC.St.slice_join(_, x), r, HC.Restored{}}} : Maybe<&2, HC.Hub>}
+  {==}
+
+def Laws.restore_more_not_fresh(x, r, j):
+  {==}
+
+def Laws.restore_more_not_live(x, r, j):
+  {==}
+
+def Laws.restore_in_slices(k, st, r):
+  %HSC.St.slice_round(k, st) : {P.restore_more(HC.Hub{HSC.St.slice_drop(k, st), r, HC.Restored{}}, HSC.St.photo_json(HSC.St.slice_take(k, st))) == Some{HC.Hub{_, r, HC.Restored{}}} : Maybe<&2, HC.Hub>}
+  %HSC.St.photo_round(HSC.St.slice_take(k, st)) : {P.restore_more(HC.Hub{HSC.St.slice_drop(k, st), r, HC.Restored{}}, HSC.St.photo_json(HSC.St.slice_take(k, st))) == Some{HC.Hub{HSC.St.slice_join(_, HSC.St.slice_drop(k, st)), r, HC.Restored{}}} : Maybe<&2, HC.Hub>}
   {==}
 
 def Laws.replay_from_photo(p, t, st):

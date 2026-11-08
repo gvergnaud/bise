@@ -54,11 +54,13 @@ type Cut is Data:
 type Flow is Type:
   Go{h: H.Hub}
 
-# what one input answers: a line, or view_all's lines (view.bend
-# all_head: never one line holding the whole view, c6 (c))
+# what one input answers: a line, view_all's lines (view.bend all_head:
+# never one line holding the whole view, c6 (c)), or the photo's lines
+# (the state left to send, PH.SLICE records a line)
 type Out is Data:
   One{line: String}
   Views{head: J.Json, arch: List<&2, S.Agent>, msgs: List<&2, S.MRec>}
+  Photos{st: S.St}
 
 def fx_json(f: X.Fx) -> J.Json:
   match f:
@@ -107,7 +109,7 @@ def replay(+h: H.Hub, m: Maybe<&2, M.Ev>) -> H.Hub & String:
       (h, J.stringify(L.answer_skipped(True{})))
     case Some{+e}:
       +ok = CO.replay_fresh(H.Hub.d(h), e)
-      (H.Hub{CO.replay_one(ok, H.Hub.d(h), e), H.Hub.r(h), False{}}, J.stringify(Bool.pick(J.Json, ok, L.answer_done(), L.answer_skipped(True{}))))
+      (H.Hub{CO.replay_one(ok, H.Hub.d(h), e), H.Hub.r(h), H.Live{}}, J.stringify(Bool.pick(J.Json, ok, L.answer_done(), L.answer_skipped(True{}))))
 
 # {"t":"replay_many","evs":[..]}: a batch of journal events at boot,
 # answered {"skipped":[<index in the batch>..]} (CO.replay_batch).
@@ -121,26 +123,26 @@ def evs_of(evs: List<&2, J.Json>) -> List<&2, Maybe<&2, M.Ev>>:
 def replay_many.done(p: S.St & List<&2, Nat>, +r: X.R) -> H.Hub & String:
   match p:
     case (+d, +sk):
-      (H.Hub{d, r, False{}}, J.stringify(L.answer_skipped_at(sk)))
+      (H.Hub{d, r, H.Live{}}, J.stringify(L.answer_skipped_at(sk)))
 
 def replay_many(+h: H.Hub, +evs: List<&2, J.Json>) -> H.Hub & String:
   replay_many.done(CO.replay_batch(evs_of(evs), H.Hub.d(h), 0n, Nil{}), H.Hub.r(h))
 
-# `photo`: the durable state's photo, or why not (an env query pending)
-def photo.answer(m: Maybe<&2, J.Json>) -> J.Json:
+# `photo`: the durable state's lines, or why not (an env query pending)
+def photo.out(m: Maybe<&2, S.St>) -> Out:
   match m:
     case Some{+st}:
-      L.answer_photo(st)
+      Photos{st}
     case None{}:
-      L.answer_error("photo: an env query is pending")
+      One{J.stringify(L.answer_error("photo: an env query is pending"))}
 
-# `restore_photo`: the hub from the photo; not an object: unchanged
-def restore_photo(m: Maybe<&2, H.Hub>, +h: H.Hub) -> H.Hub & String:
+# `restore_photo` / `restore_more`: the hub restored; else unchanged
+def restored(m: Maybe<&2, H.Hub>, +h: H.Hub, +why: String) -> H.Hub & String:
   match m:
     case Some{+h2}:
       (h2, J.stringify(L.answer_done()))
     case None{}:
-      (h, J.stringify(L.answer_error("restore_photo: only a hub that applied nothing yet, from a photo object")))
+      (h, J.stringify(L.answer_error(why)))
 
 # view_all's lines (`xs`: every message in send order)
 def views.go(+d: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>, +xs: List<&2, S.MRec>) -> Out:
@@ -170,9 +172,11 @@ def handle.link(l: L.Link, +h: H.Hub, +i: J.Json) -> H.Hub & Out:
     case L.TView{}:
       (h, views(h))
     case L.TPhoto{}:
-      (h, One{J.stringify(photo.answer(PH.photo(h)))})
+      (h, photo.out(PH.photo(h)))
     case L.TRestorePhoto{+st}:
-      one(restore_photo(PH.restore(h, st), h))
+      one(restored(PH.restore(h, st), h, "restore_photo: only a hub that applied nothing yet, from a photo object"))
+    case L.TRestoreMore{+st}:
+      one(restored(PH.restore_more(h, st), h, "restore_more: only right after restore_photo, from a photo object"))
     case L.TStep{}:
       one(answer(X.R.rts(H.Hub.r(h)), V.waiter_marks(X.R.waiters(H.Hub.r(h))), H.commit(h, i)))
 
@@ -222,11 +226,28 @@ def send_views(s: Socket, +h: H.Hub, +line: J.Json, m: Maybe<&2, J.Json>, +arch:
         send_views(s2, h, next, V.all_next(H.Hub.d(h), X.R.rts(H.Hub.r(h)), X.R.waiters(H.Hub.r(h)), arch, msgs),
           V.all_arch_rest(arch), V.all_msgs_rest(arch, msgs))
 
+# the photo's lines: `st`'s first PH.SLICE records, then what is left,
+# each line built when the one before it is sent; every line but the
+# last says `more` (`last`: no record left after this line). Unsafe as
+# the server is: it ends when no record is left (each line takes some)
+@unsafe
+def send_photos(last: Bool, s: Socket, +st: S.St) -> IO(Socket):
+  match last:
+    case True{}:
+      send_line(s, J.stringify(L.answer_photo(PH.slice_json(st), None{})))
+    case False{}:
+      +rest = PH.slice_rest(st)
+      do IO<Socket>:
+        s2 : Socket <- send_line(s, J.stringify(L.answer_photo(PH.slice_json(st), Some{True{}})))
+        send_photos(PH.all_sent(PH.slice_rest(rest)), s2, rest)
+
 @unsafe
 def send_out(s: Socket, +h: H.Hub, o: Out) -> IO(Socket):
   match o:
     case One{+line}:
       send_line(s, line)
+    case Photos{+st}:
+      send_photos(PH.all_sent(PH.slice_rest(st)), s, st)
     case Views{+head, +arch, +msgs}:
       send_views(s, h, head, V.all_next(H.Hub.d(h), X.R.rts(H.Hub.r(h)), X.R.waiters(H.Hub.r(h)), arch, msgs),
         V.all_arch_rest(arch), V.all_msgs_rest(arch, msgs))

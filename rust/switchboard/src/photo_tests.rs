@@ -62,10 +62,12 @@ fn the_mark_of_written_lines_is_the_mark_of_the_lines_read_back() {
 fn a_photo_reads_back_as_written_and_two_keys_stay() {
     let d = tmp("files");
     let evs = events();
-    let st = json!({"agents": [{"name": "main", "text": "é─😀"}]});
+    let st = [json!({"agents": [{"name": "main", "text": "é─😀\nline"}]}), json!({"old": []})];
     write(&d, "k1", &Mark::of(&evs), &st).unwrap();
     let (h, back) = read(&d, "k1").expect("the photo");
-    assert_eq!((h, back), (head(&evs), st.clone()));
+    assert_eq!(h, head(&evs));
+    let back: Vec<Value> = back.iter().map(|l| serde_json::from_str(l).unwrap()).collect();
+    assert_eq!(back, st, "one slice a line, read back as written");
     write(&d, "k2", &Mark::of(&evs[..1]), &st).unwrap();
     write(&d, "k3", &Mark::of(&evs[..2]), &st).unwrap();
     assert!(read(&d, "k3").is_some() && read(&d, "k2").is_some(), "this build's and the one before");
@@ -82,6 +84,12 @@ fn a_torn_or_old_photo_is_none_and_a_crash_tmp_goes_at_boot() {
     // words): refused, the boot replays the journal
     std::fs::write(d.join("k2.json"), "{\"v\":1,\"key\":\"k2\",\"events\":1,\"prefix\":\"0\",\"paths\":\"0\",\"st\":{}}").unwrap();
     assert!(read(&d, "k2").is_none(), "another file version");
+    // a V2 photo (c6 5b, the state in one object): refused too
+    std::fs::write(d.join("k4.json"), "{\"v\":2,\"key\":\"k4\",\"events\":1,\"prefix\":\"0\",\"paths\":\"0\",\"st\":{}}").unwrap();
+    assert!(read(&d, "k4").is_none(), "a V2 photo");
+    // fewer slices than its head counts: a file cut short
+    std::fs::write(d.join("k5.json"), "{\"v\":3,\"key\":\"k5\",\"events\":1,\"prefix\":\"0\",\"paths\":\"0\",\"slices\":2}\n{}\n").unwrap();
+    assert!(read(&d, "k5").is_none(), "a slice missing");
     std::fs::write(d.join("k3.json.tmp"), "half").unwrap();
     clean(&d);
     assert!(!d.join("k3.json.tmp").exists());

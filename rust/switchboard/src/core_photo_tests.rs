@@ -6,9 +6,35 @@
 use super::super::*;
 use serde_json::json;
 
+/// The photo of a small state: one slice (PH.SLICE records a line).
 fn photo(t: &mut T) -> Value {
-    let out = t.hub.raw(&json!({"t": "photo"}));
-    out.get("st").cloned().unwrap_or_else(|| panic!("no photo: {out}"))
+    let mut lines = t.hub.photo().expect("a photo");
+    assert_eq!(lines.len(), 1, "a small state is one slice");
+    lines.remove(0)
+}
+
+/// A slice's lines as the photo file holds them.
+fn texts(slices: &[Value]) -> Vec<String> {
+    slices.iter().map(Value::to_string).collect()
+}
+
+/// `st` in two slices, as sb-core cuts a bigger one (St.slice_take /
+/// slice_drop): its first agent with every scalar, then the rest of its
+/// agents and every other list, the scalars at their defaults.
+fn two_slices(st: &Value) -> (Value, Value) {
+    let agents = st["agents"].as_array().expect("its agents");
+    assert!(agents.len() >= 2, "two agents to cut between");
+    let mut first = json!({"agents": [agents[0]]});
+    let mut rest = json!({"agents": agents[1..]});
+    for (k, v) in st.as_object().unwrap().iter().filter(|(k, _)| *k != "agents") {
+        if v.is_array() {
+            first[k] = json!([]);
+            rest[k] = v.clone();
+        } else {
+            first[k] = v.clone();
+        }
+    }
+    (first, rest)
 }
 
 #[test]
@@ -18,7 +44,9 @@ fn a_hub_that_stepped_refuses_a_photo_and_stays_as_it_is() {
     let before = photo(&mut t);
     let out = t.hub.raw(&json!({"t": "restore_photo", "st": {"agents": []}}));
     assert!(out.get("error").is_some(), "a live hub took a photo: {out}");
-    assert_eq!(photo(&mut t), before, "the refused restore changed the state");
+    let more = t.hub.raw(&json!({"t": "restore_more", "st": {"agents": []}}));
+    assert!(more.get("error").is_some(), "a live hub took a slice: {more}");
+    assert_eq!(photo(&mut t), before, "the refused restores changed the state");
 }
 
 #[test]
@@ -27,10 +55,28 @@ fn a_fresh_hub_restores_the_photo_once() {
     t.spawn_task("a");
     let st = photo(&mut t);
     assert_eq!(t.hub.raw(&json!({"t": "init", "workspace": "/w"})), json!({}));
+    let more = t.hub.raw(&json!({"t": "restore_more", "st": st}));
+    assert!(more.get("error").is_some(), "a fresh hub took a slice before its photo: {more}");
     assert_eq!(t.hub.raw(&json!({"t": "restore_photo", "st": st})), json!({}));
     assert_eq!(photo(&mut t), st, "the restored state is the photo's");
     let again = t.hub.raw(&json!({"t": "restore_photo", "st": st}));
     assert!(again.get("error").is_some(), "a second restore was taken: {again}");
+}
+
+/// c6 (c): the slices restored last first (restore_photo, then
+/// restore_more) are the state whole: each slice's records before the
+/// ones restored, the first slice's scalars (law restore_in_slices).
+#[test]
+fn the_slices_restored_last_first_are_the_state() {
+    let mut t = T::new();
+    t.spawn_task("a");
+    t.spawn_task("b");
+    let st = photo(&mut t);
+    let (first, rest) = two_slices(&st);
+    assert_eq!(t.hub.raw(&json!({"t": "init", "workspace": "/w"})), json!({}));
+    assert_eq!(t.hub.raw(&json!({"t": "restore_photo", "st": rest})), json!({}));
+    assert_eq!(t.hub.raw(&json!({"t": "restore_more", "st": first})), json!({}));
+    assert_eq!(photo(&mut t), st, "the slices joined are the photo");
 }
 
 /// Chunk 4: a hub rebuilt from the photo of the first k journal events
@@ -48,10 +94,26 @@ fn a_hub_rebuilt_from_a_photo_and_the_tail_is_the_full_replays() {
     let all = full.rebuild(&events, None, &mut |_, _| {}).unwrap();
     assert_eq!(all.photo, Err("no photo".into()));
     let mut from = Hub::new("/w");
-    let got = from.rebuild(&events, Some((k, st)), &mut |_, _| {}).unwrap();
+    let got = from.rebuild(&events, Some((k, texts(&[st]))), &mut |_, _| {}).unwrap();
     assert_eq!(got.photo, Ok(k));
     assert_eq!(from.photo(), full.photo(), "the photo + tail is the full replay");
     assert!(from.st.agents.contains_key("b"), "the mirror has the tail's task");
+}
+
+/// The same from a photo in two slices: the file's lines, last first.
+#[test]
+fn a_hub_rebuilt_from_a_photo_in_slices_is_the_full_replays() {
+    let mut t = T::new();
+    t.spawn_task("a");
+    t.spawn_task("b");
+    let events = t.journal.borrow().clone();
+    let (first, rest) = two_slices(&photo(&mut t));
+    let mut full = Hub::new("/w");
+    full.rebuild(&events, None, &mut |_, _| {}).unwrap();
+    let mut from = Hub::new("/w");
+    let got = from.rebuild(&events, Some((events.len(), texts(&[first, rest]))), &mut |_, _| {}).unwrap();
+    assert_eq!(got.photo, Ok(events.len()));
+    assert_eq!(from.photo(), full.photo(), "the slices are the full replay");
 }
 
 /// A photo sb-core refuses (not an object; St.photo_of reads any object,
@@ -64,9 +126,29 @@ fn a_refused_photo_falls_back_to_the_full_replay() {
     let mut full = Hub::new("/w");
     full.rebuild(&events, None, &mut |_, _| {}).unwrap();
     let mut from = Hub::new("/w");
-    let got = from.rebuild(&events, Some((events.len(), json!(["not a state"]))), &mut |_, _| {}).unwrap();
+    let got = from.rebuild(&events, Some((events.len(), texts(&[json!(["not a state"])]))), &mut |_, _| {}).unwrap();
     assert!(matches!(&got.photo, Err(why) if why.contains("refused")), "{:?}", got.photo);
     assert_eq!(from.photo(), full.photo());
+}
+
+/// A photo refused halfway (its last slice restored, an earlier one not):
+/// a new state, then the full replay; never the slices restored so far
+/// under the journal's events.
+#[test]
+fn a_photo_refused_halfway_starts_over_with_the_full_replay() {
+    let mut t = T::new();
+    t.spawn_task("a");
+    t.spawn_task("b");
+    let events = t.journal.borrow().clone();
+    let (_, rest) = two_slices(&photo(&mut t));
+    let mut full = Hub::new("/w");
+    full.rebuild(&events, None, &mut |_, _| {}).unwrap();
+    for bad in [json!(["not a state"]).to_string(), "{\"agents\": [".to_string()] {
+        let mut from = Hub::new("/w");
+        let got = from.rebuild(&events, Some((events.len(), vec![bad, rest.to_string()])), &mut |_, _| {}).unwrap();
+        assert!(matches!(&got.photo, Err(why) if why.contains("slice 1 of 2")), "{:?}", got.photo);
+        assert_eq!(from.photo(), full.photo(), "the full replay, from a new state");
+    }
 }
 
 /// The measure on a real journal (issue 36 chunk 4's proof), by hand:
@@ -183,8 +265,8 @@ fn boot_phases_on_a_real_journal() {
         u => panic!("{u:?}"),
     };
     phase(&mut lines, &boot, "boot: usable (mark of all)", &mut at);
-    let r = boot.raw(&Link::RestorePhoto(cl::RestorePhoto { st }).to_value());
-    assert_eq!(r, json!({}));
+    assert_eq!(boot.restore(&st).unwrap(), Ok(()));
+    drop(st);
     phase(&mut lines, &boot, "boot: restore", &mut at);
     for ev in events[..k].iter().filter(|ev| crate::forge::is_pr_line(ev)) {
         crate::forge::read_line(&mut boot.pr_known, ev);

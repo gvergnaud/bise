@@ -50,7 +50,7 @@ impl Photos {
 }
 
 /// The photo of `key` in `dir` that fits `events`, or why none does.
-fn pick(dir: &Path, key: Option<&str>, events: &[Value], migrated: bool) -> (Option<(usize, Value)>, Option<String>) {
+fn pick(dir: &Path, key: Option<&str>, events: &[Value], migrated: bool) -> (Option<(usize, Vec<String>)>, Option<String>) {
     let Some(key) = key else { return (None, Some("sb-core's binary unreadable".into())) };
     let read = photo::read(dir, key);
     match photo::usable(read.as_ref().map(|(h, _)| h), key, events, migrated) {

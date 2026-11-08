@@ -23,13 +23,13 @@
 use super::journal::{bend_json, jv, Jv};
 use super::*;
 use bise_proto::core::state as st;
-use super::photo::{list_codec, listed, whole};
+use super::photo::{list_codec, listed, st_slices, whole};
 use bise_proto::core::state::{Ty, Wire, STATE};
 
 const S: &str = "S.";
 
 /// A field's Bend type, its declared names prefixed with `q`.
-fn ty(t: Ty, q: &str) -> String {
+pub(crate) fn ty(t: Ty, q: &str) -> String {
     match t {
         Ty::Nat => "Nat".into(),
         Ty::Str => "String".into(),
@@ -55,7 +55,7 @@ fn qual(term: &str, q: &str) -> String {
 }
 
 /// A field's default, its declared names prefixed with `q`.
-fn dflt(f: &st::Field, q: &str) -> String {
+pub(crate) fn dflt(f: &st::Field, q: &str) -> String {
     if let Some(d) = f.default {
         return qual(d, q);
     }
@@ -79,7 +79,7 @@ fn rec(q: &str, name: &str, args: &[String]) -> String {
 }
 
 /// The pattern variables of a record's fields: f0, f1, ...
-fn slots(n: usize) -> Vec<String> {
+pub(crate) fn slots(n: usize) -> Vec<String> {
     (0..n).map(|i| format!("f{i}")).collect()
 }
 
@@ -1036,6 +1036,7 @@ pub(crate) fn state_codec() -> String {
             list_codec(&mut s, n, shn);
         }
     }
+    st_slices(&mut s);
     view_pins(&mut s);
     default_pins(&mut s);
     s

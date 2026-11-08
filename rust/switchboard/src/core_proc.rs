@@ -88,7 +88,7 @@ impl Limits {
     pub fn of(&self, v: &Value, bytes: usize, factor: f64) -> Duration {
         let base = match v["t"].as_str() {
             Some("replay_many") => self.step + self.per_event * v["evs"].as_array().map_or(0, |a| a.len()) as u32,
-            Some("restore_photo") => self.step + self.per_mb.mul_f64(bytes as f64 / 1e6),
+            Some("restore_photo" | "restore_more") => self.step + self.per_mb.mul_f64(bytes as f64 / 1e6),
             _ => self.step,
         };
         base.mul_f64(factor.clamp(1.0, crate::load::MAX_FACTOR))

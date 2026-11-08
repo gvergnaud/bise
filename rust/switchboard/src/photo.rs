@@ -7,8 +7,10 @@
 //! One file per sb-core build, `<state>/photo/<key>.json` (the key: a hash
 //! of the sb-core binary, so a photo of another state shape is never
 //! offered to this one), the last two builds kept (a rollback boots from
-//! the other). Its content: `{"v":2, "key", "events": k, "prefix",
-//! "paths", "st"}`, where `k` is the number of journal events (every line
+//! the other). Its content: a head line `{"v":3, "key", "events": k,
+//! "prefix", "paths", "slices": n}`, then sb-core's photo in its n lines
+//! (each the photo of an St holding the next records, c6 (c), restored
+//! last first), where `k` is the number of journal events (every line
 //! the hub read, its own PR lines too) the photo holds, `prefix` a chained
 //! hash of events 1..k (the journal's first k events unchanged since the
 //! photo, not only event k), `paths` a hash of their workspace paths as
@@ -31,7 +33,9 @@ use std::path::{Path, PathBuf};
 /// The photo file's shape version. 2 (c6): sb-core's messages lost their
 /// text and parts (`has_parts` instead): an older hub refuses the new
 /// photo and replays the journal, which keeps every message's words.
-pub const V: u64 = 2;
+/// 3 (c6 (c)): the state in slices, one line each (sb-core never holds
+/// the whole photo as one line); a V2 file reads as none: a full replay.
+pub const V: u64 = 3;
 
 /// A photo is taken at most this often when the hub is idle (ms).
 pub const IDLE_EVERY_MS: u64 = 24 * 3600 * 1000;
@@ -199,11 +203,14 @@ fn file(dir: &Path, key: &str) -> PathBuf {
     dir.join(format!("{key}.json"))
 }
 
-/// The photo of `key`: its head and its state; none when missing,
-/// unreadable or of another file version.
-pub fn read(dir: &Path, key: &str) -> Option<(Head, Value)> {
-    let text = std::fs::read_to_string(file(dir, key)).ok()?;
-    let mut v: Value = serde_json::from_str(&text).ok()?;
+/// The photo of `key`: its head and its slices, each as its line's text
+/// (the hub parses one at a time as it sends it, crate::core's
+/// `rebuild`); none when missing, unreadable, of another file version, or
+/// not holding the slices its head counts (a file cut short).
+pub fn read(dir: &Path, key: &str) -> Option<(Head, Vec<String>)> {
+    use std::io::BufRead;
+    let mut lines = std::io::BufReader::new(std::fs::File::open(file(dir, key)).ok()?).lines();
+    let v: Value = serde_json::from_str(&lines.next()?.ok()?).ok()?;
     if v["v"].as_u64() != Some(V) {
         return None;
     }
@@ -213,25 +220,26 @@ pub fn read(dir: &Path, key: &str) -> Option<(Head, Value)> {
         paths: v["paths"].as_str().and_then(|p| u64::from_str_radix(p, 16).ok())?,
     };
     let head = Head { key: v["key"].as_str()?.to_string(), mark };
-    let st = v.get_mut("st").map(Value::take).filter(Value::is_object)?;
-    Some((head, st))
+    let n = v["slices"].as_u64()? as usize;
+    let slices: Vec<String> = lines.collect::<Result<_, _>>().ok()?;
+    (n > 0 && slices.len() == n).then_some((head, slices))
 }
 
-/// Write the photo of `key` (tmp + fsync + rename), then keep it and the
-/// newest photo of one other key (a rollback's), no other.
-pub fn write(dir: &Path, key: &str, mark: &Mark, st: &Value) -> std::io::Result<()> {
+/// Write the photo of `key` (tmp + fsync + rename): its head line, then
+/// one line per slice; then keep it and the newest photo of one other
+/// key (a rollback's), no other.
+pub fn write(dir: &Path, key: &str, mark: &Mark, slices: &[Value]) -> std::io::Result<()> {
     std::fs::create_dir_all(dir)?;
-    let head = serde_json::json!({"v": V, "key": key, "events": mark.events, "prefix": format!("{:016x}", mark.prefix), "paths": format!("{:016x}", mark.paths)});
-    let mut text = head.to_string();
-    text.pop(); // its closing brace: the state goes in the same object
-    text.push_str(",\"st\":");
-    text.push_str(&st.to_string());
-    text.push('}');
+    let head = serde_json::json!({"v": V, "key": key, "events": mark.events, "prefix": format!("{:016x}", mark.prefix), "paths": format!("{:016x}", mark.paths), "slices": slices.len()});
     let tmp = dir.join(format!("{key}.json.tmp"));
     {
-        let mut f = std::fs::File::create(&tmp)?;
-        f.write_all(text.as_bytes())?;
-        f.sync_all()?;
+        let mut f = std::io::BufWriter::new(std::fs::File::create(&tmp)?);
+        writeln!(f, "{head}")?;
+        for s in slices {
+            serde_json::to_writer(&mut f, s)?;
+            f.write_all(b"\n")?;
+        }
+        f.into_inner().map_err(std::io::IntoInnerError::into_error)?.sync_all()?;
     }
     std::fs::rename(&tmp, file(dir, key))?;
     keep_two(dir, key);

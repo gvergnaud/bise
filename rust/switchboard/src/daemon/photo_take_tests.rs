@@ -15,9 +15,9 @@ fn the_boot_picks_its_builds_photo_when_it_fits_and_says_why_not() {
     let d = tmp("pick");
     let evs: Vec<Value> = (0..5).map(|i| json!({"type": "said", "n": i})).collect();
     let st = json!({"agents": []});
-    photo::write(&d, "k1", &Mark::of(&evs[..3]), &st).unwrap();
+    photo::write(&d, "k1", &Mark::of(&evs[..3]), std::slice::from_ref(&st)).unwrap();
     let (from, why) = pick(&d, Some("k1"), &evs, false);
-    assert_eq!((from, why), (Some((3, st.clone())), None));
+    assert_eq!((from, why), (Some((3, vec![st.to_string()])), None));
     let (from, why) = pick(&d, Some("k2"), &evs, false);
     assert_eq!(from, None);
     assert_eq!(why.as_deref(), Some("no photo"), "another build has no photo of its own");

@@ -1183,6 +1183,12 @@ law link_restore_photo_bare:
 def link_restore_photo_bare():
   {==}
 
+law link_restore_more_bare:
+  {LINK.of(J.obj([J.kv("t", J.JStr{"restore_more"})])) == LINK.TRestoreMore{J.JNull{}} : LINK.Link}
+
+def link_restore_more_bare():
+  {==}
+
 law link_unknown_tag:
   {LINK.of(J.obj([J.kv("t", J.JStr{"weather"})])) == LINK.TStep{} : LINK.Link}
 
@@ -1239,6 +1245,13 @@ law link_TRestorePhoto_round:
   {LINK.of(LINK.json(LINK.TRestorePhoto{st})) == LINK.TRestorePhoto{st} : LINK.Link}
 
 def link_TRestorePhoto_round(st):
+  {==}
+
+law link_TRestoreMore_round:
+  for st: J.Json
+  {LINK.of(LINK.json(LINK.TRestoreMore{st})) == LINK.TRestoreMore{st} : LINK.Link}
+
+def link_TRestoreMore_round(st):
   {==}
 
 # ---- Fx ----
@@ -1924,10 +1937,15 @@ def answer_need_round(need):
 
 law answer_photo_round:
   for st: J.Json
-  {LINK.APhoto.of(LINK.answer_json(LINK.APhoto{st})) == LINK.APhoto{st} : LINK.Answer}
+  for more: Maybe<&2, Bool>
+  {LINK.APhoto.of(LINK.answer_json(LINK.APhoto{st, more})) == LINK.APhoto{st, more} : LINK.Answer}
 
-def answer_photo_round(st):
-  {==}
+def answer_photo_round(st, more):
+  match more:
+    case None{}:
+      {==}
+    case Some{x_more}:
+      {==}
 
 law answer_view_round:
   for view: J.Json

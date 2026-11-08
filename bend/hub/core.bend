@@ -75,8 +75,16 @@ type NewTask is Data:
     objective: String, worktree: Bool, with_changes: Bool, parts: String,
     fwd: Maybe<&2, Nat>}
 
+# where a hub is in its boot: Fresh, nothing applied since init;
+# Restored, only a photo's slices (restore_photo, then restore_more);
+# Live, after any step or replay
+type Phase is Data:
+  Fresh{}
+  Restored{}
+  Live{}
+
 type Hub is Data:
-  Hub{d: S.St, r: X.R, fresh: Bool}
+  Hub{d: S.St, r: X.R, phase: Phase}
 
 type CardK is Data:
   KQuestion{}
@@ -3514,7 +3522,7 @@ def Hub.r(x: Hub) -> X.R:
       r
 
 def hub_new(+workspace: String) -> Hub:
-  Hub{M.init(workspace), X.R{Nil{}, Nil{}, Nil{}, Nil{}, Nil{}, Nil{}, workspace, False{}, 0n, False{}, Nil{}, None{}, None{}, Nil{}, Nil{}}, True{}}
+  Hub{M.init(workspace), X.R{Nil{}, Nil{}, Nil{}, Nil{}, Nil{}, Nil{}, workspace, False{}, 0n, False{}, Nil{}, None{}, None{}, Nil{}, Nil{}}, Fresh{}}
 
 # the context of one input over the hub
 def start(+h: Hub, +i: J.Json) -> X.Cx<Hub.d(h)>:
@@ -4292,7 +4300,7 @@ def commit.go(-o: S.St, need: Maybe<&2, J.Json>, +c: X.Core<o>, +r: X.R, +h: Hub
     case Some{+q}:
       Turn{h, Nil{}, Some{q}}
     case None{}:
-      Turn{Hub{X.Core.d(o, c), X.R.with_ans(r, Nil{}), False{}}, X.Core.fx(o, c), None{}}
+      Turn{Hub{X.Core.d(o, c), X.R.with_ans(r, Nil{}), Live{}}, X.Core.fx(o, c), None{}}
 
 def commit.cx(-o: S.St, cx: X.Cx<o>, +h: Hub) -> Turn:
   match cx:

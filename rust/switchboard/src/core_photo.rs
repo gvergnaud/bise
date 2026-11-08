@@ -7,8 +7,9 @@
 
 use super::*;
 
-/// The photo that fits a journal's events: (k, its state), or none.
-pub type PhotoOf = Box<dyn FnMut(&[Value]) -> Option<(usize, Value)>>;
+/// The photo that fits a journal's events: (k, its slices' lines), or
+/// none.
+pub type PhotoOf = Box<dyn FnMut(&[Value]) -> Option<(usize, Vec<String>)>>;
 
 /// What the hub needs to restart a dead sb-core (BISE-292): the journal
 /// (the durable state, replayed into the new one) and hub.log; and, when
@@ -44,26 +45,35 @@ pub struct Rebuilt {
 }
 
 impl Hub {
-    /// sb-core's durable state (the `photo` step); none while a step of
-    /// its waits on the hub (a need) or on a decode failure.
-    pub fn photo(&mut self) -> Option<Value> {
-        let out = self.call(&Link::Photo(cl::Photo {}).to_value())?;
-        out.get("st").cloned().filter(Value::is_object)
+    /// sb-core's durable state (the `photo` step), in its slices (c6
+    /// (c)); none while a step of its waits on the hub (a need), on a
+    /// decode failure, or sb-core dead or late on it.
+    pub fn photo(&mut self) -> Option<Vec<Value>> {
+        let lines = match self.link.call_lines(&Link::Photo(cl::Photo {}).to_value()) {
+            Ok(lines) => lines,
+            Err(e) => {
+                self.log(&format!("photo: {e}"));
+                return None;
+            }
+        };
+        lines.into_iter().map(|mut l| l.get_mut("st").map(Value::take).filter(Value::is_object)).collect()
     }
 
-    /// `replay_with`, from a photo when one fits: sb-core restores it
-    /// (a fresh sb-core only, law restore_only_fresh), then replays
-    /// events[k..]. The hub's own PR lines are read from every event,
-    /// the photo's too (sb-core never holds them). A photo sb-core
-    /// refuses: the full replay, as without one. sb-core dead or late
-    /// on it: the error (the boot exits on it, a revival counts it).
-    pub fn rebuild(&mut self, events: &[Value], from: Option<(usize, Value)>, progress: &mut dyn FnMut(usize, usize)) -> Result<Rebuilt, CoreError> {
-        let Some((k, st)) = from else {
+    /// `replay_with`, from a photo when one fits: sb-core restores its
+    /// slices last first (`restore_photo`, a fresh sb-core only, law
+    /// restore_only_fresh; then `restore_more`, law restore_in_slices),
+    /// then replays events[k..]. The hub's own PR lines are read from
+    /// every event, the photo's too (sb-core never holds them). A photo
+    /// sb-core refuses, even halfway: a new state (`init`) and the full
+    /// replay, as without one. sb-core dead or late on it: the error (the
+    /// boot exits on it, a revival counts it).
+    pub fn rebuild(&mut self, events: &[Value], from: Option<(usize, Vec<String>)>, progress: &mut dyn FnMut(usize, usize)) -> Result<Rebuilt, CoreError> {
+        let Some((k, slices)) = from else {
             return Ok(Rebuilt { skipped: self.replay_with(events, progress)?, photo: Err("no photo".into()) });
         };
-        let out = self.try_raw(&Link::RestorePhoto(cl::RestorePhoto { st }).to_value())?;
-        if let Some(e) = out.get("error") {
-            let why = format!("sb-core refused the photo: {}", one_line(&e.to_string()));
+        if let Err(why) = self.restore(&slices)? {
+            drop(slices);
+            self.try_raw(&Link::Init(cl::Init { workspace: self.workspace.clone() }).to_value())?;
             return Ok(Rebuilt { skipped: self.replay_with(events, progress)?, photo: Err(why) });
         }
         let k = k.min(events.len());
@@ -72,6 +82,27 @@ impl Hub {
             self.pr_news.read_journal(ev);
         }
         Ok(Rebuilt { skipped: self.replay_with(&events[k..], progress)?, photo: Ok(k) })
+    }
+
+    /// The photo's slices into sb-core, the last first, each parsed as it
+    /// goes (the hub never holds the whole photo parsed): Ok(Err(why))
+    /// when a slice is not JSON or sb-core refuses one.
+    pub(super) fn restore(&mut self, slices: &[String]) -> Result<Result<(), String>, CoreError> {
+        for (i, text) in slices.iter().enumerate().rev() {
+            let Ok(st) = serde_json::from_str::<Value>(text) else {
+                return Ok(Err(format!("the photo's slice {} of {} is not JSON", i + 1, slices.len())));
+            };
+            let input = if i + 1 == slices.len() {
+                Link::RestorePhoto(cl::RestorePhoto { st })
+            } else {
+                Link::RestoreMore(cl::RestoreMore { st })
+            };
+            let out = self.try_raw(&input.to_value())?;
+            if let Some(e) = out.get("error") {
+                return Ok(Err(format!("sb-core refused the photo's slice {} of {}: {}", i + 1, slices.len(), one_line(&e.to_string()))));
+            }
+        }
+        Ok(Ok(()))
     }
 
     /// A new sb-core with the durable state of the journal and the REPL
