@@ -7,13 +7,13 @@
 // (the core's role_set). The words are roleList.ts's; the TUI's /models says the same.
 // Owner: setup-page.
 import { useState, type ReactNode } from 'react';
-import type { AppCmd, FeatureId, FeaturePart, FeatureRow, Model, RoleRow, SetupFix, SetupGauge } from '@/proto';
-import { Act, Button, Dropdown, Help, PickerSeg, tipAttrs } from '@/ds';
+import type { AppCmd, FeatureId, FeaturePart, FeatureRow, Model, RoleRow, SetupGauge } from '@/proto';
+import { Act, Button, Dropdown, Help, PickerSeg, Press, tipAttrs } from '@/ds';
 import { cx } from '@/ds/cx';
 import { settings } from '@/proto/words.gen';
 import { Trouble, TryIt, fixButton, type GaugePorts } from './gauge';
 import { modelRow } from './hold';
-import { ABOUT, FALLBACK, ROW_NAME, fixLine, modelView, ownFix, partName, partStatus, partsInOrder, pickGroups, rowStatus, type Status } from './roleList';
+import { ABOUT, FALLBACK, ROW_NAME, actInPlace, fixLine, hasTrouble, modelView, partName, partStatus, partsInOrder, pickGroups, rowStatus, type Status } from './roleList';
 
 export interface RoleListProps {
   g: SetupGauge;
@@ -30,7 +30,15 @@ export interface RoleListProps {
 }
 
 /** A status cell: its words in its tone, its tip. */
-function StatusMark({ s, testId }: { s: Status; testId: string }) {
+function StatusMark({ s, testId, toggle }: { s: Status; testId: string; toggle?: { open: boolean; flip: () => void } }) {
+  // a stopped role's status: a link that opens its troubleshooting under the row (designer m_57293)
+  if (toggle !== undefined) {
+    return (
+      <Press look={cx('st-mark', 'st-link', s.tone)} aria-expanded={toggle.open} onClick={toggle.flip} {...tipAttrs(s.tip)} data-testid={testId}>
+        {s.text}
+      </Press>
+    );
+  }
   return (
     <span className={cx('st-mark', s.tone)} {...tipAttrs(s.tip)} data-testid={testId}>
       {s.text}
@@ -43,16 +51,21 @@ function StatusMark({ s, testId }: { s: Status; testId: string }) {
 function ModelCell({ r, p, props, testId }: { r: FeatureRow; p: FeaturePart; props: RoleListProps; testId: string }) {
   const { roles, models, ports } = props;
   const v = modelView(r, p, roles, models);
-  const role = v.role === null ? undefined : roles.find((x) => x.role === v.role);
-  const words: ReactNode = (
-    <>
-      <span className="st-mn">{v.name}</span>
-      {v.faint !== '' && <span className="st-mp">{v.faint}</span>}
-      {v.effort !== null && <span className="st-mp">· {v.effort}</span>}
-    </>
-  );
+  // no model yet: a role he picks one for (the picker, its words say so), else nothing to show
+  const own = roles.find((x) => x.role === p.role);
+  const role = v === null ? (own?.kind === 'chat' && r.fix?.t === 'pick_model' ? own : undefined) : v.role === null ? undefined : own;
+  const words: ReactNode =
+    v === null ? (
+      <span className="st-mp">{settings.part_pick}</span>
+    ) : (
+      <>
+        <span className="st-mn">{v.name}</span>
+        {v.faint !== '' && <span className="st-mp">{v.faint}</span>}
+        {v.effort !== null && <span className="st-mp">· {v.effort}</span>}
+      </>
+    );
   if (role === undefined) {
-    return (
+    return v === null ? null : (
       <span className="st-model" {...tipAttrs(v.tip)} data-testid={testId}>
         {words}
       </span>
@@ -66,7 +79,7 @@ function ModelCell({ r, p, props, testId }: { r: FeatureRow; p: FeaturePart; pro
         label={words}
         extra="st-pick"
         name={settings.role_model({ role: ROW_NAME[r.id] })}
-        tip={v.tip}
+        tip={v?.tip ?? settings.part_pick}
         align="end"
         groups={pickGroups(role, roles, models)}
         {...(efforts.length > 0
@@ -94,58 +107,42 @@ function ModelCell({ r, p, props, testId }: { r: FeatureRow; p: FeaturePart; pro
   );
 }
 
-/** One row: name and line, model, status, its own fix; Voice mode's parts under it. */
-function Row({ r, props, line, open, toggle }: { r: FeatureRow; props: RoleListProps; line: { fix: SetupFix } | null; open: boolean; toggle: () => void }) {
+/** One row on the list's three columns, role · model · status (designer m_57293), never more: a
+ * stopped role's status is a link to its troubleshooting (its fix there, or on the fix line); a
+ * role with no model shows its act in the model's place ('Turn on'); Voice mode's parts under it. */
+function Row({ r, props, open, toggle }: { r: FeatureRow; props: RoleListProps; open: boolean; toggle: () => void }) {
   const { g, ports } = props;
   const one = r.parts.length === 1 ? r.parts[0] : undefined;
   const status = rowStatus(r, g);
-  const mark = status !== null ? <StatusMark s={status} testId={`settings.feature.${r.id}.mark`} /> : null;
-  const fix = ownFix(r, line);
+  const act = actInPlace(r);
   const better = r.fix == null && r.better != null && r.better.t === 'allow_perm' ? r.better : null;
-  const failed = r.state === 'failed';
+  const link = hasTrouble(r) ? { open, flip: toggle } : undefined;
+  const mark = status === null ? null : <StatusMark s={status} testId={`settings.feature.${r.id}.mark`} {...(link !== undefined ? { toggle: link } : {})} />;
   return (
     <div className={cx('st-feature', props.at === r.id && 'is-at')} data-state={r.state} data-testid={`settings.feature.${r.id}`}>
-      <div
-        className="st-row"
-        role={failed ? 'button' : undefined}
-        aria-expanded={failed ? open : undefined}
-        onClick={
-          failed
-            ? (e) => {
-                // the row's own controls (its model and picker, a portal React bubbles through, its fix) never toggle it
-                const t = e.target as Element;
-                if (e.currentTarget.contains(t) && t.closest('.st-cell, .st-act') === null) toggle();
-              }
-            : undefined
-        }
-      >
+      <div className="st-row">
         <span className="st-name">
           {ROW_NAME[r.id]}
           <span className="st-sub">{ABOUT[r.id]}</span>
         </span>
-        <span className="st-cell">{one !== undefined && <ModelCell r={r} p={one} props={props} testId={modelTestId(r, one)} />}</span>
-        <span className="st-status">
-          {r.id === 'dictation' && r.state === 'on' && ports.tryIt !== undefined ? <TryIt port={ports.tryIt} mark={mark} /> : mark}
-        </span>
-        <span className="st-act">
-          {fix !== null && !open && (
-            <Button
-              size="sm"
-              onClick={() => {
-                // an env var's model: the troubleshooting says where to remove it
-                if (fix.t === 'remove_env') toggle();
-                else ports.fix(fix, r.id);
-              }}
-              testId={`settings.feature.${r.id}.fix`}
-            >
-              {fixButton(fix, g)}
+        <span className="st-cell">
+          {act !== null ? (
+            <Button kind="ghost" size="sm" onClick={() => { ports.fix(act, r.id); }} testId={`settings.feature.${r.id}.fix`}>
+              {fixButton(act, g)}
             </Button>
+          ) : (
+            one !== undefined && <ModelCell r={r} p={one} props={props} testId={modelTestId(r, one)} />
           )}
+        </span>
+        <span className="st-status">
           {better !== null && (
-            <Act onClick={() => { ports.fix(better, r.id); }} testId={`settings.feature.${r.id}.better`}>
-              {fixButton(better, g)}
-            </Act>
+            <span className="st-try">
+              <Act onClick={() => { ports.fix(better, r.id); }} testId={`settings.feature.${r.id}.better`}>
+                {fixButton(better, g)}
+              </Act>
+            </span>
           )}
+          {r.id === 'dictation' && r.state === 'on' && ports.tryIt !== undefined ? <TryIt port={ports.tryIt} mark={mark} /> : mark}
         </span>
       </div>
       {one === undefined &&
@@ -156,9 +153,8 @@ function Row({ r, props, line, open, toggle }: { r: FeatureRow; props: RoleListP
               <ModelCell r={r} p={p} props={props} testId={modelTestId(r, p)} />
             </span>
             <span className="st-status">
-              <StatusMark s={partStatus(p, g)} testId={`settings.feature.${r.id}.${p.role}.mark`} />
+              <StatusMark s={partStatus(p, g)} testId={`settings.feature.${r.id}.${p.role}.mark`} {...(p.state === 'failed' && link !== undefined ? { toggle: link } : {})} />
             </span>
-            <span className="st-act" />
           </div>
         ))}
       {open && <Trouble r={r} g={g} ports={ports} />}
@@ -203,7 +199,6 @@ export function RoleList(props: RoleListProps) {
             key={r.id}
             r={r}
             props={props}
-            line={line}
             open={opened.has(r.id)}
             toggle={() => {
               const next = new Set(opened);

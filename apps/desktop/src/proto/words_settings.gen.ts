@@ -1330,8 +1330,12 @@ export const settings = {
   part_thinks: "thinks",
   /** voice mode's sub-rows: the voice */
   part_speaks: "speaks",
-  /** a role with no model (the checker off) */
-  part_none: "none",
+  /** a role with no model yet: its picker's words */
+  part_pick: "Pick a model",
+  /** the model that listens: its id, and where it changes today */
+  tip_voice_where: (a: { model: string | number }): string => String(a.model) + " · the terminal's /models changes it",
+  /** voice mode's voice: its id, and where it changes today */
+  tip_tts_where: (a: { model: string | number }): string => String(a.model) + " · set tts_model under [voice_mode] in config.toml to change it",
   /** a model that runs bise's model, after its name (faint) */
   part_same_as_bise: "same as bise",
   /** its tip */
@@ -1380,8 +1384,8 @@ export const settings = {
   off_perm: (a: { perm: string | number }): string => "○ needs " + String(a.perm),
   /** the fix line on top, a key that failed: the roles it stops */
   fixline_key: (a: { provider: string | number; what: string | number }): string => "your " + String(a.provider) + " key expired: " + String(a.what) + " stopped.",
-  /** the fix line on top: the roles that stopped */
-  fixline_stopped: (a: { what: string | number }): string => String(a.what) + " stopped.",
+  /** the fix line on top: the roles that stopped, and why (a why_* sentence) */
+  fixline_stopped: (a: { what: string | number; why: string | number }): string => String(a.what) + " stopped: " + String(a.why),
   /** a list's last joint ("Titles, Dictation and Voice mode") */
   list_and: "and",
   /** a word of the gauge: accounts */

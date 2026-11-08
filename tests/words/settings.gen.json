@@ -1583,10 +1583,11 @@
   },
   "settings.fixline_stopped": {
     "args": [
-      "what"
+      "what",
+      "why"
     ],
     "one": null,
-    "text": "{what} stopped."
+    "text": "{what} stopped: {why}"
   },
   "settings.fold_accounts": {
     "args": [],
@@ -2806,10 +2807,10 @@
     "one": null,
     "text": "hears"
   },
-  "settings.part_none": {
+  "settings.part_pick": {
     "args": [],
     "one": null,
-    "text": "none"
+    "text": "Pick a model"
   },
   "settings.part_same_as_bise": {
     "args": [],
@@ -5726,10 +5727,24 @@
     "one": null,
     "text": "works · the check took {secs} s"
   },
+  "settings.tip_tts_where": {
+    "args": [
+      "model"
+    ],
+    "one": null,
+    "text": "{model} · set tts_model under [voice_mode] in config.toml to change it"
+  },
   "settings.tip_untested": {
     "args": [],
     "one": null,
     "text": "set up · not tested yet: Test everything makes one small real call"
+  },
+  "settings.tip_voice_where": {
+    "args": [
+      "model"
+    ],
+    "one": null,
+    "text": "{model} · the terminal's /models changes it"
   },
   "settings.tour_card": {
     "args": [

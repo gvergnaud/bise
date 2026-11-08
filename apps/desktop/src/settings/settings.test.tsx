@@ -442,7 +442,7 @@ describe('settings · Setup: which model does what (page models-settings, pick A
     );
     expect(screen.getByTestId('settings.feature.talk').textContent).toContain(settings.role_main_name + settings.about_talk);
     // the fix line: what stopped, and the one button (the row doesn't repeat it)
-    expect(screen.getByTestId('settings.fixline').textContent).toContain(settings.fixline_stopped({ what: settings.short_voice_mode }));
+    expect(screen.getByTestId('settings.fixline').textContent).toContain(settings.fixline_stopped({ what: settings.short_voice_mode, why: settings.why_no_credit({ provider: 'Mistral' }) }));
     expect(screen.getByTestId('settings.fixline.fix').textContent).toBe(settings.fix_credit({ provider: 'Mistral' }));
     expect(screen.getAllByText(settings.fix_credit({ provider: 'Mistral' }))).toHaveLength(1);
     // Voice mode: hears / thinks / speaks, each its model and status; no wall of red
@@ -455,8 +455,8 @@ describe('settings · Setup: which model does what (page models-settings, pick A
     expect(p.sent).toEqual([]);
     fireEvent.click(screen.getByTestId('settings.gauge.test'));
     expect(p.sent).toEqual([{ cmd: 'setup_test' }]);
-    // a failed row opens its troubleshooting on his click
-    fireEvent.click(screen.getByTestId('settings.feature.voice_mode').querySelector('.st-row') as Element);
+    // a stopped role's status is a link: it opens the troubleshooting under the row
+    fireEvent.click(screen.getByTestId('settings.feature.voice_mode.tts.mark'));
     expect(screen.getByTestId('settings.feature.voice_mode.trouble').textContent).toContain('No credit left on this workspace');
     fireEvent.click(screen.getByTestId('settings.feature.voice_mode.trouble.again'));
     expect(p.sent.at(-1)).toEqual({ cmd: 'setup_test', models: ['groq/whisper-large-v3', 'mistral/voxtral-mini-tts-2603', 'chatgpt/gpt-6.1-sol'] });
@@ -487,7 +487,7 @@ describe('settings · Setup: which model does what (page models-settings, pick A
   it('copy report has the providers\' words and never a key', () => {
     const copied: string[] = [];
     view('setup', { ...ports(), copy: (t) => copied.push(t) }, { gauge: gauge() });
-    fireEvent.click(screen.getByTestId('settings.feature.voice_mode').querySelector('.st-row') as Element);
+    fireEvent.click(screen.getByTestId('settings.feature.voice_mode.tts.mark'));
     fireEvent.click(screen.getByTestId('settings.feature.voice_mode.trouble.copy'));
     expect(copied[0]).toContain('no_credit');
     expect(copied[0]).not.toMatch(/sk-|Bearer/);
@@ -501,7 +501,7 @@ describe('settings · Setup: which model does what (page models-settings, pick A
       testing: [],
       rows: gauge().rows.map((r) =>
         r.id === 'approvals'
-          ? { id: 'approvals', state: 'failed' as const, fix: { t: 'add_key' as const, provider: 'openrouter', url: KEYS }, parts: [{ model: JEV, provider: 'OpenRouter', role: 'classify' as const, source: 'config' as const, state: 'failed' as const, why: 'wrong_key' as const, said: 'API key expired.' }] }
+          ? { id: 'approvals', state: 'failed' as const, fix: { t: 'add_key' as const, provider: 'openrouter', url: KEYS }, parts: [{ model: JEV, name: 'jev-1.13', provider: 'OpenRouter', role: 'classify' as const, source: 'config' as const, state: 'failed' as const, why: 'wrong_key' as const, said: 'API key expired.' }] }
           : r,
       ),
     };

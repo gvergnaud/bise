@@ -218,7 +218,8 @@ export function Trouble({ r, g, ports }: { r: FeatureRow; g: SetupGauge; ports: 
       {at != null && <p className="when">{settings.trouble_checked({ time: new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) })}</p>}
       <div className="acts">
         {r.fix != null && (
-          <Button kind="pri" onClick={() => { if (r.fix != null) ports.fix(r.fix, r.id); }} testId={`settings.feature.${r.id}.trouble.fix`}>
+          // secondary: the fix line on top holds the screen's one primary (designer m_54523, m_57293)
+          <Button onClick={() => { if (r.fix != null) ports.fix(r.fix, r.id); }} testId={`settings.feature.${r.id}.trouble.fix`}>
             {fixButton(r.fix, g)}
           </Button>
         )}

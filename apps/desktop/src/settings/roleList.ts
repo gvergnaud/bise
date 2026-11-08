@@ -74,15 +74,20 @@ export interface ModelView {
 /** A part's model in row `r`: a button on the row that owns its role; bise's model elsewhere
  * (images, voice mode's thinks) says so and points to bise's row; an env var's names it with the
  * step that gives it back (models-ux m_57191). Pure. */
-export function modelView(r: FeatureRow, p: FeaturePart, roles: readonly RoleRow[], models: readonly Model[]): ModelView {
-  // the core names every model; none: no model (the checker off, no voice)
-  const name = p.name !== undefined && p.name !== '' ? p.name : settings.part_none;
+export function modelView(r: FeatureRow, p: FeaturePart, roles: readonly RoleRow[], models: readonly Model[]): ModelView | null {
+  // the core names every model; none: no model (the checker off), its status says it
+  if (p.name === undefined || p.name === '') return null;
+  const name = p.name;
   const role = roles.find((x) => x.role === p.role);
   const row = modelRow(p.model, models);
-  const effort = role?.effort != null && role.effort !== '' && role.effort !== row?.default_effort ? role.effort : null;
+  // the role's own effort, on the model it is set for
+  const effort = role?.model === p.model && role.effort != null && role.effort !== '' && role.effort !== row?.default_effort ? role.effort : null;
   const provider = p.provider ?? '';
   if (p.source === 'env' && p.var != null) return { name, faint: settings.part_set_by({ var: p.var }), effort, role: null, tip: settings.tip_set_by({ var: p.var }) };
   if (p.role === 'main' && r.id !== 'talk') return { name, faint: settings.part_same_as_bise, effort: null, role: null, tip: settings.tip_same_as_bise };
+  // the voices: no list to pick from here yet; the tip says where they change today
+  if (p.role === 'voice') return { name, faint: provider, effort: null, role: null, tip: settings.tip_voice_where({ model: p.model }) };
+  if (p.role === 'tts') return { name, faint: provider, effort: null, role: null, tip: settings.tip_tts_where({ model: p.model }) };
   const pick = PICKED.has(p.role) && role?.kind === 'chat' ? p.role : null;
   return { name, faint: provider, effort, role: pick, tip: p.model };
 }
@@ -147,9 +152,6 @@ export function rowStatus(r: FeatureRow, g: SetupGauge): Status | null {
   return { ...s, tip: better ?? (ms === null ? settings.tip_untested : settings.tip_took({ secs: secsOf(ms) })) };
 }
 
-/** Two fixes are the same act. Pure. */
-export const sameFix = (a: SetupFix, b: SetupFix): boolean => JSON.stringify(a) === JSON.stringify(b);
-
 /** The fix line on top: only when something stopped, the core's Next, and the rows it brings back
  * ('your Mistral key expired: Titles, Dictation and Voice mode stopped.'). Pure. */
 export function fixLine(g: SetupGauge): { text: string; fix: SetupFix } | null {
@@ -159,15 +161,26 @@ export function fixLine(g: SetupGauge): { text: string; fix: SetupFix } | null {
   if (stopped.length === 0) return null;
   const what = joinAnd(stopped.map((id) => SHORT[id]));
   const f = n.fix;
-  const text = f.t === 'add_key' && keyFailed(g, f.provider) ? settings.fixline_key({ provider: providerName(g, f.provider), what }) : settings.fixline_stopped({ what });
+  const first = g.rows.find((r) => r.id === stopped[0]);
+  const text =
+    f.t === 'add_key' && keyFailed(g, f.provider)
+      ? settings.fixline_key({ provider: providerName(g, f.provider), what })
+      : settings.fixline_stopped({ what, why: first !== undefined ? whyWords(first, g) : '' });
   return { text, fix: f };
 }
 
-/** A row's own fix button: its fix, unless the fix line on top is the same act, or the fix is
- * another model (the row's model button is that act). Pure. */
-export function ownFix(r: FeatureRow, line: { fix: SetupFix } | null): SetupFix | null {
-  if (r.fix == null || r.fix.t === 'pick_model') return null;
-  return line !== null && sameFix(r.fix, line.fix) ? null : r.fix;
+/** The act a row with no model shows in its model's place ('Turn on', 'Add a Mistral key'); none
+ * when it has a model, or when the fix is a model (its picker is that act). Pure. */
+export function actInPlace(r: FeatureRow): SetupFix | null {
+  const p = r.parts.length === 1 ? r.parts[0] : undefined;
+  if (p === undefined || (p.name ?? '') !== '' || r.fix == null || r.fix.t === 'pick_model') return null;
+  return r.fix;
+}
+
+/** A row whose status opens its troubleshooting: it stopped, or it is off with a fix that isn't in
+ * the model's place (a permission to allow, a model that can't read images). Pure. */
+export function hasTrouble(r: FeatureRow): boolean {
+  return r.state === 'failed' || (r.state === 'off' && r.fix != null && actInPlace(r) === null);
 }
 
 /** the picker's id for "back to its fallback" (role_set with no model): a word no model id can be */

@@ -126,8 +126,12 @@ crate::words! { settings:
     part_thinks = "thinks";
     /// voice mode's sub-rows: the voice
     part_speaks = "speaks";
-    /// a role with no model (the checker off)
-    part_none = "none";
+    /// a role with no model yet: its picker's words
+    part_pick = "Pick a model";
+    /// the model that listens: its id, and where it changes today
+    tip_voice_where(model) = "{model} · the terminal's /models changes it";
+    /// voice mode's voice: its id, and where it changes today
+    tip_tts_where(model) = "{model} · set tts_model under [voice_mode] in config.toml to change it";
     /// a model that runs bise's model, after its name (faint)
     part_same_as_bise = "same as bise";
     /// its tip
@@ -176,8 +180,8 @@ crate::words! { settings:
     off_perm(perm) = "○ needs {perm}";
     /// the fix line on top, a key that failed: the roles it stops
     fixline_key(provider, what) = "your {provider} key expired: {what} stopped.";
-    /// the fix line on top: the roles that stopped
-    fixline_stopped(what) = "{what} stopped.";
+    /// the fix line on top: the roles that stopped, and why (a why_* sentence)
+    fixline_stopped(what, why) = "{what} stopped: {why}";
     /// a list's last joint ("Titles, Dictation and Voice mode")
     list_and = "and";
     /// a word of the gauge: accounts
