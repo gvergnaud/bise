@@ -186,6 +186,42 @@ crate::words! { pages:
     review_part_files(n) = one "{n} file" | "{n} files";
     /// a part's folder line for the files at the repo's root
     review_folder_root = "top level";
+    /// the review's last guide part: the hunks out of the story (the model's pick, drawn open)
+    review_part_rest = "The rest";
+    /// a guide part's weight word after its area: it reads as background
+    review_part_context = "context";
+    /// a guide part's weight's tip on its ink dot
+    review_part_critical = "where a bug would hurt";
+    /// the review bar's mode: the guide's parts (a segmented control)
+    review_mode_guide = "Guide";
+    /// the review bar's mode: the parts by kind and folder (no model)
+    review_mode_kind = "By kind";
+    /// the review bar's count of the files he marked viewed
+    review_viewed_count(n, total) = "{n} of {total} viewed";
+    /// a file card's Viewed box
+    review_viewed = "Viewed";
+    /// its tip
+    review_viewed_tip = "mark this file viewed (v): its card folds";
+    /// the review bar's previous part's tip
+    review_part_prev = "previous part (p)";
+    /// the review bar's next part's tip
+    review_part_next = "next part (n)";
+    /// the bar's place's tip: it opens the outline
+    review_outline_tip = "the outline (⌘\\)";
+    /// the bar's guide slot while the small jobs model writes it
+    review_guide_writing = "writing the guide…";
+    /// the bar's guide slot on a change of 2 files and 4 hunks or less
+    review_guide_small = "small change: no guide";
+    /// the bar's guide slot when the call failed (then Try again)
+    review_guide_failed = "couldn't write the guide";
+    /// the bar's guide slot when small jobs is his main model: his click writes it
+    review_guide_write(tokens, model) = "Write a guide · about {tokens} tokens on {model}";
+    /// its tip
+    review_guide_write_tip = "your small jobs model is your main model, so i ask first";
+    /// the bar's guide slot once it came while he read (never moves what he reads)
+    review_guide_ready = "the guide is ready";
+    /// its action: the guide in place, at the part holding the file he was reading
+    review_guide_show = "Show it";
 
     // ---- a feature (route feature)
     /// the feature head's sub when it isn't known

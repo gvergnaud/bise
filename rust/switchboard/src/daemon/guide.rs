@@ -39,7 +39,8 @@ fn target_key(t: &GuideTarget) -> String {
     match t {
         GuideTarget::Agent { name } => format!("agent:{}", name),
         GuideTarget::Commit { sha, .. } => format!("commit:{}", sha),
-        GuideTarget::Pr { url } => format!("pr:{}", url),
+        // one PR, one key, whatever link opened it (forge::pr_link's, the PR artifacts' key)
+        GuideTarget::Pr { url } => format!("pr:{}", crate::forge::pr_link(url).map_or_else(|| url.clone(), |l| l.url)),
     }
 }
 
@@ -103,8 +104,10 @@ impl Shell {
             Next::Answer(state) => {
                 if let Why::Open { to, .. } = s.why {
                     let guide = if state == GuideState::Ready { s.kept.map(Box::new) } else { None };
-                    let tokens = (state == GuideState::NeedsClick).then_some(tokens);
-                    self.proto_note(&[to], &HubEv::Guide { project: self.project(), hash: s.hash, state, guide, tokens });
+                    let ask = state == GuideState::NeedsClick;
+                    let tokens = ask.then_some(tokens);
+                    let model = ask.then(|| small_ask::Small::of(self).model().to_string());
+                    self.proto_note(&[to], &HubEv::Guide { project: self.project(), hash: s.hash, state, guide, tokens, model });
                 }
             }
             Next::Start => self.guide_call(s, run),
@@ -117,7 +120,7 @@ impl Shell {
         let Some(small) = small else { return };
         self.guides.writing.insert(s.hash.clone());
         self.guides.failed.remove(&s.hash);
-        let ev = HubEv::Guide { project: self.project(), hash: s.hash.clone(), state: GuideState::Writing, guide: None, tokens: None };
+        let ev = HubEv::Guide { project: self.project(), hash: s.hash.clone(), state: GuideState::Writing, guide: None, tokens: None, model: None };
         if let Why::Open { to, .. } = s.why {
             self.proto_note(&[to], &ev);
         }
@@ -153,7 +156,7 @@ impl Shell {
         };
         let ids = self.typed_ids();
         if !ids.is_empty() {
-            self.proto_note(&ids, &HubEv::Guide { project: self.project(), hash, state, guide, tokens: None });
+            self.proto_note(&ids, &HubEv::Guide { project: self.project(), hash, state, guide, tokens: None, model: None });
         }
     }
 

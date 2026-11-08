@@ -13,7 +13,7 @@ import type { AnswerJump } from './store';
 import type { Acted } from './acted';
 import type { Refused } from './refused';
 import type { InboxItem } from '@/inbox/listed';
-import { prActKey, prDetailKey, prDiffKey, prLogKey, type PrActState } from './types';
+import { guideKey, prActKey, prDetailKey, prDiffKey, prLogKey, type GuideEv, type PrActState } from './types';
 import { artDiffKey, diffErrKey, diffKey, toolOutKey, Store, type ToolOut, type Away, type Dictation, type HubLine, type Diff, type FilesAnswer, type Ev, type EvOf, type Pending, type PrsList, type BranchesList, type VersionsList, type PagesList, type ThreadHits, type ThreadOrder, type VoiceModeState, type TalkShot } from './store';
 
 /**
@@ -139,6 +139,9 @@ export const useArtifactDiff = (project: string, id: string, version: number): D
   useSlice(artDiffKey(project, id, version), (s) => s.artifactDiff(project, id, version));
 export const useDiff = (project: string, agent: string, commit?: string): Diff | null =>
   useSlice(diffKey(project, agent, commit), (s) => s.diff(project, agent, commit));
+/** A diff's guide by the diff's hash (none: no hash, an older hub); null until the hub says. */
+export const useGuide = (project: string, hash: string | null): GuideEv | null =>
+  useSlice(hash === null ? 'guide:none' : guideKey(project, hash), (s) => (hash === null ? null : s.guide(project, hash)));
 /** A PR's diff by its link (askPrDiff); null until the hub answers. */
 export const usePrDiff = (project: string, url: string): Diff | null =>
   useSlice(prDiffKey(project, url), (s) => s.prDiff(project, url));

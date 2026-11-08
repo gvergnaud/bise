@@ -46,6 +46,16 @@ impl Small {
         (!big && !s.broken.load(Ordering::Relaxed)).then(|| Small { setup: bise_catalog::Setup { agent_model: String::new(), ..s.setup.clone() }, ..s })
     }
 
+    /// The model a call runs first (the small one, else the agents').
+    pub(super) fn model(&self) -> &str {
+        let (small, agent) = (&self.setup.small_model, &self.setup.agent_model);
+        if self.broken.load(Ordering::Relaxed) || small.is_empty() {
+            agent
+        } else {
+            small
+        }
+    }
+
     /// Some model is set up (the small one or the agents').
     pub(super) fn any(sh: &mut Shell) -> bool {
         let st = sh.config.setup();
@@ -70,7 +80,8 @@ impl Small {
             return Err("no model set up".into());
         }
         let keys = self.spawn_env.map(|f| f()).unwrap_or_default();
-        let first = if self.broken.load(Ordering::Relaxed) || small.is_empty() { agent } else { small };
+        // the one rule that picks it (the guide's button names the same)
+        let first = self.model();
         let got = oneshot(&self.repl, &self.root, req_file, first, &keys);
         let Err(e) = &got else { return got };
         log_line(&self.paths, &format!("{}: {} failed: {}", what, first, e));

@@ -275,6 +275,7 @@ export const EMPTY_ORDER: ThreadOrder = {
 };
 
 export type Diff = EvOf<'diff'>;
+export type GuideEv = EvOf<'guide'>;
 export type Away = EvOf<'away_summary'>;
 /** An `@` query's answer (core/picks.rs, the TUI's files.rs ranking). */
 export interface FilesAnswer {
@@ -326,6 +327,12 @@ export function toolOutKey(project: string, agent: string, pos: number): string 
 
 export function diffKey(project: string, agent: string, commit?: string): string {
   return commit === undefined ? `diff:${project}/${agent}` : `diff:${project}/@${commit}`;
+}
+
+/** A diff's guide by the diff's hash (page review-guided): the review, the PR tab and a merged
+ *  commit with the same diff share it. */
+export function guideKey(project: string, hash: string): string {
+  return `guide:${project}/${hash}`;
 }
 
 /** A `.diff` artifact's diff at its version (the `diff` ask's `artifact`, try-diff-open). */

@@ -621,6 +621,7 @@ export type {
   BranchesList,
   Dictation,
   Diff,
+  GuideEv,
   Ev,
   EvOf,
   FilesAnswer,

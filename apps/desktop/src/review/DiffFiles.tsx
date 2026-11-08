@@ -6,13 +6,16 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
 import { copyText, QuotePop } from '@/quote/QuotePop';
 import { flatRows, handQuotes, quotesOf, range, type RowAt, type Sel } from './quote';
-import { Button, Diff, Empty, Fold, type DiffLine as DsLine } from '@/ds';
+import { Button, Check, Diff, Empty, Fold, tipAttrs, type DiffLine as DsLine } from '@/ds';
 import { pages } from '@/proto/words_pages.gen';
 import { diffRuns, langOfPath } from './syntax';
 import { useRouter } from '@/app/router';
 import type { Diff as DiffEv } from '@/store';
-import { fileHead, linesOf } from './model';
-import { counts, framed, partsOf, shownOrder, type Kind, type Part } from './parts';
+import type { GuideTarget } from '@/proto';
+import type { Kind } from './parts';
+import { guideColumn, kindColumn, numberOf, shownCards, viewedCount, type Card, type Section, type Words } from './column';
+import { useGuideState, useSectionNav, useViewed } from './columnState';
+import { GuideSlot, ReviewBar } from './ReviewBar';
 import './review.css';
 
 export interface DiffFilesProps {
@@ -32,25 +35,30 @@ export interface DiffFilesProps {
   readonly onEscape: () => void;
   /** its test ids: `<testId>.files`, a file `<testId>.file.<i>`, its line `<testId>.file.<i>.<l>` */
   readonly testId?: string;
+  /** the change its guide is asked for (page review-guided); none: By kind only (a .diff artifact) */
+  readonly guide?: GuideTarget;
 }
 
-export function DiffFiles({ project, diff, loading, error, onRetry, none, to, from, onEscape, testId = 'review' }: DiffFilesProps) {
+export function DiffFiles({ project, diff, loading, error, onRetry, none, to, from, onEscape, testId = 'review', guide }: DiffFilesProps) {
   const router = useRouter();
   const body = useRef<HTMLDivElement>(null);
   const at = useRef(-1);
   useEffect(() => {
     body.current?.focus();
   }, []);
-  // the files in the parts' order (simple mode: parts.ts), a folded part's left out: the quote's
-  // rows, `starts` and the test ids all follow what is shown, never git's order
-  // the kinds he folded; Generated starts folded (a path rule, never the guide's weight)
-  const [folded, setFolded] = useState<readonly Kind[]>(['generated']);
-  const parts = useMemo(() => (diff === null ? [] : partsOf(diff.files)), [diff]);
-  const order = useMemo(() => shownOrder(parts, framed(parts) ? folded : []), [parts, folded]);
-  const shown = useMemo(() => order.flatMap((i) => diff?.files[i] ?? []), [diff, order]);
-  const shownAt = useMemo(() => new Map(order.map((fi, i) => [fi, i])), [order]);
-  const fileLines = useMemo(() => shown.map(linesOf), [shown]);
-  const paths = useMemo(() => shown.map((f) => f.path), [shown]);
+  // the column (column.ts): its sections in the mode shown, a folded one's cards left out: the
+  // quote's rows, `starts` and the test ids all follow what is shown, never git's order
+  const g = useGuideState(project, diff, guide, body);
+  // the sections he folded; Generated starts folded (a path rule, never the guide's weight)
+  const [folded, setFolded] = useState<readonly string[]>(['generated']);
+  const viewed = useViewed(project);
+  const sections = useMemo(() => {
+    if (diff === null) return [];
+    return g.mode === 'guide' && g.shown !== null ? guideColumn(diff, g.shown, folded, viewed.set, WORDS) : kindColumn(diff, folded, viewed.set, WORDS);
+  }, [diff, g.mode, g.shown, folded, viewed.set]);
+  const cards = useMemo(() => shownCards(sections), [sections]);
+  const fileLines = useMemo(() => cards.map((c) => c.lines), [cards]);
+  const paths = useMemo(() => cards.map((c) => c.path), [cards]);
   const rows = useMemo(() => flatRows(fileLines), [fileLines]);
   const starts = useMemo(() => fileLines.reduce<number[]>((acc, _ls, i) => [...acc, i === 0 ? 0 : (acc[i - 1] ?? 0) + (fileLines[i - 1]?.length ?? 0)], []), [fileLines]);
   const [sel, setSel] = useState<Sel | null>(null);
@@ -133,7 +141,18 @@ export function DiffFiles({ project, diff, loading, error, onRetry, none, to, fr
       return;
     }
     const files = body.current?.querySelectorAll<HTMLElement>('.rv-file') ?? [];
-    if (e.key === 'Tab' && files.length > 0) {
+    const plain = !e.metaKey && !e.ctrlKey && !e.altKey;
+    if (e.key === BACKSLASH && e.metaKey) {
+      e.preventDefault();
+      setOutline((o) => !o);
+    } else if ((e.key === 'n' || e.key === 'p') && plain) {
+      e.preventDefault();
+      nav.go(e.key === 'n' ? 1 : -1);
+    } else if (e.key === 'v' && plain) {
+      e.preventDefault();
+      const c = cards[Math.max(0, at.current)];
+      if (c !== undefined) markViewed(c, !c.viewed);
+    } else if (e.key === 'Tab' && files.length > 0) {
       e.preventDefault();
       at.current = (at.current + (e.shiftKey ? -1 : 1) + files.length) % files.length;
       files[at.current]?.scrollIntoView({ block: 'start' });
@@ -145,45 +164,54 @@ export function DiffFiles({ project, diff, loading, error, onRetry, none, to, fr
       onEscape();
     }
   };
-  // opening or folding a part moves the shown rows: a selection over them goes
-  const toggle = (k: Kind) => {
+  // opening or folding a section moves the shown rows: a selection over them goes
+  const toggle = (key: string) => {
     setSel(null);
     at.current = -1;
-    setFolded((f) => (f.includes(k) ? f.filter((x) => x !== k) : [...f, k]));
+    setFolded((f) => (f.includes(key) ? f.filter((x) => x !== key) : [...f, key]));
   };
-  // under a folder line, a file's head names it short (its full path in the tip)
-  const short = framed(parts);
-  const fileAt = (i: number) => {
-    const f = shown[i];
-    if (f === undefined) return null;
-    return (
-      <div key={f.path} className="rv-file">
-        {f.note != null && f.note !== '' && <p className="rv-note">{f.note}</p>}
-        <FileDiff
-          path={f.path}
-          head={fileHead(f, short)}
-          tip={short ? f.path : undefined}
-          add={f.add}
-          rm={f.del}
-          lines={fileLines[i] ?? []}
-          picked={(li) => inSel(sel, (starts[i] ?? 0) + li)}
-          pop={sel !== null && !dragging && lastFileOf(sel, rows) === i ? <QuotePop to={to} testId={`${testId}.quote.pop`} onAsk={askClick} onCopy={copyClick} /> : undefined}
-          testId={`${testId}.file.${i}`}
-        />
-      </div>
-    );
+  const markViewed = (c: Card, on: boolean) => {
+    setSel(null);
+    viewed.mark(c.file, on);
   };
-  // a part's folders: its folder line, then that folder's files (each at its shown index)
-  const groupsOf = (p: Part) =>
-    p.groups.map((g) => (
-      <div key={g.folder} className="rv-group">
-        <p className="rv-folder">{g.folder === '' ? pages.review_folder_root : g.folder}</p>
-        {g.files.map((fi) => fileAt(shownAt.get(fi) ?? -1))}
+  const fileAt = (c: Card, i: number) => (
+    <div key={c.key} className="rv-file" data-path={c.path}>
+      {c.note != null && c.note !== '' && <p className="rv-note">{c.note}</p>}
+      <FileDiff
+        path={c.path}
+        head={
+          <>
+            {c.head}
+            <span className="rv-vbox" {...tipAttrs(pages.review_viewed_tip)}>
+              <Check on={c.viewed} onChange={(on) => { markViewed(c, on); }} label={pages.review_viewed} testId={`${testId}.file.${String(i)}.viewed`} />
+            </span>
+          </>
+        }
+        tip={c.short ? c.path : undefined}
+        add={c.add}
+        rm={c.del}
+        lines={c.lines}
+        picked={(li) => inSel(sel, (starts[i] ?? 0) + li)}
+        pop={sel !== null && !dragging && lastFileOf(sel, rows) === i ? <QuotePop to={to} testId={`${testId}.quote.pop`} onAsk={askClick} onCopy={copyClick} /> : undefined}
+        testId={`${testId}.file.${String(i)}`}
+      />
+    </div>
+  );
+  const cardAt = new Map(cards.map((c, i) => [c.key, i]));
+  const blocksOf = (s: Section) =>
+    s.blocks.map((b, k) => (
+      <div key={b.folder ?? String(k)} className="rv-group">
+        {b.folder !== null && <p className="rv-folder">{b.folder}</p>}
+        {b.cards.map((c) => fileAt(c, cardAt.get(c.key) ?? -1))}
       </div>
     ));
+  const nav = useSectionNav(body, sections);
+  const [outline, setOutline] = useState(false);
+  const framedNow = sections.length > 1 || (sections[0]?.blocks.length ?? 0) > 1;
+  const place = [numberOf(sections, nav.cur), sections.find((s) => s.key === nav.cur)?.label].filter(Boolean).join(' · ');
 
   return (
-    <div className="rv-body" data-testid={`${testId}.files`} tabIndex={-1} ref={body} onKeyDown={onKey} onMouseDown={onMouseDown} onMouseOver={onMouseOver} data-selecting={sel !== null || undefined}>
+    <div className="rv-body" data-testid={`${testId}.files`} tabIndex={-1} ref={body} onKeyDown={onKey} onMouseDown={onMouseDown} onMouseOver={onMouseOver} onScroll={(e) => { nav.onScroll(); g.noteScroll(e.currentTarget.scrollTop); }} data-selecting={sel !== null || undefined}>
       {/* never a bare grey bar (designer m_15244): say what it waits for, or that nothing differs */}
       {diff === null && error != null ? (
         <Empty
@@ -199,24 +227,31 @@ export function DiffFiles({ project, diff, loading, error, onRetry, none, to, fr
         <Empty testId={`${testId}.none`} title={none}>{diff.note ?? undefined}</Empty>
       ) : (
         <>
+        {(framedNow || guide !== undefined) && (
+          <ReviewBar
+            place={place}
+            onOutline={() => { setOutline((o) => !o); }}
+            outline={outline ? { sections, number: (k) => numberOf(sections, k), onSection: (k) => { setOutline(false); nav.to(k); }, onClose: () => { setOutline(false); body.current?.focus(); }, testId } : null}
+            onPrev={() => { nav.go(-1); }}
+            onNext={() => { nav.go(1); }}
+            viewed={pages.review_viewed_count({ n: viewedCount(diff.files, viewed.set), total: diff.files.length })}
+            mode={g.mode === 'guide' && g.shown !== null ? 'guide' : 'kind'}
+            canGuide={g.ready}
+            onMode={g.setMode}
+            slot={guide === undefined ? null : <GuideSlot ev={g.ev} shown={g.shown !== null && g.mode === 'guide'} onRun={g.run} onShow={g.show} testId={testId} />}
+            testId={testId}
+          />
+        )}
         {diff.cut_files != null && diff.cut_files > 0 && <p className="rv-note" data-testid={`${testId}.cut`}>{pages.review_cut_files({ n: diff.cut_files })}</p>}
-        {!framed(parts)
-          ? shown.map((_f, i) => fileAt(i))
-          : parts.map((p) => {
-              const open = !folded.includes(p.kind);
-              // folded, its files' names say what it holds ('words_pages.gen.ts')
-              const names = open ? '' : p.groups.flatMap((g) => g.files.map((fi) => baseName(diff.files[fi]?.path ?? ''))).join(', ');
-              const facts = ['', pages.review_part_files({ n: p.files }), names, counts(p)].filter((x, k) => k === 0 || x !== '').join(' · ');
-              return (
-                <div key={p.kind} className="rv-part" data-testid={`${testId}.part.${p.kind}`}>
-                  <Fold open={open} onToggle={() => { toggle(p.kind); }} testId={`${testId}.part.${p.kind}.fold`}>
-                    <span className="rv-kind">{kindWord[p.kind]}</span>
-                    <span className="rv-facts">{facts}</span>
-                  </Fold>
-                  {open && groupsOf(p)}
-                </div>
-              );
-            })}
+        {g.mode === 'guide' && g.shown !== null && g.shown.overview !== '' && <p className="rv-overview" data-testid={`${testId}.overview`}>{g.shown.overview}</p>}
+        {!framedNow && g.shown === null
+          ? cards.map((c, i) => fileAt(c, i))
+          : sections.map((s) => (
+              <div key={s.key} className="rv-part" data-section={s.key} data-testid={`${testId}.part.${s.key}`}>
+                <SectionHead s={s} number={numberOf(sections, s.key)} onToggle={() => { toggle(s.key); }} testId={`${testId}.part.${s.key}.fold`} />
+                {!s.folded && blocksOf(s)}
+              </div>
+            ))}
         </>
       )}
     </div>
@@ -225,7 +260,7 @@ export function DiffFiles({ project, diff, loading, error, onRetry, none, to, fr
 
 interface FileDiffProps {
   readonly path: string;
-  readonly head: string;
+  readonly head: ReactNode;
   /** the head's tip: the full path when the head names it short */
   readonly tip?: string | undefined;
   readonly add: number;
@@ -259,7 +294,40 @@ const kindWord: Record<Kind, string> = {
   generated: pages.review_kind_generated,
 };
 
-const baseName = (path: string) => path.slice(path.lastIndexOf('/') + 1);
+/** ⌘\\ opens the outline */
+const BACKSLASH = String.fromCharCode(92);
+
+const WORDS: Words = { kind: kindWord, files: (n) => pages.review_part_files({ n }), root: pages.review_folder_root, rest: pages.review_part_rest };
+
+/**
+ * A section's head, its fold (his: any section folds): a kind's word, or a guide part's number,
+ * area and title (a critical part's title gets an ink dot and bold; a context part a dim word,
+ * open: the weight never folds, architect m_57259), its summary, its facts.
+ */
+function SectionHead({ s, number, onToggle, testId }: { s: Section; number: string | null; onToggle: () => void; testId: string }) {
+  // folded, its files' names say what it holds ('words_pages.gen.ts')
+  const facts = ['', s.count, s.folded ? s.names.join(', ') : '', s.sum].filter((x, k) => k === 0 || x !== '').join(' · ');
+  if (s.kind !== 'part') {
+    return (
+      <Fold open={!s.folded} onToggle={onToggle} testId={testId}>
+        <span className="rv-kind">{s.label}</span>
+        <span className="rv-facts">{facts}</span>
+      </Fold>
+    );
+  }
+  return (
+    <>
+      <Fold open={!s.folded} onToggle={onToggle} testId={testId}>
+        <span className="rv-area">{[number, s.label, s.weight === 'context' ? pages.review_part_context : ''].filter(Boolean).join(' · ')}</span>
+      </Fold>
+      <h3 className="rv-title" data-weight={s.weight ?? undefined}>
+        {s.weight === 'critical' && <i className="rv-dot" {...tipAttrs(pages.review_part_critical)} />}
+        {s.title}
+      </h3>
+      {s.summary !== null && s.summary !== '' && <p className="rv-summary">{s.summary}</p>}
+    </>
+  );
+}
 
 /** Row `i` of the flat list is in the selection. */
 function inSel(s: Sel | null, i: number): boolean {

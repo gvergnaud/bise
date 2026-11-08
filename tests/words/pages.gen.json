@@ -196,6 +196,44 @@
     "one": null,
     "text": "top level"
   },
+  "pages.review_guide_failed": {
+    "args": [],
+    "one": null,
+    "text": "couldn't write the guide"
+  },
+  "pages.review_guide_ready": {
+    "args": [],
+    "one": null,
+    "text": "the guide is ready"
+  },
+  "pages.review_guide_show": {
+    "args": [],
+    "one": null,
+    "text": "Show it"
+  },
+  "pages.review_guide_small": {
+    "args": [],
+    "one": null,
+    "text": "small change: no guide"
+  },
+  "pages.review_guide_write": {
+    "args": [
+      "tokens",
+      "model"
+    ],
+    "one": null,
+    "text": "Write a guide · about {tokens} tokens on {model}"
+  },
+  "pages.review_guide_write_tip": {
+    "args": [],
+    "one": null,
+    "text": "your small jobs model is your main model, so i ask first"
+  },
+  "pages.review_guide_writing": {
+    "args": [],
+    "one": null,
+    "text": "writing the guide…"
+  },
   "pages.review_kind_code": {
     "args": [],
     "one": null,
@@ -242,6 +280,16 @@
     "one": null,
     "text": "Merge into main"
   },
+  "pages.review_mode_guide": {
+    "args": [],
+    "one": null,
+    "text": "Guide"
+  },
+  "pages.review_mode_kind": {
+    "args": [],
+    "one": null,
+    "text": "By kind"
+  },
   "pages.review_no_changes": {
     "args": [],
     "one": null,
@@ -264,12 +312,42 @@
     "one": null,
     "text": "open #{n} in your browser"
   },
+  "pages.review_outline_tip": {
+    "args": [],
+    "one": null,
+    "text": "the outline (⌘\\)"
+  },
+  "pages.review_part_context": {
+    "args": [],
+    "one": null,
+    "text": "context"
+  },
+  "pages.review_part_critical": {
+    "args": [],
+    "one": null,
+    "text": "where a bug would hurt"
+  },
   "pages.review_part_files": {
     "args": [
       "n"
     ],
     "one": "{n} file",
     "text": "{n} files"
+  },
+  "pages.review_part_next": {
+    "args": [],
+    "one": null,
+    "text": "next part (n)"
+  },
+  "pages.review_part_prev": {
+    "args": [],
+    "one": null,
+    "text": "previous part (p)"
+  },
+  "pages.review_part_rest": {
+    "args": [],
+    "one": null,
+    "text": "The rest"
   },
   "pages.review_retry": {
     "args": [],
@@ -280,6 +358,24 @@
     "args": [],
     "one": null,
     "text": "Thread"
+  },
+  "pages.review_viewed": {
+    "args": [],
+    "one": null,
+    "text": "Viewed"
+  },
+  "pages.review_viewed_count": {
+    "args": [
+      "n",
+      "total"
+    ],
+    "one": null,
+    "text": "{n} of {total} viewed"
+  },
+  "pages.review_viewed_tip": {
+    "args": [],
+    "one": null,
+    "text": "mark this file viewed (v): its card folds"
   },
   "pages.see_changes": {
     "args": [],

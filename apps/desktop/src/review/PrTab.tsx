@@ -6,10 +6,10 @@
 // to fix' that fills the composer and never sends, reviews read-only, its agents) and Changes (its
 // diff, the hub's pick of place or forge). Every wait says what it waits for, with the link out
 // beside a miss. Owner: pr-artifacts.
-import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { Button, Empty, Head, MoreButton, Press, Seg, Skel, tipAttrs, type EntityMenu } from '@/ds';
 import { prDiffKey, useArtifacts, useDiffError, usePrActed, usePrCheckLog, usePrDetail, usePrDiff, useStore } from '@/store';
-import type { Pr, PrCheck, PrDetail } from '@/proto';
+import type { GuideTarget, Pr, PrCheck, PrDetail } from '@/proto';
 import { panel } from '@/proto/words_panel.gen';
 import { menus } from '@/proto/words_menus.gen';
 import { Markdown } from '@/thread/Markdown';
@@ -229,12 +229,14 @@ function Changes({ project, url }: { project: string; url: string }) {
   const router = useRouter();
   const diff = usePrDiff(project, url);
   const failed = useDiffError(prDiffKey(project, url));
+  // its guide (page review-guided): the hub keys a PR by its canonical link
+  const target = useMemo((): GuideTarget => ({ kind: 'pr', url }), [url]);
   useEffect(() => {
     store.askPrDiff(project, url);
   }, [store, project, url]);
   return (
     <DiffFiles project={project} diff={diff} loading={panel.prtab_loading_changes} error={failed}
       onRetry={() => { store.askPrDiff(project, url); }} none={panel.prtab_no_changes}
-      to={diff?.agent ?? ''} from={url} onEscape={() => { router.back(); }} testId="prtab.changes" />
+      to={diff?.agent ?? ''} from={url} onEscape={() => { router.back(); }} testId="prtab.changes" guide={target} />
   );
 }

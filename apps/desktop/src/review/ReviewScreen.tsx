@@ -4,10 +4,10 @@
 // change or a commit from 'merged today' is read-only ('merged · e0f3df5
 // · 14:05', no merge, no ask for changes); a merge happens only by his
 // click on the agent's open merge card (the hub's one /answer path).
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Button, Head } from '@/ds';
 import { diffKey, useAgents, useCards, useDiff, useDiffError, useMerged, usePlaces, useStore } from '@/store';
-import type { Pr } from '@/proto';
+import type { GuideTarget, Pr } from '@/proto';
 import { clock } from '@/thread/entry';
 import { useRouter } from '@/app/router';
 import { usePageColumn } from '@/app/pagecol';
@@ -47,6 +47,8 @@ export function ReviewScreen({ project, agent, commit }: { project: string; agen
   const card = done ? undefined : mergeCardOf(cards, agent);
   const title = commit === undefined ? agent : pages.review_commit({ sha: commit.slice(0, 7) });
   const line = headLine(diff, { commit, merged, clock });
+  // the change its guide is of (page review-guided): the agent's live change, or that commit
+  const guideTarget = useMemo((): GuideTarget => (commit === undefined ? { kind: 'agent', name: agent } : { kind: 'commit', agent, sha: commit }), [agent, commit]);
 
   return (
     <section ref={screen} style={col} className="rv-screen" data-testid="review.screen" data-project={project} data-agent={agent}>
@@ -103,6 +105,7 @@ export function ReviewScreen({ project, agent, commit }: { project: string; agen
         onEscape={() => {
           router.back();
         }}
+        guide={guideTarget}
       />
     </section>
   );

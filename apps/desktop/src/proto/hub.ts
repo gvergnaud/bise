@@ -95,7 +95,12 @@ hash?: string | null, title?: string | null, req?: number | null, commits?: numb
  * a `.diff` artifact's diff (the `diff` ask's `artifact`): its id and
  * the version read; a client keys the answer by them
  */
-artifact?: string | null, version?: number | null, } | { "ev": "guide", project: string, hash: string, state: GuideState, guide?: Guide | null, tokens?: number | null, } | { "ev": "branches", project: string, base: string, rows: Array<BranchRow>, } | { "ev": "versions", project: string, current: string, dev?: boolean, installed?: boolean, items: Array<VersionItem>, } | { "ev": "release" } & ReleaseEv | { "ev": "update" } & UpdateEv | { "ev": "route", project: string, rid: number, to: string, name: string, text: string, correct_until_ms: number, why: string, } | { "ev": "route_done", project: string, rid: number, state: string, to: string, xid?: number | null, msg?: number | null, } | { "ev": "jobs", project: string, items: Array<Job>, } | { "ev": "job_end", project: string, agent: string, state: JobState, label: string, summary: string, 
+artifact?: string | null, version?: number | null, } | { "ev": "guide", project: string, hash: string, state: GuideState, guide?: Guide | null, tokens?: number | null, 
+/**
+ * needs_click: the model his click runs (his main model: the
+ * button names it, page review-guided)
+ */
+model?: string | null, } | { "ev": "branches", project: string, base: string, rows: Array<BranchRow>, } | { "ev": "versions", project: string, current: string, dev?: boolean, installed?: boolean, items: Array<VersionItem>, } | { "ev": "release" } & ReleaseEv | { "ev": "update" } & UpdateEv | { "ev": "route", project: string, rid: number, to: string, name: string, text: string, correct_until_ms: number, why: string, } | { "ev": "route_done", project: string, rid: number, state: string, to: string, xid?: number | null, msg?: number | null, } | { "ev": "jobs", project: string, items: Array<Job>, } | { "ev": "job_end", project: string, agent: string, state: JobState, label: string, summary: string, 
 /**
  * draft (J): the job's key (its end's time on that hub), the same
  * as in bise's followed_end of it: a window shows one line per

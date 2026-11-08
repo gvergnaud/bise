@@ -8,6 +8,7 @@ import {
   diffKey,
   diffErrKey,
   artDiffKey,
+  guideKey,
   type Ev,
   type HubLine,
   type InboxList,
@@ -228,6 +229,10 @@ export function applyTyped(s: Store, ev: Ev): void {
         s.put(key, ev);
         if (s.slices.get(diffErrKey(key)) != null) s.put(diffErrKey(key), null);
       }
+      return;
+    // a diff's guide by its hash: the answer to `guide`, or one written for every window
+    case "guide":
+      s.put(guideKey(ev.project, ev.hash), ev);
       return;
     case "prefs":
       s.put("prefs", ev.prefs);

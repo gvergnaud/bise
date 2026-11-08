@@ -371,6 +371,10 @@ pub enum HubEv {
         guide: Option<Box<Guide>>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         tokens: Option<u32>,
+        /// needs_click: the model his click runs (his main model: the
+        /// button names it, page review-guided)
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        model: Option<String>,
     },
     /// `/diff`'s branch picker (the answer to `branches`): the local
     /// branches ahead of `base`, the trunk

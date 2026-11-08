@@ -42,6 +42,8 @@ import {
   diffKey,
   diffErrKey,
   artDiffKey,
+  guideKey,
+  type GuideEv,
   prActKey,
   type PrActState,
   prDetailKey,
@@ -370,6 +372,10 @@ export class StoreReads extends StoreBase {
   }
   prDiff(project: string, url: string): Diff | null {
     return this.slice<Diff | null>(prDiffKey(project, url), null);
+  }
+  /** A diff's guide (its state, the guide once written) by the diff's hash; null before the hub says. */
+  guide(project: string, hash: string): GuideEv | null {
+    return this.slice<GuideEv | null>(guideKey(project, hash), null);
   }
   /** The latest diff of an agent's change, or of one commit (`commit`). */
   diff(project: string, agent: string, commit?: string): Diff | null {

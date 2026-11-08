@@ -126,6 +126,8 @@ pub struct Guide {
 pub enum GuideTarget {
     Agent { name: String },
     Commit { agent: String, sha: String },
+    /// a PR by its link; the hub reads it through forge::pr_link (one PR,
+    /// one key, whatever link opened it)
     Pr { url: String },
 }
 
