@@ -10,7 +10,13 @@ export type Hunk = { header: string, lines: Array<DiffLine>,
 /**
  * git's function context after the `@@` (the terminal's `@@ head @@`)
  */
-head?: string | null, };
+head?: string | null, 
+/**
+ * its id in a guide: a short hash of its file's path and its removed
+ * and added lines, stable across pushes while the hunk is the same
+ * (switchboard's guide::hunk_id; never computed by a client)
+ */
+id?: string | null, };
 
 export type DiffFile = { path: string, 
 /**
@@ -75,3 +81,56 @@ export type DiffView = { title?: string | null, req?: number | null, commits?: n
  * the version read; a client keys the answer by them
  */
 artifact?: string | null, version?: number | null, };
+
+/**
+ * How much a guide's part matters to the change (page review-guided). A
+ * label only: the review shows every part, never folds or skips one by
+ * its weight (architect m_57259: the guide never hides code).
+ */
+export type Weight = "critical" | "normal" | "context";
+
+/**
+ * One part of a guide: an idea of the change, its hunks in reading order.
+ */
+export type GuidePart = { 
+/**
+ * where it is, 1-2 words ("Sidebar", "Tests")
+ */
+area: string, 
+/**
+ * 2-6 words that name the idea, never a file ("Give the row's end one owner")
+ */
+title: string, 
+/**
+ * at most two lines, plain text
+ */
+summary: string, 
+/**
+ * its hunks' ids ([`Hunk::id`]), in the order to read them
+ */
+hunks: Array<string>, weight: Weight, };
+
+/**
+ * A change's guide, written by the small jobs model (switchboard's
+ * guide.rs). Every hunk of the diff is in exactly one part or in `rest`.
+ */
+export type Guide = { 
+/**
+ * three lines at most: what the change does, plain text
+ */
+overview: string, parts: Array<GuidePart>, 
+/**
+ * the hunks out of the story (glue, docs, generated, repeats)
+ */
+rest: Array<string>, };
+
+/**
+ * The diff a `guide` ask is about: the same diffs as the review's
+ * (an agent's change, a commit, a PR by its link).
+ */
+export type GuideTarget = { "kind": "agent", name: string, } | { "kind": "commit", agent: string, sha: string, } | { "kind": "pr", url: string, };
+
+/**
+ * Where a diff's guide stands (the `guide` event).
+ */
+export type GuideState = "none" | "small" | "writing" | "ready" | "failed" | "needs_click" | "unknown";

@@ -5,7 +5,7 @@
 //! they can't reach a hub or come from one.
 
 use crate::context::FnContext;
-use crate::diff::{DiffFile, DiffResult, DiffView};
+use crate::diff::{DiffFile, DiffResult, DiffView, Guide, GuideState, GuideTarget};
 use crate::ops::{BranchRow, ReleaseEv, UpdateEv, VersionItem};
 use crate::parts::Part;
 use crate::rows::{Agent, ApprovalMode, ApprovalRule, Artifact, ArtifactMoved, Card, Folder, FolderOp, LibraryProject, CheckerKind, Feature, Merged, Model, Place, Pr, Proc, ScheduledTask, UsageRow, Worktree};
@@ -355,6 +355,22 @@ pub enum HubEv {
         /// next to these on the wire, boxed (the enum stays small)
         #[serde(flatten)]
         view: Box<DiffView>,
+        /// the hash of its files (switchboard's guide::diff_hash, computed
+        /// once where the diff is read): its guide's key (`guide`)
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        hash: Option<String>,
+    },
+    /// a diff's guide (page review-guided), keyed by the diff's `hash`:
+    /// the answer to `guide`, and to every client when one is written or
+    /// fails; `tokens` the call's estimated cost (needs_click)
+    Guide {
+        project: Project,
+        hash: String,
+        state: GuideState,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        guide: Option<Box<Guide>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        tokens: Option<u32>,
     },
     /// `/diff`'s branch picker (the answer to `branches`): the local
     /// branches ahead of `base`, the trunk
@@ -589,7 +605,7 @@ pub enum HubEv {
 }
 
 impl HubEv {
-    pub const TAGS: &'static [&'static str] = &["welcome", "agents", "cards", "thread", "thread_hits", "entry", "typing", "partial", "artifacts", "artifacts_moved", "folders", "library", "scheduled", "worktrees", "processes", "proc_out", "merged", "features", "prs", "pr_acted", "pr_detail", "pr_check_log", "models", "tool_out", "queued_taken", "log", "completion", "log_body", "diff", "branches", "versions", "release", "update", "route", "route_done", "jobs", "job_end", "followed_end", "activity", "flow", "paused", "switch", "growth", "pulse", "bise_update", "usage", "pages", "page_changed", "card_open", "app_open", "inbox_history", "inbox_recorded", "focused", "approvals", "notice", "refused", "error"];
+    pub const TAGS: &'static [&'static str] = &["welcome", "agents", "cards", "thread", "thread_hits", "entry", "typing", "partial", "artifacts", "artifacts_moved", "folders", "library", "scheduled", "worktrees", "processes", "proc_out", "merged", "features", "prs", "pr_acted", "pr_detail", "pr_check_log", "models", "tool_out", "queued_taken", "log", "completion", "log_body", "diff", "guide", "branches", "versions", "release", "update", "route", "route_done", "jobs", "job_end", "followed_end", "activity", "flow", "paused", "switch", "growth", "pulse", "bise_update", "usage", "pages", "page_changed", "card_open", "app_open", "inbox_history", "inbox_recorded", "focused", "approvals", "notice", "refused", "error"];
 
     pub fn decode(line: &str) -> Result<HubEv, String> {
         Self::from_value(parse(line)?)
@@ -860,6 +876,15 @@ pub enum HubCmd {
     /// error says why it stayed (delivered, taken, not his, the agent
     /// down). The user's authority: a client's only (issue 16)
     QueuedSteer { project: Project, agent: String, id: u64 },
+    /// the review opened a diff, or he clicked 'Write a guide': its guide
+    /// (`guide` answers). `run`: his click, the call may use the main
+    /// model; else only a kept guide or the small jobs model's
+    Guide {
+        project: Project,
+        target: GuideTarget,
+        #[serde(default, skip_serializing_if = "crate::is_false")]
+        run: bool,
+    },
     /// `/diff`'s picker opened: `branches` answers
     Branches { project: Project },
     /// the environments screen opened: `worktrees` comes again
@@ -1179,7 +1204,7 @@ pub enum HubCmd {
 }
 
 impl HubCmd {
-    pub const TAGS: &'static [&'static str] = &["subscribe", "unsubscribe", "page", "find", "send", "answer", "close", "approvals", "remove_rule", "stop", "archive", "unarchive", "artifacts_seen", "tool_out", "log", "completion", "log_body", "queued_take", "queued_steer", "diff", "worktrees", "processes", "proc_out", "proc_follow", "proc_stop", "merged", "features", "prs", "pr_act", "pr_detail", "pr_check_log", "inbox_history", "scheduled", "scheduled_stop", "wake_stop", "models", "new", "rename", "model", "effort", "route_correct", "route_cancel", "follow", "slash", "branches", "scheduled_run", "artifacts_add", "artifacts_move", "artifacts_folders", "artifacts_library", "focus", "versions", "version_info", "version_switch", "version_rollback", "version_restart", "version_update", "bise_update", "release_plan", "release_run", "stop_hub", "page_voice", "usage", "pause", "resume", "view_resource", "view_call", "view_message", "view_context", "plugin_views", "app_open"];
+    pub const TAGS: &'static [&'static str] = &["subscribe", "unsubscribe", "page", "find", "send", "answer", "close", "approvals", "remove_rule", "stop", "archive", "unarchive", "artifacts_seen", "tool_out", "log", "completion", "log_body", "queued_take", "queued_steer", "diff", "worktrees", "processes", "proc_out", "proc_follow", "proc_stop", "merged", "features", "prs", "pr_act", "pr_detail", "pr_check_log", "inbox_history", "scheduled", "scheduled_stop", "wake_stop", "models", "new", "rename", "model", "effort", "route_correct", "route_cancel", "follow", "slash", "guide", "branches", "scheduled_run", "artifacts_add", "artifacts_move", "artifacts_folders", "artifacts_library", "focus", "versions", "version_info", "version_switch", "version_rollback", "version_restart", "version_update", "bise_update", "release_plan", "release_run", "stop_hub", "page_voice", "usage", "pause", "resume", "view_resource", "view_call", "view_message", "view_context", "plugin_views", "app_open"];
 
     pub fn decode(line: &str) -> Result<HubCmd, String> {
         Self::from_value(parse(line)?)
@@ -1250,6 +1275,7 @@ impl HubCmd {
             | HubCmd::Follow { project, .. }
             | HubCmd::Slash { project, .. }
             | HubCmd::Branches { project }
+            | HubCmd::Guide { project, .. }
             | HubCmd::ScheduledRun { project, .. }
             | HubCmd::ArtifactsAdd { project, .. }
             | HubCmd::ArtifactsMove { project, .. }

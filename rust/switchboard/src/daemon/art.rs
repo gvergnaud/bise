@@ -1,7 +1,7 @@
 //! Artifacts and diffs on the hub's side (docs/artifacts.md): the
 //! `artifacts` event (artifacts/seen, artifacts/add's words), `sb
 //! artifact` (add, list, archive, unarchive), the thread lines, `diff/read` and `branches/list`'s answers
-//! (computed off the hub's loop), each agent's
+//! (computed off the hub's loop; [`Shell::diff_job`] reads a diff for the guide too, daemon/guide.rs), each agent's
 //! `changes` in the state, the `landed` line after a land, and his edits
 //! saved from the viewer's grid ([`Shell::art_save`], pages/artifact/save.rs).
 
@@ -514,6 +514,16 @@ impl Shell {
     /// shape (`proto_view::diff`), to that client. `d` is checked
     /// (`DiffAsk::check`).
     pub(super) fn diff_typed(&mut self, id: ClientId, project: String, d: crate::proto_view::DiffAsk) {
+        let (job, tx) = (self.diff_job(project, d), self.tx.clone());
+        std::thread::spawn(move || {
+            let _ = tx.send(Msg::Typed { to: super::rpc::Typed::Answer(id), v: job().to_value() });
+        });
+    }
+
+    /// The typed `diff` event `d` asks (or its `error`), read by the
+    /// returned job off the hub's loop: the review's answer, and the
+    /// diff a guide reads (daemon/guide.rs), the same way.
+    pub(super) fn diff_job(&mut self, project: String, d: crate::proto_view::DiffAsk) -> impl FnOnce() -> bise_proto::hub::HubEv + Send + 'static {
         let shared = PathBuf::from(&self.hub.workspace);
         // one commit: the range ask the TUI's door under a land uses
         let ask = self.diff_ask(&d.op());
@@ -524,8 +534,8 @@ impl Shell {
         let mine = d.range.is_none() && d.commit.is_none();
         let result = self.hub.st.agents.get(&agent).filter(|_| mine).and_then(|a| a.last_report.as_ref()).and_then(|r| r.result.clone());
         let req = d.req.map_or(Value::Null, |r| json!(r));
-        let (tx, how) = (self.tx.clone(), self.base_how());
-        std::thread::spawn(move || {
+        let how = self.base_how();
+        move || {
             let mut ev = diff_answer(ask, &shared, &how, req);
             // a binary file's size, read here (the mapper stays pure):
             // its file in the agent's checkout, when it is still there
@@ -543,8 +553,8 @@ impl Shell {
                 *c = commit;
                 *r = result.and_then(|v| serde_json::from_value(v).ok()).map(Box::new);
             }
-            let _ = tx.send(Msg::Typed { to: super::rpc::Typed::Answer(id), v: typed.to_value() });
-        });
+            typed
+        }
     }
 
     /// How the diffs pick their base now: `[worktree] base` and PR flow

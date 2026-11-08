@@ -4,7 +4,7 @@
 
 import type { OpenWhat } from './app_rows';
 import type { FnContext } from './context';
-import type { DiffFile, DiffResult } from './diff';
+import type { DiffFile, DiffResult, Guide, GuideState, GuideTarget } from './diff';
 import type { InboxRecord, StateFilter } from './inbox';
 import type { BodyOf, Completion, CompletionAsk, LogItem } from './log';
 import type { BranchRow, ReleaseEv, UpdateEv, VersionItem } from './ops';
@@ -85,12 +85,17 @@ note?: string | null,
  * a change too big for one answer: how many of its last files
  * come without their lines (whole files, `diff::cap`)
  */
-cut_files?: number | null, title?: string | null, req?: number | null, commits?: number | null, working?: boolean, uncommitted?: boolean, landed_ms?: number | null, gone?: boolean, 
+cut_files?: number | null, 
+/**
+ * the hash of its files (switchboard's guide::diff_hash, computed
+ * once where the diff is read): its guide's key (`guide`)
+ */
+hash?: string | null, title?: string | null, req?: number | null, commits?: number | null, working?: boolean, uncommitted?: boolean, landed_ms?: number | null, gone?: boolean, 
 /**
  * a `.diff` artifact's diff (the `diff` ask's `artifact`): its id and
  * the version read; a client keys the answer by them
  */
-artifact?: string | null, version?: number | null, } | { "ev": "branches", project: string, base: string, rows: Array<BranchRow>, } | { "ev": "versions", project: string, current: string, dev?: boolean, installed?: boolean, items: Array<VersionItem>, } | { "ev": "release" } & ReleaseEv | { "ev": "update" } & UpdateEv | { "ev": "route", project: string, rid: number, to: string, name: string, text: string, correct_until_ms: number, why: string, } | { "ev": "route_done", project: string, rid: number, state: string, to: string, xid?: number | null, msg?: number | null, } | { "ev": "jobs", project: string, items: Array<Job>, } | { "ev": "job_end", project: string, agent: string, state: JobState, label: string, summary: string, 
+artifact?: string | null, version?: number | null, } | { "ev": "guide", project: string, hash: string, state: GuideState, guide?: Guide | null, tokens?: number | null, } | { "ev": "branches", project: string, base: string, rows: Array<BranchRow>, } | { "ev": "versions", project: string, current: string, dev?: boolean, installed?: boolean, items: Array<VersionItem>, } | { "ev": "release" } & ReleaseEv | { "ev": "update" } & UpdateEv | { "ev": "route", project: string, rid: number, to: string, name: string, text: string, correct_until_ms: number, why: string, } | { "ev": "route_done", project: string, rid: number, state: string, to: string, xid?: number | null, msg?: number | null, } | { "ev": "jobs", project: string, items: Array<Job>, } | { "ev": "job_end", project: string, agent: string, state: JobState, label: string, summary: string, 
 /**
  * draft (J): the job's key (its end's time on that hub), the same
  * as in bise's followed_end of it: a window shows one line per
@@ -228,7 +233,7 @@ from?: string | null, } | { "cmd": "answer", project: string, card: number, repl
 /**
  * his answer as typed parts, as `Send.parts` (`reply` then ignored)
  */
-parts?: Array<Part>, } | { "cmd": "close", project: string, card: number, } | { "cmd": "approvals", project: string, mode?: string | null, } | { "cmd": "remove_rule", project: string, rule: ApprovalRule, } | { "cmd": "stop", project: string, agent: string, } | { "cmd": "archive", project: string, agent: string, force: boolean, } | { "cmd": "unarchive", project: string, agent: string, } | { "cmd": "artifacts_seen", project: string, at_ms?: number | null, } | { "cmd": "diff", project: string, artifact?: string | null, version?: number | null, agent?: string | null, commit?: string | null, branch?: string | null, pr?: number | null, pr_url?: string, range?: string | null, req?: number | null, } | { "cmd": "tool_out", project: string, agent: string, pos: number, } | { "cmd": "log", project: string, agent: string, before?: number, find?: string, } | { "cmd": "completion" } & CompletionAsk | { "cmd": "log_body", project: string, agent: string, of: BodyOf, } | { "cmd": "queued_take", project: string, agent: string, id: number, } | { "cmd": "queued_steer", project: string, agent: string, id: number, } | { "cmd": "branches", project: string, } | { "cmd": "worktrees", project: string, } | { "cmd": "processes", project: string, watch?: boolean, } | { "cmd": "proc_out", project: string, agent: string, id: string, from?: number, } | { "cmd": "proc_follow", project: string, agent: string, id: string, on: boolean, } | { "cmd": "proc_stop", project: string, agent: string, id?: string, all?: boolean, } | { "cmd": "merged", project: string, } | { "cmd": "features", project: string, } | { "cmd": "prs", project: string, } | { "cmd": "pr_detail", project: string, url: string, req: number, } | { "cmd": "pr_check_log", project: string, url: string, check: string, req: number, } | { "cmd": "pr_act", project: string, url: string, head: string, act: PrAct, req: number, } | { "cmd": "inbox_history", project: string, agent?: string | null, state?: StateFilter | null, words?: string | null, 
+parts?: Array<Part>, } | { "cmd": "close", project: string, card: number, } | { "cmd": "approvals", project: string, mode?: string | null, } | { "cmd": "remove_rule", project: string, rule: ApprovalRule, } | { "cmd": "stop", project: string, agent: string, } | { "cmd": "archive", project: string, agent: string, force: boolean, } | { "cmd": "unarchive", project: string, agent: string, } | { "cmd": "artifacts_seen", project: string, at_ms?: number | null, } | { "cmd": "diff", project: string, artifact?: string | null, version?: number | null, agent?: string | null, commit?: string | null, branch?: string | null, pr?: number | null, pr_url?: string, range?: string | null, req?: number | null, } | { "cmd": "tool_out", project: string, agent: string, pos: number, } | { "cmd": "log", project: string, agent: string, before?: number, find?: string, } | { "cmd": "completion" } & CompletionAsk | { "cmd": "log_body", project: string, agent: string, of: BodyOf, } | { "cmd": "queued_take", project: string, agent: string, id: number, } | { "cmd": "queued_steer", project: string, agent: string, id: number, } | { "cmd": "guide", project: string, target: GuideTarget, run?: boolean, } | { "cmd": "branches", project: string, } | { "cmd": "worktrees", project: string, } | { "cmd": "processes", project: string, watch?: boolean, } | { "cmd": "proc_out", project: string, agent: string, id: string, from?: number, } | { "cmd": "proc_follow", project: string, agent: string, id: string, on: boolean, } | { "cmd": "proc_stop", project: string, agent: string, id?: string, all?: boolean, } | { "cmd": "merged", project: string, } | { "cmd": "features", project: string, } | { "cmd": "prs", project: string, } | { "cmd": "pr_detail", project: string, url: string, req: number, } | { "cmd": "pr_check_log", project: string, url: string, check: string, req: number, } | { "cmd": "pr_act", project: string, url: string, head: string, act: PrAct, req: number, } | { "cmd": "inbox_history", project: string, agent?: string | null, state?: StateFilter | null, words?: string | null, 
 /**
  * a card id: only the older ones (the next page)
  */

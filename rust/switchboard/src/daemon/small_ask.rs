@@ -5,7 +5,9 @@
 //! small model is marked broken for the hub's life (the shared flag); the
 //! log says each failure. A setup with neither model fails at once.
 //! The caller runs it in its own thread and sends the answer back as a
-//! `Msg`.
+//! `Msg`. A call nobody clicked (a guide written in the background,
+//! daemon/guide.rs) takes [`Small::cheap`]: the small model alone, never
+//! the main or agents model, never a fallback.
 
 use super::*;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -31,6 +33,23 @@ impl Small {
             paths: sh.opts.paths.clone(),
             spawn_env: sh.opts.spawn_env,
         }
+    }
+
+    /// The small model alone, for a call nobody clicked (a guide written
+    /// in the background, architect m_57259): None when it is the main or
+    /// the agents model (unset, it follows them), or marked broken. Its
+    /// call never falls back to the agents model.
+    pub(super) fn cheap(sh: &mut Shell) -> Option<Small> {
+        let s = Small::of(sh);
+        let st = &s.setup;
+        let big = st.small_model.is_empty() || st.small_model == st.model || st.small_model == st.agent_model;
+        (!big && !s.broken.load(Ordering::Relaxed)).then(|| Small { setup: bise_catalog::Setup { agent_model: String::new(), ..s.setup.clone() }, ..s })
+    }
+
+    /// Some model is set up (the small one or the agents').
+    pub(super) fn any(sh: &mut Shell) -> bool {
+        let st = sh.config.setup();
+        !st.small_model.is_empty() || !st.agent_model.is_empty()
     }
 
     pub(super) fn paths(&self) -> &Paths {

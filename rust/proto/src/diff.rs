@@ -31,6 +31,11 @@ pub struct Hunk {
     /// git's function context after the `@@` (the terminal's `@@ head @@`)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub head: Option<String>,
+    /// its id in a guide: a short hash of its file's path and its removed
+    /// and added lines, stable across pushes while the hunk is the same
+    /// (switchboard's guide::hunk_id; never computed by a client)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -70,6 +75,81 @@ pub struct DiffFile {
     /// terminal's /diff opens it), none when that folder is gone
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub abs: Option<String>,
+}
+
+/// How much a guide's part matters to the change (page review-guided). A
+/// label only: the review shows every part, never folds or skips one by
+/// its weight (architect m_57259: the guide never hides code).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum Weight {
+    Critical,
+    #[default]
+    Normal,
+    Context,
+}
+
+/// One part of a guide: an idea of the change, its hunks in reading order.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct GuidePart {
+    /// where it is, 1-2 words ("Sidebar", "Tests")
+    pub area: String,
+    /// 2-6 words that name the idea, never a file ("Give the row's end one owner")
+    pub title: String,
+    /// at most two lines, plain text
+    pub summary: String,
+    /// its hunks' ids ([`Hunk::id`]), in the order to read them
+    pub hunks: Vec<String>,
+    #[serde(default)]
+    pub weight: Weight,
+}
+
+/// A change's guide, written by the small jobs model (switchboard's
+/// guide.rs). Every hunk of the diff is in exactly one part or in `rest`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Guide {
+    /// three lines at most: what the change does, plain text
+    pub overview: String,
+    pub parts: Vec<GuidePart>,
+    /// the hunks out of the story (glue, docs, generated, repeats)
+    pub rest: Vec<String>,
+}
+
+/// The diff a `guide` ask is about: the same diffs as the review's
+/// (an agent's change, a commit, a PR by its link).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum GuideTarget {
+    Agent { name: String },
+    Commit { agent: String, sha: String },
+    Pr { url: String },
+}
+
+/// Where a diff's guide stands (the `guide` event).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum GuideState {
+    /// no guide and none coming: no model set up
+    None,
+    /// a small change (2 files and 4 hunks or less): it needs none
+    Small,
+    /// the small jobs model writes it
+    Writing,
+    /// here: `guide` holds it
+    Ready,
+    /// the call or its answer failed: a click asks again
+    Failed,
+    /// small jobs is the main model: nothing runs by itself, a click
+    /// writes it (`tokens` says the cost first)
+    NeedsClick,
+    /// a newer hub's state
+    #[serde(other)]
+    Unknown,
 }
 
 /// What a change measured, before and after (the review's result line,

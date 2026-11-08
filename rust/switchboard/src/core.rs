@@ -526,6 +526,9 @@ pub enum Effect {
     /// in step (`forge::artifact::sync`, daemon/pr_arts.rs). `agent`: its
     /// place's first agent.
     PrArtifact { pr: Box<crate::place::PrSnapshot>, agent: Option<String> },
+    /// shell-only: an agent's PR got a push, its change's guide is
+    /// written again if a cheap model can (daemon/guide.rs)
+    Guide { agent: String },
     /// pr-design §6.3: the user's `1` on a ready-to-merge item. The
     /// daemon runs `gh pr merge` on a thread (the head pinned) and
     /// answers with `Input::Merged`.
@@ -1446,6 +1449,13 @@ impl Hub {
                 let at = forge::news::At { place: &p.id, branch: &l.branch, agents: &p.agents };
                 let outs = self.pr_news.event(&e, Some(&at), first);
                 self.news_out(fx, env, outs);
+                // a push on an agent's open PR: its guide is written again
+                // (a cache fill in the shell, daemon/guide.rs)
+                if let (PrEvent::Changed { from, to, .. }, Some(agent)) = (&e, p.agents.first()) {
+                    if forge::news::head_moved(from, to) && to.state == crate::place::PrState::Open {
+                        fx.push(Effect::Guide { agent: agent.clone() });
+                    }
+                }
                 fx.push(Effect::Pr(e));
             }
             self.pr_ok_ms.insert(l.place.clone(), r.at_ms);

@@ -293,6 +293,8 @@ impl Msg {
             Msg::GateChecked { dir, .. } => format!("gate checked {dir}"),
             Msg::View(_) => "a view's request".into(),
             Msg::RoleLine { dir, .. } => format!("role line {dir}"),
+            Msg::GuideSeen(_) => "guide seen".into(),
+            Msg::GuideDone { hash, .. } => format!("guide {hash}"),
             Msg::Typed { .. } => "typed event".into(),
             Msg::WakeSeen(s) => format!("wake seen {}", s.id),
             Msg::Placed { name, .. } => format!("placed {name}"),

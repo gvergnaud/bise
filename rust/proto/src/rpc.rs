@@ -69,6 +69,9 @@ pub const METHODS: &[MethodRow] = &[
     m("agent/follow", "follow", None),
     m("artifacts/seen", "artifacts_seen", None),
     m("diff/read", "diff", Some("diff")),
+    // a diff's guide (page review-guided): kept, small, being written, or
+    // its call; a written or failed one comes to every connection too
+    m("guide/get", "guide", Some("guide")),
     // a tool row opened: its whole output from the session log (main's
     // 5a9cc5f2), answered later from a thread
     m("tool/output", "tool_out", Some("tool_out")),
@@ -231,6 +234,7 @@ const fn n(method: &'static str, ev: &'static str, scope: Scope) -> NoteRow {
 /// `tool_out` are only results (they answer a request, never pushed).
 pub const NOTIFICATIONS: &[NoteRow] = &[
     n("hub/agents", "agents", Scope::Hub),
+    n("hub/guide", "guide", Scope::Hub),
     n("hub/cards", "cards", Scope::Hub),
     n("hub/jobs", "jobs", Scope::Hub),
     n("hub/artifacts", "artifacts", Scope::Hub),

@@ -30,6 +30,7 @@ mod choose;
 mod features;
 mod fn_context;
 pub(crate) mod gate;
+mod guide;
 mod history;
 mod lines;
 mod names;
@@ -238,6 +239,10 @@ enum Msg {
     /// The repo's commit style, read off the loop (`git log`, at the start
     /// and after each land: Shell::ask_commit_style).
     CommitStyle(Option<String>),
+    /// A diff read for its guide (daemon/guide.rs): the loop decides.
+    GuideSeen(Box<guide::Seen>),
+    /// A guide's call is over (daemon/guide.rs): kept, or why not.
+    GuideDone { hash: String, got: Result<bise_proto::diff::Guide, String> },
     /// A role-line call is over (BISE-126).
     RoleLine {
         dir: String,
@@ -487,6 +492,8 @@ struct Shell {
     holds: crate::idle::Holds,
     /// artifacts and diffs (`daemon/art.rs`, docs/artifacts.md)
     art: art::Art,
+    /// the diffs' guides being written or failed (`daemon/guide.rs`)
+    guides: guide::Guides,
     /// the local sites' servers it started again (`daemon/revive.rs`)
     revive: revive::Revive,
     /// `sb wake`'s look, on its worker (`daemon/wake_look.rs`)
@@ -885,6 +892,15 @@ impl Shell {
         self.proto_on(v);
     }
 
+    /// What the shell's parts do with a line just journaled: the photos,
+    /// the inbox's answers, the usage counts, a merge card's guide.
+    fn journaled(&mut self, ev: &Value) {
+        self.photos.journaled(ev);
+        self.answers_journaled(ev);
+        self.usage_journal(ev);
+        self.guide_journaled(ev);
+    }
+
     fn run(&mut self, e: Effect) {
         match e {
             Effect::Journal(ev) => {
@@ -895,9 +911,7 @@ impl Shell {
                 if let Some(at) = w.at {
                     self.hub.st.bodies.index(&ev, at);
                 }
-                self.photos.journaled(&ev);
-                self.answers_journaled(&ev);
-                self.usage_journal(&ev);
+                self.journaled(&ev);
                 // /drop (design §7.3): its tab group closes too
                 if let Some(name) = crate::computer_use::archived(&ev) {
                     crate::computer_use::drop_agent(&self.proc_hub, name);
@@ -1027,6 +1041,7 @@ impl Shell {
             Effect::ModelRefused { agent, why } => self.model_refused(&agent, &why),
             Effect::Pr(e) => log_line(&self.opts.paths, &crate::forge::log_line(&e)),
             Effect::PrArtifact { pr, agent } => self.pr_artifact(&pr, agent.as_deref()),
+            Effect::Guide { agent } => self.guide_want(bise_proto::diff::GuideTarget::Agent { name: agent }, guide::Why::Push),
             Effect::Merge { card, place, number, head, method } => self.merge_pr(card, place, number, head, method),
             Effect::PrAct { client, req, url, number, head, action } => self.pr_act(client, req, url, number, head, action),
             Effect::PrActed { client, req, url, act, err, why } => {
@@ -1810,6 +1825,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
         ),
         holds: crate::idle::Holds::default(),
         art: art::Art::default(),
+        guides: guide::Guides::default(),
         revive: revive::Revive::default(),
         wake_look: wake_look::WakeLook::start(tx.clone()),
         place_work: place_work::PlaceWork::start(&paths, tx.clone()),

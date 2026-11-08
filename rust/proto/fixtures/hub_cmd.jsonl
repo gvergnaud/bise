@@ -103,3 +103,5 @@
 {"cmd":"view_context","project":"acme-1a2b3c4d","agent":"perf","call":"1730000000000-1","content":[{"type":"text","text":"count=4"}]}
 {"cmd":"plugin_views","project":"acme-1a2b3c4d","plugin":"fake-app"}
 {"cmd":"diff","project":"acme-1a2b3c4d","artifact":"cu-upload-diff","version":2,"req":7}
+{"cmd":"guide","project":"acme-1a2b3c4d","target":{"kind":"agent","name":"perf"}}
+{"cmd":"guide","project":"acme-1a2b3c4d","target":{"kind":"pr","url":"https://github.com/acme/app/pull/412"},"run":true}

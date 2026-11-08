@@ -22,6 +22,13 @@ use crate::place::{Checks, PrSnapshot, PrState, PrView, Review};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
+/// The PR's head moved between two polls: a push (its diff may have
+/// changed). The one comparison: 'back in review' reads it, and the hub
+/// writes the change's guide again on it (daemon/guide.rs).
+pub fn head_moved(from: &PrSnapshot, to: &PrSnapshot) -> bool {
+    to.head_oid != from.head_oid
+}
+
 /// The pseudo sender of GitHub's news (reserved: no agent takes it).
 pub const GITHUB: &str = "github";
 
@@ -243,7 +250,7 @@ impl News {
                 }
                 let was_red = from.review == Review::ChangesRequested || matches!(from.checks, Checks::Fail { .. });
                 let is_red = to.review == Review::ChangesRequested || matches!(to.checks, Checks::Fail { .. });
-                let pushed = to.head_oid != from.head_oid && self.back.get(place) != Some(&to.head_oid);
+                let pushed = head_moved(from, to) && self.back.get(place) != Some(&to.head_oid);
                 if was_red && pushed && !matches!(to.checks, Checks::Fail { .. }) && to.state == PrState::Open {
                     self.back.insert(place.clone(), to.head_oid.clone());
                     let by = who(self).map(|a| format!(" · {} pushed {}", a, short(&to.head_oid))).unwrap_or_default();

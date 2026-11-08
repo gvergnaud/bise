@@ -26,6 +26,7 @@ export const METHODS = {
   "agent/follow": { cmd: "follow", result: null },
   "artifacts/seen": { cmd: "artifacts_seen", result: null },
   "diff/read": { cmd: "diff", result: "diff" },
+  "guide/get": { cmd: "guide", result: "guide" },
   "tool/output": { cmd: "tool_out", result: "tool_out" },
   "log/read": { cmd: "log", result: "log" },
   "log/completion": { cmd: "completion", result: "completion" },
@@ -82,6 +83,7 @@ export const METHODS = {
 
 export const NOTIFICATIONS = {
   "hub/agents": { ev: "agents", scope: "hub" },
+  "hub/guide": { ev: "guide", scope: "hub" },
   "hub/cards": { ev: "cards", scope: "hub" },
   "hub/jobs": { ev: "jobs", scope: "hub" },
   "hub/artifacts": { ev: "artifacts", scope: "hub" },

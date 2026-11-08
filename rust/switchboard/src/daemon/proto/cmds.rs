@@ -236,6 +236,17 @@ impl Shell {
                 }
                 self.diff_typed(id, project, ask);
             }
+            // a diff's guide (daemon/guide.rs): kept, small, being written,
+            // or its call; the answer to this client, a written one to all
+            HubCmd::Guide { target, run, .. } => {
+                use bise_proto::diff::GuideTarget as T;
+                if let T::Agent { name: a } | T::Commit { agent: a, .. } = &target {
+                    if !known(self, a) {
+                        return self.proto_error(id, &tag, &format!("no agent {a}"));
+                    }
+                }
+                self.guide_want(target, super::guide::Why::Open { to: id, run });
+            }
             // a tool row opened: its whole output from the session log
             // (tool_out.rs), files read on a thread, to this client
             HubCmd::ToolOut { project, agent, pos } => {

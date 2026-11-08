@@ -529,7 +529,7 @@ pub fn diff(ev: &Value, project: &str, agent: &str) -> HubEv {
     }
     let files = ev.get("files").and_then(Value::as_array).cloned().unwrap_or_default();
     let flag = |f: &Value, k: &str| f.get(k).and_then(Value::as_bool).unwrap_or(false);
-    let files = files
+    let mut files: Vec<DiffFile> = files
         .iter()
         .map(|f| {
             let hunks: Vec<Hunk> = f.get("hunks").and_then(Value::as_array).into_iter().flatten().map(hunk).collect();
@@ -556,6 +556,8 @@ pub fn diff(ev: &Value, project: &str, agent: &str) -> HubEv {
             }
         })
         .collect();
+    // the hunks' ids and the diff's hash, once, here: its guide's key
+    let hash = crate::guide::stamp(&mut files);
     HubEv::Diff {
         project: project.into(),
         agent: agent.into(),
@@ -578,6 +580,7 @@ pub fn diff(ev: &Value, project: &str, agent: &str) -> HubEv {
             artifact: Some(s(ev, "artifact")).filter(|a| !a.is_empty()),
             version: ev.get("version").and_then(Value::as_u64).map(|v| v as u32),
         }),
+        hash: Some(hash),
     }
 }
 
@@ -609,7 +612,7 @@ fn hunk(h: &Value) -> Hunk {
         };
         lines.push(line);
     }
-    Hunk { header, lines, head: Some(head).filter(|h| !h.is_empty()) }
+    Hunk { header, lines, head: Some(head).filter(|h| !h.is_empty()), id: None }
 }
 
 /// An agent's current step from one feed line: its tool intent, "" at

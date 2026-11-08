@@ -45,6 +45,7 @@ export const TAGS = {
   // the answer to log_body (log/body): a cut /debug body whole, its `of` echoed (log/whole.ts)
   log_body: true,
   diff: true,
+  guide: true,
   route: true,
   route_done: true,
   jobs: true,

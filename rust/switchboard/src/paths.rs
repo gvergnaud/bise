@@ -136,6 +136,11 @@ impl Paths {
     pub fn procs_dir(&self) -> PathBuf {
         self.state.join("procs")
     }
+    /// The diffs' guides (`<diff hash>.json`, page review-guided):
+    /// guide.rs's, its one reader and writer, the newest 200 kept.
+    pub fn guides_dir(&self) -> PathBuf {
+        self.state.join("guides")
+    }
     /// The output of the local sites' servers the hub started again
     /// (`<id>.out`, daemon/revive.rs's; site-revive).
     pub fn revive_dir(&self) -> PathBuf {
