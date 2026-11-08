@@ -392,8 +392,12 @@ def part_d():
         evs = [json.loads(l.split("ev: ", 1)[1]) for l in open(os.path.join(tmp, "wire.log")).readlines()[wn:]
                if "ev: " in l and '"request_failed"' in l]
         said = [l for l in out if obs_lines.kind(l) == "assistant"]
-        check([r.get("hang") for r in recs][:1] == [1] and [r["status"] for r in recs][1:] == [200]
-              and 1.5 <= recs[0]["held_s"] < 10,
+        # by its record, never its place: the fake writes a hang's line when the hold ends,
+        # so a request that ends during those 2 s (the Ctrl+C'd [[slow: 3]] ones above,
+        # under load) is logged ahead of it (4 of 58 full gates, the red of 6df94672a..23190643f)
+        hung = [r for r in recs if r.get("hang")]
+        check([r["hang"] for r in hung] == [1] and 1.5 <= hung[0]["held_s"] < 10
+              and 200 in [r["status"] for r in recs if not r.get("hang")],
               "[[hang: 1]]: the first request holds its head until the client gives up (~2 s), the next answers: %r"
               % [(r.get("hang"), r["status"], r.get("held_s")) for r in recs])
         check(len(evs) == 1 and evs[0]["data"].get("limit") == "head" and evs[0]["data"].get("waited_ms") == 2000
