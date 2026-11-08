@@ -100,3 +100,39 @@ export function barFit(r: BarFit): BarFits {
   if (fits(false, false, r.pillShort)) return { fact: false, role: false, narrow: r.pillFull > 0, pill: r.pillShort };
   return { fact: false, role: false, narrow: r.pillFull > 0, pill: r.pillSign };
 }
+
+/** The subtitle cut no shorter than this: its … and a few letters, never a letter left over (designer m_57304). */
+export const SUB_MIN_PX = 48;
+
+/** A thread's title row in the bar (designer m_57254, m_57304), px, each with its gap before it. */
+export interface TitleRoom {
+  /** what the title can take: its own content box and the status slot's slack */
+  readonly room: number;
+  /** the name, and the state fact (0 when hidden): they stay */
+  readonly fixed: number;
+  /** the agent's links in order (PR, branch, page), each whole */
+  readonly links: readonly number[];
+  /** the subtitle whole, 0 without one */
+  readonly sub: number;
+}
+
+/** What shows: the subtitle whole, cut with … or out; the first `links` links. */
+export interface TitleFits {
+  readonly sub: 'whole' | 'cut' | 'out';
+  readonly links: number;
+}
+
+/**
+ * The title's give-way when room runs short (designer m_57304): the subtitle first, cut with …
+ * down to SUB_MIN_PX, then dropped whole; then the links whole, last first (page, branch; the PR
+ * last); the name and the fact stay. Pure.
+ */
+export function titleFit(r: TitleRoom): TitleFits {
+  const sum = (n: number) => r.links.slice(0, n).reduce((a, b) => a + b, 0);
+  const all = r.links.length;
+  if (r.fixed + sum(all) + r.sub <= r.room) return { sub: r.sub > 0 ? 'whole' : 'out', links: all };
+  if (r.sub > SUB_MIN_PX && r.fixed + sum(all) + SUB_MIN_PX <= r.room) return { sub: 'cut', links: all };
+  let n = all;
+  while (n > 0 && r.fixed + sum(n) > r.room) n -= 1;
+  return { sub: 'out', links: n };
+}

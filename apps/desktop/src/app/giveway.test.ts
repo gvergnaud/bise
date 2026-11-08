@@ -1,7 +1,7 @@
 // The title bar's give-way order (designer m_45616, m_45674): the minis never shrink; the crumb's
 // fact goes first, then the pill's short form, never a word cut mid-way.
 import { describe, expect, it } from 'vitest';
-import { barFit, cutCrumb, giveWay, STATUS_NARROW_PX } from './giveway';
+import { barFit, cutCrumb, giveWay, STATUS_NARROW_PX, SUB_MIN_PX, titleFit } from './giveway';
 
 describe('the title bar gives way', () => {
   it('room for all: nothing gives way', () => {
@@ -65,5 +65,32 @@ describe('the minis after the crumb (designer m_45869)', () => {
     const none = { ...room, pillFull: 0, pillShort: 0, pillSign: 0 };
     expect(barFit({ ...none, avail: 500 })).toEqual({ fact: false, role: true, narrow: false, pill: 0 });
     expect(barFit({ ...none, avail: 300 })).toEqual({ fact: false, role: false, narrow: false, pill: 0 });
+  });
+});
+
+describe('a thread\'s title with its links (designer m_57304)', () => {
+  // the name and fact 200, the links PR 70, branch 90, page 150, the subtitle 220
+  const r = (room: number, sub = 220) => titleFit({ room, fixed: 200, links: [70, 90, 150], sub });
+
+  it('room for all: all whole', () => {
+    expect(r(730)).toEqual({ sub: 'whole', links: 3 });
+  });
+
+  it('the subtitle gives way first: cut, never under its least, then out whole; the links stay', () => {
+    expect(r(729)).toEqual({ sub: 'cut', links: 3 });
+    expect(r(510 + SUB_MIN_PX)).toEqual({ sub: 'cut', links: 3 });
+    expect(r(510 + SUB_MIN_PX - 1)).toEqual({ sub: 'out', links: 3 });
+  });
+
+  it('then the links, whole, last first: the page, the branch, the PR last; the name and fact stay', () => {
+    expect(r(509)).toEqual({ sub: 'out', links: 2 });
+    expect(r(359)).toEqual({ sub: 'out', links: 1 });
+    expect(r(269)).toEqual({ sub: 'out', links: 0 });
+    expect(r(100)).toEqual({ sub: 'out', links: 0 });
+  });
+
+  it('a subtitle no wider than its least is never cut: whole or out', () => {
+    expect(r(200 + 310 + 30, 30)).toEqual({ sub: 'whole', links: 3 });
+    expect(r(200 + 310 + 29, 30)).toEqual({ sub: 'out', links: 3 });
   });
 });

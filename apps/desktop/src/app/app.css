@@ -216,21 +216,18 @@ body:has(.app-shell) {
 }
 /* a thread's agent's links right after its name (BarLinks.tsx, designer m_57254): 12 from the name
    to the first link's text (the title's 8 and the link's 4), 8 between texts, each a 24 high hit
-   area r 6, t-12 text-2; hover a 6 % fill and the text in ink. One line: a link with no room wraps
-   out of it, whole, the last first (page, then branch; the PR last); the subtitle's words give way
-   before them (its shrink), the fact stays */
-.app-bar-title .s {
-  flex-shrink: 1000;
-}
+   area r 6, t-12 text-2; hover a 6 % fill and the text in ink. Never shrunk nor cut: no room, the
+   subtitle gives way first (cut with …, then out), then the links whole, last first (giveway.ts
+   titleFit, BarLinks measures: the title's data-sub, a link's data-out); the name and fact stay */
 .app-bar-links {
-  flex: 0 1 auto;
-  min-width: 0;
+  flex: none;
   display: flex;
-  flex-wrap: wrap;
-  max-height: var(--s-6);
-  overflow: hidden;
   align-self: center;
   margin-left: calc(var(--s-1) * -1);
+}
+.app-bar-title[data-sub='out'] .s,
+.app-bar-link[data-out] {
+  display: none;
 }
 .app-bar-link {
   display: inline-flex;
