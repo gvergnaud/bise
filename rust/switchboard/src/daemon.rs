@@ -1709,6 +1709,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
     let user_config = std::fs::read_to_string(home.config_file()).unwrap_or_default();
     let runner = crate::approvals::check::Runner::new(&home)
         .with_oneshot(opts.repl_bin.clone(), opts.app_root.clone(), opts.spawn_env);
+    let spool = usage_spool::UsageSpool::new(&opts, &paths.workspace, now_ms());
     let mut sh = Shell {
         opts,
         // before `hub` moves: its split of each message (crate::spent)
@@ -1761,7 +1762,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
         plugins_checked: None,
         recycle: recycling::Recycle::from_env(),
         usage: Default::default(),
-        usage_spool: usage_spool::UsageSpool::new(&home, &paths.workspace, now_ms()),
+        usage_spool: spool,
         pulse: Default::default(),
         small_broken: Default::default(),
         config: config_watch::ConfigWatch::new(&home, &paths),

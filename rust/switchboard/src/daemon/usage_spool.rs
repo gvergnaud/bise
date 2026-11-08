@@ -36,18 +36,17 @@ pub(super) struct UsageSpool {
 
 impl UsageSpool {
     /// At the hub's start: nothing counted yet, sharing read once.
-    pub(super) fn new(home: &bise_home::Home, workspace: &Path, now: u64) -> UsageSpool {
+    pub(super) fn new(opts: &Opts, workspace: &Path, now: u64) -> UsageSpool {
         let source = Source::hub(&bise_home::hub_id(workspace), std::process::id());
-        UsageSpool { counter: Counter::new(now), on: permit(home).is_some() && source.is_some(), source, written_ms: now }
+        UsageSpool { counter: Counter::new(now), on: permit(opts).is_some() && source.is_some(), source, written_ms: now }
     }
 }
 
-/// The permit of this process, read now. The hub runs as part of a
-/// release or of a dev build; until a build says its channel (plan step
-/// 9), it reads as `Dev`, which never shares.
-fn permit(home: &bise_home::Home) -> Option<Permit> {
+/// The permit of this process, read now; its channel is its app root's
+/// (a dev tree never shares).
+fn permit(opts: &Opts) -> Option<Permit> {
     let env = |k: &str| std::env::var(k).ok();
-    sharing_allowed(&Facts::read(home, &env, Channel::Dev, false)).ok()
+    sharing_allowed(&Facts::read(&opts.home, &env, Channel::of_root(&opts.app_root), false)).ok()
 }
 
 impl Shell {
@@ -95,7 +94,7 @@ impl Shell {
     pub(super) fn usage_write(&mut self, now: u64) {
         let u = &mut self.usage_spool;
         u.written_ms = now;
-        let (Some(permit), Some(source)) = (permit(&self.opts.home), u.source.as_ref()) else {
+        let (Some(permit), Some(source)) = (permit(&self.opts), u.source.as_ref()) else {
             u.on = false;
             u.counter.clear(now);
             return;
