@@ -31,7 +31,7 @@ describe("the window's usage signals", () => {
       return src.slice(start, src.indexOf('\n}\n', start));
     };
     // what each fn returns: `return "x"`, `=> "x"`, `{ "x" }` and its last line's "x"
-    const made = new Set([...['link_kind', 'path_kind'].flatMap((fn) => [...body(fn).matchAll(/(?:return|=>|\{)[ \t]*"([a-z]+)"|\n\s*"([a-z]+)"\s*$/g)].map((m) => m[1] ?? m[2]))]);
+    const made = new Set([...['link_kind', 'path_kind'].flatMap((fn) => [...body(fn).matchAll(/(?:return|=>|\{)[ \t]*"([a-z]+)"|\n\s*"([a-z]+)"\s*$/g)].map((m) => m[1] ?? m[2] ?? ''))].filter((k) => k !== ''));
     expect(made.size).toBeGreaterThan(8);
     const own = [...made].filter((k) => artifactGesture(k) === `artifact_${k}`);
     expect([...own, ...ARTIFACT_OTHER_KINDS].sort()).toEqual([...made].sort());
