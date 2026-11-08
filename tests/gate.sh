@@ -821,7 +821,11 @@ desktop_check() {
     # --no-warn-ignored: $rel holds .css/.webp/.html too, which eslint warns are ignored, and
     # --max-warnings 0 made a css-only change red (review-gates m_46660)
     # shellcheck disable=SC2086
-    (cd "$root/apps/desktop" && python3 ../../tests/conflict_markers.py && pnpm -s typecheck && pnpm -s exec eslint --max-warnings 0 --no-warn-ignored $rel \
+    # views:check (~1 s): kit/views/web.{js,css}, committed, match what src/views builds (its
+    # tokens included: 371fd9510's stale web.css passed a quick, the build that checked it is
+    # out of quick since a3efd0597); every desktop quick, vite's module graph is its input list
+    (cd "$root/apps/desktop" && python3 ../../tests/conflict_markers.py && pnpm -s typecheck && pnpm -s views:check \
+        && pnpm -s exec eslint --max-warnings 0 --no-warn-ignored $rel \
         && pnpm -s exec vitest related --run --passWithNoTests $projects $rel \
         && pnpm -s exec vitest related --run --passWithNoTests --project bims-laws $rel && echo "@@ by path" \
         && { [ -z "$dbypath" ] || pnpm -s exec vitest run --passWithNoTests $projects $dbypath; }) >"$log" 2>&1

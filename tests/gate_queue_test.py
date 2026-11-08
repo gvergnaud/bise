@@ -99,15 +99,21 @@ def desktop_check_quick_only():
     """A quick's whole-app desktop_check runs check:quick: check with test:quick
     (the unit project) for test and no build (quick builds nothing,
     c3-quick-90s: the full gate, the tip and a release build), the same plain
-    lint; every other gate runs check."""
+    lint; every other gate runs check. The build's views:check (kit/views,
+    committed, fresh) runs in both of quick's desktop paths: a stale web.css
+    passed a quick at 371fd9510 once the build was out of it."""
     import json
     s = json.load(open(os.path.join(HERE, "..", "apps", "desktop", "package.json")))["scripts"]
-    want = s["check"].replace("pnpm test ", "pnpm test:quick ")
+    want = s["check"].replace("pnpm test ", "pnpm test:quick ").replace("pnpm typecheck && ", "pnpm typecheck && pnpm views:check && ")
     check(want.endswith(" && pnpm build") and s.get("check:quick") == want[:-len(" && pnpm build")]
           and s.get("test:quick") == s["test"] + " --project unit",
-          "check:quick is check with test:quick (unit, no bims-laws) for test, without its build: %r"
+          "check:quick is check with views:check, test:quick (unit, no bims-laws) for test, without its build: %r"
           % s.get("check:quick"))
+    check(s.get("build", "").endswith(" && pnpm views:check") and s.get("views:check", "").endswith("scripts/views-web.mts --check"),
+          "the build ends with views:check (scripts/views-web.mts --check): %r" % s.get("build"))
     src = open(GATE).read()
+    check("pnpm -s typecheck && pnpm -s views:check" in src,
+          "gate.sh: quick's by-path desktop_check runs views:check after typecheck")
     uses = [l.strip() for l in src.splitlines() if "check:quick" in l and not l.strip().startswith("#")]
     check(len(uses) == 1 and '[ "$mode" = quick ] && [ "${1:-}" != strict ] && echo check:quick || echo check' in uses[0],
           "gate.sh: check:quick only in a quick's non-strict desktop_check, `check` everywhere else: %r" % uses)
