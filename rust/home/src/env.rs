@@ -205,6 +205,9 @@ pub const VARS: &[Var] = &[
     test_offscreen_core("BISE_VOICE_FAKE_HEARD", "what the voice fake hears (tests)"),
     test_offscreen_core("BISE_VOICE_FAKE_HEARD_MS", "how long the ambient core's fake listener takes to flush, a batch request's time (the dictation repro)"),
     user("BISE_VOICE_MODEL", "the voice model"),
+    // not bise's names, read by bise: the usage counts' gate (bise_usage::sharing_allowed)
+    user("CI", "set (not 0/false): a CI run, no usage counts"),
+    user("DO_NOT_TRACK", "1: no usage counts, nothing sent (the consoledonottrack.com convention; BISE_TELEMETRY=0 too)"),
     internal("SB_AGENT", "an agent's name, for its sb"),
     test_input("SB_BENCH_JOURNAL", "a journal to bench (an ignored test)"),
     test_input("SB_BENCH_LINES", "the transcript bench's line count"),

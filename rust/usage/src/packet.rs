@@ -5,7 +5,7 @@
 //!
 //! The caps are applied here and only here: a count or a bucket at most
 //! [`COUNT_MAX`], minutes rounded to the nearest [`MINUTE_STEP`] and at
-//! most [`MinutesKey::max_minutes`]; zeros are left out.
+//! most [`MinutesKey::cap`]; zeros are left out.
 
 use std::collections::BTreeMap;
 
@@ -154,7 +154,7 @@ impl Packet {
             os_major: p.build.os_major.min(OS_MAJOR_MAX),
             arch: p.build.arch,
             counts: p.tally.counts.iter().map(|(k, n)| (*k, cap(*n))).filter(|(_, n)| *n > 0).collect(),
-            minutes: p.tally.seconds.iter().map(|(k, s)| (*k, round_minutes(*s, k.max_minutes()))).filter(|(_, m)| *m > 0).collect(),
+            minutes: p.tally.seconds.iter().map(|(k, s)| (*k, round_minutes(*s, k.cap()))).filter(|(_, m)| *m > 0).collect(),
             hist: p
                 .tally
                 .hist
@@ -187,7 +187,7 @@ mod tests {
     fn minutes_round_to_five_and_stop_at_their_cap() {
         assert_eq!([0, 149, 150, 449, 450, 3600].map(|s| round_minutes(s, 1440)), [0, 0, 5, 5, 10, 60]);
         assert_eq!(round_minutes(200_000, 1440), 1440);
-        assert_eq!(round_minutes(10_000_000, MinutesKey::AgentWork.max_minutes()), 14_400);
+        assert_eq!(round_minutes(10_000_000, MinutesKey::AgentWork.cap()), 14_400);
     }
 
     #[test]

@@ -3,9 +3,9 @@
 //! an opaque id, the 8 hex of a hub id, never the project's name). A
 //! process keeps its day's [`Tally`] in memory and writes it whole every
 //! 5 minutes and at a clean exit (tmp then rename: a reader never sees
-//! half); a process that starts again with the same name reads its file
-//! first and goes on from it. The sender sums a closed day's files
-//! ([`read_day`], then [`Tally::sum`]).
+//! half). Every process starts at zero: a restart is a new pid, so a new
+//! file, never a dead process's tally to go on from. The sender sums a
+//! closed day's files ([`read_day`], then [`Tally::sum`]).
 //!
 //! The edge of this crate that touches files, with the paths as
 //! arguments; writing asks for a [`Permit`]. Not here: when to write, the
@@ -100,11 +100,6 @@ pub fn write_source(_: &Permit, day_dir: &Path, source: &Source, tally: &Tally) 
     })
 }
 
-/// A source's tally of that day, if it wrote one (a restart goes on from it).
-pub fn read_source(day_dir: &Path, source: &Source) -> Option<Tally> {
-    Tally::from_json(&std::fs::read_to_string(day_dir.join(source.file_name())).ok()?)
-}
-
 /// Every source of a day, with its kind; files of another shape, too big
 /// or unreadable are skipped.
 pub fn read_day(day_dir: &Path) -> Vec<(SourceKind, Tally)> {
@@ -154,7 +149,7 @@ mod tests {
         std::fs::write(dir.join("notes.txt"), "/Users/camille").unwrap();
         let day = read_day(&dir);
         assert_eq!(day.iter().map(|(k, _)| *k).collect::<Vec<_>>(), [SourceKind::Core, SourceKind::Hub]);
-        assert_eq!(read_source(&dir, &hub), Some(t));
+        assert!(day.iter().all(|(_, back)| *back == t));
         assert!(!dir.join(format!(".{}.tmp", hub.file_name())).exists());
         let _ = std::fs::remove_dir_all(&dir);
     }

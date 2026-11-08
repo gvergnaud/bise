@@ -21,7 +21,7 @@ fn names<T: Copy>(all: &[T], name: fn(T) -> &'static str) -> Value {
 /// The schema of `POST /v1/packets`'s body.
 pub fn schema() -> Value {
     let counts: Map<String, Value> = CountKey::ALL.iter().map(|k| (k.name().to_string(), json!({ "max": COUNT_MAX }))).collect();
-    let minutes: Map<String, Value> = MinutesKey::ALL.iter().map(|k| (k.name().to_string(), json!({ "max": k.max_minutes(), "step": MINUTE_STEP }))).collect();
+    let minutes: Map<String, Value> = MinutesKey::ALL.iter().map(|k| (k.name().to_string(), json!({ "max": k.cap(), "step": MINUTE_STEP }))).collect();
     let hist: Map<String, Value> = HistKey::ALL.iter().map(|k| (k.name().to_string(), json!({ "buckets": k.labels(), "max": COUNT_MAX }))).collect();
     json!({
         "schema": SCHEMA,

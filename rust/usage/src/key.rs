@@ -144,10 +144,11 @@ pub const COUNT_MAX: u16 = 999;
 pub const MINUTE_STEP: u16 = 5;
 
 impl MinutesKey {
-    /// The most minutes a packet carries for it: a day (1440) for a clock
-    /// he lives by; agent time adds the agents up, so it gets ten
-    /// agents' full day.
-    pub fn max_minutes(self) -> u16 {
+    /// The most minutes a packet carries for it, the one place of this cap
+    /// (round_minutes and the schema, so the PII law, read it): a day (1440)
+    /// for a clock he lives by; agent time adds the agents up, so it gets
+    /// ten agents' full day (14400).
+    pub fn cap(self) -> u16 {
         match self {
             MinutesKey::AgentWork => 14_400,
             MinutesKey::AppOpen | MinutesKey::AppFocused | MinutesKey::AppEngaged | MinutesKey::TuiAttached | MinutesKey::TuiFocused => 1440,
