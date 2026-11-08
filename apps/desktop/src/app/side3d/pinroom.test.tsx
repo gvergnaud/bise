@@ -4,9 +4,9 @@
 // then each of its items clicked. happy-dom has no layout nor :hover: side3d.css is read with
 // `:hover` as `[data-hover]` and the row hovered by that attribute; the pin covers the end's last
 // item unless the row keeps its room, so 'never under the pin' is: shown, and either not last or
-// the room kept (36 right). Mutation: side3d.css's hide rule back to
-// `:is(.s3-orow-age, .s3-orow-pr):last-child`, or the room rule dropped, or the PR after the age in
-// OuterCard.tsx, turns this red.
+// the room kept (36 right); a row with a port keeps the room at rest too and hides nothing. Mutation:
+// side3d.css's hide rule back to `:is(.s3-orow-age, .s3-orow-pr):last-child`, a room rule dropped,
+// the port rows' hide exception dropped, or the PR after the age in OuterCard.tsx, turns this red.
 import { cleanup, fireEvent, render } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -123,7 +123,7 @@ describe('an agent line hovered: the pin never covers its PR', () => {
   });
 });
 
-describe('a process row hovered: the pin never covers its port', () => {
+describe('a process row hovered: the pin never covers its port nor moves it', () => {
   const proc = (id: string, runs: boolean) => (
     <SideRow pic={<span />} title="pnpm dev" sub="" label="pnpm dev" tip="pnpm dev" onClick={() => undefined} menu={{ onContextMenu: () => undefined, open: () => undefined }}
       pin={{ kind: 'process', project: P, id, on: false }} testId={id}
@@ -135,17 +135,17 @@ describe('a process row hovered: the pin never covers its port', () => {
       } />
   );
 
-  it('its port shows and stays clear of the pin, with or without the ∿ after it', () => {
+  it('a row with a port keeps the room of the pin, at rest and hovered; its port and its ∿ stay as they were (designer m_57275)', () => {
     const v = render(<StoreProvider store={store()}>{proc('runs', true)}{proc('done', false)}</StoreProvider>);
     for (const id of ['runs', 'done']) {
       const rowEl = v.getByTestId(id);
       const body = rowEl.querySelector<HTMLElement>('.s3-row-body');
       if (body === null) throw new Error(`${id}: no body`);
+      expect(px(getComputedStyle(body).paddingRight), id).toBe(ROOM);
       hover(rowEl);
-      clear(v.getByTestId(`${id}.port`), body);
-      // the ∿ after it is words: the pin takes its place, no room kept
-      expect(px(getComputedStyle(body).paddingRight), id).toBe(id === 'runs' ? 12 : ROOM);
+      expect(px(getComputedStyle(body).paddingRight), id).toBe(ROOM);
+      expect(getComputedStyle(v.getByTestId(`${id}.port`)).visibility, id).not.toBe('hidden');
     }
-    expect(getComputedStyle(v.getByTestId('runs.runs')).visibility).toBe('hidden');
+    expect(getComputedStyle(v.getByTestId('runs.runs')).visibility).not.toBe('hidden');
   });
 });

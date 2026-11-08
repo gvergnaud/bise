@@ -793,18 +793,18 @@
   opacity: 1;
   pointer-events: auto;
 }
-/* it covers only words: an end item that takes a click (a PR, a port: role button or link) is never
-   hidden nor under it (his m_57202, designer m_57214) */
-.s3-row:is(:hover, :has(> .s3-pin:focus-within)) .s3-row-end > :last-child:not(:is([role='button'], [role='link'])),
+/* it covers only words, never an item that takes a click (his m_57202, designer m_57214): an agent's
+   age, never its PR; a row with a port keeps the pin's room instead and hides nothing, its ∿ too
+   (designer m_57275) */
+.s3-row:is(:hover, :has(> .s3-pin:focus-within)):not(:has(.s3-port)) .s3-row-end > :last-child,
 .s3-row:is(:hover, :has(> .s3-pin:focus-within)) .s3-row-end > .b-pinmark,
 .s3-orow:is(:hover, :has(> .s3-pin:focus-within)) .s3-orow-open > .s3-orow-age:last-child,
 .s3-orow:is(:hover, :has(> .s3-pin:focus-within)) .s3-orow-open > .b-pinmark {
   visibility: hidden;
 }
-/* a row whose end's last item takes a click (an agent's PR with no age after it, a port with no ∿):
-   the pin's room kept at rest, that item ending 4 before the pin's box, so a hover moves nothing
-   (designer m_57214) */
-.s3-row:has(> .s3-pin):has(.s3-port):not(:has(.s3-wave)) .s3-row-body,
+/* a row whose end holds a port, or ends on an agent's PR (no age after it): the pin's room kept at
+   rest, its end 4 before the pin's box, so a hover moves nothing (designer m_57214, m_57275) */
+.s3-row:has(> .s3-pin):has(.s3-port) .s3-row-body,
 .s3-orow:has(> .s3-pin):has(.s3-orow-pr):not(:has(.s3-orow-age)) .s3-orow-open {
   padding-right: calc(var(--s-8) + var(--s-1));
 }
@@ -1371,24 +1371,18 @@
   flex-direction: column;
 }
 
-/* a process's port as a link at its row's end (folded-side v9): t-12 mono text-2, the open icon,
-   its click opens the page, never the row */
+/* a process's port as a link at its row's end (folded-side v9): its short form (':5242') t-12 mono
+   text-3, its whole address in its tip; its click opens the page, never the row; its hover says it
+   is a link (ink, underlined), nothing grows (designer m_57275) */
 .s3-port {
   display: inline-flex;
   align-items: center;
-  gap: var(--s-1);
   font: 400 var(--t-12)/16px var(--font-mono);
-  color: var(--c-text-2);
+  color: var(--c-text-3);
 }
 .s3-port:hover {
   color: var(--c-text);
-}
-/* the short form at rest (':5242', portfit.ts): it gives way to the command, text-3 */
-.s3-port[data-short] {
-  color: var(--c-text-3);
-}
-.s3-port[data-short]:hover {
-  color: var(--c-text);
+  text-decoration: underline;
 }
 /* a watch's detail under its row: its words one a line text-2, then its agent and 'stop watching' */
 .s3-detail {

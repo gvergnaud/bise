@@ -28,7 +28,6 @@ import { groupParts, groupWords } from './lists';
 import { artifactObj, laterObj, procObj } from './objects';
 import { openTab } from './ports';
 import { openPr } from '@/review/openPr';
-import { usePortFull, type PortBoxes } from './portfit';
 import { pinnedIn, procPinId, watchPinId, type PinSet } from '../pins';
 
 /** a row's object, css px */
@@ -109,40 +108,26 @@ export function typed(p: Pick<Proc, 'cmd' | 'cwd'>): string {
   return c.args === '' ? c.prog : `${c.prog} ${c.args}`;
 }
 
-/** a process row's command line, command and port, for the port's fit (portfit.ts) */
-function procBoxes(el: HTMLElement): PortBoxes {
-  return { line: el.querySelector('.s3-row-lines'), cmd: el.querySelector('.s3-row-l1'), port: el.querySelector('.s3-port') };
-}
-
 export function ProcRow({ x, now, group, pinned = false }: { x: ProcItem; now: number; group?: string; pinned?: boolean }) {
   const p = x.p;
   const menu = useEntityMenu({ kind: 'process', project: x.project, agent: p.agent, id: p.id });
   const on = isRunning(p);
   const u = on ? urlWords(p, stateOf(p)) : null;
-  const row = useRef<HTMLDivElement>(null);
-  // the port gives way to the command: short at rest, full on hover or focus when the command keeps 12 characters (designer m_46894)
-  const fullWords = u === null ? '' : u.label.replace(/ ↗$/u, '');
-  const full = usePortFull(row, procBoxes, fullWords);
   return (
     <SideRow
-      ref={row}
       pic={<ThingPic thing={{ obj: procObj(p) }} px={ROW_PX} tile="terminal" />}
       title={<span className="s3-cmd">{typed(p)}</span>}
       sub={<Parts parts={procSub(p, now, group, u !== null)} />}
       end={
         <>
-          {/* its port as a link that opens the page, never the row (folded-side v9, the Overview's port link) */}
+          {/* its port as a link that opens the page, never the row (folded-side v9, the Overview's port link):
+              its short form at rest and on hover, nothing grows; its whole address in its tip (designer m_57275) */}
           {u !== null && (
-            <span className="s3-port" role="link" aria-label={u.label} {...tipAttrs(full ? undefined : u.label)} data-short={full ? undefined : ''} onClick={(e) => {
+            <span className="s3-port" role="link" aria-label={u.label} {...tipAttrs(u.label)} onClick={(e) => {
               e.stopPropagation();
               void (window as Partial<Window>).bise?.openExternal(u.url);
             }} data-testid={`app.flyout.processes.${x.project}.${p.agent}.${p.id}.port`}>
-              {full ? (
-                <>
-                  {fullWords}
-                  <AppIcon name="open" size={14} />
-                </>
-              ) : u.row}
+              {u.row}
             </span>
           )}
           {on && <span className="s3-wave" {...tipAttrs(side.running_tip)} data-testid={`app.flyout.processes.${x.project}.${p.agent}.${p.id}.runs`}>{markOf(stateOf(p)).glyph}</span>}
