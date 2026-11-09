@@ -17,11 +17,10 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runStub, type Cmd } from './stub-lib.mts';
+import { cardsOf, startRows, withCards, type Card, type Row } from './startrows.mts';
 
 /** A world line (an event, JSON): the fields the stub reads of each kind. */
 type Item = { pos: number; head?: string; rule?: string; meta?: string; body?: { text?: string } };
-type Card = { id: number };
-type Row = { project?: unknown; cards?: Card[]; waits?: number; [k: string]: unknown };
 type Ev = {
   ev?: string; project?: unknown; agent?: unknown; before?: number | null; merged?: unknown; id?: unknown;
   entries?: { pos: number }[]; items?: Item[]; slot?: { slot: unknown; req: number }; raw?: unknown;
@@ -133,28 +132,9 @@ function answer(cmd: Cmd): Ev[] {
     default: return [];
   }
 }
-// The real core lists a held hub's cards in its `projects` rows in the same beat it forwards that
-// hub's `cards` (core/hubs.rs project_ev: emit_projects after 'cards'; his cards and bise's own by
-// id, inbox_cards); the window reads the rows only (inbox-sync). So does the stub: a start row that
-// says nothing of its cards gets its hub's from the start world (a row that lists them keeps what
-// the test wrote), and a `cards` line a test sends later is followed by the rows it changes.
-// One card per id, his first (a hub's ids are its own; the fixtures' hub_ev reuses #11 in `others`).
-const cardsOf = (ev: Ev): Card[] => {
-  const all = [...(ev.cards ?? []), ...(ev.others ?? [])];
-  return all.filter((c, i) => all.findIndex((x) => x.id === c.id) === i).sort((a, b) => a.id - b.id);
-};
-const withCards = (list: Row[], byProject: Map<unknown, Card[]>, onlyUnsaid = false): Row[] =>
-  list.map((r) => {
-    const cards = byProject.get(r.project);
-    return cards && !(onlyUnsaid && r.cards !== undefined) ? { ...r, cards, waits: cards.length } : r;
-  });
-const held = new Map(evs.filter((ev) => ev.ev === 'cards' && typeof ev.project === 'string' && Array.isArray(ev.cards)).map((ev) => [ev.project, cardsOf(ev)]));
-const startLines = start
-  .filter((l) => parse(l).ev !== 'transcript')
-  .map((l) => {
-    const ev = parse(l);
-    return ev.ev === 'projects' && Array.isArray(ev.projects) && held.size > 0 ? JSON.stringify({ ...ev, projects: withCards(ev.projects, held, true) }) : l;
-  });
+// The start rows list each project's cards as the real core does (startrows.mts: a project's first
+// `cards` line), and a `cards` line a test sends later is followed by the rows it changes.
+const startLines = startRows(start.filter((l) => parse(l).ev !== 'transcript'), evs);
 let rows: Row[] | null = null;
 let seen = 0;
 function follow(line: string): string[] {
