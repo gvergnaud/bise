@@ -214,12 +214,11 @@ crate::words! { pages:
     review_guide_failed = "couldn't write the guide";
     /// the bar's guide slot when small jobs is his main model: his click writes it
     review_guide_write(tokens, model) = "Write a guide · about {tokens} tokens on {model}";
-    /// its tip: the model's whole id
-    review_guide_write_tip(model) = "your small jobs model is your main model ({model}), so i ask first";
-    /// the same button in a narrow column (it never gets cut): its model in its tip
+    /// its tip: the cost and the model's whole id, in full (the button may name neither)
+    review_guide_write_tip(tokens, model) = "about {tokens} tokens on {model}: your small jobs model is your main model, so i ask first";
+    /// the same button in a narrow column: its model in its tip; never cut further (the cost is
+    /// why it asks: designer m_57841)
     review_guide_write_short(tokens) = "Write a guide · {tokens} tokens";
-    /// the same button when the bar has even less room: its token count gone too
-    review_guide_write_bare = "Write a guide";
     /// the Guide segment's tip while no guide is there to show
     review_guide_none = "no guide yet";
     /// the bar's guide slot once it came while he read (never moves what he reads)

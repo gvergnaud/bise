@@ -163,19 +163,13 @@
     display: inline;
   }
 }
-/* the bar never leaves its column (designer m_57825, m_57833; ReviewBar useFit): things give way in
-   turn: the slot's model words (into its tip), its token count, the viewed count, last the part's
-   name (whole or …; one word dropped whole); Guide | By kind always fits */
-.rv-bare {
+/* the bar never leaves its column (designer m_57825, m_57841; ReviewBar useFit): things give way in
+   turn: the viewed count, the slot's model words (into its tip), last the part's name (whole or …;
+   one word dropped whole); 'Write a guide · 48k tokens' and Guide | By kind always stay */
+.rv-bar[data-fit~='slot-short'] > .rv-slot .rv-wide {
   display: none;
 }
-.rv-bar[data-fit~='slot-short'] > .rv-slot .rv-wide,
-.rv-bar[data-fit~='slot-bare'] > .rv-slot .rv-wide,
-.rv-bar[data-fit~='slot-bare'] > .rv-slot .rv-narrow {
-  display: none;
-}
-.rv-bar[data-fit~='slot-short'] > .rv-slot .rv-narrow,
-.rv-bar[data-fit~='slot-bare'] > .rv-slot .rv-bare {
+.rv-bar[data-fit~='slot-short'] > .rv-slot .rv-narrow {
   display: inline;
 }
 .rv-bar[data-fit~='count-off'] > .rv-viewed,

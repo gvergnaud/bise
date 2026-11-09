@@ -219,11 +219,6 @@
     "one": null,
     "text": "Write a guide · about {tokens} tokens on {model}"
   },
-  "pages.review_guide_write_bare": {
-    "args": [],
-    "one": null,
-    "text": "Write a guide"
-  },
   "pages.review_guide_write_short": {
     "args": [
       "tokens"
@@ -233,10 +228,11 @@
   },
   "pages.review_guide_write_tip": {
     "args": [
+      "tokens",
       "model"
     ],
     "one": null,
-    "text": "your small jobs model is your main model ({model}), so i ask first"
+    "text": "about {tokens} tokens on {model}: your small jobs model is your main model, so i ask first"
   },
   "pages.review_guide_writing": {
     "args": [],

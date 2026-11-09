@@ -4,10 +4,11 @@
 // while he read), and Guide | By kind, always both (Guide off until a guide is there; only a small
 // change, which never gets one, drops it). A hairline at its foot while code scrolls under it. In a
 // narrow column the place says the part's area, the count '0/9', the button its short words: the
-// button never gets cut. The bar never leaves its column (designer m_57825, m_57833): when it would,
-// things give way in turn (FIT): the slot's model words (into its tip), then its token count, then
-// the viewed count, last the part's name (whole or …; one word is never cut, only dropped whole);
-// Guide | By kind always fits. Renders of their props but that fit: DiffFiles owns the state and keys.
+// button never gets cut. The bar never leaves its column (designer m_57825, m_57841): when it would,
+// things give way in turn (FIT): the viewed count, then the slot's model words (into its tip, which
+// states cost and model in full), last the part's name (whole or …; one word is never cut, only
+// dropped whole). 'Write a guide · 48k tokens' and Guide | By kind always stay. Renders of their
+// props but that fit: DiffFiles owns the state and keys.
 import { useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Button, Filters, IconButton, PickerPop, Press, tipAttrs } from '@/ds';
 import { pages } from '@/proto/words_pages.gen';
@@ -81,11 +82,11 @@ export function ReviewBar({ place, placeShort, single, onOutline, outline, onPre
 }
 
 /**
- * What the bar gave way, step by step (review.css .rv-bar[data-fit~=...]): none; the slot's short
- * words (no model: its tip has it); its bare words (no token count); the count gone; the part's
- * name cut with …; the part's name gone.
+ * What the bar gave way, step by step (review.css .rv-bar[data-fit~=...]): none; the viewed count
+ * gone; the slot's short words (no model: its tip has it, the cost stays); the part's name cut with
+ * …; the part's name gone.
  */
-const FIT = [undefined, 'slot-short', 'slot-bare', 'slot-bare count-off', 'slot-bare count-off place-cut', 'slot-bare count-off place-off'] as const;
+const FIT = [undefined, 'count-off', 'count-off slot-short', 'count-off slot-short place-cut', 'count-off slot-short place-off'] as const;
 
 /** The words a part's name shows now (the wide or the narrow one: the one displayed). */
 function shownPlace(place: Element): string {
@@ -158,10 +159,9 @@ export function GuideSlot({ ev, shown, onRun, onShow, testId }: GuideSlotProps) 
       const model = modelName(ev.model ?? '');
       return (
         <span className="rv-slot" data-testid={id}>
-          <Button size="sm" onClick={onRun} title={pages.review_guide_write_tip({ model: ev.model ?? '' })} testId={`${id}.write`}>
+          <Button size="sm" onClick={onRun} title={pages.review_guide_write_tip({ tokens, model: ev.model ?? '' })} testId={`${id}.write`}>
             <span className="rv-wide">{pages.review_guide_write({ tokens, model })}</span>
             <span className="rv-narrow">{pages.review_guide_write_short({ tokens })}</span>
-            <span className="rv-bare">{pages.review_guide_write_bare}</span>
           </Button>
         </span>
       );

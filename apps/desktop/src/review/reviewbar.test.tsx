@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
-// The review bar never leaves its column (designer m_57825, m_57833; code-viewer-width piece 2: at
+// The review bar never leaves its column (designer m_57825, m_57841; code-viewer-width piece 2: at
 // 900 its Guide | By kind ran 20 px past the diff column, then 'Code' was cut before the model words
-// went): things give way in turn, the slot's model words, its token count, the viewed count, last
-// the part's name (a one-word name dropped whole, never cut); it fits: nothing gives way. happy-dom
+// went): things give way in turn, the viewed count, the slot's model words, last the part's name (a
+// one-word name dropped whole, never cut); 'Write a guide · 48k tokens' stays; it fits: nothing. happy-dom
 // has no layout: the bar's widths are given, its row narrower by `saved` px at each step. Mutation:
 // useFit never stepping (no setFit) turns the first two cases red.
 import { afterEach, describe, expect, it } from 'vitest';
@@ -35,19 +35,19 @@ function bar() {
 }
 
 describe('the review bar in a narrow column', () => {
-  it("a little too wide: only the slot's model words go (the model in its tip), the count and 'Code' stay", () => {
+  it("a little too wide: only the viewed count goes; the slot keeps its model words, 'Code' stays", () => {
     const back = widths(720, 700, 30);
     try {
-      expect(bar().getAttribute('data-fit')).toBe('slot-short');
+      expect(bar().getAttribute('data-fit')).toBe('count-off');
     } finally {
       back();
     }
   });
 
-  it("never wide enough: the slot's words, the count, then the one-word name, dropped whole; Guide | By kind stays", () => {
+  it("never wide enough: the count, the slot's model words, then the one-word name, dropped whole; the cost and Guide | By kind stay", () => {
     const back = widths(900, 700);
     try {
-      expect(bar().getAttribute('data-fit')).toBe('slot-bare count-off place-off');
+      expect(bar().getAttribute('data-fit')).toBe('count-off slot-short place-off');
       expect(screen.getByTestId('t.bar.mode')).toBeTruthy();
     } finally {
       back();

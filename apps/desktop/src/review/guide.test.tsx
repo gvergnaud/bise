@@ -119,11 +119,10 @@ describe('the guided review', () => {
     const { v, cmds, send } = view();
     send({ ev: 'guide', project: P, hash: H, state: 'needs_click', tokens: 5200, model: 'anthropic/claude-opus-5-5' });
     const b = v.getByTestId('review.bar.guide.write');
-    // the model's name without its provider; its whole id in the tip; a narrow column's short words
+    // the model's name without its provider; the cost and its whole id in the tip; a narrow column's short words
     expect(b.querySelector('.rv-wide')?.textContent).toBe(pages.review_guide_write({ tokens: '5k', model: 'claude-opus-5-5' }));
     expect(b.querySelector('.rv-narrow')?.textContent).toBe(pages.review_guide_write_short({ tokens: '5k' }));
-    expect(b.querySelector('.rv-bare')?.textContent).toBe(pages.review_guide_write_bare);
-    expect(b.getAttribute('title')).toBe(pages.review_guide_write_tip({ model: 'anthropic/claude-opus-5-5' }));
+    expect(b.getAttribute('title')).toBe(pages.review_guide_write_tip({ tokens: '5k', model: 'anthropic/claude-opus-5-5' }));
     // Guide stays in the control, off until a guide is here
     expect(v.getByTestId('review.bar.mode.guide').getAttribute('aria-disabled')).toBe('true');
     fireEvent.click(b);
