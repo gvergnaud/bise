@@ -592,6 +592,32 @@ fn models_fits_narrow_screens_by_cutting_the_provider_first() {
     assert!(!narrow.lines().any(|l| l.trim_start().starts_with("not tested")), "{narrow}");
 }
 
+/// The model column has one width per screen size: a longer name is cut
+/// with …, the status column never moves; the faint provider shows on
+/// every row or on none (designer m_57640).
+#[test]
+fn the_model_column_holds_and_the_provider_shows_on_all_rows_or_none() {
+    let (e, _hm) = home("column-80", "[roles]\nmain = 'mistral/mistral-medium-latest'\n", &["MISTRAL_API_KEY"]);
+    let o = open(&e, Open::Roles);
+    let rows = ["bise ", "Agents ", "Titles and summaries ", "Images and computer use ", "Dictation and fn ", "Voice mode "];
+    let ends = |sc: &str| rows.iter().map(|r| line_of(sc, r).trim_end().chars().count()).collect::<Vec<_>>();
+    // 80 columns: no provider, Dictation's long name cut, the statuses in one column
+    let narrow = screen_w(&o, 80);
+    assert!(rows.iter().all(|r| !line_of(&narrow, r).contains("Mistral") && !line_of(&narrow, r).contains("same as bise")), "{narrow}");
+    assert!(line_of(&narrow, "Dictation and fn ").contains("voxtral-mini-tran") && line_of(&narrow, "Dictation and fn ").contains('…'), "{narrow}");
+    let e80 = ends(&narrow);
+    assert!(e80.windows(2).all(|w| w[0] == w[1]), "{e80:?}
+{narrow}");
+    assert!(!narrow.lines().any(|l| l.trim_start().starts_with("tested")), "{narrow}");
+    // 170 columns: on every row, faint
+    let wide = screen_w(&o, 170);
+    assert!(rows[..3].iter().chain(&rows[4..5]).all(|r| line_of(&wide, r).contains("Mistral")), "{wide}");
+    assert!(line_of(&wide, "Images and computer use ").contains("same as bise"), "{wide}");
+    let e170 = ends(&wide);
+    assert!(e170.windows(2).all(|w| w[0] == w[1]), "{e170:?}
+{wide}");
+}
+
 #[test]
 fn an_agent_with_its_own_model_shows_under_agents() {
     let (e, _hm) = home("own", "[roles]\nmain = \"mistral/mistral-medium-latest\"\n", &["MISTRAL_API_KEY"]);

@@ -1003,6 +1003,22 @@ fn wrap_words(text: &str, w: usize) -> Vec<String> {
     out
 }
 
+/// `t` in at most `w` columns, cut with … when longer.
+fn clip(t: &str, w: usize) -> String {
+    if t.width() <= w {
+        return t.to_string();
+    }
+    let mut out = String::new();
+    for c in t.chars() {
+        if out.width() + c.to_string().width() + 1 > w {
+            break;
+        }
+        out.push(c);
+    }
+    out.push('…');
+    out
+}
+
 /// The mark before a line of `/models`: ✓ on the row just changed, › on
 /// the cursor's.
 fn lead(selected: bool, flash: bool) -> Span<'static> {
@@ -1103,12 +1119,14 @@ fn models_lines(o: &Onb, w: usize, gap: usize, said: &dyn Fn(&mut Vec<Line<'stat
     let col = |f: &dyn Fn(&RowText) -> usize| rows.iter().map(f).max().unwrap_or(0);
     let nw = col(&|x| x.name.width()) + 3;
     let aw = col(&|x| x.about.width()) + 3;
-    let cw = col(&|x| x.cells()[0].width()) + 3;
     let sw = col(&|x| x.status.text.width());
     // the plain line sits on the row when every column fits (models-ux)
-    let wide = 2 + nw + aw + cw + sw <= w;
+    let wide = 2 + nw + aw + col(&|x| x.cells()[0].width()) + 3 + sw <= w;
+    // the model column: one width per screen size; the faint words on
+    // every row or on none (designer m_57640)
     let room = w.saturating_sub(2 + nw + if wide { aw } else { 0 } + sw + 2);
-    let cw = cw.min(room + 2);
+    let level = (0..3).find(|&i| col(&|x| x.cells()[i].width()) <= room).unwrap_or(2);
+    let cw = col(&|x| x.cells()[level].width()).min(room) + 2;
     for x in &rows {
         let sel = at == Some(Item::Row(x.id));
         let flash = pn.flash.as_ref().is_some_and(|(id, t)| gv::row_of(id) == Some(x.id) && t.elapsed() < FLASH);
@@ -1117,12 +1135,17 @@ fn models_lines(o: &Onb, w: usize, gap: usize, said: &dyn Fn(&mut Vec<Line<'stat
         if wide {
             line.push(s(pad(x.about, aw), theme::dim()));
         }
-        let cell = x.cells().into_iter().find(|c| c.width() <= room).unwrap_or_else(|| x.model.clone());
+        // a name longer than the column is cut: the status never moves
+        let cell = clip(&x.cells()[level], cw - 2);
         // Images follows bise's row: nothing on it looks editable
         let ink = if x.id == FeatureId::Vision || x.model.is_empty() { theme::dim() } else { theme::text() };
-        let (m, rest) = cell.split_at(x.model.len().min(cell.len()));
-        line.push(s(m.to_string(), ink));
-        line.push(s(pad(rest, cw.saturating_sub(m.width())), theme::dim()));
+        let (m, rest) = match cell.strip_prefix(x.model.as_str()) {
+            Some(rest) if !x.model.is_empty() => (x.model.clone(), rest.to_string()),
+            _ if x.model.is_empty() => (String::new(), cell),
+            _ => (cell, String::new()),
+        };
+        line.push(s(m.clone(), ink));
+        line.push(s(pad(&rest, cw.saturating_sub(m.width())), theme::dim()));
         let tone = match x.status.tone {
             Tone::Ink => theme::text(),
             Tone::Err => theme::error(),
