@@ -162,6 +162,8 @@ pub type CuBusy = std::sync::Arc<std::sync::Mutex<crate::computer_use::Busy>>;
 pub type CuPollFn = Box<dyn Fn(Sender<Done>, std::sync::Arc<std::sync::atomic::AtomicBool>)>;
 /// (the last setup check, the fix, what runs, the channel of a later failure) -> its flash
 pub type CuFixFn = Box<dyn Fn(&Value, &str, CuBusy, Sender<Done>) -> Option<String>>;
+/// (default | forget, the browser profile) -> done, or why not
+pub type CuProfileFn = Box<dyn Fn(&str, &bise_proto::app_rows::CuProfileKey) -> Result<(), String>>;
 
 /// Computer use's I/O (P.2): the TUI's /computer-use functions
 /// (crate::computer_use), a fake in tests.
@@ -181,7 +183,7 @@ pub struct CuPorts {
     /// a browser profile made the default or forgotten (`default` |
     /// `forget`, his click only): the broker's (`bise computer-use
     /// default`); the next check shows it
-    pub profile: Box<dyn Fn(&str, &bise_proto::app_rows::CuProfileKey) -> Result<(), String>>,
+    pub profile: CuProfileFn,
 }
 
 /// Everything the setup commands read or write.
