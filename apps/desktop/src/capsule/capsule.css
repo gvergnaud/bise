@@ -44,6 +44,11 @@ html:has(.b-capsule), body:has(.b-capsule) { margin: 0; background: transparent;
    place) keeps its 640 px on the left, the pane's 480 px on the right; the window follows */
 .b-cap-glass.with-pane { display: flex; align-items: stretch; width: auto; }
 .b-cap-glass.with-pane > .b-spotlight, .b-cap-glass.with-pane > .b-cap-card { width: 640px; flex: none; }
+/* the pane taller than the spotlight (a long thread): the spotlight takes the window's height too,
+   its list grows, so its key bar sits at the bottom on the pane's key bar's line (designer) */
+.b-cap-glass.with-pane > .b-spotlight { display: flex; flex-direction: column; }
+.b-cap-glass.with-pane > .b-spotlight > .b-spot { flex: 1 1 auto; }
+.b-cap-glass.with-pane > .b-spotlight > .b-spot > [role="listbox"] { flex-grow: 1; }
 /* the pearl 40 px, 16 px in from the glass's corner; the words start 16 px past it, their first
    line centered on it (24 + half a 24.6 px line = the pearl's center at 36) */
 .b-cap-pearl { position: absolute; left: var(--s-4); top: var(--s-4); width: var(--s-10); height: var(--s-10); z-index: 2; pointer-events: none; }
