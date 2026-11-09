@@ -3,12 +3,13 @@
 // tab / shift+tab next / previous file, j k scroll, esc `onEscape`; V7 / L11: drag or shift+↑↓
 // select whole lines, a typed key quotes them in `to`'s thread. Each file's code is colored by its
 // language (diff-syntax: syntax.ts), after a first plain paint. Owner: nm-pages-b.
-import { useDeferredValue, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
+import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode, type RefObject } from 'react';
 import { copyText, QuotePop } from '@/quote/QuotePop';
 import { flatRows, handQuotes, quotesOf, range, type RowAt, type Sel } from './quote';
 import { Button, Check, Diff, Empty, Fold, tipAttrs, type DiffLine as DsLine } from '@/ds';
 import { pages } from '@/proto/words_pages.gen';
 import { diffRuns, langOfPath } from './syntax';
+import { lineWindow, type Span } from './lineWindow';
 import { useRouter } from '@/app/router';
 import type { Diff as DiffEv } from '@/store';
 import type { GuideTarget } from '@/proto';
@@ -193,6 +194,7 @@ export function DiffFiles({ project, diff, loading, error, onRetry, none, to, fr
         lines={c.lines}
         picked={(li) => inSel(sel, (starts[i] ?? 0) + li)}
         pop={sel !== null && !dragging && lastFileOf(sel, rows) === i ? <QuotePop to={to} testId={`${testId}.quote.pop`} onAsk={askClick} onCopy={copyClick} /> : undefined}
+        scroller={body}
         testId={`${testId}.file.${String(i)}`}
       />
     </div>
@@ -279,23 +281,106 @@ interface FileDiffProps {
   readonly lines: readonly DsLine[];
   readonly picked: (i: number) => boolean;
   readonly pop: ReactNode;
+  /** the column's scroller: the lines near its view are drawn */
+  readonly scroller: RefObject<HTMLElement | null>;
   readonly testId: string;
 }
 
 /**
  * One file's Diff, its code colored by its language (diff-syntax): drawn plain first, then
  * colored in a deferred render, one file at a time (React yields between files), so a long diff
- * shows at once and stays scrollable while it colors. A file's runs are kept until its lines change.
+ * shows at once and stays scrollable while it colors. Only its lines near the view are drawn
+ * (code-viewer-width: lineWindow.ts), the rest a gap of their height; a file longer than
+ * COLOR_WHOLE lines is colored block by block, the blocks the window shows, each kept until its
+ * lines change.
  */
-function FileDiff({ path, head, tip, add, rm, lines, picked, pop, testId }: FileDiffProps) {
+function FileDiff({ path, head, tip, add, rm, lines, picked, pop, scroller, testId }: FileDiffProps) {
+  const box = useRef<HTMLDivElement>(null);
+  const span = useLineWindow(box, scroller, lines.length);
   const colored = useDeferredValue(true, false);
-  const runs = useMemo(() => (colored ? diffRuns(lines, langOfPath(path)) : null), [colored, lines, path]);
-  const shown = lines.map((l, li) => {
-    const r = runs?.[li];
+  const runsAt = useRunsAt(lines, path, colored, span);
+  const shown = lines.slice(span.from, span.to).map((l, k) => {
+    const li = span.from + k;
+    const r = runsAt(li);
     const sel = picked(li);
     return r == null && !sel ? l : { ...l, ...(r == null ? {} : { runs: r }), ...(sel ? { sel: true } : {}) };
   });
-  return <Diff file={head} {...(tip === undefined ? {} : { fileTip: tip })} add={add} rm={rm} lines={shown} pop={pop} testId={testId} />;
+  return (
+    <div ref={box}>
+      <Diff file={head} {...(tip === undefined ? {} : { fileTip: tip })} add={add} rm={rm} lines={shown} at={span.from} total={lines.length} pop={pop} testId={testId} />
+    </div>
+  );
+}
+
+/** a file up to this many lines is colored whole (a comment over many lines stays one token) */
+const COLOR_WHOLE = 2000;
+/** a longer one, block by block, as many lines each */
+const COLOR_BLOCK = 512;
+
+/**
+ * Line `li`'s colored runs (null: plain, or not colored yet): a file up to COLOR_WHOLE lines
+ * colored whole; a longer one only in the COLOR_BLOCK blocks `span` shows.
+ */
+function useRunsAt(lines: readonly DsLine[], path: string, colored: boolean, span: Span): (li: number) => DsLine['runs'] {
+  const lang = langOfPath(path);
+  const whole = lines.length <= COLOR_WHOLE;
+  const from = whole ? 0 : Math.floor(span.from / COLOR_BLOCK) * COLOR_BLOCK;
+  const to = whole ? lines.length : Math.min(lines.length, Math.ceil(span.to / COLOR_BLOCK) * COLOR_BLOCK);
+  const runs = useMemo(() => {
+    if (!colored) return null;
+    if (whole) return diffRuns(lines, lang);
+    const out: ReturnType<typeof diffRuns> = [];
+    for (let b = from; b < to; b += COLOR_BLOCK) out.push(...diffRuns(lines.slice(b, b + COLOR_BLOCK), lang));
+    return out;
+  }, [colored, whole, lines, lang, from, to]);
+  return (li) => runs?.[li - from] ?? null;
+}
+
+/** The rows of a file's lines to draw where its box sits in the scroller now (lineWindow.ts). */
+function spanNow(el: HTMLElement, s: HTMLElement | null, total: number): Span {
+  const view = s?.clientHeight ?? 0;
+  const top = s === null ? 0 : s.getBoundingClientRect().top - el.getBoundingClientRect().top;
+  // one row: the diff's line-height (ds .b-diff, its rows white-space: pre)
+  const rowH = Number.parseFloat(getComputedStyle(el.firstElementChild ?? el).lineHeight);
+  return lineWindow({ top, view, rowH, total });
+}
+
+/**
+ * The rows of a file's lines to draw (lineWindow.ts): measured before paint after each render (a
+ * section folded above moves it with no scroll), again on each scroll (once a frame) and resize of
+ * `scroller`. Its state moves only when the window does.
+ */
+function useLineWindow(box: RefObject<HTMLElement | null>, scroller: RefObject<HTMLElement | null>, total: number): Span {
+  const [span, setSpan] = useState<Span>({ from: 0, to: 0 });
+  const keep = (next: Span) => {
+    setSpan((cur) => (cur.from === next.from && cur.to === next.to ? cur : next));
+  };
+  useLayoutEffect(() => {
+    if (box.current === null) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- its place in the scroller: known only after the commit, before paint
+    keep(spanNow(box.current, scroller.current, total));
+  });
+  useLayoutEffect(() => {
+    const s = scroller.current;
+    if (s === null) return undefined;
+    let frame = 0;
+    const later = () => {
+      if (frame !== 0) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        if (box.current !== null) keep(spanNow(box.current, s, total));
+      });
+    };
+    s.addEventListener('scroll', later, { passive: true });
+    const seen = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(later);
+    seen?.observe(s);
+    return () => {
+      s.removeEventListener('scroll', later);
+      seen?.disconnect();
+      if (frame !== 0) cancelAnimationFrame(frame);
+    };
+  }, [box, scroller, total]);
+  return span;
 }
 
 const kindWord: Record<Kind, string> = {

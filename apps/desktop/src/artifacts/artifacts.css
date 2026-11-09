@@ -70,6 +70,9 @@
 .art-open-end { margin-left: auto; display: inline-flex; align-items: center; gap: var(--s-1); flex: none; }
 .art-v { font-family: var(--font-mono); }
 .art-open-body { flex: 1 1 auto; min-height: 0; display: flex; justify-content: center; padding: var(--s-4); background: color-mix(in srgb, var(--c-text) 3%, transparent); overflow: hidden; }
+/* a .diff's files (DiffArtifact) take the body's width: its .rv-body is an inline-size container,
+   so its own width is none and a centered flex item shrank to one character (code-viewer-width) */
+.art-open-body > .rv-screen { flex: 1 1 auto; min-width: 0; }
 /* at 800 the open head gives the title the room: no meta line, '↗' alone, 'v2 ⌄' */
 @media (max-width: 900px) {
   .art-open-sub, .art-open .art-wide { display: none; }

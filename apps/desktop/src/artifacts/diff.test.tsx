@@ -9,6 +9,9 @@ import { Store, StoreProvider } from '@/store';
 import { RouterContext, createRouter } from '@/app/router';
 import { ArtifactOpen } from './index';
 import { isDiff } from './model';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { NO_LAYOUT_ROWS } from '@/review/lineWindow';
 
 afterEach(() => {
   cleanup();
@@ -83,6 +86,49 @@ describe('a .diff artifact', () => {
     expect(colorOf('import')).toBe('var(--md-syn-keyword)');
     expect(colorOf('"./upload.js"')).toBe('var(--md-syn-string)');
     expect([...screen.getByTestId('artifact.diff.file.0.1').querySelectorAll<HTMLElement>('span[style]')].map((s) => s.style.color)).toContain('var(--md-syn-comment)');
+  });
+
+  // code-viewer-width (his m_57763: security.diff, 29k lines, one column of characters, the window
+  // lagged). Mutations: artifacts.css without its `.art-open-body > .rv-screen` rule turns the
+  // width red; FileDiff drawing all its lines (no lineWindow) turns the window red.
+  it("takes the panel's width: the body's flex item grows and may shrink below its content", () => {
+    const style = document.createElement('style');
+    style.textContent = ['artifacts.css', '../review/review.css'].map((f) => readFileSync(join(__dirname, f), 'utf8')).join('\n');
+    document.head.append(style);
+    try {
+      mount(cuDiff(1));
+      const col = screen.getByTestId('artifact.diff');
+      expect(col.parentElement?.classList.contains('art-open-body')).toBe(true);
+      // .rv-body is an inline-size container (no width of its own): without a flex grow the
+      // centered item shrinks to nothing
+      const css = getComputedStyle(col);
+      expect(css.flexGrow).toBe('1');
+      expect(Number.parseFloat(css.minWidth)).toBe(0);
+    } finally {
+      style.remove();
+    }
+  });
+
+  it('draws only a window of a 5,000-line file, the rest a gap of its height, its lines keeping their ids', () => {
+    const { store } = mount(cuDiff(1));
+    const n = 5_000;
+    act(() => {
+      store.apply({
+        ev: 'diff', project: P, agent: '', base: '', artifact: 'cu-upload-diff', version: 1, title: 'cu-upload at dd86c8a',
+        files: [{
+          path: 'security.ts', status: 'added', add: n, del: 0,
+          hunks: [{ header: `@@ -0,0 +1,${String(n)} @@`, lines: Array.from({ length: n }, (_, i) => ({ kind: 'add' as const, new: i + 1, text: `const line${String(i)} = ${String(i)};` })) }],
+        }],
+      });
+    });
+    const file = screen.getByTestId('artifact.diff.file.0');
+    const rows = file.querySelectorAll('.b-dl');
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.length).toBeLessThanOrEqual(NO_LAYOUT_ROWS);
+    expect(screen.getByTestId('artifact.diff.file.0.1').textContent).toContain('const line0 = 0;');
+    // the rows not drawn: one gap after them, as many line-heights (the scroller keeps its length)
+    const gap = file.querySelector<HTMLElement>('.b-dgap');
+    expect(gap?.style.getPropertyValue('--rows')).toBe(String(n + 1 - rows.length));
   });
 
   it('only a .diff or .patch file is drawn as a diff', () => {

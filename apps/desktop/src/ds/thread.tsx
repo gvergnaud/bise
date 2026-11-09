@@ -298,17 +298,24 @@ export interface DiffProps {
   onLine?: (i: number) => void;
   /** the quote pop under the picked lines */
   pop?: ReactNode;
-  /** each line's test id is `<testId>.<i>` */
+  /** each line's test id is `<testId>.<i>`, `i` its index in the file */
   testId?: string;
+  /** a window of a long file (code-viewer-width): `lines` are its lines [at, at + lines.length) of
+   * `total`; the rows before and after are a gap of their height (one line-height each). None: all */
+  at?: number;
+  total?: number;
 }
 /** a diff: a file head and its lines */
-export function Diff({ file, fileTip, add, rm, lines, onLine, pop, testId }: DiffProps) {
+export function Diff({ file, fileTip, add, rm, lines, onLine, pop, testId, at = 0, total = at + lines.length }: DiffProps) {
+  const after = total - at - lines.length;
   return (
     <div className="b-diff" data-testid={testId}>
       <div className="fh" {...tipAttrs(fileTip)}>{file}{add ? <> <span className="ok">+{add}</span></> : null}{rm ? <> <span className="er">−{rm}</span></> : null}</div>
-      {lines.map((l, i) => {
-        const first = l.sel && !lines[i - 1]?.sel;
-        const last = l.sel && !lines[i + 1]?.sel;
+      {at > 0 && <div className="b-dgap" style={{ "--rows": at } as CSSProperties} aria-hidden="true" />}
+      {lines.map((l, k) => {
+        const i = at + k;
+        const first = l.sel && !lines[k - 1]?.sel;
+        const last = l.sel && !lines[k + 1]?.sel;
         return (
           <div key={i} className={cx("b-dl", l.sign === "+" && "ad", l.sign === "-" && "rm", l.head && "hh", l.sel && "pk", first && "first", last && "last")}
             role={onLine ? "button" : undefined} onClick={onLine ? () => { onLine(i); } : undefined} data-testid={sub(testId, i)}
@@ -317,6 +324,7 @@ export function Diff({ file, fileTip, add, rm, lines, onLine, pop, testId }: Dif
           </div>
         );
       })}
+      {after > 0 && <div className="b-dgap" style={{ "--rows": after } as CSSProperties} aria-hidden="true" />}
       {pop != null && <div className="b-quotepop">{pop}</div>}
     </div>
   );
