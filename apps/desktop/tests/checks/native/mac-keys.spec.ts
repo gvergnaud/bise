@@ -19,7 +19,10 @@ const KEYS: readonly { path: string; role?: string; key: RegExp }[] = [
   { path: 'bise/Settings…', key: /^(CmdOrCtrl|CommandOrControl|Command|Cmd)\+,$/ },
   { path: 'bise/Hide bise', role: 'hide', key: /^(Command|Cmd|CmdOrCtrl|CommandOrControl)\+H$/i },
   { path: 'bise/Quit bise', role: 'quit', key: /^(CommandOrControl|CmdOrCtrl|Command|Cmd)\+Q$/i },
-  { path: 'File/Close Window', role: 'close', key: /^(CommandOrControl|CmdOrCtrl|Command|Cmd)\+W$/i },
+  // ⌘W closes the panel's tab in front, never bise's window; Close Window is ⇧⌘W, as Safari and
+  // Chrome (7da5658be, designer m_53158)
+  { path: 'File/Close Tab', key: /^(CommandOrControl|CmdOrCtrl|Command|Cmd)\+W$/i },
+  { path: 'File/Close Window', role: 'close', key: /^Shift\+(CommandOrControl|CmdOrCtrl|Command|Cmd)\+W$/i },
   { path: 'Edit/Undo', role: 'undo', key: /^(CommandOrControl|CmdOrCtrl|Command|Cmd)\+Z$/i },
   { path: 'Edit/Redo', role: 'redo', key: /^Shift\+(CommandOrControl|CmdOrCtrl|Command|Cmd)\+Z$/i },
   { path: 'Edit/Cut', key: /^(CmdOrCtrl|CommandOrControl)\+X$/i },

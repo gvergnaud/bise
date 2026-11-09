@@ -1324,7 +1324,7 @@ be the same data, and harder to keep in sync.
 | I6/B3, I8, I9/C46/S30, N14/L8, V8/W21, V14/S28/L2, L5, V17, L1/M18, L25/S37 | not built: no amb-home land since 4d22b577 | amb-home | amb-home's turn |
 | C3 | partly built: the typed `new` command takes with_changes (6cb6c0ef); the /command is not built | amb-home | amb-home's commands item |
 | C13/L15, C40, C42/L14 | not built | amb-home | amb-home's commands item |
-| W33/N10 | pass, harness (native/badge 6b1530fc: the badge and "bise · 2 waiting" in the title, updated at once; the Dock icon itself is the VM pass's) | amb-mac | - |
+| W33/N10 | pass, harness (native/badge 6b1530fc: the badge counts what waits, updated at once; the window title no longer counts since b06021770, it is what he looks at; the Dock icon itself is the VM pass's) | amb-mac | - |
 | W25/V13/K26/M16 | pass, harness (terminal/panel: ⌃` opens a shell, hide and show keep it; 7dc16b63) | amb-win, amb-mac | - |
 | V12/W24/L21/N13 | not built (voice mode with the agent in view) | amb-mac, amb-web | - |
 | N2 | built, no check (a824752f, never by color alone) | amb-kit | a ds/contrast check |
