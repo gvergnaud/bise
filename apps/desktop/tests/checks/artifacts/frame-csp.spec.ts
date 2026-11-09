@@ -141,8 +141,9 @@ for (const [id, rgb, what] of [
       const { page } = s;
       for (const width of [1400, 800]) {
         await page.setViewportSize({ width, height: 900 });
-        await expect(page.getByTestId('app.art')).toBeVisible({ timeout: 10_000 });
-        await expect(page.getByTestId('artifact.page')).toBeVisible({ timeout: 5000 });
+        // the artifact in its panel tab (ArtifactRoute): the frame itself, the old app.art aside
+        // went with bise fait mac (c8177e9b0) and this wait failed in every tag check since
+        await expect(page.getByTestId('artifact.page')).toBeVisible({ timeout: 10_000 });
         const src = (await page.getByTestId('artifact.page').getAttribute('src')) ?? '';
         expect(src.startsWith(pages.url), `${String(width)}: framed from the pages server (${src})`).toBe(true);
         await expect
