@@ -30,6 +30,8 @@
 }
 
 .rv-body {
+  /* the review bar's words follow the column's width (@container rv) */
+  container: rv / inline-size;
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
@@ -97,6 +99,9 @@
 /* the column's sticky bar (page review-guided, pick B): where he is (its outline over the page, never
    a rail), ‹ ›, the viewed count, the guide's one slot, Guide | By kind. On the cards' edge, the
    page's ground under it so the code scrolls beneath. */
+.rv-bar[data-under] {
+  box-shadow: 0 1px 0 var(--c-line);
+}
 .rv-bar {
   position: sticky;
   top: calc(-1 * var(--s-2));
@@ -130,24 +135,47 @@
   color: var(--c-text-3);
   font-variant-numeric: tabular-nums;
 }
-/* one line at 800 too: the place, the count and the modes keep their words, the guide's slot gives
-   way (cut with '…', its whole words in its tip) */
-.rv-place,
+/* one line at 800 too: the slot and the modes keep their words (the button is never cut), the
+   place gives way with '…', the count goes short first; a narrow column says each one short */
+.rv-place {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .rv-viewed,
+.rv-steps,
+.rv-bar > .rv-slot,
 .rv-bar > .b-filters {
   flex: none;
   white-space: nowrap;
 }
-.rv-bar > .rv-slot {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.rv-narrow {
+  display: none;
 }
-.rv-slot > .b-btn {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+@container rv (max-width: 680px) {
+  .rv-bar .rv-wide {
+    display: none;
+  }
+  .rv-bar .rv-narrow {
+    display: inline;
+  }
+}
+/* ‹ ›: the only mouse way to step, 24 px to hit, text-2, ink on hover, off at the ends */
+.rv-steps {
+  display: inline-flex;
+}
+.rv-steps > .b-ibtn {
+  width: var(--s-6);
+  height: var(--s-6);
+  color: var(--c-text-2);
+}
+.rv-steps > .b-ibtn:hover:not(:disabled) {
+  color: var(--c-text);
+}
+.rv-steps > .b-ibtn:disabled {
+  color: var(--c-text-3);
 }
 .rv-bar-gap {
   flex: 1 1 auto;
@@ -177,7 +205,7 @@
    ds's next step up), a critical one's ink dot (never pink or red), its summary */
 .rv-overview {
   margin: 0 var(--pad-row-x) var(--s-6);
-  font: var(--f-lead);
+  font: var(--t-13)/20px var(--font-ui);
   color: var(--c-text-2);
 }
 .rv-area {
@@ -194,7 +222,7 @@
   color: var(--c-text);
 }
 .rv-title[data-weight='critical'] {
-  font-weight: 700;
+  font-weight: 600;
 }
 .rv-dot {
   flex: none;

@@ -208,7 +208,14 @@ export function DiffFiles({ project, diff, loading, error, onRetry, none, to, fr
   const nav = useSectionNav(body, sections);
   const [outline, setOutline] = useState(false);
   const framedNow = sections.length > 1 || (sections[0]?.blocks.length ?? 0) > 1;
-  const place = [numberOf(sections, nav.cur), sections.find((s) => s.key === nav.cur)?.label].filter(Boolean).join(' · ');
+  // the bar names the part he is in by its title (a narrow column: its area), one name with the outline
+  const curSection = sections.find((s) => s.key === nav.cur);
+  const place = [numberOf(sections, nav.cur), curSection?.title ?? curSection?.label].filter(Boolean).join(' · ');
+  const placeShort = [numberOf(sections, nav.cur), curSection?.label].filter(Boolean).join(' · ');
+  const curAt = sections.findIndex((s) => s.key === nav.cur);
+  const viewedIn = (key: string) => new Set(sections.find((s) => s.key === key)?.blocks.flatMap((b) => b.cards.filter((c) => c.viewed).map((c) => c.file))).size;
+  // Guide | By kind keeps its shape: Guide off until a guide is here; gone only on a small change
+  const guideSeg = guide === undefined || g.ev?.state === 'small' ? null : g.ready ? ({ on: true } as const) : ({ on: false, why: g.ev?.state === 'writing' ? pages.review_guide_writing : pages.review_guide_none } as const);
 
   return (
     <div className="rv-body" data-testid={`${testId}.files`} tabIndex={-1} ref={body} onKeyDown={onKey} onMouseDown={onMouseDown} onMouseOver={onMouseOver} onScroll={(e) => { nav.onScroll(); g.noteScroll(e.currentTarget.scrollTop); }} data-selecting={sel !== null || undefined}>
@@ -230,15 +237,18 @@ export function DiffFiles({ project, diff, loading, error, onRetry, none, to, fr
         {(framedNow || guide !== undefined) && (
           <ReviewBar
             place={place}
+            placeShort={placeShort}
+            single={sections.length <= 1}
             onOutline={() => { setOutline((o) => !o); }}
-            outline={outline ? { sections, number: (k) => numberOf(sections, k), onSection: (k) => { setOutline(false); nav.to(k); }, onClose: () => { setOutline(false); body.current?.focus(); }, testId } : null}
-            onPrev={() => { nav.go(-1); }}
-            onNext={() => { nav.go(1); }}
-            viewed={pages.review_viewed_count({ n: viewedCount(diff.files, viewed.set), total: diff.files.length })}
+            outline={outline ? { sections, number: (k) => numberOf(sections, k), current: nav.cur, viewed: viewedIn, onSection: (k) => { setOutline(false); nav.to(k); }, onClose: () => { setOutline(false); body.current?.focus(); }, testId } : null}
+            onPrev={curAt > 0 ? () => { nav.go(-1); } : null}
+            onNext={curAt < sections.length - 1 ? () => { nav.go(1); } : null}
+            viewed={{ n: viewedCount(diff.files, viewed.set), total: diff.files.length }}
             mode={g.mode === 'guide' && g.shown !== null ? 'guide' : 'kind'}
-            canGuide={g.ready}
+            guide={guideSeg}
             onMode={g.setMode}
             slot={guide === undefined ? null : <GuideSlot ev={g.ev} shown={g.shown !== null && g.mode === 'guide'} onRun={g.run} onShow={g.show} testId={testId} />}
+            under={g.under}
             testId={testId}
           />
         )}

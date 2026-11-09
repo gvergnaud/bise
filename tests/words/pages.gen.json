@@ -201,6 +201,11 @@
     "one": null,
     "text": "couldn't write the guide"
   },
+  "pages.review_guide_none": {
+    "args": [],
+    "one": null,
+    "text": "no guide yet"
+  },
   "pages.review_guide_ready": {
     "args": [],
     "one": null,
@@ -224,10 +229,20 @@
     "one": null,
     "text": "Write a guide · about {tokens} tokens on {model}"
   },
-  "pages.review_guide_write_tip": {
-    "args": [],
+  "pages.review_guide_write_short": {
+    "args": [
+      "tokens",
+      "model"
+    ],
     "one": null,
-    "text": "your small jobs model is your main model, so i ask first"
+    "text": "Write a guide · {tokens} tokens on {model}"
+  },
+  "pages.review_guide_write_tip": {
+    "args": [
+      "model"
+    ],
+    "one": null,
+    "text": "your small jobs model is your main model ({model}), so i ask first"
   },
   "pages.review_guide_writing": {
     "args": [],
@@ -349,6 +364,13 @@
     "one": null,
     "text": "The rest"
   },
+  "pages.review_part_viewed": {
+    "args": [
+      "n"
+    ],
+    "one": null,
+    "text": "{n} viewed"
+  },
   "pages.review_retry": {
     "args": [],
     "one": null,
@@ -371,6 +393,14 @@
     ],
     "one": null,
     "text": "{n} of {total} viewed"
+  },
+  "pages.review_viewed_short": {
+    "args": [
+      "n",
+      "total"
+    ],
+    "one": null,
+    "text": "{n}/{total}"
   },
   "pages.review_viewed_tip": {
     "args": [],

@@ -6,7 +6,8 @@
 .b-filter-row{display:flex;align-items:center;gap:var(--s-2);height:var(--h-control-sm);margin-top:var(--s-6);padding:0 var(--s-3)}
 .b-filters{display:inline-flex;flex:none;box-sizing:border-box;height:var(--h-control-sm);padding:calc(var(--s-1) / 2);border-radius:var(--r-2);background:var(--c-sunken)}
 .b-filters>[role=tab]{display:inline-flex;align-items:center;height:var(--h-seg-in);padding:0 var(--s-3);border-radius:var(--r-1);font:500 var(--f-meta);color:var(--c-text-2);white-space:nowrap;transition:color var(--d-fast) var(--ease-out)}
-.b-filters>[role=tab]:not(.on):hover{color:var(--c-text)}
+.b-filters>[role=tab]:not(.on):not(.dis):hover{color:var(--c-text)}
+.b-filters>[role=tab].dis{color:var(--c-text-3)}
 .b-filters>[role=tab].on{background:var(--c-seg-on);color:var(--c-text);box-shadow:var(--e-1)}
 .b-filters>[role=tab]:focus-visible{outline:2px solid var(--c-focus);outline-offset:-2px}
 /* the row above a list (ListBar; his m_52658, designer m_52674, Artifacts' spec D m_44968): 32 high,

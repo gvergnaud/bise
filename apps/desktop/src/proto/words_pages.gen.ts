@@ -178,6 +178,10 @@ export const pages = {
   review_mode_kind: "By kind",
   /** the review bar's count of the files he marked viewed */
   review_viewed_count: (a: { n: string | number; total: string | number }): string => String(a.n) + " of " + String(a.total) + " viewed",
+  /** the same count in a narrow column */
+  review_viewed_short: (a: { n: string | number; total: string | number }): string => String(a.n) + "/" + String(a.total),
+  /** an outline row's files he marked viewed */
+  review_part_viewed: (a: { n: string | number }): string => String(a.n) + " viewed",
   /** a file card's Viewed box */
   review_viewed: "Viewed",
   /** its tip */
@@ -196,8 +200,12 @@ export const pages = {
   review_guide_failed: "couldn't write the guide",
   /** the bar's guide slot when small jobs is his main model: his click writes it */
   review_guide_write: (a: { tokens: string | number; model: string | number }): string => "Write a guide · about " + String(a.tokens) + " tokens on " + String(a.model),
-  /** its tip */
-  review_guide_write_tip: "your small jobs model is your main model, so i ask first",
+  /** its tip: the model's whole id */
+  review_guide_write_tip: (a: { model: string | number }): string => "your small jobs model is your main model (" + String(a.model) + "), so i ask first",
+  /** the same button in a narrow column (it never gets cut) */
+  review_guide_write_short: (a: { tokens: string | number; model: string | number }): string => "Write a guide · " + String(a.tokens) + " tokens on " + String(a.model),
+  /** the Guide segment's tip while no guide is there to show */
+  review_guide_none: "no guide yet",
   /** the bar's guide slot once it came while he read (never moves what he reads) */
   review_guide_ready: "the guide is ready",
   /** its action: the guide in place, at the part holding the file he was reading */

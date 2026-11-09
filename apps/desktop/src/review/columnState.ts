@@ -26,6 +26,8 @@ export interface GuideState {
   readonly show: () => void;
   /** the column scrolled to `top` */
   readonly noteScroll: (top: number) => void;
+  /** code scrolls under the bar (its hairline) */
+  readonly under: boolean;
 }
 
 export function useGuideState(project: string, diff: Diff | null, target: GuideTarget | undefined, body: RefObject<HTMLElement | null>): GuideState {
@@ -48,8 +50,10 @@ export function useGuideState(project: string, diff: Diff | null, target: GuideT
   const guide = ev?.state === 'ready' && ev.guide != null && diff !== null && guidable(diff) ? ev.guide : null;
   // ready while he hasn't scrolled: in place at once; else his 'Show it' (never moves what he reads)
   if (guide !== null && shown === null && mode === 'guide' && !scrolled) setShown(guide);
+  const [under, setUnder] = useState(false);
   const noteScroll = useCallback((top: number) => {
     setScrolled(top > READING_PX);
+    setUnder(top > 0);
   }, []);
   const run = useCallback(() => {
     if (target !== undefined) store.command({ cmd: 'guide', project, target, run: true });
@@ -71,7 +75,7 @@ export function useGuideState(project: string, diff: Diff | null, target: GuideT
     },
     [guide],
   );
-  return { ev, shown, mode, ready: guide !== null, setMode, run, show, noteScroll };
+  return { ev, shown, mode, ready: guide !== null, setMode, run, show, noteScroll, under };
 }
 
 /** The path of the file card at the column's top (what he is reading), or null. */

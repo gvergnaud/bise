@@ -198,6 +198,10 @@ crate::words! { pages:
     review_mode_kind = "By kind";
     /// the review bar's count of the files he marked viewed
     review_viewed_count(n, total) = "{n} of {total} viewed";
+    /// the same count in a narrow column
+    review_viewed_short(n, total) = "{n}/{total}";
+    /// an outline row's files he marked viewed
+    review_part_viewed(n) = "{n} viewed";
     /// a file card's Viewed box
     review_viewed = "Viewed";
     /// its tip
@@ -216,8 +220,12 @@ crate::words! { pages:
     review_guide_failed = "couldn't write the guide";
     /// the bar's guide slot when small jobs is his main model: his click writes it
     review_guide_write(tokens, model) = "Write a guide · about {tokens} tokens on {model}";
-    /// its tip
-    review_guide_write_tip = "your small jobs model is your main model, so i ask first";
+    /// its tip: the model's whole id
+    review_guide_write_tip(model) = "your small jobs model is your main model ({model}), so i ask first";
+    /// the same button in a narrow column (it never gets cut)
+    review_guide_write_short(tokens, model) = "Write a guide · {tokens} tokens on {model}";
+    /// the Guide segment's tip while no guide is there to show
+    review_guide_none = "no guide yet";
     /// the bar's guide slot once it came while he read (never moves what he reads)
     review_guide_ready = "the guide is ready";
     /// its action: the guide in place, at the part holding the file he was reading

@@ -91,7 +91,8 @@ describe('the guided review', () => {
       'apps/desktop/src/agents/sidebar.css',
       'docs/desktop-bar.md',
     ]);
-    expect(v.getByTestId('review.bar.place').textContent).toContain('01 / 02 · Sidebar');
+    expect(v.getByTestId('review.bar.place').querySelector('.rv-wide')?.textContent).toBe("01 / 02 · Give the row's end one owner");
+    expect(v.getByTestId('review.bar.place').querySelector('.rv-narrow')?.textContent).toBe('01 / 02 · Sidebar');
     // By kind is one click away, and back
     fireEvent.click(v.getByTestId('review.bar.mode.kind'));
     expect(v.getByTestId('review.part.code')).toBeTruthy();
@@ -118,7 +119,12 @@ describe('the guided review', () => {
     const { v, cmds, send } = view();
     send({ ev: 'guide', project: P, hash: H, state: 'needs_click', tokens: 5200, model: 'anthropic/claude-opus-5-5' });
     const b = v.getByTestId('review.bar.guide.write');
-    expect(b.textContent).toBe(pages.review_guide_write({ tokens: '5k', model: 'anthropic/claude-opus-5-5' }));
+    // the model's name without its provider; its whole id in the tip; a narrow column's short words
+    expect(b.querySelector('.rv-wide')?.textContent).toBe(pages.review_guide_write({ tokens: '5k', model: 'claude-opus-5-5' }));
+    expect(b.querySelector('.rv-narrow')?.textContent).toBe(pages.review_guide_write_short({ tokens: '5k', model: 'claude-opus-5-5' }));
+    expect(b.getAttribute('title')).toBe(pages.review_guide_write_tip({ model: 'anthropic/claude-opus-5-5' }));
+    // Guide stays in the control, off until a guide is here
+    expect(v.getByTestId('review.bar.mode.guide').getAttribute('aria-disabled')).toBe('true');
     fireEvent.click(b);
     expect(cmds.at(-1)).toEqual({ cmd: 'guide', project: P, target: { kind: 'agent', name: 'pr-access' }, run: true });
     send({ ev: 'guide', project: P, hash: H, state: 'failed' });
@@ -126,16 +132,18 @@ describe('the guided review', () => {
     expect(cmds.filter((c) => c.cmd === 'guide' && c.run === true)).toHaveLength(2);
     send({ ev: 'guide', project: P, hash: H, state: 'small' });
     expect(v.getByTestId('review.bar.guide').textContent).toBe(pages.review_guide_small);
+    // a small change never gets one: the control drops Guide
+    expect(v.queryByTestId('review.bar.mode.guide')).toBeNull();
   });
 
   it('Viewed: the box or v marks a file, its card folds, the bar counts it', () => {
     const { v } = view();
-    expect(v.getByTestId('review.bar.viewed').textContent).toBe(pages.review_viewed_count({ n: 0, total: 4 }));
+    expect(v.getByTestId('review.bar.viewed').querySelector('.rv-wide')?.textContent).toBe(pages.review_viewed_count({ n: 0, total: 4 }));
     fireEvent.click(v.getByTestId('review.file.0.viewed'));
-    expect(v.getByTestId('review.bar.viewed').textContent).toBe(pages.review_viewed_count({ n: 1, total: 4 }));
+    expect(v.getByTestId('review.bar.viewed').querySelector('.rv-wide')?.textContent).toBe(pages.review_viewed_count({ n: 1, total: 4 }));
     expect(v.getByTestId('review.file.0').querySelector('.b-dl')).toBeNull();
     fireEvent.click(v.getByTestId('review.file.0.viewed'));
-    expect(v.getByTestId('review.bar.viewed').textContent).toBe(pages.review_viewed_count({ n: 0, total: 4 }));
+    expect(v.getByTestId('review.bar.viewed').querySelector('.rv-wide')?.textContent).toBe(pages.review_viewed_count({ n: 0, total: 4 }));
   });
 
   it('n and p walk the sections; ⌘\\ opens the outline, a pick goes there', () => {

@@ -27,6 +27,8 @@ export interface FilterOpt {
   readonly label: ReactNode;
   /** a count's tip, a hint: the part's hover tip */
   readonly tip?: string;
+  /** shown but not pickable yet (its tip says why): the segments keep their shape */
+  readonly disabled?: boolean;
 }
 
 export interface FiltersProps {
@@ -44,10 +46,10 @@ export function Filters({ items, on, onPick, label, testId }: FiltersProps) {
   return (
     <span className="b-filters b-chrome" role="tablist" aria-label={label} data-testid={testId}>
       {items.map((o) => (
-        <span key={o.id} role="tab" tabIndex={o.id === on ? 0 : -1} aria-selected={o.id === on} className={cx(o.id === on && "on")}
+        <span key={o.id} role="tab" tabIndex={o.id === on ? 0 : -1} aria-selected={o.id === on} aria-disabled={o.disabled === true || undefined} className={cx(o.id === on && "on", o.disabled === true && "dis")}
           {...tipAttrs(o.tip)}
-          onClick={onPick ? () => { onPick(o.id); } : undefined}
-          onKeyDown={onPick ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onPick(o.id); } } : undefined}
+          onClick={onPick && o.disabled !== true ? () => { onPick(o.id); } : undefined}
+          onKeyDown={onPick && o.disabled !== true ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onPick(o.id); } } : undefined}
           data-testid={sub(testId, o.id)}>
           {o.label}
         </span>
