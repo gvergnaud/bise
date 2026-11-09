@@ -295,6 +295,11 @@ export function Capsule(p: CapsuleProps): JSX.Element {
   );
 }
 
+/** Words hidden under the box's bottom: its last line fades (data-more, capsule.css; designer m_57904). */
+function moreBelow(el: HTMLElement): void {
+  el.toggleAttribute("data-more", el.scrollHeight - el.scrollTop - el.clientHeight > 4);
+}
+
 /** The corner answer's scrollbar stays this long after the last scroll, then goes. */
 export const SCROLLBAR_LINGER_MS = 700;
 
@@ -303,15 +308,16 @@ export const SCROLLBAR_LINGER_MS = 700;
  * (--cap-max), then its words scroll. The newest line stays in view while he is at the bottom;
  * scrolled up, it never moves (ambient's text-appearing, m_12403). Scrolled, the top line fades
  * (data-scrolled); the overlay scrollbar shows only while he scrolls (data-scrolling). `text`:
- * what grows. `over`: the words don't all fit.
+ * what grows. `over`: the words don't all fit. `follow` false (bise's answer, about 12 lines,
+ * read from the top: spotlight-ux m_57903): it never scrolls by itself, his scroll stays.
  */
-function useFollow(text: string | undefined): {
+function useFollow(text: string | undefined, follow = true): {
   box: RefObject<HTMLDivElement | null>;
   over: boolean;
   onScroll: (e: UIEvent<HTMLDivElement>) => void;
 } {
   const box = useRef<HTMLDivElement>(null);
-  const atEnd = useRef(true);
+  const atEnd = useRef(follow);
   const lastTop = useRef(0);
   const [over, setOver] = useState(false);
   // the overlay scrollbar shows only while he scrolls (designer m_22394): data-scrolling, gone
@@ -328,6 +334,7 @@ function useFollow(text: string | undefined): {
     if (el === null) return;
     if (atEnd.current) el.scrollTop = el.scrollHeight;
     setOver(el.scrollHeight > el.clientHeight + 1);
+    moreBelow(el);
   }, [text]);
   // the box changes size after that effect too ('the rest in bise' showing under it, the card
   // growing to its cap): while he is at the bottom, the newest line stays in view
@@ -337,6 +344,7 @@ function useFollow(text: string | undefined): {
     const ro = new ResizeObserver(() => {
       if (atEnd.current) el.scrollTop = el.scrollHeight;
       setOver(el.scrollHeight > el.clientHeight + 1);
+      moreBelow(el);
     });
     ro.observe(el);
     return () => {
@@ -349,9 +357,10 @@ function useFollow(text: string | undefined): {
     // 'rest in bise' line appearing) leaves a gap with no scroll up, and keeps following
     const up = el.scrollTop < lastTop.current - 1;
     lastTop.current = el.scrollTop;
-    atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 4 || (atEnd.current && !up);
+    atEnd.current = follow && (el.scrollHeight - el.scrollTop - el.clientHeight < 4 || (atEnd.current && !up));
     // scrolled: the top line fades out over 16 px instead of being cut (capsule.css)
     el.toggleAttribute("data-scrolled", el.scrollTop > 0);
+    moreBelow(el);
     el.toggleAttribute("data-scrolling", true);
     if (scrolling.current !== null) window.clearTimeout(scrolling.current);
     scrolling.current = window.setTimeout(() => {
@@ -387,7 +396,10 @@ function Answer({
   answer: SpotAnswer | null;
   onOpen: () => void;
 }): JSX.Element {
-  const { box, over, onScroll } = useFollow(answer?.text);
+  // read from the top: the card grows to about 12 lines, then stops; while it streams the ∿ rides
+  // 'the rest in bise' (the new words are under the fold), his scroll stays where he puts it
+  const { box, over, onScroll } = useFollow(answer?.text, false);
+  const live = answer?.done === false;
   return (
     <div className="b-cap-answer" data-testid="capsule.answer" aria-live="polite" data-glass>
       <div
@@ -399,13 +411,18 @@ function Answer({
         data-testid="capsule.answer.scroll"
         onScroll={onScroll}
       >
-        <div data-testid="capsule.answer.text" data-live={answer?.done === false ? "1" : "0"}>
-          <MdAnswer text={answer?.text ?? ""} live={answer?.done === false} still={stillNow()} onLink={openLink} />
+        <div data-testid="capsule.answer.text" data-live={live ? "1" : "0"}>
+          <MdAnswer text={answer?.text ?? ""} live={live} still={stillNow()} onLink={openLink} />
         </div>
       </div>
       {over && (
         <Press look="more" onClick={onOpen} data-testid="capsule.answer.more">
           {W.restInBise}
+          {live && (
+            <span className="th-wave" aria-hidden="true" data-testid="capsule.answer.more.sign">
+              ∿
+            </span>
+          )}
         </Press>
       )}
       <div className="b-cap-keys" data-testid="capsule.answer.keys">

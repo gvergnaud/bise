@@ -30,6 +30,13 @@
 .b-cap-answer .th-md :is(h1, h2) {
   font-size: 1.15em;
 }
+/* inline code as the thread's bubble draws it (designer m_57904): mono at 0.9em, regular weight,
+   never bigger nor bolder than the words around it */
+.b-spot-answer .th-md :not(pre) > code,
+.b-cap-answer .th-md :not(pre) > code {
+  font-size: 0.9em;
+  font-weight: 400;
+}
 /* a line about the answer (asked, waiting for the first words; sent to another project): dim */
 .b-spot-answer.note {
   color: var(--c-text-2);
