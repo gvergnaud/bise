@@ -146,6 +146,19 @@ export function pinnedBounds(size: { width: number; height: number }, pin: Pin, 
 }
 
 /**
+ * A window pinned by its left that would pass the work area's right edge (the spotlight's thread
+ * pane opening, 640 -> 1120): shifted left just enough, never past the work area's left, never
+ * re-centred (designer's condition 1, page spotlight-reponse). The pin moves with it, so it stays
+ * shifted when it shrinks back. A right-pinned window (the corner) is left as it is. Pure.
+ */
+export function onScreen(b: Rect, pin: Pin, wa: Rect): { readonly bounds: Rect; readonly pin: Pin } {
+  if (pin.side !== 'left') return { bounds: b, pin };
+  const dx = Math.min(b.x + b.width - (wa.x + wa.width), b.x - wa.x);
+  if (dx <= 0) return { bounds: b, pin };
+  return { bounds: { ...b, x: b.x - dx }, pin: { ...pin, x: pin.x - dx } };
+}
+
+/**
  * At show, a 'bottom' view that grows down: its glass's top where `maxHeight`
  * of glass would end BOTTOM px above the work area's bottom (inside the work
  * area), centred; the window is its current size. Pin it with edge 'top'.

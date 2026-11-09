@@ -17,7 +17,7 @@ import { BrowserWindow, ipcMain, screen, type Tray } from 'electron';
 import { CAPSULE_LINE, IPC, type CapsuleAt, type CapsuleFit, type CapsuleState } from '../shared/api';
 import { appendCapsuleFrame, capsuleFrame } from './capsuleframe';
 import { glassOf } from './glass';
-import { capsuleBounds, fitBounds, OFF_DISPLAY, pinnedBounds, pinOf, type Anchor, type DisplayBox, type Pin, type Rect } from './place';
+import { capsuleBounds, fitBounds, OFF_DISPLAY, onScreen, pinnedBounds, pinOf, type Anchor, type DisplayBox, type Pin, type Rect } from './place';
 import { loadRenderer, OFF, webPreferences } from './windows';
 
 const START = { width: 640, height: 120 };
@@ -32,6 +32,8 @@ export class Capsule {
   private glass: Rect | undefined;
   /** where the glass was put at show: it stays there while shown (place.ts) */
   private pin: Pin | null = null;
+  /** the work area of the screen it was pinned on: a wider content stays inside it */
+  private pinArea: Rect | null = null;
   /** this show grows down from a pinned top-left (the voice view) */
   private fit: CapsuleFit | null = null;
   private state: CapsuleState = { shown: false, at: 'bottom', keys: false, why: 'asked' };
@@ -188,11 +190,19 @@ export class Capsule {
   /** At show: centred on its anchor, inside the screen, and pinned. Shown: a new size keeps the glass's left and anchored edge. */
   private place(): void {
     if (this.pin !== null) {
-      this.win.setBounds(pinnedBounds(this.size, this.pin, this.glass));
+      // a wider content (the spotlight's thread pane) grows right, shifted left only as much as
+      // keeps it on its screen (place.ts onScreen)
+      const kept = onScreen(pinnedBounds(this.size, this.pin, this.glass), this.pin, this.pinArea ?? this.display().workArea);
+      this.pin = kept.pin;
+      this.win.setBounds(kept.bounds);
     } else {
-      const b = this.boundsOn(this.display());
+      const d = this.display();
+      const b = this.boundsOn(d);
       this.win.setBounds(b);
-      if (this.state.shown) this.pin = this.pinAt(b);
+      if (this.state.shown) {
+        this.pin = this.pinAt(b);
+        this.pinArea = d.workArea;
+      }
     }
     this.record();
   }
@@ -213,8 +223,15 @@ export class Capsule {
     if (this.framesDir === null || !this.state.shown) return;
     const w = this.would;
     const d = w?.d ?? this.realDisplay();
-    const b = w !== null ? pinnedBounds(this.size, w.pin, this.glass) : this.boundsOn(d);
-    if (w === null) this.would = { pin: this.pinAt(b), d };
+    let b: Rect;
+    if (w !== null) {
+      const kept = onScreen(pinnedBounds(this.size, w.pin, this.glass), w.pin, d.workArea);
+      this.would = { pin: kept.pin, d };
+      b = kept.bounds;
+    } else {
+      b = this.boundsOn(d);
+      this.would = { pin: this.pinAt(b), d };
+    }
     appendCapsuleFrame(this.framesDir, capsuleFrame(Date.now(), w === null ? 'show' : 'move', this.state.at, b, d, this.win.getBounds()));
   }
 

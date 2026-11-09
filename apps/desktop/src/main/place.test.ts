@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BOTTOM, capsuleBounds, CORNER, fitBounds, MENU_GAP, OFF_DISPLAY, pinnedBounds, pinOf, TOP, type DisplayBox } from './place';
+import { BOTTOM, capsuleBounds, CORNER, fitBounds, MENU_GAP, OFF_DISPLAY, onScreen, pinnedBounds, pinOf, TOP, type DisplayBox } from './place';
 
 // a 1512x982 MacBook display: the menu bar 33 px, the Dock 70 px
 const mac: DisplayBox = {
@@ -84,6 +84,43 @@ describe('a shown capsule never moves while he types (lead m_11455)', () => {
     const b1 = pinnedBounds({ width: 1028, height: 300 }, pin, g1);
     expect(b1.x + g1.x).toBe(b0.x + g0.x);
     expect(b1.y + g1.y + g1.height).toBe(b0.y + g0.y + g0.height);
+  });
+});
+
+describe("the spotlight's thread pane widens it right, its left part never moves (designer's condition 1)", () => {
+  const wa = { x: 0, y: 25, width: 1470, height: 900 };
+  const d13: DisplayBox = { bounds: { x: 0, y: 0, width: 1470, height: 956 }, workArea: wa };
+  it('room on the right (a wide screen): 640 -> 1120 keeps its left', () => {
+    const wide0: DisplayBox = { bounds: { x: 0, y: 0, width: 2560, height: 1440 }, workArea: { x: 0, y: 25, width: 2560, height: 1340 } };
+    const b0 = capsuleBounds({ width: 640, height: 400 }, wide0, { at: 'top' });
+    const pin = pinOf(b0, { width: 640, height: 400 }, { at: 'top' });
+    const wide = onScreen(pinnedBounds({ width: 1120, height: 400 }, pin), pin, wide0.workArea);
+    expect(wide.bounds.x).toBe(b0.x);
+  });
+  it('a 13-inch, centred: 1120 fits, shifted left by what passes the right edge (65 pt), never re-centred', () => {
+    const b0 = capsuleBounds({ width: 640, height: 400 }, d13, { at: 'top' });
+    const pin = pinOf(b0, { width: 640, height: 400 }, { at: 'top' });
+    const wide = onScreen(pinnedBounds({ width: 1120, height: 400 }, pin), pin, wa);
+    expect(wide.bounds.x + wide.bounds.width).toBe(wa.x + wa.width);
+    expect(b0.x - wide.bounds.x).toBe(65);
+  });
+  it('the right edge would leave the screen: shifted left just enough, and stays shifted when it shrinks', () => {
+    const b0 = { x: 700, y: 195, width: 640, height: 400 };
+    const pin = pinOf(b0, { width: 640, height: 400 }, { at: 'top' });
+    const wide = onScreen(pinnedBounds({ width: 1120, height: 400 }, pin), pin, wa);
+    expect(wide.bounds.x + wide.bounds.width).toBe(wa.x + wa.width);
+    expect(wide.bounds.x).toBe(350);
+    const back = onScreen(pinnedBounds({ width: 640, height: 400 }, wide.pin), wide.pin, wa);
+    expect(back.bounds.x).toBe(350);
+  });
+  it('a second screen to the right: kept inside its own work area; the corner (right-pinned) never shifts', () => {
+    const wa2 = { x: 1470, y: 0, width: 1920, height: 1080 };
+    const pin = pinOf({ x: 3000, y: 170, width: 640, height: 300 }, { width: 640, height: 300 }, { at: 'top' });
+    const wide = onScreen(pinnedBounds({ width: 1120, height: 300 }, pin), pin, wa2);
+    expect(wide.bounds.x + wide.bounds.width).toBe(wa2.x + wa2.width);
+    const corner = pinOf({ x: 3000, y: 700, width: 320, height: 100 }, { width: 320, height: 100 }, { at: 'corner' });
+    const c = onScreen(pinnedBounds({ width: 900, height: 100 }, corner), corner, wa2);
+    expect(c.pin).toBe(corner);
   });
 });
 
