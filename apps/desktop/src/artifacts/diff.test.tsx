@@ -129,6 +129,8 @@ describe('a .diff artifact', () => {
     // the rows not drawn: one gap after them, as many line-heights (the scroller keeps its length)
     const gap = file.querySelector<HTMLElement>('.b-dgap');
     expect(gap?.style.getPropertyValue('--rows')).toBe(String(n + 1 - rows.length));
+    // the number columns as wide as the file's largest number, not the drawn rows' (designer m_57796)
+    expect(file.style.getPropertyValue('--nd')).toBe(String(n).length.toString());
   });
 
   // designer m_57777: a long line is never cut; it wraps at any character, its next rows at its own
@@ -149,7 +151,7 @@ describe('a .diff artifact', () => {
       expect(cell?.textContent).toBe(`    ${'x'.repeat(300)}`);
       expect(cell?.style.getPropertyValue('--ind')).toBe('4');
       const css = getComputedStyle(cell as HTMLElement);
-      expect([css.whiteSpace, css.wordBreak]).toEqual(['pre-wrap', 'break-all']);
+      expect([css.whiteSpace, css.overflowWrap]).toEqual(['pre-wrap', 'anywhere']);
     } finally {
       style.remove();
     }

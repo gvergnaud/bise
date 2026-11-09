@@ -304,6 +304,14 @@ export interface DiffProps {
    * `gap` the rows (line-heights: a wrapped line takes several) of the lines before and after it */
   at?: number;
   gap?: { readonly before: number; readonly after: number };
+  /** the digits of the file's largest line number (the number columns' width); none: of `lines` */
+  digits?: number;
+}
+/** The digits of the largest line number of `lines` (1 at least). Pure. */
+export function lineDigits(lines: readonly DiffLine[]): number {
+  let top = 0;
+  for (const l of lines) top = Math.max(top, l.old ?? 0, l.new ?? 0);
+  return String(top).length;
 }
 /** tabs stop every TAB_COLS columns (the browser's default tab-size) */
 export const TAB_COLS = 8;
@@ -319,11 +327,11 @@ export function indentCols(text: string): number {
   return codeCols(lead);
 }
 /** a diff: a file head and its lines */
-export function Diff({ file, fileTip, add, rm, lines, onLine, pop, testId, at = 0, gap }: DiffProps) {
+export function Diff({ file, fileTip, add, rm, lines, onLine, pop, testId, at = 0, gap, digits }: DiffProps) {
   const before = gap?.before ?? 0;
   const after = gap?.after ?? 0;
   return (
-    <div className="b-diff" data-testid={testId}>
+    <div className="b-diff" data-testid={testId} style={{ "--nd": digits ?? lineDigits(lines) } as CSSProperties}>
       <div className="fh" {...tipAttrs(fileTip)}>{file}{add ? <> <span className="ok">+{add}</span></> : null}{rm ? <> <span className="er">−{rm}</span></> : null}</div>
       {before > 0 && <div className="b-dgap" style={{ "--rows": before } as CSSProperties} aria-hidden="true" />}
       {lines.map((l, k) => {

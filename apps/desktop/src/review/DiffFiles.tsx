@@ -6,7 +6,7 @@
 import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode, type RefObject } from 'react';
 import { copyText, QuotePop } from '@/quote/QuotePop';
 import { flatRows, handQuotes, quotesOf, range, type RowAt, type Sel } from './quote';
-import { Button, Check, Diff, Empty, Fold, tipAttrs, type DiffLine as DsLine } from '@/ds';
+import { Button, Check, Diff, Empty, Fold, lineDigits, tipAttrs, type DiffLine as DsLine } from '@/ds';
 import { pages } from '@/proto/words_pages.gen';
 import { diffRuns, langOfPath } from './syntax';
 import { lineRows, lineWindow, rowStarts, type Span } from './lineWindow';
@@ -296,7 +296,8 @@ interface FileDiffProps {
  */
 function FileDiff({ path, head, tip, add, rm, lines, picked, pop, scroller, testId }: FileDiffProps) {
   const box = useRef<HTMLDivElement>(null);
-  const { span, starts } = useLineWindow(box, scroller, lines);
+  const digits = useMemo(() => lineDigits(lines), [lines]);
+  const { span, starts } = useLineWindow(box, scroller, lines, digits);
   const colored = useDeferredValue(true, false);
   const runsAt = useRunsAt(lines, path, colored, span);
   const shown = lines.slice(span.from, span.to).map((l, k) => {
@@ -307,7 +308,7 @@ function FileDiff({ path, head, tip, add, rm, lines, picked, pop, scroller, test
   });
   return (
     <div ref={box}>
-      <Diff file={head} {...(tip === undefined ? {} : { fileTip: tip })} add={add} rm={rm} lines={shown} at={span.from} gap={{ before: starts[span.from] ?? 0, after: (starts.at(-1) ?? 0) - (starts[span.to] ?? 0) }} pop={pop} testId={testId} />
+      <Diff file={head} {...(tip === undefined ? {} : { fileTip: tip })} add={add} rm={rm} lines={shown} at={span.from} gap={{ before: starts[span.from] ?? 0, after: (starts.at(-1) ?? 0) - (starts[span.to] ?? 0) }} digits={digits} pop={pop} testId={testId} />
     </div>
   );
 }
@@ -336,15 +337,15 @@ function useRunsAt(lines: readonly DsLine[], path: string, colored: boolean, spa
   return (li) => runs?.[li - from] ?? null;
 }
 
-/** the code cell's left edge in the diff's rows: its three gutter columns (ds thread.css .b-dl: 3em 3em 1.4em) */
-const GUTTER_EM = 7.4;
+/** the sign column's width, em (ds thread.css .b-dl: its number columns `digits` ch and --s-2 each, then this) */
+const SIGN_EM = 1.4;
 /** one mono column's width, px, by font (measured once each) */
 const chOf = new Map<string, number>();
 
-/** The columns of a file's code cell now (0: no layout). */
-function colsOf(diff: Element): number {
+/** The columns of a file's code cell now, its number columns `digits` wide (0: no layout). */
+function colsOf(diff: Element, digits: number): number {
   const css = getComputedStyle(diff);
-  const width = diff.clientWidth - GUTTER_EM * Number.parseFloat(css.fontSize);
+  const pad = Number.parseFloat(css.getPropertyValue('--s-2')) || 0;
   let ch = chOf.get(css.font);
   if (ch === undefined) {
     const probe = document.createElement('span');
@@ -355,6 +356,7 @@ function colsOf(diff: Element): number {
     probe.remove();
     if (ch > 0) chOf.set(css.font, ch);
   }
+  const width = diff.clientWidth - 2 * (digits * ch + pad) - SIGN_EM * Number.parseFloat(css.fontSize);
   return ch > 0 && width > 0 ? Math.floor(width / ch) : 0;
 }
 
@@ -379,11 +381,11 @@ interface Seen {
  * above moves it with no scroll), again on each scroll (once a frame) and resize of `scroller`. A
  * new width counts the rows again first, then places the window. Its state moves only when they do.
  */
-function useLineWindow(box: RefObject<HTMLElement | null>, scroller: RefObject<HTMLElement | null>, lines: readonly DsLine[]): { span: Span; starts: readonly number[] } {
+function useLineWindow(box: RefObject<HTMLElement | null>, scroller: RefObject<HTMLElement | null>, lines: readonly DsLine[], digits: number): { span: Span; starts: readonly number[] } {
   const [seen, setSeen] = useState<Seen>({ span: { from: 0, to: 0 }, cols: 0 });
   const starts = useMemo(() => rowStarts(lines.map((l) => lineRows(l.text, seen.cols, l.head === true))), [lines, seen.cols]);
   const look = (diff: Element, s: HTMLElement | null) => {
-    const cols = colsOf(diff);
+    const cols = colsOf(diff, digits);
     const next = cols === seen.cols ? spanNow(diff, s, starts) : seen.span;
     setSeen((cur) => (cur.cols === cols && cur.span.from === next.from && cur.span.to === next.to ? cur : { span: next, cols }));
   };

@@ -19,17 +19,39 @@ export interface Span {
 }
 
 /**
- * The rows a code line takes in a cell `cols` columns wide: its first row holds `cols` columns,
- * each next one `cols` less its indent (at most half the cell, as thread.css caps it). A hunk's
- * head stays one row (cut with …); `cols` 0 (not measured): one row. Pure.
+ * The rows a code line takes in a cell `cols` columns wide, as the browser wraps it (ds thread.css
+ * .b-dl>.cd: pre-wrap, overflow-wrap anywhere): its words placed in turn, a break after a space or
+ * punctuation, a word longer than a whole row split anywhere, spaces hanging at a row's end. Its
+ * first row holds `cols` columns, each next one `cols` less its indent (at most half the cell, as
+ * thread.css caps it). A hunk's head stays one row (cut with …); `cols` 0 (not measured): one
+ * row. Close, never more rows than the browser draws: a window placed by it draws no blank. Pure.
  */
 export function lineRows(text: string, cols: number, head = false): number {
-  if (head || cols <= 0) return 1;
-  const n = codeCols(text);
-  if (n <= cols) return 1;
+  if (head || cols <= 0 || codeCols(text) <= cols) return 1;
   const next = cols - Math.min(indentCols(text), Math.floor(cols / 2));
-  return 1 + Math.ceil((n - cols) / next);
+  let rows = 1;
+  let cap = cols;
+  let at = 0;
+  for (const [, word = '', space = ''] of text.matchAll(BREAKS)) {
+    let w = codeCols(word);
+    if (at + w > cap && at > 0 && w <= next) {
+      rows++;
+      cap = next;
+      at = 0;
+    }
+    while (at + w > cap) {
+      w -= cap - at;
+      rows++;
+      cap = next;
+      at = 0;
+    }
+    at += w + codeCols(space);
+  }
+  return rows;
 }
+
+/** a word up to its break (after a space, or after punctuation), and the spaces that hang after it */
+const BREAKS = /([^\s]*?[-/,;:.)\]}>=|&+*]|[^\s]+)?([ \t]*)/gu;
 
 /** The row each line starts at, and the file's rows at the end (its length: lines + 1). Pure. */
 export function rowStarts(rows: readonly number[]): number[] {

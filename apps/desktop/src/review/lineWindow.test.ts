@@ -1,7 +1,7 @@
 // lineWindow (code-viewer-width): the lines of a long file drawn around the view, in steps, a
 // wrapped line counted for its rows (designer m_57777). Mutations: lineWindow returning
 // { from: 0, to: total } turns the window cases but the no-layout one red; lineRows returning 1
-// turns the wrap cases red.
+// turns the wrap cases red; lineRows splitting anywhere (no words) turns the words case red.
 import { describe, expect, it } from 'vitest';
 import { lineRows, lineWindow, NO_LAYOUT_ROWS, ROW_STEP, rowStarts } from './lineWindow';
 
@@ -53,6 +53,13 @@ describe('lineRows', () => {
     // 4 spaces of indent: the next rows hold 76 columns: 80 + 76 + 76 + 68
     expect(lineRows(`    ${'x'.repeat(296)}`, 80)).toBe(4);
     expect(lineRows(`    ${'x'.repeat(306)}`, 80)).toBe(5);
+  });
+
+  it('words wrap at their spaces first (designer m_57796): a word that does not fit starts the next row', () => {
+    // 27 columns at 10 a row: 3 rows split anywhere, 4 by words
+    expect(lineRows('aaaaaa bbbbbb cccccc dddddd', 10)).toBe(4);
+    // 'host-' | '1.example.' | 'com': after the hyphen, then the rest split as it must
+    expect(lineRows('host-1.example.com', 10)).toBe(3);
   });
 
   it('a tab goes to its stop; an indent over half the cell counts as half', () => {
