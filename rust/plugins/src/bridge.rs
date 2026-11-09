@@ -2,7 +2,9 @@
 //! index and its plugins' MCP servers. It starts the servers of the
 //! plugins that are on, writes `D/mcp-index.txt` (the only tool index the
 //! Bend REPL reads: the plugins' tools, then his Mistral connectors',
-//! minus the ones turned off), `D/skills-index.txt` and `D/report.txt`,
+//! minus the ones turned off), `D/mcp-accounts.json` (his accounts on
+//! those connectors, typed: [`connectors::accounts_file`]),
+//! `D/skills-index.txt` and `D/report.txt`,
 //! then serves each server over loopback HTTP (the JSON-response subset of
 //! MCP Streamable HTTP) until the REPL is gone, with no server too: its
 //! exit is an event ([`crate::parent`]), and then every server is stopped
@@ -837,7 +839,7 @@ struct Live {
     catalog: Mutex<Catalog>,
     /// the index and report last written (the files are written on a
     /// change only, once `ready`)
-    written: Mutex<(String, String)>,
+    written: Mutex<(String, String, String)>,
     ready: AtomicBool,
     stop: AtomicBool,
     /// a start or the first catalog load is done (the ready wait)
@@ -914,11 +916,12 @@ impl Live {
         *lock(&self.res) = res;
     }
 
-    /// The index and the report as they are now.
-    fn files(&self) -> (String, String) {
+    /// The index, the report and the accounts file as they are now.
+    fn files(&self) -> (String, String, String) {
         let entries = self.entries();
         let state = self.state();
         let (mut index, diags, counts) = index_of(&entries, &self.virtuals(), &self.base, &state);
+        let accounts = connectors::accounts_file(&lock(&self.catalog), &state);
         for l in connectors::index_lines(&lock(&self.catalog), &state) {
             index.push_str(&l);
             index.push('\n');
@@ -952,7 +955,7 @@ impl Live {
         }
         res.diagnostics.extend(diags);
         status.sort_by(|a, b| (&a.plugin, &a.server).cmp(&(&b.plugin, &b.server)));
-        (index, report::text(&res, Some(&status)))
+        (index, report::text(&res, Some(&status)), accounts)
     }
 
     /// Write the index and the report when they changed (once ready).
@@ -960,10 +963,13 @@ impl Live {
         if !self.ready.load(Ordering::SeqCst) {
             return;
         }
-        let (index, report) = self.files();
+        let (index, report, accounts) = self.files();
         let mut w = lock(&self.written);
         if w.0 != index && write_atomic(&self.dir.join("mcp-index.txt"), &index).is_ok() {
             w.0 = index;
+        }
+        if w.2 != accounts && write_atomic(&self.dir.join(connectors::ACCOUNTS_FILE), &accounts).is_ok() {
+            w.2 = accounts;
         }
         if w.1 != report && write_atomic(&self.dir.join("report.txt"), &report).is_ok() {
             w.1 = report;
@@ -1506,7 +1512,7 @@ pub fn serve(opts: Opts) -> std::io::Result<()> {
         state: RwLock::new(roots.state.clone()),
         res: Mutex::new(Resolution::default()),
         catalog: Mutex::new(Catalog::default()),
-        written: Mutex::new((String::new(), String::new())),
+        written: Mutex::new((String::new(), String::new(), String::new())),
         ready: AtomicBool::new(false),
         stop: AtomicBool::new(false),
         done: (Mutex::new(()), Condvar::new()),
@@ -1541,14 +1547,15 @@ pub fn serve(opts: Opts) -> std::io::Result<()> {
             g = live.done.1.wait_timeout(g, left.min(Duration::from_millis(200))).map(|r| r.0).unwrap_or_else(|e| e.into_inner().0);
         }
     }
-    let (index, report) = live.files();
+    let (index, report, accounts) = live.files();
     write_atomic(&opts.dir.join("mcp-index.txt"), &index)?;
+    write_atomic(&opts.dir.join(connectors::ACCOUNTS_FILE), &accounts)?;
     // the session's skills index, before `ready`: the REPL's first
     // prompt reads it (and only it)
     let skills = crate::skills::index(&crate::skills::ordered(loose.join().unwrap_or_default(), plugin_skills));
     write_atomic(&opts.dir.join("skills-index.txt"), &skills)?;
     write_atomic(&opts.dir.join("report.txt"), &report)?;
-    *lock(&live.written) = (index, report);
+    *lock(&live.written) = (index, report, accounts);
     live.ready.store(true, Ordering::SeqCst);
     // a server up between files() and ready: its index line now
     live.publish();

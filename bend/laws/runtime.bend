@@ -680,3 +680,52 @@ law view_lines_each_under_its_id:
 law views_files_in_side_dir:
   {(Mc.tool_now_path("/h/agents/a/run", "7"), Mc.views_path("/h/agents/a/run", "7"))
     == ("/h/agents/a/run/bend-tool-7.txt", "/h/agents/a/run/bend-views-7.txt") : String & String}
+
+# ---- his accounts on a connector (runtime/mcp-pure.bend, multi-accounts) ----
+
+def gmail_accts() -> List<&2, Mc.Acct>:
+  [Mc.Acct{"default", "perso", True{}}, Mc.Acct{"account-2", "pro", False{}},
+   Mc.Acct{"account-3", "work", False{}}, Mc.Acct{"account-4", "work", False{}}]
+
+# LAW: a name picks its account.
+law account_by_name:
+  {Mc.account_pick(gmail_accts(), "account-2", "gmail") == Mc.APName{"account-2"} : Mc.AcctPick}
+
+# LAW: a title only one account has picks it.
+law account_by_unique_title:
+  {Mc.account_pick(gmail_accts(), "pro", "gmail") == Mc.APName{"account-2"} : Mc.AcctPick}
+
+# LAW: a name wins over a title (an account titled like another's name).
+law account_name_before_title:
+  {Mc.account_pick([Mc.Acct{"pro", "", False{}}, Mc.Acct{"b", "pro", True{}}], "pro", "gmail")
+    == Mc.APName{"pro"} : Mc.AcctPick}
+
+# LAW: a title two accounts share is refused, the accounts listed (the
+# shared title shows as each one's name), never the default.
+law account_ambiguous_title_refused:
+  {Mc.account_pick(gmail_accts(), "work", "gmail")
+    == Mc.APRefuse{"gmail has no account \"work\" bise can tell apart: its accounts are perso (default), pro, account-3, account-4. pass one of these as account, or leave account out for the default."} : Mc.AcctPick}
+
+# LAW: an unknown account is refused, never sent to the default.
+law account_unknown_refused:
+  {Mc.account_pick(gmail_accts(), "nope", "gmail")
+    == Mc.APRefuse{"gmail has no account \"nope\" bise can tell apart: its accounts are perso (default), pro, account-3, account-4. pass one of these as account, or leave account out for the default."} : Mc.AcctPick}
+
+# LAW: no list for that connector: refused, never sent to the default.
+law account_no_list_refused:
+  {Mc.account_pick(Nil{}, "pro", "gmail")
+    == Mc.APRefuse{"bise has no list of gmail's accounts: leave account out to use its default account."} : Mc.AcctPick}
+
+# LAW: a call's accounts are its connector's, by cid.
+law accounts_by_cid:
+  {(Mc.accts_of([Mc.ConnAccts{"c-1", "gmail", gmail_accts()}, Mc.ConnAccts{"c-2", "drive", Nil{}}], "c-1"),
+    Mc.accts_of([Mc.ConnAccts{"c-1", "gmail", gmail_accts()}], "c-9"))
+    == (gmail_accts(), Nil{}) : List<&2, Mc.Acct> & List<&2, Mc.Acct>}
+
+# LAW: the tool groups line says a group's accounts only with 2 or more.
+law group_line_says_accounts:
+  {Mc.group_lines(["gmail", "drive"],
+      [T.ToolDef{"gmail.search", "#s"}, T.ToolDef{"gmail.send", "#m"}, T.ToolDef{"drive.list", "#l"}],
+      [Mc.ConnAccts{"c-1", "gmail", [Mc.Acct{"default", "perso", True{}}, Mc.Acct{"account-2", "pro", False{}}]},
+       Mc.ConnAccts{"c-2", "drive", [Mc.Acct{"default", "", True{}}]}])
+    == "\n- `gmail` (2 functions) · accounts: perso (default), pro\n- `drive` (1 function)" : String}

@@ -232,3 +232,27 @@ def Laws.view_lines_each_under_its_id():
 
 def Laws.views_files_in_side_dir():
   {==}
+
+def Laws.account_by_name():
+  {==}
+
+def Laws.account_by_unique_title():
+  {==}
+
+def Laws.account_name_before_title():
+  {==}
+
+def Laws.account_ambiguous_title_refused():
+  {==}
+
+def Laws.account_unknown_refused():
+  {==}
+
+def Laws.account_no_list_refused():
+  {==}
+
+def Laws.accounts_by_cid():
+  {==}
+
+def Laws.group_line_says_accounts():
+  {==}

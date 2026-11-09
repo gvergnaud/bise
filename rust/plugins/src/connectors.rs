@@ -367,6 +367,42 @@ pub fn index_lines_with(catalog: &Catalog, on: &dyn Fn(&PluginId) -> bool) -> Ve
     out
 }
 
+// ---- the accounts file ----
+
+/// The session's accounts file, beside the index in the bridge's folder
+/// (`bend/runtime/plugins.bend`'s `mcp_accounts_path` reads this name).
+pub const ACCOUNTS_FILE: &str = "mcp-accounts.json";
+
+/// The accounts file's text: for each ready connector on in the index
+/// that has accounts, `{"cid", "group", "accounts": [{name, title?,
+/// default?}]}` (the index's cid and alias; no status: a call resolves
+/// its `account` there, `bend/runtime/mcp-pure.bend`'s `account_pick`).
+pub fn accounts_file(catalog: &Catalog, state: &StateV2) -> String {
+    let cs: Vec<Value> = catalog
+        .connectors
+        .iter()
+        .filter(|c| c.auth == ConnectorAuth::Ready && !c.accounts.is_empty() && state.is_on(&PluginId::mistral(&c.name), false))
+        .map(|c| {
+            let accts: Vec<Value> = c
+                .accounts
+                .iter()
+                .map(|a| {
+                    let mut v = json!({"name": a.name});
+                    if let Some(t) = &a.title {
+                        v["title"] = json!(t);
+                    }
+                    if a.default {
+                        v["default"] = json!(true);
+                    }
+                    v
+                })
+                .collect();
+            json!({"cid": c.id, "group": c.name, "accounts": accts})
+        })
+        .collect();
+    Value::Array(cs).to_string() + "\n"
+}
+
 // ---- the cache ----
 
 /// The cache file as read: the catalog and when a fetch last failed.

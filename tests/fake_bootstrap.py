@@ -20,11 +20,19 @@ unit tests (rust/plugins/src/connectors/tests.rs). Checks:
 7. accounts: each ready connector's GET .../user/credentials (never a
    built-in, never one not connected), his accounts in the cache; a list
    that fails keeps the last ones and the refresh still succeeds.
+8. a call's account (runtime/mcp.bend through tests/mcp_retry_probe.bend,
+   against this fake's gateway): `account` by title goes as
+   x-credentials-name with the connection's name and leaves the
+   arguments; none sends no header; an unknown one is refused with the
+   accounts listed and no request made; a tool whose schema takes its own
+   `account` keeps it.
 
-Needs the bise binary (cd rust && cargo build -p bend-harness).
+Needs the bise binary (cd rust && cargo build -p bend-harness) and, for
+8, the bend compiler (skipped without it).
+
 python3 -u tests/fake_bootstrap.py
 """
-import http.server, json, os, subprocess, sys, tempfile, threading
+import http.server, json, os, shutil, subprocess, sys, tempfile, threading
 from urllib.parse import urlparse, parse_qs
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -54,6 +62,8 @@ class Mistral:
         self.statuses, self.gets, self.posts, self.auth = [], [], [], []
         # the credentials lists asked, by connector id; a 500 for an id in cred_fail
         self.creds, self.cred_fail = [], set()
+        # the gateway's tools/call requests: (cid, x-credentials-name or None, arguments)
+        self.calls = []
         self.accounts = {"c-slack": [
             {"name": "default", "title": "perso", "is_default": True, "authentication_type": "oauth2", "scope": "user",
              "status": {"status_type": "valid"}},
@@ -104,11 +114,28 @@ class Mistral:
                 m.auth.append(self.headers.get("Authorization"))
                 n = int(self.headers.get("Content-Length") or 0)
                 body = json.loads(self.rfile.read(n) or b"{}")
+                if self.path.startswith("/v1/connectors-gateway/") and self.path.endswith("/mcp"):
+                    return self.gateway(self.path.split("/")[3], body)
                 m.posts.append((self.path, body))
                 if self.path.endswith("/user/credentials"):
                     m.pending.add(self.path.split("/")[3])
                     return self.answer(200, {"message": "ok"})
                 self.answer(404, {"detail": "not found"})
+
+            def gateway(self, cid, body):
+                """MCP Streamable HTTP, JSON answers, no session"""
+                method = body.get("method")
+                if method == "initialize":
+                    return self.answer(200, {"jsonrpc": "2.0", "id": body.get("id"), "result": {
+                        "protocolVersion": "2025-06-18", "capabilities": {}, "serverInfo": {"name": "fake", "version": "1"}}})
+                if method == "tools/call":
+                    args = body["params"].get("arguments")
+                    m.calls.append((cid, self.headers.get("x-credentials-name"), args))
+                    return self.answer(200, {"jsonrpc": "2.0", "id": body.get("id"), "result": {
+                        "content": [{"type": "text", "text": "found 1"}], "isError": False}})
+                self.send_response(202)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
 
             def log_message(self, *a):
                 pass
@@ -116,6 +143,60 @@ class Mistral:
         self.srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
         threading.Thread(target=self.srv.serve_forever, daemon=True).start()
         self.url = "http://127.0.0.1:%d" % self.srv.server_address[1]
+
+
+SCHEMA = {"type": "object", "properties": {"query": {"type": "string"}}}
+OWN = {"type": "object", "properties": {"account": {"type": "string"}}}
+
+
+def account_calls(m, tmp, check):
+    """8: runtime/mcp.bend's mcp_call (the probe) on the index and the
+    accounts file where the session's bridge writes them"""
+    bend = shutil.which("bend") or os.path.expanduser("~/.bend/bin/bend")
+    if not os.path.exists(bend):
+        print("SKIP account calls: no bend compiler")
+        return
+    exe = os.path.join(tmp, "probe")
+    c = subprocess.run([bend, "mcp_retry_probe.bend", "-o", exe], cwd=HERE, capture_output=True, text=True)
+    if not os.path.exists(exe):
+        check("the probe compiles", False, c.stdout[-2000:] + c.stderr[-2000:])
+        return
+    run = os.path.join(tmp, "run")
+    d = os.path.join(run, "0", "plugins")
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, "mcp-index.txt"), "w") as f:
+        f.write("c-slack slack search : #Search | input: %s\n" % json.dumps(SCHEMA))
+        f.write("c-slack slack lookup : #Look up | input: %s\n" % json.dumps(OWN))
+    # the bridge's format (bend_plugins::connectors::accounts_file, its unit test)
+    with open(os.path.join(d, "mcp-accounts.json"), "w") as f:
+        f.write(json.dumps([{"cid": "c-slack", "group": "slack", "accounts": [
+            {"name": "default", "title": "perso", "default": True}, {"name": "account-2", "title": "pro"}]}]) + "\n")
+
+    def call(tool, args):
+        env = {"PATH": os.environ.get("PATH", ""), "HOME": tmp, "BEND_RUN_DIR": run, "BEND_REPL_PORT": "0",
+               "BISE_MISTRAL_URL": m.url, "PROBE_KEY": KEY, "PROBE_TOOL": tool, "PROBE_ARGS": json.dumps(args)}
+        out = subprocess.run([exe], env=env, capture_output=True, text=True, timeout=120).stdout
+        st, _, text = out.partition("\n")
+        return st.strip(), text.strip()
+
+    m.calls = []
+    st, text = call("slack.search", {"query": "x", "account": "pro"})
+    check("account by title: x-credentials-name is its name, the argument removed",
+          st == "ok" and m.calls == [("c-slack", "account-2", {"query": "x"})], repr((st, text, m.calls)))
+    m.calls = []
+    st, text = call("slack.search", {"query": "x"})
+    check("no account: no header (his default)", st == "ok" and m.calls == [("c-slack", None, {"query": "x"})],
+          repr((st, text, m.calls)))
+    m.calls = []
+    st, text = call("slack.search", {"query": "x", "account": "nope"})
+    check("an unknown account: refused, the accounts listed, nothing sent",
+          st == "err" and m.calls == [] and text.startswith(
+              'slack has no account "nope" bise can tell apart: its accounts are perso (default), pro.'),
+          repr((st, text, m.calls)))
+    m.calls = []
+    st, text = call("slack.lookup", {"account": "someone"})
+    check("a tool that takes its own account keeps it, no header",
+          st == "ok" and m.calls == [("c-slack", None, {"account": "someone"})], repr((st, text, m.calls)))
 
 
 def main():
@@ -215,6 +296,7 @@ def main():
         rc, out = run("refresh", e=nokey)
         check("no Mistral key: no request, and it says so",
               rc == 1 and "no Mistral key" in out and len(m.auth) == n, repr((rc, out)))
+        account_calls(m, tmp, check)
     m.srv.shutdown()
     if fails:
         sys.exit("FAIL %s" % fails)

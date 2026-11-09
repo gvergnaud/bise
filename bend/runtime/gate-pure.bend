@@ -44,6 +44,13 @@ def ask_line_x(+n: String, +tool: String, +args: String, +nonce: String,
   String.concat(["gate ", n, " {\"tool\":", J.quote_string(tool), ",\"args\":",
     J.quote_string(args), ",\"nonce\":", J.quote_string(nonce), extra, "}"])
 
+# the gate line's field for a connector call's resolved account (its
+# connection's name, Mcpp.account_pick; "" for the default: no field). The
+# hub's destination takes it, never the raw argument
+def account_extra(+name: String) -> String:
+  Bool.pick(String, String.is_empty(name), "",
+    String.append(",\"account\":", J.quote_string(name)))
+
 # the line the hub reads (the arguments as the model wrote them)
 def ask_line(+n: String, +tool: String, +args: String, +nonce: String) -> String:
   ask_line_x(n, tool, args, nonce, "")

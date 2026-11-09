@@ -144,6 +144,13 @@ def jarr.m(m: Maybe<&2, Jv.Val>) -> List<&2, Jv.Val>:
 def jarr(v: Jv.Val, +k: String) -> List<&2, Jv.Val>:
   jarr.m(Jv.get(v, k))
 
+def jsome.n(m: Maybe<&2, Nat>) -> Bool:
+  match m:
+    case Some{_}:
+      True{}
+    case None{}:
+      False{}
+
 # the index every lookup reads: this session's one tool index, written
 # by its plugins bridge (runtime/plugins.bend): the plugins' tools and
 # the Mistral connectors', minus the ones he turned off. Missing: no
@@ -230,10 +237,20 @@ def call_body(+tool: String, +args: String) -> String:
 def is_local(+cid: String) -> Bool:
   String.starts_with(cid, "http://127.0.0.1:")
 
-def gateway_url(+cid: String) -> String:
+# base: Mistral's API (BISE_MISTRAL_URL names a fake one in tests)
+def gateway_url(+base: String, +cid: String) -> String:
   Bool.pick(String, is_local(cid), cid,
-    String.append("https://api.mistral.ai/v1/connectors-gateway/",
-      String.append(cid, "/mcp")))
+    String.concat([base, "/v1/connectors-gateway/", cid, "/mcp"]))
+
+def mistral_base.of(+s: String) -> String:
+  Bool.pick(String, String.is_empty(String.trim(s)), "https://api.mistral.ai",
+    String.trim(s))
+
+# Mistral's API base: BISE_MISTRAL_URL (a test setting), else Mistral's
+def mistral_base() -> IO(String):
+  do IO<String>:
+    r : Result<&1, &1, U32 & String, String> <- IO.get_env("BISE_MISTRAL_URL")
+    IO.pure(String, mistral_base.of(P.env_or(r, "")))
 
 def mcp_hdrs(+key: String) -> Map<&2, List<&2, String>>:
   Http.set(Http.set(Http.set(Http.empty(), "Authorization",
@@ -556,29 +573,37 @@ def tool_now.read(asks: Bool) -> IO(String):
         +now : String <- P.read_or(Mcp.tool_now_path(side, P.env_or(pr, "0")), "")
         IO.pure(String, String.trim(now))
 
-# a tool with a view asks its bridge to keep the full result (C2)
+# a tool with a view asks its bridge to keep the full result (C2); acct:
+# the account the call names (its connection's name, sent as
+# x-credentials-name), "" for his default
 def mcp_call.send(+name: String, +cid: String, +tool: String,
-    +schema: String, +args: String, +key: String, +ui: String) -> IO(MR):
+    +schema: String, +args: String, +key: String, +ui: String, +acct: String)
+    -> IO(MR):
   do IO<MR>:
     +tid : String <- tool_now.read(Mcp.asks_view(cid, ui))
-    tries(Mcp.max_tries(), 0n, name, Pvp.url_host(gateway_url(cid)),
-      gateway_url(cid), hdr_if(Bool.not(Mcp.asks_view(cid, ui)),
-        mcp_hdrs(Bool.pick(String, is_local(cid), "", key)), "x-bise-call", "1"),
+    +base : String <- mistral_base()
+    tries(Mcp.max_tries(), 0n, name, Pvp.url_host(gateway_url(base, cid)),
+      gateway_url(base, cid), hdr_if(String.is_empty(acct),
+        hdr_if(Bool.not(Mcp.asks_view(cid, ui)),
+          mcp_hdrs(Bool.pick(String, is_local(cid), "", key)), "x-bise-call", "1"),
+        "x-credentials-name", acct),
       tool, schema, args, tid)
 
 # a gateway call needs the Mistral key: without one, say so and send nothing
 def mcp_call.keyed(no_key: Bool, +name: String, +cid: String, +tool: String,
-    +schema: String, +args: String, +key: String, +ui: String) -> IO(MR):
+    +schema: String, +args: String, +key: String, +ui: String, +acct: String)
+    -> IO(MR):
   match no_key:
     case True{}:
       IO.pure(MR, MR{False{}, Mcp.no_key_text()})
     case False{}:
-      mcp_call.send(name, cid, tool, schema, args, key, ui)
+      mcp_call.send(name, cid, tool, schema, args, key, ui, acct)
 
 def mcp_call.found(+name: String, +cid: String, +tool: String,
-    +schema: String, +args: String, +key: String, +ui: String) -> IO(MR):
+    +schema: String, +args: String, +key: String, +ui: String, +acct: String)
+    -> IO(MR):
   mcp_call.keyed(Bool.and(String.is_empty(key), Bool.not(is_local(cid))),
-    name, cid, tool, schema, args, key, ui)
+    name, cid, tool, schema, args, key, ui, acct)
 
 # a call with no arguments still needs a JSON object body
 def call_args.of(is_empty: Bool, +args: String) -> String:
@@ -591,11 +616,200 @@ def call_args.of(is_empty: Bool, +args: String) -> String:
 def call_args(+args: String) -> String:
   call_args.of(String.is_empty(args), args)
 
+# ---- the account a call names (Mcp.account_pick) ----
+# A gateway connector's call may carry `account`; a plugin's own tool, or
+# a tool whose schema takes its own `account`, keeps it as an argument.
+
+def jsome(m: Maybe<&2, Jv.Val>) -> Bool:
+  match m:
+    case Some{_}:
+      True{}
+    case None{}:
+      False{}
+
+def schema_takes.props(m: Maybe<&2, Jv.Val>) -> Bool:
+  match m:
+    case Some{+p}:
+      jsome(Jv.get(p, "account"))
+    case None{}:
+      False{}
+
+def schema_takes.of(m: Maybe<&2, Jv.Val>) -> Bool:
+  match m:
+    case Some{+v}:
+      schema_takes.props(Jv.get(v, "properties"))
+    case None{}:
+      False{}
+
+# the tool's input schema has its own `account` property
+def schema_takes_account(+schema: String) -> Bool:
+  schema_takes.of(Jv.parse(schema))
+
+# whether `account` is bise's to read for this tool
+def account_ours(+cid: String, +schema: String) -> Bool:
+  Bool.and(Bool.not(is_local(cid)), Bool.not(schema_takes_account(schema)))
+
+def arg_account.w(m: Maybe<&2, Jv.Val>) -> Maybe<&2, String>:
+  match m:
+    case Some{Jv.Str{+s}}:
+      Some{s}
+    case _:
+      None{}
+
+def arg_account.p(m: Maybe<&2, Jv.Val>) -> Maybe<&2, String>:
+  match m:
+    case Some{+v}:
+      arg_account.w(Jv.get(v, "account"))
+    case None{}:
+      None{}
+
+# the call's `account` argument (a string), if any
+def arg_account(+args: String) -> Maybe<&2, String>:
+  arg_account.p(Jv.parse(args))
+
+def strip_account.v(v: Jv.Val, +args: String) -> String:
+  match v:
+    case Jv.Obj{m}:
+      Jv.encode(Jv.Obj{Map.del(&2, Jv.Val, m, "account")})
+    case _:
+      args
+
+def strip_account.p(m: Maybe<&2, Jv.Val>, +args: String) -> String:
+  match m:
+    case Some{v}:
+      strip_account.v(v, args)
+    case None{}:
+      args
+
+# the arguments without `account` (the tool never sees it)
+def strip_account(+args: String) -> String:
+  strip_account.p(Jv.parse(args), args)
+
+def with_account.v(v: Jv.Val, +args: String, +n: String) -> String:
+  match v:
+    case Jv.Obj{m}:
+      Jv.encode(Jv.Obj{Map.set(&2, Jv.Val, m, "account", Jv.Str{n})})
+    case _:
+      args
+
+def with_account.p(m: Maybe<&2, Jv.Val>, +args: String, +n: String) -> String:
+  match m:
+    case Some{v}:
+      with_account.v(v, args, n)
+    case None{}:
+      args
+
+# the arguments with `account` set to the connection's name the gate asked
+# about: the call resolves a name first, so it sends that account or, if
+# it is gone since, refuses (never another one)
+def with_account(+args: String, +n: String) -> String:
+  with_account.p(Jv.parse(args), args, n)
+
+def acct_of(+v: Jv.Val) -> Mcp.Acct:
+  Mcp.Acct{jstr(v, "name", ""), jstr(v, "title", ""), jbool(v, "default", False{})}
+
+def accts_list(xs: List<&2, Jv.Val>) -> List<&2, Mcp.Acct>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case Con{+x, rest}:
+      Con{acct_of(x), accts_list(rest)}
+
+def conn_of(+v: Jv.Val) -> Mcp.ConnAccts:
+  Mcp.ConnAccts{jstr(v, "cid", ""), jstr(v, "group", ""), accts_list(jarr(v, "accounts"))}
+
+def conns_list(xs: List<&2, Jv.Val>) -> List<&2, Mcp.ConnAccts>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case Con{+x, rest}:
+      Con{conn_of(x), conns_list(rest)}
+
+# the accounts file's text, typed (none when missing or not a list)
+def conns_of(m: Maybe<&2, String>) -> List<&2, Mcp.ConnAccts>:
+  match m:
+    case None{}:
+      Nil{}
+    case Some{+t}:
+      conns_list(jarr.w(jdone(Jv.parse(t))))
+
+# the session's accounts, as its plugins bridge wrote them beside the index
+def accounts_read() -> IO(List<&2, Mcp.ConnAccts>):
+  do IO<List<&2, Mcp.ConnAccts>>:
+    +pp : String <- Pl.mcp_accounts_path()
+    m : Maybe<&2, String> <- P.read_file(pp)
+    IO.pure(List<&2, Mcp.ConnAccts>, conns_of(m))
+
+def mt_pick.ours(ours: Bool, +cid: String, +want: String, +name: String)
+    -> IO(Mcp.AcctPick):
+  match ours:
+    case False{}:
+      IO.pure(Mcp.AcctPick, Mcp.APDefault{})
+    case True{}:
+      do IO<Mcp.AcctPick>:
+        cs : List<&2, Mcp.ConnAccts> <- accounts_read()
+        IO.pure(Mcp.AcctPick, Mcp.account_pick(Mcp.accts_of(cs, cid), want,
+          Mcp.group_of(name)))
+
+# the account a call of this tool names (read at each call: a renamed or
+# new account is never stale)
+def mt_pick(m: Maybe<&2, String>, +cid: String, +schema: String, +name: String)
+    -> IO(Mcp.AcctPick):
+  match m:
+    case None{}:
+      IO.pure(Mcp.AcctPick, Mcp.APDefault{})
+    case Some{+want}:
+      mt_pick.ours(account_ours(cid, schema), cid, want, name)
+
+def call_account.found(m: Maybe<&2, McpTool>, +name: String, +args: String)
+    -> IO(Mcp.AcctPick):
+  match m:
+    case Some{MT{+cid, _, +schema, _}}:
+      mt_pick(arg_account(args), cid, schema, name)
+    case _:
+      IO.pure(Mcp.AcctPick, Mcp.APDefault{})
+
+def call_account.read(m: Maybe<&2, String>, +name: String, +args: String)
+    -> IO(Mcp.AcctPick):
+  match m:
+    case Some{+content}:
+      call_account.found(find_line(content, name), name, args)
+    case None{}:
+      IO.pure(Mcp.AcctPick, Mcp.APDefault{})
+
+def call_account.has(has: Bool, +name: String, +args: String)
+    -> IO(Mcp.AcctPick):
+  match has:
+    case False{}:
+      IO.pure(Mcp.AcctPick, Mcp.APDefault{})
+    case True{}:
+      do IO<Mcp.AcctPick>:
+        m : Maybe<&2, String> <- index_content()
+        call_account.read(m, name, args)
+
+# the account a call names, before the gate asks (the gate line carries
+# the resolved name): no file is read unless the arguments say `account`
+def call_account(+name: String, +args: String) -> IO(Mcp.AcctPick):
+  call_account.has(jsome.n(Tx.find(args, "\"account\"", 0n)), name, args)
+
+def mcp_call.picked(p: Mcp.AcctPick, +name: String, +cid: String,
+    +tool: String, +schema: String, +args: String, +key: String, +ui: String)
+    -> IO(MR):
+  match p:
+    case Mcp.APDefault{}:
+      mcp_call.found(name, cid, tool, schema, call_args(args), key, ui, "")
+    case Mcp.APName{+n}:
+      mcp_call.found(name, cid, tool, schema, call_args(strip_account(args)), key, ui, n)
+    case Mcp.APRefuse{+why}:
+      IO.pure(MR, MR{False{}, why})
+
 def mcp_call.mt(mt: McpTool, +name: String, +args: String, +key: String)
     -> IO(MR):
   match mt:
     case MT{+cid, +tool, +schema, +ui}:
-      mcp_call.found(name, cid, tool, schema, call_args(args), key, ui)
+      do IO<MR>:
+        p : Mcp.AcctPick <- mt_pick(arg_account(args), cid, schema, name)
+        mcp_call.picked(p, name, cid, tool, schema, args, key, ui)
 
 # no index: the call is still named (issue 21: a nameless answer read
 # like an empty result)

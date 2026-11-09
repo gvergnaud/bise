@@ -388,6 +388,26 @@ tests use temp dirs.
     static views (`cid = …/<plugin>/~views`), then his Mistral
     connectors' (`connectors::index_lines`, `cid` = the connector's id),
     minus every tool, server, connector or plugin turned off;
+  - `D/mcp-accounts.json` (`connectors::ACCOUNTS_FILE`,
+    `connectors::accounts_file`): his accounts on each ready connector
+    that is on and has them, typed: `[{cid, group, accounts: [{name,
+    title?, default?}]}]`. A gateway call's optional `account` argument
+    is resolved there at each call (`runtime/mcp-pure.bend`
+    `account_pick`, its laws in `bend/laws/runtime.bend`): a connection
+    name first, then a title only one account has; anything else (an
+    unknown or shared title, no list for that connector) is refused with
+    one line that lists the accounts, never sent to the default. A
+    resolved account leaves the arguments and goes as
+    `x-credentials-name`; no `account`, no header (Mistral's default). A
+    plugin's own tool, or a tool whose schema has its own `account`,
+    keeps it as an argument. In `auto`, the account is resolved before
+    the gate asks: refused, nothing is asked; resolved, the gate line
+    carries its name (`"account"`, absent for the default) and the call
+    runs with that name as its `account`, so it sends the account the
+    verdict was about or, gone since, is refused.
+    The system prompt's Tool groups line says a group's accounts when it
+    has 2 or more (`· accounts: perso (default), pro`), read at the
+    agent's start;
   - `D/skills-index.txt`: `name\tdescription\tpath` lines, every skill
     of this session that is on: the loose skill folders
     (`bend_plugins::skills`, scanned while the servers start) and the

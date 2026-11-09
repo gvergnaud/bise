@@ -390,3 +390,30 @@ fn a_cache_from_before_accounts_reads_none() {
     let back = of_cache_text(&to_cache_text(&Cached { catalog: c.clone(), failed_ms: 0 })).catalog;
     assert_eq!(back, c);
 }
+
+#[test]
+fn the_accounts_file_has_ready_connectors_on_with_accounts_only() {
+    let mut c = catalog(BODY);
+    let accts = parse_accounts(ACCOUNTS).unwrap();
+    for e in c.connectors.iter_mut() {
+        e.accounts = accts.clone();
+    }
+    let off = StateV2 { disabled: vec!["mistral:slack".into()], ..StateV2::default() };
+    let text = accounts_file(&c, &off);
+    let v: Value = serde_json::from_str(&text).unwrap();
+    let ids: Vec<&str> = v.as_array().unwrap().iter().map(|e| e["cid"].as_str().unwrap()).collect();
+    let want: Vec<&str> = c.connectors.iter().filter(|e| e.auth == ConnectorAuth::Ready && e.name != "slack").map(|e| e.id.as_str()).collect();
+    assert_eq!(ids, want, "ready ones only, an off connector out");
+    // one entry, as the runtime reads it (tests/fake_bootstrap.py writes the same)
+    let one = Catalog {
+        connectors: vec![ConnectorEntry { name: "slack".into(), display_name: "Slack".into(), id: "c-slack".into(), auth: ConnectorAuth::Ready, tools: vec![], accounts: accts[..2].to_vec() }],
+        ..Catalog::default()
+    };
+    assert_eq!(
+        accounts_file(&one, &StateV2::default()),
+        "[{\"accounts\":[{\"default\":true,\"name\":\"default\",\"title\":\"perso\"},{\"name\":\"account-2\"}],\"cid\":\"c-slack\",\"group\":\"slack\"}]\n"
+    );
+    // no accounts: an empty list
+    assert_eq!(accounts_file(&catalog(BODY), &StateV2::default()), "[]\n");
+    assert!(ACCOUNTS_FILE.ends_with(".json") && include_str!("../../../../bend/runtime/plugins.bend").contains(&format!("\"/{ACCOUNTS_FILE}\"")), "plugins.bend reads the same name");
+}

@@ -14,6 +14,8 @@
 #                    minus the ones turned off; rewritten every 2 s when
 #                    plugins.json or the connectors' catalog moves, so a
 #                    tool toggle needs no new REPL
+#   mcp-accounts.json his accounts on each ready connector, typed
+#                    (runtime/mcp.bend resolves a call's `account` there)
 #   skills-index.txt every on skill (skill folders and plugins), in the
 #                    skills index format: the only one runtime/skills.bend reads
 #   report.txt       the listing /plugins shows
@@ -53,6 +55,13 @@ def mcp_index_path() -> IO(String):
   do IO<String>:
     +d : String <- dir()
     IO.pure(String, String.append(d, "/mcp-index.txt"))
+
+# his accounts on each ready connector, typed (the bridge writes it
+# beside the index: bend_plugins::connectors::ACCOUNTS_FILE)
+def mcp_accounts_path() -> IO(String):
+  do IO<String>:
+    +d : String <- dir()
+    IO.pure(String, String.append(d, "/mcp-accounts.json"))
 
 def skills_index_path() -> IO(String):
   do IO<String>:

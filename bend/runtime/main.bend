@@ -188,27 +188,56 @@ def gate.ask_x(out: Pv.Out, +name: String, +args: String, +dir: String, +extra: 
     out3 : Pv.Out <- Dr.emit(out2, [Gp.done_line(n, Gp.how_of(v))])
     IO.pure(Pv.Out & Gp.Verdict, (out3, v))
 
+# a gate's verdict and the arguments the call runs with
+def gate.as(pv: Pv.Out & Gp.Verdict, +args: String) -> Pv.Out & (Gp.Verdict & String):
+  match pv:
+    case (out, +v):
+      (out, (v, args))
+
+# a connector call's account, resolved before the gate asks: refused, the
+# call ends with its line and nothing is asked; named, the gate line
+# carries the resolved name (Gp.account_extra), never the raw argument,
+# and the call runs with that name as its `account` (Mcp.with_account),
+# so the verdict is about the exact account sent
 @unsafe
-def gate.if(asks: Bool, out: Pv.Out, +name: String, +args: String, +dir: String)
-    -> IO(Pv.Out & Gp.Verdict):
+def gate.acct(p: Mcpp.AcctPick, out: Pv.Out, +name: String, +args: String,
+    +dir: String) -> IO(Pv.Out & (Gp.Verdict & String)):
+  match p:
+    case Mcpp.APRefuse{+why}:
+      IO.pure(Pv.Out & (Gp.Verdict & String), (out, (Gp.VDeny{why}, args)))
+    case Mcpp.APName{+n}:
+      do IO<Pv.Out & (Gp.Verdict & String)>:
+        pv : Pv.Out & Gp.Verdict <- gate.ask_x(out, name, args, dir, Gp.account_extra(n))
+        IO.pure(Pv.Out & (Gp.Verdict & String), gate.as(pv, Mcp.with_account(args, n)))
+    case Mcpp.APDefault{}:
+      do IO<Pv.Out & (Gp.Verdict & String)>:
+        pv : Pv.Out & Gp.Verdict <- gate.ask(out, name, args, dir)
+        IO.pure(Pv.Out & (Gp.Verdict & String), gate.as(pv, args))
+
+@unsafe
+def gate.asks(asks: Bool, out: Pv.Out, +name: String, +args: String, +dir: String)
+    -> IO(Pv.Out & (Gp.Verdict & String)):
   match asks:
     case True{}:
-      gate.ask(out, name, args, dir)
+      do IO<Pv.Out & (Gp.Verdict & String)>:
+        p : Mcpp.AcctPick <- Mcp.call_account(name, args)
+        gate.acct(p, out, name, args, dir)
     case False{}:
-      IO.pure(Pv.Out & Gp.Verdict, (out, Gp.VAllow{""}))
+      IO.pure(Pv.Out & (Gp.Verdict & String), (out, (Gp.VAllow{""}, args)))
 
-# the gate of one call (scripted runs never ask)
+# the gate of one call (scripted runs never ask): its verdict, and the
+# arguments the call runs with
 @unsafe
 def gate(out: Pv.Out, +name: String, +args: String, live: Bool)
-    -> IO(Pv.Out & Gp.Verdict):
+    -> IO(Pv.Out & (Gp.Verdict & String)):
   match live:
     case False{}:
-      IO.pure(Pv.Out & Gp.Verdict, (out, Gp.VAllow{""}))
+      IO.pure(Pv.Out & (Gp.Verdict & String), (out, (Gp.VAllow{""}, args)))
     case True{}:
-      do IO<Pv.Out & Gp.Verdict>:
+      do IO<Pv.Out & (Gp.Verdict & String)>:
         +dir : String <- P.side_dir()
         m : Maybe<&2, String> <- P.read_file(Gp.mode_path(dir))
-        gate.if(Gp.gated(name) && Gp.mode_asks(m), out, name, args, dir)
+        gate.asks(Gp.gated(name) && Gp.mode_asks(m), out, name, args, dir)
 
 # ---- bash under the sandbox (approvals-sandbox, approvals-design.md §6) ----
 # An allowed bash call runs under the sandbox its allow names (flags ""
@@ -577,21 +606,28 @@ def exec_program.call.gated.emit(ro: Pv.Out & Xp.ExecRes, +name: String, +live: 
         out2 : Pv.Out <- emit_sub(out, name, r, live)
         IO.pure(Pv.Out & (Sfp.Def & Xp.ExecRes), (out2, (d2, r)))
 
-def exec_program.call.gated(pv: Pv.Out & Gp.Verdict, +name: String, +args: String,
+# the verdict and the arguments the call runs with (the gate's)
+def exec_program.call.gated.va(out0: Pv.Out, va: Gp.Verdict & String, +name: String,
     +live: Bool, +d: Sfp.Def) -> IO(Pv.Out & (Sfp.Def & Xp.ExecRes)):
-  match pv:
-    case (out0, +v):
+  match va:
+    case (+v, +args):
       do IO<Pv.Out & (Sfp.Def & Xp.ExecRes)>:
         ro : Pv.Out & Xp.ExecRes <- exec_program.call.after(Gp.denial(v), out0, name, args,
           Gp.flags(v), live)
         exec_program.call.gated.emit(ro, name, live, d)
 
+def exec_program.call.gated(pv: Pv.Out & (Gp.Verdict & String), +name: String,
+    +live: Bool, +d: Sfp.Def) -> IO(Pv.Out & (Sfp.Def & Xp.ExecRes)):
+  match pv:
+    case (out0, va):
+      exec_program.call.gated.va(out0, va, name, live, d)
+
 @unsafe
 def exec_program.call(out: Pv.Out, +name: String, +args: String, +live: Bool,
     +d: Sfp.Def) -> IO(Pv.Out & (Sfp.Def & Xp.ExecRes)):
   do IO<Pv.Out & (Sfp.Def & Xp.ExecRes)>:
-    pv : Pv.Out & Gp.Verdict <- gate(out, name, args, live)
-    exec_program.call.gated(pv, name, args, live, d)
+    pv : Pv.Out & (Gp.Verdict & String) <- gate(out, name, args, live)
+    exec_program.call.gated(pv, name, live, d)
 
 def exec_program.call.ungated(out: Pv.Out, +name: String, +args: String, +live: Bool,
     +d: Sfp.Def) -> IO(Pv.Out & (Sfp.Def & Xp.ExecRes)):
@@ -762,19 +798,26 @@ def exec_tool.after(m: Maybe<&2, String>, out: Pv.Out, +name: String, +args: Str
       IO.pure(Pv.Out & (Sfp.Def & Xp.ExecRes),
         (out, (Sfp.def_none(), Xp.Ex{False{}, why})))
 
-def exec_tool.gated(pv: Pv.Out & Gp.Verdict, +name: String, +args: String,
+# the verdict and the arguments the call runs with (the gate's)
+def exec_tool.gated.va(out: Pv.Out, va: Gp.Verdict & String, +name: String,
+    +live: Bool) -> IO(Pv.Out & (Sfp.Def & Xp.ExecRes)):
+  match va:
+    case (+v, +args):
+      exec_tool.after(Gp.denial(v), out, name, args, Gp.flags(v), live)
+
+def exec_tool.gated(pv: Pv.Out & (Gp.Verdict & String), +name: String,
     +live: Bool) -> IO(Pv.Out & (Sfp.Def & Xp.ExecRes)):
   match pv:
-    case (out, +v):
-      exec_tool.after(Gp.denial(v), out, name, args, Gp.flags(v), live)
+    case (out, va):
+      exec_tool.gated.va(out, va, name, live)
 
 @unsafe
 def exec_tool(out: Pv.Out, +call: T.Call, +live: Bool) -> IO(Pv.Out & (Sfp.Def & Xp.ExecRes)):
   match call:
     case T.Call{_, +name, +args}:
       do IO<Pv.Out & (Sfp.Def & Xp.ExecRes)>:
-        pv : Pv.Out & Gp.Verdict <- gate(out, name, args, live)
-        exec_tool.gated(pv, name, args, live)
+        pv : Pv.Out & (Gp.Verdict & String) <- gate(out, name, args, live)
+        exec_tool.gated(pv, name, live)
 
 def emit_code_ann.pick(is_code: Bool, out: Pv.Out, +call: T.Call) -> IO(Pv.Out):
   match is_code:

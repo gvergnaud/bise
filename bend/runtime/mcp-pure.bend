@@ -323,26 +323,6 @@ def group_line(+g: String, +n: Nat) -> String:
   String.append("- `", String.append(g, String.append("` (",
     String.append(Nat.show(n), group_line.unit(Nat.is_eq(n, 1n))))))
 
-def group_lines(gs: List<&2, String>, +tools: List<&2, T.ToolDef>) -> String:
-  match gs:
-    case Nil{}:
-      ""
-    case Con{+g, rest}:
-      String.append("\n", String.append(group_line(g, group_count(tools, g)),
-        group_lines(rest, tools)))
-
-def groups_section.pick(empty: Bool, +lines: String) -> String:
-  match empty:
-    case True{}:
-      ""
-    case False{}:
-      String.append("### Tool groups\n\nThe `tools.<group>` namespaces of this session. To search one group, pass its name in the `connectors` argument of `search_tool_functions`.\n", lines)
-
-# the prompt subsection ("" when no tool has a group)
-def groups_section(+tools: List<&2, T.ToolDef>) -> String:
-  groups_section.pick(String.is_empty(group_lines(groups_of(tools), tools)),
-    group_lines(groups_of(tools), tools))
-
 # ---- a call that failed: where, why, what bise did, is it safe ----
 # A call is initialize, the initialized notification and tools/call on
 # one connection (runtime/mcp.bend). It is tried again, on a fresh
@@ -773,3 +753,227 @@ def rpc_text.pick(m: Maybe<&2, String>, +body: String) -> String:
 def rpc_text(+body: String) -> String:
   rpc_text.pick(rpc_text.go(String.split(body, Tx.newline()), None{}), body)
 
+# ---- his accounts on a connector (multi-accounts, docs/plugins.md) ----
+# The bridge writes the session's accounts beside the index
+# (mcp-accounts.json: each ready connector's accounts, typed). A call's
+# optional `account` argument picks one: a name first, then a title only
+# when exactly one account has it; anything else is refused with one line
+# that lists the accounts, never sent to the default. No `account`: no
+# header, Mistral's default.
+
+# one account: Mistral's name of the connection, his title ("" when none),
+# whether it is the default
+type Acct is Data:
+  Acct{name: String, title: String, dflt: Bool}
+
+# a connector's accounts: its cid (the index's), its group (`tools.<group>`)
+type ConnAccts is Data:
+  ConnAccts{cid: String, group: String, accts: List<&2, Acct>}
+
+# what a call's `account` resolves to
+type AcctPick is Data:
+  # no `account`, or not ours to read: no header
+  APDefault{}
+  # the connection's name, for x-credentials-name
+  APName{name: String}
+  # refused: the line the model reads, no call made
+  APRefuse{why: String}
+
+def acct_name(+a: Acct) -> String:
+  match a:
+    case Acct{+n, _, _}:
+      n
+
+def acct_title(+a: Acct) -> String:
+  match a:
+    case Acct{_, +t, _}:
+      t
+
+def acct_dflt(+a: Acct) -> Bool:
+  match a:
+    case Acct{_, _, +d}:
+      d
+
+def names_put(hit: Bool, +n: String, +rest: List<&2, String>) -> List<&2, String>:
+  match hit:
+    case True{}:
+      Con{n, rest}
+    case False{}:
+      rest
+
+# the names of the accounts whose name is `want`
+def by_name(accts: List<&2, Acct>, +want: String) -> List<&2, String>:
+  match accts:
+    case Nil{}:
+      Nil{}
+    case Con{+a, rest}:
+      names_put(String.eq(acct_name(a), want), acct_name(a), by_name(rest, want))
+
+# the names of the accounts whose title is `want` (a blank title is none)
+def by_title(accts: List<&2, Acct>, +want: String) -> List<&2, String>:
+  match accts:
+    case Nil{}:
+      Nil{}
+    case Con{+a, rest}:
+      names_put(Bool.and(Bool.not(String.is_empty(acct_title(a))),
+          String.eq(acct_title(a), want)),
+        acct_name(a), by_title(rest, want))
+
+# exactly one name in the list
+def only_one(ns: List<&2, String>) -> Maybe<&2, String>:
+  match ns:
+    case Con{+n, Nil{}}:
+      Some{n}
+    case _:
+      None{}
+
+# what he reads for an account: its title when that title picks it alone
+# (no account has it as a name, no other has it as a title), else its name
+def acct_label.pick(m: Maybe<&2, String>, clash: Bool, +a: Acct) -> String:
+  match m:
+    case Some{_}:
+      Bool.pick(String, clash, acct_name(a), acct_title(a))
+    case None{}:
+      acct_name(a)
+
+def acct_label(+accts: List<&2, Acct>, +a: Acct) -> String:
+  acct_label.pick(only_one(by_title(accts, acct_title(a))),
+    Bool.not(List.is_empty(&2, String, by_name(accts, acct_title(a)))), a)
+
+def acct_shown(+accts: List<&2, Acct>, +a: Acct) -> String:
+  String.append(acct_label(accts, a),
+    Bool.pick(String, acct_dflt(a), " (default)", ""))
+
+def accts_text.go(xs: List<&2, Acct>, +accts: List<&2, Acct>, +first: Bool)
+    -> String:
+  match xs:
+    case Nil{}:
+      ""
+    case Con{+a, rest}:
+      String.concat([Bool.pick(String, first, "", ", "), acct_shown(accts, a),
+        accts_text.go(rest, accts, False{})])
+
+# "perso (default), pro"
+def accts_text(+accts: List<&2, Acct>) -> String:
+  accts_text.go(accts, accts, True{})
+
+def refuse_text.pick(none: Bool, +group: String, +want: String,
+    +accts: List<&2, Acct>) -> String:
+  match none:
+    case True{}:
+      String.concat(["bise has no list of ", group,
+        "'s accounts: leave account out to use its default account."])
+    case False{}:
+      String.concat([group, " has no account \"", want,
+        "\" bise can tell apart: its accounts are ", accts_text(accts),
+        ". pass one of these as account, or leave account out for the default."])
+
+# the one line of a refused `account`
+def refuse_text(+group: String, +want: String, +accts: List<&2, Acct>) -> String:
+  refuse_text.pick(List.is_empty(&2, Acct, accts), group, want, accts)
+
+def account_pick.title(m: Maybe<&2, String>, +accts: List<&2, Acct>,
+    +want: String, +group: String) -> AcctPick:
+  match m:
+    case Some{+n}:
+      APName{n}
+    case None{}:
+      APRefuse{refuse_text(group, want, accts)}
+
+def account_pick.of(ns: List<&2, String>, +accts: List<&2, Acct>,
+    +want: String, +group: String) -> AcctPick:
+  match ns:
+    case Con{+n, _}:
+      APName{n}
+    case Nil{}:
+      account_pick.title(only_one(by_title(accts, want)), accts, want, group)
+
+# a call's `account` (want) against the connector's accounts: a name
+# first, then a title only one account has; else refused
+def account_pick(+accts: List<&2, Acct>, +want: String, +group: String)
+    -> AcctPick:
+  account_pick.of(by_name(accts, want), accts, want, group)
+
+# the first entry's accounts when `hit`, else the walk's
+def accts_hit(hit: Bool, +as: List<&2, Acct>, +rest_res: List<&2, Acct>)
+    -> List<&2, Acct>:
+  match hit:
+    case True{}:
+      as
+    case False{}:
+      rest_res
+
+# the accounts of the connector `cid` (none when the file has no entry)
+def accts_of(cs: List<&2, ConnAccts>, +cid: String) -> List<&2, Acct>:
+  match cs:
+    case Nil{}:
+      Nil{}
+    case Con{ConnAccts{+c, _, +as}, rest}:
+      accts_hit(String.eq(c, cid), as, accts_of(rest, cid))
+
+# the accounts of the group `g` (none when the file has no entry)
+def accts_of_group(cs: List<&2, ConnAccts>, +g: String) -> List<&2, Acct>:
+  match cs:
+    case Nil{}:
+      Nil{}
+    case Con{ConnAccts{_, +gr, +as}, rest}:
+      accts_hit(String.eq(gr, g), as, accts_of_group(rest, g))
+
+# ---- the tool groups' lines, with their accounts ----
+
+# a group's accounts, said only when it has 2 or more (one account: the
+# line stays as it was)
+def group_accts.of(many: Bool, +accts: List<&2, Acct>) -> String:
+  match many:
+    case True{}:
+      String.append(" · accounts: ", accts_text(accts))
+    case False{}:
+      ""
+
+def group_accts(+accts: List<&2, Acct>) -> String:
+  group_accts.of(Nat.is_gt(List.length(&2, Acct, accts), 1n), accts)
+
+def group_lines(gs: List<&2, String>, +tools: List<&2, T.ToolDef>,
+    +cs: List<&2, ConnAccts>) -> String:
+  match gs:
+    case Nil{}:
+      ""
+    case Con{+g, rest}:
+      String.concat(["\n", group_line(g, group_count(tools, g)),
+        group_accts(accts_of_group(cs, g)), group_lines(rest, tools, cs)])
+
+# whether a group of the section says its accounts
+def some_accts(gs: List<&2, String>, +cs: List<&2, ConnAccts>) -> Bool:
+  match gs:
+    case Nil{}:
+      False{}
+    case Con{+g, rest}:
+      Bool.or(Nat.is_gt(List.length(&2, Acct, accts_of_group(cs, g)), 1n),
+        some_accts(rest, cs))
+
+def groups_section.accts(many: Bool) -> String:
+  match many:
+    case True{}:
+      " A group that lists `accounts:` takes an optional `account` argument on each of its calls: one of those accounts (as written there). Without it, the call uses the account marked (default)."
+    case False{}:
+      ""
+
+def groups_section.pick(empty: Bool, +lines: String, +accts: String) -> String:
+  match empty:
+    case True{}:
+      ""
+    case False{}:
+      String.concat(["### Tool groups\n\nThe `tools.<group>` namespaces of this session. To search one group, pass its name in the `connectors` argument of `search_tool_functions`.",
+        accts, "\n", lines])
+
+# the prompt subsection ("" when no tool has a group), each group with
+# its accounts when it has 2 or more (cs: the session's accounts file)
+def groups_section_x(+tools: List<&2, T.ToolDef>, +cs: List<&2, ConnAccts>)
+    -> String:
+  groups_section.pick(String.is_empty(group_lines(groups_of(tools), tools, cs)),
+    group_lines(groups_of(tools), tools, cs),
+    groups_section.accts(some_accts(groups_of(tools), cs)))
+
+# the prompt subsection with no accounts known
+def groups_section(+tools: List<&2, T.ToolDef>) -> String:
+  groups_section_x(tools, Nil{})

@@ -2,6 +2,7 @@
 # mcp_call ($PROBE_TOOL with $PROBE_ARGS, the index where the session's
 # plugins bridge writes it: $BEND_RUN_DIR/$BEND_REPL_PORT/plugins/mcp-index.txt),
 # then prints "ok" or "err" on the first line and the answer after it.
+# $PROBE_KEY: the Mistral key a gateway connector's call sends ("" when unset).
 import Base
 import ../bend/runtime/mcp.bend as Mcp
 
@@ -22,5 +23,6 @@ def main() -> IO(Unit):
   do IO<Unit>:
     tr : Result<&1, &1, U32 & String, String> <- IO.get_env("PROBE_TOOL")
     ar : Result<&1, &1, U32 & String, String> <- IO.get_env("PROBE_ARGS")
-    m : Mcp.MR <- Mcp.mcp_call(env_of(tr), env_of(ar), "")
+    kr : Result<&1, &1, U32 & String, String> <- IO.get_env("PROBE_KEY")
+    m : Mcp.MR <- Mcp.mcp_call(env_of(tr), env_of(ar), env_of(kr))
     IO.print(show(m))

@@ -137,7 +137,9 @@ def live_prompt(+cat: List<&2, T.ToolDef>, +patch: Bool) -> IO(String):
     +extra : String <- extra_prompt()
     +amd : String <- agents_md()
     mi : Maybe<&2, String> <- Mcp.index_content()
-    +gs : String <- IO.pure(String, Mcpp.groups_section(Mcpp.merged_tools.live(cat, mi)))
+    # his accounts, read once here: a group with 2 or more says them
+    +ca : List<&2, Mcpp.ConnAccts> <- Mcp.accounts_read()
+    +gs : String <- IO.pure(String, Mcpp.groups_section_x(Mcpp.merged_tools.live(cat, mi), ca))
     IO.pure(String, Rcp.prompt_extra(Rcp.prompt_extra(live_prompt.go(prompt_join(about_for(extra), Rcp.solo_tone(extra, tone), tu, gs, Rcp.prompt_extra(ct, note)), content), amd), extra))
 
 def live_cfg(+threshold: Nat, +keep: Nat) -> IO(T.Cfg):
