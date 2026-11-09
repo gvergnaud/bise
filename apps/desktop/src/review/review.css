@@ -129,6 +129,7 @@
   border-radius: 3px;
 }
 .rv-caret {
+  margin-left: var(--s-1);
   color: var(--c-text-3);
 }
 .rv-viewed {

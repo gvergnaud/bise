@@ -92,7 +92,7 @@ describe('the guided review', () => {
       'docs/desktop-bar.md',
     ]);
     expect(v.getByTestId('review.bar.place').querySelector('.rv-wide')?.textContent).toBe("01 / 02 · Give the row's end one owner");
-    expect(v.getByTestId('review.bar.place').querySelector('.rv-narrow')?.textContent).toBe('01 / 02 · Sidebar');
+    expect(v.getByTestId('review.bar.place').querySelector('.rv-narrow')?.textContent).toBe('Sidebar');
     // By kind is one click away, and back
     fireEvent.click(v.getByTestId('review.bar.mode.kind'));
     expect(v.getByTestId('review.part.code')).toBeTruthy();

@@ -16,7 +16,7 @@ export type Mode = 'guide' | 'kind';
 export interface ReviewBarProps {
   /** '01 / 03 · Give the row's end one owner' */
   readonly place: string;
-  /** '01 / 03 · Sidebar': a narrow column's */
+  /** 'Sidebar': a narrow column's (its area alone, never cut for its number) */
   readonly placeShort: string;
   /** one section only: nothing to walk (no ‹ ›, no outline) */
   readonly single: boolean;

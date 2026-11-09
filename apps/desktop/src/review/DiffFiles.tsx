@@ -211,7 +211,8 @@ export function DiffFiles({ project, diff, loading, error, onRetry, none, to, fr
   // the bar names the part he is in by its title (a narrow column: its area), one name with the outline
   const curSection = sections.find((s) => s.key === nav.cur);
   const place = [numberOf(sections, nav.cur), curSection?.title ?? curSection?.label].filter(Boolean).join(' · ');
-  const placeShort = [numberOf(sections, nav.cur), curSection?.label].filter(Boolean).join(' · ');
+  // narrow: the area alone, never cut for its number (‹ › already say there's more)
+  const placeShort = curSection?.label ?? '';
   const curAt = sections.findIndex((s) => s.key === nav.cur);
   const viewedIn = (key: string) => new Set(sections.find((s) => s.key === key)?.blocks.flatMap((b) => b.cards.filter((c) => c.viewed).map((c) => c.file))).size;
   // Guide | By kind keeps its shape: Guide off until a guide is here; gone only on a small change
