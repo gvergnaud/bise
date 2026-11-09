@@ -126,9 +126,9 @@ rest: Array<string>, };
 
 /**
  * The diff a `guide` ask is about: the same diffs as the review's
- * (an agent's change, a commit, a PR by its link).
+ * (an agent's change, a commit, a PR by its link, a branch).
  */
-export type GuideTarget = { "kind": "agent", name: string, } | { "kind": "commit", agent: string, sha: string, } | { "kind": "pr", url: string, };
+export type GuideTarget = { "kind": "agent", name: string, } | { "kind": "commit", agent: string, sha: string, } | { "kind": "pr", url: string, } | { "kind": "branch", name: string, };
 
 /**
  * Where a diff's guide stands (the `guide` event).

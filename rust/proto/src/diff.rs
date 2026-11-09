@@ -119,7 +119,7 @@ pub struct Guide {
 }
 
 /// The diff a `guide` ask is about: the same diffs as the review's
-/// (an agent's change, a commit, a PR by its link).
+/// (an agent's change, a commit, a PR by its link, a branch).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -129,6 +129,9 @@ pub enum GuideTarget {
     /// a PR by its link; the hub reads it through forge::pr_link (one PR,
     /// one key, whatever link opened it)
     Pr { url: String },
+    /// a branch against the trunk, three dots (a feature's: the diff
+    /// feature::write_diff reads; code-viewer-width, architect m_57792)
+    Branch { name: String },
 }
 
 /// Where a diff's guide stands (the `guide` event).

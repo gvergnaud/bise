@@ -42,6 +42,7 @@ import {
   diffKey,
   diffErrKey,
   artDiffKey,
+  branchDiffKey,
   guideKey,
   type GuideEv,
   prActKey,
@@ -376,6 +377,10 @@ export class StoreReads extends StoreBase {
   /** A diff's guide (its state, the guide once written) by the diff's hash; null before the hub says. */
   guide(project: string, hash: string): GuideEv | null {
     return this.slice<GuideEv | null>(guideKey(project, hash), null);
+  }
+  /** A branch's latest diff against the trunk (branchDiffKey). */
+  branchDiff(project: string, branch: string): Diff | null {
+    return this.slice<Diff | null>(branchDiffKey(project, branch), null);
   }
   /** The latest diff of an agent's change, or of one commit (`commit`). */
   diff(project: string, agent: string, commit?: string): Diff | null {

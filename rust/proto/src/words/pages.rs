@@ -97,15 +97,9 @@ crate::words! { pages:
     /// no update log
     no_update_log = "no update log: this app never updated itself.";
 
-    // ---- a branch with no agent on it (route branch)
+    // ---- a branch with no agent on it (route branch): its guided review against the trunk
     /// the branch page's sub head
     a_branch = "a branch";
-    /// no agent works on it: the empty state's title
-    branch_no_agent = "no agent works on this branch";
-    /// why it can't be diffed
-    branch_no_diff = "its diff needs an agent on it for now.";
-    /// the link to the changes page
-    see_changes = "see the changes";
 
     // ---- a skill in a tab (page skill-panel, Gabriel's pick A; designer m_43059)
     /// the skill tab's action: its file in his editor

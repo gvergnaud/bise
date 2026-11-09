@@ -236,6 +236,8 @@ function opens(f: HubFacts, project: string, act: OptAct, tab = false): Output[]
       const to = { project, artifact: plan.id, at: plan.at };
       return [tab ? { out: "nav", to, tab: true } : { out: "nav", to }];
     }
+    case "branch":
+      return [{ out: "nav", to: { project, branch: plan.branch } }];
     case "url":
       return [{ out: "fx", fx: { fx: "openExternal", args: [plan.url] } }];
     case "sign_in":

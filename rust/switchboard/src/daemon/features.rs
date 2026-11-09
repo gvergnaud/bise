@@ -304,7 +304,7 @@ impl Shell {
     pub(super) fn snapshot_feature_acts(&self, snap: &mut crate::snapshot::Snapshot) {
         for c in snap.cards.iter_mut().filter(|c| c.kind == feature::TRY && !c.opens.contains_key(&feature::DIFF_OPTION)) {
             let Some(name) = c.place.as_deref().and_then(feature::of_place) else { continue };
-            if let Some((n, act)) = feature::try_acts(&c.kind, self.features.diff_id(name).as_deref()) {
+            if let Some((n, act)) = feature::try_acts(&c.kind, name, self.features.diff_id(name).as_deref()) {
                 c.opens.insert(n, act);
             }
         }
@@ -658,7 +658,8 @@ mod tests {
         let f = Features::load(&state, &file);
         assert_eq!(f.diff_id("cu").as_deref(), Some("cu-diff"));
         assert_eq!(f.diff_id("bims"), None, "no diff kept: its item as it is");
-        assert_eq!(feature::try_acts(feature::TRY, f.diff_id("cu").as_deref()), Some((2, bise_proto::rows::OptAct::artifact("cu-diff", None, None))));
+        let (_, act) = feature::try_acts(feature::TRY, "cu", f.diff_id("cu").as_deref()).unwrap();
+        assert!(matches!(act, bise_proto::rows::OptAct::Open { artifact: Some(ref a), .. } if a == "cu-diff"), "{act:?}");
         // archived: it opens no more
         store.archive(&crate::artifacts::Pick { ids: vec!["cu-diff".into()], ..Default::default() }, 2).unwrap();
         f.diffs_from(&state, &file);

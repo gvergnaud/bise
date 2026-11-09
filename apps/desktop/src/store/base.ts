@@ -3,7 +3,7 @@
 // the events and his actions in store.ts.
 import type { ArchivedAgent, Entry } from "@/proto";
 import type { CoreCmd, CorePort } from "@/shared/api";
-import { artDiffKey, diffErrKey, diffKey, type Ev, type FilesAnswer, type ThreadOrder } from "./types";
+import { artDiffKey, branchDiffKey, diffErrKey, diffKey, type Ev, type FilesAnswer, type ThreadOrder } from "./types";
 import type { Ask } from "./window";
 import { NO_FACTS, type HubFacts } from "./machine/types";
 
@@ -165,7 +165,9 @@ export class StoreBase {
       this.modelSentAt = this.now();
     // a review's or a .diff artifact's ask: a refusal comes back for it; asked again, its last one goes
     if (cmd.cmd === "diff" && cmd.req == null) {
-      const key = cmd.artifact != null ? artDiffKey(cmd.project, cmd.artifact, cmd.version ?? 0) : cmd.agent != null ? diffKey(cmd.project, cmd.agent, cmd.commit ?? undefined) : null;
+      const key = cmd.artifact != null ? artDiffKey(cmd.project, cmd.artifact, cmd.version ?? 0)
+        : cmd.agent != null ? diffKey(cmd.project, cmd.agent, cmd.commit ?? undefined)
+        : cmd.branch != null ? branchDiffKey(cmd.project, cmd.branch) : null;
       if (key !== null) {
         this.diffAsked.set(cmd.project, key);
         if (this.slices.get(diffErrKey(key)) != null) this.put(diffErrKey(key), null);

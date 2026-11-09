@@ -8,6 +8,7 @@ import {
   diffKey,
   diffErrKey,
   artDiffKey,
+  branchDiffKey,
   guideKey,
   type Ev,
   type HubLine,
@@ -223,9 +224,12 @@ export function applyTyped(s: Store, ev: Ev): void {
         if (!s.diffReqs.has(ev.req)) return;
         s.diffReqs.delete(ev.req);
       }
-      // a .diff artifact's, by its id and version; else an agent's change or one commit
+      // a .diff artifact's, by its id and version; a branch's (no agent, its head the branch asked);
+      // else an agent's change or one commit
       {
-        const key = ev.artifact != null ? artDiffKey(ev.project, ev.artifact, ev.version ?? 0) : diffKey(ev.project, ev.agent, ev.commit ?? undefined);
+        const key = ev.artifact != null ? artDiffKey(ev.project, ev.artifact, ev.version ?? 0)
+          : ev.agent === '' && ev.head != null && ev.head !== '' ? branchDiffKey(ev.project, ev.head)
+          : diffKey(ev.project, ev.agent, ev.commit ?? undefined);
         s.put(key, ev);
         if (s.slices.get(diffErrKey(key)) != null) s.put(diffErrKey(key), null);
       }

@@ -105,12 +105,19 @@ export interface ArtifactAt {
   readonly at: string | null;
 }
 
+/** Where the window goes: a branch's guided review (a feature try card's '2 show the diff'). */
+export interface BranchAt {
+  readonly project: string;
+  readonly branch: string;
+}
+
 /** What a step asks the shell to do, in order. */
 export type Output =
   | { readonly out: "cmd"; readonly cmd: CoreCmd }
   | ({ readonly out: "keep" } & Keep)
-  /** to the artifact's view beside its maker's thread; `tab`: in the panel's tab, the route stays */
-  | { readonly out: "nav"; readonly to: ArtifactAt; readonly tab?: true }
+  /** to the artifact's view beside its maker's thread, or a branch's review; `tab`: an artifact in
+   *  the panel's tab, the route stays */
+  | { readonly out: "nav"; readonly to: ArtifactAt | BranchAt; readonly tab?: true }
   | { readonly out: "fx"; readonly fx: Fx };
 
 /**

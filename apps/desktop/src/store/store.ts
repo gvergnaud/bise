@@ -608,6 +608,7 @@ export class Store extends StoreVoice {
 export {
   TAGS,
   artDiffKey,
+  branchDiffKey,
   diffErrKey,
   diffKey,
   takeKey,

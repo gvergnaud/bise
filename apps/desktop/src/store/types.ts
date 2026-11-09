@@ -345,6 +345,12 @@ export function diffErrKey(key: string): string {
   return `err:${key}`;
 }
 
+/** A branch's diff against the trunk, by its name (the `diff` ask's `branch`; its answer: no agent,
+ *  `head` the branch asked; a feature's try card's guided review: code-viewer-width). */
+export function branchDiffKey(project: string, branch: string): string {
+  return `diff:${project}/branch:${branch}`;
+}
+
 /** A PR's diff, by its link (the `diff` ask's `pr_url`; its answer is known by its `req`). */
 export function prDiffKey(project: string, url: string): string {
   return `diff:${project}/pr:${url}`;

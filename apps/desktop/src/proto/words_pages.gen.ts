@@ -84,12 +84,6 @@ export const pages = {
   no_update_log: "no update log: this app never updated itself.",
   /** the branch page's sub head */
   a_branch: "a branch",
-  /** no agent works on it: the empty state's title */
-  branch_no_agent: "no agent works on this branch",
-  /** why it can't be diffed */
-  branch_no_diff: "its diff needs an agent on it for now.",
-  /** the link to the changes page */
-  see_changes: "see the changes",
   /** the skill tab's action: its file in his editor */
   skill_open_editor: "Open in editor",
   /** its '…': the file in Finder */

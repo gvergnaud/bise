@@ -15,6 +15,17 @@ describe('an option the window does itself (notif-open)', () => {
     expect(optPlan({ act: 'sign_in' }, () => true)).toEqual({ t: 'sign_in' });
     expect(optPlan({ act: 'open' }, () => true)).toEqual({ t: 'none' });
   });
+  // code-viewer-width (architect m_57792): a feature try card's '2 show the diff' carries its .diff
+  // and its branch's review; this window opens the review, an older one the .diff. Mutation:
+  // optPlan without its review line turns the first case red.
+  it("an option with a branch review opens that branch's guided review, else its artifact; a newer hub's act opens nothing", () => {
+    const tryDiff = { act: 'open' as const, artifact: 'security-diff', review: { kind: 'branch' as const, name: 'security' } };
+    expect(optPlan(tryDiff, () => true)).toEqual({ t: 'branch', branch: 'security' });
+    expect(optPlan({ act: 'open', artifact: 'security-diff' }, () => true)).toEqual({ t: 'artifact', id: 'security-diff', at: null });
+    // a review of another kind is not this act's: its artifact
+    expect(optPlan({ ...tryDiff, review: { kind: 'agent', name: 'perf' } }, () => true)).toEqual({ t: 'artifact', id: 'security-diff', at: null });
+    expect(optPlan({ act: 'unknown' }, () => true)).toEqual({ t: 'none' });
+  });
   it('the frame opens at the block: its hash, the theme query kept', () => {
     expect(anchoredSrc('http://127.0.0.1:1/p/issue-15?theme=dark', 'm-pr16')).toBe('http://127.0.0.1:1/p/issue-15?theme=dark#m-pr16');
     expect(anchoredSrc('http://h/p/a?theme=light#old', 'b')).toBe('http://h/p/a?theme=light#b');

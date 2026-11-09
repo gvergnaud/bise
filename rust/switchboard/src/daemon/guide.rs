@@ -41,6 +41,7 @@ fn target_key(t: &GuideTarget) -> String {
         GuideTarget::Commit { sha, .. } => format!("commit:{}", sha),
         // one PR, one key, whatever link opened it (forge::pr_link's, the PR artifacts' key)
         GuideTarget::Pr { url } => format!("pr:{}", crate::forge::pr_link(url).map_or_else(|| url.clone(), |l| l.url)),
+        GuideTarget::Branch { name } => format!("branch:{}", name),
     }
 }
 
@@ -63,6 +64,8 @@ impl Shell {
             GuideTarget::Agent { name } => crate::proto_view::DiffAsk { agent: Some(name.clone()), ..Default::default() },
             GuideTarget::Commit { agent, sha } => crate::proto_view::DiffAsk { agent: Some(agent.clone()), commit: Some(sha.clone()), ..Default::default() },
             GuideTarget::Pr { url } => crate::proto_view::DiffAsk { pr_url: Some(url.clone()), ..Default::default() },
+            // a feature's branch against the trunk (code-viewer-width; ref_ok in check)
+            GuideTarget::Branch { name } => crate::proto_view::DiffAsk { branch: Some(name.clone()), ..Default::default() },
         };
         if let Err(e) = ask.check() {
             if let Why::Open { to, .. } = why {
@@ -168,5 +171,18 @@ impl Shell {
                 self.guide_want(GuideTarget::Agent { name: name.into() }, Why::MergeCard);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// code-viewer-width (architect m_57792): a branch's guide has its own
+    /// key, never an agent's or a commit's of the same name.
+    #[test]
+    fn a_branchs_guide_is_kept_by_its_name() {
+        assert_eq!(target_key(&GuideTarget::Branch { name: "security".into() }), "branch:security");
+        assert_ne!(target_key(&GuideTarget::Branch { name: "x".into() }), target_key(&GuideTarget::Agent { name: "x".into() }));
     }
 }

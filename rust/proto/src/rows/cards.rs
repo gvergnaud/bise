@@ -54,10 +54,20 @@ pub enum OptAct {
         // office-artifacts lands on main (architect m_24679)
         #[serde(default, skip_serializing_if = "Option::is_none")]
         at: Option<String>,
+        /// the diff's guided review to open instead (code-viewer-width,
+        /// architect m_57792): a feature's branch for the try item's
+        /// `2 show the diff`. An older client ignores it and opens
+        /// `artifact` (the .diff) as before
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        review: Option<crate::diff::GuideTarget>,
     },
     /// the client's own ChatGPT sign-in; the hub closes the item once
     /// the sign-in is back
     SignIn,
+    /// an act this client doesn't know (a newer hub's): the option does
+    /// nothing here, and the card still reads (architect m_57792)
+    #[serde(other)]
+    Unknown,
 }
 
 /// The hub's items with numbered options, about a place: opened and
@@ -131,21 +141,25 @@ impl Card {
 impl OptAct {
     /// Open a page in his browser (a merge's PR, an update's notes).
     pub fn link(url: Option<&str>) -> OptAct {
-        OptAct::Open { url: url.map(str::to_string), artifact: None, at: None }
+        OptAct::Open { url: url.map(str::to_string), artifact: None, at: None, review: None }
     }
 
     /// Open artifact `id` at `at` in the app; `url` for a client that
     /// can't (or when it is gone).
     pub fn artifact(id: &str, at: Option<&str>, url: Option<&str>) -> OptAct {
-        OptAct::Open { url: url.map(str::to_string), artifact: Some(id.to_string()), at: at.map(str::to_string) }
+        OptAct::Open { url: url.map(str::to_string), artifact: Some(id.to_string()), at: at.map(str::to_string), review: None }
     }
 }
 
 /// A card's `opens` as the hub's snapshot holds them (`{"<n>": <act>}`):
-/// the ones that read, keyed by option. Pure.
+/// the ones that read, keyed by option; an act it doesn't know is none
+/// (never given on as `Unknown`). Pure.
 pub fn opens_of(v: Option<&serde_json::Value>) -> BTreeMap<u32, OptAct> {
     let Some(m) = v.and_then(serde_json::Value::as_object) else { return BTreeMap::new() };
-    m.iter().filter_map(|(k, a)| Some((k.parse().ok()?, serde_json::from_value(a.clone()).ok()?))).collect()
+    m.iter()
+        .filter_map(|(k, a)| Some((k.parse().ok()?, serde_json::from_value(a.clone()).ok()?)))
+        .filter(|(_, a)| *a != OptAct::Unknown)
+        .collect()
 }
 
 /// Where a card points on a page (a question block, a step of a plan).
@@ -487,6 +501,15 @@ mod open_tests {
         assert_eq!(serde_json::to_value(OptAct::link(Some("https://x.test/pull/1"))).unwrap(), json!({"act": "open", "url": "https://x.test/pull/1"}));
         // an older hub's Open {url} still reads
         assert_eq!(serde_json::from_value::<OptAct>(json!({"act": "open", "url": "u"})).unwrap(), OptAct::link(Some("u")));
+        // code-viewer-width (architect m_57792): a newer hub's act reads as Unknown, the card
+        // with it (a released client errored on it and lost the whole row); a review rides on Open
+        assert_eq!(serde_json::from_value::<OptAct>(json!({"act": "review", "branch": "x"})).unwrap(), OptAct::Unknown);
+        let opt: Opt = serde_json::from_value(json!({"n": 2, "label": "show the diff", "act": {"act": "later"}})).unwrap();
+        assert_eq!((opt.n, opt.act), (2, Some(OptAct::Unknown)));
+        let review = json!({"act": "open", "artifact": "cu-diff", "review": {"kind": "branch", "name": "cu"}});
+        let read: OptAct = serde_json::from_value(review.clone()).unwrap();
+        assert_eq!(read, OptAct::Open { url: None, artifact: Some("cu-diff".into()), at: None, review: Some(crate::diff::GuideTarget::Branch { name: "cu".into() }) });
+        assert_eq!(serde_json::to_value(&read).unwrap(), review);
         // the snapshot's opens: bad keys and shapes are dropped
         let opens = opens_of(Some(&json!({"1": wire, "x": wire, "2": {"act": "nope"}})));
         assert_eq!(opens.into_iter().collect::<Vec<_>>(), vec![(1, a.clone())]);

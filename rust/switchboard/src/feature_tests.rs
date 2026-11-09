@@ -437,16 +437,23 @@ fn the_handoff_brief_says_what_failed_and_the_steps() {
     assert!(t.contains("cu has no live agent.") && t.contains("what failed: it failed: x"), "{t}");
 }
 
-/// try-diff-open (architect m_52963): the try item's `2 show the diff`
-/// opens the feature's diff artifact in the client, nothing sent (the
-/// row's act, read by both clients; the wire: core_place_tests); no diff
-/// kept, or another kind: no act.
+/// try-diff-open (architect m_52963), code-viewer-width (m_57792): the
+/// try item's `2 show the diff` opens the guided review of the feature's
+/// branch in the client, and carries the feature's diff artifact for a
+/// client that can't (an older one); nothing sent (the row's act, read by
+/// both clients; the wire: core_place_tests); no diff kept, or another
+/// kind: no act.
 #[test]
-fn the_try_items_show_the_diff_opens_its_artifact() {
-    let act = bise_proto::rows::OptAct::artifact("cu-diff", None, None);
-    assert_eq!(try_acts(TRY, Some("cu-diff")), Some((2, act.clone())));
-    assert_eq!(try_acts(TRY, None), None, "no diff kept yet");
-    assert_eq!(try_acts(MERGE, Some("cu-diff")), None, "the merge item's 2 is keep working");
+fn the_try_items_show_the_diff_opens_its_branchs_review() {
+    let act = bise_proto::rows::OptAct::Open {
+        url: None,
+        artifact: Some("cu-diff".into()),
+        at: None,
+        review: Some(bise_proto::diff::GuideTarget::Branch { name: "cu".into() }),
+    };
+    assert_eq!(try_acts(TRY, "cu", Some("cu-diff")), Some((2, act)));
+    assert_eq!(try_acts(TRY, "cu", None), None, "no diff kept yet");
+    assert_eq!(try_acts(MERGE, "cu", Some("cu-diff")), None, "the merge item's 2 is keep working");
     // its artifact: one per feature, the tip in its title
     let add = diff_artifact("cu", "abc1234", Path::new("/s/features/cu.diff"));
     assert_eq!((add.id.as_deref(), add.title.as_deref(), add.kind.as_deref()), (Some("cu-diff"), Some("cu at abc1234"), Some("code")));

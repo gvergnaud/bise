@@ -8,6 +8,8 @@ import type { Card } from '@/proto';
 import type { InboxCardActs } from '@/inbox/InboxCard';
 import { chipOpen } from '@/inbox/about';
 import { artifactAsk, cardRoute } from '@/shared/asks';
+import { formatRoute } from '@/app/route';
+import { navRoute } from '@/app/edge';
 import type { Effect, FxName, Intent } from '@/store/machine/types';
 import type { BiseApi } from '@/shared/api';
 
@@ -52,7 +54,8 @@ export function capsuleCardActs(store: { do: (i: Intent) => unknown }, c: Card, 
 export function runCapsuleEffect(e: Effect, bise: CapsuleBise | undefined): void {
   switch (e.out) {
     case 'nav':
-      bise?.openWindow(artifactAsk(e.to));
+      // a branch's review: the main window on its screen; an artifact: its panel's tab
+      bise?.openWindow('branch' in e.to ? formatRoute(navRoute(e.to)) : artifactAsk(e.to));
       return;
     case 'fx':
       void bise?.[e.fx.fx](...e.fx.args);

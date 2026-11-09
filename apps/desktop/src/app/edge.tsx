@@ -16,6 +16,7 @@ import { useRouter, type Router } from './router';
 
 /** The route a move goes to: the artifact's view beside its maker's thread. Pure. */
 export function navRoute(to: Extract<Effect, { out: 'nav' }>['to']): Route {
+  if ('branch' in to) return { screen: 'branch', project: to.project, branch: to.branch };
   return routeOfOpen({ project: to.project, what: 'artifact', id: to.artifact });
 }
 
@@ -31,6 +32,11 @@ export function askEffect(route: string): Extract<Effect, { out: 'nav' }> | unde
 
 /** A move: the artifact's view at its block, in the panel's tab (`tab`) or through `router`. */
 export function runNav(e: Extract<Effect, { out: 'nav' }>, router: Pick<Router, 'go'> | null): void {
+  // a branch's guided review: its own screen (code-viewer-width)
+  if ('branch' in e.to) {
+    router?.go(navRoute(e.to));
+    return;
+  }
   if (e.to.at !== null) openAtAnchor(`${e.to.project}/${e.to.artifact}`, e.to.at);
   // a card's chip: the panel's tab only, the thread and its open card stay (his m_47572)
   if (e.tab === true) openTab({ kind: 'artifact', project: e.to.project, id: e.to.artifact });

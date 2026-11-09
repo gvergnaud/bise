@@ -292,7 +292,9 @@ function modelEffects(f: HubFacts, input: Input): Effect[] {
   const it = input.intent;
   if (it.i !== "pick") return [];
   const act = f.rows.find((r) => r.project === it.project)?.cards?.find((c) => c.id === it.card)?.options.find((o) => o.n === it.n)?.act ?? null;
-  if (act === null || act.act === "sign_in") return [];
+  if (act === null || act.act === "sign_in" || act.act === "unknown") return [];
+  // a branch's guided review before its artifact (code-viewer-width)
+  if (act.review?.kind === "branch") return [{ out: "nav", to: { project: it.project, branch: act.review.name } }];
   const arts = f.artifacts[it.project] ?? [];
   const id = act.artifact ?? null;
   const url = act.url ?? null;

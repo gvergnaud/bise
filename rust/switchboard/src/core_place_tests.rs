@@ -237,9 +237,10 @@ fn a_feature_item_runs_his_answer_until_its_step_ends() {
     // snapshot_feature_acts), 1 and 3 answer
     let mut snap = t.hub.snapshot(0);
     let c = snap.cards.iter_mut().find(|c| c.id == try_id).unwrap();
-    c.opens.extend(crate::feature::try_acts(&c.kind, Some("cu-diff")));
+    c.opens.extend(crate::feature::try_acts(&c.kind, "cu", Some("cu-diff")));
     let row = crate::proto_view::cards(&snap, "p", 0, |_| true).0.into_iter().find(|c| c.id == try_id).unwrap();
-    let acts: Vec<(u32, bool)> = row.options.iter().map(|o| (o.n, o.act == Some(bise_proto::rows::OptAct::artifact("cu-diff", None, None)))).collect();
+    let act = crate::feature::try_acts(crate::feature::TRY, "cu", Some("cu-diff")).map(|(_, a)| a);
+    let acts: Vec<(u32, bool)> = row.options.iter().map(|o| (o.n, o.act.is_some() && o.act == act)).collect();
     assert_eq!(acts, vec![(1, false), (2, true), (3, false)]);
     t.user(MAIN, &format!("/answer {} 1", try_id));
     assert_eq!(running(&mut t, try_id), Some(true), "its try builds");

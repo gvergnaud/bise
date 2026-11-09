@@ -25,16 +25,6 @@
     "one": null,
     "text": "asks you"
   },
-  "pages.branch_no_agent": {
-    "args": [],
-    "one": null,
-    "text": "no agent works on this branch"
-  },
-  "pages.branch_no_diff": {
-    "args": [],
-    "one": null,
-    "text": "its diff needs an agent on it for now."
-  },
   "pages.copied": {
     "args": [],
     "one": null,
@@ -406,11 +396,6 @@
     "args": [],
     "one": null,
     "text": "mark this file viewed (v): its card folds"
-  },
-  "pages.see_changes": {
-    "args": [],
-    "one": null,
-    "text": "see the changes"
   },
   "pages.server_up": {
     "args": [],

@@ -561,11 +561,14 @@ pub fn home_short(p: &str) -> String {
 pub const DIFF_OPTION: u32 = 2;
 
 /// The try item's options' acts (a client's, never sent, the item stays):
-/// its `2 show the diff` opens `diff`, the feature's diff artifact, when
-/// there is one (none: the item as it is). Pure.
-pub fn try_acts(kind: &str, diff: Option<&str>) -> Option<(u32, bise_proto::rows::OptAct)> {
+/// its `2 show the diff` opens the guided review of feature `name`'s
+/// branch (code-viewer-width, architect m_57792), and `diff`, the
+/// feature's diff artifact, for a client that can't (an older one); when
+/// there is a diff (none: the item as it is). Pure.
+pub fn try_acts(kind: &str, name: &str, diff: Option<&str>) -> Option<(u32, bise_proto::rows::OptAct)> {
     (kind == TRY).then_some(())?;
-    Some((DIFF_OPTION, bise_proto::rows::OptAct::artifact(diff?, None, None)))
+    let review = bise_proto::diff::GuideTarget::Branch { name: name.to_string() };
+    Some((DIFF_OPTION, bise_proto::rows::OptAct::Open { url: None, artifact: Some(diff?.to_string()), at: None, review: Some(review) }))
 }
 
 /// Each feature's diff artifact, by feature: of `names`, the stored

@@ -133,6 +133,7 @@ export const hub_ev: readonly HubEv[] = [
   {"detail":{"body":"Every colour goes through the **tokens**: dark mode follows the system.","checks":[{"name":"ci / test","state":"pass"},{"name":"lint","state":"pass"},{"name":"e2e","state":"pass"}],"notes":[{"at_ms":1790000000000,"author":"bob","body":"tokens read well in both themes","verdict":"approved"}]},"ev":"pr_detail","project":"acme-1a2b3c4d","req":10,"url":"https://github.com/acme/web/pull/418"},
   {"ev":"guide","guide":{"overview":"the slow path caches its plan now; the hot loop reads the cache","parts":[{"area":"Planner","hunks":["3fa9c0d2e1"],"summary":"slow() keeps its plan in a cache keyed by the query","title":"Cache the plan once","weight":"critical"}],"rest":[]},"hash":"9f2c41d07a3be815","project":"acme-1a2b3c4d","state":"ready"},
   {"ev":"guide","hash":"0b7e6a5f4c3d2e1f","model":"anthropic/claude-opus-5-5","project":"acme-1a2b3c4d","state":"needs_click","tokens":5200},
+  {"cards":[{"agent":"main","id":924,"kind":"feature_try","options":[{"label":"try it","n":1},{"act":{"act":"open","artifact":"security-diff","review":{"kind":"branch","name":"security"}},"label":"show the diff","n":2},{"label":"not yet","n":3}],"place":"feature:security","project":"acme-1a2b3c4d","question":"security is ready to try","rank":1,"since_ms":1791100350000,"urgent":false}],"ev":"cards","project":"acme-1a2b3c4d"},
 ];
 
 /** rust/proto/fixtures/hub_cmd.jsonl */

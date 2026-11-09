@@ -3,6 +3,7 @@
 // ids, positions and *_ms are numbers (u64 in Rust, safe below 2^53).
 
 import type { Anchor } from './anchor';
+import type { GuideTarget } from './diff';
 import type { Queued } from './draft';
 
 /**
@@ -237,7 +238,14 @@ artifact?: string | null,
 /**
  * where in it: a block's or an item's id on a page
  */
-at?: string | null, } | { "act": "sign_in" };
+at?: string | null, 
+/**
+ * the diff's guided review to open instead (code-viewer-width,
+ * architect m_57792): a feature's branch for the try item's
+ * `2 show the diff`. An older client ignores it and opens
+ * `artifact` (the .diff) as before
+ */
+review?: GuideTarget | null, } | { "act": "sign_in" } | { "act": "unknown" };
 
 /**
  * A numbered option of a card.
