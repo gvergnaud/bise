@@ -122,6 +122,10 @@ pub enum CoreEv {
         on: bool,
         ready: bool,
         rows: Vec<CuRow>,
+        /// the browser profiles with the extension (the Profiles group,
+        /// shown from two), the default marked; none until a check came
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        profiles: Vec<CuProfile>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         said: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]

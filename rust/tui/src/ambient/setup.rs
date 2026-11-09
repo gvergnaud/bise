@@ -178,6 +178,10 @@ pub struct CuPorts {
     pub fix: CuFixFn,
     /// the live test, once at a time
     pub live_test: Box<dyn Fn(&CuBusy)>,
+    /// a browser profile made the default or forgotten (`default` |
+    /// `forget`, his click only): the broker's (`bise computer-use
+    /// default`); the next check shows it
+    pub profile: Box<dyn Fn(&str, &bise_proto::app_rows::CuProfileKey) -> Result<(), String>>,
 }
 
 /// Everything the setup commands read or write.
@@ -730,6 +734,7 @@ pub fn live(flow: FlowFn) -> SetupPorts {
             }),
             fix: Box::new(|check, fix, busy, tx| crate::computer_use::fix(check, fix, busy, move |t| drop(tx.send(Done::CuSaid(t))))),
             live_test: Box::new(crate::computer_use::live_test),
+            profile: Box::new(crate::computer_use::profile_act),
         },
     }
 }

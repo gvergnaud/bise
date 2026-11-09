@@ -33,6 +33,8 @@ struct World {
     cu_fixes: Vec<String>,
     cu_live_tests: usize,
     cu_offs: Vec<bool>,
+    /// his profile acts (act, browser, dir)
+    cu_profiles: Vec<(String, String, String)>,
     /// settings · Setup's live tests asked (model, generation) and the
     /// channel of the last one, to end them from the test
     model_tests: Vec<(String, u64)>,
@@ -96,6 +98,7 @@ fn setup(t: &mut T) -> Rc<RefCell<World>> {
     let (n, o, q, r, u, v) = (w.clone(), w.clone(), w.clone(), w.clone(), w.clone(), w.clone());
     let (x, y, z, mt) = (w.clone(), w.clone(), w.clone(), w.clone());
     let mf = w.clone();
+    let cp = w.clone();
     let gi = w.clone();
     let ym = w.clone();
     let (ck, rc) = (w.clone(), w.clone());
@@ -315,6 +318,10 @@ fn setup(t: &mut T) -> Rc<RefCell<World>> {
                 (f == "add_extension").then(|| "opened · path copied".to_string())
             }),
             live_test: Box::new(move |_| v.borrow_mut().cu_live_tests += 1),
+            profile: Box::new(move |act, k| {
+                cp.borrow_mut().cu_profiles.push((act.into(), k.browser.clone(), k.dir.clone()));
+                Ok(())
+            }),
         },
         roles: Box::new(move || {
             let main = x.borrow().role_sets.iter().rev().find(|(r, _, _)| r == "main").and_then(|(_, m, _)| m.clone()).unwrap_or_else(|| "mistral/m".into());
@@ -865,6 +872,25 @@ fn computer_use_polls_while_its_page_is_open_and_fixes_on_his_act() {
     t.until(|o| evs(o, "computer_use").iter().any(|e| e["said"] == "repair failed"));
     assert_eq!(w.borrow().cu_fixes, ["add_extension", "repair"]);
     t.take();
+
+    // two Chrome profiles: the Profiles group's rows, the default marked; his
+    // Make default goes to the broker and the rows say it before the next poll
+    let two = json!({"browser": "Chrome", "rows": [], "profiles": [
+        {"key": {"browser": "chrome", "dir": "Default"}, "browser_name": "Chrome", "name": "pro", "email": "gabriel@work.com", "connected": true, "default": true},
+        {"key": {"browser": "chrome", "dir": "Profile 1"}, "browser_name": "Chrome", "name": "perso", "connected": false, "default": false}
+    ]});
+    tx.send(Done::CuCheck(two)).unwrap();
+    t.until(|o| evs(o, "computer_use").iter().any(|e| e["profiles"].as_array().is_some_and(|p| p.len() == 2)));
+    let ev = evs(&t.take(), "computer_use").last().copied().cloned().unwrap();
+    assert_eq!((ev["profiles"][0]["default"].as_bool(), ev["profiles"][1].get("default")), (Some(true), None));
+    app(&mut t, r#"{"cmd":"computer_use","act":"default","profile":{"browser":"chrome","dir":"Profile 1"}}"#);
+    let ev = evs(&t.take(), "computer_use")[0].clone();
+    assert_eq!((ev["profiles"][0].get("default"), ev["profiles"][1]["default"].as_bool()), (None, Some(true)));
+    app(&mut t, r#"{"cmd":"computer_use","act":"forget","profile":{"browser":"chrome","dir":"Default"}}"#);
+    assert_eq!(evs(&t.take(), "computer_use")[0]["profiles"].as_array().map(Vec::len), Some(1));
+    assert_eq!(w.borrow().cu_profiles, [("default".into(), "chrome".into(), "Profile 1".into()), ("forget".into(), "chrome".into(), "Default".into())]);
+    app(&mut t, r#"{"cmd":"computer_use","act":"default"}"#);
+    assert!(evs(&t.take(), "error")[0]["text"].as_str().is_some_and(|e| e.contains("which profile")));
 
     app(&mut t, r#"{"cmd":"computer_use","act":"leave"}"#);
     assert!(stop.load(std::sync::atomic::Ordering::SeqCst), "leave stops the poll");

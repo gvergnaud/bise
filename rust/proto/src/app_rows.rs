@@ -753,6 +753,37 @@ pub struct CuRow {
     pub apps: bool,
 }
 
+/// A browser profile with the bise extension (computer use with several
+/// Chrome profiles; settings · computer use's Profiles group): seen once
+/// (`~/.bise/computer-use/profiles.json`), open now or not.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct CuProfile {
+    /// the browser's key ("chrome") and the profile's dir ("Profile 1")
+    pub key: CuProfileKey,
+    /// the browser as he reads it ("Chrome")
+    pub browser_name: String,
+    /// the name Chrome shows ("pro")
+    pub name: String,
+    /// its Google account, when one is signed in
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
+    /// its extension is connected now (else: the browser or the profile isn't open)
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub connected: bool,
+    /// agents use it when they name none
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub default: bool,
+}
+
+/// A browser profile's key: what `computer_use {act: default|forget}` takes.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct CuProfileKey {
+    pub browser: String,
+    pub dir: String,
+}
+
 /// An agent that uses computer use now (S29, `computer_live`): one entry
 /// of the machine's state.json (`bise_computer_use::state::agents`),
 /// idle agents absent.

@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { AppCmd, CoreEv } from '@/proto';
 import { AppIcon, Button, Group, Help, Toggle, type AppIconName, type GroupItem } from '@/ds';
 import { chromeCase } from './chrome';
+import { ProfilesGroup } from './cuProfiles';
 import { settings } from '@/proto/words.gen';
 
 export type ComputerUse = Extract<CoreEv, { ev: 'computer_use' }>;
@@ -142,6 +143,7 @@ export function Computer({ cu, send }: { cu: ComputerUse | null; send: (cmd: App
       />
       {on && web.length === 0 && <Help>{settings.cu_checking}</Help>}
       {on && web.length > 0 && <Group title={settings.cu_web} testId="settings.cu.web" items={web.map(row)} />}
+      {on && <ProfilesGroup profiles={cu?.profiles ?? []} send={send} />}
       {on && apps.length > 0 && <Group title={settings.cu_apps} testId="settings.cu.apps" items={apps.map(row)} />}
       {cu?.said != null && <Help err>{cu.said}</Help>}
       {/* the removal, a row at the page's end that asks once (designer m_43882): no red link */}

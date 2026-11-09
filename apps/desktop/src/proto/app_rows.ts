@@ -602,6 +602,42 @@ fix?: string | null,
 apps?: boolean, };
 
 /**
+ * A browser profile with the bise extension (computer use with several
+ * Chrome profiles; settings · computer use's Profiles group): seen once
+ * (`~/.bise/computer-use/profiles.json`), open now or not.
+ */
+export type CuProfile = { 
+/**
+ * the browser's key ("chrome") and the profile's dir ("Profile 1")
+ */
+key: CuProfileKey, 
+/**
+ * the browser as he reads it ("Chrome")
+ */
+browser_name: string, 
+/**
+ * the name Chrome shows ("pro")
+ */
+name: string, 
+/**
+ * its Google account, when one is signed in
+ */
+email?: string | null, 
+/**
+ * its extension is connected now (else: the browser or the profile isn't open)
+ */
+connected?: boolean, 
+/**
+ * agents use it when they name none
+ */
+default?: boolean, };
+
+/**
+ * A browser profile's key: what `computer_use {act: default|forget}` takes.
+ */
+export type CuProfileKey = { browser: string, dir: string, };
+
+/**
  * An agent that uses computer use now (S29, `computer_live`): one entry
  * of the machine's state.json (`bise_computer_use::state::agents`),
  * idle agents absent.

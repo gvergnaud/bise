@@ -549,7 +549,34 @@ fn browser_rows(paths: &Paths) -> Value {
         "live_test": last,
         "extension": {"id": browsers::EXTENSION_ID, "dir": extension_dir(paths).map(|d| d.display().to_string())},
         "rows": [browser_row, ext_row, test_row],
+        "profiles": profile_rows(live.as_ref()),
     })
+}
+
+/// The browser profiles of the broker's status (ctl: with the email),
+/// connected or known, the default marked: the Profiles group's rows.
+/// Pure.
+pub fn profile_rows(live: Option<&Value>) -> Value {
+    let rows: Vec<Value> = live
+        .and_then(|l| l["browsers"].as_array())
+        .into_iter()
+        .flatten()
+        .filter_map(|b| {
+            let p = b.get("profile")?;
+            let mut v = json!({
+                "key": {"browser": p["browser"], "dir": p["dir"]},
+                "browser_name": b["name"],
+                "name": p["name"],
+                "connected": b["connected"] == true,
+                "default": p["default"] == true,
+            });
+            if let Some(e) = p.get("email").and_then(Value::as_str) {
+                v["email"] = json!(e);
+            }
+            Some(v)
+        })
+        .collect();
+    Value::Array(rows)
 }
 
 // ---- live test ----

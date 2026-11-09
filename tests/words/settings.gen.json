@@ -548,6 +548,99 @@
     "one": null,
     "text": "off: agents never touch your browser or apps"
   },
+  "settings.cu_profile_add": {
+    "args": [],
+    "one": null,
+    "text": "Connect another profile"
+  },
+  "settings.cu_profile_add_title": {
+    "args": [],
+    "one": null,
+    "text": "Connect another Chrome profile"
+  },
+  "settings.cu_profile_cancel": {
+    "args": [],
+    "one": null,
+    "text": "Cancel"
+  },
+  "settings.cu_profile_connected": {
+    "args": [],
+    "one": null,
+    "text": "✓ connected"
+  },
+  "settings.cu_profile_default": {
+    "args": [],
+    "one": null,
+    "text": "Default"
+  },
+  "settings.cu_profile_default_tip": {
+    "args": [],
+    "one": null,
+    "text": "agents use this profile unless you name another"
+  },
+  "settings.cu_profile_done": {
+    "args": [],
+    "one": null,
+    "text": "Done"
+  },
+  "settings.cu_profile_forget": {
+    "args": [],
+    "one": null,
+    "text": "Forget this profile"
+  },
+  "settings.cu_profile_make_default": {
+    "args": [],
+    "one": null,
+    "text": "Make default"
+  },
+  "settings.cu_profile_not_open": {
+    "args": [],
+    "one": null,
+    "text": "○ not open"
+  },
+  "settings.cu_profile_not_open_tip": {
+    "args": [],
+    "one": null,
+    "text": "open Chrome in this profile and agents can use it again"
+  },
+  "settings.cu_profile_step_add": {
+    "args": [],
+    "one": null,
+    "text": "Add the bise extension there, the same way as the first time."
+  },
+  "settings.cu_profile_step_back": {
+    "args": [],
+    "one": null,
+    "text": "Come back here: bise sees it."
+  },
+  "settings.cu_profile_step_open": {
+    "args": [],
+    "one": null,
+    "text": "Open Chrome in that profile."
+  },
+  "settings.cu_profile_step_open_hint": {
+    "args": [],
+    "one": null,
+    "text": "Click your avatar at the top right of Chrome, then the profile."
+  },
+  "settings.cu_profile_sub": {
+    "args": [
+      "browser",
+      "email"
+    ],
+    "one": null,
+    "text": "{browser} · {email}"
+  },
+  "settings.cu_profile_waiting": {
+    "args": [],
+    "one": null,
+    "text": "waiting for Chrome…"
+  },
+  "settings.cu_profiles_head": {
+    "args": [],
+    "one": null,
+    "text": "Profiles"
+  },
   "settings.cu_ready": {
     "args": [],
     "one": null,

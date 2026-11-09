@@ -101,6 +101,8 @@ pub(super) fn status(sh: &Arc<Shared>, agent: Option<&str>) -> Value {
 /// `status` for the commands: C1's plus every agent.
 pub(super) fn full_status(sh: &Arc<Shared>) -> Value {
     let mut v = status(sh, None);
+    // his commands' socket (never an agent's): the profiles' emails, for Settings
+    v["browsers"] = browsers_json(sh, true);
     let inner = lock(&sh.inner);
     v["agents"] = state::render(&inner.agents, json!([]), json!({}))["agents"].clone();
     v["sessions"] = json!(inner.sessions.iter().filter(|(_, n)| **n > 0).map(|(k, _)| k.clone()).collect::<Vec<_>>());

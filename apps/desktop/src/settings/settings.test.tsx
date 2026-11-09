@@ -376,6 +376,42 @@ describe('computer use', () => {
     ]);
   });
 
+  // two Chrome profiles (designer m_58124): the Profiles group, Default on one, ✓ connected / ○ not
+  // open, ⋯ = Make default (never on the default) and Forget; one profile: no group
+  it('the Profiles group lists his browser profiles, the default, and acts on his click', async () => {
+    const two: ComputerUse['profiles'] = [
+      { key: { browser: 'chrome', dir: 'Default' }, browser_name: 'Chrome', name: 'pro', email: 'gabriel@work.com', connected: true, default: true },
+      { key: { browser: 'chrome', dir: 'Profile 1' }, browser_name: 'Chrome', name: 'perso', connected: false },
+    ];
+    const menus: string[][] = [];
+    (window as { bise?: object }).bise = { popupMenu: (items: { id: string }[]) => { menus.push(items.map((i) => i.id)); return Promise.resolve(items[0]?.id ?? null); } };
+    const p = ports();
+    const { unmount } = view('computer', p, { computerUse: { ...cu(), profiles: two } });
+    const pro = screen.getByTestId('settings.cu.profile.chrome/Default');
+    expect(screen.getByTestId('settings.cu.profiles').textContent).toContain('Chrome · gabriel@work.com');
+    expect(screen.getByTestId('settings.cu.profile.chrome/Default.default').textContent).toBe('Default');
+    expect(pro.textContent).toContain('✓ connected');
+    expect(screen.queryByTestId('settings.cu.profile.chrome/Profile 1.default')).toBeNull();
+    expect(screen.getByTestId('settings.cu.profile.chrome/Profile 1.status').textContent).toBe('○ not open');
+    fireEvent.click(screen.getByTestId('settings.cu.profile.chrome/Profile 1.more'));
+    fireEvent.click(screen.getByTestId('settings.cu.profile.chrome/Default.more'));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(menus).toEqual([['default', 'forget'], ['forget']]);
+    expect(p.sent.filter((c) => c.cmd === 'computer_use' && c.act !== 'check')).toEqual([
+      { cmd: 'computer_use', act: 'default', profile: { browser: 'chrome', dir: 'Profile 1' } },
+      { cmd: 'computer_use', act: 'forget', profile: { browser: 'chrome', dir: 'Default' } },
+    ]);
+    // Connect another profile: the steps, a wait until a new one connects
+    fireEvent.click(screen.getByTestId('settings.cu.profiles.add'));
+    expect(screen.getByTestId('settings.cu.profiles.add.steps').querySelectorAll('li')).toHaveLength(3);
+    expect(screen.getByTestId('settings.cu.profiles.add.waiting').textContent).toBe('waiting for Chrome…');
+    unmount();
+    view('computer', ports(), { computerUse: { ...cu(), profiles: two.slice(0, 1) } });
+    expect(screen.queryByTestId('settings.cu.profiles')).toBeNull();
+    delete (window as { bise?: object }).bise;
+  });
+
   // the screen (screen.tsx) hands the page a new `send` on each of its renders, and it renders on
   // every core event: the page checks once while it is open, it never leaves and checks again
   it('a re-render with a new send neither leaves nor checks again (the stuck check)', () => {

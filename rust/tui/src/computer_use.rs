@@ -261,6 +261,32 @@ pub(crate) fn stop(dir: &str) {
     });
 }
 
+/// His click in Settings' Profiles group: `default` or `forget` that
+/// browser profile, on the broker's commands' socket (it writes
+/// profiles.json).
+pub(crate) fn profile_act(act: &str, key: &bise_proto::app_rows::CuProfileKey) -> Result<(), String> {
+    let args = serde_json::json!({"browser": key.browser, "dir": key.dir});
+    bise_computer_use::cli::control(&bise_computer_use::paths::Paths::from_env(), act, &args).map(drop)
+}
+
+/// The Profiles group's rows from a setup check (`cli::profile_rows`). Pure.
+pub(crate) fn profiles(check: &Value) -> Vec<bise_proto::app_rows::CuProfile> {
+    check.get("profiles").cloned().and_then(|v| serde_json::from_value(v).ok()).unwrap_or_default()
+}
+
+/// A check after his `default` / `forget`, until the next poll says it. Pure.
+pub(crate) fn profile_moved(check: &mut Value, act: &str, browser: &str, dir: &str) {
+    let Some(list) = check.get_mut("profiles").and_then(Value::as_array_mut) else { return };
+    let is = |p: &Value| p["key"]["browser"] == browser && p["key"]["dir"] == dir;
+    if act == "forget" {
+        list.retain(|p| !is(p));
+        return;
+    }
+    for p in list.iter_mut() {
+        p["default"] = Value::Bool(is(p));
+    }
+}
+
 /// `? you took the wheel · ⏎ give it back`: the user gives it back.
 pub(crate) fn give_back(agent: &str) {
     fire(&["resume", agent]);

@@ -321,10 +321,14 @@ pub enum AppCmd {
     /// computer use (P.2): `act` on | off | uninstall | check (its page is
     /// open: the setup check runs, once a second, until leave or 2 min
     /// without a check) | leave | fix (`fix`: a row's fix, his click only)
+    /// | default | forget (`profile`: a browser profile of the Profiles
+    /// group, his click only)
     ComputerUse {
         act: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         fix: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        profile: Option<CuProfileKey>,
     },
     /// the projects the window shows now (replaces the set; on load and on
     /// each route change): the core holds their hubs and sends their

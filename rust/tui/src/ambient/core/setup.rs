@@ -639,7 +639,7 @@ impl Core {
             }
             AppCmd::SetupTest { models } => ("setup_test", self.setup_test(models)),
             AppCmd::HelperPerms { mic, accessibility, screen } => ("helper_perms", self.helper_perms(mic, accessibility, screen)),
-            AppCmd::ComputerUse { act, fix } => ("computer_use", self.computer_use(&act, fix.as_deref())),
+            AppCmd::ComputerUse { act, fix, profile } => ("computer_use", self.computer_use(&act, fix.as_deref(), profile.as_ref())),
             other => return self.setup_error("setup", &format!("not a setup command: {other:?}")),
         };
         if let Err(e) = res {
@@ -648,8 +648,9 @@ impl Core {
     }
 
     /// One act of computer use's page: on, off, uninstall, check (start
-    /// or keep its poll), leave (stop it), fix (a row's button).
-    fn computer_use(&mut self, act: &str, fix: Option<&str>) -> Result<(), String> {
+    /// or keep its poll), leave (stop it), fix (a row's button), default
+    /// or forget (a browser profile of the Profiles group).
+    fn computer_use(&mut self, act: &str, fix: Option<&str>, profile: Option<&bise_proto::app_rows::CuProfileKey>) -> Result<(), String> {
         let s = self.setup.as_mut().ok_or("this core has no setup")?;
         match act {
             "on" => (s.ports.cu.set_on)(true),
@@ -688,6 +689,14 @@ impl Core {
                 c.said = None;
                 c.flash = (s.ports.cu.fix)(&c.check, f, c.busy.clone(), s.tx.clone());
             }
+            "default" | "forget" => {
+                let key = profile.ok_or("computer_use: which profile?")?;
+                (s.ports.cu.profile)(act, key)?;
+                // the check holds the old default until the next poll: say the new one now
+                if let Some(c) = s.cu.as_mut() {
+                    crate::computer_use::profile_moved(&mut c.check, act, &key.browser, &key.dir);
+                }
+            }
             other => return Err(format!("computer_use: no act {other}")),
         }
         self.emit_cu(true);
@@ -698,6 +707,7 @@ impl Core {
     fn emit_cu(&mut self, always: bool) {
         let Some(s) = self.setup.as_mut() else { return };
         let on = (s.ports.cu.is_on)();
+        let profiles = s.cu.as_ref().map(|c| crate::computer_use::profiles(&c.check)).unwrap_or_default();
         let (rows, said, flash) = match s.cu.as_mut() {
             Some(c) => {
                 crate::computer_use::settle(&mut c.busy.lock().unwrap_or_else(|e| e.into_inner()), &c.check);
@@ -715,6 +725,9 @@ impl Core {
         let ready = crate::computer_use::ready(&rows);
         let rows: Vec<_> = rows.iter().map(crate::computer_use::row_data).collect();
         let mut ev = json!({"ev": "computer_use", "on": on, "ready": ready, "rows": rows});
+        if !profiles.is_empty() {
+            ev["profiles"] = json!(profiles);
+        }
         if let Some(t) = said {
             ev["said"] = json!(t);
         }

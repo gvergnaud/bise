@@ -117,4 +117,40 @@ crate::words! { settings:
     cu_remove_yes = "Remove";
     /// the removal asked once: no
     cu_remove_keep = "Keep";
+    /// computer use: the browser profiles' group, from two (designer m_58124)
+    cu_profiles_head = "Profiles";
+    /// a profile row's sub: its browser and its account, as they are written
+    cu_profile_sub(browser, email) = "{browser} · {email}";
+    /// a profile's status: its extension is connected
+    cu_profile_connected = "✓ connected";
+    /// a profile's status: its browser or the profile isn't open (never a failure)
+    cu_profile_not_open = "○ not open";
+    /// the not-open status's tip
+    cu_profile_not_open_tip = "open Chrome in this profile and agents can use it again";
+    /// the default profile's chip
+    cu_profile_default = "Default";
+    /// the default chip's tip
+    cu_profile_default_tip = "agents use this profile unless you name another";
+    /// a profile's ⋯ menu: make it the default
+    cu_profile_make_default = "Make default";
+    /// a profile's ⋯ menu: out of the list until it connects again
+    cu_profile_forget = "Forget this profile";
+    /// under the group: the steps to add a profile
+    cu_profile_add = "Connect another profile";
+    /// the add sheet's title
+    cu_profile_add_title = "Connect another Chrome profile";
+    /// the add sheet's step 1
+    cu_profile_step_open = "Open Chrome in that profile.";
+    /// step 1's hint
+    cu_profile_step_open_hint = "Click your avatar at the top right of Chrome, then the profile.";
+    /// the add sheet's step 2
+    cu_profile_step_add = "Add the bise extension there, the same way as the first time.";
+    /// the add sheet's step 3
+    cu_profile_step_back = "Come back here: bise sees it.";
+    /// the add sheet waits for the new profile
+    cu_profile_waiting = "waiting for Chrome…";
+    /// the add sheet: close
+    cu_profile_cancel = "Cancel";
+    /// the add sheet: the new profile came, close
+    cu_profile_done = "Done";
 }
