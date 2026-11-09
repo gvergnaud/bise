@@ -196,8 +196,10 @@ export const pages = {
   review_guide_write: (a: { tokens: string | number; model: string | number }): string => "Write a guide · about " + String(a.tokens) + " tokens on " + String(a.model),
   /** its tip: the model's whole id */
   review_guide_write_tip: (a: { model: string | number }): string => "your small jobs model is your main model (" + String(a.model) + "), so i ask first",
-  /** the same button in a narrow column (it never gets cut) */
-  review_guide_write_short: (a: { tokens: string | number; model: string | number }): string => "Write a guide · " + String(a.tokens) + " tokens on " + String(a.model),
+  /** the same button in a narrow column (it never gets cut): its model in its tip */
+  review_guide_write_short: (a: { tokens: string | number }): string => "Write a guide · " + String(a.tokens) + " tokens",
+  /** the same button when the bar has even less room: its token count gone too */
+  review_guide_write_bare: "Write a guide",
   /** the Guide segment's tip while no guide is there to show */
   review_guide_none: "no guide yet",
   /** the bar's guide slot once it came while he read (never moves what he reads) */

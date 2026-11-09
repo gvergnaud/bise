@@ -219,13 +219,17 @@
     "one": null,
     "text": "Write a guide · about {tokens} tokens on {model}"
   },
+  "pages.review_guide_write_bare": {
+    "args": [],
+    "one": null,
+    "text": "Write a guide"
+  },
   "pages.review_guide_write_short": {
     "args": [
-      "tokens",
-      "model"
+      "tokens"
     ],
     "one": null,
-    "text": "Write a guide · {tokens} tokens on {model}"
+    "text": "Write a guide · {tokens} tokens"
   },
   "pages.review_guide_write_tip": {
     "args": [

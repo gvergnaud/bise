@@ -136,10 +136,10 @@
   color: var(--c-text-3);
   font-variant-numeric: tabular-nums;
 }
-/* one line at 800 too: the slot and the modes keep their words (the button is never cut), the
-   place gives way with '…', the count goes short first; a narrow column says each one short */
+/* one line at 800 too: the slot and the modes keep their words (the button is never cut); a narrow
+   column says each one short; what gives way when it still won't fit: .rv-bar[data-fit] below */
 .rv-place {
-  flex: 0 1 auto;
+  flex: none;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -163,16 +163,27 @@
     display: inline;
   }
 }
-/* the bar never leaves its column (designer m_57825, ReviewBar useFit): the slot's short words first
-   (the model in its tip), then the count goes; Guide | By kind always fits */
-.rv-bar[data-fit] > .rv-slot .rv-wide {
+/* the bar never leaves its column (designer m_57825, m_57833; ReviewBar useFit): things give way in
+   turn: the slot's model words (into its tip), its token count, the viewed count, last the part's
+   name (whole or …; one word dropped whole); Guide | By kind always fits */
+.rv-bare {
   display: none;
 }
-.rv-bar[data-fit] > .rv-slot .rv-narrow {
+.rv-bar[data-fit~='slot-short'] > .rv-slot .rv-wide,
+.rv-bar[data-fit~='slot-bare'] > .rv-slot .rv-wide,
+.rv-bar[data-fit~='slot-bare'] > .rv-slot .rv-narrow {
+  display: none;
+}
+.rv-bar[data-fit~='slot-short'] > .rv-slot .rv-narrow,
+.rv-bar[data-fit~='slot-bare'] > .rv-slot .rv-bare {
   display: inline;
 }
-.rv-bar[data-fit='2'] > .rv-viewed {
+.rv-bar[data-fit~='count-off'] > .rv-viewed,
+.rv-bar[data-fit~='place-off'] > .rv-place {
   display: none;
+}
+.rv-bar[data-fit~='place-cut'] > .rv-place {
+  flex: 0 1 auto;
 }
 /* ‹ ›: the only mouse way to step, 24 px to hit, text-2, ink on hover, off at the ends */
 .rv-steps {

@@ -4,9 +4,10 @@
 // while he read), and Guide | By kind, always both (Guide off until a guide is there; only a small
 // change, which never gets one, drops it). A hairline at its foot while code scrolls under it. In a
 // narrow column the place says the part's area, the count '0/9', the button its short words: the
-// button never gets cut. The bar never leaves its column (designer m_57825): when it would, the slot
-// says its short words first (the model in its tip), then the count goes; Guide | By kind always
-// fits. Renders of their props but that fit: DiffFiles owns the state and the keys.
+// button never gets cut. The bar never leaves its column (designer m_57825, m_57833): when it would,
+// things give way in turn (FIT): the slot's model words (into its tip), then its token count, then
+// the viewed count, last the part's name (whole or …; one word is never cut, only dropped whole);
+// Guide | By kind always fits. Renders of their props but that fit: DiffFiles owns the state and keys.
 import { useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Button, Filters, IconButton, PickerPop, Press, tipAttrs } from '@/ds';
 import { pages } from '@/proto/words_pages.gen';
@@ -48,7 +49,7 @@ export function ReviewBar({ place, placeShort, single, onOutline, outline, onPre
     { id: 'kind', label: pages.review_mode_kind },
   ];
   return (
-    <div ref={bar} className="rv-bar" data-under={under || undefined} data-fit={fit || undefined} data-testid={`${testId}.bar`}>
+    <div ref={bar} className="rv-bar" data-under={under || undefined} data-fit={FIT[fit]} data-testid={`${testId}.bar`}>
       {single ? (
         <span className="rv-place" data-testid={`${testId}.bar.place`}>
           <span className="rv-wide">{place}</span>
@@ -79,19 +80,33 @@ export function ReviewBar({ place, placeShort, single, onOutline, outline, onPre
   );
 }
 
-/** how much the bar gave way: 0 none, 1 the slot's short words, 2 the count gone too */
-const FIT_MAX = 2;
+/**
+ * What the bar gave way, step by step (review.css .rv-bar[data-fit~=...]): none; the slot's short
+ * words (no model: its tip has it); its bare words (no token count); the count gone; the part's
+ * name cut with …; the part's name gone.
+ */
+const FIT = [undefined, 'slot-short', 'slot-bare', 'slot-bare count-off', 'slot-bare count-off place-cut', 'slot-bare count-off place-off'] as const;
+
+/** The words a part's name shows now (the wide or the narrow one: the one displayed). */
+function shownPlace(place: Element): string {
+  const parts = [...place.querySelectorAll('.rv-wide, .rv-narrow')].filter((p) => getComputedStyle(p).display !== 'none');
+  return (parts[0] ?? place).textContent.trim();
+}
 
 /**
- * The bar's fit (FIT_MAX steps): after each render, before paint, one step more while its row is
- * wider than the bar; a new width starts again from none.
+ * The bar's fit (FIT's steps): after each render, before paint, one step more while its row is
+ * wider than the bar, or while a one-word part name is cut (it is dropped whole instead); a new
+ * width starts again from none.
  */
 function useFit(bar: RefObject<HTMLDivElement | null>): number {
   const [fit, setFit] = useState(0);
   // eslint-disable-next-line react-hooks/exhaustive-deps -- after every render: the slot's words change (writing, then 'Write a guide · …')
   useLayoutEffect(() => {
     const el = bar.current;
-    if (el === null || fit >= FIT_MAX || el.scrollWidth <= el.clientWidth) return;
+    if (el === null || fit >= FIT.length - 1) return;
+    const place = el.querySelector('.rv-place');
+    const oneWordCut = place !== null && place.scrollWidth > place.clientWidth && !/\s/u.test(shownPlace(place));
+    if (el.scrollWidth <= el.clientWidth && !oneWordCut) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- the row's width: known only after the commit, before paint
     setFit(fit + 1);
   });
@@ -145,7 +160,8 @@ export function GuideSlot({ ev, shown, onRun, onShow, testId }: GuideSlotProps) 
         <span className="rv-slot" data-testid={id}>
           <Button size="sm" onClick={onRun} title={pages.review_guide_write_tip({ model: ev.model ?? '' })} testId={`${id}.write`}>
             <span className="rv-wide">{pages.review_guide_write({ tokens, model })}</span>
-            <span className="rv-narrow">{pages.review_guide_write_short({ tokens, model })}</span>
+            <span className="rv-narrow">{pages.review_guide_write_short({ tokens })}</span>
+            <span className="rv-bare">{pages.review_guide_write_bare}</span>
           </Button>
         </span>
       );
