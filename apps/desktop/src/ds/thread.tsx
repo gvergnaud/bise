@@ -300,18 +300,32 @@ export interface DiffProps {
   pop?: ReactNode;
   /** each line's test id is `<testId>.<i>`, `i` its index in the file */
   testId?: string;
-  /** a window of a long file (code-viewer-width): `lines` are its lines [at, at + lines.length) of
-   * `total`; the rows before and after are a gap of their height (one line-height each). None: all */
+  /** a window of a long file (code-viewer-width): `lines` are its lines from index `at`, and
+   * `gap` the rows (line-heights: a wrapped line takes several) of the lines before and after it */
   at?: number;
-  total?: number;
+  gap?: { readonly before: number; readonly after: number };
+}
+/** tabs stop every TAB_COLS columns (the browser's default tab-size) */
+export const TAB_COLS = 8;
+/** The columns `text` takes in a mono font, its tabs to their stops. Pure. */
+export function codeCols(text: string): number {
+  let n = 0;
+  for (const ch of text) n = ch === "\t" ? n + TAB_COLS - (n % TAB_COLS) : n + 1;
+  return n;
+}
+/** The columns of `text`'s leading spaces and tabs: where its wrapped rows start. Pure. */
+export function indentCols(text: string): number {
+  const lead = /^[ \t]*/u.exec(text)?.[0] ?? "";
+  return codeCols(lead);
 }
 /** a diff: a file head and its lines */
-export function Diff({ file, fileTip, add, rm, lines, onLine, pop, testId, at = 0, total = at + lines.length }: DiffProps) {
-  const after = total - at - lines.length;
+export function Diff({ file, fileTip, add, rm, lines, onLine, pop, testId, at = 0, gap }: DiffProps) {
+  const before = gap?.before ?? 0;
+  const after = gap?.after ?? 0;
   return (
     <div className="b-diff" data-testid={testId}>
       <div className="fh" {...tipAttrs(fileTip)}>{file}{add ? <> <span className="ok">+{add}</span></> : null}{rm ? <> <span className="er">−{rm}</span></> : null}</div>
-      {at > 0 && <div className="b-dgap" style={{ "--rows": at } as CSSProperties} aria-hidden="true" />}
+      {before > 0 && <div className="b-dgap" style={{ "--rows": before } as CSSProperties} aria-hidden="true" />}
       {lines.map((l, k) => {
         const i = at + k;
         const first = l.sel && !lines[k - 1]?.sel;
@@ -320,7 +334,12 @@ export function Diff({ file, fileTip, add, rm, lines, onLine, pop, testId, at = 
           <div key={i} className={cx("b-dl", l.sign === "+" && "ad", l.sign === "-" && "rm", l.head && "hh", l.sel && "pk", first && "first", last && "last")}
             role={onLine ? "button" : undefined} onClick={onLine ? () => { onLine(i); } : undefined} data-testid={sub(testId, i)}
             {...(l.head ? tipAttrs(l.text) : {})}>
-            <i>{l.old ?? ""}</i><i>{l.new ?? ""}</i><i>{l.sign ?? ""}</i>{l.head ? <span>{l.text}</span> : l.runs ? <span className="cd">{l.runs.map((r, k) => <span key={k} style={r.style}>{r.text}</span>)}</span> : l.text}
+            <i>{l.old ?? ""}</i><i>{l.new ?? ""}</i><i>{l.sign ?? ""}</i>{l.head ? <span>{l.text}</span> : (
+              // a long line wraps, its next rows at its own indent (designer m_57777: never cut)
+              <span className="cd" style={{ "--ind": indentCols(l.text) } as CSSProperties}>
+                {l.runs ? l.runs.map((r, k) => <span key={k} style={r.style}>{r.text}</span>) : l.text}
+              </span>
+            )}
           </div>
         );
       })}

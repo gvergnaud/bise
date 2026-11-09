@@ -59,6 +59,9 @@
 .b-dl.rm{background:color-mix(in srgb,var(--c-err) 12%,transparent)}
 /* a hunk's head: one line, cut with … 12 px inside the card, whole in its tip (designer m_53016) */
 .b-dgap{height:calc(var(--rows)*1lh)}
+/* a code line wraps at any character, never cut (designer m_57777); its next rows start at its own
+   indent (--ind columns, at most half the cell: lineWindow.ts lineRows counts its rows the same) */
+.b-dl>.cd{white-space:pre-wrap;word-break:break-all;--ind-w:min(calc(var(--ind,0)*1ch),50%);padding-left:var(--ind-w);text-indent:calc(-1*var(--ind-w))}
 .b-dl.hh>span{overflow:hidden;text-overflow:ellipsis;padding-right:var(--s-3)}
 .b-dl.pk{box-shadow:inset 1px 0 0 var(--c-ink),inset -1px 0 0 var(--c-ink)}.b-dl.pk i{color:var(--c-ink)}.b-dl.pk.first{box-shadow:inset 1px 0 0 var(--c-ink),inset -1px 0 0 var(--c-ink),inset 0 1px 0 var(--c-ink)}.b-dl.pk.last{box-shadow:inset 1px 0 0 var(--c-ink),inset -1px 0 0 var(--c-ink),inset 0 -1px 0 var(--c-ink)}.b-dl.pk.first.last{box-shadow:inset 0 0 0 1px var(--c-ink)}
 .b-quotepop{display:inline-flex;margin:var(--gap-tight) 0;padding:var(--s-1) var(--s-2);border-radius:var(--r-2);background:var(--c-ink);color:var(--c-on-ink);font:var(--t-12) var(--font-ui)}

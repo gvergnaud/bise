@@ -131,6 +131,30 @@ describe('a .diff artifact', () => {
     expect(gap?.style.getPropertyValue('--rows')).toBe(String(n + 1 - rows.length));
   });
 
+  // designer m_57777: a long line is never cut; it wraps at any character, its next rows at its own
+  // indent. Mutation: thread.css without its .b-dl>.cd rule turns it red.
+  it('wraps a 300-character line, its next rows at its indent, never cut', () => {
+    const style = document.createElement('style');
+    style.textContent = readFileSync(join(__dirname, '../ds/css/thread.css'), 'utf8');
+    document.head.append(style);
+    try {
+      const { store } = mount(cuDiff(1));
+      act(() => {
+        store.apply({
+          ev: 'diff', project: P, agent: '', base: '', artifact: 'cu-upload-diff', version: 1, title: 'cu-upload at dd86c8a',
+          files: [{ path: 'notes.txt', status: 'modified', add: 1, del: 0, hunks: [{ header: '@@ -1 +1 @@', lines: [{ kind: 'add', new: 1, text: `    ${'x'.repeat(300)}` }] }] }],
+        });
+      });
+      const cell = screen.getByTestId('artifact.diff.file.0.1').querySelector<HTMLElement>('.cd');
+      expect(cell?.textContent).toBe(`    ${'x'.repeat(300)}`);
+      expect(cell?.style.getPropertyValue('--ind')).toBe('4');
+      const css = getComputedStyle(cell as HTMLElement);
+      expect([css.whiteSpace, css.wordBreak]).toEqual(['pre-wrap', 'break-all']);
+    } finally {
+      style.remove();
+    }
+  });
+
   it('only a .diff or .patch file is drawn as a diff', () => {
     expect(isDiff(cuDiff(1))).toBe(true);
     expect(isDiff({ ...cuDiff(1), path: '/w/fix.PATCH' })).toBe(true);

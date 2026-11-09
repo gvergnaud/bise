@@ -9,7 +9,7 @@ import { flatRows, handQuotes, quotesOf, range, type RowAt, type Sel } from './q
 import { Button, Check, Diff, Empty, Fold, tipAttrs, type DiffLine as DsLine } from '@/ds';
 import { pages } from '@/proto/words_pages.gen';
 import { diffRuns, langOfPath } from './syntax';
-import { lineWindow, type Span } from './lineWindow';
+import { lineRows, lineWindow, rowStarts, type Span } from './lineWindow';
 import { useRouter } from '@/app/router';
 import type { Diff as DiffEv } from '@/store';
 import type { GuideTarget } from '@/proto';
@@ -296,7 +296,7 @@ interface FileDiffProps {
  */
 function FileDiff({ path, head, tip, add, rm, lines, picked, pop, scroller, testId }: FileDiffProps) {
   const box = useRef<HTMLDivElement>(null);
-  const span = useLineWindow(box, scroller, lines.length);
+  const { span, starts } = useLineWindow(box, scroller, lines);
   const colored = useDeferredValue(true, false);
   const runsAt = useRunsAt(lines, path, colored, span);
   const shown = lines.slice(span.from, span.to).map((l, k) => {
@@ -307,7 +307,7 @@ function FileDiff({ path, head, tip, add, rm, lines, picked, pop, scroller, test
   });
   return (
     <div ref={box}>
-      <Diff file={head} {...(tip === undefined ? {} : { fileTip: tip })} add={add} rm={rm} lines={shown} at={span.from} total={lines.length} pop={pop} testId={testId} />
+      <Diff file={head} {...(tip === undefined ? {} : { fileTip: tip })} add={add} rm={rm} lines={shown} at={span.from} gap={{ before: starts[span.from] ?? 0, after: (starts.at(-1) ?? 0) - (starts[span.to] ?? 0) }} pop={pop} testId={testId} />
     </div>
   );
 }
@@ -336,29 +336,62 @@ function useRunsAt(lines: readonly DsLine[], path: string, colored: boolean, spa
   return (li) => runs?.[li - from] ?? null;
 }
 
-/** The rows of a file's lines to draw where its box sits in the scroller now (lineWindow.ts). */
-function spanNow(el: HTMLElement, s: HTMLElement | null, total: number): Span {
+/** the code cell's left edge in the diff's rows: its three gutter columns (ds thread.css .b-dl: 3em 3em 1.4em) */
+const GUTTER_EM = 7.4;
+/** one mono column's width, px, by font (measured once each) */
+const chOf = new Map<string, number>();
+
+/** The columns of a file's code cell now (0: no layout). */
+function colsOf(diff: Element): number {
+  const css = getComputedStyle(diff);
+  const width = diff.clientWidth - GUTTER_EM * Number.parseFloat(css.fontSize);
+  let ch = chOf.get(css.font);
+  if (ch === undefined) {
+    const probe = document.createElement('span');
+    probe.textContent = '0'.repeat(100);
+    probe.style.cssText = 'position:absolute;visibility:hidden;white-space:pre';
+    diff.append(probe);
+    ch = probe.getBoundingClientRect().width / 100;
+    probe.remove();
+    if (ch > 0) chOf.set(css.font, ch);
+  }
+  return ch > 0 && width > 0 ? Math.floor(width / ch) : 0;
+}
+
+/** The lines of a file to draw where its box sits in the scroller now (lineWindow.ts). */
+function spanNow(diff: Element, s: HTMLElement | null, starts: readonly number[]): Span {
   const view = s?.clientHeight ?? 0;
-  const top = s === null ? 0 : s.getBoundingClientRect().top - el.getBoundingClientRect().top;
-  // one row: the diff's line-height (ds .b-diff, its rows white-space: pre)
-  const rowH = Number.parseFloat(getComputedStyle(el.firstElementChild ?? el).lineHeight);
-  return lineWindow({ top, view, rowH, total });
+  const top = s === null ? 0 : s.getBoundingClientRect().top - diff.getBoundingClientRect().top;
+  // one row: the diff's line-height (ds .b-diff; a wrapped line takes whole rows)
+  const rowH = Number.parseFloat(getComputedStyle(diff).lineHeight);
+  return lineWindow({ top, view, rowH, starts });
+}
+
+interface Seen {
+  readonly span: Span;
+  /** the code cell's columns its rows were counted at */
+  readonly cols: number;
 }
 
 /**
- * The rows of a file's lines to draw (lineWindow.ts): measured before paint after each render (a
- * section folded above moves it with no scroll), again on each scroll (once a frame) and resize of
- * `scroller`. Its state moves only when the window does.
+ * The lines of a file to draw (lineWindow.ts) and the row each starts at (a long line wraps:
+ * lineRows at the code cell's columns): measured before paint after each render (a section folded
+ * above moves it with no scroll), again on each scroll (once a frame) and resize of `scroller`. A
+ * new width counts the rows again first, then places the window. Its state moves only when they do.
  */
-function useLineWindow(box: RefObject<HTMLElement | null>, scroller: RefObject<HTMLElement | null>, total: number): Span {
-  const [span, setSpan] = useState<Span>({ from: 0, to: 0 });
-  const keep = (next: Span) => {
-    setSpan((cur) => (cur.from === next.from && cur.to === next.to ? cur : next));
+function useLineWindow(box: RefObject<HTMLElement | null>, scroller: RefObject<HTMLElement | null>, lines: readonly DsLine[]): { span: Span; starts: readonly number[] } {
+  const [seen, setSeen] = useState<Seen>({ span: { from: 0, to: 0 }, cols: 0 });
+  const starts = useMemo(() => rowStarts(lines.map((l) => lineRows(l.text, seen.cols, l.head === true))), [lines, seen.cols]);
+  const look = (diff: Element, s: HTMLElement | null) => {
+    const cols = colsOf(diff);
+    const next = cols === seen.cols ? spanNow(diff, s, starts) : seen.span;
+    setSeen((cur) => (cur.cols === cols && cur.span.from === next.from && cur.span.to === next.to ? cur : { span: next, cols }));
   };
   useLayoutEffect(() => {
-    if (box.current === null) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- its place in the scroller: known only after the commit, before paint
-    keep(spanNow(box.current, scroller.current, total));
+    const diff = box.current?.firstElementChild;
+    if (diff == null) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- its place and width in the scroller: known only after the commit, before paint
+    look(diff, scroller.current);
   });
   useLayoutEffect(() => {
     const s = scroller.current;
@@ -368,19 +401,20 @@ function useLineWindow(box: RefObject<HTMLElement | null>, scroller: RefObject<H
       if (frame !== 0) return;
       frame = requestAnimationFrame(() => {
         frame = 0;
-        if (box.current !== null) keep(spanNow(box.current, s, total));
+        const diff = box.current?.firstElementChild;
+        if (diff != null) look(diff, s);
       });
     };
     s.addEventListener('scroll', later, { passive: true });
-    const seen = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(later);
-    seen?.observe(s);
+    const seenSize = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(later);
+    seenSize?.observe(s);
     return () => {
       s.removeEventListener('scroll', later);
-      seen?.disconnect();
+      seenSize?.disconnect();
       if (frame !== 0) cancelAnimationFrame(frame);
     };
-  }, [box, scroller, total]);
-  return span;
+  });
+  return { span: seen.span, starts };
 }
 
 const kindWord: Record<Kind, string> = {
