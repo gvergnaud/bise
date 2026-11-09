@@ -684,3 +684,41 @@ fn a_plugin_that_needs_node() {
     let mut sc = Screen { sel: Some("maps".into()), ..Default::default() };
     assert!(matches!(key(&mut sc, std::slice::from_ref(&p), &[], &press(KeyCode::Char(' '))), Effect::Set { on: false, .. }));
 }
+
+/// multi-accounts piece 4: a ready connector's page lists his accounts
+/// (title · name, Default, status) first; a adds another (its
+/// next_account), d makes the selected one default, c reconnects it, r
+/// asks its name in the composer, x asks once then removes it.
+#[test]
+fn a_connector_page_lists_its_accounts_and_their_keys() {
+    use bend_plugins::connectors::AccountChange;
+    use bise_proto::app_rows::{AccountStatus, ConnectorAccount};
+    let mut p = plugin("mistral:gmail", PluginKind::Mistral, Scope::Mistral, "mail", vec![]);
+    p.title = "Gmail".into();
+    p.accounts = vec![
+        ConnectorAccount { name: "default".into(), title: Some("perso".into()), default: true, status: AccountStatus::Valid },
+        ConnectorAccount { name: "account-2".into(), title: None, default: false, status: AccountStatus::Invalid },
+    ];
+    p.next_account = Some("account-3".into());
+    let rows = vec![p.clone()];
+    let mut sc = Screen { opened: Some(p.id.clone()), ..Default::default() };
+    let t = texts(&page_body(&sc, &p, 120));
+    let at = t.iter().position(|l| l.trim() == settings::plugins_accounts_head).expect("its accounts head");
+    assert!(t[at + 1].contains("perso · default") && t[at + 1].contains(settings::plugins_account_default) && t[at + 1].contains(settings::plugins_account_works), "{t:?}");
+    assert!(t[at + 2].contains("account-2") && !t[at + 2].contains(" · account-2") && t[at + 2].contains(settings::plugins_account_expired), "{t:?}");
+    let id = "mistral:gmail".to_string();
+    assert_eq!(key(&mut sc, &rows, &[], &press(KeyCode::Char('a'))), Effect::Account { id: id.clone(), account: "account-3".into(), change: None });
+    // the first lines of the page are its accounts
+    key(&mut sc, &rows, &[], &press(KeyCode::Down));
+    assert_eq!(sc.part.as_deref(), Some("account:default"));
+    assert_eq!(key(&mut sc, &rows, &[], &press(KeyCode::Char('d'))), Effect::None, "already the default");
+    key(&mut sc, &rows, &[], &press(KeyCode::Down));
+    assert_eq!(key(&mut sc, &rows, &[], &press(KeyCode::Char('d'))), Effect::Account { id: id.clone(), account: "account-2".into(), change: Some(AccountChange::MakeDefault) });
+    assert_eq!(key(&mut sc, &rows, &[], &press(KeyCode::Char('c'))), Effect::Account { id: id.clone(), account: "account-2".into(), change: None });
+    assert_eq!(key(&mut sc, &rows, &[], &press(KeyCode::Char('r'))), Effect::AskAccountTitle { id: id.clone(), account: "account-2".into() });
+    assert_eq!(key(&mut sc, &rows, &[], &press(KeyCode::Char('x'))), Effect::None, "x asks first");
+    assert_eq!(sc.note.as_ref().map(|n| n.0.clone()), Some(settings::plugins_account_remove_again("account-2")));
+    assert_eq!(key(&mut sc, &rows, &[], &press(KeyCode::Char('x'))), Effect::Account { id, account: "account-2".into(), change: Some(AccountChange::Remove) });
+    let bar: String = key_bar(&sc, &rows, 150).spans.iter().map(|s| s.content.to_string()).collect();
+    assert!(bar.contains(settings::plugins_key_account_add) && bar.contains(settings::plugins_key_account_remove), "{bar}");
+}

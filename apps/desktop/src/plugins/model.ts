@@ -74,6 +74,9 @@ export function gives(p: Plugin): string {
   // a connector is its own server: its tools are its parts
   const tools = partsOf(p, 'tool').length;
   if (tools > 0) out.push(settings.plugins_n_tools({ n: tools }));
+  // his accounts, said from 2 (one account: nothing changes)
+  const accounts = (p.accounts ?? []).length;
+  if (accounts > 1) out.push(settings.plugins_n_accounts({ n: accounts }));
   return out.join(' · ');
 }
 

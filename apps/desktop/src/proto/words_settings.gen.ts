@@ -2184,4 +2184,80 @@ export const settings = {
   plugins_hint_setting: "s sets it",
   /** key bar: s (a row that needs a setting), ⏎ (a setting's line) */
   plugins_key_setting: "set it",
+  /** a connector's page: the group of his accounts on it (designer m_57870) */
+  plugins_accounts_head: "accounts",
+  /** list: a connector with 2 or more accounts, under its name */
+  plugins_n_accounts: (a: { n: number }): string => a.n === 1 ? String(a.n) + " account" : String(a.n) + " accounts",
+  /** an account row: the one calls take when they name none (a quiet chip) */
+  plugins_account_default: "Default",
+  /** an account row: its login works */
+  plugins_account_works: "✓ works",
+  /** an account row: its login expired or was revoked */
+  plugins_account_expired: "✗ expired",
+  /** an account row: no status from Mistral (faint, never err: designer m_58028) */
+  plugins_account_not_checked: "– not checked",
+  /** its tip */
+  plugins_account_not_checked_tip: "Mistral doesn't report this account's status",
+  /** an account's action: log it in again */
+  plugins_account_reconnect: "Reconnect",
+  /** an account's action: his name for it */
+  plugins_account_rename: "Rename",
+  /** an account's action: calls take it when they name none */
+  plugins_account_make_default: "Make default",
+  /** an account's action: remove it (asked in the row first) */
+  plugins_account_remove: "Remove…",
+  /** the row's question before a remove (name: what the row says) */
+  plugins_account_remove_ask: (a: { name: string | number }): string => "remove " + String(a.name) + " from your Mistral account? your agents can't use it after.",
+  /** the row's question: yes */
+  plugins_account_remove_yes: "Remove",
+  /** the row's question: no */
+  plugins_account_remove_no: "Keep",
+  /** under the accounts: log in one more (a secondary button) */
+  plugins_account_add: "Connect another account",
+  /** the sheet's title (service: the connector's name, 'Gmail') */
+  plugins_account_add_title: (a: { service: string | number }): string => "Connect another " + String(a.service) + " account",
+  /** the sheet's step 1 */
+  plugins_account_step_open: (a: { service: string | number }): string => String(a.service) + " opens in your browser: sign in with the account to add.",
+  /** step 1's reminder */
+  plugins_account_step_open_hint: "Already signed in there? Choose 'Use another account'.",
+  /** the sheet's step 2 */
+  plugins_account_step_allow: "Allow access.",
+  /** the sheet's step 3 */
+  plugins_account_step_back: "Come back here: bise sees it.",
+  /** the sheet while his browser is open */
+  plugins_account_waiting: (a: { service: string | number }): string => "waiting for " + String(a.service) + "…",
+  /** the sheet's start button (opens his browser) */
+  plugins_account_open: (a: { service: string | number }): string => "Open " + String(a.service),
+  /** the sheet: once the account is there, his name for it */
+  plugins_account_name_it: "Name this account",
+  /** the name field's sub: what the name is for */
+  plugins_account_name_hint: "your agents use this name when you ask for this account.",
+  /** the sheet's last button */
+  plugins_account_done: "Done",
+  /** the sheet's and the field's cancel */
+  plugins_account_cancel: "Cancel",
+  /** the rename field's save */
+  plugins_account_save: "Save",
+  /** a new account's name, before he gives one: the connector and its number, neutral and selected (designer m_58028) */
+  plugins_account_name_default: (a: { service: string | number; n: string | number }): string => String(a.service) + " " + String(a.n),
+  /** terminal key bar: a, on a connector with accounts */
+  plugins_key_account_add: "another account",
+  /** terminal key bar: r, on an account's line */
+  plugins_key_account_rename: "rename",
+  /** terminal key bar: d, on an account's line */
+  plugins_key_account_default: "make default",
+  /** terminal key bar: c, on an account's line */
+  plugins_key_account_reconnect: "reconnect",
+  /** terminal key bar: x, on an account's line */
+  plugins_key_account_remove: "remove",
+  /** terminal: the first x on an account (name: what its line says) */
+  plugins_account_remove_again: (a: { name: string | number }): string => "x again removes " + String(a.name) + " from your Mistral account",
+  /** terminal: its login opened (service: the connector's name) */
+  plugins_account_opened: (a: { service: string | number }): string => String(a.service) + "'s login is open in your browser: sign in with the account to add",
+  /** terminal: an account's change sent, its end said in the thread */
+  plugins_account_sent: (a: { name: string | number }): string => String(a.name) + ": sent to Mistral",
+  /** terminal: an account's change or login ended well */
+  plugins_account_changed: (a: { name: string | number }): string => String(a.name) + ": done",
+  /** terminal: the rename line's usage */
+  plugins_account_usage: "usage: /plugins account mistral:NAME connect|default|remove ACCOUNT · /plugins account mistral:NAME rename ACCOUNT TITLE",
 } as const;

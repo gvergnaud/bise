@@ -2898,6 +2898,187 @@
     "one": null,
     "text": "about"
   },
+  "settings.plugins_account_add": {
+    "args": [],
+    "one": null,
+    "text": "Connect another account"
+  },
+  "settings.plugins_account_add_title": {
+    "args": [
+      "service"
+    ],
+    "one": null,
+    "text": "Connect another {service} account"
+  },
+  "settings.plugins_account_cancel": {
+    "args": [],
+    "one": null,
+    "text": "Cancel"
+  },
+  "settings.plugins_account_changed": {
+    "args": [
+      "name"
+    ],
+    "one": null,
+    "text": "{name}: done"
+  },
+  "settings.plugins_account_default": {
+    "args": [],
+    "one": null,
+    "text": "Default"
+  },
+  "settings.plugins_account_done": {
+    "args": [],
+    "one": null,
+    "text": "Done"
+  },
+  "settings.plugins_account_expired": {
+    "args": [],
+    "one": null,
+    "text": "✗ expired"
+  },
+  "settings.plugins_account_make_default": {
+    "args": [],
+    "one": null,
+    "text": "Make default"
+  },
+  "settings.plugins_account_name_default": {
+    "args": [
+      "service",
+      "n"
+    ],
+    "one": null,
+    "text": "{service} {n}"
+  },
+  "settings.plugins_account_name_hint": {
+    "args": [],
+    "one": null,
+    "text": "your agents use this name when you ask for this account."
+  },
+  "settings.plugins_account_name_it": {
+    "args": [],
+    "one": null,
+    "text": "Name this account"
+  },
+  "settings.plugins_account_not_checked": {
+    "args": [],
+    "one": null,
+    "text": "– not checked"
+  },
+  "settings.plugins_account_not_checked_tip": {
+    "args": [],
+    "one": null,
+    "text": "Mistral doesn't report this account's status"
+  },
+  "settings.plugins_account_open": {
+    "args": [
+      "service"
+    ],
+    "one": null,
+    "text": "Open {service}"
+  },
+  "settings.plugins_account_opened": {
+    "args": [
+      "service"
+    ],
+    "one": null,
+    "text": "{service}'s login is open in your browser: sign in with the account to add"
+  },
+  "settings.plugins_account_reconnect": {
+    "args": [],
+    "one": null,
+    "text": "Reconnect"
+  },
+  "settings.plugins_account_remove": {
+    "args": [],
+    "one": null,
+    "text": "Remove…"
+  },
+  "settings.plugins_account_remove_again": {
+    "args": [
+      "name"
+    ],
+    "one": null,
+    "text": "x again removes {name} from your Mistral account"
+  },
+  "settings.plugins_account_remove_ask": {
+    "args": [
+      "name"
+    ],
+    "one": null,
+    "text": "remove {name} from your Mistral account? your agents can't use it after."
+  },
+  "settings.plugins_account_remove_no": {
+    "args": [],
+    "one": null,
+    "text": "Keep"
+  },
+  "settings.plugins_account_remove_yes": {
+    "args": [],
+    "one": null,
+    "text": "Remove"
+  },
+  "settings.plugins_account_rename": {
+    "args": [],
+    "one": null,
+    "text": "Rename"
+  },
+  "settings.plugins_account_save": {
+    "args": [],
+    "one": null,
+    "text": "Save"
+  },
+  "settings.plugins_account_sent": {
+    "args": [
+      "name"
+    ],
+    "one": null,
+    "text": "{name}: sent to Mistral"
+  },
+  "settings.plugins_account_step_allow": {
+    "args": [],
+    "one": null,
+    "text": "Allow access."
+  },
+  "settings.plugins_account_step_back": {
+    "args": [],
+    "one": null,
+    "text": "Come back here: bise sees it."
+  },
+  "settings.plugins_account_step_open": {
+    "args": [
+      "service"
+    ],
+    "one": null,
+    "text": "{service} opens in your browser: sign in with the account to add."
+  },
+  "settings.plugins_account_step_open_hint": {
+    "args": [],
+    "one": null,
+    "text": "Already signed in there? Choose 'Use another account'."
+  },
+  "settings.plugins_account_usage": {
+    "args": [],
+    "one": null,
+    "text": "usage: /plugins account mistral:NAME connect|default|remove ACCOUNT · /plugins account mistral:NAME rename ACCOUNT TITLE"
+  },
+  "settings.plugins_account_waiting": {
+    "args": [
+      "service"
+    ],
+    "one": null,
+    "text": "waiting for {service}…"
+  },
+  "settings.plugins_account_works": {
+    "args": [],
+    "one": null,
+    "text": "✓ works"
+  },
+  "settings.plugins_accounts_head": {
+    "args": [],
+    "one": null,
+    "text": "accounts"
+  },
   "settings.plugins_add": {
     "args": [],
     "one": null,
@@ -3468,6 +3649,31 @@
     "one": null,
     "text": "skills folder"
   },
+  "settings.plugins_key_account_add": {
+    "args": [],
+    "one": null,
+    "text": "another account"
+  },
+  "settings.plugins_key_account_default": {
+    "args": [],
+    "one": null,
+    "text": "make default"
+  },
+  "settings.plugins_key_account_reconnect": {
+    "args": [],
+    "one": null,
+    "text": "reconnect"
+  },
+  "settings.plugins_key_account_remove": {
+    "args": [],
+    "one": null,
+    "text": "remove"
+  },
+  "settings.plugins_key_account_rename": {
+    "args": [],
+    "one": null,
+    "text": "rename"
+  },
   "settings.plugins_key_add": {
     "args": [],
     "one": null,
@@ -3683,6 +3889,13 @@
     ],
     "one": null,
     "text": "▸ {n} more"
+  },
+  "settings.plugins_n_accounts": {
+    "args": [
+      "n"
+    ],
+    "one": "{n} account",
+    "text": "{n} accounts"
   },
   "settings.plugins_n_off": {
     "args": [

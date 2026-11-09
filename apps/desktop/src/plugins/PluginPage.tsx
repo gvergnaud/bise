@@ -21,6 +21,7 @@ import { ds } from '@/proto/words_ds.gen';
 import { PluginIcon } from './PluginIcon';
 import { ViewsGroup } from './ViewsGroup';
 import { SettingsGroup } from './SettingsGroup';
+import { AccountsGroup } from './AccountsGroup';
 
 export interface PagePorts {
   send: (cmd: AppCmd) => void;
@@ -116,6 +117,8 @@ export function PluginPage({ p, project, ports }: { p: Plugin; project?: string;
           </span>
         </div>
       )}
+      {/* a ready connector's accounts, the first group (designer m_57870) */}
+      <AccountsGroup p={p} {...at} send={ports.send} />
       {(p.prompts ?? []).length > 0 && (
         <div className="plg-try" data-testid={`${tid}.try`}>
           {(p.prompts ?? []).map((t, i) => (

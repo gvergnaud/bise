@@ -754,6 +754,22 @@ fn run(app: &mut crate::app::App, e: Effect) {
             app.flash = Some((settings::plugins_agent_started.to_string(), Instant::now()));
             return;
         }
+        Effect::Account { id, account, change } => {
+            let p = app.plugins.as_ref().and_then(|o| o.rows.iter().find(|p| p.id == id));
+            let title = p.map_or(id.clone(), |p| p.title.clone());
+            let shown = p.and_then(|p| p.accounts.iter().find(|a| a.name == account)).and_then(|a| a.title.clone()).unwrap_or_else(|| account.clone());
+            let note = account_said(&id, &account, change, &title, &shown);
+            if let Some(o) = app.plugins.as_mut() {
+                o.note(note, false);
+            }
+        }
+        Effect::AskAccountTitle { id, account } => {
+            app.plugins = None;
+            crate::sb::focus(app, "main");
+            let line = format!("/plugins account {id} rename {account} ");
+            app.ed.set(&line, line.len());
+            return;
+        }
         Effect::AskSetting { plugin, var, label, secret } => {
             app.plugins = None;
             let line = start_ask(app, Ask { plugin, var, label, secret });
@@ -775,6 +791,24 @@ fn connect_said(id: &str, title: &str) {
     });
     if let Err(e) = r {
         say(e);
+    }
+}
+
+/// One of his accounts on connector `id` ([`connect_account`] or
+/// [`change_account`], their own threads): their end comes back to the
+/// thread; the note for the screen now.
+fn account_said(id: &str, account: &str, change: Option<bend_plugins::connectors::AccountChange>, title: &str, shown: &str) -> String {
+    let done = settings::plugins_account_changed(shown);
+    let end = move |r: Result<(), String>| say(r.map_or_else(|e| e, |()| done));
+    match change {
+        None => match connect_account(id, account, say, end) {
+            Ok(()) => settings::plugins_account_opened(title),
+            Err(e) => e,
+        },
+        Some(c) => {
+            change_account(id, account, c, end);
+            settings::plugins_account_sent(shown)
+        }
     }
 }
 
@@ -821,6 +855,23 @@ pub(crate) fn slash(app: &mut crate::app::App, typed: &str) -> Vec<String> {
             return vec![settings::plugins_connecting(title)];
         }
         (Some("refresh"), None) if !skills => refresh_said(),
+        (Some("account"), Some(id)) if !skills => {
+            use bend_plugins::connectors::AccountChange;
+            let (verb, account) = (words.next(), words.next());
+            let rest: Vec<&str> = words.by_ref().collect();
+            let change = match (verb, rest.join(" ").trim()) {
+                (Some("connect"), _) => None,
+                (Some("default"), _) => Some(AccountChange::MakeDefault),
+                (Some("remove"), _) => Some(AccountChange::Remove),
+                (Some("rename"), t) if !t.is_empty() => Some(AccountChange::Rename(t.to_string())),
+                _ => return vec![settings::plugins_account_usage.to_string()],
+            };
+            let Some(account) = account else { return vec![settings::plugins_account_usage.to_string()] };
+            let rows = rows(&ws, &pending());
+            let p = rows.iter().find(|p| p.kind == bise_proto::app_rows::PluginKind::Mistral && (p.id == id || p.name == id || p.title.eq_ignore_ascii_case(id)));
+            let (id, title) = p.map_or_else(|| (id.to_string(), id.to_string()), |p| (p.id.clone(), p.title.clone()));
+            return vec![account_said(&id, account, change, &title, account)];
+        }
         (Some(sub @ ("set" | "unset")), name) if !skills => {
             let (Some(name), Some(var)) = (name, words.next()) else { return vec![settings::plugins_setting_usage.to_string()] };
             let rows = rows(&ws, &pending());

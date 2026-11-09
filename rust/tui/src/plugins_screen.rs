@@ -196,6 +196,49 @@ pub(crate) struct Screen {
     pub(crate) note: Option<(String, bool)>,
     /// the first body line shown
     pub(crate) top: usize,
+    /// an account's line whose first `x` asked (a second removes it)
+    pub(crate) confirm: Option<String>,
+}
+
+/// An account's line id on a connector's page.
+fn account_id(name: &str) -> String {
+    format!("account:{name}")
+}
+
+/// What an account's line says first: his name for it, else its name.
+fn account_title(a: &bise_proto::app_rows::ConnectorAccount) -> &str {
+    a.title.as_deref().filter(|t| !t.trim().is_empty()).unwrap_or(&a.name)
+}
+
+/// A ready connector's accounts group: its head, then one line per
+/// account (his name for it, its connection's name, Default, its status).
+fn account_lines(sc: &Screen, p: &Plugin, width: usize, out: &mut Body) {
+    use bise_proto::app_rows::AccountStatus;
+    if p.kind != PluginKind::Mistral || (p.accounts.is_empty() && p.next_account.is_none()) {
+        return;
+    }
+    out.push((Line::default(), None));
+    out.push((Line::from(plain(format!(" {}", settings::plugins_accounts_head), Style::default().fg(dim()).add_modifier(Modifier::BOLD))), None));
+    for a in &p.accounts {
+        let id = account_id(&a.name);
+        let selected = sc.part.as_deref() == Some(id.as_str());
+        let lead = if selected { "›" } else { " " };
+        let mut left = vec![plain(format!(" {lead} "), Style::default().fg(accent())), plain(account_title(a).to_string(), Style::default().fg(text()))];
+        if account_title(a) != a.name {
+            left.push(plain(format!(" · {}", a.name), Style::default().fg(dim())));
+        }
+        let mut right = Vec::new();
+        if a.default {
+            right.push(plain(format!("{} ", settings::plugins_account_default), Style::default().fg(dim())));
+        }
+        match a.status {
+            AccountStatus::Valid => right.push(plain(settings::plugins_account_works, Style::default().fg(text()))),
+            AccountStatus::Invalid => right.push(plain(settings::plugins_account_expired, Style::default().fg(error()))),
+            // no status from Mistral is never a failure (designer m_58028)
+            AccountStatus::Error | AccountStatus::Unknown => right.push(plain(settings::plugins_account_not_checked, Style::default().fg(faint()))),
+        }
+        out.push((split(left, right, width), Some(id)));
+    }
 }
 
 /// What a key asks the shell to do.
@@ -231,6 +274,12 @@ pub(crate) enum Effect {
     /// ask for a setting's value in the composer (`/plugins set`): the
     /// plugin's name, the var, its label, typed hidden when `secret`
     AskSetting { plugin: String, var: String, label: String, secret: bool },
+    /// one of his accounts on connector `id`: its login (`change` none:
+    /// another account, or a reconnect) or a change on Mistral
+    Account { id: String, account: String, change: Option<bend_plugins::connectors::AccountChange> },
+    /// ask for an account's new name in the composer (`/plugins account
+    /// <id> rename <account> `)
+    AskAccountTitle { id: String, account: String },
 }
 
 // ---- what a row is (pure) ----
@@ -873,6 +922,7 @@ pub(crate) fn page_body(sc: &Screen, p: &Plugin, width: usize) -> Body {
         state.push(plain(settings::plugins_needs_node, Style::default().fg(error())));
     }
     out.push((Line::from(state), None));
+    account_lines(sc, p, width, &mut out);
     if !p.prompts.is_empty() {
         out.push((Line::default(), None));
         let head = if wide { settings::plugins_try_head_wide } else { settings::plugins_try_head };
@@ -1225,6 +1275,17 @@ pub(crate) fn key_bar(sc: &Screen, rows: &[Plugin], width: usize) -> Line<'stati
         if on_setting {
             pairs.push(("⏎", settings::plugins_key_setting));
         }
+        if p.kind == PluginKind::Mistral && p.next_account.is_some() {
+            pairs.push(("a", settings::plugins_key_account_add));
+        }
+        if let Some(a) = sc.part.as_deref().and_then(|id| id.strip_prefix("account:")).and_then(|n| p.accounts.iter().find(|a| a.name == n)) {
+            pairs.push(("r", settings::plugins_key_account_rename));
+            if !a.default {
+                pairs.push(("d", settings::plugins_key_account_default));
+            }
+            pairs.push(("c", settings::plugins_key_account_reconnect));
+            pairs.push(("x", settings::plugins_key_account_remove));
+        }
         if wide {
             if p.parts.iter().any(|x| !x.tools.is_empty()) {
                 pairs.push(("⏎", settings::plugins_key_fold));
@@ -1311,6 +1372,9 @@ fn page_ids(sc: &Screen, p: &Plugin) -> Vec<String> {
             out.push(more_id(owner));
         }
     };
+    if p.kind == PluginKind::Mistral {
+        out.extend(p.accounts.iter().map(|a| account_id(&a.name)));
+    }
     out.extend(p.settings.iter().map(|s| setting_id(&s.var)));
     for x in p.parts.iter().filter(|x| x.kind == PartKind::Skill) {
         out.push(x.id.clone());
@@ -1472,8 +1536,44 @@ fn add_key(sc: &mut Screen, k: &KeyEvent) -> Effect {
     Effect::None
 }
 
+/// A key on a connector's accounts (none: not an account key here).
+fn account_key(sc: &mut Screen, p: &Plugin, k: &KeyEvent) -> Option<Effect> {
+    use bend_plugins::connectors::AccountChange;
+    if p.kind != PluginKind::Mistral {
+        return None;
+    }
+    let KeyCode::Char(c) = k.code else { return None };
+    if c == 'a' {
+        let next = p.next_account.clone()?;
+        return Some(Effect::Account { id: p.id.clone(), account: next, change: None });
+    }
+    let a = sc.part.as_deref().and_then(|id| id.strip_prefix("account:")).and_then(|n| p.accounts.iter().find(|a| a.name == n))?;
+    let (id, account) = (p.id.clone(), a.name.clone());
+    let e = match c {
+        'r' => Effect::AskAccountTitle { id, account },
+        'd' if !a.default => Effect::Account { id, account, change: Some(AccountChange::MakeDefault) },
+        'c' => Effect::Account { id, account, change: None },
+        'x' if sc.confirm.as_deref() == Some(account.as_str()) => {
+            sc.confirm = None;
+            Effect::Account { id, account, change: Some(AccountChange::Remove) }
+        }
+        'x' => {
+            sc.note = Some((settings::plugins_account_remove_again(account_title(a)), true));
+            sc.confirm = Some(account);
+            Effect::None
+        }
+        _ => return None,
+    };
+    Some(e)
+}
+
 fn page_key(sc: &mut Screen, p: &Plugin, k: &KeyEvent) -> Effect {
     let list = page_ids(sc, p);
+    if let Some(e) = account_key(sc, p, k) {
+        return e;
+    }
+    // a remove asks again only on the same line, right after
+    sc.confirm = None;
     match k.code {
         KeyCode::Esc => {
             sc.opened = None;
