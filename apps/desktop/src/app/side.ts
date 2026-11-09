@@ -2,7 +2,7 @@
 // sign per agent in a 15 px mono column, the same signs as the TUI's, what
 // a project's row says on its right, which done agents fold into 'n more
 // today', and the window's widths (the sidebar slides over under 1000 px,
-// the right panel is open by default from 1100 px). Owner: amb-win. Pure:
+// the frame is wide from 1100 px). Owner: amb-win. Pure:
 // Sidebar.tsx and App.tsx draw these.
 import type { Agent, ComputerAgent, ProjectRow } from '@/proto';
 import { hero } from '@/proto/words_hero.gen';
@@ -247,14 +247,8 @@ export function crumbGoOf(route: Route, name: (project: string) => string, place
 
 /** Under this width the sidebar (and the right panel) slide over the window. */
 export const NARROW_PX = 1000;
-/** From this width the right panel is open by default. */
+/** From this width the frame is 'wide' (Frame.tsx widthOf); the panel stays folded by default at any width (panel/state.ts). */
 export const PANEL_OPEN_PX = 1100;
-
-/** The panel's state at a width: docked (open or closed) or sliding over. Pure. */
-export function panelAt(width: number, kept: boolean | undefined): { docked: boolean; open: boolean } {
-  if (width < NARROW_PX) return { docked: false, open: false };
-  return { docked: true, open: kept ?? width >= PANEL_OPEN_PX };
-}
 
 /**
  * The title bar's panel button words after its '↗': 'artifacts · 5' ('5' under 1000 px); at zero

@@ -2,7 +2,7 @@
 import { hero } from '@/proto/words_hero.gen';
 import { describe, expect, it } from 'vitest';
 import type { Agent, ProjectRow } from '@/proto';
-import { computerDot, crumbGoOf, crumbOf, folds, moreWords, panelAt, panelWords, panelProject, projectSide, signOf, turnShort } from './side';
+import { computerDot, crumbGoOf, crumbOf, folds, moreWords, panelWords, panelProject, projectSide, signOf, turnShort } from './side';
 import { keyAction, menuEcho, MENU_ECHO_MS, type KeyLike } from './keys';
 import type { Route } from './route';
 import { PAGES } from '@/settings/pages';
@@ -66,13 +66,6 @@ describe("a project's row", () => {
 });
 
 describe('the frame', () => {
-  it('the panel: open by default from 1100 px, closed below, his choice kept, sliding over under 1000 px', () => {
-    expect(panelAt(1400, undefined)).toEqual({ docked: true, open: true });
-    expect(panelAt(1050, undefined)).toEqual({ docked: true, open: false });
-    expect(panelAt(1400, false)).toEqual({ docked: true, open: false });
-    expect(panelAt(1050, true)).toEqual({ docked: true, open: true });
-    expect(panelAt(800, true)).toEqual({ docked: false, open: false });
-  });
   it("the panel's project: the route's, every project's on bise's thread, none without a project or on the global screens", () => {
     expect(panelProject({ screen: 'thread', project: 'p', agent: 'perf' }, 'h', 1)).toBe('p');
     expect(panelProject({ screen: 'bise' }, 'h', 2), "bise's own thread: every project's").toBe('');

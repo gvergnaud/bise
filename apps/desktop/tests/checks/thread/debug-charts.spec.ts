@@ -73,9 +73,12 @@ for (const width of [1400, 1100] as const) {
         await expect.poll(() => page.evaluate(() => window.innerWidth), { timeout: 5000 }).toBe(width);
         await core.send({ ev: 'prefs', prefs: { onboarded: true, theme } } as never);
         await core.send(request() as never);
-        // at 1400 the right bar closed: the pane is over 880, the charts a column; at 1100 the bar
-        // open: under 880, the charts above the list behind three tabs
-        if (width === 1400) await page.getByTestId('app.panel.toggle').click();
+        // the panel folded, as a fresh window has it (panel.test.tsx 'is folded by default'); at 1400
+        // the side's outer card goes compact (its bar button, the coins): the pane is over 880, the
+        // charts a column; at 1100 (no room for the card) under 880, the charts above the list
+        // behind three tabs
+        await expect(page.getByTestId('app.panel.bar')).not.toHaveAttribute('data-open');
+        if (width === 1400) await page.getByTestId('app.bar.sidecard').click();
         const charts = page.getByTestId('comp.charts');
         await expect(charts).toBeVisible({ timeout: 15_000 });
         const keys = await charts.locator('.lg-bar').evaluateAll((bs) => bs.map((b) => b.getAttribute('data-testid')));
