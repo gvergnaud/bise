@@ -15,7 +15,9 @@
 // The core stops; the hubs never do: they are their own processes, and an app update never
 // touches them (S.6). The bundle is swapped (swap.ts: a write-ahead record first, then current →
 // <name>.app.old, the new one in place, rolled back on any error). .old stays until the new app
-// ran and said so (plan.ts startup); a new app that never did is offered a way back, on his click.
+// ran and said so (plan.ts startup); a new app that never did is on probation again at its next
+// start, offered a way back on his click while .old is a whole app, until its core answers (plan.ts
+// afterStart). Bundles go with swap.ts removeTree, never fs.rm (Electron's fs sees app.asar as a folder).
 // An app on a disk image, translocated, or in a folder it can't write downloads nothing: state
 // 'none' with why (plan.ts cantSwapAt). Where moving fixes it (move.ts movable), its first start
 // asks once per build to move it to /Applications (offerMove: one alert, 'Move' / 'Not now', kept
@@ -44,9 +46,9 @@ import { IPC, MOMENT_LINE, MOVE_LINE, QUIT_SWAP_LINE, RELAUNCH_LINE, UPDATE_LINE
 import { inside } from '../testhome';
 import { notQuiet, idleOfText, TICK_MS, type Busy, type MomentFacts } from './moment';
 export { bounded } from './moment';
-import { bundleOf, cantSwapAt, designated, developerId, leftovers, localFeed, readAfter, readSwap, readTrace, readVersion, signerChange, startup, zipName, type After, type AppBuild, type SwapRecord } from './plan';
+import { afterStart, bundleOf, cantSwapAt, designated, developerId, leftovers, localFeed, readAfter, readSwap, readTrace, readVersion, signerChange, startup, wholeAppParts, zipName, type After, type AppBuild, type SwapRecord } from './plan';
 import { asksMove, declinedText, movable, MOVE_ASK, readDeclined, testAnswer } from './move';
-import { swapIn, writeRecord } from './swap';
+import { removeTree, swapIn, writeRecord } from './swap';
 
 const run = promisify(execFile);
 
@@ -161,11 +163,12 @@ export class Updates {
       this.canMove = movable(cant, this.target, this.d.home);
       this.set({ state: 'none', cant, ...(this.canMove ? { move: 'can' as const } : {}) });
     }
-    for (const n of leftovers(await readdir(this.dir))) await rm(join(this.dir, n), { recursive: true, force: true });
+    for (const n of leftovers(await readdir(this.dir))) await this.removeTree(join(this.dir, n));
     const recFile = join(this.dir, 'swap.json');
     const rec = existsSync(recFile) ? readSwap(readFileSync(recFile, 'utf8')) : null;
     const old = `${this.target}.old`;
-    switch (startup(old, existsSync(old), rec)) {
+    const s = startup(old, existsSync(old), rec);
+    switch (s) {
       case 'stray':
         console.log(`update: ${old} is not this updater's (no swap record names it): left as is`);
         break;
@@ -173,27 +176,29 @@ export class Updates {
         await rm(recFile, { force: true });
         break;
       case 'confirmed':
-        await rm(old, { recursive: true, force: true });
+        await this.removeTree(old);
         await rm(recFile, { force: true });
         break;
-      case 'first':
-        if (rec !== null) await writeRecord(recFile, { ...rec, attempts: 1 });
-        this.first = true;
-        this.firstRec = rec;
-        break;
-      case 'went_bad':
-        this.set({ state: 'went_bad', version: rec?.to_version ?? '' });
-        break;
-      case 'none':
+      default:
         break;
     }
+    // a first start, or one after a start that never said ok: counted, the core's answer confirms it
+    const plan = afterStart(s, wholeAppParts(old).every((p) => existsSync(p)));
+    if (plan.probation && rec !== null) {
+      await writeRecord(recFile, { ...rec, attempts: rec.attempts + 1 });
+      this.first = true;
+      this.firstRec = rec;
+    }
+    if (plan.offerBack && rec !== null) this.set({ state: 'went_bad', version: rec.to_version });
   }
 
-  /** The app runs (its window loaded, its core answered): a first start after a swap is confirmed, .old goes. */
+  /** The app runs (its window loaded, its core answered): a start on probation after a swap is confirmed, .old goes, and so does 'go back'. */
   async started(): Promise<void> {
     if (!this.first) return;
     this.first = false;
-    await rm(`${this.target}.old`, { recursive: true, force: true });
+    if (this.state.state === 'went_bad') this.set(this.resting());
+    // .old first: a stop in between leaves a record with no .old ('forget'), never a .old with none ('stray')
+    await this.removeTree(`${this.target}.old`);
     await rm(join(this.dir, 'swap.json'), { force: true });
     // a quiet install leaves its trace for the settings (designer m_25362)
     const rec = this.firstRec;
@@ -296,6 +301,16 @@ export class Updates {
     if (this.d.send({ cmd: 'app_version', id: this.build.id, ...(this.build.built !== undefined ? { built: this.build.built } : {}) })) this.sentAt = t;
   }
 
+  /** A bundle the updater made, gone (swap.ts removeTree, refused outside its own names). */
+  private removeTree(path: string): Promise<void> {
+    return removeTree(path, this.dir);
+  }
+
+  /** The state with nothing on its way: none, with why this app can't update itself here. */
+  private resting(): UpdateState {
+    return this.cant === null ? { state: 'none' } : { state: 'none', cant: this.cant, ...(this.canMove ? { move: 'can' as const } : {}) };
+  }
+
   private set(s: UpdateState): void {
     this.state = s;
     this.ticking(s.state === 'ready');
@@ -317,7 +332,7 @@ export class Updates {
     try {
       await download(url, `${zip}.part`, sha256);
       await rename(`${zip}.part`, zip);
-      await rm(unpack, { recursive: true, force: true });
+      await this.removeTree(unpack);
       await run('/usr/bin/ditto', ['-x', '-k', zip, unpack]);
       const apps = (await readdir(unpack)).filter((n) => n.endsWith('.app'));
       if (apps.length !== 1) throw new UpdateError('signature', `the zip holds ${apps.length} apps`);
@@ -329,7 +344,7 @@ export class Updates {
       this.set({ state: 'ready', version });
     } catch (e) {
       await rm(`${zip}.part`, { force: true });
-      await rm(unpack, { recursive: true, force: true });
+      await this.removeTree(unpack);
       const reason: UpdateFail = e instanceof UpdateError ? e.reason : 'download';
       this.set({ state: 'failed', version, why: e instanceof Error ? e.message : String(e), reason });
     } finally {
@@ -440,15 +455,28 @@ export class Updates {
   /** His click after a new app that didn't start right: back to .old, then start it. */
   async revert(): Promise<boolean> {
     const old = `${this.target}.old`;
-    if (this.state.state !== 'went_bad' || !existsSync(old)) return false;
+    if (this.state.state !== 'went_bad' || this.installing || !wholeAppParts(old).every((p) => existsSync(p))) return false;
     const bad = `${this.target}.bad`;
-    await rm(bad, { recursive: true, force: true });
     this.installing = true;
+    // the renames before the core stops: one that fails puts back what moved and leaves the app as
+    // it was, its core running (a click went 'going back…' for good, the core stopped)
+    try {
+      await this.removeTree(bad);
+      await rename(this.target, bad);
+      try {
+        await rename(old, this.target);
+      } catch (e) {
+        await rename(bad, this.target);
+        throw e;
+      }
+    } catch (e) {
+      this.installing = false;
+      console.log(`update: go back failed: ${e instanceof Error ? e.message : String(e)}`);
+      return false;
+    }
     this.d.stopCore();
-    await rename(this.target, bad);
-    await rename(old, this.target);
-    await rm(bad, { recursive: true, force: true });
     await rm(join(this.dir, 'swap.json'), { force: true });
+    await this.removeTree(bad).catch(() => undefined);
     this.relaunch();
     return true;
   }

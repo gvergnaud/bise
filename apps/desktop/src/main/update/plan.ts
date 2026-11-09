@@ -103,7 +103,7 @@ export function readSwap(text: string): SwapRecord | null {
  *   target, so the second rename happened;
  * - `confirmed`: it said it started fine: remove .old and the record;
  * - `went_bad`: the record names this .old, the new app started before and
- *   never said ok: offer to go back, on his click, never by itself.
+ *   never said ok (afterStart says what this start does about it).
  */
 export type Startup = 'none' | 'forget' | 'stray' | 'first' | 'confirmed' | 'went_bad';
 
@@ -112,6 +112,42 @@ export function startup(old: string, oldExists: boolean, rec: SwapRecord | null)
   if (rec === null || rec.old_path !== old) return 'stray';
   if (rec.ok) return 'confirmed';
   return rec.attempts === 0 ? 'first' : 'went_bad';
+}
+
+/**
+ * What this start does after `startup` (go-back-banner): `probation`, it counts this start and the
+ * core's answer confirms the new app (.old and the record go); `offerBack`, the window says the new
+ * app didn't start right with 'go back', until that answer. A start after one that never said ok
+ * is on probation again: an app that runs now ran fine, the line goes once its core answers
+ * (it stayed for good before). 'go back' is offered only when .old is a whole app (`oldWhole`): a
+ * half-deleted one has nothing to go back to.
+ */
+export function afterStart(s: Startup, oldWhole: boolean): { readonly probation: boolean; readonly offerBack: boolean } {
+  if (s === 'first') return { probation: true, offerBack: false };
+  if (s === 'went_bad') return { probation: true, offerBack: oldWhole };
+  return { probation: false, offerBack: false };
+}
+
+/**
+ * Why `path` may not go with the updater's `rm -rf` (swap.ts removeTree), or null: only what the
+ * updater makes, an absolute `<x>.app.old` or `<x>.app.bad`, or an `unpack-*` right under its
+ * `updates` folder; never '/', a relative path, or anything else (the app itself): a wrong join
+ * throws instead of deleting an app (architect m_58148).
+ */
+export function refuseRemove(path: string, updates: string): string | null {
+  if (!path.startsWith('/') || path.split('/').includes('..')) return `not an absolute path: ${path}`;
+  const parts = path.split('/').filter((p) => p !== '');
+  const name = parts[parts.length - 1] ?? '';
+  if (parts.length < 2) return `too close to the root: ${path}`;
+  if (/^[^/]+\.app\.(old|bad)$/.test(name)) return null;
+  const parent = `/${parts.slice(0, -1).join('/')}`;
+  if (name.startsWith('unpack-') && parent === updates.replace(/\/+$/, '')) return null;
+  return `not the updater's to remove: ${path}`;
+}
+
+/** The paths a whole .app has (its Info.plist, its executables' folder): all there, macOS can start it. */
+export function wholeAppParts(bundle: string): readonly string[] {
+  return [`${bundle}/Contents/Info.plist`, `${bundle}/Contents/MacOS`];
 }
 
 /** The leftovers in the updates folder a start removes: partial downloads and unpacked copies (one download at a time). */

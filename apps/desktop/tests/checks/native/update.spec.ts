@@ -13,8 +13,10 @@
 //             answered, drops .old and swap.json (confirmed)
 //   tampered  a sealed file changed after signing: failed, why = the signature; nothing swapped
 //   other     validly signed, another build: failed, why = the signature; nothing swapped
-//   went_bad  a swapped-in app that started once and never said so: went_bad, and 'go back'
-//             (window.bise.update.revert()) puts .old back and says relaunch
+//   went_bad  a swapped-in app that started once and never said so: its next start whose core
+//             answers drops the line, .old and swap.json; one whose core never answers says
+//             went_bad, and 'go back' (window.bise.update.revert()) puts .old back and says relaunch
+// The fake bundles hold a real app.asar: Electron's fs sees it as a folder (go-back-banner).
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type { Page } from '@playwright/test';
@@ -164,7 +166,33 @@ for (const build of ['tampered', 'other'] as const satisfies readonly UpdateBuil
   });
 }
 
-test('setup/update (S.6, real core) went_bad: a swapped-in app that never said it ran offers go back; revert puts .old back', async () => {
+test('setup/update (S.6, real core) went_bad then fine: a start after one that never said ok, whose core answers, drops the line, .old and swap.json', async () => {
+  test.setTimeout(120_000);
+  const w = realWorld();
+  const f = makeUpdateFeed(w.home, 'good');
+  const dir = caseDir(w, 'went-bad-fine');
+  const userData = path.join(dir, 'userdata');
+  const updates = path.join(userData, 'updates');
+  // Gauthier's Mac (desktop-v2026.11.6, go-back-banner): a record started once, never confirmed
+  cpSync(f.target, `${f.target}.old`, { recursive: true, verbatimSymlinks: true });
+  mkdirSync(updates, { recursive: true });
+  writeFileSync(path.join(updates, 'swap.json'), JSON.stringify({
+    phase: 'swapped', old_path: `${f.target}.old`, from_version: 'before', to_version: OFFERED.version, attempts: 1, ok: false,
+  }));
+
+  const { s, out } = await launch(w, f.env, userData);
+  try {
+    await expect.poll(() => existsSync(`${f.target}.old`) || existsSync(path.join(updates, 'swap.json')), {
+      timeout: 30_000, message: 'once the core answered, .old (app.asar and all) and swap.json are gone',
+    }).toBe(false);
+    await expect(s.page.locator('[data-testid="app.update"][data-state="went_bad"]'), 'no went_bad line once it runs').toHaveCount(0);
+    expect(out.of(RELAUNCH), 'nothing goes back by itself').toEqual([]);
+  } finally {
+    await s.close();
+  }
+});
+
+test('setup/update (S.6) went_bad: a swapped-in app whose core never answers offers go back; revert puts .old back', async () => {
   test.setTimeout(120_000);
   const w = realWorld();
   const f = makeUpdateFeed(w.home, 'good');
@@ -180,7 +208,8 @@ test('setup/update (S.6, real core) went_bad: a swapped-in app that never said i
   }));
   const oldIno = statSync(`${f.target}.old`).ino;
 
-  const { s, out } = await launch(w, f.env, userData);
+  // a new app that didn't start right: its core never answers (a core that a core answer would confirm)
+  const { s, out } = await launch(w, { ...f.env, BISE_DESKTOP_BISE: '/usr/bin/false' }, userData);
   try {
     await waitState(s.page, out, (x) => x.state === 'went_bad' && x.version === OFFERED.version, 'went_bad', 20_000);
     await sleep(2000);

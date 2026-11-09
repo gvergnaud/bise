@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { readSwap, startup, type Startup } from './plan';
-import { swapIn, type SwapStep } from './swap';
+import { removeTree, swapIn, type SwapStep } from './swap';
 
 // One law per crash point of the swap (architect m_18352): before the
 // record, after the record, after rename 1, after rename 2, after ok. Each
@@ -29,7 +29,7 @@ function world() {
     const old = `${target}.old`;
     return startup(old, existsSync(old), existsSync(recFile) ? readSwap(readFileSync(recFile, 'utf8')) : null);
   };
-  return { target, staged, recFile, old: `${target}.old`, mark, next };
+  return { target, staged, recFile, updates: join(d, 'updates'), old: `${target}.old`, mark, next };
 }
 
 class Crash extends Error {}
@@ -104,6 +104,30 @@ describe('the swap, write-ahead: each crash point', () => {
     expect(existsSync(w.old)).toBe(false);
     expect(existsSync(w.recFile)).toBe(false);
     expect(w.next()).toBe('none');
+  });
+
+  it('removeTree takes a bundle whole, app.asar too; none there is nothing', async () => {
+    const w = world();
+    mkdirSync(join(w.old, 'Contents', 'Resources'), { recursive: true });
+    writeFileSync(join(w.old, 'Contents', 'Resources', 'app.asar'), 'asar');
+    await removeTree(w.old, w.updates);
+    expect(existsSync(w.old)).toBe(false);
+    await removeTree(w.old, w.updates);
+  });
+
+  it('removeTree refuses, by throwing, what the updater never makes: the app itself stays', async () => {
+    const w = world();
+    await expect(removeTree(w.target, w.updates)).rejects.toThrow(/refused/);
+    expect(w.mark(w.target)).toBe('v1');
+  });
+
+  it(".old left half-deleted by an earlier update (only its app.asar): the next swap still goes (go-back-banner)", async () => {
+    const w = world();
+    mkdirSync(join(w.old, 'Contents', 'Resources'), { recursive: true });
+    writeFileSync(join(w.old, 'Contents', 'Resources', 'app.asar'), 'asar');
+    await swapIn(w.target, w.staged, w.recFile, { from: 'v1', to: 'v2' });
+    expect(w.mark(w.target)).toBe('v2');
+    expect(w.mark(w.old)).toBe('v1');
   });
 
   it("a launcher's .old next to the bundle, no record: stray, never went_bad", () => {

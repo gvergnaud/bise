@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bundleOf, cantSwapAt, designated, developerId, leftovers, localFeed, readAfter, readSwap, readVersion, signerChange, startup, zipName } from './plan';
+import { afterStart, bundleOf, cantSwapAt, designated, developerId, leftovers, localFeed, readAfter, readSwap, readVersion, refuseRemove, signerChange, startup, wholeAppParts, zipName } from './plan';
 
 describe('readVersion (the app bundle VERSION)', () => {
   it('reads id and built; a dev build has no built; no id is no build', () => {
@@ -46,6 +46,25 @@ describe('startup after a swap (.old kept until started ok, write-ahead record: 
   });
   it('the record names this .old, started before and never said ok: offer to go back', () => {
     expect(startup(OLD, true, rec(1, false))).toBe('went_bad');
+  });
+  it('a start after one that never said ok is on probation again: its core answer confirms it, the line goes (go-back-banner)', () => {
+    expect(afterStart('went_bad', true)).toEqual({ probation: true, offerBack: true });
+    expect(afterStart('first', true)).toEqual({ probation: true, offerBack: false });
+    for (const s of ['none', 'forget', 'stray', 'confirmed'] as const) expect(afterStart(s, true)).toEqual({ probation: false, offerBack: false });
+  });
+  it("'go back' only to a whole app: a half-deleted .old (Gauthier's: only app.asar left) offers nothing", () => {
+    expect(afterStart('went_bad', false)).toEqual({ probation: true, offerBack: false });
+    expect(wholeAppParts('/A/bise.app.old')).toEqual(['/A/bise.app.old/Contents/Info.plist', '/A/bise.app.old/Contents/MacOS']);
+  });
+  it("the updater's rm -rf takes only its own: <x>.app.old, <x>.app.bad, unpack-* in its folder (architect m_58148)", () => {
+    const U = '/U/bise/updates';
+    expect(refuseRemove('/A/bise.app.old', U)).toBeNull();
+    expect(refuseRemove('/A/bise.app.bad', U)).toBeNull();
+    expect(refuseRemove(`${U}/unpack-bise-1`, U)).toBeNull();
+    expect(refuseRemove(`${U}/unpack-bise-1`, `${U}/`)).toBeNull();
+    for (const p of ['/A/bise.app', '/', '', 'bise.app.old', '/x.app.old', '/A/../bise.app.old', `${U}/swap.json`, '/elsewhere/unpack-x', `${U}/unpack-x/bise.app`, '/A/bise.app.old/Contents']) {
+      expect(refuseRemove(p, U), p).not.toBeNull();
+    }
   });
   it("a .old the updater didn't make (no record, or a record naming another path) is stray: never went_bad", () => {
     expect(startup(OLD, true, null)).toBe('stray');

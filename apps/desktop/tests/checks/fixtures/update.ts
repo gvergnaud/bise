@@ -46,7 +46,27 @@ export const OFFERED = { version: '2026.10.2-99', id: 'd99', built: '2026-10-08T
 
 const run = (cmd: string, args: string[]): string => execFileSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 
-/** A minimal ad-hoc-signed .app at `app` with this VERSION (never run: its executable is a copy of /usr/bin/true). */
+/**
+ * A real one-file asar archive (@electron/asar's layout: a size pickle, the header JSON's pickle,
+ * the data), as a packed app's Contents/Resources/app.asar: Electron's fs reads it as a folder, so
+ * an updater that fs.rm's a bundle stops on it (go-back-banner); a fake bundle without one hid that.
+ */
+export function asarArchive(): Buffer {
+  const data = Buffer.from('module.exports = 1;');
+  const json = Buffer.from(JSON.stringify({ files: { 'index.js': { size: data.length, offset: '0' } } }));
+  const padded = Buffer.alloc(Math.ceil(json.length / 4) * 4);
+  json.copy(padded);
+  const header = Buffer.alloc(8 + padded.length);
+  header.writeUInt32LE(4 + padded.length, 0);
+  header.writeInt32LE(json.length, 4);
+  padded.copy(header, 8);
+  const size = Buffer.alloc(8);
+  size.writeUInt32LE(4, 0);
+  size.writeUInt32LE(header.length, 4);
+  return Buffer.concat([size, header, data]);
+}
+
+/** A minimal ad-hoc-signed .app at `app` with this VERSION and an app.asar (never run: its executable is a copy of /usr/bin/true). */
 function fakeApp(app: string, version: { id: string; built: string }): void {
   rmSync(app, { recursive: true, force: true });
   mkdirSync(join(app, 'Contents', 'MacOS'), { recursive: true });
@@ -64,6 +84,7 @@ function fakeApp(app: string, version: { id: string; built: string }): void {
 `,
   );
   cpSync('/usr/bin/true', join(app, 'Contents', 'MacOS', 'bise'));
+  writeFileSync(join(app, 'Contents', 'Resources', 'app.asar'), asarArchive());
   writeFileSync(join(app, 'Contents', 'Resources', 'VERSION'), `id=${version.id}\nbuilt=${version.built}\n`);
   run('/usr/bin/codesign', ['--force', '--sign', '-', join(app, 'Contents', 'MacOS', 'bise')]);
   run('/usr/bin/codesign', ['--force', '--sign', '-', app]);
