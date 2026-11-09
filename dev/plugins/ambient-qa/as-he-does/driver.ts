@@ -1770,7 +1770,17 @@ async function fileChips(harness: () => Promise<unknown>) {
   const appHome = await page.evaluate(() => { const w: Window & { bise?: { home?: string } } = window; return w.bise?.home ?? null; }).catch(() => null);
   const fenced = !!appHome && !FD.startsWith(`${appHome}/`);
   const drop = async (sel: string, files: string[]) => {
-    const box = await page.locator(sel).first().boundingBox().catch(() => null);
+    // the drag lands on page coordinates: read them once the target's box holds still for 100 ms.
+    // A box read while the layout still moved (a card just docked, 'answering' just drawn) put
+    // the point off the field, and the drop was lost without a trace: (f1)'s 'chip false' in
+    // 11.8's and 11.9's first passes, at load ~10-12
+    const boxOf = () => page.locator(sel).first().boundingBox().catch(() => null);
+    const box = await until(async () => {
+      const a = await boxOf();
+      await page.waitForTimeout(100);
+      const b = await boxOf();
+      return a && b && a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height ? b : null;
+    }, 5000, 100);
     if (!box) return false;
     const x = box.x + box.width / 2, y = box.y + box.height / 2;
     const s = await page.context().newCDPSession(page);
