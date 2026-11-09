@@ -144,13 +144,6 @@ def jarr.m(m: Maybe<&2, Jv.Val>) -> List<&2, Jv.Val>:
 def jarr(v: Jv.Val, +k: String) -> List<&2, Jv.Val>:
   jarr.m(Jv.get(v, k))
 
-def jsome.n(m: Maybe<&2, Nat>) -> Bool:
-  match m:
-    case Some{_}:
-      True{}
-    case None{}:
-      False{}
-
 # the index every lookup reads: this session's one tool index, written
 # by its plugins bridge (runtime/plugins.bend): the plugins' tools and
 # the Mistral connectors', minus the ones he turned off. Missing: no
@@ -740,76 +733,70 @@ def accounts_read() -> IO(List<&2, Mcp.ConnAccts>):
     m : Maybe<&2, String> <- P.read_file(pp)
     IO.pure(List<&2, Mcp.ConnAccts>, conns_of(m))
 
-def mt_pick.ours(ours: Bool, +cid: String, +want: String, +name: String)
-    -> IO(Mcp.AcctPick):
+def mt_pick.ours(ours: Bool, +cid: String, want: Maybe<&2, String>, +name: String)
+    -> IO(Mcp.CallPick):
   match ours:
     case False{}:
-      IO.pure(Mcp.AcctPick, Mcp.APDefault{})
+      IO.pure(Mcp.CallPick, Mcp.CPGo{"", ""})
     case True{}:
-      do IO<Mcp.AcctPick>:
+      do IO<Mcp.CallPick>:
         cs : List<&2, Mcp.ConnAccts> <- accounts_read()
-        IO.pure(Mcp.AcctPick, Mcp.account_pick(Mcp.accts_of(cs, cid), want,
+        IO.pure(Mcp.CallPick, Mcp.call_pick(Mcp.accts_of(cs, cid), want,
           Mcp.group_of(name)))
 
-# the account a call of this tool names (read at each call: a renamed or
-# new account is never stale)
-def mt_pick(m: Maybe<&2, String>, +cid: String, +schema: String, +name: String)
-    -> IO(Mcp.AcctPick):
-  match m:
-    case None{}:
-      IO.pure(Mcp.AcctPick, Mcp.APDefault{})
-    case Some{+want}:
-      mt_pick.ours(account_ours(cid, schema), cid, want, name)
-
 def call_account.found(m: Maybe<&2, McpTool>, +name: String, +args: String)
-    -> IO(Mcp.AcctPick):
+    -> IO(Mcp.CallPick):
   match m:
     case Some{MT{+cid, _, +schema, _}}:
-      mt_pick(arg_account(args), cid, schema, name)
+      mt_pick.ours(account_ours(cid, schema), cid, arg_account(args), name)
     case _:
-      IO.pure(Mcp.AcctPick, Mcp.APDefault{})
+      IO.pure(Mcp.CallPick, Mcp.CPGo{"", ""})
 
 def call_account.read(m: Maybe<&2, String>, +name: String, +args: String)
-    -> IO(Mcp.AcctPick):
+    -> IO(Mcp.CallPick):
   match m:
     case Some{+content}:
       call_account.found(find_line(content, name), name, args)
     case None{}:
-      IO.pure(Mcp.AcctPick, Mcp.APDefault{})
+      IO.pure(Mcp.CallPick, Mcp.CPGo{"", ""})
 
-def call_account.has(has: Bool, +name: String, +args: String)
-    -> IO(Mcp.AcctPick):
-  match has:
-    case False{}:
-      IO.pure(Mcp.AcctPick, Mcp.APDefault{})
-    case True{}:
-      do IO<Mcp.AcctPick>:
-        m : Maybe<&2, String> <- index_content()
-        call_account.read(m, name, args)
+# the account a gateway call runs with and the label its card shows,
+# resolved ONCE above the call (main.bend, every mode): the index for its
+# connector, then its accounts (read at each call: a renamed or new
+# account is never stale). Not a gateway connector's call: nothing
+def call_account(+name: String, +args: String) -> IO(Mcp.CallPick):
+  do IO<Mcp.CallPick>:
+    m : Maybe<&2, String> <- index_content()
+    call_account.read(m, name, args)
 
-# the account a call names, before the gate asks (the gate line carries
-# the resolved name): no file is read unless the arguments say `account`
-def call_account(+name: String, +args: String) -> IO(Mcp.AcctPick):
-  call_account.has(jsome.n(Tx.find(args, "\"account\"", 0n)), name, args)
+# the arguments a resolved call runs with: `account` set to the picked
+# connection's name ("" for the default: the arguments as they are)
+def pick_args(p: Mcp.CallPick, +args: String) -> String:
+  match p:
+    case Mcp.CPGo{+n, _}:
+      Bool.pick(String, String.is_empty(n), args, with_account(args, n))
+    case Mcp.CPRefuse{_}:
+      args
 
-def mcp_call.picked(p: Mcp.AcctPick, +name: String, +cid: String,
+# the account the call carries, already resolved above it: it leaves the
+# arguments and goes as x-credentials-name; mcp_call looks nothing up
+def mcp_call.acct(m: Maybe<&2, String>, ours: Bool, +name: String, +cid: String,
     +tool: String, +schema: String, +args: String, +key: String, +ui: String)
     -> IO(MR):
-  match p:
-    case Mcp.APDefault{}:
+  match m:
+    case Some{+n}:
+      Bool.pick(IO(MR), ours,
+        mcp_call.found(name, cid, tool, schema, call_args(strip_account(args)), key, ui, n),
+        mcp_call.found(name, cid, tool, schema, call_args(args), key, ui, ""))
+    case None{}:
       mcp_call.found(name, cid, tool, schema, call_args(args), key, ui, "")
-    case Mcp.APName{+n}:
-      mcp_call.found(name, cid, tool, schema, call_args(strip_account(args)), key, ui, n)
-    case Mcp.APRefuse{+why}:
-      IO.pure(MR, MR{False{}, why})
 
 def mcp_call.mt(mt: McpTool, +name: String, +args: String, +key: String)
     -> IO(MR):
   match mt:
     case MT{+cid, +tool, +schema, +ui}:
-      do IO<MR>:
-        p : Mcp.AcctPick <- mt_pick(arg_account(args), cid, schema, name)
-        mcp_call.picked(p, name, cid, tool, schema, args, key, ui)
+      mcp_call.acct(arg_account(args), account_ours(cid, schema), name, cid,
+        tool, schema, args, key, ui)
 
 # no index: the call is still named (issue 21: a nameless answer read
 # like an empty result)

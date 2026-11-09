@@ -715,7 +715,7 @@ fn mockup_turn(open: bool) -> Vec<Ev> {
         Ev::Thinking { ms: 14_000, text: "safari drops the session cookie on the redirect. SameSite=None needs\nSecure, and the dev server sets it without. check session.ts first.".into(), open },
         Ev::Tool(b),
         Ev::Tool(t),
-        Ev::Sub { name: "github.search_issues".into(), ok: true, preview: "2 items".into() },
+        Ev::Sub { name: "github.search_issues".into(), ok: true, preview: "2 items".into(), account: None },
         Ev::Tool(p),
         Ev::Assistant("found it: safari drops SameSite=None cookies without Secure. added secure: true; the webkit test passes now.".into()),
     ]
@@ -861,7 +861,7 @@ fn an_answered_card_fades_in_place() {
 fn computer_actions_are_rows_of_their_own() {
     let mut t = tool_with(1, "run_typescript", None, Some((true, "done")), true);
     t.elapsed = Some(String::new());
-    let sub = |name: &str, ok: bool, preview: &str| Ev::Sub { name: name.into(), ok, preview: preview.into() };
+    let sub = |name: &str, ok: bool, preview: &str| Ev::Sub { name: name.into(), ok, preview: preview.into(), account: None };
     let events = vec![
         Ev::Tool(t),
         sub("computer.snapshot", true, r##"{"refs":12,"target":"tab:7","text":"# Anker cable · amazon.fr"##),
@@ -945,7 +945,9 @@ fn feed_entities_use_the_book_glyphs() {
     assert_eq!(row(Ev::Warn("turn interrupted".into())), " ▲ turn interrupted");
     assert_eq!(row(Ev::Warn("turn interrupted by main".into())), " ▲ turn interrupted by main");
     assert_eq!(row(Ev::Err("boom".into())), " ✗ boom");
-    assert_eq!(row(Ev::Sub { name: "gh.x".into(), ok: false, preview: "404".into() }), "   ↳ gh.x ✗ 404");
+    assert_eq!(row(Ev::Sub { name: "gh.x".into(), ok: false, preview: "404".into(), account: None }), "   ↳ gh.x ✗ 404");
+    // the account a sub-call used follows its name (multi-accounts piece 5)
+    assert_eq!(row(Ev::Sub { name: "gmail.search".into(), ok: true, preview: "1".into(), account: Some("perso".into()) }), "   ↳ gmail.search · perso ✓");
     assert!(row(Ev::You("hi".into(), Mark::Read, false, None)).starts_with("│  hi"));
     // a tool the turn abandoned says so in English
     let mut events = vec![Ev::Tool(ToolData::bare(9, ToolState::Run))];

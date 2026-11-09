@@ -919,6 +919,85 @@ def accts_of_group(cs: List<&2, ConnAccts>, +g: String) -> List<&2, Acct>:
     case Con{ConnAccts{_, +gr, +as}, rest}:
       accts_hit(String.eq(gr, g), as, accts_of_group(rest, g))
 
+# ---- the account a call runs with (resolved once, above the call) ----
+# main.bend resolves every gateway call's account once, in every mode,
+# before the gate: the call then runs with that name and the card shows
+# its label, both from the same pick.
+
+# what a call runs with: the connection's name for x-credentials-name
+# ("" for the default: no header) and the label its card shows ("" when
+# the connector has fewer than 2 accounts); or refused, no call made
+type CallPick is Data:
+  CPGo{name: String, label: String}
+  CPRefuse{why: String}
+
+def default_name.hit(hit: Bool, +a: Acct, +rest_res: String) -> String:
+  match hit:
+    case True{}:
+      acct_name(a)
+    case False{}:
+      rest_res
+
+def default_name(accts: List<&2, Acct>) -> String:
+  match accts:
+    case Nil{}:
+      ""
+    case Con{+a, rest}:
+      default_name.hit(acct_dflt(a), a, default_name(rest))
+
+def acct_named.hit(hit: Bool, +a: Acct, +rest_res: Maybe<&2, Acct>) -> Maybe<&2, Acct>:
+  match hit:
+    case True{}:
+      Some{a}
+    case False{}:
+      rest_res
+
+def acct_named(accts: List<&2, Acct>, +n: String) -> Maybe<&2, Acct>:
+  match accts:
+    case Nil{}:
+      None{}
+    case Con{+a, rest}:
+      acct_named.hit(String.eq(acct_name(a), n), a, acct_named(rest, n))
+
+def label_of.m(m: Maybe<&2, Acct>, +accts: List<&2, Acct>) -> String:
+  match m:
+    case Some{+a}:
+      acct_label(accts, a)
+    case None{}:
+      ""
+
+def label_of.many(many: Bool, +accts: List<&2, Acct>, +n: String) -> String:
+  match many:
+    case True{}:
+      label_of.m(acct_named(accts, n), accts)
+    case False{}:
+      ""
+
+# the card's label of account `n`: what the accounts line calls it
+# (acct_label), only when the connector has 2 or more accounts
+def label_of(+accts: List<&2, Acct>, +n: String) -> String:
+  label_of.many(Nat.is_gt(List.length(&2, Acct, accts), 1n), accts, n)
+
+def call_pick.named(p: AcctPick, +accts: List<&2, Acct>) -> CallPick:
+  match p:
+    case APName{+n}:
+      CPGo{n, label_of(accts, n)}
+    case APRefuse{+why}:
+      CPRefuse{why}
+    case APDefault{}:
+      CPGo{"", label_of(accts, default_name(accts))}
+
+# a call's account, once: no `account` (want None): his default, no
+# header, its label; else account_pick, the header's name and its label
+# from that same pick
+def call_pick(+accts: List<&2, Acct>, want: Maybe<&2, String>, +group: String)
+    -> CallPick:
+  match want:
+    case None{}:
+      CPGo{"", label_of(accts, default_name(accts))}
+    case Some{+w}:
+      call_pick.named(account_pick(accts, w, group), accts)
+
 # ---- the tool groups' lines, with their accounts ----
 
 # a group's accounts, said only when it has 2 or more (one account: the

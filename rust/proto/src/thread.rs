@@ -570,6 +570,11 @@ pub struct ToolItem {
     /// calls: "running the tests")
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub intent: Option<String>,
+    /// the account a connector call runs as (`tool_account`, its label:
+    /// his title for it, else its name), only when the connector has 2 or
+    /// more; the row shows it after its name
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account: Option<String>,
     /// its intent ("running the tests"), else `name: first line of args`
     pub text: String,
     pub kind: ToolKind,

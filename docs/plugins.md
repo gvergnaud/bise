@@ -410,11 +410,22 @@ tests use temp dirs.
     resolved account leaves the arguments and goes as
     `x-credentials-name`; no `account`, no header (Mistral's default). A
     plugin's own tool, or a tool whose schema has its own `account`,
-    keeps it as an argument. In `auto`, the account is resolved before
-    the gate asks: refused, nothing is asked; resolved, the gate line
-    carries its name (`"account"`, absent for the default) and the call
-    runs with that name as its `account`, so it sends the account the
-    verdict was about or, gone since, is refused.
+    keeps it as an argument. The account is resolved once, above the
+    call, in every mode (`main.bend`'s gate step, `Mcp.call_account`,
+    `call_pick` in `mcp-pure.bend`): refused, nothing is asked or sent;
+    resolved, the gate line (in `auto`) carries its name (`"account"`,
+    absent for the default) and the call runs with that name as its
+    `account`; `mcp_call` only reads it, so it sends the account the
+    verdict was about. The same pick gives the call's label (multi-
+    accounts piece 5): the title when it alone picks the account, else
+    the name, the default's when the call names none, and only when the
+    connector has 2 or more accounts. A top-level call writes
+    `tool_account #<id> : <label>` (bise-proto `thread/lines.rs`
+    `Rec::ToolAccount`, folded onto `ToolItem.account`); a call inside
+    run_typescript writes `subtool <name> <ok|fail> as <label> :
+    <preview>` (`Rec::Sub.account`). The label is one line with each ':'
+    written '∶' (U+2236). The TUI and the desktop show it after the
+    call's name: `gmail.search · perso`.
     The system prompt's Tool groups line says a group's accounts when it
     has 2 or more (`· accounts: perso (default), pro`), read at the
     agent's start;

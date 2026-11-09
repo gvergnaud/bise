@@ -36,6 +36,8 @@ pub(crate) struct SubCall<'a> {
     pub(crate) name: &'a str,
     pub(crate) ok: bool,
     pub(crate) preview: &'a str,
+    // the connector account it used: ` · perso` after the name
+    pub(crate) account: Option<&'a str>,
 }
 
 // corners, lines and joints: rounded, or plain ASCII (book §11)
@@ -273,7 +275,7 @@ pub(crate) fn box_lines(
     let mut shown: Vec<Vec<Span<'static>>> = subs
         .iter()
         .map(|s| {
-            let mut l = vec![Span::styled(format!("{} {}", glyph(G_SUBCALL), s.name), dim_st)];
+            let mut l = vec![Span::styled(format!("{} {}{}", glyph(G_SUBCALL), s.name, crate::render::account_suffix(s.account)), dim_st)];
             if s.ok {
                 l.push(Span::styled(format!(" {}", glyph(G_RECEIVED)), dim_st));
             } else {
@@ -666,12 +668,17 @@ mod tests {
     #[test]
     fn sub_calls_are_inside() {
         let td = tool("run_typescript", ToolState::Ok, 1);
-        let subs = [SubCall { name: "github.search_issues", ok: true, preview: "" }];
+        let subs = [
+            SubCall { name: "github.search_issues", ok: true, preview: "", account: None },
+            SubCall { name: "gmail.search", ok: true, preview: "", account: Some("perso") },
+        ];
         let rows = inner(&text(&td, &subs));
         assert!(rows[0].starts_with("╭─ ƒ typescript"), "{rows:#?}");
         let out: Vec<&String> = rows.iter().skip_while(|r| !r.starts_with('├')).skip(1).collect();
         assert_eq!(out[0], "↳ github.search_issues ✓");
-        assert_eq!(out[1], "line 1");
+        // the account it used follows the name (multi-accounts piece 5)
+        assert_eq!(out[1], "↳ gmail.search · perso ✓");
+        assert_eq!(out[2], "line 1");
     }
 
     /// ASCII: `+- $ bash ok 0.9s ---+`, `|`, `> n more lines`.

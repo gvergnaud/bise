@@ -722,6 +722,37 @@ law accounts_by_cid:
     Mc.accts_of([Mc.ConnAccts{"c-1", "gmail", gmail_accts()}], "c-9"))
     == (gmail_accts(), Nil{}) : List<&2, Mc.Acct> & List<&2, Mc.Acct>}
 
+# LAW: a call's header and its card's label come from the same pick: a
+# named account runs as its name and shows its label; no account runs as
+# the default (no header) and shows the default's label; one account
+# shows no label; a refusal runs nothing.
+law call_pick_header_and_label:
+  {(Mc.call_pick(gmail_accts(), Some{"pro"}, "gmail"),
+    (Mc.call_pick(gmail_accts(), Some{"account-3"}, "gmail"),
+     (Mc.call_pick(gmail_accts(), None{}, "gmail"),
+      (Mc.call_pick([Mc.Acct{"default", "perso", True{}}], None{}, "gmail"),
+       Mc.call_pick(gmail_accts(), Some{"work"}, "gmail")))))
+    == (Mc.CPGo{"account-2", "pro"},
+        (Mc.CPGo{"account-3", "account-3"},
+         (Mc.CPGo{"", "perso"},
+          (Mc.CPGo{"", ""},
+           Mc.CPRefuse{"gmail has no account \"work\" bise can tell apart: its accounts are perso (default), pro, account-3, account-4. pass one of these as account, or leave account out for the default."}))))
+    : Mc.CallPick & (Mc.CallPick & (Mc.CallPick & (Mc.CallPick & Mc.CallPick)))}
+
+# LAW: a sub-call's line says the account it ran as (`as <label>`, one
+# line, no ':'), none without a label; a top-level call's line is
+# `tool_account #<id> : <label>`, none without a label.
+law account_lines:
+  {(Rt.sub_ann_x("gmail.search", "perso", Xt.Ex{True{}, "found 1"}),
+    (Rt.sub_ann_x("gmail.search", "", Xt.Ex{False{}, "x"}),
+     (Rt.sub_ann_x("gmail.send", "a: b\nc", Xt.Ex{True{}, "ok"}),
+      (Rt.account_anns(7, "pro"), Rt.account_anns(7, "")))))
+    == ("subtool gmail.search ok as perso : found 1",
+        ("subtool gmail.search fail : x",
+         ("subtool gmail.send ok as a∶ b c : ok",
+          (["tool_account #7 : pro"], Nil{}))))
+    : String & (String & (String & (List<&2, String> & List<&2, String>)))}
+
 # LAW: the tool groups line says a group's accounts only with 2 or more.
 law group_line_says_accounts:
   {Mc.group_lines(["gmail", "drive"],

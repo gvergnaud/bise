@@ -31,6 +31,9 @@ pub(crate) struct ToolData {
     // the model's one-line description of a bash/ts call (tool_intent
     // annotation, BISE-223); None: the call had none
     pub(crate) intent: Option<String>,
+    // the connector account the call used (tool_account annotation, set
+    // only when its connector has 2+ accounts): ` · perso` after the name
+    pub(crate) account: Option<String>,
     pub(crate) state: ToolState,
     pub(crate) result: Option<(bool, String)>,
     pub(crate) started: std::time::Instant,
@@ -123,6 +126,7 @@ impl ToolData {
             args: None,
             code: None,
             intent: None,
+            account: None,
             state,
             result: None,
             started,
@@ -206,6 +210,8 @@ pub(crate) enum Ev {
         name: String,
         ok: bool,
         preview: String,
+        // the connector account it used (`subtool … as <label>`)
+        account: Option<String>,
     },
     // runtime annotations, merged into the matching Tool by id
     ToolInfo {
@@ -230,6 +236,12 @@ pub(crate) enum Ev {
     ToolIntent {
         id: u32,
         text: String,
+    },
+    // the connector account of a call (tool_account annotation), merged
+    // into the matching Tool by id
+    ToolAccount {
+        id: u32,
+        label: String,
     },
     Turn,
     TurnDone,
@@ -457,9 +469,9 @@ fn rec_ev(rec: Rec) -> Option<Ev> {
         Rec::Idle => Ev::Idle,
         // switchboard: the hub's own lines in a feed
         Rec::Hub(h) => return sb::hub_ev(h),
-        Rec::Sub { name, ok, preview } => Ev::Sub { name, ok, preview },
+        Rec::Sub { name, ok, preview, account } => Ev::Sub { name, ok, preview, account },
         // tool_move read these above
-        Rec::Tool { .. } | Rec::ToolIntent { .. } | Rec::ToolCode { .. } | Rec::ToolResult { .. } | Rec::ToolView { .. } => return None,
+        Rec::Tool { .. } | Rec::ToolIntent { .. } | Rec::ToolAccount { .. } | Rec::ToolCode { .. } | Rec::ToolResult { .. } | Rec::ToolView { .. } => return None,
         // BR-003: right after an interrupt, an info; else an error
         Rec::Rejected(r) => notice_ev(words::rejected(&r)),
         // a replayed message was committed: the model read it
@@ -491,6 +503,7 @@ fn tool_ev(m: lines::ToolMove) -> Option<Ev> {
         M::Finish { id, ok } => Ev::Tool(ToolData::bare(id, if ok { ToolState::Ok } else { ToolState::Fail })),
         M::Info { id, name, args } => Ev::ToolInfo { id, name, args },
         M::Intent { id, text } => Ev::ToolIntent { id, text },
+        M::Account { id, label } => Ev::ToolAccount { id, label },
         M::Code { id, code } => Ev::ToolCode { id, code },
         M::Result { id, ok, preview } => Ev::ToolResult { id, ok, preview },
         M::View { .. } => return None,

@@ -445,6 +445,7 @@ pub(crate) fn ev_visible(ev: &Ev, debug: bool) -> bool {
             | Ev::ToolResult { .. }
             | Ev::ToolCode { .. }
             | Ev::ToolIntent { .. }
+            | Ev::ToolAccount { .. }
     )
 }
 
@@ -640,6 +641,13 @@ pub(crate) fn push_event(events: &mut Vec<Ev>, cache: &mut Vec<Option<EventRows>
                 td.intent = Some(text.clone());
                 cache[i] = None;
                 forget_work_run(events, cache, i);
+            }
+            return false;
+        }
+        Ev::ToolAccount { id, label } => {
+            if let Some((i, td)) = last_tool_mut(events, |td| td.id == *id) {
+                td.account = Some(label.clone());
+                cache[i] = None;
             }
             return false;
         }
@@ -856,7 +864,7 @@ fn subs_of(events: &[Ev], i: usize) -> Vec<crate::toolbox::SubCall<'_>> {
     events[i + 1..]
         .iter()
         .map_while(|e| match e {
-            Ev::Sub { name, ok, preview } => Some(crate::toolbox::SubCall { name, ok: *ok, preview }),
+            Ev::Sub { name, ok, preview, account } => Some(crate::toolbox::SubCall { name, ok: *ok, preview, account: account.as_deref() }),
             _ => None,
         })
         // a computer action has its own row under the box (design §8)

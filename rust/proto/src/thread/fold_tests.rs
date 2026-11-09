@@ -754,6 +754,28 @@ fn his_messages_carry_their_delivery_mark() {
 /// name, args and intent apart from its text; a report's call
 /// leaves no item; a finish with no running row is an ended row.
 #[test]
+fn a_call_carries_its_account() {
+    // multi-accounts piece 5 (architect m_58035): `tool_account #<id>`
+    // lands on the row with that id; a call without one has none
+    let none = |_: &str| None;
+    let l = |pos: u64, line: &str| (pos, 1_000 + pos, line.to_string());
+    let ls = vec![
+        l(1, "  obs: tool_started #1"),
+        l(2, "tool #1 gmail.search : {\"q\":\"x\"}"),
+        l(3, "tool_account #1 : Gabriel pro"),
+        l(4, "  obs: tool_finished #1 ok"),
+        l(5, "  obs: tool_started #2"),
+        l(6, "tool #2 gmail.search : {\"q\":\"y\"}"),
+        l(7, "  obs: tool_finished #2 ok"),
+    ];
+    let e = fold(&ls, &ctx_with(&[], &none));
+    let items = &e[0].tools.as_ref().unwrap().items;
+    assert_eq!(items.iter().map(|i| i.account.as_deref()).collect::<Vec<_>>(), [Some("Gabriel pro"), None]);
+    let j = serde_json::to_value(&items[1]).unwrap();
+    assert!(j.get("account").is_none(), "none left out: {j}");
+}
+
+#[test]
 fn a_tool_row_starts_with_tool_started() {
     let none = |_: &str| None;
     let l = |pos: u64, line: &str| (pos, 1_000 + pos, line.to_string());

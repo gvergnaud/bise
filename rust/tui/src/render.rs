@@ -455,9 +455,9 @@ pub(crate) fn ev_lines(ev: &Ev, width: usize) -> Vec<Line<'static>> {
         }
         // a sub-call inside a TypeScript run: `↳ github.search_issues ✓`;
         // a failed one says why, in the error color
-        Ev::Sub { name, ok, preview } => vec![Line::from(vec![
+        Ev::Sub { name, ok, preview, account } => vec![Line::from(vec![
             Span::styled(format!("   {} ", G_SUBCALL), dim_st),
-            Span::styled(name.clone(), dim_st),
+            Span::styled(format!("{}{}", name, account_suffix(account.as_deref())), dim_st),
             if *ok {
                 Span::styled(format!(" {}", G_RECEIVED), dim_st)
             } else {
@@ -542,7 +542,7 @@ pub(crate) fn ev_lines(ev: &Ev, width: usize) -> Vec<Line<'static>> {
             }
             l
         }
-        Ev::ToolInfo { .. } | Ev::ToolResult { .. } | Ev::ToolCode { .. } | Ev::ToolIntent { .. } | Ev::Gate(_) => vec![],
+        Ev::ToolInfo { .. } | Ev::ToolResult { .. } | Ev::ToolCode { .. } | Ev::ToolIntent { .. } | Ev::ToolAccount { .. } | Ev::Gate(_) => vec![],
         Ev::Usage(u) => vec![Line::from(Span::styled(u.line(), dim_st))],
         Ev::Raw(t) => vec![Line::from(Span::styled(format!("  {}", t), dim_st))],
         Ev::AgentMsg { text, open, .. } if is_brief(text) => brief_lines(text, *open, width),
@@ -1320,6 +1320,16 @@ pub(crate) fn elapsed_label(elapsed: &Option<String>) -> String {
     }
 }
 
+// " · perso" after a call's name: the connector account it used, when
+// the runtime wrote one (its connector has 2+ accounts); the label is
+// data, the " · " is the tool row's own separator
+pub(crate) fn account_suffix(account: Option<&str>) -> String {
+    match account {
+        Some(a) if !a.is_empty() => format!(" · {}", a),
+        _ => String::new(),
+    }
+}
+
 // the name and the one-line args of a tool, and its decoded source
 pub(crate) fn tool_meta(td: &ToolData) -> (String, String, Option<(CodeLang, String)>) {
     let name = td.name.clone().unwrap_or_else(|| format!("#{}", td.id));
@@ -1365,7 +1375,7 @@ pub(crate) fn tool_head(td: &ToolData, tick: u32, name: &str, args: &str) -> Lin
     // §9 Emphasis: a one-line tool call is the agent's own work, dim
     let mut row = vec![
         Span::styled(format!(" {} ", glyph), dim_st),
-        Span::styled(label.to_string(), dim_st),
+        Span::styled(format!("{}{}", label, account_suffix(td.account.as_deref())), dim_st),
     ];
     match td.state {
         // cut by /pause: nothing went wrong (designer m_19111)

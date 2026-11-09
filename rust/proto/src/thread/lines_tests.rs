@@ -13,7 +13,17 @@ fn runtime_lines_read_as_their_kind() {
     assert_eq!(read("tool_intent #3 :  "), Rec::Dropped);
     assert_eq!(read("tool_code #3 : a\\Nb"), Rec::ToolCode { id: 3, code: "a\\Nb".into() });
     assert_eq!(read("tool_result #3 fail : exit 1"), Rec::ToolResult { id: 3, ok: false, preview: "exit 1".into() });
-    assert_eq!(read("subtool slack.send ok : sent"), Rec::Sub { name: "slack.send".into(), ok: true, preview: "sent".into() });
+    assert_eq!(read("subtool slack.send ok : sent"), Rec::Sub { name: "slack.send".into(), ok: true, preview: "sent".into(), account: None });
+    // multi-accounts piece 5: the account a connector sub-call ran as
+    assert_eq!(read("subtool gmail.search ok as perso : found 1"), Rec::Sub { name: "gmail.search".into(), ok: true, preview: "found 1".into(), account: Some("perso".into()) });
+    assert_eq!(
+        read("subtool gmail.send fail as Gabriel pro∶ work : HTTP 401 : no"),
+        Rec::Sub { name: "gmail.send".into(), ok: false, preview: "HTTP 401 : no".into(), account: Some("Gabriel pro∶ work".into()) },
+        "a label with spaces, its ':' written as '∶'; the preview keeps its own ' : '"
+    );
+    assert_eq!(read("subtool gmail.send fail : x"), Rec::Sub { name: "gmail.send".into(), ok: false, preview: "x".into(), account: None });
+    assert_eq!(read("tool_account #4 : perso pro"), Rec::ToolAccount { id: 4, label: "perso pro".into() });
+    assert_eq!(read("tool_account #4 :  "), Rec::Dropped);
     assert_eq!(read("core rejected: no pending completion"), Rec::Rejected("no pending completion".into()));
     assert_eq!(read("second line"), Rec::Raw("second line".into()));
     assert_eq!(read_history("you : a\\nb"), Rec::HistYou("a\nb".into()));

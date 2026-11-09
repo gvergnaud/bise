@@ -96,6 +96,7 @@ impl Fold<'_> {
             ToolMove::Start(id) => self.start(pos, ms, id, ToolState::Run),
             ToolMove::Info { id, name, args } => self.info(pos, ms, id, &name, &args),
             ToolMove::Intent { id, text } => self.intent(id, &text),
+            ToolMove::Account { id, label } => self.account(id, &label),
             ToolMove::Code { id, code } => self.code(id, &code),
             ToolMove::Result { id, ok, preview } => self.result(id, ok, &preview, ms),
             ToolMove::Finish { id, ok } => self.finish(pos, ms, id, ok),
@@ -133,6 +134,7 @@ impl Fold<'_> {
             name: String::new(),
             args: String::new(),
             intent: None,
+            account: None,
             text: String::new(),
             kind: ToolKind::Other,
             land: false,
@@ -311,6 +313,13 @@ impl Fold<'_> {
             t.items[i].intent = Some(intent);
         }
         self.sum(e);
+    }
+
+    fn account(&mut self, id: u32, label: &str) {
+        let Some(&(_, e, i)) = self.tools.iter().rev().find(|(t, _, _)| *t == id) else { return };
+        if let Some(t) = self.out[e].tools.as_mut() {
+            t.items[i].account = Some(label.to_string());
+        }
     }
 
     fn sum(&mut self, e: usize) {
@@ -933,7 +942,7 @@ pub fn tail_start(lines: &[Line], entries: &[Entry], want: usize) -> Pos {
         }
         let Some(m) = lines::tool_move(&rec) else { continue };
         let id = match &m {
-            ToolMove::Start(id) | ToolMove::Info { id, .. } | ToolMove::Intent { id, .. } | ToolMove::Code { id, .. } | ToolMove::Result { id, .. } | ToolMove::Finish { id, .. } | ToolMove::View { id, .. } => *id,
+            ToolMove::Start(id) | ToolMove::Info { id, .. } | ToolMove::Intent { id, .. } | ToolMove::Account { id, .. } | ToolMove::Code { id, .. } | ToolMove::Result { id, .. } | ToolMove::Finish { id, .. } | ToolMove::View { id, .. } => *id,
         };
         if let ToolMove::Start(_) = m {
             last.retain(|&(i, _)| i != id);

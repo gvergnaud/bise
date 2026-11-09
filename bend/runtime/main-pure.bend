@@ -523,12 +523,30 @@ def prog_after(ok: Bool, +out: String, stop: Bool) -> ProgStep:
 # tool the program called, with the outcome. Out is Type-kind: every
 # emit writes the same connection, so the emitter param is shared and
 # the returned handle is discarded here.
-def sub_ann(+name: String, +r: Xp.ExecRes) -> String:
+# an account's label on one line field: one line, and no ':' (a reader
+# splits its line at the first " : "): each ':' becomes '∶' (U+2236)
+def label_field(+label: String) -> String:
+  String.join(String.split(Tx.flatten(label), ':'), "∶")
+
+def as_label(+label: String) -> String:
+  Bool.pick(String, String.is_empty(label), "", String.append(" as ", label_field(label)))
+
+# a sub-call's line with the account it ran as (multi-accounts): `subtool
+# <name> <ok|fail> as <label> : <preview>`; no label: no `as`
+def sub_ann_x(+name: String, +label: String, +r: Xp.ExecRes) -> String:
   match r:
     case Xp.Ex{+ok, +out}:
-      String.append("subtool ", String.append(name,
-        String.append(" ", String.append(ok_label(ok),
-          String.append(" : ", ann_flat(out))))))
+      String.concat(["subtool ", name, " ", ok_label(ok), as_label(label),
+        " : ", ann_flat(out)])
+
+def sub_ann(+name: String, +r: Xp.ExecRes) -> String:
+  sub_ann_x(name, "", r)
+
+# a top-level connector call's account (its card's suffix): `tool_account
+# #<id> : <label>`, none when it has no label
+def account_anns(+id: U32, +label: String) -> List<&2, String>:
+  Bool.pick(List<&2, String>, String.is_empty(label), Nil{},
+    Con{String.concat(["tool_account #", U32.show(id), " : ", label_field(label)]), Nil{}})
 
 # tool dispatch: which executor a call's name selects (checked in this
 # order; anything unknown is an MCP connector tool). self.compact and

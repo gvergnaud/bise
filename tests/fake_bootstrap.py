@@ -238,10 +238,16 @@ def account_calls(m, tmp, check):
     st, text = call("slack.search", {"query": "x", "account": "pro"})
     check("account by title: x-credentials-name is its name, the argument removed",
           st == "ok" and m.calls == [("c-slack", "account-2", {"query": "x"})], repr((st, text, m.calls)))
+    # piece 5 (architect m_58035): the sub-call line a run_typescript call
+    # writes names the account, from the same pick as the header
+    check("the call's sub-call line says the account it ran as",
+          text.startswith("subtool slack.search ok as pro : "), repr(text))
     m.calls = []
     st, text = call("slack.search", {"query": "x"})
     check("no account: no header (his default)", st == "ok" and m.calls == [("c-slack", None, {"query": "x"})],
           repr((st, text, m.calls)))
+    check("no account: the line names his default",
+          text.startswith("subtool slack.search ok as perso : "), repr(text))
     m.calls = []
     st, text = call("slack.search", {"query": "x", "account": "nope"})
     check("an unknown account: refused, the accounts listed, nothing sent",

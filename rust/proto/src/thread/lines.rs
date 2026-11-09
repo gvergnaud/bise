@@ -182,6 +182,9 @@ pub enum Rec {
     Tool { id: u32, name: String, args: String },
     /// `tool_intent #<id> : <one line>` (bash, run_typescript: BISE-223)
     ToolIntent { id: u32, text: String },
+    /// `tool_account #<id> : <label>`: the account a connector call runs
+    /// as (multi-accounts; only when its connector has 2 or more)
+    ToolAccount { id: u32, label: String },
     /// `tool_code #<id> : <full args, wire-encoded>`
     ToolCode { id: u32, code: String },
     /// `tool_result #<id> <ok|fail> : <preview>`
@@ -189,8 +192,9 @@ pub enum Rec {
     /// `tool_view #<id> : {"plugin","server","uri","call"}`: a view of
     /// that call (MCP Apps, docs/mcp-apps.md C3)
     ToolView { id: u32, view: ToolViewRef },
-    /// `subtool <name> <ok|fail> : <preview>` (a run_typescript sub-call)
-    Sub { name: String, ok: bool, preview: String },
+    /// `subtool <name> <ok|fail>[ as <label>] : <preview>` (a
+    /// run_typescript sub-call; `as`: the account a connector call ran as)
+    Sub { name: String, ok: bool, preview: String, account: Option<String> },
     /// `core rejected: <why>`
     Rejected(String),
     /// the runtime's `  obs: …`
@@ -396,6 +400,9 @@ pub fn read(line: &str) -> Rec {
     }
     if let Some(r) = line.strip_prefix("tool_intent #") {
         return intent(r).unwrap_or(Rec::Dropped);
+    }
+    if let Some(r) = line.strip_prefix("tool_account #") {
+        return account(r).unwrap_or(Rec::Dropped);
     }
     if let Some(r) = line.strip_prefix("tool_code #") {
         return code(r).unwrap_or(Rec::Dropped);
@@ -667,6 +674,12 @@ fn intent(r: &str) -> Option<Rec> {
     Some(Rec::ToolIntent { id: id.trim().parse().ok()?, text: text.to_string() })
 }
 
+fn account(r: &str) -> Option<Rec> {
+    let (id, rest) = r.split_once(" : ")?;
+    let label = rest.trim();
+    (!label.is_empty()).then(|| Some(Rec::ToolAccount { id: id.trim().parse().ok()?, label: label.to_string() }))?
+}
+
 fn code(r: &str) -> Option<Rec> {
     let (id, rest) = r.split_once(" : ")?;
     Some(Rec::ToolCode { id: id.trim().parse().ok()?, code: rest.to_string() })
@@ -688,10 +701,17 @@ fn tool_view(r: &str) -> Option<Rec> {
     ok.then_some(Rec::ToolView { id: id.trim().parse().ok()?, view })
 }
 
+/// `<name> <ok|fail>[ as <label>] : <preview>`: the status is the first
+/// word after the name, then an optional `as <label>` (the runtime writes
+/// it on one line with no ':').
 fn sub(r: &str) -> Option<Rec> {
     let (name, rest) = r.split_once(' ')?;
-    let (st, preview) = rest.split_once(" : ").unwrap_or((rest, ""));
-    Some(Rec::Sub { name: name.to_string(), ok: st.trim() == "ok", preview: preview.to_string() })
+    let (head, preview) = rest.split_once(" : ").unwrap_or((rest, ""));
+    let (st, account) = match head.trim().split_once(' ') {
+        Some((st, more)) => (st, more.trim().strip_prefix("as ").map(str::trim).filter(|l| !l.is_empty()).map(String::from)),
+        None => (head.trim(), None),
+    };
+    Some(Rec::Sub { name: name.to_string(), ok: st == "ok", preview: preview.to_string(), account })
 }
 
 /// A line no feed shows as a step of the turn (F3, proto-lead m_15384): a

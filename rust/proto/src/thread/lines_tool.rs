@@ -13,6 +13,9 @@ pub enum ToolMove {
     Info { id: u32, name: String, args: String },
     /// `tool_intent`: on the newest row with that id
     Intent { id: u32, text: String },
+    /// `tool_account`: the account it runs as, on the newest row with
+    /// that id
+    Account { id: u32, label: String },
     /// `tool_code`: on the newest row with that id
     Code { id: u32, code: String },
     /// `tool_result`: its output on the newest row with that id
@@ -37,6 +40,7 @@ pub fn tool_move(rec: &Rec) -> Option<ToolMove> {
         Rec::Obs(Obs::ToolFinished { id, ok }) => ToolMove::Finish { id, ok },
         Rec::Tool { id, name, args } => ToolMove::Info { id, name, args },
         Rec::ToolIntent { id, text } => ToolMove::Intent { id, text },
+        Rec::ToolAccount { id, label } => ToolMove::Account { id, label },
         Rec::ToolCode { id, code } => ToolMove::Code { id, code },
         Rec::ToolResult { id, ok, preview } => ToolMove::Result { id, ok, preview },
         Rec::ToolView { id, view } => ToolMove::View { id, view },

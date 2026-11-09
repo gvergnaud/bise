@@ -188,56 +188,72 @@ def gate.ask_x(out: Pv.Out, +name: String, +args: String, +dir: String, +extra: 
     out3 : Pv.Out <- Dr.emit(out2, [Gp.done_line(n, Gp.how_of(v))])
     IO.pure(Pv.Out & Gp.Verdict, (out3, v))
 
-# a gate's verdict and the arguments the call runs with
-def gate.as(pv: Pv.Out & Gp.Verdict, +args: String) -> Pv.Out & (Gp.Verdict & String):
+# what the gate step hands the call: its verdict, the arguments it runs
+# with (a connector call's `account` set to the resolved name), and the
+# account label its card shows ("" for none)
+type Gated is Data:
+  Gated{v: Gp.Verdict, args: String, label: String}
+
+def gate.as(pv: Pv.Out & Gp.Verdict, +args: String, +label: String) -> Pv.Out & Gated:
   match pv:
     case (out, +v):
-      (out, (v, args))
+      (out, Gated{v, args, label})
 
-# a connector call's account, resolved before the gate asks: refused, the
-# call ends with its line and nothing is asked; named, the gate line
-# carries the resolved name (Gp.account_extra), never the raw argument,
-# and the call runs with that name as its `account` (Mcp.with_account),
-# so the verdict is about the exact account sent
+# a resolved call: the gate asks (auto) about the exact account it will
+# send (the gate line carries its name, Gp.account_extra), or not (yolo)
 @unsafe
-def gate.acct(p: Mcpp.AcctPick, out: Pv.Out, +name: String, +args: String,
-    +dir: String) -> IO(Pv.Out & (Gp.Verdict & String)):
-  match p:
-    case Mcpp.APRefuse{+why}:
-      IO.pure(Pv.Out & (Gp.Verdict & String), (out, (Gp.VDeny{why}, args)))
-    case Mcpp.APName{+n}:
-      do IO<Pv.Out & (Gp.Verdict & String)>:
-        pv : Pv.Out & Gp.Verdict <- gate.ask_x(out, name, args, dir, Gp.account_extra(n))
-        IO.pure(Pv.Out & (Gp.Verdict & String), gate.as(pv, Mcp.with_account(args, n)))
-    case Mcpp.APDefault{}:
-      do IO<Pv.Out & (Gp.Verdict & String)>:
-        pv : Pv.Out & Gp.Verdict <- gate.ask(out, name, args, dir)
-        IO.pure(Pv.Out & (Gp.Verdict & String), gate.as(pv, args))
-
-@unsafe
-def gate.asks(asks: Bool, out: Pv.Out, +name: String, +args: String, +dir: String)
-    -> IO(Pv.Out & (Gp.Verdict & String)):
+def gate.go(asks: Bool, out: Pv.Out, +name: String, +args: String, +dir: String,
+    +acct: String, +label: String) -> IO(Pv.Out & Gated):
   match asks:
     case True{}:
-      do IO<Pv.Out & (Gp.Verdict & String)>:
-        p : Mcpp.AcctPick <- Mcp.call_account(name, args)
-        gate.acct(p, out, name, args, dir)
+      do IO<Pv.Out & Gated>:
+        pv : Pv.Out & Gp.Verdict <- gate.ask_x(out, name, args, dir, Gp.account_extra(acct))
+        IO.pure(Pv.Out & Gated, gate.as(pv, args, label))
     case False{}:
-      IO.pure(Pv.Out & (Gp.Verdict & String), (out, (Gp.VAllow{""}, args)))
+      IO.pure(Pv.Out & Gated, (out, Gated{Gp.VAllow{""}, args, label}))
 
-# the gate of one call (scripted runs never ask): its verdict, and the
-# arguments the call runs with
+# a connector call's account, resolved ONCE above the call in every mode
+# (Mcp.call_account): refused, the call ends with its line and nothing is
+# asked or called; else it runs with that name (Mcp.pick_args) and its
+# card's label, so what runs is what was judged and what is shown
+@unsafe
+def gate.pick(p: Mcpp.CallPick, asks: Bool, out: Pv.Out, +name: String,
+    +args: String, +dir: String) -> IO(Pv.Out & Gated):
+  match p:
+    case Mcpp.CPRefuse{+why}:
+      IO.pure(Pv.Out & Gated, (out, Gated{Gp.VDeny{why}, args, ""}))
+    case Mcpp.CPGo{+n, +l}:
+      gate.go(asks, out, name, Mcp.pick_args(Mcpp.CPGo{n, l}, args), dir, n, l)
+
+# only a connector's call has an account to resolve
+def gate.resolve(is_mcp: Bool, +name: String, +args: String) -> IO(Mcpp.CallPick):
+  match is_mcp:
+    case True{}:
+      Mcp.call_account(name, args)
+    case False{}:
+      IO.pure(Mcpp.CallPick, Mcpp.CPGo{"", ""})
+
+def gate.is_mcp(t: Rtp.Tool) -> Bool:
+  match t:
+    case Rtp.TMcp{}:
+      True{}
+    case _:
+      False{}
+
+# the gate of one call (scripted runs never ask nor resolve): its
+# verdict, the arguments it runs with and its account label
 @unsafe
 def gate(out: Pv.Out, +name: String, +args: String, live: Bool)
-    -> IO(Pv.Out & (Gp.Verdict & String)):
+    -> IO(Pv.Out & Gated):
   match live:
     case False{}:
-      IO.pure(Pv.Out & (Gp.Verdict & String), (out, (Gp.VAllow{""}, args)))
+      IO.pure(Pv.Out & Gated, (out, Gated{Gp.VAllow{""}, args, ""}))
     case True{}:
-      do IO<Pv.Out & (Gp.Verdict & String)>:
+      do IO<Pv.Out & Gated>:
         +dir : String <- P.side_dir()
         m : Maybe<&2, String> <- P.read_file(Gp.mode_path(dir))
-        gate.asks(Gp.gated(name) && Gp.mode_asks(m), out, name, args, dir)
+        p : Mcpp.CallPick <- gate.resolve(gate.is_mcp(Rtp.tool_of(name)), name, args)
+        gate.pick(p, Gp.gated(name) && Gp.mode_asks(m), out, name, args, dir)
 
 # ---- bash under the sandbox (approvals-sandbox, approvals-design.md §6) ----
 # An allowed bash call runs under the sandbox its allow names (flags ""
@@ -558,10 +574,11 @@ def exec_program.call.bash(is_bash: Bool, +name: String, +args: String,
       exec_program.call.patch(String.eq(name, "apply_patch"),
         name, args, live)
 
-def emit_sub(out: Pv.Out, +name: String, +r: Xp.ExecRes, live: Bool) -> IO(Pv.Out):
+# label: the account the sub-call ran as ("" for none, Rtp.sub_ann_x)
+def emit_sub(out: Pv.Out, +name: String, +label: String, +r: Xp.ExecRes, live: Bool) -> IO(Pv.Out):
   match live:
     case True{}:
-      Dr.emit(out, Con{Rtp.sub_ann(name, r), Nil{}})
+      Dr.emit(out, Con{Rtp.sub_ann_x(name, label, r), Nil{}})
     case False{}:
       IO.pure(Pv.Out, out)
 
@@ -596,37 +613,31 @@ def exec_program.call.after(m: Maybe<&2, String>, out: Pv.Out, +name: String,
     case Some{+why}:
       IO.pure(Pv.Out & Xp.ExecRes, (out, Xp.Ex{False{}, why}))
 
-def exec_program.call.gated.emit(ro: Pv.Out & Xp.ExecRes, +name: String, +live: Bool,
-    +d: Sfp.Def) -> IO(Pv.Out & (Sfp.Def & Xp.ExecRes)):
+def exec_program.call.gated.emit(ro: Pv.Out & Xp.ExecRes, +name: String, +label: String,
+    +live: Bool, +d: Sfp.Def) -> IO(Pv.Out & (Sfp.Def & Xp.ExecRes)):
   match ro:
     case (out, +r):
       do IO<Pv.Out & (Sfp.Def & Xp.ExecRes)>:
         +d2 : Sfp.Def <- IO.pure(Sfp.Def,
           exec_program.call.self_req(Sfp.is_self_tool(name), name, d))
-        out2 : Pv.Out <- emit_sub(out, name, r, live)
+        out2 : Pv.Out <- emit_sub(out, name, label, r, live)
         IO.pure(Pv.Out & (Sfp.Def & Xp.ExecRes), (out2, (d2, r)))
 
-# the verdict and the arguments the call runs with (the gate's)
-def exec_program.call.gated.va(out0: Pv.Out, va: Gp.Verdict & String, +name: String,
+# the gate's verdict, the arguments the call runs with and its label
+def exec_program.call.gated(pv: Pv.Out & Gated, +name: String,
     +live: Bool, +d: Sfp.Def) -> IO(Pv.Out & (Sfp.Def & Xp.ExecRes)):
-  match va:
-    case (+v, +args):
+  match pv:
+    case (out0, Gated{+v, +args, +label}):
       do IO<Pv.Out & (Sfp.Def & Xp.ExecRes)>:
         ro : Pv.Out & Xp.ExecRes <- exec_program.call.after(Gp.denial(v), out0, name, args,
           Gp.flags(v), live)
-        exec_program.call.gated.emit(ro, name, live, d)
-
-def exec_program.call.gated(pv: Pv.Out & (Gp.Verdict & String), +name: String,
-    +live: Bool, +d: Sfp.Def) -> IO(Pv.Out & (Sfp.Def & Xp.ExecRes)):
-  match pv:
-    case (out0, va):
-      exec_program.call.gated.va(out0, va, name, live, d)
+        exec_program.call.gated.emit(ro, name, label, live, d)
 
 @unsafe
 def exec_program.call(out: Pv.Out, +name: String, +args: String, +live: Bool,
     +d: Sfp.Def) -> IO(Pv.Out & (Sfp.Def & Xp.ExecRes)):
   do IO<Pv.Out & (Sfp.Def & Xp.ExecRes)>:
-    pv : Pv.Out & (Gp.Verdict & String) <- gate(out, name, args, live)
+    pv : Pv.Out & Gated <- gate(out, name, args, live)
     exec_program.call.gated(pv, name, live, d)
 
 def exec_program.call.ungated(out: Pv.Out, +name: String, +args: String, +live: Bool,
@@ -636,7 +647,7 @@ def exec_program.call.ungated(out: Pv.Out, +name: String, +args: String, +live: 
       name, args, live)
     +d2 : Sfp.Def <- IO.pure(Sfp.Def,
       exec_program.call.self_req(Sfp.is_self_tool(name), name, d))
-    out2 : Pv.Out <- emit_sub(out, name, r, live)
+    out2 : Pv.Out <- emit_sub(out, name, "", r, live)
     IO.pure(Pv.Out & (Sfp.Def & Xp.ExecRes), (out2, (d2, r)))
 
 # consume the call pair once: the handle rides beside the next step
@@ -798,26 +809,23 @@ def exec_tool.after(m: Maybe<&2, String>, out: Pv.Out, +name: String, +args: Str
       IO.pure(Pv.Out & (Sfp.Def & Xp.ExecRes),
         (out, (Sfp.def_none(), Xp.Ex{False{}, why})))
 
-# the verdict and the arguments the call runs with (the gate's)
-def exec_tool.gated.va(out: Pv.Out, va: Gp.Verdict & String, +name: String,
-    +live: Bool) -> IO(Pv.Out & (Sfp.Def & Xp.ExecRes)):
-  match va:
-    case (+v, +args):
-      exec_tool.after(Gp.denial(v), out, name, args, Gp.flags(v), live)
-
-def exec_tool.gated(pv: Pv.Out & (Gp.Verdict & String), +name: String,
+# the gate's verdict, the arguments the call runs with, and its account
+# label: said once before the call runs (`tool_account #<id>`, its card)
+def exec_tool.gated(pv: Pv.Out & Gated, +id: U32, +name: String,
     +live: Bool) -> IO(Pv.Out & (Sfp.Def & Xp.ExecRes)):
   match pv:
-    case (out, va):
-      exec_tool.gated.va(out, va, name, live)
+    case (out, Gated{+v, +args, +label}):
+      do IO<Pv.Out & (Sfp.Def & Xp.ExecRes)>:
+        out2 : Pv.Out <- Dr.emit(out, Rtp.account_anns(id, label))
+        exec_tool.after(Gp.denial(v), out2, name, args, Gp.flags(v), live)
 
 @unsafe
 def exec_tool(out: Pv.Out, +call: T.Call, +live: Bool) -> IO(Pv.Out & (Sfp.Def & Xp.ExecRes)):
   match call:
-    case T.Call{_, +name, +args}:
+    case T.Call{+id, +name, +args}:
       do IO<Pv.Out & (Sfp.Def & Xp.ExecRes)>:
-        pv : Pv.Out & (Gp.Verdict & String) <- gate(out, name, args, live)
-        exec_tool.gated(pv, name, live)
+        pv : Pv.Out & Gated <- gate(out, name, args, live)
+        exec_tool.gated(pv, id, name, live)
 
 def emit_code_ann.pick(is_code: Bool, out: Pv.Out, +call: T.Call) -> IO(Pv.Out):
   match is_code:

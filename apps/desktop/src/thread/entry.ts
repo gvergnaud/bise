@@ -381,6 +381,8 @@ export interface ToolLike {
   name?: string | null;
   /** the model's one line for it (its 'description'): words, not machine text */
   intent?: string | null;
+  /** the connector account it ran as (ToolItem.account): set only when its connector has 2+ */
+  account?: string | null;
   text: string;
   kind: string;
   state?: string;
@@ -413,6 +415,8 @@ export interface ToolLine {
   out: string;
   /** an edit's line counts, '+18 −6' (dim after its words); '' when the hub has none */
   counts: string;
+  /** the connector account it ran as ('perso', dim after its words); '' when the hub wrote none */
+  account: string;
 }
 
 const base = (p: string): string => p.split('/').filter(Boolean).pop() ?? p;
@@ -531,6 +535,7 @@ export function toolLines(items: readonly ToolLike[]): {
       // a read or search says the TUI's verb, like its fold ('read gone.rs', designer m_14103/m_14269)
       text: t.kind === 'read' || t.kind === 'search' ? `${t.kind} ${toolWords(t.text).replace(/^\S+\s+/, '')}`.trim() : t.kind === 'edit' ? (edit?.text ?? toolWords(t.text)) : toolWords(t.text),
       counts: t.kind === 'edit' ? (edit?.counts ?? '') : '',
+      account: (t.account ?? '').trim(),
       time,
       state: t.state === 'run' || t.state === 'ok' || t.state === 'err' ? t.state : '',
       end: toolEnd(t, time),

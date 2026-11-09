@@ -72,6 +72,12 @@ args?: string,
  */
 intent?: string | null, 
 /**
+ * the account a connector call runs as (`tool_account`, its label:
+ * his title for it, else its name), only when the connector has 2 or
+ * more; the row shows it after its name
+ */
+account?: string | null, 
+/**
  * its intent ("running the tests"), else `name: first line of args`
  */
 text: string, kind: ToolKind, 

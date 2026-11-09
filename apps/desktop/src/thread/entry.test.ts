@@ -231,6 +231,14 @@ describe('D14 / D15: a report is a status line, a command reads once', () => {
     // a folded read opens to a row with the TUI's verb (designer m_14269)
     expect(t.rest[0]?.text).toBe('read a.rs');
   });
+
+  it('a connector call keeps the account it ran as, none when the hub wrote none (multi-accounts piece 5)', () => {
+    const t = toolLines([
+      { pos: 1, at_ms: 0, text: 'gmail.search: {"q":"x"}', kind: 'run', account: 'Gabriel pro' },
+      { pos: 2, at_ms: 0, text: 'gmail.search: {"q":"y"}', kind: 'run' },
+    ]);
+    expect(t.lines.map((l) => l.account)).toEqual(['Gabriel pro', '']);
+  });
 });
 
 describe("N2: a scheduled task's line names the agent, not the task's number", () => {
