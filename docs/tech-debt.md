@@ -211,6 +211,12 @@ Ranked by value: risk removed per hour spent.
   Next time (tip gate or a bench): `sudo fs_usage -w -f filesys | grep
   sb-e2e` next to it names the process, then it becomes a task (architect
   m_56280).
+- The desktop first run's key check (`firstkey.rs`) does not write its
+  result to checks.json (`bise_catalog::checks::record`), while the
+  core's setup_test and the terminal's checks do: after a first run,
+  Settings and `/models` say '○ not tested' for the model it just
+  checked until the next test. Fix: one `record` call where firstkey's
+  check ends. cheap (S), no UX change (architect m_57594).
 
 ## Progress
 

@@ -380,6 +380,11 @@
     "one": null,
     "text": "⏎ replaces it   esc keeps the old one"
   },
+  "settings.bar_use_it": {
+    "args": [],
+    "one": null,
+    "text": "⏎ use it   x not now   ↑↓ choose   esc back"
+  },
   "settings.bise_update_again": {
     "args": [],
     "one": null,
@@ -2167,6 +2172,11 @@
     "one": null,
     "text": "✓ {secs} s"
   },
+  "settings.mark_untested": {
+    "args": [],
+    "one": null,
+    "text": "○ not tested"
+  },
   "settings.me_color": {
     "args": [],
     "one": null,
@@ -2233,6 +2243,18 @@
     ],
     "one": null,
     "text": "{model} needs {provider}: sign in or add its key here, then it's set."
+  },
+  "settings.models_follows_bise": {
+    "args": [],
+    "one": null,
+    "text": "follows bise: change it on bise's row"
+  },
+  "settings.models_voice_n": {
+    "args": [
+      "n"
+    ],
+    "one": null,
+    "text": "{n} models"
   },
   "settings.names_more": {
     "args": [
@@ -5109,13 +5131,6 @@
     "one": null,
     "text": "back"
   },
-  "settings.roles_checker_off": {
-    "args": [
-      "dot"
-    ],
-    "one": null,
-    "text": "off {dot} every command asks you"
-  },
   "settings.roles_checker_sees": {
     "args": [],
     "one": null,
@@ -5160,31 +5175,6 @@
     "one": null,
     "text": "the terminal's /models shows the same"
   },
-  "settings.roles_hint_agents": {
-    "args": [],
-    "one": null,
-    "text": "the ones main starts, for the work it hands out."
-  },
-  "settings.roles_hint_checker": {
-    "args": [],
-    "one": null,
-    "text": "in auto, decides which commands run and which ask you."
-  },
-  "settings.roles_hint_main": {
-    "args": [],
-    "one": null,
-    "text": "talks with you and starts the agents."
-  },
-  "settings.roles_hint_small": {
-    "args": [],
-    "one": null,
-    "text": "titles and summaries. a small fast model is enough."
-  },
-  "settings.roles_hint_voice": {
-    "args": [],
-    "one": null,
-    "text": "writes down what you say. enter opens /voice."
-  },
   "settings.roles_jev_through": {
     "args": [
       "dot",
@@ -5198,26 +5188,12 @@
     "one": null,
     "text": "type to filter, or a model id that isn't listed."
   },
-  "settings.roles_no_key": {
-    "args": [
-      "dot"
-    ],
-    "one": null,
-    "text": "no key {dot} enter fixes it"
-  },
   "settings.roles_no_model": {
     "args": [
       "provider"
     ],
     "one": null,
     "text": "  {provider} has no model listed: type its id."
-  },
-  "settings.roles_none_yet": {
-    "args": [
-      "dot"
-    ],
-    "one": null,
-    "text": "none yet {dot} enter picks one"
   },
   "settings.roles_not_now": {
     "args": [],
@@ -5310,13 +5286,6 @@
     "one": null,
     "text": "recommended"
   },
-  "settings.roles_same_as": {
-    "args": [
-      "role"
-    ],
-    "one": null,
-    "text": "same as {role}"
-  },
   "settings.roles_screen_sub": {
     "args": [],
     "one": null,
@@ -5350,20 +5319,6 @@
     "args": [],
     "one": null,
     "text": "only the providers that can listen. ctrl+r starts, any key stops."
-  },
-  "settings.roles_voice_none": {
-    "args": [
-      "dot"
-    ],
-    "one": null,
-    "text": "off {dot} none of your keys listens {dot} enter sets it up"
-  },
-  "settings.roles_voice_off": {
-    "args": [
-      "dot"
-    ],
-    "one": null,
-    "text": "off {dot} enter sets it up"
   },
   "settings.roles_voice_only": {
     "args": [],

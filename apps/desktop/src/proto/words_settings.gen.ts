@@ -1236,6 +1236,8 @@ export const settings = {
   mark_took: (a: { secs: string | number }): string => "✓ " + String(a.secs) + " s",
   /** a feature's mark: set up, not tested since its key changed */
   mark_on: "✓",
+  /** the terminal's mark: set up, no test result yet (never ✓ without one, architect m_57509) */
+  mark_untested: "○ not tested",
   /** a feature's mark: it failed */
   mark_failed: "✗ failed",
   /** a feature's mark: off */
@@ -1540,6 +1542,12 @@ export const settings = {
   roles_screen_sub: "each role picks a provider, then a model. one provider can serve several.",
   /** key bar: the roles */
   bar_choose_change: "↑↓ choose   ⏎ change   esc back",
+  /** key bar: the news line on `/models` (a newer model for some roles) */
+  bar_use_it: "⏎ use it   x not now   ↑↓ choose   esc back",
+  /** `/models`' Voice mode row: its models, in the model's place (they change on /voice) */
+  models_voice_n: (a: { n: string | number }): string => String(a.n) + " models",
+  /** `/models`: under Images, which follows bise's model */
+  models_follows_bise: "follows bise: change it on bise's row",
   /** the effort's title */
   roles_effort_title: "how hard should it think?",
   /** the effort's line */
@@ -1554,28 +1562,6 @@ export const settings = {
   roles_from: (a: { var: string | number }): string => "from " + String(a.var),
   /** voice off */
   roles_off: "off",
-  /** a role with no key */
-  roles_no_key: (a: { dot: string | number }): string => "no key " + String(a.dot) + " enter fixes it",
-  /** voice: none of the keys listens */
-  roles_voice_none: (a: { dot: string | number }): string => "off " + String(a.dot) + " none of your keys listens " + String(a.dot) + " enter sets it up",
-  /** voice off */
-  roles_voice_off: (a: { dot: string | number }): string => "off " + String(a.dot) + " enter sets it up",
-  /** the checker off */
-  roles_checker_off: (a: { dot: string | number }): string => "off " + String(a.dot) + " every command asks you",
-  /** a role with nothing picked */
-  roles_none_yet: (a: { dot: string | number }): string => "none yet " + String(a.dot) + " enter picks one",
-  /** a role following another */
-  roles_same_as: (a: { role: string | number }): string => "same as " + String(a.role),
-  /** what main is for */
-  roles_hint_main: "talks with you and starts the agents.",
-  /** what the agents are for */
-  roles_hint_agents: "the ones main starts, for the work it hands out.",
-  /** what small jobs are for */
-  roles_hint_small: "titles and summaries. a small fast model is enough.",
-  /** what the checker is for */
-  roles_hint_checker: "in auto, decides which commands run and which ask you.",
-  /** what voice is for */
-  roles_hint_voice: "writes down what you say. enter opens /voice.",
   /** what leaves the machine with the checker */
   roles_checker_sees: "the checker sees the command, the script it runs, and your request.",
   /** voice's providers */

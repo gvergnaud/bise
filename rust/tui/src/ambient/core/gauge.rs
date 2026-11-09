@@ -15,7 +15,7 @@
 use super::Core;
 use crate::ambient::model_test::ModelTest;
 use crate::ambient::setup::Done;
-use bise_catalog::features::{self, Access, Facts, Test};
+use bise_catalog::features::{self, Facts, Test};
 use bise_proto::app_rows::{Account, CheckWhy, FeatureState, SetupGauge};
 use bise_proto::core_ev::CoreEv;
 use bise_proto::helper::Grant;
@@ -40,23 +40,6 @@ pub(crate) struct GaugeLive {
     pub(super) screen: Option<Grant>,
     /// the last gauge sent (only a change goes out)
     sent: Option<SetupGauge>,
-}
-
-/// A provider's access from his accounts: signed in (or a key found) is
-/// ready, an expired sign-in expired; a provider that takes no key is
-/// ready.
-pub(crate) fn access_of(accounts: &[Account], catalog: &bise_catalog::Catalog, pid: &str) -> Access {
-    let mine = || accounts.iter().filter(|a| a.provider == pid);
-    if mine().any(|a| a.state == "signed_in") {
-        return Access::Ready;
-    }
-    if mine().any(|a| a.state == "expired") {
-        return Access::Expired;
-    }
-    match catalog.provider(pid) {
-        Some(p) if p.key_env.is_empty() && !p.signs_in() && p.needs.is_empty() => Access::Ready,
-        _ => Access::Missing,
-    }
 }
 
 impl GaugeLive {
@@ -93,7 +76,7 @@ impl GaugeLive {
     /// the models this core hasn't tested itself.
     pub(crate) fn gauge(&mut self, setup: &bise_catalog::Setup, tts: Option<String>, accounts: &[Account], home_gone: Option<String>, news_seen: &[String], stored: &[Test]) -> SetupGauge {
         self.observe(accounts);
-        let access = |p: &str| access_of(accounts, &setup.catalog, p);
+        let access = |p: &str| features::access_of(accounts, &setup.catalog, p);
         let generation = |p: &str| self.generation(p);
         let tests: Vec<Test> = stored.iter().filter(|t| !self.tests.iter().any(|o| o.model == t.model)).cloned().chain(self.tests.iter().cloned()).collect();
         let facts = Facts {
@@ -253,16 +236,6 @@ mod tests {
             coding: false,
             needs_url: false,
         }
-    }
-
-    #[test]
-    fn a_provider_is_ready_signed_in_expired_or_missing() {
-        let c = bise_catalog::Catalog::builtin();
-        let a = [acct("chatgpt", "expired"), acct("mistral", "signed_in"), acct("groq", "signed_out")];
-        assert_eq!(access_of(&a, &c, "mistral"), Access::Ready);
-        assert_eq!(access_of(&a, &c, "chatgpt"), Access::Expired);
-        assert_eq!(access_of(&a, &c, "groq"), Access::Missing);
-        assert_eq!(access_of(&a, &c, "anthropic"), Access::Missing);
     }
 
     #[test]

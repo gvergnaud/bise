@@ -40,6 +40,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 use unicode_width::UnicodeWidthStr;
 
+mod gauge_view;
 mod models;
 mod provider;
 #[cfg(test)]
@@ -402,8 +403,11 @@ pub(crate) struct Onb {
     /// only the key step (a launch whose model can't run, after the
     /// first run: BISE-266)
     pub keys_only: bool,
-    /// the running check's answer
-    pub pending: Option<std::sync::mpsc::Receiver<Result<(), crate::keycheck::Fail>>>,
+    /// the running check's answer, and when it started
+    pub pending: Option<(std::sync::mpsc::Receiver<Result<(), crate::keycheck::Fail>>, Instant)>,
+    /// `/models`' tests of a model its news line just put on some roles
+    /// (no screen of their own: the rows say testing…)
+    pub role_tests: Vec<roles::RoleTest>,
     pub checker: Checker,
     /// the key just saved replaces another key the environment holds
     /// under this name (BISE-269: auth.json wins): said once, dim
@@ -479,6 +483,7 @@ impl Onb {
             ask_key: false,
             keys_only: false,
             pending: None,
+            role_tests: Vec::new(),
             checker: real_check,
             shadows: None,
             panel: None,
@@ -857,30 +862,41 @@ impl Onb {
             },
         };
         // BISE-298: a voice model is checked by a transcription
-        let voice = self.voice_pick();
+        let call = self.call_of(&p, &model, the_key, self.voice_pick());
+        self.pending = Some((self.spawn_check(call, env), Instant::now()));
+        Sub::Checking(p, model, tried)
+    }
+
+    /// The one tiny call that checks `model` with `key`: a transcription
+    /// when `voice`, the checker's Jev one System One question.
+    fn call_of(&self, p: &Provider, model: &str, key: String, voice: bool) -> crate::keycheck::Call {
         let (api, base_url, id) = if voice {
-            let r = self.setup.catalog.resolve_stt(&model);
+            let r = self.setup.catalog.resolve_stt(model);
             (r.api, r.base_url, r.id)
-        } else if let Some((_, wire)) = bise_catalog::roles::jev_of(&model) {
+        } else if let Some((_, wire)) = bise_catalog::roles::jev_of(model) {
             // the checker's Jev (approvals): one tiny System One question
-            let r = self.setup.catalog.resolve(&model);
+            let r = self.setup.catalog.resolve(model);
             (crate::keycheck::SYSTEM_ONE.to_string(), r.base_url, wire)
         } else {
-            let r = self.setup.catalog.resolve(&model);
+            let r = self.setup.catalog.resolve(model);
             (r.api, r.base_url, r.id)
         };
-        let caps = self.setup.catalog.resolve(&model).caps;
-        let call = crate::keycheck::Call {
+        let caps = self.setup.catalog.resolve(model).caps;
+        crate::keycheck::Call {
             provider: p.id.clone(),
             api,
             base_url,
             model: id,
-            key: the_key,
+            key,
             key_command: String::new(),
             headers: caps.headers.into_iter().collect(),
             headers_env: caps.headers_env,
             voice,
-        };
+        }
+    }
+
+    /// Run `call` on its own thread: its answer comes on the channel.
+    fn spawn_check(&self, call: crate::keycheck::Call, env: Env) -> std::sync::mpsc::Receiver<Result<(), crate::keycheck::Fail>> {
         let (tx, rx) = std::sync::mpsc::channel();
         let (check, url) = (self.checker, env("BEND_PROVIDER_URL"));
         // no base URL (foundry without ANTHROPIC_FOUNDRY_BASE_URL): no
@@ -892,8 +908,7 @@ impl Onb {
                 let _ = tx.send(check(&call, url));
             });
         }
-        self.pending = Some(rx);
-        Sub::Checking(p, model, tried)
+        rx
     }
 
     /// Where a found key is, in the key step's words: "ANTHROPIC_API_KEY",
@@ -922,15 +937,23 @@ impl Onb {
     pub(crate) fn tick(&mut self, env: Env) {
         self.tick_sign_in(env);
         self.tick_sign_out(env);
-        let Some(rx) = &self.pending else { return };
+        self.tick_role_tests(env);
+        let Some((rx, at)) = &self.pending else { return };
         let answer = match rx.try_recv() {
             Ok(a) => a,
             Err(std::sync::mpsc::TryRecvError::Empty) => return,
             Err(_) => Err(crate::keycheck::Fail::of(Why::Unreachable(settings::first_check_stopped.into()))),
         };
+        let ms = at.elapsed().as_millis() as u64;
         self.pending = None;
         let Sub::Checking(p, model, tried) = std::mem::replace(&mut self.sub, Sub::List) else { return };
         let key = tried.again();
+        // the key in use was tested (found, the plan's, or a pasted one
+        // that is kept): Settings and `/models` show its result
+        let kept = key.is_none() || answer.as_ref().err().is_none_or(|f| f.why == Why::NoCredit);
+        if kept {
+            self.record_check(&model, &answer, ms);
+        }
         self.sub = match answer {
             // BISE-282: a good key with no credit yet is saved all the same
             // (not the model: the key step comes back until it answers)
@@ -1896,8 +1919,14 @@ fn draw_page(f: &mut Frame, o: &Onb, now: u64) {
     let gap = gap_of(area);
     // the rows above the dots
     let body = Rect { height: area.height.saturating_sub(3), ..area };
-    // BISE-298: /provider and /models get 80 columns on a wide terminal
-    let col = if o.panel.is_some() && area.width >= 90 {
+    // BISE-298: /provider and /models get 80 columns on a wide terminal;
+    // /models' list up to 140 on a very wide one, where each row's plain
+    // line fits on it (models-ux m_57498)
+    let models_list = o.panel.as_ref().is_some_and(|p| p.screen == roles::Screen::Roles) && o.sub == Sub::List;
+    let col = if models_list && area.width >= 150 {
+        let w = (area.width - 10).min(140);
+        Rect { x: body.x + (body.width - w) / 2, width: w, ..body }
+    } else if o.panel.is_some() && area.width >= 90 {
         let w = 80;
         Rect { x: body.x + (body.width - w) / 2, width: w, ..body }
     } else if o.step == Step::Model && o.sub == Sub::List && area.width >= 100 {

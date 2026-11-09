@@ -240,11 +240,20 @@ fn the_window_puts_off_a_models_news_by_its_id() {
     assert_eq!(prefs::news_seen(&v), vec!["anthropic/claude-opus-5-6".to_string()]);
     assert!(prefs::news_seen(&o).is_empty(), "none set: none");
     assert_eq!(prefs::set_dotted(&v, "models.news_seen", Value::Null).unwrap()["models"], json!({}), "null takes it out");
+    // put_off (the terminal's x): once each, the oldest cut past the cap,
+    // and a window's long list cut the same way
+    let twice = prefs::put_off(&prefs::put_off(&v, "mistral/m-2").unwrap(), "mistral/m-2").unwrap();
+    assert_eq!(prefs::news_seen(&twice), vec!["anthropic/claude-opus-5-6".to_string(), "mistral/m-2".to_string()]);
+    let many: Vec<String> = (0..prefs::NEWS_SEEN_MAX + 5).map(|i| format!("p/m-{i}")).collect();
+    let cut = prefs::set_dotted(&o, "models.news_seen", json!(many)).unwrap();
+    let kept = prefs::news_seen(&cut);
+    assert_eq!((kept.len(), kept[0].as_str()), (prefs::NEWS_SEEN_MAX, "p/m-5"));
+    assert_eq!(prefs::news_seen(&prefs::put_off(&cut, "p/new").unwrap()).last().map(String::as_str), Some("p/new"));
     assert!(prefs::set_dotted(&o, "models", json!({})).is_err(), "never whole");
     assert!(prefs::set_dotted(&o, "models.main", json!("x/y")).is_err(), "only news_seen");
     assert!(prefs::set_dotted(&o, "models.news_seen", json!("anthropic/claude-opus-5-6")).is_err(), "a list");
     assert!(prefs::set_dotted(&o, "models.news_seen", json!(["opus"])).is_err(), "of provider/id");
-    assert!(prefs::set_dotted(&o, "models.news_seen", json!(vec!["a/b"; 201])).is_err(), "at most 200");
+    assert_eq!(prefs::news_seen(&prefs::set_dotted(&o, "models.news_seen", json!(vec!["a/b"; 201])).unwrap()), vec!["a/b".to_string()], "each id once");
 }
 
 #[test]

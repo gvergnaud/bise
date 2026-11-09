@@ -18,7 +18,7 @@
 
 use crate::keycheck::{Call, Fail, Why};
 use bise_catalog::auth::{EnvFile, From, Keys, Store};
-use bise_proto::app_rows::{CheckWhy, KeyFrom};
+use bise_proto::app_rows::{Account, CheckWhy, KeyFrom};
 use bise_proto::words::settings;
 
 /// An environment lookup (the real one, or a map in the tests).
@@ -191,6 +191,82 @@ pub(crate) fn model_for(home: &bise_home::Home, env: Env, id: &str) -> (String, 
 /// field asks for the URL too (Isidor, 28 oct).
 pub(crate) fn needs_url(p: &bise_catalog::Provider) -> bool {
     p.chats() && p.needs.is_empty() && !p.signs_in() && p.base_url.trim().is_empty()
+}
+
+/// A catalog provider's status as the window's account: a subscription
+/// when it signs in, else a key; signed in (or a key ready), expired,
+/// else signed out.
+pub fn account_of(s: &bise_catalog::auth_cli::Status) -> Account {
+    let state = match s.state.as_str() {
+        "signed in" | "ready" => "signed_in",
+        "expired" => "expired",
+        _ => "signed_out",
+    };
+    Account {
+        id: s.id.clone(),
+        label: s.name.clone(),
+        kind: if s.auth == "api" { "key" } else { "subscription" }.into(),
+        state: state.into(),
+        who: s.email.clone(),
+        plan: s.plan.clone(),
+        provider: s.id.clone(),
+        from: None,
+        keys_url: String::new(),
+        coding: false,
+        needs_url: false,
+    }
+}
+
+/// His accounts as Settings lists them, from `home`'s auth.json, .env
+/// files and `env`: the one source of the gauge's access, for the
+/// desktop's core (its accounts port) and the terminal's `/models`
+/// (architect m_57594).
+pub fn accounts(home: &bise_home::Home, env: Env) -> Vec<Account> {
+    use bise_catalog::auth_cli;
+    let paths = auth_cli::Paths::of(home);
+    let setup = bise_catalog::Setup::load(&paths.config);
+    let Ok(store) = Store::read(&paths.auth_file) else { return Vec::new() };
+    let files = EnvFile::read_all(&paths.env_files);
+    let keys = Keys { env, store: &store, files: &files };
+    let main = setup.catalog.resolve(&setup.model).provider;
+    let home = paths.home.as_deref();
+    let mut v = auth_cli::statuses(&setup.catalog, &keys, &main, home)
+        .iter()
+        .map(|s| {
+            let mut a = account_of(s);
+            if let Some(p) = setup.catalog.provider(&s.id) {
+                a.from = (!p.signs_in()).then(|| keys.find(&p.id, &p.key_env)).flatten().map(|f| key_from(&f.from, home));
+                a.keys_url = p.keys_url.clone();
+                a.coding = crate::onboarding::CODING_PLANS.contains(&p.id.as_str());
+                a.needs_url = needs_url(p);
+                // a key with no base URL can't answer: never "added" (Isidor, 28 oct)
+                if a.needs_url && a.state == "signed_in" {
+                    a.state = "signed_out".into();
+                }
+            }
+            a
+        })
+        .collect::<Vec<_>>();
+    // the coding plans are hidden from the catalog's list until set up;
+    // the first run offers them under their own row (the TUI's)
+    for id in crate::onboarding::CODING_PLANS {
+        if let Some(p) = setup.catalog.provider(id).filter(|p| !p.key_env.is_empty() && !v.iter().any(|a| a.id == p.id)) {
+            v.push(Account {
+                id: p.id.clone(),
+                label: p.name.clone(),
+                kind: "key".into(),
+                state: "signed_out".into(),
+                who: None,
+                plan: None,
+                provider: p.id.clone(),
+                from: None,
+                keys_url: p.keys_url.clone(),
+                coding: true,
+                needs_url: false,
+            });
+        }
+    }
+    v
 }
 
 /// A base URL he typed, cleaned: trimmed, http(s) only, no trailing '/'.

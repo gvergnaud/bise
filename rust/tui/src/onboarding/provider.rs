@@ -89,6 +89,8 @@ pub(crate) struct Panel {
     /// the model the last check of the steps passed (a voice model is
     /// not checked twice)
     pub checked: Option<String>,
+    /// `/models`' rows (Settings' gauge), read again after each change
+    pub gauge: Option<bise_proto::app_rows::SetupGauge>,
 }
 
 /// Where a provider's key is, for the list and the menu.
@@ -195,21 +197,17 @@ impl Onb {
             closed: false,
             key_first: false,
             checked: None,
+            gauge: None,
         });
         o.fetch_plan_models();
         match ask.open {
             super::roles::Open::Providers => {}
             super::roles::Open::Roles => {
-                if let Some(pn) = &mut o.panel {
-                    pn.screen = super::roles::Screen::Roles;
-                }
+                o.open_roles(None, env);
                 return o;
             }
             super::roles::Open::RolesAt(id) => {
-                if let Some(pn) = &mut o.panel {
-                    pn.screen = super::roles::Screen::Roles;
-                }
-                o.sel = super::roles::shown().iter().position(|x| x.id == id).unwrap_or(0);
+                o.open_roles(Some(id), env);
                 return o;
             }
             super::roles::Open::Pick(id) => {

@@ -210,3 +210,29 @@ fn a_failure_goes_before_a_fix_that_unlocks_more() {
     assert_eq!(state(&g, F::Small), S::Failed, "{:?}", states(&g));
     assert_eq!(next.fix, SetupFix::TestAgain);
 }
+
+/// A provider's access from his accounts, the one rule for the core and
+/// the terminal: signed in is ready, an expired sign-in expired, a
+/// provider that takes no key ready, anything else missing.
+#[test]
+fn a_provider_is_ready_signed_in_expired_or_missing() {
+    let acct = |provider: &str, state: &str| bise_proto::app_rows::Account {
+        id: provider.into(),
+        label: provider.into(),
+        kind: "key".into(),
+        state: state.into(),
+        who: None,
+        plan: None,
+        provider: provider.into(),
+        from: None,
+        keys_url: String::new(),
+        coding: false,
+        needs_url: false,
+    };
+    let c = Catalog::builtin();
+    let a = [acct("chatgpt", "expired"), acct("mistral", "signed_in"), acct("groq", "signed_out")];
+    assert_eq!(features::access_of(&a, &c, "mistral"), Access::Ready);
+    assert_eq!(features::access_of(&a, &c, "chatgpt"), Access::Expired);
+    assert_eq!(features::access_of(&a, &c, "groq"), Access::Missing);
+    assert_eq!(features::access_of(&a, &c, "anthropic"), Access::Missing);
+}

@@ -108,23 +108,63 @@ fn typed(o: &mut Onb, e: Env, t: &str) {
 }
 
 #[test]
-fn models_lists_each_role_with_its_provider_then_its_model() {
+fn models_shows_settings_rows_with_settings_words() {
     let (e, _hm) = home("list", "[roles]\nmain = \"mistral/mistral-medium-latest\"\n", &["MISTRAL_API_KEY"]);
+    let hm = home_of(&e);
     let o = open(&e, Open::Roles);
     let sc = screen(&o);
     assert!(sc.contains("which model does what?"), "{sc}");
-    assert!(sc.contains("each role picks a provider, then a model. one provider can serve several."), "{sc}");
-    // picked: the provider, then the id; a fallback: its rule, the provider, the id
-    assert!(line_of(&sc, "main  ").contains("Mistral  mistral-medium-latest · high"), "{sc}");
-    assert!(line_of(&sc, "agents ").contains("same as main · Mistral · mistral-medium-latest · high"), "{sc}");
-    assert!(line_of(&sc, "small jobs ").contains("auto · Mistral · mistral-small-latest"), "{sc}");
-    // voice mode off: off, and how to set it up
-    assert!(line_of(&sc, "voice ").trim_end().ends_with("off · enter sets it up"), "{sc}");
-    // what the role under the cursor is for, once, under the list
-    assert!(sc.contains("main: talks with you and starts the agents."), "{sc}");
+    // Settings' rows in Settings' order; no approvals checker
+    let names = ["bise ", "Agents ", "Titles and summaries ", "Images and computer use ", "Dictation and fn ", "Voice mode "];
+    let at: Vec<usize> = names.iter().map(|n| sc.find(line_of(&sc, n)).unwrap()).collect();
+    assert!(at.windows(2).all(|w| w[0] < w[1]), "{sc}");
+    assert!(!sc.contains("checker") && !sc.contains("Auto approvals"), "{sc}");
+    // the model by name, its provider faint; never ✓ without a result
+    assert!(line_of(&sc, "bise ").contains("mistral-medium  Mistral"), "{sc}");
+    assert!(line_of(&sc, "bise ").trim_end().ends_with("○ not tested"), "{sc}");
+    assert!(!sc.contains('✓'), "{sc}");
+    // Images follows bise; Voice mode is one row with its models
+    assert!(line_of(&sc, "Images and computer use ").contains("mistral-medium  same as bise"), "{sc}");
+    assert!(line_of(&sc, "Voice mode ").contains("3 models"), "{sc}");
+    // 110 columns: the plain line goes under the list for the cursor's row
+    assert!(!line_of(&sc, "bise ").contains("talks with you"), "{sc}");
+    assert!(sc.contains("bise: talks with you and starts the agents"), "{sc}");
     assert!(sc.contains("↑↓ choose   ⏎ change   esc back"), "{sc}");
-    // the checker (approvals): no Jev key, the small jobs model
-    assert!(line_of(&sc, "checker ").contains("auto · Mistral · mistral-small-latest"), "{sc}");
+    // wide: on the row
+    let wide = screen_w(&o, 170);
+    assert!(line_of(&wide, "bise ").contains("talks with you and starts the agents"), "{wide}");
+    assert!(!wide.contains("bise: talks"), "{wide}");
+    // a result kept in checks.json (any screen's test): ✓ and its time
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64;
+    let t = bise_catalog::features::Test { model: "mistral/mistral-medium-latest".into(), generation: 0, failed: None, ms: 640, at_ms: now };
+    bise_catalog::checks::record(&hm.checks_file(), &t, now).unwrap();
+    let o = open(&e, Open::Roles);
+    let sc = screen(&o);
+    assert!(line_of(&sc, "bise ").trim_end().ends_with("✓ 0.6 s"), "{sc}");
+    assert!(line_of(&sc, "Titles and summaries ").trim_end().ends_with("○ not tested"), "{sc}");
+}
+
+/// The images row follows bise's: enter goes to bise's row, which says
+/// where it changes; Voice mode opens /voice.
+#[test]
+fn images_go_to_bises_row_and_voice_mode_opens_voice() {
+    let (e, _hm) = home("follow", "[roles]\nmain = 'mistral/mistral-medium-latest'\n", &["MISTRAL_API_KEY"]);
+    let mut o = open(&e, Open::Roles);
+    while !line_of(&screen(&o), "Images and computer use ").contains("› ") {
+        o.on_key(key(KeyCode::Down), 1, &e);
+    }
+    let sc = screen(&o);
+    assert!(sc.contains("follows bise: change it on bise's row") && sc.contains("↑↓ choose   ⏎ go   esc back"), "{sc}");
+    assert_eq!(o.on_key(key(KeyCode::Enter), 1, &e), Out::Stay);
+    assert!(line_of(&screen(&o), "bise ").contains("› "), "{}", screen(&o));
+    let _s = crate::voicemode::settings::test_serial();
+    let _ = crate::voicemode::settings::take_request();
+    while !line_of(&screen(&o), "Voice mode ").contains("› ") {
+        o.on_key(key(KeyCode::Down), 1, &e);
+    }
+    assert!(screen(&o).contains("↑↓ choose   ⏎ open   esc back"), "{}", screen(&o));
+    assert_eq!(o.on_key(key(KeyCode::Enter), 1, &e), Out::Done);
+    assert!(crate::voicemode::settings::take_request().is_some());
 }
 
 /// The checker's row, `design §4.2` and designer's words: auto (Jev when
@@ -133,17 +173,11 @@ fn models_lists_each_role_with_its_provider_then_its_model() {
 fn the_checker_row_and_its_picker() {
     let _s = serial();
     let (e, hm) = home("checker", "[roles]\nmain = \"mistral/mistral-medium-latest\"\n", &["MISTRAL_API_KEY", "TYPESAFE_API_KEY"]);
-    let mut o = open(&e, Open::Roles);
+    // /models no longer lists the checker (main m_57194): its steps open
+    // on their own until the security branch removes them
+    let mut o = open(&e, Open::Pick("classify"));
     let sc = screen(&o);
-    // unset, TypeSafe's key ready: Jev, dim like small jobs
-    assert!(line_of(&sc, "checker ").contains("auto · TypeSafe · jev-1.13"), "{sc}");
-    while shown().get(o.sel).map(|r| r.id) != Some("classify") {
-        o.on_key(key(KeyCode::Down), 1, &e);
-    }
-    let sc = screen(&o);
-    assert!(sc.split_whitespace().collect::<Vec<_>>().join(" ").contains("checker: in auto, decides which commands run and which ask you."), "{sc}");
-    o.on_key(key(KeyCode::Enter), 1, &e);
-    let sc = screen(&o);
+    // unset, TypeSafe's key ready: Jev
     assert!(sc.contains("checker: which provider?") && sc.contains("now: auto · TypeSafe · jev-1.13"), "{sc}");
     assert!(sc.contains("the checker sees the command, the script it runs, and your request."), "{sc}");
     assert!(line_of(&sc, "auto ").contains("TypeSafe · jev-1.13 · now"), "{sc}");
@@ -166,17 +200,13 @@ fn the_checker_row_and_its_picker() {
     o.sel = rows.iter().position(|r| matches!(r, PRow::Jev(p, _) if p.id == "typesafe")).unwrap();
     o.on_key(key(KeyCode::Enter), 1, &e);
     assert!(cfg(&hm).contains("classify = \"typesafe/jev-1.13\""), "{}", cfg(&hm));
-    let sc = screen(&o);
-    assert!(sc.contains("which model does what?"), "back to /models: {sc}");
-    assert!(line_of(&sc, "checker ").contains("TypeSafe") && line_of(&sc, "checker ").contains("jev-1.13"), "{sc}");
-    // off: the row says so
-    o.on_key(key(KeyCode::Enter), 1, &e);
+    // off
+    let mut o = open(&e, Open::Pick("classify"));
     assert!(line_of(&screen(&o), "TypeSafe ").trim_end().ends_with("✓ ready · now"), "{}", screen(&o));
     o.sel = o.pick_rows("classify").iter().position(|r| *r == PRow::Off).unwrap();
     o.on_key(key(KeyCode::Enter), 1, &e);
     assert!(cfg(&hm).contains("classify = \"off\""), "{}", cfg(&hm));
-    assert!(line_of(&screen(&o), "checker ").contains("off · every command asks you"), "{}", screen(&o));
-    o.on_key(key(KeyCode::Enter), 1, &e);
+    let o = open(&e, Open::Pick("classify"));
     let sc = screen(&o);
     assert!(sc.contains("now: off · every command asks you"), "{sc}");
     // one now: the off row's, not auto's
@@ -240,11 +270,13 @@ fn the_providers_line_up_in_one_column() {
         let l = line_of(&sc, row);
         l[..l.find(what).unwrap_or_else(|| panic!("{what}: {sc}"))].chars().count()
     };
-    assert_eq!(col("main  ", "Mistral"), col("agents ", "OpenAI"), "{sc}");
-    assert_eq!(col("main  ", "mistral-medium"), col("agents ", "gpt-6-luna"), "{sc}");
-    assert_eq!(col("main  ", "Mistral"), col("voice ", "Mistral"), "{sc}");
-    // a config naming a voice model shows it as written
-    assert!(line_of(&sc, "voice ").contains("voxtral-mini-latest · off"), "{sc}");
+    // the models in one column, the statuses in another (Settings' fix
+    // of Dictation's offset)
+    assert_eq!(col("bise ", "mistral-medium"), col("Agents ", "gpt-6-luna"), "{sc}");
+    assert_eq!(col("bise ", "mistral-medium"), col("Dictation and fn ", "voxtral"), "{sc}");
+    let end = |row: &str| line_of(&sc, row).trim_end().chars().count();
+    assert_eq!(end("bise "), end("Agents "), "{sc}");
+    assert_eq!(end("bise "), end("Voice mode "), "{sc}");
 }
 
 #[test]
@@ -252,8 +284,24 @@ fn a_role_whose_provider_has_no_key_says_so_and_enter_fixes_it() {
     let (e, _hm) = home("broken", "[roles]\nmain = \"anthropic/claude-opus-5-5\"\n", &["MISTRAL_API_KEY"]);
     let mut o = open(&e, Open::Roles);
     let sc = screen(&o);
-    // what runs stays on screen
-    assert!(line_of(&sc, "main  ").contains("Anthropic  claude-opus-5-5  ✗ no key · enter fixes it"), "{sc}");
+    // what runs stays on screen, ✗ and why in the status column; the fix
+    // line on top, the cursor on it
+    let row = line_of(&sc, "bise ");
+    assert!(row.contains("Anthropic") && row.trim_end().ends_with("✗ no key"), "{sc}");
+    let fix = line_of(&sc, "Next ");
+    let flat = sc.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(fix.contains("› ") && flat.contains("Voice mode stopped: there's no Anthropic key."), "{sc}");
+    // a long fix line wraps under its words, the rows' columns hold
+    let col = |l: &str, at: &str| l[..l.find(at).unwrap()].chars().count();
+    let wrapped = sc.lines().find(|l| l.trim_start() == "key.").expect("the fix line wraps at 80 columns");
+    assert_eq!(col(wrapped, "key."), col(fix, "bise,"), "{sc}");
+    assert!(sc.find(fix) < sc.find(row), "{sc}");
+    // enter on the fix line: Anthropic's key step, no model written
+    o.on_key(key(KeyCode::Enter), 1, &e);
+    assert!(matches!(&o.sub, Sub::Paste(p, _, _) if p.id == "anthropic"), "{:?}", o.sub);
+    o.on_key(key(KeyCode::Esc), 1, &e);
+    // enter on the row: its steps, straight to the key step
+    o.on_key(key(KeyCode::Down), 1, &e);
     o.on_key(key(KeyCode::Enter), 1, &e);
     assert!(matches!(&o.sub, Sub::Paste(p, m, _) if p.id == "anthropic" && m == "anthropic/claude-opus-5-5"), "{:?}", o.sub);
 }
@@ -313,8 +361,8 @@ fn agents_pick_a_provider_then_a_model_then_its_effort() {
     // back on /models, the row flashing ✓
     let sc = screen(&o);
     assert!(sc.contains("which model does what?"), "{sc}");
-    let a = line_of(&sc, "agents ");
-    assert!(a.contains("✓") && a.contains("Mistral  mistral-medium-latest · none"), "{sc}");
+    let a = line_of(&sc, "Agents ");
+    assert!(a.contains("✓") && a.contains("mistral-medium  Mistral · none"), "{sc}");
     // same as main again (its first row): the role leaves config.toml
     o.on_key(key(KeyCode::Enter), 1, &e);
     while o.sel != 0 {
@@ -323,7 +371,7 @@ fn agents_pick_a_provider_then_a_model_then_its_effort() {
     o.on_key(key(KeyCode::Enter), 1, &e);
     let c = cfg(&hm);
     assert!(!c.contains("agents") && c.contains("model = \"mistral/mistral-medium-latest\""), "{c}");
-    assert!(line_of(&screen(&o), "agents ").contains("same as main"));
+    assert!(!line_of(&screen(&o), "Agents ").contains("· none"), "{}", screen(&o));
 }
 
 #[test]
@@ -373,7 +421,7 @@ fn a_provider_not_set_up_goes_through_its_key_step_then_its_models() {
         o.on_key(key(KeyCode::Enter), 1, &e);
     }
     assert!(cfg(&hm).contains("openai/gpt-6-nova"), "{}", cfg(&hm));
-    assert!(line_of(&screen(&o), "main  ").contains("OpenAI"), "{}", screen(&o));
+    assert!(line_of(&screen(&o), "bise  ").contains("OpenAI"), "{}", screen(&o));
 }
 
 #[test]
@@ -475,10 +523,10 @@ fn mistral_serves_main_and_voice() {
     let (e, hm) = home("both", "[roles]\nmain = \"mistral/mistral-medium-latest\"\n", &["MISTRAL_API_KEY"]);
     let mut o = open(&e, Open::Roles);
     let _ = take_voice_out();
-    while shown()[o.sel].id != "voice" {
+    while !line_of(&screen(&o), "Dictation and fn ").contains("› ") {
         o.on_key(key(KeyCode::Down), 1, &e);
     }
-    assert!(screen(&o).contains("voice: writes down what you say. enter opens /voice."), "{}", screen(&o));
+    assert!(screen(&o).contains("Dictation and fn: turns your voice into text"), "{}", screen(&o));
     // voice-menu (designer): ⏎ on voice opens /voice's screen (on speech
     // to text), the one editor of the voice model; /models closes
     {
@@ -501,10 +549,10 @@ fn mistral_serves_main_and_voice() {
     assert_eq!(take_voice_out(), None);
     // esc on /voice comes back to /models, on the voice row
     let o = open(&e, Open::RolesAt("voice"));
-    assert_eq!(shown()[o.sel].id, "voice");
     let sc = screen(&o);
-    assert!(line_of(&sc, "main  ").contains("Mistral") && line_of(&sc, "voice ").contains("Mistral  voxtral-mini-transcribe-3"), "{sc}");
-    assert!(line_of(&sc, "voice ").contains("› "), "{sc}");
+    let d = line_of(&sc, "Dictation and fn ");
+    assert!(line_of(&sc, "bise ").contains("Mistral") && d.contains("voxtral-mini-transcribe") && d.contains("Mistral"), "{sc}");
+    assert!(d.contains("› "), "{sc}");
 }
 
 #[test]
@@ -528,19 +576,20 @@ fn provider_menu_names_the_roles_and_sends_to_models() {
 }
 
 #[test]
-fn models_fits_narrow_screens_by_cutting_the_fallbacks_id_first() {
+fn models_fits_narrow_screens_by_cutting_the_provider_first() {
     let (e, _hm) = home("narrow", "[roles.main]\nmodel = \"anthropic/claude-opus-5-5\"\neffort = \"high\"\n", &["ANTHROPIC_API_KEY"]);
     let o = open(&e, Open::Roles);
     let wide = screen_w(&o, 110);
-    let narrow = screen_w(&o, 50);
-    assert!(line_of(&wide, "main  ").contains("Anthropic  claude-opus-5-5 · high"), "{wide}");
-    assert!(line_of(&wide, "agents  ").contains("same as main · Anthropic · claude-opus-5-5 · high"), "{wide}");
-    // a row never wraps: the fallback's id goes, never its provider; the
-    // picked id stays
-    assert!(line_of(&narrow, "main  ").contains("Anthropic  claude-opus-5-5"), "{narrow}");
-    let a = line_of(&narrow, "agents  ");
-    assert!(a.contains("same as main · Anthropic") && !a.contains("claude"), "{narrow}");
-    assert!(!narrow.lines().any(|l| l.trim_start().starts_with("claude")), "{narrow}");
+    let narrow = screen_w(&o, 80);
+    // high is opus's own default: no effort said
+    assert!(line_of(&wide, "bise ").contains("opus 5.5  Anthropic"), "{wide}");
+    assert!(!line_of(&wide, "bise ").contains("high"), "{wide}");
+    // 80 columns: a row never wraps; the provider goes, the model and the
+    // status stay
+    let b = line_of(&narrow, "bise ");
+    assert!(b.contains("opus 5.5") && b.trim_end().ends_with("○ not tested"), "{narrow}");
+    assert!(narrow.lines().all(|l| l.chars().count() <= 80), "{narrow}");
+    assert!(!narrow.lines().any(|l| l.trim_start().starts_with("not tested")), "{narrow}");
 }
 
 #[test]
@@ -548,6 +597,69 @@ fn an_agent_with_its_own_model_shows_under_agents() {
     let (e, _hm) = home("own", "[roles]\nmain = \"mistral/mistral-medium-latest\"\n", &["MISTRAL_API_KEY"]);
     let o = Onb::provider_panel(&e, Ask { open: Open::Roles, overrides: vec![("perf".into(), "openai/gpt-6-sol".into())], ..Ask::default() });
     let sc = screen(&o);
-    let i = sc.lines().position(|l| l.contains("agents   ")).expect("agents row");
+    let i = sc.lines().position(|l| l.contains("Agents   ")).expect("agents row");
     assert!(sc.lines().nth(i + 1).unwrap().contains("1 agent uses its own model: perf · openai/gpt-6-sol"), "{sc}");
+}
+
+/// The news line (models-ux m_57498): a newer model the catalog declares
+/// for some roles. `x` puts it off in prefs (Settings' state too); enter
+/// puts it on its roles in one write, tests it once, keeps the result in
+/// checks.json.
+#[test]
+fn the_news_line_uses_a_newer_model_or_puts_it_off() {
+    let _one = serial();
+    let toml = "[models.'anthropic/claude-opus-5-6']\nreplaces = 'anthropic/claude-opus-5-5'\n\n[roles]\nmain = 'anthropic/claude-opus-5-5'\n";
+    let (e, hm) = home("news", toml, &["ANTHROPIC_API_KEY"]);
+    let mut o = open(&e, Open::Roles);
+    let sc = screen(&o);
+    let news = line_of(&sc, "opus 5.6 is out.");
+    assert!(news.contains("› ") && news.contains("Use it for the 2 roles on opus 5.5 ›"), "{sc}");
+    assert!(sc.find(news) < sc.find(line_of(&sc, "bise ")), "{sc}");
+    assert!(sc.contains("⏎ use it   x not now"), "{sc}");
+    // not now: the same pref the core writes; the line goes
+    o.on_key(key(KeyCode::Char('x')), 1, &e);
+    let prefs = bise_home::Slot::file(hm.prefs_file()).get().unwrap();
+    assert_eq!(bise_home::prefs::news_seen(&prefs), vec!["anthropic/claude-opus-5-6".to_string()]);
+    assert!(!screen(&o).contains("is out."), "{}", screen(&o));
+    // back again: use it
+    std::fs::remove_file(hm.prefs_file()).unwrap();
+    let mut o = open(&e, Open::Roles);
+    CALLS.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    o.on_key(key(KeyCode::Enter), 1, &e);
+    let c = cfg(&hm);
+    assert!(c.contains("main = \"anthropic/claude-opus-5-6\"") && c.contains("agents = \"anthropic/claude-opus-5-6\""), "{c}");
+    assert!(line_of(&screen(&o), "bise ").contains("testing…"), "{}", screen(&o));
+    for _ in 0..400 {
+        o.tick(&e);
+        if o.role_tests.is_empty() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    // one test for the two roles, its result kept for both screens
+    let calls = CALLS.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    assert_eq!(calls.iter().filter(|(c, _)| c.starts_with("anthropic/claude-opus-5-6")).count(), 1, "{calls:?}");
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64;
+    let kept = bise_catalog::checks::read(&std::fs::read_to_string(hm.checks_file()).unwrap(), now);
+    assert!(kept.iter().any(|t| t.model == "anthropic/claude-opus-5-6" && t.failed.is_none()), "{kept:?}");
+    let sc = screen(&o);
+    assert!(!sc.contains("is out.") && line_of(&sc, "bise ").contains('✓') && line_of(&sc, "Agents ").contains('✓'), "{sc}");
+}
+
+/// A key check of the steps keeps its result in checks.json: `/models`
+/// and Settings show it.
+#[test]
+fn a_check_of_the_steps_is_kept_for_both_screens() {
+    let _one = serial();
+    let (e, hm) = home("kept", "[roles]\nmain = 'mistral/mistral-medium-latest'\n", &["MISTRAL_API_KEY"]);
+    let mut o = open(&e, Open::Roles);
+    // a voice model: checked by a transcription, with the key in use
+    o.sub = o.open_pick("voice", Back::Roles);
+    o.on_key(key(KeyCode::Enter), 1, &e);
+    o.on_key(key(KeyCode::Enter), 1, &e);
+    settle(&mut o, &e);
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64;
+    let kept = bise_catalog::checks::read(&std::fs::read_to_string(hm.checks_file()).unwrap_or_default(), now);
+    assert!(kept.iter().any(|t| t.model.starts_with("mistral/voxtral") && t.failed.is_none()), "{kept:?}");
+    assert!(line_of(&screen(&o), "Dictation and fn ").contains('✓'), "{}", screen(&o));
 }

@@ -32,6 +32,8 @@ crate::words! { settings:
     mark_took(secs) = "✓ {secs} s";
     /// a feature's mark: set up, not tested since its key changed
     mark_on = "✓";
+    /// the terminal's mark: set up, no test result yet (never ✓ without one, architect m_57509)
+    mark_untested = "○ not tested";
     /// a feature's mark: it failed
     mark_failed = "✗ failed";
     /// a feature's mark: off

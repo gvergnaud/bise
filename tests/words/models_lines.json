@@ -1,0 +1,86 @@
+{
+  "_doc": "Which model does what: the lines Settings (apps/desktop/src/settings/roleList.ts) and the terminal's /models (rust/tui/src/onboarding/gauge_view.rs) word from the same setup_gauge. Both sides read this file (architect m_57594): a change of wording on one side goes red on the other. `fix`: the fix line; `news`: [text, act]; `stops`: [row, part, status] for each part that failed or is off.",
+  "cases": [
+    {
+      "name": "all on",
+      "gauge": {
+        "of": 2, "on": 2, "next": null, "testing": [], "news": null,
+        "rows": [
+          { "id": "talk", "state": "on", "fix": null, "perms": [], "home_gone": null, "better": null, "parts": [
+            { "role": "main", "model": "anthropic/claude-opus-5-5", "name": "opus 5.5", "provider": "Anthropic", "source": "config", "state": "on", "ms": 640 } ] },
+          { "id": "agents", "state": "on", "fix": null, "perms": [], "home_gone": null, "better": null, "parts": [
+            { "role": "agents", "model": "anthropic/claude-opus-5-5", "name": "opus 5.5", "provider": "Anthropic", "source": "default", "state": "on" } ] }
+        ]
+      },
+      "fix": null,
+      "news": null,
+      "stops": []
+    },
+    {
+      "name": "the Mistral key expired: one fix line for the rows it stops",
+      "gauge": {
+        "of": 3, "on": 0, "testing": [], "news": null,
+        "next": { "fix": { "t": "add_key", "provider": "mistral", "url": "https://console.mistral.ai/api-keys" }, "unlocks": ["small", "dictation", "voice_mode"] },
+        "rows": [
+          { "id": "small", "state": "failed", "fix": { "t": "add_key", "provider": "mistral" }, "perms": [], "home_gone": null, "better": null, "parts": [
+            { "role": "small", "model": "mistral/mistral-small-latest", "name": "mistral-small", "provider": "Mistral", "source": "default", "state": "failed", "why": "wrong_key", "said": "Unauthorized" } ] },
+          { "id": "dictation", "state": "failed", "fix": { "t": "add_key", "provider": "mistral" }, "perms": [], "home_gone": null, "better": null, "parts": [
+            { "role": "voice", "model": "mistral/voxtral-mini-transcribe-3", "name": "voxtral-mini-transcribe 3", "provider": "Mistral", "source": "default", "state": "failed", "why": "wrong_key" } ] },
+          { "id": "voice_mode", "state": "failed", "fix": { "t": "add_key", "provider": "mistral" }, "perms": [], "home_gone": null, "better": null, "parts": [
+            { "role": "voice", "model": "mistral/voxtral-mini-transcribe-3", "name": "voxtral-mini-transcribe 3", "provider": "Mistral", "source": "default", "state": "failed", "why": "wrong_key" },
+            { "role": "tts", "model": "mistral/voxtral-tts", "name": "voxtral-tts", "provider": "Mistral", "source": "default", "state": "failed", "why": "wrong_key" },
+            { "role": "main", "model": "anthropic/claude-opus-5-5", "name": "opus 5.5", "provider": "Anthropic", "source": "config", "state": "on", "ms": 640 } ] }
+        ]
+      },
+      "fix": "your Mistral key expired: Titles, Dictation and Voice mode stopped.",
+      "news": null,
+      "stops": [["small", 0, "✗ key expired"], ["dictation", 0, "✗ key expired"], ["voice_mode", 0, "✗ key expired"], ["voice_mode", 1, "✗ key expired"]]
+    },
+    {
+      "name": "no credit on bise's model, a voice off",
+      "gauge": {
+        "of": 2, "on": 0, "testing": [], "news": null,
+        "next": { "fix": { "t": "credit", "provider": "chatgpt" }, "unlocks": ["talk"] },
+        "rows": [
+          { "id": "talk", "state": "failed", "fix": { "t": "credit", "provider": "chatgpt" }, "perms": [], "home_gone": null, "better": null, "parts": [
+            { "role": "main", "model": "chatgpt/gpt-6.1-sol", "name": "gpt-6.1-sol", "provider": "ChatGPT", "source": "config", "state": "failed", "why": "no_credit" } ] },
+          { "id": "voice_mode", "state": "off", "fix": { "t": "add_key", "provider": "elevenlabs" }, "perms": [], "home_gone": null, "better": null, "parts": [
+            { "role": "voice", "model": "groq/whisper-large-v3", "name": "whisper large v3", "provider": "Groq", "source": "config", "state": "on", "ms": 300 },
+            { "role": "tts", "model": "elevenlabs/eleven-v3", "name": "eleven v3", "provider": "ElevenLabs", "source": "default", "state": "off" } ] }
+        ]
+      },
+      "fix": "bise stopped: your ChatGPT key has no credit left.",
+      "news": null,
+      "stops": [["talk", 0, "✗ no credit"], ["voice_mode", 1, "○ off"]]
+    },
+    {
+      "name": "news for two roles",
+      "gauge": {
+        "of": 1, "on": 1, "next": null, "testing": [],
+        "news": { "model": "anthropic/claude-opus-5-6", "name": "opus 5.6", "replaces": "anthropic/claude-opus-5-5", "replaces_name": "opus 5.5", "roles": ["main", "agents"] },
+        "rows": [
+          { "id": "talk", "state": "on", "fix": null, "perms": [], "home_gone": null, "better": null, "parts": [
+            { "role": "main", "model": "anthropic/claude-opus-5-5", "name": "opus 5.5", "provider": "Anthropic", "source": "config", "state": "on" } ] }
+        ]
+      },
+      "fix": null,
+      "news": ["opus 5.6 is out.", "Use it for the 2 roles on opus 5.5"],
+      "stops": []
+    },
+    {
+      "name": "news for one role, a model gone",
+      "gauge": {
+        "of": 1, "on": 0, "testing": [],
+        "next": { "fix": { "t": "pick_model", "role": "small" }, "unlocks": ["small"] },
+        "news": { "model": "mistral/mistral-small-4", "name": "mistral-small 4", "replaces": "mistral/mistral-small-latest", "replaces_name": "mistral-small", "roles": ["small"] },
+        "rows": [
+          { "id": "small", "state": "failed", "fix": { "t": "pick_model", "role": "small" }, "perms": [], "home_gone": null, "better": null, "parts": [
+            { "role": "small", "model": "mistral/mistral-small-latest", "name": "mistral-small", "provider": "Mistral", "source": "config", "state": "failed", "why": "model" } ] }
+        ]
+      },
+      "fix": "Titles stopped: the provider doesn't know mistral/mistral-small-latest any more.",
+      "news": ["mistral-small 4 is out.", "Use it for Titles"],
+      "stops": [["small", 0, "✗ model gone"]]
+    }
+  ]
+}

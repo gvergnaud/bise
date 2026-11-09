@@ -361,29 +361,7 @@ pub fn check_role_set(setup: &bise_catalog::Setup, role: &str, model: Option<&st
     Ok(())
 }
 
-/// A catalog provider's status as the window's account: a subscription
-/// when it signs in, else a key; signed in (or a key ready), expired,
-/// else signed out.
-pub fn account_of(s: &bise_catalog::auth_cli::Status) -> Account {
-    let state = match s.state.as_str() {
-        "signed in" | "ready" => "signed_in",
-        "expired" => "expired",
-        _ => "signed_out",
-    };
-    Account {
-        id: s.id.clone(),
-        label: s.name.clone(),
-        kind: if s.auth == "api" { "key" } else { "subscription" }.into(),
-        state: state.into(),
-        who: s.email.clone(),
-        plan: s.plan.clone(),
-        provider: s.id.clone(),
-        from: None,
-        keys_url: String::new(),
-        coding: false,
-        needs_url: false,
-    }
-}
+pub use crate::firstkey::{account_of, accounts};
 
 /// The repos to show: newest first, at most [`MAX_FOUND`], each flagged
 /// when already one of his projects.
@@ -558,52 +536,7 @@ pub fn live(flow: FlowFn) -> SetupPorts {
         prefs: Box::new(move || std::fs::read_to_string(home().prefs_file()).ok().and_then(|t| serde_json::from_str(&t).ok())),
         // the whole file, tmp + rename (bise_home's Slot)
         write_prefs: Box::new(move |v| bise_home::Slot::file(home().prefs_file()).set(v.clone()).map_err(|e| e.to_string())),
-        accounts: Box::new(move || {
-            let paths = auth_paths();
-            let setup = bise_catalog::Setup::load(&paths.config);
-            let Ok(store) = bise_catalog::auth::Store::read(&paths.auth_file) else { return Vec::new() };
-            let files = bise_catalog::auth::EnvFile::read_all(&paths.env_files);
-            let keys = bise_catalog::auth::Keys { env: &env, store: &store, files: &files };
-            let main = setup.catalog.resolve(&setup.model).provider;
-            let home = paths.home.as_deref();
-            let mut v = auth_cli::statuses(&setup.catalog, &keys, &main, home)
-                .iter()
-                .map(|s| {
-                    let mut a = account_of(s);
-                    if let Some(p) = setup.catalog.provider(&s.id) {
-                        a.from = (!p.signs_in()).then(|| keys.find(&p.id, &p.key_env)).flatten().map(|f| crate::firstkey::key_from(&f.from, home));
-                        a.keys_url = p.keys_url.clone();
-                        a.coding = crate::onboarding::CODING_PLANS.contains(&p.id.as_str());
-                        a.needs_url = crate::firstkey::needs_url(p);
-                        // a key with no base URL can't answer: never "added" (Isidor, 28 oct)
-                        if a.needs_url && a.state == "signed_in" {
-                            a.state = "signed_out".into();
-                        }
-                    }
-                    a
-                })
-                .collect::<Vec<_>>();
-            // the coding plans are hidden from the catalog's list until set
-            // up; the first run offers them under their own row (the TUI's)
-            for id in crate::onboarding::CODING_PLANS {
-                if let Some(p) = setup.catalog.provider(id).filter(|p| !p.key_env.is_empty() && !v.iter().any(|a| a.id == p.id)) {
-                    v.push(Account {
-                        id: p.id.clone(),
-                        label: p.name.clone(),
-                        kind: "key".into(),
-                        state: "signed_out".into(),
-                        who: None,
-                        plan: None,
-                        provider: p.id.clone(),
-                        from: None,
-                        keys_url: p.keys_url.clone(),
-                        coding: true,
-                        needs_url: false,
-                    });
-                }
-            }
-            v
-        }),
+        accounts: Box::new(move || accounts(&home(), &env)),
         claude_plan: Box::new(move || bise_catalog::detect::claude_plan(home().user_home(), &env)),
         // the key step's one path (firstkey.rs): checked live on its own
         // thread, saved only once it works

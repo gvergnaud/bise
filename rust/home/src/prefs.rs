@@ -101,10 +101,36 @@ pub const WINDOW_KEYS: &[&str] = &["onboarded", "theme", "voice", "context", "ex
 /// that path, a list of such ids (at most 200), or null. Set whole.
 pub const NEWS_SEEN: &str = "news_seen";
 
+/// At most this many put-off models are kept: the oldest go first.
+pub const NEWS_SEEN_MAX: usize = 200;
+
+/// `prefs` with `model` put off ("Not now"): added once to
+/// `models.news_seen`, the oldest cut past [`NEWS_SEEN_MAX`]. The one rule
+/// for the terminal and the window's prefs_set. Pure.
+pub fn put_off(prefs: &Value, model: &str) -> Result<Value, String> {
+    let mut ids = news_seen(prefs);
+    ids.push(model.to_string());
+    set_dotted(prefs, &format!("models.{NEWS_SEEN}"), Value::from(ids))
+}
+
+/// A news_seen list as kept: each id once (its first place), the newest
+/// [`NEWS_SEEN_MAX`]; anything else as sent (refused after).
+fn news_seen_kept(v: Value) -> Value {
+    let Some(a) = v.as_array() else { return v };
+    let mut ids: Vec<Value> = Vec::new();
+    for x in a {
+        if !ids.contains(x) {
+            ids.push(x.clone());
+        }
+    }
+    let cut = ids.len().saturating_sub(NEWS_SEEN_MAX);
+    Value::Array(ids.split_off(cut))
+}
+
 fn models_key(parts: &[&str], v: &Value) -> Result<(), String> {
     match parts {
         ["models", NEWS_SEEN] => {
-            let ids = |a: &Vec<Value>| a.len() <= 200 && a.iter().all(|x| x.as_str().is_some_and(|s| (3..=256).contains(&s.len()) && s.contains('/')));
+            let ids = |a: &Vec<Value>| a.len() <= NEWS_SEEN_MAX && a.iter().all(|x| x.as_str().is_some_and(|s| (3..=256).contains(&s.len()) && s.contains('/')));
             if v.is_null() || v.as_array().is_some_and(ids) {
                 Ok(())
             } else {
@@ -262,6 +288,8 @@ pub fn set_dotted(obj: &Value, key: &str, value: Value) -> Result<Value, String>
     if PIN_ROOTS.contains(&top) {
         pins_key(&parts, &value)?;
     }
+    // a put-off list is kept capped, whoever sends it (put_off, the window)
+    let value = if parts[..] == ["models", NEWS_SEEN] { news_seen_kept(value) } else { value };
     if top == "models" {
         models_key(&parts, &value)?;
     }

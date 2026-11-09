@@ -18,10 +18,14 @@
 //!
 //! A pick is written at once (`set_role`), then `/models` flashes its row.
 
+use super::gauge_view::{self as gv, Tone};
 use super::signin::Kind;
 use super::*;
+use bise_catalog::features::{self, Facts, Test};
 use bise_catalog::roles::{self as r, Source};
+use bise_proto::app_rows::{FeatureId, FeatureState, RoleId, SetupFix, SetupGauge};
 use bise_proto::words::settings;
+use std::sync::mpsc::{Receiver, TryRecvError};
 use std::sync::Mutex;
 
 /// Which of the panel's screens shows.
@@ -95,7 +99,39 @@ pub(crate) enum PRow {
     Off,
 }
 
-/// The roles `/models` lists.
+/// A test `/models` runs on its own (the model its news line just put on
+/// some roles, once): no screen of its own, its rows say testing… until
+/// it answers.
+pub(crate) struct RoleTest {
+    model: String,
+    at: Instant,
+    rx: Receiver<Result<(), crate::keycheck::Fail>>,
+}
+
+/// A line of `/models` the cursor stands on: the fix line, the news
+/// line, then the rows in Settings' order.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum Item {
+    Fix(SetupFix),
+    News,
+    Row(FeatureId),
+}
+
+/// `/models`' lines the cursor stands on, for the gauge `g`.
+pub(crate) fn items(g: &SetupGauge) -> Vec<Item> {
+    let mut v: Vec<Item> = gv::fix_line(g).map(|(_, fix)| Item::Fix(fix)).into_iter().collect();
+    if gv::news_line(g).is_some() {
+        v.push(Item::News);
+    }
+    v.extend(gv::LISTED.into_iter().filter(|id| g.rows.iter().any(|r| r.id == *id)).map(Item::Row));
+    v
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64)
+}
+
+/// The roles a provider serves (`/provider`'s tags and menus).
 pub(crate) fn shown() -> Vec<&'static r::Role> {
     r::ROLES.iter().filter(|x| x.shown).collect()
 }
@@ -120,11 +156,6 @@ fn fallback_word(id: &str) -> &'static str {
     }
 }
 
-/// The role column: the longest name and 3 spaces.
-fn role_w() -> usize {
-    shown().iter().map(|x| x.name.width()).max().unwrap_or(0) + 3
-}
-
 fn pad(t: &str, w: usize) -> String {
     let n = t.width();
     if n >= w {
@@ -139,6 +170,248 @@ fn dot() -> &'static str {
         "-"
     } else {
         "·"
+    }
+}
+
+// ---- `/models`: Settings' rows (page models-settings, pick A) ----
+
+impl Onb {
+    /// Settings' gauge from what the terminal knows (architect m_57509):
+    /// the keys found (an expired plan sign-in: expired), the results
+    /// checks.json keeps (any screen's tests, on generation 0), voice
+    /// mode's `tts_model`, the models he put off; no helper here, so
+    /// nothing is said about permissions.
+    pub(crate) fn gauge(&self, env: Env) -> SetupGauge {
+        // his accounts as Settings lists them: the core's one access rule
+        let accounts = crate::firstkey::accounts(&self.home, env);
+        let access = |pid: &str| features::access_of(&accounts, &self.setup.catalog, pid);
+        let generation = |_: &str| 0;
+        let checks = std::fs::read_to_string(self.home.checks_file()).unwrap_or_default();
+        let tests = bise_catalog::checks::read(&checks, now_ms());
+        let prefs = bise_home::Slot::file(self.home.prefs_file()).get();
+        let seen = prefs.as_ref().map(bise_home::prefs::news_seen).unwrap_or_default();
+        let config = std::fs::read_to_string(self.home.config_file()).ok();
+        let facts = Facts {
+            access: &access,
+            generation: &generation,
+            tests: &tests,
+            mic: None,
+            accessibility: None,
+            screen: None,
+            home_gone: None,
+            tts_model: bise_catalog::voice::VoiceModeKeys::from_text(config.as_deref()).tts_model,
+            testing: self.role_tests.iter().map(|t| t.model.clone()).collect(),
+            news_seen: &seen,
+        };
+        features::gauge(&self.setup, &facts)
+    }
+
+    /// Read `/models`' rows again (after a change, a test's answer).
+    pub(super) fn refresh_gauge(&mut self, env: Env) {
+        if self.panel.is_none() {
+            return;
+        }
+        let g = self.gauge(env);
+        let n = items(&g).len();
+        self.pn_mut().gauge = Some(g);
+        if self.pn().screen == Screen::Roles {
+            self.sel = self.sel.min(n.saturating_sub(1));
+        }
+    }
+
+    /// `/models`' rows as last read (opening `/models` reads them; none
+    /// yet: an empty list).
+    fn rows_gauge(&self) -> SetupGauge {
+        let none = || SetupGauge { rows: Vec::new(), on: 0, of: 0, next: None, testing: Vec::new(), news: None };
+        self.panel.as_ref().and_then(|p| p.gauge.clone()).unwrap_or_else(none)
+    }
+
+    /// Open `/models`, on `role`'s row, else on its first line.
+    pub(super) fn open_roles(&mut self, role: Option<&str>, env: Env) {
+        self.pn_mut().screen = Screen::Roles;
+        self.refresh_gauge(env);
+        self.sel = role.map_or(0, |id| self.at_role(id));
+    }
+
+    /// The line of `role`'s row on `/models`.
+    fn at_role(&self, role: &str) -> usize {
+        let row = gv::row_of(role).map(Item::Row);
+        items(&self.rows_gauge()).iter().position(|x| Some(x) == row.as_ref()).unwrap_or(0)
+    }
+
+    /// Keep a check's result in checks.json: Settings and `/models` show
+    /// it (bise_catalog::checks).
+    pub(super) fn record_check(&self, model: &str, answer: &Result<(), crate::keycheck::Fail>, ms: u64) {
+        let now = now_ms();
+        let t = Test { model: model.to_string(), generation: 0, failed: answer.as_ref().err().map(crate::firstkey::why_of), ms, at_ms: now };
+        // a record that can't be written only leaves the row 'not tested'
+        let _ = bise_catalog::checks::record(&self.home.checks_file(), &t, now);
+    }
+
+    /// Test `model` once, on its own thread, with the key in use; no key:
+    /// nothing to test (its row already says so).
+    fn test_once(&mut self, model: &str, env: Env) {
+        let Some(p) = self.provider_of(model) else { return };
+        let key = if p.plan {
+            (self.logins.token)(&bise_catalog::auth_cli::Paths::of(&self.home)).ok()
+        } else if p.key_env.is_empty() {
+            Some(String::new())
+        } else {
+            self.found_key(&p, env).map(|f| f.key)
+        };
+        let Some(key) = key else { return };
+        let call = self.call_of(&p, model, key, false);
+        let rx = self.spawn_check(call, env);
+        self.role_tests.push(RoleTest { model: model.to_string(), at: Instant::now(), rx });
+    }
+
+    /// The answers of `/models`' own tests: kept in checks.json, the rows
+    /// read again.
+    pub(super) fn tick_role_tests(&mut self, env: Env) {
+        let mut done: Vec<(String, Result<(), crate::keycheck::Fail>, u64)> = Vec::new();
+        self.role_tests.retain(|t| {
+            let answer = match t.rx.try_recv() {
+                Err(TryRecvError::Empty) => return true,
+                Ok(a) => a,
+                Err(TryRecvError::Disconnected) => Err(crate::keycheck::Fail::of(Why::Unreachable(settings::first_check_stopped.into()))),
+            };
+            done.push((t.model.clone(), answer, t.at.elapsed().as_millis() as u64));
+            false
+        });
+        for (model, answer, ms) in &done {
+            self.record_check(model, answer, *ms);
+        }
+        if !done.is_empty() {
+            self.refresh_gauge(env);
+        }
+    }
+
+    /// The news line's act: its model on its roles in one write
+    /// (`roles::save_roles`, the core's role_set_many), then one test when
+    /// a role's model moved (piece 2's rule: an unchanged model costs
+    /// nothing).
+    fn use_news(&mut self, g: &SetupGauge, env: Env) {
+        let Some(n) = &g.news else { return };
+        let ids: Vec<&str> = n.roles.iter().map(String::as_str).collect();
+        let before: Vec<String> = ids.iter().map(|id| self.setup.role_model(id).0).collect();
+        if let Err(e) = r::save_roles(&self.home.config_file(), &ids, &n.model) {
+            self.pn_mut().said = Some(format!("{} {}", theme::glyph(theme::G_FAILED), e));
+            return;
+        }
+        self.reload_setup(env);
+        if ids.iter().zip(&before).any(|(id, was)| self.setup.role_model(id).0 != *was) {
+            self.test_once(&n.model, env);
+        }
+        let first = ids.first().and_then(|id| gv::row_of(id)).and_then(gv::role_of);
+        self.pn_mut().flash = first.map(|id| (id, Instant::now()));
+    }
+
+    /// The news line's `not now`: its model goes in `models.news_seen`
+    /// the way the core's prefs_set writes it (one state for both
+    /// screens: put off once, gone in both).
+    fn news_not_now(&mut self, g: &SetupGauge) {
+        let Some(n) = &g.news else { return };
+        let slot = bise_home::Slot::file(self.home.prefs_file());
+        let now = slot.get().unwrap_or_else(|| serde_json::json!({}));
+        let res = bise_home::prefs::put_off(&now, &n.model).and_then(|v| slot.set(v).map_err(|e| e.to_string()));
+        if let Err(e) = res {
+            self.pn_mut().said = Some(format!("{} {}", theme::glyph(theme::G_FAILED), e));
+        }
+    }
+
+    /// Enter on the fix line: the key step of its provider (its key is
+    /// kept, no model written), its sign-in, its billing page, a role's
+    /// steps, or its failed models tested again.
+    fn on_fix(&mut self, fix: SetupFix, g: &SetupGauge, env: Env) -> Sub {
+        let failed = |pid: &str| {
+            g.rows.iter().flat_map(|r| r.parts.iter()).find(|p| p.state == FeatureState::Failed && bise_catalog::split_name(&p.model).is_some_and(|(x, _)| x == pid)).map(|p| p.model.clone())
+        };
+        match fix {
+            SetupFix::AddKey { provider, .. } => {
+                let Some(p) = self.setup.catalog.provider(&provider).map(Provider::of) else { return Sub::List };
+                // checked with a chat model of it, else the model that failed
+                let m = r::pick_for(&self.setup.catalog, &p.id, &self.setup.model).or_else(|| failed(&p.id)).unwrap_or_default();
+                self.note = None;
+                Sub::Paste(p, m, String::new())
+            }
+            SetupFix::SignIn { .. } => self.sign_in(Kind::ChatGpt),
+            SetupFix::Credit { url, .. } => {
+                (self.pn().opener)(&url);
+                Sub::List
+            }
+            SetupFix::PickModel { role } => match role {
+                RoleId::Main => self.open_pick(r::MAIN, Back::Roles),
+                RoleId::Agents => self.open_pick(r::AGENTS, Back::Roles),
+                RoleId::Small => self.open_pick(r::SMALL, Back::Roles),
+                _ => Sub::List,
+            },
+            SetupFix::TestAgain => {
+                let models: Vec<String> = g.rows.iter().flat_map(|r| r.parts.iter()).filter(|p| p.state == FeatureState::Failed).map(|p| p.model.clone()).collect();
+                for m in models.iter().filter(|m| !m.is_empty()) {
+                    if !self.role_tests.iter().any(|t| t.model == *m) {
+                        self.test_once(m, env);
+                    }
+                }
+                Sub::List
+            }
+            _ => Sub::List,
+        }
+    }
+
+    /// Enter on a row: its role's steps (a role whose provider lost its
+    /// key: straight to its key step); Images goes to bise's row, which
+    /// it follows; Dictation and Voice mode open /voice.
+    fn on_row(&mut self, id: FeatureId) -> Result<Sub, Out> {
+        if id == FeatureId::Vision {
+            self.sel = self.at_role(r::MAIN);
+            return Ok(Sub::List);
+        }
+        let role = match gv::role_of(id) {
+            Some(r::VOICE) | None => {
+                // voice-menu (designer): one editor for the voice models,
+                // /voice's screen; esc there comes back
+                crate::voicemode::settings::request_from_models();
+                return Err(Out::Done);
+            }
+            Some(role) => role,
+        };
+        let sub = self.open_pick(role, Back::Roles);
+        Ok(match self.role_broken(role) {
+            Some(p) => Sub::Paste(p, self.role_model(role).0, String::new()),
+            None => sub,
+        })
+    }
+
+    /// A key on `/models`' list.
+    fn on_models_key(&mut self, k: KeyEvent, env: Env) -> Result<Sub, Out> {
+        let g = self.rows_gauge();
+        let all = items(&g);
+        let n = all.len().max(1);
+        Ok(match k.code {
+            KeyCode::Esc => return Err(Out::Done),
+            KeyCode::Up | KeyCode::Down => {
+                self.pn_mut().flash = None;
+                self.sel = if k.code == KeyCode::Down { (self.sel + 1) % n } else { (self.sel + n - 1) % n };
+                Sub::List
+            }
+            KeyCode::Enter => {
+                self.pn_mut().flash = None;
+                match all.get(self.sel).cloned() {
+                    Some(Item::Fix(fix)) => self.on_fix(fix, &g, env),
+                    Some(Item::News) => {
+                        self.use_news(&g, env);
+                        Sub::List
+                    }
+                    Some(Item::Row(id)) => return self.on_row(id),
+                    None => Sub::List,
+                }
+            }
+            KeyCode::Char('x') if all.get(self.sel) == Some(&Item::News) => {
+                self.news_not_now(&g);
+                Sub::List
+            }
+            _ => Sub::List,
+        })
     }
 }
 
@@ -430,10 +703,15 @@ impl Onb {
     fn save_role(&mut self, id: &str, model: Option<&str>, effort: Option<&str>, env: Env) -> Result<(), String> {
         // the one locked writer, the desktop's core's too
         r::save_role(&self.home.config_file(), id, model, effort)?;
+        self.reload_setup(env);
+        Ok(())
+    }
+
+    /// Read config.toml again after a role's write.
+    fn reload_setup(&mut self, env: Env) {
         self.setup = setup_of(env, &self.home);
         self.model = self.setup.model.clone();
         self.mine = self.setup.catalog.resolve(&self.model).provider;
-        Ok(())
     }
 
     /// A pick is done: saved, then back where the steps came from.
@@ -449,20 +727,18 @@ impl Onb {
                 set_voice_out(VoiceOut::On(m.to_string()));
             }
         }
-        self.back(Some(id))
+        self.back(Some(id), env)
     }
 
     /// Leave the steps: to `/models` (the row flashing when it changed),
     /// or the feed.
-    fn back(&mut self, changed: Option<&'static str>) -> Sub {
+    fn back(&mut self, changed: Option<&'static str>, env: Env) -> Sub {
         let Screen::Pick(id, back) = self.pn().screen.clone() else { return Sub::List };
         self.pn_mut().filter.clear();
         match back {
             Back::Roles => {
-                let pn = self.pn_mut();
-                pn.screen = Screen::Roles;
-                pn.flash = changed.map(|c| (c, Instant::now()));
-                self.sel = shown().iter().position(|x| x.id == id).unwrap_or(0);
+                self.open_roles(Some(id), env);
+                self.pn_mut().flash = changed.map(|c| (c, Instant::now()));
                 Sub::List
             }
             Back::Close => {
@@ -518,34 +794,24 @@ impl Onb {
         let screen = self.pn().screen.clone();
         let sub = std::mem::replace(&mut self.sub, Sub::List);
         self.sub = match (&screen, sub, k.code) {
-            (Screen::Roles, Sub::List, KeyCode::Esc) => return Out::Done,
-            (Screen::Roles, Sub::List, KeyCode::Up | KeyCode::Down) => {
-                self.pn_mut().flash = None;
-                self.sel = updown(self.sel, shown().len());
-                Sub::List
-            }
-            (Screen::Roles, Sub::List, KeyCode::Enter) => {
-                let Some(role) = shown().get(self.sel).copied() else { return Out::Stay };
-                self.pn_mut().flash = None;
-                // voice-menu (designer): one editor for the voice model,
-                // /voice's screen on speech to text; esc there comes back
-                if role.id == r::VOICE {
-                    crate::voicemode::settings::request_from_models();
-                    return Out::Done;
-                }
-                let sub = self.open_pick(role.id, Back::Roles);
-                // a role whose provider lost its key: straight to its key step
-                match self.role_broken(role.id) {
-                    Some(p) => {
-                        let m = self.role_model(role.id).0;
-                        Sub::Paste(p, m, String::new())
-                    }
-                    None => sub,
+            (Screen::Roles, Sub::List, _) => match self.on_models_key(k, env) {
+                Ok(s) => s,
+                Err(out) => return out,
+            },
+            // the fix line's key step: once it works (the key kept, no
+            // model written) or on esc, back to the list
+            (Screen::Roles, Sub::Works(..), KeyCode::Enter | KeyCode::Esc) => Sub::List,
+            (Screen::Roles, sub, _) => {
+                self.sub = sub;
+                self.on_model_sub(k, now, env);
+                match std::mem::replace(&mut self.sub, Sub::List) {
+                    // tab on a failed check: back to the list
+                    Sub::Which(_) => Sub::List,
+                    s => s,
                 }
             }
-            (Screen::Roles, s, _) => s,
             // ---- 1. which provider? ----
-            (Screen::Pick(..), Sub::List, KeyCode::Esc) => self.back(None),
+            (Screen::Pick(..), Sub::List, KeyCode::Esc) => self.back(None, env),
             (Screen::Pick(id, _), Sub::List, KeyCode::Up | KeyCode::Down) => {
                 let rows = self.pick_rows(id);
                 self.sel = updown(self.sel, rows.len());
@@ -649,6 +915,10 @@ impl Onb {
             }
             (Screen::Providers, s, _) => s,
         };
+        // a key on /models may have changed a role, a key or a pref
+        if self.pn().screen == Screen::Roles {
+            self.refresh_gauge(env);
+        }
         if self.pn().closed {
             return Out::Done;
         }
@@ -670,33 +940,7 @@ pub(super) fn lines(o: &Onb, w: u16, gap: usize) -> Option<Vec<Line<'static>>> {
     };
     let dim = |t: String| Line::from(s(t, theme::dim()));
     match (&pn.screen, &o.sub) {
-        (Screen::Roles, Sub::List) => {
-            let mut v = vec![title(settings::roles_screen_title), dim(settings::roles_screen_sub.into())];
-            blanks(&mut v, gap);
-            // the providers in one column (designer)
-            let pw = shown()
-                .iter()
-                .filter(|x| o.own(x.id))
-                .map(|x| o.provider_name(&o.role_model(x.id).0).width())
-                .max()
-                .map_or(0, |n| n + 2);
-            for (k, role) in shown().into_iter().enumerate() {
-                let flash = pn.flash.as_ref().is_some_and(|(id, at)| *id == role.id && at.elapsed() < FLASH);
-                v.push(role_row(o, role, k == o.sel, flash, w as usize, pw));
-                if role.id == r::AGENTS && !pn.overrides.is_empty() {
-                    v.push(dim(format!("{}{}", " ".repeat(2 + role_w()), overrides_words(&pn.overrides))));
-                }
-            }
-            // what the role under the cursor is for (designer)
-            if let Some(role) = shown().get(o.sel) {
-                v.push(Line::raw(""));
-                v.push(dim(format!("  {}: {}", role.name, role_hint(role.id))));
-            }
-            said(&mut v);
-            blanks(&mut v, gap);
-            v.push(keybar(settings::bar_choose_change));
-            Some(v)
-        }
+        (Screen::Roles, Sub::List) => Some(models_lines(o, w as usize, gap, &said)),
         (Screen::Pick(id, _), Sub::List) => Some(provider_lines(o, id, w, gap, &said)),
         (Screen::Pick(id, _), Sub::Model(p, i, f)) => Some(model_lines(o, id, p, *i, f, w, gap, &said)),
         (Screen::Pick(id, _), Sub::Effort(m, i)) => {
@@ -743,89 +987,175 @@ fn role_extra(o: &Onb, id: &str) -> String {
     String::new()
 }
 
-/// One row of `/models`: the role, its provider (a column of `pw`), its
-/// model, its effort. A row never wraps: a picked row loses its effort;
-/// a fallback its model id, then its effort, never its provider
-/// (designer).
-fn role_row(o: &Onb, role: &r::Role, selected: bool, flash: bool, w: usize, pw: usize) -> Line<'static> {
-    let (m, src) = o.role_model(role.id);
-    let d = dot();
-    let room = w.saturating_sub(2 + role_w());
-    let pname = o.provider_name(&m);
-    let short = short_model(&m);
-    let extra = role_extra(o, role.id);
-    let extra = if extra.is_empty() { extra } else { format!(" {} {}", d, extra) };
-    let voice_off = role.id == r::VOICE && !o.voice_enabled();
-    let voice_none = role.id == r::VOICE && src == Source::Auto && !o.provider_of(&m).is_some_and(|p| o.ready(&p));
-    // the checker off (designer): the row says so, dim
-    let checker_off = role.id == r::CLASSIFY && (m == r::CHECKER_OFF || m.is_empty());
-    let mut pieces: Vec<Span<'static>> = Vec::new();
-    // the provider in its column, then the model id
-    let what = |pieces: &mut Vec<Span<'static>>| {
-        if pname.is_empty() {
-            pieces.push(s(m.clone(), theme::text()));
-        } else {
-            pieces.push(s(pad(&pname, pw), theme::text()));
-            pieces.push(s(short.clone(), theme::text()));
-        }
-    };
-    if o.role_broken(role.id).is_some() {
-        // the thing that runs stays on screen (designer)
-        what(&mut pieces);
-        pieces.push(s(format!("  {} ", theme::glyph(theme::G_FAILED)), theme::error()));
-        pieces.push(s(settings::roles_no_key(d), theme::dim()));
-    } else {
-        match src {
-            // one key, every role: a key that can't listen says so here
-            // (voice follows the keys; none of them transcribes)
-            _ if voice_none => pieces.push(s(settings::roles_voice_none(d), theme::dim())),
-            _ if voice_off && src != Source::Picked => pieces.push(s(settings::roles_voice_off(d), theme::dim())),
-            _ if checker_off => pieces.push(s(settings::roles_checker_off(d), theme::dim())),
-            Source::None => pieces.push(s(settings::roles_none_yet(d), theme::dim())),
-            Source::Picked | Source::Env(_) => {
-                what(&mut pieces);
-                let used: usize = pieces.iter().map(|x| x.content.width()).sum();
-                if used + extra.width() <= room {
-                    pieces.push(s(extra.clone(), theme::dim()));
-                }
+/// `text` in lines of at most `w` columns, cut between words (a word
+/// longer than `w` stands alone).
+fn wrap_words(text: &str, w: usize) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for word in text.split(' ') {
+        match out.last_mut() {
+            Some(l) if l.width() + 1 + word.width() <= w => {
+                l.push(' ');
+                l.push_str(word);
             }
-            Source::SameAs(_) | Source::Auto => {
-                let rule = match src {
-                    Source::SameAs(of) => settings::roles_same_as(r::role(of).map_or(of, |x| x.name)),
-                    _ => settings::role_auto.into(),
-                };
-                let full = format!("{} {} {} {} {}{}", rule, d, pname, d, short, extra);
-                let no_id = format!("{} {} {}{}", rule, d, pname, extra);
-                let bare = format!("{} {} {}", rule, d, pname);
-                let t = [full, no_id].into_iter().find(|t| t.width() <= room).unwrap_or(bare);
-                pieces.push(s(t, theme::dim()));
-            }
+            _ => out.push(word.to_string()),
         }
     }
-    let lead: Vec<Span<'static>> = if flash {
-        vec![s(format!("{} ", theme::glyph(theme::G_DONE)), theme::accent())]
-    } else if selected {
-        vec![s(format!("{} ", theme::glyph(theme::G_YOU)), theme::accent())]
-    } else {
-        vec![Span::raw("  ")]
-    };
-    let name = s(pad(role.name, role_w()), theme::text());
-    let mut row = lead;
-    row.push(if selected { name.patch_style(Style::default().add_modifier(Modifier::BOLD)) } else { name });
-    row.extend(pieces);
-    Line::from(row)
+    out
 }
 
-/// What a role is for, under `/models`' list for the row under the
-/// cursor.
-fn role_hint(id: &str) -> &'static str {
-    match id {
-        r::MAIN => settings::roles_hint_main,
-        r::AGENTS => settings::roles_hint_agents,
-        r::SMALL => settings::roles_hint_small,
-        r::CLASSIFY => settings::roles_hint_checker,
-        _ => settings::roles_hint_voice,
+/// The mark before a line of `/models`: ✓ on the row just changed, › on
+/// the cursor's.
+fn lead(selected: bool, flash: bool) -> Span<'static> {
+    if flash {
+        s(format!("{} ", theme::glyph(theme::G_DONE)), theme::accent())
+    } else if selected {
+        s(format!("{} ", theme::glyph(theme::G_YOU)), theme::accent())
+    } else {
+        Span::raw("  ")
     }
+}
+
+/// The effort bise's and the agents' rows add: only when it isn't their
+/// model's default ("" none).
+fn effort_shown(o: &Onb, id: FeatureId) -> String {
+    let role = match id {
+        FeatureId::Talk => r::MAIN,
+        FeatureId::Agents => r::AGENTS,
+        _ => return String::new(),
+    };
+    let (m, src) = o.role_model(role);
+    // the agents following bise think as hard as bise
+    let from = if matches!(src, Source::SameAs(_)) { r::MAIN } else { role };
+    let model = o.setup.catalog.resolve(&m);
+    let e = model.effort_for(o.setup.role_effort(from));
+    if e == model.default_effort() { String::new() } else { e }
+}
+
+/// One row of `/models`, as its columns say it.
+struct RowText {
+    id: FeatureId,
+    name: &'static str,
+    about: &'static str,
+    /// its model, then (faint) its provider or why it follows; then its
+    /// effort; no model: the fix in its place, faint
+    model: String,
+    faint: String,
+    effort: String,
+    status: gv::Status,
+}
+
+impl RowText {
+    /// The model's cell at its widest, and as it shrinks on a narrow
+    /// screen: the provider goes first, then the effort.
+    fn cells(&self) -> [String; 3] {
+        let effort = if self.effort.is_empty() { String::new() } else { format!(" {} {}", dot(), self.effort) };
+        let faint = if self.faint.is_empty() { String::new() } else { format!("  {}", self.faint) };
+        [format!("{}{}{}", self.model, faint, effort), format!("{}{}", self.model, effort), self.model.clone()]
+    }
+}
+
+fn row_text(o: &Onb, r: &bise_proto::app_rows::FeatureRow, g: &SetupGauge) -> RowText {
+    let (model, faint) = match gv::cell(r) {
+        Some(c) => (c.name, c.faint),
+        None => (String::new(), gv::act_in_place(r, g).unwrap_or_default()),
+    };
+    RowText { id: r.id, name: gv::name(r.id), about: gv::about(r.id), model, faint, effort: effort_shown(o, r.id), status: gv::status(r, g) }
+}
+
+/// `/models` (page models-settings, pick A; models-ux m_57498): the fix
+/// line first and the news line under it, then one row per role in
+/// Settings' order with Settings' words: its name, what it does (on the
+/// row when it fits, else under the list for the cursor's row), its
+/// model, one status column.
+fn models_lines(o: &Onb, w: usize, gap: usize, said: &dyn Fn(&mut Vec<Line<'static>>)) -> Vec<Line<'static>> {
+    let pn = o.pn();
+    let dim = |t: String| Line::from(s(t, theme::dim()));
+    let g = o.rows_gauge();
+    let all = items(&g);
+    let at = all.get(o.sel).cloned();
+    let mut v = vec![title(settings::roles_screen_title), dim(settings::roles_screen_sub.into())];
+    blanks(&mut v, gap);
+    // what's broken before what's new (designer m_57470)
+    if let Some((text, _)) = gv::fix_line(&g) {
+        let sel = matches!(at, Some(Item::Fix(_)));
+        let next = format!("{} ", settings::gauge_next);
+        // a long sentence wraps under itself, never under the mark
+        let indent = 2 + next.width();
+        for (k, part) in wrap_words(&text, w.saturating_sub(indent)).into_iter().enumerate() {
+            let head = if k == 0 { vec![lead(sel, false), s(next.clone(), theme::error())] } else { vec![Span::raw(" ".repeat(indent))] };
+            v.push(Line::from([head, vec![s(part, theme::text())]].concat()));
+        }
+    }
+    if let Some((text, act)) = gv::news_line(&g) {
+        let sel = at == Some(Item::News);
+        v.push(Line::from(vec![lead(sel, false), s(format!("{}  ", text), theme::dim()), s(format!("{} ›", act), theme::text())]));
+    }
+    if all.iter().any(|x| !matches!(x, Item::Row(_))) {
+        v.push(Line::raw(""));
+    }
+    let rows: Vec<RowText> = all
+        .iter()
+        .filter_map(|x| match x {
+            Item::Row(id) => g.rows.iter().find(|r| r.id == *id).map(|r| row_text(o, r, &g)),
+            _ => None,
+        })
+        .collect();
+    let col = |f: &dyn Fn(&RowText) -> usize| rows.iter().map(f).max().unwrap_or(0);
+    let nw = col(&|x| x.name.width()) + 3;
+    let aw = col(&|x| x.about.width()) + 3;
+    let cw = col(&|x| x.cells()[0].width()) + 3;
+    let sw = col(&|x| x.status.text.width());
+    // the plain line sits on the row when every column fits (models-ux)
+    let wide = 2 + nw + aw + cw + sw <= w;
+    let room = w.saturating_sub(2 + nw + if wide { aw } else { 0 } + sw + 2);
+    let cw = cw.min(room + 2);
+    for x in &rows {
+        let sel = at == Some(Item::Row(x.id));
+        let flash = pn.flash.as_ref().is_some_and(|(id, t)| gv::row_of(id) == Some(x.id) && t.elapsed() < FLASH);
+        let name = s(pad(x.name, nw), theme::text());
+        let mut line = vec![lead(sel, flash), if sel { name.patch_style(Style::default().add_modifier(Modifier::BOLD)) } else { name }];
+        if wide {
+            line.push(s(pad(x.about, aw), theme::dim()));
+        }
+        let cell = x.cells().into_iter().find(|c| c.width() <= room).unwrap_or_else(|| x.model.clone());
+        // Images follows bise's row: nothing on it looks editable
+        let ink = if x.id == FeatureId::Vision || x.model.is_empty() { theme::dim() } else { theme::text() };
+        let (m, rest) = cell.split_at(x.model.len().min(cell.len()));
+        line.push(s(m.to_string(), ink));
+        line.push(s(pad(rest, cw.saturating_sub(m.width())), theme::dim()));
+        let tone = match x.status.tone {
+            Tone::Ink => theme::text(),
+            Tone::Err => theme::error(),
+            Tone::Faint => theme::dim(),
+        };
+        line.push(s(format!("{:>sw$}", x.status.text), tone));
+        v.push(Line::from(line));
+        if x.id == FeatureId::Agents && !pn.overrides.is_empty() {
+            v.push(dim(format!("{}{}", " ".repeat(2 + nw), overrides_words(&pn.overrides))));
+        }
+    }
+    // under the list: what the cursor's row does on a narrow screen;
+    // Images, where it changes
+    if let Some(Item::Row(id)) = &at {
+        let hint = match id {
+            FeatureId::Vision => Some(settings::models_follows_bise.to_string()),
+            _ if !wide => Some(format!("{}: {}", gv::name(*id), gv::about(*id))),
+            _ => None,
+        };
+        if let Some(h) = hint {
+            v.push(Line::raw(""));
+            v.push(dim(format!("  {}", h)));
+        }
+    }
+    said(&mut v);
+    blanks(&mut v, gap);
+    v.push(keybar(match at {
+        Some(Item::News) => settings::bar_use_it,
+        Some(Item::Fix(_)) | Some(Item::Row(FeatureId::Vision)) => settings::bar_choose_go,
+        Some(Item::Row(FeatureId::VoiceMode)) => settings::bar_choose_open,
+        _ => settings::bar_choose_change,
+    }));
+    v
 }
 
 /// The approvals mode is `auto` (`BISE_APPROVALS` for this session, else

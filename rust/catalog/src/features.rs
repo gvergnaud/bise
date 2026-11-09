@@ -25,6 +25,24 @@ pub enum Access {
     Missing,
 }
 
+/// A provider's access from his accounts (the rows Settings lists, the
+/// same for the core and the terminal): signed in (or a key found) is
+/// ready, an expired sign-in expired; a provider that takes no key is
+/// ready. Pure.
+pub fn access_of(accounts: &[bise_proto::app_rows::Account], catalog: &crate::Catalog, pid: &str) -> Access {
+    let mine = || accounts.iter().filter(|a| a.provider == pid);
+    if mine().any(|a| a.state == "signed_in") {
+        return Access::Ready;
+    }
+    if mine().any(|a| a.state == "expired") {
+        return Access::Expired;
+    }
+    match catalog.provider(pid) {
+        Some(p) if p.key_env.is_empty() && !p.signs_in() && p.needs.is_empty() => Access::Ready,
+        _ => Access::Missing,
+    }
+}
+
 /// A model's last live test (his click), on the generation of its
 /// provider's key it ran with.
 #[derive(Clone, Debug, PartialEq, Eq)]
