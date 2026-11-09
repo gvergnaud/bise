@@ -557,9 +557,6 @@ export function SpotlightLab(): JSX.Element {
         onOpen={(item) => {
           setLog((l) => [...l, JSON.stringify({ open: item.id })]);
         }}
-        onOpenAnswer={() => {
-          setLog((l) => [...l, JSON.stringify({ openAnswer: true })]);
-        }}
         onClose={() => {
           setLog((l) => [...l, JSON.stringify({ close: true })]);
         }}

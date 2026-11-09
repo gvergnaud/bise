@@ -11,9 +11,24 @@
   padding: var(--s-1) var(--s-5) var(--s-3) var(--spot-words);
   font: var(--t-15)/1.5 var(--font-read);
   color: var(--c-text);
-  white-space: pre-wrap;
   overflow-wrap: anywhere;
   user-select: text;
+}
+/* the 'asked' / 'went' line keeps its own breaks; the answer is the thread's markdown (Answer) */
+.b-spot-answer .b-live {
+  white-space: pre-wrap;
+}
+/* its titles at 1.15× the answer's size at most, the smaller ones at its size (page
+   spotlight-reponse v2); shared by the corner card (capsule.css imports none of its own) */
+.b-spot-answer .th-md :is(h1, h2, h3, h4, h5, h6),
+.b-cap-answer .th-md :is(h1, h2, h3, h4, h5, h6) {
+  margin: var(--s-3) 0 var(--s-1);
+  font-size: 1em;
+  line-height: inherit;
+}
+.b-spot-answer .th-md :is(h1, h2),
+.b-cap-answer .th-md :is(h1, h2) {
+  font-size: 1.15em;
 }
 /* a line about the answer (asked, waiting for the first words; sent to another project): dim */
 .b-spot-answer.note {

@@ -67,7 +67,10 @@ html:has(.b-capsule), body:has(.b-capsule) { margin: 0; background: transparent;
 .b-cap-talk .words, .b-cap-answer .t { flex: 0 1 auto; min-height: 0; overflow-y: auto; overflow-wrap: anywhere; }
 .b-cap-talk .words > div { min-height: var(--s-8); display: flex; align-items: center; }
 .b-cap-talk > *:not(.words) { flex: none; }
-.b-cap-answer .t { white-space: pre-wrap; user-select: text; }
+/* the answer (the thread's markdown) about 12 lines high in the corner (page spotlight-reponse v2),
+   then it scrolls and 'the rest in bise' shows under it */
+.b-cap-answer .t { user-select: text; }
+.b-capsule.corner .b-cap-answer .t { max-height: calc(1.45em * 12); }
 /* scrolled, the line under the top edge fades out over 16 px, as under the thread's head (designer
    m_21358); at the top of the text, no fade */
 .b-cap-talk .words[data-scrolled], .b-cap-answer .t[data-scrolled] { -webkit-mask-image: linear-gradient(to bottom, transparent, black var(--s-4)); mask-image: linear-gradient(to bottom, transparent, black var(--s-4)); }

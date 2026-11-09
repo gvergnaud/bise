@@ -2,7 +2,8 @@
 // pushed card (amb-home's card, through `card`), the tray's dropdown. bise's ':*' (its presence,
 // designer's bise-presence v10: presence.ts) at a fixed place for every view, so a change of view
 // never re-mounts it (bug 2); the spotlight gets a hole where it would be. The content's size goes to the window (onSize): an answer that
-// doesn't fit grows the panel, and past ANSWER_MAX_LINES it offers the rest in the window (bug 6).
+// doesn't fit grows the panel; the corner card's answer shows about 12 lines, then scrolls and
+// offers the rest in the window (bug 6; page spotlight-reponse v2).
 import {
   useEffect,
   useLayoutEffect,
@@ -16,10 +17,8 @@ import {
 } from "react";
 import { BiseMark, Press } from "@/ds";
 import {
-  LiveText,
   RouteLine,
   Spotlight,
-  answerLines,
   type SpotAnswer,
   type SpotData,
   type SpotItem,
@@ -36,6 +35,8 @@ import type { PreviewLine } from "@/spotlight/preview";
 import type { Part } from "@/proto";
 import { ScreenAsk, ShotRow, shotName, type TalkShot } from "./shot";
 import { fileUrl } from "@/thread/rows";
+import { Answer as MdAnswer } from "@/thread/Markdown";
+import "@/thread/thread.css";
 import { TrayMenu } from "./TrayMenu";
 import "./capsule.css";
 
@@ -215,9 +216,6 @@ export function Capsule(p: CapsuleProps): JSX.Element {
             onOpen={p.onOpen}
             onSelect={p.onSelect}
             preview={p.preview}
-            onOpenAnswer={() => {
-              p.onOpenWindow("bise");
-            }}
             onClose={p.onClose}
             shot={p.shot == null ? null : { thumb: fileUrl(p.shot.file), name: shotName(p.shot), title: `${p.shot.app} · ${p.shot.title}` }}
             onShotDrop={p.onShotDrop}
@@ -374,6 +372,14 @@ function TalkWords({ heard, phase }: { heard: string; phase: "listen" | "think" 
   );
 }
 
+/** A link in bise's answer opens in his browser (the thread's ThreadRows openLink). */
+function openLink(url: string): void {
+  void (window as Partial<Window>).bise?.openExternal(url);
+}
+
+/** No fade: reduced motion, or the window not in front (LiveText's rule). */
+const stillNow = (): boolean => window.matchMedia("(prefers-reduced-motion: reduce)").matches || !document.hasFocus();
+
 function Answer({
   answer,
   onOpen,
@@ -381,24 +387,23 @@ function Answer({
   answer: SpotAnswer | null;
   onOpen: () => void;
 }): JSX.Element {
-  const a = answer === null ? null : answerLines(answer.text);
-  const { box, over, onScroll } = useFollow(a?.shown);
+  const { box, over, onScroll } = useFollow(answer?.text);
   return (
     <div className="b-cap-answer" data-testid="capsule.answer" aria-live="polite" data-glass>
       <div
         ref={box}
-        // b-md: the thread's markdown colors (ds md.css: code green, bold pale pink; designer m_22394)
-        className="t b-md"
+        // the thread's own answer (Markdown.tsx: lists, links, code, its fade; page
+        // spotlight-reponse v2), about 12 lines high (capsule.css), then it scrolls and 'the rest
+        // in bise' shows
+        className="t"
         data-testid="capsule.answer.scroll"
         onScroll={onScroll}
       >
-        <LiveText
-          text={a?.shown ?? ""}
-          live={answer?.done === false}
-          testId="capsule.answer.text"
-        />
+        <div data-testid="capsule.answer.text" data-live={answer?.done === false ? "1" : "0"}>
+          <MdAnswer text={answer?.text ?? ""} live={answer?.done === false} still={stillNow()} onLink={openLink} />
+        </div>
       </div>
-      {(a?.cut === true || over) && (
+      {over && (
         <Press look="more" onClick={onOpen} data-testid="capsule.answer.more">
           {W.restInBise}
         </Press>

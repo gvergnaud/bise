@@ -19,8 +19,7 @@ import { cardKeyOf } from "@/inbox/stripRows";
 import type { Card, Grant, HelperEv } from "@/proto";
 import { threadKey, useHeard, useLevel, usePrefs, useProjects, useRefusedList, useShot, useStore } from "@/store";
 import { withRefused } from "@/inbox/listed";
-import { followPartial, type LivePartial } from "@/shared/partial";
-import type { SpotAnswer, SpotFront, SpotItem, SpotQuote, SpotRoute } from "@/spotlight";
+import type { SpotFront, SpotItem, SpotQuote, SpotRoute } from "@/spotlight";
 import { W } from "@/spotlight/words";
 import { useTheme } from "@/theme";
 import "@/ds/index.css";
@@ -31,6 +30,7 @@ import { asksForScreen, shotOf, shotPref } from "./shot";
 import { quoteOf } from "./quote";
 import { quoteOn as quotePref } from "@/shared/quote";
 import { useAgentPreview, useSpotData } from "./data";
+import { useMainAnswer } from "./useAnswer";
 import { capsuleCardActs, runCapsuleEffect } from "./cardacts";
 import { draftAsk } from "@/shared/asks";
 import { useComposerSources } from "@/composer/useSources";
@@ -177,111 +177,10 @@ export function CapsuleRoot(): JSX.Element {
     home === null ? null : threadKey(home, "main"),
   );
 
-  // bise's answer to what he asked: main's thread, subscribed in this window too (qa-flows: the
-  // capsule's store never had it), streamed (typing) or arriving whole (a new agent entry after
-  // his question)
-  const [last, setLast] = useState<SpotAnswer | null>(null);
-  // rebase: his ask follows main's thread again (R18: another window's unsubscribe used to drop
-  // this one's follow, and the answer never came); until that fresh page lands, an entry already
-  // in it is never his answer, so `after` moves past the page first
-  const asked = useRef<{
-    after: number;
-    started: boolean;
-    rebase: boolean;
-  } | null>(null);
-  const followAsk = useCallback(
-    (h: string): void => {
-      const order = store.threadOrder(threadKey(h, "main")).order;
-      // (the answer view opens with its first reply, which replaces the last answer then)
-      asked.current = {
-        after: order.length === 0 ? -1 : Math.max(...order),
-        started: false,
-        rebase: true,
-      };
-      store.subscribeThread(h, "main", 20);
-    },
-    [store],
-  );
-  // main's reply while it is written (the hub's partial, 250 ms at most; shared/partial.ts,
-  // followed in the effect below): it shows from its first words, and the entry that lands after
-  // it takes its place (same text: no change; LiveText fades only what is new)
-  const liveRef = useRef<LivePartial | null>(null);
-  useEffect(() => {
-    if (home === null) return;
-    const key = threadKey(home, "main");
-    store.subscribeThread(home, "main", 20);
-    const read = (): void => {
-      const a = asked.current;
-      if (a === null) return;
-      const typing = store.typing(key);
-      const reply = a.rebase
-        ? undefined
-        : store
-            .threadOrder(key)
-            .order.filter((pos) => pos > a.after)
-            .map((pos) => store.entry(key, pos))
-            .filter((e) => e?.kind === "agent")
-            .at(-1);
-      const partial = liveRef.current;
-      const next =
-        partial !== null
-          ? { text: partial.text, done: false }
-          : typing !== ""
-            ? { text: typing, done: false }
-            : reply !== undefined
-              ? { text: reply.text, done: true }
-              : null;
-      if (next === null) return;
-      if (!a.started) {
-        a.started = true;
-        dispatch({ ev: "answer" });
-      }
-      setLast(next);
-    };
-    const offs = [
-      store.subscribe(`typing:${key}`, read),
-      store.subscribe(`order:${key}`, read),
-      // the ask's follow is live again: its fresh page (always before the ask's own entries, one
-      // connection, in order) moves `after` past what it holds; a live entry first (no page: a
-      // core that never dropped the follow) just ends the wait
-      store.onEvent((ev) => {
-        const a = asked.current;
-        if (
-          a === null ||
-          !a.rebase ||
-          (ev.ev !== "thread" && ev.ev !== "entry") ||
-          ev.project !== home ||
-          ev.agent !== "main"
-        )
-          return;
-        a.rebase = false;
-        if (ev.ev === "thread")
-          a.after = Math.max(a.after, ...ev.entries.map((e) => e.pos));
-        else read();
-      }),
-    ];
-    const port = bise?.core;
-    if (port !== undefined) {
-      offs.push(
-        followPartial(port, home, "main", (live) => {
-          liveRef.current = live;
-          if (live !== null) {
-            read();
-            return;
-          }
-          // cleared (its entry landed, a stop, an error): no more '∿'; an entry, if one comes, replaces it
-          if (asked.current?.started === true)
-            setLast((l) => (l !== null && !l.done ? { ...l, done: true } : l));
-        }),
-      );
-    }
-    return () => {
-      offs.forEach((off) => {
-        off();
-      });
-      store.unsubscribeThread(home, "main");
-    };
-  }, [store, home, bise]);
+  // bise's answer to what he asked (useAnswer.ts): its first words open the answer view
+  const { last, setLast, followAsk, asked } = useMainAnswer(store, home, bise?.core, () => {
+    dispatch({ ev: "answer" });
+  });
 
   // the routing hold on his send (bar ⛔3, lead m_9855): shown from the hub's route event at once,
   // gone on its route_done; esc (or fn esc) keeps it with bise, another project corrects it
@@ -355,7 +254,7 @@ export function CapsuleRoot(): JSX.Element {
           }
         }
       }),
-    [store],
+    [store, asked, setLast],
   );
   const keepWithBise = useCallback((): void => {
     const r = routeRef.current;

@@ -8,7 +8,7 @@ import type { Editor } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import type { Store } from "@/composer/drafts";
 import { flat, spotList, spotView, type SpotData } from "./list";
-import { Spotlight, answerLines, outgoingOf, quoteChip, spotMax, withQuote, ANSWER_MAX_LINES } from "./Spotlight";
+import { Spotlight, outgoingOf, quoteChip, spotMax, withQuote } from "./Spotlight";
 import { cardLine, newBrief, shortPath } from "./words";
 
 afterEach(cleanup);
@@ -130,11 +130,32 @@ describe("the spotlight list", () => {
       "~/…/w-ambtools/h/code/telemetry",
     );
   });
-  it("a long answer shows its start and says the rest is in bise", () => {
-    const long = Array.from({ length: 40 }, (_, i) => `line ${i}`).join("\n");
-    expect(answerLines(long).cut).toBe(true);
-    expect(answerLines(long).shown.split("\n").length).toBe(ANSWER_MAX_LINES);
-    expect(answerLines("short").cut).toBe(false);
+});
+
+describe("bise's answer, whole and formatted (page spotlight-reponse v2, la base)", () => {
+  it("a long answer shows whole, its end too, as the thread draws it: lists, links, code", () => {
+    const long = [
+      "**Pour en monter un :**",
+      "",
+      "1. installe Docker Desktop ;",
+      "2. lance `deployments-cli cluster up` ;",
+      "",
+      ...Array.from({ length: 30 }, (_, i) => `- étape ${String(i)}`),
+      "",
+      "La doc : [clusters](https://docs.example.com/clusters).",
+      "",
+      "Tu veux que je lance un agent ?",
+    ].join("\n");
+    const ui = render(<Spotlight data={D} answer={{ text: long, done: true }} onAsk={vi.fn()} onOpen={vi.fn()} onClose={vi.fn()} />);
+    const a = ui.getByTestId("spot.answer");
+    expect(a.dataset.state).toBe("done");
+    // no cut: the closing question and the link are there, no 'the rest in bise'
+    expect(a.textContent).toContain("Tu veux que je lance un agent ?");
+    expect(a.querySelectorAll("ul > li")).toHaveLength(30);
+    expect(a.querySelectorAll("ol > li")).toHaveLength(2);
+    expect(a.querySelector("a")?.getAttribute("href")).toBe("https://docs.example.com/clusters");
+    expect(a.querySelector("code")?.textContent).toBe("deployments-cli cluster up");
+    expect(ui.getByTestId("spot.frame").textContent).not.toContain("the rest in bise");
   });
 });
 

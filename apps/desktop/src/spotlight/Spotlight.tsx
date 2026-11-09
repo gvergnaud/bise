@@ -33,6 +33,8 @@ import {
 } from "./list";
 import { W, newBrief } from "./words";
 import { LiveText } from "./LiveText";
+import { Answer } from "@/thread/Markdown";
+import "@/thread/thread.css";
 import { shownName } from "@/agents/model";
 import { keptStorage } from "@/app/keep";
 import type { PreviewLine } from "./preview";
@@ -117,8 +119,6 @@ export interface SpotlightProps {
     readonly id: string;
     readonly lines: readonly PreviewLine[];
   } | null;
-  /** Open bise's answer in the window (the rest of a long one). */
-  readonly onOpenAnswer?: () => void;
   readonly onClose: () => void;
   /** The content's height in CSS px, each time it changes: the panel follows it. */
   readonly onHeight?: (px: number) => void;
@@ -173,9 +173,6 @@ export interface SpotShot {
   readonly name: string;
   readonly title: string;
 }
-
-/** An answer longer than this many lines shows its start and 'the rest in bise'. */
-export const ANSWER_MAX_LINES = 18;
 
 /** An agent's state mark in its row's glyph column (designer m_25150, the delight-marks set; never a sphere). */
 const MARK: Record<AgentStatus, string> = {
@@ -342,15 +339,13 @@ export function RouteLine({
   );
 }
 
-export function answerLines(text: string): {
-  readonly shown: string;
-  readonly cut: boolean;
-} {
-  const lines = text.split("\n");
-  return lines.length <= ANSWER_MAX_LINES
-    ? { shown: text, cut: false }
-    : { shown: lines.slice(0, ANSWER_MAX_LINES).join("\n"), cut: true };
+/** A link in bise's answer opens in his browser (the thread's ThreadRows openLink). */
+function openLink(url: string): void {
+  void (window as Partial<Window>).bise?.openExternal(url);
 }
+
+/** No fade: reduced motion, or the window not in front (LiveText's rule). */
+const stillNow = (): boolean => window.matchMedia("(prefers-reduced-motion: reduce)").matches || !document.hasFocus();
 
 export function Spotlight(p: SpotlightProps): JSX.Element {
   const testId = p.testId ?? "spot";
@@ -474,6 +469,14 @@ export function Spotlight(p: SpotlightProps): JSX.Element {
       props.current.onOpen(env);
       return take();
     }
+    if ((k === "PageDown" || k === "PageUp") && bare) {
+      // a long answer's end is always reachable from the keyboard: a page of the answer and the
+      // list under it (they scroll together past the window's cap)
+      const pane = box.current?.querySelector<HTMLElement>('[role="listbox"]');
+      if (pane == null) return false;
+      pane.scrollBy({ top: (k === "PageDown" ? 1 : -1) * Math.max(40, pane.clientHeight - 40) });
+      return take();
+    }
     if (into !== null) {
       // in the list: ↑↓ move, ↑ on its first row back to his words (the caret at the end), ⏎ the
       // row, ⌘⏎ his words to it, esc back to his words; a key that writes goes back with it
@@ -521,11 +524,6 @@ export function Spotlight(p: SpotlightProps): JSX.Element {
       return false;
     }
     if (k === "Enter" && bare) {
-      const a = props.current.answer;
-      if (a && at.blank && answerLines(a.text).cut) {
-        props.current.onOpenAnswer?.();
-        return take();
-      }
       // the list for his words now (the deferred one may be a key late)
       const now =
         route !== null
@@ -560,7 +558,7 @@ export function Spotlight(p: SpotlightProps): JSX.Element {
     return false;
   };
 
-  const ans = p.answer ? answerLines(p.answer.text) : null;
+  const ans = p.answer;
   const first = items[0];
   const keys =
     route !== null
@@ -666,7 +664,7 @@ export function Spotlight(p: SpotlightProps): JSX.Element {
             </span>
           </span>
         }
-        keys={ans?.cut === true ? W.answerMore : keys}
+        keys={keys}
       >
         {route !== null && (
           <RouteLine
@@ -675,32 +673,25 @@ export function Spotlight(p: SpotlightProps): JSX.Element {
             testId={`${testId}.route`}
           />
         )}
-        {ans !== null && (
+        {ans != null && (
           // his ask shows it went (R18 on 723648da: the spot fell back to its list with no sign of
           // the ask until a word came back): 'asked bise' with the ∿ until the first words, which
-          // take its place; an ask bise sent to another project says where its answer is
+          // take its place; an ask bise sent to another project says where its answer is. The
+          // answer itself is the thread's (Markdown.tsx's Answer: lists, links, code, its fade),
+          // whole: past the window's cap it scrolls with the list (page spotlight-reponse v2)
           <div
-            className={cx(
-              "b-spot-answer",
-              (p.answer?.note === true || ans.shown === "") && "note",
-            )}
+            className={cx("b-spot-answer", (ans.note === true || ans.text === "") && "note")}
             data-testid={`${testId}.answer`}
-            data-state={
-              p.answer?.note === true
-                ? "went"
-                : ans.shown === ""
-                  ? "asked"
-                  : p.answer?.done === false
-                    ? "live"
-                    : "done"
-            }
+            data-state={ans.note === true ? "went" : ans.text === "" ? "asked" : !ans.done ? "live" : "done"}
             aria-live="polite"
           >
-            <LiveText
-              text={ans.shown === "" ? W.asked : ans.shown}
-              live={p.answer?.done === false}
-              testId={`${testId}.answer.text`}
-            />
+            {ans.note === true || ans.text === "" ? (
+              <LiveText text={ans.text === "" ? W.asked : ans.text} live={!ans.done} testId={`${testId}.answer.text`} />
+            ) : (
+              <div data-testid={`${testId}.answer.text`} data-live={ans.done ? "0" : "1"}>
+                <Answer text={ans.text} live={!ans.done} still={stillNow()} onLink={openLink} />
+              </div>
+            )}
           </div>
         )}
         {/* one flat keyed list, the group heads as items: a row that stays listed keeps its element
