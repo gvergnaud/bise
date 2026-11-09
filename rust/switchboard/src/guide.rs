@@ -248,14 +248,14 @@ pub struct Kept {
     pub guide: Guide,
 }
 
-fn file_of(dir: &Path, hash: &str) -> Option<PathBuf> {
+fn guide_file(dir: &Path, hash: &str) -> Option<PathBuf> {
     // a hash is hex (and `-`): never a path
     hash.chars().all(|c| c.is_ascii_hexdigit()).then(|| dir.join(format!("{}.json", hash)))
 }
 
 /// The guide kept for `hash`, if any.
 pub fn read(dir: &Path, hash: &str) -> Option<Kept> {
-    let text = std::fs::read_to_string(file_of(dir, hash)?).ok()?;
+    let text = std::fs::read_to_string(guide_file(dir, hash)?).ok()?;
     serde_json::from_str(&text).ok()
 }
 
@@ -280,7 +280,7 @@ fn kept_files(dir: &Path) -> Vec<(PathBuf, std::time::SystemTime)> {
 
 /// Keeps `k` (tmp + rename), then prunes the dir to the newest [`KEEP`].
 pub fn write(dir: &Path, k: &Kept) -> Result<(), String> {
-    let path = file_of(dir, &k.hash).ok_or("a bad hash")?;
+    let path = guide_file(dir, &k.hash).ok_or("a bad hash")?;
     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     let tmp = path.with_extension("json.tmp");
     std::fs::write(&tmp, serde_json::to_string(k).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
