@@ -295,27 +295,38 @@ def part_d():
         check("tool bash ok: a1" in text and "tool bash ok: a2" in text and said and "done: " in said[-1],
               "anthropic: two bash calls, then the last reply: %r" % (said[-1:] if said else out[-5:]))
         n = len(recs)
+
+        def recs_of(model, k=1):
+            """This turn's lines in the fake's log, by the model it sent, once there are k: the fake
+            writes a request's line after its answer, so after the turn may end, and a line late from
+            an earlier turn landed in the next one's [n:] (provider_families' third race, f6999af1f:
+            'native headers', len(recs) != 1)."""
+            def got():
+                rs = [r for r in [json.loads(l) for l in open(F.LOG)][n:] if r.get("model") == model]
+                return rs if len(rs) >= k else None
+            return wait.until(got, 10, "the fake's %d line(s) for model %s" % (k, model))
         # effort-table: xhigh is a Claude effort, sent as is in output_config.effort
         out = turn("fake/claude-r", "plus fort", extra='reasoning_effort = "xhigh"\n')
-        recs = [json.loads(l) for l in open(F.LOG)][n:]
+        recs = recs_of("claude-r")
         check(recs and all(r["family"] == "anthropic" and r["effort"] == "xhigh" for r in recs),
               "anthropic: reasoning_effort xhigh reaches output_config.effort: %r" % [r["effort"] for r in recs])
         n += len(recs)
         out = turn("fakeoai/m2", "[[bash: echo b1]]")
-        recs = [json.loads(l) for l in open(F.LOG)][n:]
+        recs = recs_of("m2", 2)
         check([r["family"] for r in recs] == ["openai-chat"] * 2 and all(r["stream"] for r in recs)
               and "tool bash ok: b1" in open(session).read(),
               "a config.toml model switch goes to openai-chat at the next call, streamed (BISE-144): %r"
               % [(r["family"], r["stream"]) for r in recs])
         n += len(recs)
         out = turn("fakegem/g", "hello")
-        recs = [json.loads(l) for l in open(F.LOG)][n:]
+        # a reply or an error: no line to wait for, its own model's only
+        recs = [r for r in [json.loads(l) for l in open(F.LOG)][n:] if r.get("model") == "g"]
         errs = [l for l in out if "rror" in l or "not supported" in l.lower() or obs_lines.kind(l) == "assistant"]
         check(repl.poll() is None and (recs and recs[0]["family"] == "gemini" or errs),
               "a gemini model: a reply, or a clean error before BISE-148: %r" % (errs[-1:] or out[-2:]))
         n += len(recs)
         out = turn("fakegw/c", "hello gateway")
-        recs = [json.loads(l) for l in open(F.LOG)][n:]
+        recs = recs_of("c")
         h = recs[0]["headers"] if recs else {}
         check(len(recs) == 1 and recs[0]["status"] == 200 and h.get("x-api-key") == "gw-tok"
               and h.get("authorization") == "Bearer gw-tok"
@@ -323,7 +334,7 @@ def part_d():
               "a gateway: key_command's key (trimmed, also as a bearer token) and headers_env's headers on the wire: %r" % h)
         n += len(recs)
         out = turn("fakegw/native", "hello native headers")
-        recs = [json.loads(l) for l in open(F.LOG)][n:]
+        recs = recs_of("native")
         h = recs[0]["headers"] if recs else {}
         check(len(recs) == 1 and h.get("source") == "model" and h.get("x-team") == "platform"
               and h.get("x-quoted") == 'hello "world"',
@@ -331,11 +342,11 @@ def part_d():
         n += len(recs)
         for model, variable in [("missing", "UNSET_GW_HEADERS"), ("empty", "EMPTY_GW_HEADERS")]:
             out = turn("fakegw/" + model, "hello missing headers")
-            recs = [json.loads(l) for l in open(F.LOG)][n:]
+            recs = [r for r in [json.loads(l) for l in open(F.LOG)][n:] if r.get("model") == model]
             check(not recs and any(variable in line and "is not set or is blank" in line and "hub" not in line for line in out),
                   "an unset or blank headers_env stops before HTTP and names the variable: " + model)
         out = turn("fakegw/broken", "hello broken")
-        recs = [json.loads(l) for l in open(F.LOG)][n:]
+        recs = [r for r in [json.loads(l) for l in open(F.LOG)][n:] if r.get("model") == "broken"]
         check(repl.poll() is None and not recs and any("key_command failed" in l for l in out),
               "a failing key_command: no call, a line that names it: %r" % out[-3:])
         # c2-turn-survives (a): the keychain locks after the first call;
