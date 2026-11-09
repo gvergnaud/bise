@@ -1,12 +1,18 @@
 // The window's one status (designer's desktop-notices page v2, m_21067): what bise does by itself
 // (core down or restarted, an update ready, /update's build, a reload) says so in ONE pill in the
 // title bar's own row, never under the composer, and nothing moves under it. One at a time: the
-// worst wins (core down > failed > update > reload > done), the others wait behind it. Pure; the
+// worst wins (went_bad > core down > failed > update > reload > done), the others wait behind it. Pure; the
 // pill itself is TitleStatus.tsx. Owner: amb-home.
 import type { ReactNode } from 'react';
 
-/** How bad a status is: the higher wins the pill. An update ready ties a reload running; the callers' order puts the update first. */
-export const RANK = { done: 1, ready: 2, running: 2, failed: 3, down: 4 } as const;
+/**
+ * How bad a status is: the higher wins the pill. An update ready ties a reload running; the callers'
+ * order puts the update first. `back`: the new app didn't start right (went_bad) wins over core down
+ * (go-back-banner, architect m_58270, designer m_58271): a packaged app's core is its own, so a core
+ * down after an update is the update's fault, 'start bise' starts the same broken core again, and
+ * 'go back' is the one act that fixes it.
+ */
+export const RANK = { done: 1, ready: 2, running: 2, failed: 3, down: 4, back: 5 } as const;
 
 /** One of its actions: in the pill when there is room (test id `<testId>.<id>`), and in its popover (`<testId>.pop.<id>`). */
 export type StatusAct = {

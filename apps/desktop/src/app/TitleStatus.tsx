@@ -23,7 +23,7 @@ export function useStatus(): StatusPart | null {
   const update = useUpdateLine();
   const hubUpdate = useHubUpdateLine();
   const biseUpdate = useBiseUpdateLine();
-  // the order breaks a tie (designer: core down > failed > update > reload > done); a newer bise
+  // the order breaks a tie (designer: went_bad > core down > failed > update > reload > done); a newer bise
   // for the machine says the app's own update too (its click installs both), so it goes first
   return worst([core, hubUpdate, biseUpdate, update, reload]);
 }

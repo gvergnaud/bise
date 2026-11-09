@@ -22,7 +22,7 @@ import path from 'node:path';
 import type { Page } from '@playwright/test';
 import { test, expect, type Session } from '../../harness';
 import { makeUpdateFeed, OFFERED, type UpdateBuild } from '../fixtures/update';
-import { launchReal, realWorld, type World } from '../world';
+import { launchReal, realWorld, worldOnboarded, type World } from '../world';
 import { clickMenu, Lines, sleep } from './world';
 
 const UPDATE = 'bise-desktop: update';
@@ -88,13 +88,14 @@ test('setup/update (S.6, real core) good: offered, ready, nothing by itself; his
   const userData = path.join(caseDir(w, 'good'), 'userdata');
   const updates = path.join(userData, 'updates');
   const inoBefore = statSync(f.target).ino;
+  // a real update happens long after the first launch: the world is set up (onboarded true). Its
+  // skip alone never ends hello without a model (1f126bcc6): the next start opened hello over the
+  // route, red alone (a fresh world) and green only after another check had onboarded it
+  worldOnboarded(w);
 
   const first = await launch(w, f.env, userData);
   try {
     const { s, out } = first;
-    // the world's home is fresh: setup opens once; he leaves it (a real update happens long after)
-    const skip = s.page.getByTestId('setup.skip');
-    await skip.waitFor({ timeout: 10_000 }).then(() => skip.click()).catch(() => undefined);
     await waitState(s.page, out, (x) => (x.state === 'downloading' || x.state === 'ready') && x.version === OFFERED.version, 'downloading');
     await waitState(s.page, out, (x) => x.state === 'ready' && x.version === OFFERED.version, 'ready');
     // nothing installs by itself: 3 s after ready, no relaunch line, the same bundle in place

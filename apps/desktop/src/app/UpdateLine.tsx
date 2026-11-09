@@ -75,10 +75,10 @@ export function useUpdateLine(): StatusPart | null {
     });
   };
   // went_bad's words in the error tone with '▲', never pink; its one action in the pill (amb-home's
-  // TitleStatus draws it, designer m_21067)
+  // TitleStatus draws it, designer m_21067); it wins over core down (status.ts RANK.back)
   const bad = s.state === 'went_bad';
   return {
-    rank: bad ? RANK.failed : RANK.ready,
+    rank: bad ? RANK.back : RANK.ready,
     testId: 'app.update',
     state: s.state,
     tone: bad ? 'err' : 'quiet',
