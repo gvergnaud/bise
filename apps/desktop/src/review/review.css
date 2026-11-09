@@ -163,6 +163,17 @@
     display: inline;
   }
 }
+/* the bar never leaves its column (designer m_57825, ReviewBar useFit): the slot's short words first
+   (the model in its tip), then the count goes; Guide | By kind always fits */
+.rv-bar[data-fit] > .rv-slot .rv-wide {
+  display: none;
+}
+.rv-bar[data-fit] > .rv-slot .rv-narrow {
+  display: inline;
+}
+.rv-bar[data-fit='2'] > .rv-viewed {
+  display: none;
+}
 /* ‹ ›: the only mouse way to step, 24 px to hit, text-2, ink on hover, off at the ends */
 .rv-steps {
   display: inline-flex;

@@ -4,8 +4,10 @@
 // while he read), and Guide | By kind, always both (Guide off until a guide is there; only a small
 // change, which never gets one, drops it). A hairline at its foot while code scrolls under it. In a
 // narrow column the place says the part's area, the count '0/9', the button its short words: the
-// button never gets cut. Pure renders of their props: DiffFiles owns the state and the keys.
-import { useRef, type ReactNode, type RefObject } from 'react';
+// button never gets cut. The bar never leaves its column (designer m_57825): when it would, the slot
+// says its short words first (the model in its tip), then the count goes; Guide | By kind always
+// fits. Renders of their props but that fit: DiffFiles owns the state and the keys.
+import { useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Button, Filters, IconButton, PickerPop, Press, tipAttrs } from '@/ds';
 import { pages } from '@/proto/words_pages.gen';
 import type { GuideEv } from '@/store';
@@ -39,12 +41,14 @@ export interface ReviewBarProps {
 
 export function ReviewBar({ place, placeShort, single, onOutline, outline, onPrev, onNext, viewed, mode, guide, onMode, slot, under, testId }: ReviewBarProps) {
   const anchor = useRef<HTMLButtonElement>(null);
+  const bar = useRef<HTMLDivElement>(null);
+  const fit = useFit(bar);
   const modes = [
     ...(guide === null ? [] : [{ id: 'guide', label: pages.review_mode_guide, ...(guide.on ? {} : { disabled: true, tip: guide.why }) }]),
     { id: 'kind', label: pages.review_mode_kind },
   ];
   return (
-    <div className="rv-bar" data-under={under || undefined} data-testid={`${testId}.bar`}>
+    <div ref={bar} className="rv-bar" data-under={under || undefined} data-fit={fit || undefined} data-testid={`${testId}.bar`}>
       {single ? (
         <span className="rv-place" data-testid={`${testId}.bar.place`}>
           <span className="rv-wide">{place}</span>
@@ -73,6 +77,39 @@ export function ReviewBar({ place, placeShort, single, onOutline, outline, onPre
       <Filters items={modes} on={mode} onPick={(id) => { onMode(id === 'guide' ? 'guide' : 'kind'); }} testId={`${testId}.bar.mode`} />
     </div>
   );
+}
+
+/** how much the bar gave way: 0 none, 1 the slot's short words, 2 the count gone too */
+const FIT_MAX = 2;
+
+/**
+ * The bar's fit (FIT_MAX steps): after each render, before paint, one step more while its row is
+ * wider than the bar; a new width starts again from none.
+ */
+function useFit(bar: RefObject<HTMLDivElement | null>): number {
+  const [fit, setFit] = useState(0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- after every render: the slot's words change (writing, then 'Write a guide · …')
+  useLayoutEffect(() => {
+    const el = bar.current;
+    if (el === null || fit >= FIT_MAX || el.scrollWidth <= el.clientWidth) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the row's width: known only after the commit, before paint
+    setFit(fit + 1);
+  });
+  useLayoutEffect(() => {
+    const el = bar.current;
+    if (el === null || typeof ResizeObserver === 'undefined') return undefined;
+    let width = el.clientWidth;
+    const seen = new ResizeObserver(() => {
+      if (el.clientWidth === width) return;
+      width = el.clientWidth;
+      setFit(0);
+    });
+    seen.observe(el);
+    return () => {
+      seen.disconnect();
+    };
+  }, [bar]);
+  return fit;
 }
 
 export interface GuideSlotProps {

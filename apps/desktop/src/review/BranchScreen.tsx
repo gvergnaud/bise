@@ -11,6 +11,8 @@ import { MAIN } from '@/app/route';
 import { useRouter } from '@/app/router';
 import type { GuideTarget } from '@/proto';
 import { DiffFiles } from './DiffFiles';
+import { headLine, totals } from './model';
+import { clock } from '@/thread/entry';
 import { ReviewScreen } from './ReviewScreen';
 import { pages } from '@/proto/words_pages.gen';
 import './review.css';
@@ -47,7 +49,8 @@ function BranchDiff({ project, branch }: { project: string; branch: string }) {
   const guide = useMemo((): GuideTarget => ({ kind: 'branch', name: branch }), [branch]);
   return (
     <section ref={screen} style={col} className="rv-screen" data-testid="branch.screen" data-project={project} data-branch={branch}>
-      <Head title={branch} sub={pages.a_branch} />
+      {/* the head an agent's review has (designer m_57825): '<branch> → main · 120 files · +2,880 −1,920' */}
+      <Head title={branch} sub={diff === null ? pages.a_branch : [headLine(diff, { merged: [], clock }), diff.files.length > 0 ? totals(diff) : ''].filter(Boolean).join(' · ')} />
       <DiffFiles
         project={project}
         diff={diff}
