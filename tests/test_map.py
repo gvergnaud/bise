@@ -473,7 +473,8 @@ def new_tree(root, to, changed, cov, specs):
 
 
 def git_tops(root=ROOT):
-    out = subprocess.run(["git", "ls-files"], cwd=root, capture_output=True, text=True).stdout.split()
+    # one path a line: a fixture may hold spaces (Chrome's "Local Extension Settings")
+    out = subprocess.run(["git", "ls-files"], cwd=root, capture_output=True, text=True).stdout.splitlines()
     return {p.split("/", 1)[0] for p in out}
 
 
