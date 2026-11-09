@@ -140,6 +140,15 @@ def main():
             sb(E, names[(PIDS + i) % TASKS], "wake", "--on-file", f, "--note", "FILE-%d" % i)
         check(len(journal(E, "wake_set")) == PIDS + FILES_W, "%d watches set" % (PIDS + FILES_W))
         log0 = len(hub_log(E))
+        # the dropped one's big rust/target (drop-offloop: its rm held his
+        # loop 110 s), written before the sampler: the test's own 26 s of
+        # writes are no hub work, and one sb list in them once took 1.3 s
+        # on a loop that never held (tip 7238e885f, hub.log: no held line)
+        dropped = names[-1]
+        wt = worktree_of(E.ws, "sb/" + dropped)
+        tt = time.time()
+        big_target(wt, TARGET)
+        print("target: %d files in %.1f s" % (TARGET, time.time() - tt))
 
         sampler = Sampler(E)
         sampler.start()
@@ -150,12 +159,6 @@ def main():
         sb(E, "main", "spawn", "t26", "--objective", "a late task", "--worktree")
         print("sb spawn answered in %.2f s" % (time.time() - ts))
         # his /archive (main's `sb drop` asks him first)
-        dropped = names[-1]
-        # its big rust/target (drop-offloop: its rm held his loop 110 s)
-        wt = worktree_of(E.ws, "sb/" + dropped)
-        tt = time.time()
-        big_target(wt, TARGET)
-        print("target: %d files in %.1f s" % (TARGET, time.time() - tt))
         ts = time.time()
         marks["archive"] = round(ts - t0, 1)
         c.say("/archive %s" % dropped)
