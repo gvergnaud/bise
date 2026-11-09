@@ -7,6 +7,8 @@
 crate::words! { inbox:
     /// the inbox's name: the screen's title, the box's and the block's head
     head = "inbox";
+    /// an option whose act this client doesn't know (a newer hub's): the status row's words
+    opt_needs_newer = "this option needs a newer bise";
 
     // ---- the history (bise_proto::inbox::words, the TUI's and the desktop's /inbox)
     /// a row's place: he answered it in the inbox

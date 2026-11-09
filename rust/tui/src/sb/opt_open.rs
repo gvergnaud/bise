@@ -42,7 +42,7 @@ pub(crate) fn plan(act: &OptAct, found: Option<Artifact>) -> Plan {
     match act {
         OptAct::SignIn => Plan::SignIn,
         // a newer hub's act: this client can't do it, and says so
-        OptAct::Unknown => Plan::Say("this option needs a newer bise".into()),
+        OptAct::Unknown => Plan::Say(bise_proto::words::inbox::opt_needs_newer.into()),
         // its guided review: here, its branch's diff (the review's other targets open their artifact)
         OptAct::Open { review: Some(GuideTarget::Branch { name }), .. } => Plan::Branch(name.clone()),
         OptAct::Open { artifact: Some(id), url, .. } => match (found, url) {
@@ -114,6 +114,6 @@ mod tests {
         let act = OptAct::Open { url: None, artifact: Some("cu-diff".into()), at: None, review: Some(GuideTarget::Branch { name: "cu".into() }) };
         assert_eq!(asker_act(&[(2, act.clone())], 2), Some(&act));
         assert_eq!(plan(&act, None), Plan::Branch("cu".into()));
-        assert_eq!(plan(&OptAct::Unknown, None), Plan::Say("this option needs a newer bise".into()));
+        assert_eq!(plan(&OptAct::Unknown, None), Plan::Say(bise_proto::words::inbox::opt_needs_newer.into()));
     }
 }

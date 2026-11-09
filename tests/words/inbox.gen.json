@@ -585,6 +585,11 @@
     "one": null,
     "text": "opens {title} beside the thread"
   },
+  "inbox.opt_needs_newer": {
+    "args": [],
+    "one": null,
+    "text": "this option needs a newer bise"
+  },
   "inbox.or_type_reads": {
     "args": [
       "agent"

@@ -6,6 +6,8 @@
 export const inbox = {
   /** the inbox's name: the screen's title, the box's and the block's head */
   head: "inbox",
+  /** an option whose act this client doesn't know (a newer hub's): the status row's words */
+  opt_needs_newer: "this option needs a newer bise",
   /** a row's place: he answered it in the inbox */
   where_inbox: "in the inbox",
   /** a row's place: he answered it in an agent's thread */
