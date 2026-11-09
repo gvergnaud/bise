@@ -35,6 +35,7 @@ fn plugin(id: &str, kind: PluginKind, scope: Scope, what: &str, parts: Vec<Plugi
         locked: false,
         action: None,
         login: None,
+        accounts: vec![],
         parts,
         logins: vec![],
         version: None,

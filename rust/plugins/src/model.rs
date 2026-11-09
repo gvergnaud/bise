@@ -19,7 +19,15 @@ pub struct ConnectorEntry {
     pub auth: ConnectorAuth,
     /// its tools (none until it is connected)
     pub tools: Vec<ToolEntry>,
+    /// his accounts on it, read after the bootstrap
+    /// (`/v1/connectors/{id}/user/credentials`): none until it is
+    /// connected, nor for a built-in or when Mistral did not list them
+    pub accounts: Vec<ConnectorAccount>,
 }
+
+/// One of his accounts on a connector: the wire's own type, so the
+/// catalog and the rows say the same.
+pub use bise_proto::app_rows::{AccountStatus, ConnectorAccount};
 
 /// Whether a connector is ready, or what connecting it takes (the
 /// catalog's `auth_action`).

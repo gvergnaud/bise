@@ -301,6 +301,7 @@ fn fake_catalog() -> bridge::CatalogSource {
                 id: "c0ffee-gmail".into(),
                 auth: ConnectorAuth::Ready,
                 tools: vec![ToolEntry { name: "send_email".into(), description: "Send a mail".into(), input_schema: r#"{"type":"object"}"#.into() }],
+                accounts: Vec::new(),
             }],
             fetched_ms: 1,
             error: None,

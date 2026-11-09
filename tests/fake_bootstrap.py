@@ -17,6 +17,9 @@ unit tests (rust/plugins/src/connectors/tests.rs). Checks:
 5. connect a no-auth connector: one POST of his default connection, then
    ready.
 6. no Mistral key: no request, and it says so.
+7. accounts: each ready connector's GET .../user/credentials (never a
+   built-in, never one not connected), his accounts in the cache; a list
+   that fails keeps the last ones and the refresh still succeeds.
 
 Needs the bise binary (cd rust && cargo build -p bend-harness).
 python3 -u tests/fake_bootstrap.py
@@ -49,6 +52,14 @@ class Mistral:
 
     def __init__(self):
         self.statuses, self.gets, self.posts, self.auth = [], [], [], []
+        # the credentials lists asked, by connector id; a 500 for an id in cred_fail
+        self.creds, self.cred_fail = [], set()
+        self.accounts = {"c-slack": [
+            {"name": "default", "title": "perso", "is_default": True, "authentication_type": "oauth2", "scope": "user",
+             "status": {"status_type": "valid"}},
+            {"name": "account-2", "title": "pro", "is_default": False, "authentication_type": "oauth2", "scope": "user",
+             "status": {"status_type": "invalid"}},
+        ]}
         self.ready = {"c-slack"}
         self.pending = set()
         m = self
@@ -77,6 +88,12 @@ class Mistral:
                         connector("c-gh", "github", "c-gh" in m.ready, "oauth"),
                         connector("c-notion", "notion", "c-notion" in m.ready, "no_auth_connect"),
                     ]})
+                if u.path.endswith("/user/credentials"):
+                    cid = u.path.split("/")[3]
+                    m.creds.append(cid)
+                    if cid in m.cred_fail:
+                        return self.answer(500, {"detail": "Internal Server Error"})
+                    return self.answer(200, {"credentials": m.accounts.get(cid, [])})
                 if u.path.endswith("/auth_url"):
                     cid = u.path.split("/")[3]
                     m.pending.add(cid)
@@ -133,7 +150,7 @@ def main():
         rc, out = run("refresh")
         q = m.gets[-1] if m.gets else {}
         check("refresh: one GET, the key as the bearer, each builtin its own param",
-              rc == 0 and len(m.gets) == 1 and m.auth == ["Bearer " + KEY]
+              rc == 0 and len(m.gets) == 1 and set(m.auth) == {"Bearer " + KEY}
               and q.get("builtin_connectors") == ["web_search", "image_generation"]
               and q.get("supports_mcp") == ["true"] and q.get("include_auth_actionable_connectors") == ["true"],
               repr((rc, out, m.gets, m.auth)))
@@ -141,6 +158,23 @@ def main():
         check("the cache has every connector and no key",
               [c["name"] for c in cached()["connectors"]] == ["slack", "github", "notion"] and KEY not in text
               and "9007199254740991" in text, text[:300])
+
+        check("accounts: one list per ready connector, none for the others",
+              m.creds == ["c-slack"], repr(m.creds))
+        slack = next(c for c in cached()["connectors"] if c["name"] == "slack")
+        check("accounts: his accounts in the cache, the default marked",
+              slack.get("accounts") == [
+                  {"name": "default", "title": "perso", "default": True, "status": "valid"},
+                  {"name": "account-2", "title": "pro", "status": "invalid"}]
+              and "accounts" not in next(c for c in cached()["connectors"] if c["name"] == "github"),
+              repr(slack))
+        m.cred_fail = {"c-slack"}
+        rc, out = run("refresh")
+        slack2 = next(c for c in cached()["connectors"] if c["name"] == "slack")
+        check("accounts: a list that fails keeps the last ones, the refresh succeeds",
+              rc == 0 and slack2.get("accounts") == slack.get("accounts") and m.creds[-1] == "c-slack",
+              repr((rc, out, slack2)))
+        m.cred_fail = set()
 
         m.statuses = [500]
         rc, out = run("refresh")

@@ -5,6 +5,7 @@
 //! dropped): the index lines say the same (a schema compared as JSON).
 
 use super::*;
+use crate::model::AccountStatus;
 use std::cell::Cell;
 use std::path::PathBuf;
 
@@ -13,6 +14,11 @@ const INDEX: &str = include_str!("fixtures/index.txt");
 
 fn catalog(body: &str) -> Catalog {
     Catalog { connectors: parse(body).unwrap(), fetched_ms: 1, error: None }
+}
+
+/// A fetch whose bootstrap is `b` and where no connector lists accounts.
+fn boot<'a>(b: &'a dyn Fn() -> Result<String, String>) -> Fetch<'a> {
+    Fetch { bootstrap: b, accounts: &|_| Err("no accounts here".to_string()) }
 }
 
 fn all_on(_: &PluginId) -> bool {
@@ -55,6 +61,7 @@ fn the_index_line_format() {
                 ToolEntry { name: "send\nmail".into(), description: "Send\r\na\tmail".into(), input_schema: r#"{"type":"object"}"#.into() },
                 ToolEntry { name: "list".into(), description: String::new(), input_schema: String::new() },
             ],
+            accounts: Vec::new(),
         }],
         ..Catalog::default()
     };
@@ -202,25 +209,25 @@ fn load_fetches_once_per_ttl_and_keeps_the_last_good_on_a_failure() {
         calls.set(calls.get() + 1);
         Err("HTTP 500 from api.mistral.ai".to_string())
     };
-    let c1 = load_with(&cache, 1_000, false, &ok);
+    let c1 = load_with(&cache, 1_000, false, &boot(&ok));
     assert_eq!((calls.get(), c1.connectors.len(), c1.fetched_ms, c1.error.clone()), (1, 11, 1_000, None));
     // fresh: from the file, no fetch
-    assert_eq!(load_with(&cache, 2_000, false, &ok), c1);
+    assert_eq!(load_with(&cache, 2_000, false, &boot(&ok)), c1);
     assert_eq!(calls.get(), 1);
     // stale and the fetch fails: the last good connectors, and why
-    let c2 = load_with(&cache, 1_000 + TTL_MS, false, &fail);
+    let c2 = load_with(&cache, 1_000 + TTL_MS, false, &boot(&fail));
     assert_eq!((calls.get(), c2.connectors.len(), c2.fetched_ms), (2, 11, 1_000));
     assert_eq!(c2.error, Some(Problem::Fetch("HTTP 500 from api.mistral.ai".into())));
     // within the backoff: no new try
-    assert_eq!(load_with(&cache, 1_000 + TTL_MS + 1, false, &fail), c2);
+    assert_eq!(load_with(&cache, 1_000 + TTL_MS + 1, false, &boot(&fail)), c2);
     assert_eq!(calls.get(), 2);
     // a bad body is a failure too, the good catalog kept
     let bad = || Ok("{\"detail\":1}".to_string());
-    let c3 = load_with(&cache, 1_000 + TTL_MS + FAIL_BACKOFF_MS, false, &bad);
+    let c3 = load_with(&cache, 1_000 + TTL_MS + FAIL_BACKOFF_MS, false, &boot(&bad));
     assert_eq!(c3.connectors.len(), 11);
     assert!(c3.error.is_some());
     // force fetches at once; a good one clears the error
-    let c4 = load_with(&cache, 1_000 + TTL_MS + FAIL_BACKOFF_MS + 1, true, &ok);
+    let c4 = load_with(&cache, 1_000 + TTL_MS + FAIL_BACKOFF_MS + 1, true, &boot(&ok));
     assert_eq!((calls.get(), c4.error), (3, None));
     let left: Vec<_> = std::fs::read_dir(cache.parent().unwrap()).unwrap().filter_map(|e| e.ok()).map(|e| e.file_name().to_string_lossy().into_owned()).filter(|n| n.contains(".tmp")).collect();
     assert!(left.is_empty(), "{left:?}");
@@ -229,7 +236,7 @@ fn load_fetches_once_per_ttl_and_keeps_the_last_good_on_a_failure() {
 #[test]
 fn no_key_or_a_locked_keychain_answers_the_cache_and_says_which() {
     let cache = tmp("nokey");
-    load_with(&cache, 1_000, false, &|| Ok(BODY.to_string()));
+    load_with(&cache, 1_000, false, &boot(&|| Ok(BODY.to_string())));
     let before = std::fs::read_to_string(&cache).unwrap();
     for (key, problem) in [(Key::NoKey, Problem::NoKey), (Key::Locked, Problem::Locked)] {
         let c = load(&cache, &key, 1_000 + TTL_MS * 2, true);
@@ -260,10 +267,15 @@ fn bridges_at_once_fetch_once() {
     std::thread::scope(|s| {
         for _ in 0..8 {
             s.spawn(|| {
-                load_with(&cache, 5_000, false, &|| {
-                    calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                    Ok(BODY.to_string())
-                })
+                load_with(
+                    &cache,
+                    5_000,
+                    false,
+                    &boot(&|| {
+                        calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                        Ok(BODY.to_string())
+                    }),
+                )
             });
         }
     });
@@ -297,4 +309,84 @@ fn index_lines_follow_plugins_json() {
     let lines = index_lines(&c, &st);
     assert!(!lines.iter().any(|l| l.starts_with("c0ffee-01 ") || l.starts_with("web_search ")), "{lines:?}");
     assert_eq!(lines.len(), index_lines(&c, &StateV2::default()).len() - 6);
+}
+
+const ACCOUNTS: &str = r#"{"credentials": [
+  {"name": "default", "title": "perso", "is_default": true, "authentication_type": "oauth2", "scope": "user", "status": {"status_type": "valid"}},
+  {"name": "account-2", "title": " ", "is_default": false, "status": {"status_type": "invalid"}},
+  {"name": "account-3", "status": {"status_type": "rotten"}},
+  {"name": "account-4", "status": null},
+  {"title": "no name"}
+]}"#;
+
+#[test]
+fn an_accounts_answer_reads_name_title_default_and_status() {
+    let a = parse_accounts(ACCOUNTS).unwrap();
+    let row = |a: &ConnectorAccount| (a.name.clone(), a.title.clone(), a.default, a.status);
+    assert_eq!(
+        a.iter().map(row).collect::<Vec<_>>(),
+        vec![
+            ("default".into(), Some("perso".into()), true, AccountStatus::Valid),
+            ("account-2".into(), None, false, AccountStatus::Invalid),
+            ("account-3".into(), None, false, AccountStatus::Unknown),
+            ("account-4".into(), None, false, AccountStatus::Unknown),
+        ]
+    );
+    assert!(parse_accounts(r#"{"detail": "no"}"#).is_err());
+    assert!(parse_accounts("nope").is_err());
+}
+
+/// The fixture's catalog where `c0ffee-02` (slack) lists `body`, and
+/// every other ready connector fails.
+fn accounts_of(raw: &str, body: &str) -> Result<String, String> {
+    if raw == "c0ffee-02" {
+        Ok(body.to_string())
+    } else {
+        Err(format!("HTTP 500 for {raw}"))
+    }
+}
+
+#[test]
+fn accounts_are_read_for_ready_connectors_only_and_a_failed_list_keeps_the_last() {
+    let cache = tmp("accounts");
+    let asked = std::sync::Mutex::new(Vec::<String>::new());
+    let list = |body: &'static str| {
+        let asked = &asked;
+        move |raw: &str| {
+            asked.lock().unwrap().push(raw.to_string());
+            accounts_of(raw, body)
+        }
+    };
+    let first = list(ACCOUNTS);
+    let c1 = load_with(&cache, 1_000, false, &Fetch { bootstrap: &|| Ok(BODY.to_string()), accounts: &first });
+    let mut want: Vec<String> = c1.connectors.iter().filter(|c| has_accounts(c)).map(|c| c.id.clone()).collect();
+    let mut got = asked.lock().unwrap().clone();
+    want.sort();
+    got.sort();
+    assert_eq!(got, want, "one list per ready connector that is not a built-in");
+    assert!(!got.iter().any(|id| c1.connectors.iter().any(|c| &c.id == id && (BUILTINS.contains(&c.name.as_str()) || c.auth != ConnectorAuth::Ready))));
+    let slack = |c: &Catalog| c.connectors.iter().find(|c| c.id == "c0ffee-02").unwrap().accounts.clone();
+    assert_eq!(slack(&c1).len(), 4);
+    assert!(c1.connectors.iter().filter(|c| c.id != "c0ffee-02").all(|c| c.accounts.is_empty()));
+    // the cache keeps them, read back the same
+    assert_eq!(cached(&cache), c1);
+    // the bootstrap is good and the list fails: the catalog is whole, slack keeps its accounts
+    let c2 = load_with(&cache, 2_000, true, &Fetch { bootstrap: &|| Ok(BODY.to_string()), accounts: &|_| Err("HTTP 502".to_string()) });
+    assert_eq!((c2.connectors.len(), c2.error.clone(), c2.fetched_ms), (11, None, 2_000));
+    assert_eq!(slack(&c2), slack(&c1));
+    // a list that answers again replaces them
+    let one = list(r#"{"credentials": [{"name": "default", "is_default": true}]}"#);
+    let c3 = load_with(&cache, 3_000, true, &Fetch { bootstrap: &|| Ok(BODY.to_string()), accounts: &one });
+    assert_eq!(slack(&c3).iter().map(|a| a.name.as_str()).collect::<Vec<_>>(), ["default"]);
+}
+
+#[test]
+fn a_cache_from_before_accounts_reads_none() {
+    let mut c = catalog(BODY);
+    let text = to_cache_text(&Cached { catalog: c.clone(), failed_ms: 0 });
+    assert!(!text.contains("\"accounts\""), "no accounts: no key written");
+    assert_eq!(of_cache_text(&text).catalog, c);
+    c.connectors[0].accounts = parse_accounts(ACCOUNTS).unwrap();
+    let back = of_cache_text(&to_cache_text(&Cached { catalog: c.clone(), failed_ms: 0 })).catalog;
+    assert_eq!(back, c);
 }

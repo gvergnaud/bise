@@ -112,6 +112,16 @@ the bodies marked `todo!("plugins chunk ...")` come with their chunk.
   `auth` Ready, OAuth, NoAuthConnect, CredentialsSetup, or Unknown: not
   ready and no auth_action bise knows, not connectable from bise; each
   tool's input schema as serde_json's compact text, keys sorted).
+  A ready connector that is not a built-in carries his accounts
+  (`accounts: Vec<ConnectorAccount>`, the wire's type: Mistral's
+  connection `name`, his `title`, `default`, `status`
+  valid|invalid|error|unknown): `with_accounts` reads
+  `GET /v1/connectors/{id}/user/credentials` for each, at the same
+  fetch and under the same lock, `ACCOUNTS_AT_ONCE` (4) at a time, each
+  bound like the bootstrap's; a list that fails keeps that connector's
+  last good accounts and never fails the catalog. They go in the same
+  cache (an additive `accounts` per connector, still version 1) and on
+  the ready connector's row (`Plugin.accounts`).
   `index_lines(&Catalog, &StateV2)`: the ready connectors' tools minus
   an off connector or tool, in the index format
   `<cid> <alias> <tool> : #<desc>[ | input: <schema>]`, with bise's

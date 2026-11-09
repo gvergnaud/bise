@@ -12,6 +12,7 @@ bise-secrets = { path = "../secrets" }
 # the wire rows catalog::rows returns (no `ts` feature here: the TS comes
 # from bise-proto alone, architect m_38936)
 bise-proto = { path = "../proto" }
+serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # Codex's ~/.codex/config.toml (src/add.rs, the import found on disk)
 toml = "1"

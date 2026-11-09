@@ -229,6 +229,10 @@ pub struct Plugin {
     /// not connected; none for every other kind
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub login: Option<LoginState>,
+    /// a ready Mistral connector's accounts, the default among them
+    /// (empty for every other kind, and while they are not read yet)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub accounts: Vec<ConnectorAccount>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub parts: Vec<PluginPart>,
     /// what to try it with: its manifest's `dev.bise.prompts` (at most
@@ -660,6 +664,43 @@ pub enum PickWaits {
     /// a server of it failed to start
     Failed,
     /// a newer core's value
+    #[serde(other)]
+    Unknown,
+}
+
+/// One of his accounts on a Mistral connector (a named connection of
+/// Mistral's `GET /v1/connectors/{id}/user/credentials`): a ready
+/// connector has one or more, exactly one the default. Read with the
+/// catalog by `bend_plugins::connectors`, kept in its cache.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct ConnectorAccount {
+    /// Mistral's name of the connection: what a tool call's `account`
+    /// and the gateway's `x-credentials-name` take
+    pub name: String,
+    /// what he named it (none: he reads `name`)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// the account a call takes when it names none
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub default: bool,
+    #[serde(default)]
+    pub status: AccountStatus,
+}
+
+/// Whether an account's login works (Mistral's `status.status_type`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum AccountStatus {
+    /// it works
+    Valid,
+    /// its login expired or was revoked: reconnect it
+    Invalid,
+    /// Mistral failed to check it
+    Error,
+    /// not checked yet, or a value bise does not know
+    #[default]
     #[serde(other)]
     Unknown,
 }

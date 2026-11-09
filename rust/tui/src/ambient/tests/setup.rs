@@ -211,6 +211,7 @@ fn setup(t: &mut T) -> Rc<RefCell<World>> {
                 locked: false,
                 action: None,
                 login: None,
+                accounts: vec![],
                 prompts: vec![],
                 settings: vec![],
                 needs_node: false,

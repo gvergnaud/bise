@@ -3,7 +3,10 @@
 //! agent and for the UI. It is fetched here in Rust and kept in one cache
 //! file (`bise_home::Home::connectors_cache`, written under a lock
 //! through a tmp file, fresh for [`TTL_MS`] and shared by every REPL),
-//! parsed into [`ConnectorEntry`]s and turned into the session's tool
+//! parsed into [`ConnectorEntry`]s, each ready one with his accounts on
+//! it ([`with_accounts`]: one `GET …/user/credentials` per connector at
+//! the same fetch, [`ACCOUNTS_AT_ONCE`] at a time, in the same cache; a
+//! failed list keeps the last good accounts), and turned into the session's tool
 //! index lines ([`index_lines`]: the index format `mcp.bend` wrote, with
 //! bise's note on image_generation; a tool's input schema is serde_json's
 //! compact text, keys sorted). A failed fetch keeps the last good
@@ -27,7 +30,7 @@ mod tests;
 
 use crate::http::{self, Url};
 use crate::id::{PartKind, PluginId};
-use crate::model::{ConnectorAuth, ConnectorEntry, StateV2, ToolEntry};
+use crate::model::{AccountStatus, ConnectorAccount, ConnectorAuth, ConnectorEntry, StateV2, ToolEntry};
 use serde_json::{json, Value};
 use std::path::Path;
 use std::time::Duration;
@@ -51,6 +54,10 @@ pub const CONNECT_MAX_MS: u64 = 5 * 60 * 1000;
 
 /// Mistral's API; `BISE_MISTRAL_URL` names a fake one in tests.
 pub const DEFAULT_BASE: &str = "https://api.mistral.ai";
+
+/// How many connectors' accounts are asked at once (each call bound
+/// like the bootstrap's).
+pub const ACCOUNTS_AT_ONCE: usize = 4;
 
 /// One request's connect and read bound.
 const FETCH_TIMEOUT: Duration = Duration::from_secs(10);
@@ -244,9 +251,81 @@ pub fn parse(body: &str) -> Result<Vec<ConnectorEntry>, String> {
                 input_schema: t.get("inputSchema").map(Value::to_string).unwrap_or_default(),
             })
             .collect();
-        out.push(ConnectorEntry { name, display_name: display, id: s(c, "id", ""), auth, tools });
+        out.push(ConnectorEntry { name, display_name: display, id: s(c, "id", ""), auth, tools, accounts: Vec::new() });
     }
     Ok(out)
+}
+
+/// Mistral's answer to `GET /v1/connectors/{id}/user/credentials`, as it
+/// is on the wire (only what bise reads).
+#[derive(serde::Deserialize)]
+struct Credentials {
+    credentials: Vec<Cred>,
+}
+
+#[derive(serde::Deserialize)]
+struct Cred {
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    title: Option<String>,
+    #[serde(default)]
+    is_default: bool,
+    #[serde(default)]
+    status: Option<CredStatus>,
+}
+
+#[derive(serde::Deserialize)]
+struct CredStatus {
+    #[serde(default)]
+    status_type: AccountStatus,
+}
+
+/// His accounts in an answer of `GET /v1/connectors/{id}/user/credentials`,
+/// in its order: a connection with no name is left out, a blank title is
+/// none, a status bise does not know is `Unknown`. An answer with no
+/// `credentials` array is an error.
+pub fn parse_accounts(body: &str) -> Result<Vec<ConnectorAccount>, String> {
+    let c: Credentials = serde_json::from_str(body).map_err(|e| format!("the accounts answer is not a credentials list (line {}, column {})", e.line(), e.column()))?;
+    Ok(c.credentials
+        .into_iter()
+        .filter(|c| !c.name.trim().is_empty())
+        .map(|c| ConnectorAccount {
+            name: c.name.trim().to_string(),
+            title: c.title.map(|t| t.trim().to_string()).filter(|t| !t.is_empty()),
+            default: c.is_default,
+            status: c.status.map(|s| s.status_type).unwrap_or_default(),
+        })
+        .collect())
+}
+
+/// Whether bise asks Mistral for a connector's accounts: a ready one that
+/// is not a built-in (those have no connection of his).
+pub fn has_accounts(c: &ConnectorEntry) -> bool {
+    c.auth == ConnectorAuth::Ready && !BUILTINS.contains(&c.name.as_str())
+}
+
+/// The connectors with their accounts: each one that [`has_accounts`]
+/// gets the list `fetch` reads for its Mistral id ([`ACCOUNTS_AT_ONCE`]
+/// at a time); a
+/// list that fails or does not parse keeps that connector's accounts in
+/// `old` (none when it had none), never failing the catalog.
+pub fn with_accounts(mut cs: Vec<ConnectorEntry>, old: &Catalog, fetch: &(dyn Fn(&str) -> Result<String, String> + Sync)) -> Vec<ConnectorEntry> {
+    let ids: Vec<(usize, String)> = cs.iter().enumerate().filter(|(_, c)| has_accounts(c)).map(|(i, c)| (i, c.id.clone())).collect();
+    for batch in ids.chunks(ACCOUNTS_AT_ONCE) {
+        let got: Vec<Option<Vec<ConnectorAccount>>> = std::thread::scope(|s| {
+            let hs: Vec<_> = batch.iter().map(|(_, id)| s.spawn(move || fetch(id).and_then(|b| parse_accounts(&b)).ok())).collect();
+            hs.into_iter().map(|h| h.join().ok().flatten()).collect()
+        });
+        for ((i, _), got) in batch.iter().zip(got) {
+            let c = &mut cs[*i];
+            c.accounts = match got {
+                Some(a) => a,
+                None => old.connectors.iter().find(|o| o.name == c.name).map(|o| o.accounts.clone()).unwrap_or_default(),
+            };
+        }
+    }
+    cs
 }
 
 // ---- the index lines ----
@@ -325,7 +404,11 @@ pub fn to_cache_text(c: &Cached) -> String {
         .iter()
         .map(|e| {
             let ts: Vec<Value> = e.tools.iter().map(|t| json!({"name": t.name, "description": t.description, "input_schema": t.input_schema})).collect();
-            json!({"name": e.name, "display_name": e.display_name, "id": e.id, "auth": auth_word(e.auth), "tools": ts})
+            let mut v = json!({"name": e.name, "display_name": e.display_name, "id": e.id, "auth": auth_word(e.auth), "tools": ts});
+            if !e.accounts.is_empty() {
+                v["accounts"] = serde_json::to_value(&e.accounts).unwrap_or_default();
+            }
+            v
         })
         .collect();
     // only a fetch's failure is the cache's: no key and a locked keychain
@@ -357,6 +440,8 @@ pub fn of_cache_text(text: &str) -> Cached {
                         .and_then(Value::as_array)
                         .map(|ts| ts.iter().map(|t| ToolEntry { name: s(t, "name"), description: s(t, "description"), input_schema: s(t, "input_schema") }).collect())
                         .unwrap_or_default(),
+                    // a cache written before accounts: none, read at the next fetch
+                    accounts: e.get("accounts").cloned().and_then(|a| serde_json::from_value(a).ok()).unwrap_or_default(),
                 })
                 .collect()
         })
@@ -427,20 +512,32 @@ pub fn after_fetch(old: Cached, got: Result<Vec<ConnectorEntry>, String>, now_ms
 }
 
 /// The catalog from `cache` when fresh at `now_ms` (and `force` is
-/// false), else fetched with `key` and written to `cache` under its lock.
+/// false), else fetched with `key` (the bootstrap, then each ready
+/// connector's accounts) and written to `cache` under its lock.
 /// No key or a locked keychain: the cache as it is (nothing written),
 /// with [`Problem::NoKey`] or [`Problem::Locked`].
 pub fn load(cache: &Path, key: &Key, now_ms: u64, force: bool) -> Catalog {
     let problem = match key {
-        Key::Key(k) => return load_with(cache, now_ms, force, &|| fetch(&base_url(), k)),
+        Key::Key(k) => {
+            let base = base_url();
+            return load_with(cache, now_ms, force, &Fetch { bootstrap: &|| fetch(&base, k), accounts: &|raw| fetch_accounts(&base, k, raw) });
+        }
         Key::NoKey => Problem::NoKey,
         Key::Locked => Problem::Locked,
     };
     Catalog { error: Some(problem), ..read_cache(cache).catalog }
 }
 
-/// [`load`] with the fetch given (the body of a 200, or why not).
-pub fn load_with(cache: &Path, now_ms: u64, force: bool, fetch: &dyn Fn() -> Result<String, String>) -> Catalog {
+/// What [`load_with`] fetches with: the bootstrap's body, and a
+/// connector's accounts' body by its Mistral id (each the body of a 200,
+/// or why not).
+pub struct Fetch<'a> {
+    pub bootstrap: &'a dyn Fn() -> Result<String, String>,
+    pub accounts: &'a (dyn Fn(&str) -> Result<String, String> + Sync),
+}
+
+/// [`load`] with the fetch given.
+pub fn load_with(cache: &Path, now_ms: u64, force: bool, fetch: &Fetch<'_>) -> Catalog {
     let first = read_cache(cache);
     if plan(&first, now_ms, force) == Plan::Keep {
         return first.catalog;
@@ -457,7 +554,8 @@ pub fn load_with(cache: &Path, now_ms: u64, force: bool, fetch: &dyn Fn() -> Res
     if now != first && (plan(&now, now_ms, false) == Plan::Keep || now.catalog.fetched_ms >= now_ms || now.failed_ms >= now_ms) {
         return now.catalog;
     }
-    let next = after_fetch(now, fetch().and_then(|b| parse(&b)), now_ms);
+    let got = (fetch.bootstrap)().and_then(|b| parse(&b)).map(|cs| with_accounts(cs, &now.catalog, fetch.accounts));
+    let next = after_fetch(now, got, now_ms);
     if let Err(e) = write_cache(cache, &next) {
         return Catalog { error: Some(Problem::Fetch(format!("{}: {}", cache.display(), e))), ..next.catalog };
     }
@@ -490,6 +588,12 @@ fn request(method: &str, url: &str, key: &str, body: &[u8]) -> Result<String, St
 /// GET the bootstrap: the body of a 200.
 pub fn fetch(base: &str, key: &str) -> Result<String, String> {
     request("GET", &bootstrap_url(base), key, b"")
+}
+
+/// GET a connector's accounts (his connections), by its Mistral id: the
+/// body of a 200.
+pub fn fetch_accounts(base: &str, key: &str, raw: &str) -> Result<String, String> {
+    request("GET", &format!("{}/v1/connectors/{}/user/credentials", base.trim_end_matches('/'), path_part(raw)), key, b"")
 }
 
 /// A connector's name or id in a URL path.
@@ -577,7 +681,7 @@ pub enum Connected {
 /// the catalog is fetched again every [`CONNECT_POLL_MS`] until the
 /// connector is ready, for at most [`CONNECT_MAX_MS`].
 pub fn connect(w: &World<'_>, id: &PluginId) -> Result<Connected, String> {
-    let fetch = || fetch(w.base, w.key);
+    let fetch = Fetch { bootstrap: &|| fetch(w.base, w.key), accounts: &|raw| fetch_accounts(w.base, w.key, raw) };
     let cat = load_with(w.cache, (w.now_ms)(), false, &fetch);
     let Some(c) = cat.find(id).cloned() else {
         let cat = load_with(w.cache, (w.now_ms)(), true, &fetch);

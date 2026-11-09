@@ -98,6 +98,7 @@ fn catalog() -> connectors::Catalog {
         id: format!("id-{name}"),
         auth,
         tools: tools.iter().map(|t| ToolEntry { name: t.to_string(), description: format!("{t} it"), input_schema: "{}".into() }).collect(),
+        accounts: Vec::new(),
     };
     connectors::Catalog {
         connectors: vec![

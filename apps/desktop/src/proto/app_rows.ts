@@ -203,7 +203,12 @@ action?: PluginAction | null,
  * while its connect runs (no button then), in when ready, out when
  * not connected; none for every other kind
  */
-login?: LoginState | null, parts?: Array<PluginPart>, 
+login?: LoginState | null, 
+/**
+ * a ready Mistral connector's accounts, the default among them
+ * (empty for every other kind, and while they are not read yet)
+ */
+accounts?: Array<ConnectorAccount>, parts?: Array<PluginPart>, 
 /**
  * what to try it with: its manifest's `dev.bise.prompts` (at most
  * 3, one line each); a click puts one in the composer, never sends it
@@ -445,6 +450,32 @@ export type PartKind = "skill" | "mcp" | "tool" | "view" | "unknown";
  * A remote MCP server's login.
  */
 export type LoginState = "needs" | "in" | "out" | "pending" | "unknown";
+
+/**
+ * One of his accounts on a Mistral connector (a named connection of
+ * Mistral's `GET /v1/connectors/{id}/user/credentials`): a ready
+ * connector has one or more, exactly one the default. Read with the
+ * catalog by `bend_plugins::connectors`, kept in its cache.
+ */
+export type ConnectorAccount = { 
+/**
+ * Mistral's name of the connection: what a tool call's `account`
+ * and the gateway's `x-credentials-name` take
+ */
+name: string, 
+/**
+ * what he named it (none: he reads `name`)
+ */
+title?: string | null, 
+/**
+ * the account a call takes when it names none
+ */
+default?: boolean, status: AccountStatus, };
+
+/**
+ * Whether an account's login works (Mistral's `status.status_type`).
+ */
+export type AccountStatus = "valid" | "invalid" | "error" | "unknown";
 
 /**
  * What a pickable plugin waits on before it works (at-plugins, designer

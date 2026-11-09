@@ -109,6 +109,7 @@ dependencies = [
  "libc",
  "ring",
  "rustls",
+ "serde",
  "serde_json",
  "toml",
  "webpki-roots 0.26.11",
