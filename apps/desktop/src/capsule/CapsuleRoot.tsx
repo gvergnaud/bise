@@ -18,7 +18,7 @@ import { InboxCard } from "@/inbox";
 import { cardKeyOf } from "@/inbox/stripRows";
 import type { Card, Grant, HelperEv, Part } from "@/proto";
 import { threadKey, useHeard, useLevel, usePrefs, useProjects, useRefusedList, useShot, useStore, useThreadOrder } from "@/store";
-import { asked as askedIn, closed, opened, paneRows, type Exchange } from "./exchange";
+import { asked as askedIn, closed, ended, opened, paneRows, type Exchange } from "./exchange";
 import { withRefused } from "@/inbox/listed";
 import type { SpotFront, SpotItem, SpotQuote, SpotRoute } from "@/spotlight";
 import { W } from "@/spotlight/words";
@@ -203,9 +203,15 @@ export function CapsuleRoot(): JSX.Element {
           ),
     [ex, mainOrder, store, mainKey, last],
   );
-  // the exchange's end (✕, ⌘W, kept past KEEP_MS): no pane, no answer under the field
+  // the exchange's end (kept past KEEP_MS): no pane, no answer under the field
   const endExchange = useCallback((): void => {
     setEx(null);
+    forget();
+  }, [forget]);
+  // ✕ or ⌘W: the pane closes and the window shrinks from the right; his next ⏎ in the left field
+  // is a follow-up again and opens the pane, as the first time (exchange.ts ended)
+  const closePane = useCallback((): void => {
+    setEx((x) => ended(x));
     forget();
   }, [forget]);
   // the spotlight closing keeps the exchange KEEP_MS; opening again brings it back as he left it,
@@ -664,7 +670,7 @@ export function CapsuleRoot(): JSX.Element {
                 bise?.openWindow(`agent/${home}/main`);
                 dispatch({ ev: "close" });
               },
-              onEnd: endExchange,
+              onEnd: closePane,
               onCopy: (t) => {
                 void bise?.copy(t);
               },

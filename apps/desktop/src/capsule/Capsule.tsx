@@ -166,7 +166,10 @@ export function Capsule(p: CapsuleProps): JSX.Element {
     if (el === null) return;
     const measure = (): void => {
       const r = el.getBoundingClientRect();
-      const g = el.querySelector("[data-glass]")?.getBoundingClientRect() ?? r;
+      // the thread pane open: the glass main places is the left part (the spotlight, or a card
+      // answered in place), so a reopen centres it where a fresh spotlight goes and the pane
+      // grows to the right; it never moves (designer's condition 1, page spotlight-reponse)
+      const g = (el.querySelector(".b-cap-glass.with-pane > :first-child") ?? el.querySelector("[data-glass]"))?.getBoundingClientRect() ?? r;
       size.current(Math.ceil(r.width), Math.ceil(r.height), {
         x: Math.round(g.x - r.x),
         y: Math.round(g.y - r.y),
@@ -225,6 +228,7 @@ export function Capsule(p: CapsuleProps): JSX.Element {
           paneActs.current = a;
         }}
         sources={p.sources}
+        room={p.room ?? null}
         testId="spot.pane"
       />
     );

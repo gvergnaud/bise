@@ -5,7 +5,7 @@
 // (⏎ sends, ⇧⏎ a new line). Its keys, taken before the field's: tab and esc back to the left
 // field, ⌘⏎ this thread in bise, ⌘W the exchange's end (as ✕), ⌘C with nothing selected the last
 // answer. The two inputs keep two jobs (designer): the left one finds and asks, this one follows up.
-import { useEffect, useLayoutEffect, useRef, useState, type JSX } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type JSX } from "react";
 import { Press } from "@/ds";
 import { PmField } from "@/composer/pm/PmField";
 import type { ComposerActions } from "@/composer/actions";
@@ -18,6 +18,7 @@ import "@/thread/thread.css";
 import { lastAnswer, type PaneRow } from "@/capsule/exchange";
 import { LiveText } from "./LiveText";
 import { W } from "./words";
+import { spotMax } from "./Spotlight";
 
 /** The pane's composer target: its own draft and history, apart from the left field's. */
 export const PANE_TARGET = "spot-thread";
@@ -38,6 +39,8 @@ export interface ThreadPaneProps {
   readonly onActions?: (a: ComposerActions) => void;
   readonly sources?: ComposerSources;
   readonly store?: Store;
+  /** The work area's height of the screen it shows on: the same cap as the spotlight's (spotMax). */
+  readonly room?: number | null;
   readonly testId?: string;
 }
 
@@ -100,7 +103,14 @@ export function ThreadPane(p: ThreadPaneProps): JSX.Element {
   };
 
   return (
-    <div className="b-spot-pane" data-pane="" data-testid={testId}>
+    <div
+      className="b-spot-pane"
+      data-pane=""
+      data-testid={testId}
+      // the spotlight's own cap (its --spot-max is on its root, a sibling): the pane is as tall
+      // as the window, its thread scrolls above the composer and the keys
+      style={{ "--spot-max": `${String(spotMax(p.room ?? window.screen.availHeight))}px` } as CSSProperties}
+    >
       <div className="hd">
         <span className="nm">{W.paneHead}</span>
         <Press look="b-spot-pane-btn" title={W.paneOpenTip} onClick={p.onOpen} data-testid={`${testId}.open`}>
@@ -152,6 +162,8 @@ export function ThreadPane(p: ThreadPaneProps): JSX.Element {
       </div>
       <div className="cmp">
         {strip}
+        {/* the app's composer field: a raised box with a 1 px line, the placeholder inside it */}
+        <span className="box">
         <PmField
           target={PANE_TARGET}
           busy={false}
@@ -174,6 +186,7 @@ export function ThreadPane(p: ThreadPaneProps): JSX.Element {
           keyFirst={keyFirst}
           pickInFlow
         />
+        </span>
       </div>
       <div className="keys" data-testid={`${testId}.keys`}>
         {W.paneKeys.map(([k, what], i) => (

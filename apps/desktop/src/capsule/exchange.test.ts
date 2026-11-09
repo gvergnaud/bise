@@ -2,7 +2,7 @@
 // the pane, 10 min kept after a close, the pane's rows from main's thread.
 import { describe, expect, it } from 'vitest';
 import type { Entry } from '@/proto';
-import { asked, closed, KEEP_MS, lastAnswer, opened, paneRows } from './exchange';
+import { asked, closed, ended, KEEP_MS, lastAnswer, opened, paneRows } from './exchange';
 
 const you = (pos: number, text: string): Entry => ({ pos, at_ms: pos, kind: 'you', text });
 const bise = (pos: number, text: string): Entry => ({ pos, at_ms: pos, kind: 'agent', text });
@@ -15,6 +15,16 @@ describe('the exchange', () => {
     expect(asked(one, 950).pane).toBe(true);
     // the follow-up keeps where the exchange starts
     expect(asked(one, 950).after).toBe(899);
+  });
+  it('✕ closes the pane; his next ask is a follow-up again and opens it, its rows from that ask on (designer, fix 5)', () => {
+    const open = asked(asked(null, 899), 950);
+    const shut = ended(open);
+    expect(shut).toMatchObject({ pane: false });
+    const again = asked(shut, 1200);
+    expect(again).toMatchObject({ pane: true, after: 1200 });
+    // the first ask ever stays under the field; ended on nothing is nothing
+    expect(asked(null, 1).pane).toBe(false);
+    expect(ended(null)).toBeNull();
   });
   it('kept 10 min after the spotlight closed, as he left it; then a fresh field', () => {
     const x = asked(asked(null, 1), 5);

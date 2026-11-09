@@ -140,6 +140,13 @@
 .b-spot-field .b-field .p {
   margin: 0;
 }
+/* the spotlight's field never draws a box (designer, pick B): not on hover, not when the pane's
+   composer has the focus (the ds's hover and focus rings are stronger than the rule above) */
+.b-spotlight .b-spot-field .b-field.ProseMirror:not(.is-error):is(:hover, :focus, :focus-within, :focus-visible, .is-focus, .is-hover) {
+  border: 0;
+  outline: 0;
+  box-shadow: none;
+}
 /* the field's own column (its chips list, the field, the placeholder, the @ menu) */
 .b-spot-words {
   position: relative;
@@ -434,7 +441,8 @@
   color: var(--c-text-3);
 }
 .b-spot-pane .rows {
-  flex: 0 1 auto;
+  /* the thread takes what the composer and the keys leave: they sit at the window's bottom */
+  flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   padding: 0 var(--s-5) var(--s-2);
@@ -474,14 +482,59 @@
 }
 .b-spot-pane .cmp {
   flex: none;
-  padding: var(--s-2) var(--s-5);
-  border-top: 1px solid var(--c-line);
+  padding: var(--s-2) var(--s-5) 0;
+}
+/* the app's composer field (designer: one focus look): a raised box with a 1 px line, never a
+   coloured ring; its placeholder on the field's first line, inside the box */
+.b-spot-pane .cmp .box {
+  position: relative;
+  display: block;
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-3);
+  background: var(--c-raised);
+  box-shadow: var(--e-1), inset 0 0 0 1px var(--c-line);
+  font: var(--t-14) / 1.45 var(--font-ui);
+  color: var(--c-text);
 }
 .b-spot-pane .cmp .b-field-host {
   display: contents;
 }
+.b-spot-pane .cmp .box .b-field.ProseMirror:is(*, :hover, :focus, :focus-within, .is-focus, .is-hover) {
+  display: block;
+  height: auto;
+  min-height: 1.45em;
+  max-height: calc(1.45em * 6);
+  overflow-y: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  outline: 0;
+  box-shadow: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+}
+.b-spot-pane .cmp .box .b-field .p {
+  margin: 0;
+}
+.b-spot-pane .cmp .box > .b-field-ph {
+  position: absolute;
+  top: var(--s-2);
+  right: var(--s-3);
+  left: var(--s-3);
+  height: 1lh;
+  overflow: hidden;
+  white-space: pre;
+  color: var(--c-text-3);
+  pointer-events: none;
+  user-select: none;
+}
+/* the key bar as the left one draws it (ds .b-spot .keys), on the same line at the bottom */
 .b-spot-pane .keys {
   flex: none;
+  margin-top: var(--s-2);
   padding: var(--s-2) var(--s-5);
   font: var(--t-11) var(--font-mono);
   color: var(--c-text-3);

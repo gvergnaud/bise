@@ -23,8 +23,18 @@ export interface Exchange {
 /** He asked bise from the spotlight (the left field or the pane): the first ask starts one, a follow-up opens the pane. */
 export function asked(x: Exchange | null, after: number): Exchange {
   if (x === null) return { after, asks: 1, pane: false, closedAt: null };
+  // the pane opening (a follow-up, or the first ask after ✕): its rows from what was already shown
+  // (the first answer moves into it), or, after ✕, from this ask on
+  if (!x.pane && x.asks > 1) return { after, asks: x.asks + 1, pane: true, closedAt: null };
   return { ...x, asks: x.asks + 1, pane: true, closedAt: null };
 }
+
+/**
+ * ✕ or ⌘W: the pane closes, its rows go; there has been an answer, so his next ask from the left
+ * field is a follow-up again and opens the pane, as the first time (designer, pick B), its rows
+ * from that ask on. None: none.
+ */
+export const ended = (x: Exchange | null): Exchange | null => (x === null ? null : { after: x.after, asks: Math.max(2, x.asks), pane: false, closedAt: x.closedAt });
 
 /** The spotlight closed at `now`: kept KEEP_MS. */
 export const closed = (x: Exchange | null, now: number): Exchange | null => (x === null ? null : { ...x, closedAt: now });

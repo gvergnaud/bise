@@ -113,6 +113,35 @@ describe("the spotlight's thread pane widens it right, its left part never moves
     const back = onScreen(pinnedBounds({ width: 640, height: 400 }, wide.pin), wide.pin, wa);
     expect(back.bounds.x).toBe(350);
   });
+  it("the left part at the screen's right edge: the pane grows the window left by its whole width (480)", () => {
+    const b0 = { x: wa.x + wa.width - 640, y: 195, width: 640, height: 400 };
+    const pin = pinOf(b0, { width: 640, height: 400 }, { at: 'top' });
+    const wide = onScreen(pinnedBounds({ width: 1120, height: 400 }, pin), pin, wa);
+    expect(b0.x - wide.bounds.x).toBe(480);
+    expect(wide.bounds.x + wide.bounds.width).toBe(b0.x + b0.width);
+  });
+  it('reopened with the pane (fn space within 10 min): its left part where it was, never the 1120 window centred (fix 4)', () => {
+    // the page tells main the left part as its glass (Capsule.tsx): the show centres that
+    for (const d of [d13, { bounds: { x: 0, y: 0, width: 2560, height: 1440 }, workArea: { x: 0, y: 25, width: 2560, height: 1340 } }]) {
+      const b0 = capsuleBounds({ width: 640, height: 400 }, d, { at: 'top' });
+      const pin = pinOf(b0, { width: 640, height: 400 }, { at: 'top' });
+      const wide = onScreen(pinnedBounds({ width: 1120, height: 400 }, pin), pin, d.workArea);
+      const left = { x: 0, y: 0, width: 640, height: 400 };
+      const again = capsuleBounds({ width: 1120, height: 400 }, d, { at: 'top' }, left);
+      expect(again.x).toBe(wide.bounds.x);
+      // the whole window as the glass: centred, the left moved (the red: 240 pt)
+      expect(capsuleBounds({ width: 1120, height: 400 }, d, { at: 'top' }).x).not.toBe(wide.bounds.x);
+    }
+  });
+  it('two screens: opened on the second one, the pane keeps the window on the screen of its left part', () => {
+    const d2: DisplayBox = { bounds: { x: 1470, y: 0, width: 1920, height: 1080 }, workArea: { x: 1470, y: 25, width: 1920, height: 1000 } };
+    const b0 = capsuleBounds({ width: 640, height: 400 }, d2, { at: 'top' });
+    const pin = pinOf(b0, { width: 640, height: 400 }, { at: 'top' });
+    const wide = onScreen(pinnedBounds({ width: 1120, height: 400 }, pin), pin, d2.workArea);
+    expect(wide.bounds.x).toBe(b0.x);
+    expect(wide.bounds.x).toBeGreaterThanOrEqual(d2.workArea.x);
+    expect(wide.bounds.x + wide.bounds.width).toBeLessThanOrEqual(d2.workArea.x + d2.workArea.width);
+  });
   it('a second screen to the right: kept inside its own work area; the corner (right-pinned) never shifts', () => {
     const wa2 = { x: 1470, y: 0, width: 1920, height: 1080 };
     const pin = pinOf({ x: 3000, y: 170, width: 640, height: 300 }, { width: 640, height: 300 }, { at: 'top' });
