@@ -176,11 +176,13 @@ def main():
             t.keys("Escape")
             t.wait(NORMAL)
             # /models: the plan pays, no price
-            # (subs-tui: enter on main's row, then the ChatGPT row, then
-            # its models, each row ending on `your ChatGPT plan`)
+            # (subs-tui: enter on bise's role row, then the ChatGPT row,
+            # then its models, each row ending on `your ChatGPT plan`;
+            # models-settings 4b named main's role `bise`)
             t.typed("/models")
             t.keys("Enter")
-            t.wait("main", 30)
+            sc = t.wait(w("settings.roles_screen_title"), 30)
+            assert re.search(r"› bise +gpt-6\.1-sol +ChatGPT", sc), sc
             t.keys("Enter")
             sc = t.wait("ChatGPT", 30)
             plan = w("settings.roles_your_plan")
