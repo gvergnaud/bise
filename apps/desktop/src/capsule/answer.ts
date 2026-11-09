@@ -20,6 +20,9 @@ export interface AnswerIn {
 
 /** The answer to show, or null: keep what shows (nothing came yet). Pure. */
 export function answerOf(i: AnswerIn): SpotAnswer | null {
+  // the turn is over and its entry is here: that is the answer, whatever partial was left (a
+  // clear that never came; ui-review m_57911)
+  if (!i.working && i.reply !== undefined) return { text: i.reply, done: true };
   if (i.partial !== null && i.partial !== '') return { text: i.partial, done: false };
   if (i.typing !== '') return { text: i.typing, done: false };
   const kept = i.shown !== null && i.shown.note !== true && i.shown.text !== '' ? i.shown.text : undefined;

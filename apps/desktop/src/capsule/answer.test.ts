@@ -18,6 +18,9 @@ describe('answerOf', () => {
     expect(answerOf({ ...base, shown, reply: 'whole' })).toEqual({ text: 'whole', done: false });
     expect(answerOf({ ...base, shown, reply: 'whole', working: false })).toEqual({ text: 'whole', done: true });
   });
+  it('the turn over with its entry: done, even with a partial left uncleared', () => {
+    expect(answerOf({ ...base, working: false, partial: 'Un clu', reply: 'whole' })).toEqual({ text: 'whole', done: true });
+  });
   it('a stop with no entry: what came stays, done', () => {
     expect(answerOf({ ...base, working: false, shown: { text: 'Un clu', done: false } })).toEqual({ text: 'Un clu', done: true });
   });
