@@ -16,8 +16,9 @@ import {
 import { newAgent } from "@/agents/actions";
 import { InboxCard } from "@/inbox";
 import { cardKeyOf } from "@/inbox/stripRows";
-import type { Card, Grant, HelperEv } from "@/proto";
-import { threadKey, useHeard, useLevel, usePrefs, useProjects, useRefusedList, useShot, useStore } from "@/store";
+import type { Card, Grant, HelperEv, Part } from "@/proto";
+import { threadKey, useHeard, useLevel, usePrefs, useProjects, useRefusedList, useShot, useStore, useThreadOrder } from "@/store";
+import { asked as askedIn, closed, opened, paneRows, type Exchange } from "./exchange";
 import { withRefused } from "@/inbox/listed";
 import type { SpotFront, SpotItem, SpotQuote, SpotRoute } from "@/spotlight";
 import { W } from "@/spotlight/words";
@@ -178,9 +179,84 @@ export function CapsuleRoot(): JSX.Element {
   );
 
   // bise's answer to what he asked (useAnswer.ts): its first words open the answer view
-  const { last, setLast, followAsk, asked } = useMainAnswer(store, home, bise?.core, () => {
+  const { last, setLast, followAsk, asked, forget } = useMainAnswer(store, home, bise?.core, () => {
     dispatch({ ev: "answer" });
   });
+
+  // the spotlight's exchange with bise (exchange.ts; page spotlight-reponse, pick B): a follow-up
+  // opens the thread pane; kept KEEP_MS after the spotlight closed, ended by ✕ or ⌘W
+  const [ex, setEx] = useState<Exchange | null>(null);
+  const exRef = useRef(ex);
+  useEffect(() => {
+    exRef.current = ex;
+  });
+  const mainKey = home === null ? "" : threadKey(home, "main");
+  const mainOrder = useThreadOrder(mainKey);
+  const rows = useMemo(
+    () =>
+      ex === null || !ex.pane
+        ? []
+        : paneRows(
+            mainOrder.order.flatMap((pos) => store.entry(mainKey, pos) ?? []),
+            ex.after,
+            last,
+          ),
+    [ex, mainOrder, store, mainKey, last],
+  );
+  // the exchange's end (✕, ⌘W, kept past KEEP_MS): no pane, no answer under the field
+  const endExchange = useCallback((): void => {
+    setEx(null);
+    forget();
+  }, [forget]);
+  // the spotlight closing keeps the exchange KEEP_MS; opening again brings it back as he left it,
+  // or nothing once it expired (a card answered in place from the spotlight is still the spotlight)
+  const shownSpot = view.kind === "spot" || (view.kind === "card" && view.from !== "menu");
+  const [wasShown, setWasShown] = useState(shownSpot);
+  if (shownSpot !== wasShown) setWasShown(shownSpot);
+  useEffect(() => {
+    const x = exRef.current;
+    if (!wasShown) {
+      setEx(closed(x, Date.now()));
+      return;
+    }
+    const back = opened(x, Date.now());
+    if (x !== null && back === null) endExchange();
+    else setEx(back);
+  }, [wasShown, endExchange]);
+  // fn space or ⌘K with the pane's composer focused: the left field (Capsule sets it)
+  const focusLeft = useRef<(() => boolean) | null>(null);
+  const onFocusLeft = useCallback((act: (() => boolean) | null): void => {
+    focusLeft.current = act;
+  }, []);
+
+  /** His message for bise's main, from the left field (`left`: with the still and the ❝ chip it
+   *  showed) or the pane's composer: a first ask starts the exchange, a follow-up opens the pane. */
+  const askBise = (text: string, parts: readonly Part[] | undefined, left: boolean): void => {
+    if (home === null) return;
+    // the exchange's rows are main's thread after what it held before this ask
+    const order = store.threadOrder(threadKey(home, "main")).order;
+    setEx((x) => askedIn(x, order.length === 0 ? -1 : Math.max(...order)));
+    followAsk(home);
+    // R41: the images and files he pasted or dropped ride the send as typed parts (msg-parts);
+    // the hub stores each image and renders it once, as a block the model sees
+    // spot-shot: from the capsule (the hub's hint, as a fn talk), with the still it showed
+    const still = left ? shotRef.current?.id : undefined;
+    store.send({
+      project: home,
+      agent: "main",
+      text,
+      ...(parts === undefined ? {} : { parts }),
+      via: "capsule",
+      ...(still === undefined ? {} : { shot: still }),
+    });
+    if (left) {
+      spotShot.current = null;
+      // his ❝ went first in the parts (Spotlight's withQuote): gone with it
+      setQuote(null);
+    }
+    // asked: the spot says so at once (∿), its first words take the line's place (R18)
+    setLast({ text: "", done: false });
+  };
 
   // the routing hold on his send (bar ⛔3, lead m_9855): shown from the hub's route event at once,
   // gone on its route_done; esc (or fn esc) keeps it with bise, another project corrects it
@@ -328,6 +404,9 @@ export function CapsuleRoot(): JSX.Element {
   useEffect(() => {
     if (bise === undefined) return;
     const offHelper = bise.onHelper((ev) => {
+      // fn space with the thread pane's composer focused: the focus to the left field, the window
+      // stays (page spotlight-reponse, pick B)
+      if (ev.ev === "fn" && ev.act === "key" && ev.key === "space" && viewRef.current.kind === "spot" && focusLeft.current?.() === true) return;
       // fn space: the next context read carries his selection (the helper reads it then only)
       if (ev.ev === "fn" && ev.act === "key" && ev.key === "space") {
         quoteArm.current = true;
@@ -571,26 +650,28 @@ export function CapsuleRoot(): JSX.Element {
       onRouteKeep={keepWithBise}
       onRouteTo={routeTo}
       onAsk={(text, parts) => {
-        if (home === null) return;
-        followAsk(home);
-        // R41: the images and files he pasted or dropped ride the send as typed parts (msg-parts);
-        // the hub stores each image and renders it once, as a block the model sees
-        // spot-shot: from the capsule (the hub's hint, as a fn talk), with the still it showed
-        const still = shotRef.current?.id;
-        store.send({
-          project: home,
-          agent: "main",
-          text,
-          ...(parts === undefined ? {} : { parts }),
-          via: "capsule",
-          ...(still === undefined ? {} : { shot: still }),
-        });
-        spotShot.current = null;
-        // his ❝ went first in the parts (Spotlight's withQuote): gone with it
-        setQuote(null);
-        // asked: the spot says so at once (∿), its first words take the line's place (R18)
-        setLast({ text: "", done: false });
+        askBise(text, parts, true);
       }}
+      pane={
+        ex?.pane === true && home !== null
+          ? {
+              rows,
+              onSend: (o) => {
+                askBise(o.text, o.parts, false);
+              },
+              onOpen: () => {
+                // ⌘⏎: this thread in bise's window (main's thread of bise's home)
+                bise?.openWindow(`agent/${home}/main`);
+                dispatch({ ev: "close" });
+              },
+              onEnd: endExchange,
+              onCopy: (t) => {
+                void bise?.copy(t);
+              },
+            }
+          : null
+      }
+      onFocusLeft={onFocusLeft}
       sources={sources}
       onOpenWith={(item, entry) => {
         // ⏎ on a row under a message: its thread in the window, his words its draft, never sent

@@ -4,8 +4,8 @@ import { describe, expect, it } from 'vitest';
 import type { Entry } from '@/proto';
 import { asked, closed, KEEP_MS, lastAnswer, opened, paneRows } from './exchange';
 
-const you = (pos: number, text: string): Entry => ({ pos, at_ms: pos, kind: 'you', text }) as Entry;
-const bise = (pos: number, text: string): Entry => ({ pos, at_ms: pos, kind: 'agent', text }) as Entry;
+const you = (pos: number, text: string): Entry => ({ pos, at_ms: pos, kind: 'you', text });
+const bise = (pos: number, text: string): Entry => ({ pos, at_ms: pos, kind: 'agent', text });
 const tool = (pos: number): Entry => ({ pos, at_ms: pos, kind: 'tool', text: 'ran ls' }) as unknown as Entry;
 
 describe('the exchange', () => {

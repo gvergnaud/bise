@@ -140,6 +140,11 @@ export interface SpotlightProps {
   /** The work area's height of the screen it shows on (main's CapsuleState.room); none: the
    *  page's own screen (window.screen, unreliable for a window parked off-screen). */
   readonly room?: number | null;
+  /** tab in his words (the thread pane open, page spotlight-reponse pick B): the pane's composer.
+   *  None: tab stays the field's. */
+  readonly onTab?: (() => void) | null;
+  /** The field's acts once mounted (the capsule moves the focus back to it from the pane). */
+  readonly onActions?: (a: ComposerActions) => void;
   readonly testId?: string;
 }
 
@@ -505,6 +510,11 @@ export function Spotlight(p: SpotlightProps): JSX.Element {
       setInList(null);
       return false;
     }
+    if (k === "Tab" && bare && props.current.onTab != null) {
+      // the thread pane open: tab goes to its composer (two inputs, two jobs; designer)
+      props.current.onTab();
+      return take();
+    }
     if (k === "Escape") {
       // the hold: keep it with bise; else the window goes, his draft kept (it comes back selected)
       if (route !== null) props.current.onRouteKeep?.();
@@ -655,6 +665,7 @@ export function Spotlight(p: SpotlightProps): JSX.Element {
               onBar={() => undefined}
               onActions={(a) => {
                 actions.current = a;
+                props.current.onActions?.(a);
               }}
               keyFirst={keyFirst}
               onText={setText}

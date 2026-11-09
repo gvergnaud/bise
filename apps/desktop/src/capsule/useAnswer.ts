@@ -26,6 +26,8 @@ export interface MainAnswer {
   readonly followAsk: (home: string) => void;
   /** the ask being answered (null: none; route_done drops it when the ask went elsewhere) */
   readonly asked: RefObject<Asked | null>;
+  /** the exchange ended: no ask followed, no answer shown */
+  readonly forget: () => void;
 }
 
 /**
@@ -126,5 +128,10 @@ export function useMainAnswer(store: Store, home: string | null, port: Pick<Core
     lastRef.current = a;
     setLast(a);
   }, []);
-  return { last, setLast: set, followAsk, asked };
+  const forget = useCallback((): void => {
+    asked.current = null;
+    lastRef.current = null;
+    setLast(null);
+  }, []);
+  return { last, setLast: set, followAsk, asked, forget };
 }

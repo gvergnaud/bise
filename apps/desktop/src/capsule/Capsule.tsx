@@ -27,6 +27,9 @@ import {
 } from "@/spotlight";
 import type { Outgoing } from "@/composer/message";
 import type { ComposerSources } from "@/composer/sources";
+import type { ComposerActions } from "@/composer/actions";
+import { ThreadPane } from "@/spotlight/ThreadPane";
+import type { PaneRow } from "./exchange";
 import type { View } from "./machine";
 import { PermSheet } from "@/setup/PermSheet";
 import type { Perms } from "@/setup/perms";
@@ -119,11 +122,27 @@ export interface CapsuleProps {
   readonly onHover?: (over: boolean) => void;
   /** The corner card is going (its 120 ms fade out before the window hides). */
   readonly leaving?: boolean;
+  /** The thread pane (page spotlight-reponse, pick B): a follow-up opened it; null: none. */
+  readonly pane?: PaneProps | null;
+  /** Gives the root the act for fn space with the pane's composer focused: the focus goes to the
+   *  left field (true), the window stays; false: the pane didn't have it (the key does what it did). */
+  readonly onFocusLeft?: (act: (() => boolean) | null) => void;
   readonly onSize: (
     width: number,
     height: number,
     glass: { x: number; y: number; width: number; height: number },
   ) => void;
+}
+
+/** The thread pane's rows and acts (CapsuleRoot's exchange). */
+export interface PaneProps {
+  readonly rows: readonly PaneRow[];
+  readonly onSend: (o: Outgoing) => void;
+  /** ⌘⏎ or its button: this thread in bise */
+  readonly onOpen: () => void;
+  /** ✕ or ⌘W: the exchange ends */
+  readonly onEnd: () => void;
+  readonly onCopy: (text: string) => void;
 }
 
 /** The views the corner card shows: the talk (listening, thinking, its 'over' lines) and its answer. Pure. */
@@ -165,6 +184,51 @@ export function Capsule(p: CapsuleProps): JSX.Element {
     };
   }, []);
 
+  // the two inputs (the left field, the pane's composer): the keys move the focus between them
+  const leftActs = useRef<ComposerActions | null>(null);
+  const paneActs = useRef<ComposerActions | null>(null);
+  const pane = p.pane ?? null;
+  const paneOpen = pane !== null;
+  // a follow-up opened the pane: its composer has the focus (the left field is empty, lists whole)
+  useEffect(() => {
+    if (paneOpen) paneActs.current?.focusEnd();
+  }, [paneOpen]);
+  const onFocusLeft = p.onFocusLeft;
+  useEffect(() => {
+    if (onFocusLeft === undefined) return undefined;
+    onFocusLeft(() => {
+      const inPane = document.activeElement?.closest("[data-pane]") != null;
+      if (!inPane) return false;
+      leftActs.current?.focusEnd();
+      return true;
+    });
+    return () => {
+      onFocusLeft(null);
+    };
+  }, [onFocusLeft]);
+  const paneView =
+    pane === null ? null : (
+      <ThreadPane
+        rows={pane.rows}
+        onSend={pane.onSend}
+        onOpen={pane.onOpen}
+        onEnd={() => {
+          // the pane closes, the window shrinks from the right, the focus to the left field
+          pane.onEnd();
+          leftActs.current?.focusEnd();
+        }}
+        onCopy={pane.onCopy}
+        onBack={() => {
+          leftActs.current?.focusEnd();
+        }}
+        onActions={(a) => {
+          paneActs.current = a;
+        }}
+        sources={p.sources}
+        testId="spot.pane"
+      />
+    );
+
   const v = p.view;
   const answering = p.answer?.done === false;
   const pearl = v.kind === "spot" || v.kind === "talk" || v.kind === "answer";
@@ -200,10 +264,23 @@ export function Capsule(p: CapsuleProps): JSX.Element {
         />
       </div>
       {v.kind === "spot" && (
-        <div data-glass className="b-cap-glass">
+        // the pane open: the spotlight keeps its 640 px on the left, the pane widens the window to
+        // the right (main's place.ts onScreen keeps it on its screen, never re-centred)
+        <div data-glass className={`b-cap-glass${paneOpen ? " with-pane" : ""}`}>
           <Spotlight
             data={p.spot}
-            answer={p.answer}
+            // the pane open: the answer is in it, the left field finds and asks again
+            answer={paneOpen ? null : p.answer}
+            onTab={
+              paneOpen
+                ? () => {
+                    paneActs.current?.focusEnd();
+                  }
+                : null
+            }
+            onActions={(a) => {
+              leftActs.current = a;
+            }}
             route={p.route}
             onRouteKeep={p.onRouteKeep}
             onRouteTo={p.onRouteTo}
@@ -227,6 +304,7 @@ export function Capsule(p: CapsuleProps): JSX.Element {
             onQuoteBack={p.onQuoteBack ?? null}
             testId="spot"
           />
+          {paneView}
         </div>
       )}
       {v.kind === "talk" && (
@@ -275,10 +353,21 @@ export function Capsule(p: CapsuleProps): JSX.Element {
           }}
         />
       )}
-      {v.kind === "card" && (
-        <div className="b-cap-card" data-testid="capsule.card" data-glass>
-          {p.card(v.id)}
+      {v.kind === "card" && paneView !== null && v.from !== "menu" ? (
+        // a waiting row answered in place with the pane open: the card takes the left part, the
+        // pane stays on the right (page spotlight-reponse, pick B)
+        <div data-glass className="b-cap-glass with-pane">
+          <div className="b-cap-card" data-testid="capsule.card">
+            {p.card(v.id)}
+          </div>
+          {paneView}
         </div>
+      ) : (
+        v.kind === "card" && (
+          <div className="b-cap-card" data-testid="capsule.card" data-glass>
+            {p.card(v.id)}
+          </div>
+        )
       )}
       {v.kind === "perms" && p.perms != null && <PermSheet perms={p.perms.perms} onAllow={p.perms.onAllow} onNotNow={p.perms.onNotNow} />}
       {v.kind === "menu" && (

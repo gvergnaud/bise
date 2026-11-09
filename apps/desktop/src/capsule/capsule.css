@@ -40,6 +40,10 @@ html:has(.b-capsule), body:has(.b-capsule) { margin: 0; background: transparent;
 .b-capsule .b-spot { width: 640px; }
 /* the card is amb-home's InboxCard v2 on surface 'glass' (.ic.glass: no fill, no shadow) */
 .b-cap-card { width: 560px; }
+/* the thread pane open (page spotlight-reponse, pick B): the spotlight (or a card answered in
+   place) keeps its 640 px on the left, the pane's 480 px on the right; the window follows */
+.b-cap-glass.with-pane { display: flex; align-items: stretch; width: auto; }
+.b-cap-glass.with-pane > .b-spotlight, .b-cap-glass.with-pane > .b-cap-card { width: 640px; flex: none; }
 /* the pearl 40 px, 16 px in from the glass's corner; the words start 16 px past it, their first
    line centered on it (24 + half a 24.6 px line = the pearl's center at 36) */
 .b-cap-pearl { position: absolute; left: var(--s-4); top: var(--s-4); width: var(--s-10); height: var(--s-10); z-index: 2; pointer-events: none; }

@@ -48,6 +48,17 @@ export const W = {
   // A.1: '/new …' or 'start an agent: …' starts an agent in bise's home with that brief
   startAgent: 'start an agent',
   keysNew: '⏎ start it   esc close',
+  // the thread pane (page spotlight-reponse, Gabriel's pick B): a follow-up opens it on the right
+  paneHead: 'bise · this thread',
+  paneOpen: 'open in bise',
+  paneOpenTip: 'open this thread in bise · ⌘⏎',
+  paneEndTip: 'end this thread · ⌘W',
+  panePh: 'follow up',
+  paneKeys: [
+    ['⏎', 'send'],
+    ['tab', 'back to search'],
+    ['⌘W', 'end'],
+  ] as const,
 } as const;
 
 /**
