@@ -75,11 +75,21 @@
 .rv-part:first-of-type > .b-fold {
   margin-top: 0;
 }
+/* a head is one line in the column (his m_58129): its word never wraps, its facts (a folded one's
+   file list) give way and end in '…', the whole list in their tip */
+.rv-part > .b-fold {
+  min-width: 0;
+}
 .rv-kind {
+  flex: none;
+  white-space: nowrap;
   font: 600 var(--t-13) var(--font-ui);
   color: var(--c-text);
 }
 .rv-facts {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font: var(--t-13) var(--font-ui);
   color: var(--c-text-3);
   white-space: pre;
@@ -226,6 +236,10 @@
   color: var(--c-text-2);
 }
 .rv-area {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font: var(--t-12) var(--font-ui);
   color: var(--c-text-3);
   font-variant-numeric: tabular-nums;

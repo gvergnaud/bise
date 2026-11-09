@@ -437,13 +437,14 @@ const WORDS: Words = { kind: kindWord, files: (n) => pages.review_part_files({ n
  * open: the weight never folds, architect m_57259), its summary, its facts.
  */
 function SectionHead({ s, number, onToggle, testId }: { s: Section; number: string | null; onToggle: () => void; testId: string }) {
-  // folded, its files' names say what it holds ('words_pages.gen.ts')
+  // folded, its files' names say what it holds ('words_pages.gen.ts'): one line in the column, the
+  // list ends in '…' and its tip says it whole (his m_58129: 'The rest' ran under the side panel)
   const facts = ['', s.count, s.folded ? s.names.join(', ') : '', s.sum].filter((x, k) => k === 0 || x !== '').join(' · ');
   if (s.kind !== 'part') {
     return (
       <Fold open={!s.folded} onToggle={onToggle} testId={testId}>
         <span className="rv-kind">{s.label}</span>
-        <span className="rv-facts">{facts}</span>
+        <span className="rv-facts" {...tipAttrs(s.folded ? s.names.join(', ') : undefined)}>{facts}</span>
       </Fold>
     );
   }
