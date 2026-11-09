@@ -1,0 +1,77 @@
+/* An artifact pill's hover preview (designer m_58173): 320 wide for every kind, the popover's
+   surface, the cached picture 16:10 inset 8, the title in ink (never the pill's pink), the meta
+   line quiet. Cold: 100 ms fade and scale .97 → 1 from the pill's side; warm or reduced motion: a
+   plain fade. Owner: artifact-peek. */
+.ap-pill { display: inline; }
+.ap-card {
+  position: fixed;
+  z-index: 900;
+  left: 0;
+  top: 0;
+  box-sizing: border-box;
+  padding: var(--s-2);
+  border-radius: 10px;
+  background: var(--c-solid);
+  box-shadow: var(--e-2);
+  color: var(--c-text);
+  font: var(--f-ui);
+  text-align: left;
+  white-space: normal;
+  user-select: none;
+  animation: ap-fade 100ms var(--ease-out);
+}
+.ap-card.cold { animation: ap-in 100ms var(--ease-out); }
+@keyframes ap-fade { from { opacity: 0; } }
+@keyframes ap-in { from { opacity: 0; transform: scale(.97); } }
+@media (prefers-reduced-motion: reduce) {
+  .ap-card.cold { animation: ap-fade 100ms linear; }
+}
+/* the picture: the gallery card's, in its 16:10 frame */
+.ap-frame {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 16 / 10;
+  border-radius: var(--r-1);
+  box-shadow: inset 0 0 0 1px var(--c-line);
+  margin-bottom: var(--s-2);
+}
+/* a md or txt: the reading font at the card's size, its 4th line fading */
+.ap-frame .th-text {
+  font: var(--t-12)/18px var(--font-read);
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+}
+.ap-frame .th-text .th-h { font: 600 var(--t-13)/18px var(--font-read); }
+/* a PR, a release, a link: its words in place of a picture */
+.ap-tile {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-1) var(--s-1) var(--s-2);
+  color: var(--c-text-3);
+}
+.ap-tile-w {
+  font: var(--f-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ap-title {
+  padding: 0 var(--s-1);
+  font-weight: 500;
+  color: var(--c-text);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow-wrap: anywhere;
+}
+.ap-meta {
+  padding: 0 var(--s-1) var(--s-1);
+  font: var(--f-meta);
+  color: var(--c-text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ap-meta.gone { color: var(--c-text-3); }

@@ -9,7 +9,8 @@
 // A link never navigates the window: a click goes to `onLink` (the thread
 // hands it the shell's open-in-browser), and only http(s) and mailto links
 // are links at all. An `artifact:<id>[@vN]` link is the artifact's name,
-// pink inline (ArtName, desktop-agents-bar §5): a click goes to `onArtifact`.
+// pink inline (ArtName, desktop-agents-bar §5): a click goes to `onArtifact`; resting on it
+// shows its preview where the thread provides one (peek/ArtPeek).
 import { memo, useEffect, useState, type MouseEvent, type ReactNode } from 'react';
 import ReactMarkdown, { defaultUrlTransform, type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -19,6 +20,7 @@ import { fade, type FadeOpts } from './fade';
 import { streamView } from './stream';
 import { AppIcon, ArtName, Kbd, Press } from '@/ds';
 import { useModHeld } from '@/app/held';
+import { ArtPeek } from './peek/ArtPeek';
 
 /** A link he may open from an answer: http, https or mailto. */
 export function openable(href: string | undefined): href is string {
@@ -168,10 +170,12 @@ export const Markdown = memo(function Markdown({
         </code>
       );
     },
-    a({ href, children }) {
+    a({ node, href, children }) {
       const art = artifactOf(href);
       if (art !== undefined) {
+        // resting on it shows its preview (peek/ArtPeek; only where the thread provides one)
         return (
+          <ArtPeek id={art} name={node === undefined ? '' : textOf(node)}>
           <ArtName
             onClick={
               onArtifact === undefined
@@ -186,6 +190,7 @@ export const Markdown = memo(function Markdown({
             <AppIcon name="artifacts" size={14} />
             {children}
           </ArtName>
+          </ArtPeek>
         );
       }
       if (!openable(href)) return <span className="th-link-off">{children}</span>;

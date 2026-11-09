@@ -24,6 +24,7 @@ import { FindMarkContext } from './findmark';
 import { GapRow, isGapKey, withGap } from './gap';
 import { SyncCue } from './syncCue';
 import { useArtifactOpener } from './openArtifact';
+import { ArtPeekContext, type PeekSource } from './peek/ArtPeek';
 import { IntroRow } from '@/welcome/Welcome';
 import { introShows } from '@/welcome/rule';
 import { MAIN } from '@/app/route';
@@ -202,6 +203,15 @@ export const Rows = memo(function Rows({ tkey, project, agent, bise, listRef, on
     }),
     [tkey, project, agent, bise, base, goArtifact],
   );
+  const peek = useMemo<PeekSource>(
+    () => ({
+      project,
+      open: (id: string) => {
+        goArtifact(project, id);
+      },
+    }),
+    [project, goArtifact],
+  );
   // each row reads the one before it: its group and its day (ambient m_11777)
   const prevOf = useMemo(() => new Map(shown.map((p, i) => [p, shown[i - 1]])), [shown]);
   // and the one after it: his last bubble of a run shows its time (messages-right v1)
@@ -321,5 +331,10 @@ export const Rows = memo(function Rows({ tkey, project, agent, bise, listRef, on
     );
   // one list per thread (key): another agent's thread is a new mount, so it opens at its end or
   // where he left it (keep.ts), never with the last thread's scroll, stick or opened rows
-  return <ThreadList key={tkey} ref={listRef} keys={keys} row={row} more={view.more} onOlder={onOlder} head={<Marker>{thread.older_messages}</Marker>} tail={tail} cue={cue} testId="thread.list" keepKey={tkey} holdPart=".th-row" reactKey={reactKey} onRead={onRead} {...(onReading === undefined ? {} : { onReading })} />;
+  // its artifact pills show their preview on hover (peek/ArtPeek)
+  return (
+    <ArtPeekContext.Provider value={peek}>
+      <ThreadList key={tkey} ref={listRef} keys={keys} row={row} more={view.more} onOlder={onOlder} head={<Marker>{thread.older_messages}</Marker>} tail={tail} cue={cue} testId="thread.list" keepKey={tkey} holdPart=".th-row" reactKey={reactKey} onRead={onRead} {...(onReading === undefined ? {} : { onReading })} />
+    </ArtPeekContext.Provider>
+  );
 });
