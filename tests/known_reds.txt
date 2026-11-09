@@ -5,7 +5,5 @@
 # release's checks run is green") when a recorded run after its since meets it; any other one
 # 14 days after its since, or at "until YYYY-MM-DD" in its why. Expired: red in its owner's quick
 # gate until the line goes (fixed) or is renewed (a fresh since, why and until).
-badge	36ab4f688	badge-race	load flake: red in both 10.11 checks runs on 36ab4f688 ('a new card counts at once': expected 6, got 7, the start count read before a fresh home's notifications ask lands), green 3/3 alone; hardened in 909848e44, remove once a release run is green; main m_38005
 
 send	c13d1c3dd	release-reds	load flake: red in 11.8's tag checks on c13d1c3dd ('ms from ⏎ to his words drawn in the thread': toBeLessThan, a timing bound) at load ~12 beside a quick gate; green alone 2/2 on the same sha and build (20-21 s); remove once a release's checks run is green (main removes it)
-mac-keys	61979716d	release-reds	load flake: red in 10.23's tag checks on 61979716d at load ~20 (Settings… did not reach the window, the app not gone within 3 s); green alone 2/2 (all 3 tests) on the same sha and build; remove once a release's checks run is green (main removes it); main m_49730
