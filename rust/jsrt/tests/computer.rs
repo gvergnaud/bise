@@ -186,6 +186,10 @@ fn browser_open() {
     assert_eq!(b.ok(p, &[("open", r#"{"url":"https://shop.test"}"#, r)]), "tab:7|7|https://shop.test/|Shop|false");
     let p2 = "const t = await computer.browser.open('https://shop.test', { browser: 'edge' }); return t.target";
     assert_eq!(b.ok(p2, &[("open", r#"{"url":"https://shop.test","browser":"edge"}"#, r)]), "tab:7");
+    // a profile by its name; the tab says the one it opened in
+    let p3 = "const t = await computer.browser.open('https://shop.test', { profile: 'perso' }); return t.profile.name";
+    let r3 = r#"{"target":"tab:8","url":"https://shop.test/","title":"Shop","profile":{"browser":"chrome","dir":"Default","name":"perso"}}"#;
+    assert_eq!(b.ok(p3, &[("open", r#"{"url":"https://shop.test","profile":"perso"}"#, r3)]), "perso");
 }
 
 #[test]

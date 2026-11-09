@@ -31,6 +31,7 @@ bise_home::test_home!();
 pub mod b64;
 pub mod broker;
 pub mod browsers;
+pub mod choose;
 pub mod cli;
 pub mod client;
 #[cfg(test)]

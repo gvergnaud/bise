@@ -51,9 +51,9 @@ return snap;
 
 | Object | Methods |
 |---|---|
-| `computer` | `status()`, `browser.open(url, { browser? })`, `browser.tabs()` (yours only), `browser.tab(id)`, `apps()`, `app(nameOrBundleId, { window? })` |
+| `computer` | `status()`, `browser.open(url, { browser?, profile? })`, `browser.tabs()` (yours only), `browser.tab(id)`, `apps()`, `app(nameOrBundleId, { window? })` |
 | tab and app | `snapshot({ maxNodes })` (text), `screenshot({ element?, maxWidth? })` (image block), `getByRole(role, { name, exact })`, `getByText(text \| /re/)`, `getByLabel(text)`, `locator({...})`, `ref("e14")`, `press("Control+A Delete")`, `type(text)`, `scroll(dir?, px?)`, `waitFor(text \| locator \| ms, { timeout })`, `read()` (page text, 4000 chars), `act({...})` (raw) |
-| tab only | `goto(url)`, `close()`, `.url`, `.title`, `.userTouched` |
+| tab only | `goto(url)`, `close()`, `.url`, `.title`, `.userTouched`, `.profile` |
 | app only | `window(title)` (a handle on that window), `.name`, `.pid`, `.windows` |
 | tab only | `waitForFileChooser(fn, { timeout })` (a `FileChooser`: `setFiles(paths)`, `.multiple`) |
 | locator | `click()`, `fill(text)`, `type(text)`, `press(keys)`, `check()`, `uncheck()`, `select(value)`, `hover()`, `scroll(dir?, px?)`, `setInputFiles(paths)`, `textContent()`, `waitFor()`, `count()`, `ref()`, `screenshot()`, `first()`, `last()`, `nth(i)` |
@@ -81,6 +81,16 @@ visible, enabled element.
   close the ones you are done with.
 - Apps: only running apps (`open -g -a "Notes"` in bash starts one in
   the background). `goto` and `close` are for tabs.
+- **Browser profiles.** The user may have the extension in several
+  profiles of one browser ("pro", "perso"); `status()` lists them, the
+  default marked. With no `profile`, `open` uses his default; the tab
+  says where it opened (`tab.profile.name`). Pass `{ profile: "perso" }`
+  (its name, its account email or its dir) when he names one, or when
+  the site is logged in on another profile. An unknown or closed one is
+  refused with the connected list: pick from it or ask, never retry
+  without. Before a write he can't undo (send, buy, post, delete, share)
+  with two or more profiles connected and his ask naming none, ask him
+  which, in one line; reading never needs it.
 - Raw tools stay callable for odd cases: `tools.computer.act({ target,
   action, ref | locator, ... })`; they return `{ error }` instead of
   throwing.

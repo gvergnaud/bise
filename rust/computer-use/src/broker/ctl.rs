@@ -230,6 +230,8 @@ pub(super) fn ctl_loop(sh: &Arc<Shared>, w: Writer, lines: Lines) {
                 Ok(json!({"released": agent}))
             }
             "status" => Ok(full_status(sh)),
+            // his default browser profile, or one he forgets ({browser, dir})
+            "default" | "forget" => super::book::edit(sh, str_of(&req, "op").unwrap_or(""), &args),
             "show" => show(sh, &args),
             "request" => request_permission(sh, str_of(&args, "what").unwrap_or("")),
             "permissions" => Ok(permissions(sh)),

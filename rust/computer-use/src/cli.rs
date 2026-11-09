@@ -27,6 +27,10 @@ pub const USAGE: &str = "usage:
   bise computer-use resume <agent>
   bise computer-use release <agent>        end of turn: detach, keep the tabs
   bise computer-use drop <agent>           close its tab group (unless the user touched a tab)
+  bise computer-use default <browser>/<profile dir>
+                                           the profile agents use when they name none (chrome/Profile 1)
+  bise computer-use forget <browser>/<profile dir>
+                                           out of the profiles list (back at its next connection)
 internal:
   bise computer-use mcp                    the `computer` plugin's MCP server (stdio)
   bise computer-use chrome-host            the browsers' native messaging host
@@ -138,6 +142,24 @@ pub fn main(args: &[String]) -> i32 {
         }
         // turned off (/computer-use off): the broker and the helper exit;
         // the plugin's enable state is the caller's (the TUI)
+        // his default browser profile, or one he forgets: `chrome/Profile 1`
+        // (the one place this text is split; the wire takes {browser, dir})
+        cmd @ ("default" | "forget") => {
+            let Some(key) = a.get(1).and_then(|s| profile_key_arg(&a[1..].join(" ")).or_else(|| profile_key_arg(s))) else {
+                eprintln!("{}", USAGE);
+                return 2;
+            };
+            match control(&paths, cmd, &key.to_json()) {
+                Ok(v) => {
+                    print(&v);
+                    0
+                }
+                Err(e) => {
+                    eprintln!("{}: {}", cmd, e);
+                    1
+                }
+            }
+        }
         "off" => {
             print(&off(&paths));
             0
@@ -265,6 +287,14 @@ pub fn stop_agent(paths: &Paths, key: &str) -> StopOutcome {
 
 /// stop / resume / release / drop: through the broker, or on the files
 /// when none runs (a later broker reads state.json).
+/// `chrome/Profile 1` -> its key (the CLI's argument only).
+pub fn profile_key_arg(s: &str) -> Option<crate::choose::Key> {
+    let (browser, dir) = s.trim().split_once('/')?;
+    let b = browsers::by_key(browser.trim())?;
+    let dir = dir.trim();
+    (!dir.is_empty()).then(|| crate::choose::Key { browser: b.key.to_string(), dir: dir.to_string() })
+}
+
 pub fn control(paths: &Paths, cmd: &str, args: &Value) -> Result<Value, String> {
     let mut args = args.clone();
     if let Some(a) = args["agent"].as_str().filter(|a| !a.is_empty()) {

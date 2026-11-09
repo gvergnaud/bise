@@ -369,9 +369,12 @@
     // false for a tab you just opened; computer.browser.tabs() refreshes it
     // (was undefined on open(), launch #6)
     userTouched: boolean = false;
+    // the browser profile it is in ({browser, dir, name}); none: unknown
+    profile?: Json;
     constructor(target: string, info?: Json) {
       super(target, info);
       if (info && info.user_touched !== undefined) this.userTouched = !!info.user_touched;
+      if (info && info.profile) this.profile = info.profile;
     }
     get id() { return this.target.slice(4); }
     async goto(url: string) { return this.act({ action: "goto", url: String(url) }); }
@@ -416,9 +419,11 @@
     status: async () => call("status", {}),
     browser: {
       // a new background tab in your own tab group ("bise · <you>")
-      open: async (url: string, opts?: { browser?: string }) => {
+      // profile: a browser profile by its name ("pro"), account email or dir; none: the default
+      open: async (url: string, opts?: { browser?: string; profile?: string }) => {
         const a: Json = { url: String(url) };
         if (opts && opts.browser !== undefined) a.browser = opts.browser;
+        if (opts && opts.profile !== undefined) a.profile = String(opts.profile);
         const r = call("open", a);
         return new Tab(r.target, r);
       },

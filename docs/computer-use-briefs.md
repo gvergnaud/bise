@@ -98,9 +98,9 @@ Namespace `computer` (the built-in plugin). Targets are strings:
 
 | Tool | Args | Result |
 |---|---|---|
-| `status` | `{}` | `{ browsers: [{ name, version, connected, extension_version }], apps: { helper: "absent"\|"stopped"\|"running", accessibility, screen_recording }, me: { stopped, paused: [target] } }` |
-| `open` | `{ url, browser? }` | `{ target, url, title }` (a background tab in the agent's group) |
-| `tabs` | `{}` | `[{ target, url, title, user_touched }]` (this agent's tabs only) |
+| `status` | `{}` | `{ browsers: [{ name, version, connected, extension_version, profile?: { browser, dir, name, default? } }], apps: { helper: "absent"\|"stopped"\|"running", accessibility, screen_recording }, me: { stopped, paused: [target] } }` |
+| `open` | `{ url, browser?, profile? }` | `{ target, url, title, profile? }` (a background tab in the agent's group; `profile`: a browser profile by name, account email or dir, else his default; unknown: `no_browser` with the connected list, never the default; two matches: `ambiguous`) |
+| `tabs` | `{}` | `[{ target, url, title, user_touched, profile? }]` (this agent's tabs only) |
 | `apps` | `{}` | `[{ target, name, pid, windows: [{ title, focused }] }]` |
 | `snapshot` | `{ target, window?, max_nodes? = 400 }` | `{ target, url?, title, text, refs, truncated }` |
 | `screenshot` | `{ target, window?, ref?, max_width? = 1280 }` | `{ path, mime, width, height }` (a JPEG in the agent's `TMPDIR`) |
@@ -217,7 +217,7 @@ each installed Chromium browser's `NativeMessagingHosts/` (design
 id is pinned with `key` in its manifest (cu-extension generates the key
 pair and commits the public key; the Web Store keeps the same id).
 
-- ext → host, first: `{"hello":{"browser":"chrome|edge|brave|vivaldi|opera|arc","version":"154.0…","extension_version":"…"}}`
+- ext → host, first: `{"hello":{"browser":"chrome|edge|brave|vivaldi|opera|arc","version":"154.0…","extension_version":"…","profile_nonce":"bise-…"}}` (`profile_nonce`: written to its `storage.local` first; the host finds the profile dir holding it and passes `profile: {dir, name, email?}` on instead, rust/computer-use/src/profiles.rs)
 - host → ext: `{"id":n,"agent":"…","op":"open|tabs|snapshot|screenshot|act","args":{…}}`
   → ext → host `{"id":n,"ok":…,"result"|"error":…}` (C1 shapes;
   `screenshot` returns `{"data":"<base64 jpeg>",…}`, the broker writes

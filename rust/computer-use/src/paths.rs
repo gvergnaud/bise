@@ -81,6 +81,13 @@ impl Paths {
         self.dir().join("live-test.json")
     }
 
+    /// The browser profiles bise saw and his default
+    /// (`~/.bise/computer-use/profiles.json`, `choose::Book`): the
+    /// broker's, kept across restarts (the run dir isn't).
+    pub fn profiles_file(&self) -> PathBuf {
+        self.root.join("computer-use").join("profiles.json")
+    }
+
     /// C4: the native host shim, `~/.bise/bin/bise-chrome-host`.
     pub fn shim(&self) -> PathBuf {
         self.root.join("bin").join("bise-chrome-host")

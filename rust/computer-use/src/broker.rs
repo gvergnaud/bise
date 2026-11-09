@@ -8,7 +8,10 @@
 //! - a command (`bise computer-use stop ...`): `{"op":"hello","role":"ctl"}`.
 //!
 //! The broker connects to the helper app itself (C5), starting it when
-//! its socket is missing. It routes `tab:` targets to the browser that owns
+//! its socket is missing. It routes `open` to a browser profile
+//! (`choose.rs`: the one asked, else his default; each extension's hello
+//! says its profile, `profiles.rs`; the default and the profiles seen in
+//! `profiles.json`, `book.rs`), `tab:` targets to the browser that owns
 //! the tab and `app:` targets to the helper, refuses the hard-refused
 //! targets (`refuse.rs`), checks an upload's files right before they go
 //! (`files.rs`: the browser gets their real paths, events.jsonl each one),
@@ -27,10 +30,13 @@ use std::time::{Duration, Instant};
 use serde_json::{json, Value};
 
 use crate::browsers::{self, Browser};
+use crate::choose::{self, Book, Live};
+use crate::profiles::Profile;
 use crate::paths::Paths;
 use crate::proto::{err, short_host, str_of, Target, TOOLS};
 use crate::{image, refuse, state};
 
+mod book;
 mod ctl;
 mod helper;
 mod peek;
@@ -120,6 +126,9 @@ struct BrowserLink {
     /// link ends and it still runs, only the extension's service worker
     /// stopped (MV3), and it comes back within 30 s
     pid: Option<i32>,
+    /// the profile it runs in (hello.profile, `profiles.rs`); None: an
+    /// older extension, or not found (unknown, never guessed)
+    profile: Option<Profile>,
 }
 
 /// After an extension's service worker stops, calls wait this long for it
@@ -178,6 +187,8 @@ struct Inner {
     /// the last browser that said hello: once one did, a closed one is
     /// no_browser ("Chrome is closed"), never not_set_up
     last_browser: Option<&'static str>,
+    /// the profiles seen and the default (`profiles.json`, `book.rs`)
+    book: Book,
 }
 
 struct Shared {
@@ -296,7 +307,7 @@ pub fn start(opts: Opts) -> Result<Handle, StartError> {
     let _ = std::fs::remove_file(&ctl_sock);
     let ctl_listener = UnixListener::bind(&ctl_sock).map_err(StartError::Io)?;
     crate::paths::private(&ctl_sock, 0o600).map_err(StartError::Io)?;
-    let inner = Inner { agents: state::restore(&opts.paths), quiet_since: Some(Instant::now()), ..Inner::default() };
+    let inner = Inner { agents: state::restore(&opts.paths), quiet_since: Some(Instant::now()), book: book::load(&opts.paths), ..Inner::default() };
     let shared = Arc::new(Shared {
         helper_app: helper::new_cache(&opts),
         opts,
@@ -431,7 +442,7 @@ fn browser_loop(sh: &Arc<Shared>, w: Writer, lines: Lines) {
         let mut inner = lock(&sh.inner);
         inner.next += 1;
         let id = inner.next;
-        inner.browsers.push(BrowserLink { id, w, browser: None, version: String::new(), extension_version: String::new(), extension_build: None, pid: None });
+        inner.browsers.push(BrowserLink { id, w, browser: None, version: String::new(), extension_version: String::new(), extension_build: None, pid: None, profile: None });
         id
     };
     for line in lines {
@@ -439,6 +450,10 @@ fn browser_loop(sh: &Arc<Shared>, w: Writer, lines: Lines) {
         let Ok(msg) = serde_json::from_str::<Value>(&line) else { continue };
         if let Some(h) = msg.get("hello") {
             let b = str_of(h, "browser").and_then(browsers::by_key).unwrap_or(browsers::ALL[0]);
+            let profile = h.get("profile").and_then(Profile::from_json);
+            if let Some(p) = &profile {
+                book::seen(sh, b.key, p);
+            }
             {
                 let mut inner = lock(&sh.inner);
                 if let Some(l) = inner.browsers.iter_mut().find(|l| l.id == id) {
@@ -447,6 +462,7 @@ fn browser_loop(sh: &Arc<Shared>, w: Writer, lines: Lines) {
                     l.extension_version = str_of(h, "extension_version").unwrap_or("").to_string();
                     l.extension_build = str_of(h, "build").map(String::from);
                     l.pid = h.get("pid").and_then(Value::as_i64).and_then(|p| i32::try_from(p).ok()).filter(|p| *p > 1);
+                    l.profile = profile.clone();
                 }
                 // the most recent browser comes first for `open`
                 if let Some(i) = inner.browsers.iter().position(|l| l.id == id) {
@@ -456,7 +472,7 @@ fn browser_loop(sh: &Arc<Shared>, w: Writer, lines: Lines) {
                 inner.asleep = None;
                 inner.last_browser = Some(b.name);
             }
-            log(&format!("browser {} connected", b.name));
+            log(&format!("browser {} connected ({})", b.name, profile.as_ref().map_or("unknown profile", |p| p.dir.as_str())));
             write_state(sh);
             continue;
         }
@@ -641,28 +657,46 @@ fn wait_for(sh: &Arc<Shared>, args: &Value) -> Duration {
     Duration::from_millis(ms) + sh.opts.slack
 }
 
-/// The browser `open` goes to: the one asked, else the agent's, else the
-/// last connected.
-fn pick_browser(sh: &Arc<Shared>, agent: &str, wanted: Option<&str>) -> Result<(u64, Browser), Value> {
+/// The browser profile `open` goes to (`choose::pick`): the one asked
+/// (`browser`, `profile`), else the default, else the only one, else the
+/// agent's own; never "the last hello".
+fn pick_browser(sh: &Arc<Shared>, agent: &str, browser: Option<&str>, profile: Option<&str>) -> Result<(u64, Browser), Value> {
     live_links(sh);
     let inner = lock(&sh.inner);
-    let live: Vec<(u64, Browser)> = inner.browsers.iter().filter_map(|l| l.browser.map(|b| (l.id, b))).collect();
+    let live: Vec<Live> = inner.browsers.iter().filter_map(|l| l.browser.map(|b| Live { link: l.id, key: b.key, name: b.name, profile: l.profile.as_ref() })).collect();
     if live.is_empty() {
         drop(inner);
         return Err(no_browser(sh));
     }
-    if let Some(w) = wanted {
-        return live
-            .iter()
-            .find(|(_, b)| b.key.eq_ignore_ascii_case(w) || b.name.eq_ignore_ascii_case(w))
-            .copied()
-            .ok_or_else(|| {
-                let names: Vec<&str> = live.iter().map(|(_, b)| b.name).collect();
-                err("no_browser", format!("{} isn't connected (connected: {}); use one of those or ask the user", w, names.join(", ")))
-            });
-    }
     let mine = inner.owners.iter().find(|((a, _), _)| a == agent).map(|(_, l)| *l);
-    Ok(mine.and_then(|m| live.iter().find(|(l, _)| *l == m).copied()).unwrap_or(live[0]))
+    let link = choose::pick(&live, &inner.book, browser, profile, mine).map_err(|r| {
+        let mut e = err(r.code, r.message);
+        if !r.candidates.is_empty() {
+            e["candidates"] = json!(r.candidates);
+        }
+        e
+    })?;
+    let b = inner.browsers.iter().find(|l| l.id == link).and_then(|l| l.browser).unwrap_or(browsers::ALL[0]);
+    Ok((link, b))
+}
+
+/// What agents see of a link's profile ({browser, dir, name}, never the
+/// email: `choose::for_agents`); None: unknown.
+fn profile_of(sh: &Arc<Shared>, link: u64) -> Option<Value> {
+    let inner = lock(&sh.inner);
+    let l = inner.browsers.iter().find(|l| l.id == link)?;
+    Some(choose::for_agents(l.browser?.key, l.profile.as_ref()?))
+}
+
+/// How the feed and the pill name a link: "Chrome", or "Chrome · pro"
+/// once he has several profiles.
+fn place_name(sh: &Arc<Shared>, link: u64, b: Browser) -> String {
+    let inner = lock(&sh.inner);
+    let p = inner.browsers.iter().find(|l| l.id == link).and_then(|l| l.profile.as_ref());
+    match p {
+        Some(p) if inner.book.known.len() > 1 => format!("{} · {}", b.name, p.name),
+        _ => b.name.to_string(),
+    }
 }
 
 fn no_browser(sh: &Arc<Shared>) -> Value {
@@ -680,7 +714,13 @@ fn no_browser(sh: &Arc<Shared>) -> Value {
 
 /// `tabs` of one browser for one agent; records the owners.
 fn tabs_of(sh: &Arc<Shared>, link: u64, agent: &str) -> Reply {
-    let r = forward(sh, link, Some(agent), None, "tabs", &json!({}), Duration::from_secs(5) + sh.opts.slack)?;
+    let mut r = forward(sh, link, Some(agent), None, "tabs", &json!({}), Duration::from_secs(5) + sh.opts.slack)?;
+    // each tab says its profile (several profiles: tabs lists them all)
+    if let Some(p) = profile_of(sh, link) {
+        for t in r.as_array_mut().into_iter().flatten().filter_map(Value::as_object_mut) {
+            t.insert("profile".into(), p.clone());
+        }
+    }
     let mut inner = lock(&sh.inner);
     for t in r.as_array().into_iter().flatten() {
         if let Some(target) = str_of(t, "target") {
@@ -779,14 +819,17 @@ fn handle(sh: &Arc<Shared>, agent: &str, tmpdir: &std::path::Path, op: &str, arg
             if let Some(why) = refuse::url(url) {
                 return Err(err("refused", why));
             }
-            let (link, b) = pick_browser(sh, agent, str_of(args, "browser"))?;
-            let r = forward(sh, link, Some(agent), None, "open", args, wait_for(sh, args))?;
+            let (link, b) = pick_browser(sh, agent, str_of(args, "browser"), str_of(args, "profile"))?;
+            let mut r = forward(sh, link, Some(agent), None, "open", args, wait_for(sh, args))?;
             if let Some(t) = str_of(&r, "target") {
                 lock(&sh.inner).owners.insert((agent.to_string(), t.to_string()), link);
                 remember(sh, t, &r);
                 lock(&sh.inner).last_target.insert(agent.to_string(), t.to_string());
             }
-            driving(sh, agent, b.name, &short_host(str_of(&r, "url").unwrap_or(url)));
+            if let (Some(p), Some(o)) = (profile_of(sh, link), r.as_object_mut()) {
+                o.insert("profile".into(), p);
+            }
+            driving(sh, agent, &place_name(sh, link, b), &short_host(str_of(&r, "url").unwrap_or(url)));
             Ok(r)
         }
         "tabs" => {

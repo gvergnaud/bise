@@ -122,13 +122,18 @@ impl FakeExt {
     /// Start the relay (`chrome-host`) on a socket pair and the fake
     /// extension on its other end; says hello as `browser`.
     fn start(p: &Paths, start: Arc<Starter>, browser: &str, jpeg: Arc<Vec<u8>>) -> FakeExt {
+        FakeExt::start_hello(p, start, json!({"browser": browser, "version": "154.0.1", "extension_version": "0.1.0"}), jpeg)
+    }
+
+    /// The same, saying `hello` (a profile's nonce, ...).
+    fn start_hello(p: &Paths, start: Arc<Starter>, hello: Value, jpeg: Arc<Vec<u8>>) -> FakeExt {
         let (ext, hostside) = UnixStream::pair().unwrap();
         let (hin, hout) = (hostside.try_clone().unwrap(), hostside);
         let p2 = p.clone();
         std::thread::spawn(move || host::run(&p2, start, hin, hout, None));
         let w = Arc::new(Mutex::new(ext.try_clone().unwrap()));
         let st = Arc::new(Mutex::new(ExtState::default()));
-        nm::write(&mut *w.lock().unwrap(), &json!({"hello": {"browser": browser, "version": "154.0.1", "extension_version": "0.1.0"}})).unwrap();
+        nm::write(&mut *w.lock().unwrap(), &json!({ "hello": hello })).unwrap();
         let (w2, st2) = (w.clone(), st.clone());
         let mut r = ext;
         std::thread::spawn(move || {
@@ -963,6 +968,84 @@ fn commands_without_a_broker_and_one_broker_only() {
     // resume with no broker clears it
     cli::control(&p, "resume", &json!({"agent": "x"})).unwrap();
     assert!(state::read(&p)["agents"].get("x").is_none());
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+/// The real-format fixture (profiles.rs) as the fake home's Chrome, its
+/// `Default` named "pro" and `Profile 1` "perso" with an email (Local
+/// State's cache, as a signed-in profile has it).
+fn chrome_with_two_profiles(p: &Paths) -> (String, String) {
+    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/chrome-profiles");
+    let dst = p.app_support().join("Google/Chrome");
+    for f in ["Default", "Profile 1"] {
+        let src = fixture.join(f).join("Local Extension Settings").join(crate::browsers::EXTENSION_ID);
+        let to = dst.join(f).join("Local Extension Settings").join(crate::browsers::EXTENSION_ID);
+        std::fs::create_dir_all(&to).unwrap();
+        for e in std::fs::read_dir(src).unwrap().flatten() {
+            std::fs::copy(e.path(), to.join(e.file_name())).unwrap();
+        }
+    }
+    let state = json!({"profile": {"info_cache": {"Default": {"name": "pro", "user_name": ""}, "Profile 1": {"name": "perso", "user_name": "gab@perso.fr"}}}});
+    std::fs::write(dst.join("Local State"), state.to_string()).unwrap();
+    let nonce = |f: &str| std::fs::read_to_string(fixture.join(f)).unwrap().trim().to_string();
+    (nonce("nonce-default.txt"), nonce("nonce-profile1.txt"))
+}
+
+#[test]
+fn two_chrome_profiles_at_once_by_name_and_the_default() {
+    let (d, p) = paths();
+    let (pro_nonce, perso_nonce) = chrome_with_two_profiles(&p);
+    let o = opts(&p);
+    let brokers: Brokers = Default::default();
+    brokers.lock().unwrap().push(broker::start(o.clone()).unwrap());
+    let img = jpeg(&d);
+    let hello = |n: &str| json!({"browser": "chrome", "version": "157.0.1", "extension_version": "0.1.1", "profile_nonce": n});
+    let pro = FakeExt::start_hello(&p, starter(o.clone(), brokers.clone()), hello(&pro_nonce), img.clone());
+    connected(&p, 1);
+    // perso says hello last: before, the last hello took every open
+    let perso = FakeExt::start_hello(&p, starter(o, brokers.clone()), hello(&perso_nonce), img);
+    connected(&p, 2);
+    let mut c = agent(&p, "ana", &d.join("ana"));
+    // no profile: the default, the first one seen (pro), whatever hello came last
+    let t = ok(&mut c, "open", json!({"url": "https://a.example/"}));
+    assert_eq!(t["profile"], json!({"browser": "chrome", "dir": "Default", "name": "pro"}));
+    assert!(pro.st.lock().unwrap().tabs.contains_key("ana") && !perso.st.lock().unwrap().tabs.contains_key("ana"));
+    // by name, any case, and by email: perso
+    for q in ["perso", "PERSO", "gab@perso.fr"] {
+        let t = ok(&mut c, "open", json!({"url": "https://b.example/", "profile": q}));
+        assert_eq!(t["profile"]["name"], "perso", "{}", q);
+        // what agents see never has the email
+        assert!(!t.to_string().contains('@'), "{}", t);
+    }
+    assert_eq!(perso.st.lock().unwrap().tabs["ana"].len(), 3);
+    // an unknown one is refused with the list, never the default
+    let e = code(&mut c, "open", json!({"url": "https://c.example/", "profile": "famille"}));
+    assert_eq!(e["code"], "no_browser");
+    assert!(e["message"].as_str().unwrap().contains("Chrome · perso"), "{}", e);
+    // tabs: both profiles', each with its profile, no email
+    let tabs = ok(&mut c, "tabs", json!({}));
+    let names: Vec<&str> = tabs.as_array().unwrap().iter().map(|t| t["profile"]["name"].as_str().unwrap()).collect();
+    assert_eq!((names.iter().filter(|n| **n == "pro").count(), names.iter().filter(|n| **n == "perso").count()), (1, 3));
+    assert!(!tabs.to_string().contains('@'));
+    // C1 status: both, the default marked, no email; state.json (Settings) has it
+    let s = ok(&mut c, "status", json!({}));
+    let ps: Vec<&Value> = s["browsers"].as_array().unwrap().iter().filter_map(|b| b.get("profile")).collect();
+    assert_eq!(ps.len(), 2);
+    assert!(ps.iter().any(|p| p["name"] == "pro" && p["default"] == true));
+    assert!(!s["browsers"].to_string().contains('@'));
+    assert!(state::read(&p)["browsers"].to_string().contains("gab@perso.fr"));
+    // his default: perso, from the command (Settings' path); no profile goes there now
+    assert!(cli::control(&p, "default", &json!({"browser": "chrome", "dir": "Profile 1"})).is_ok());
+    let t = ok(&mut c, "open", json!({"url": "https://d.example/"}));
+    assert_eq!(t["profile"]["name"], "perso");
+    assert!(cli::control(&p, "default", &json!({"browser": "chrome", "dir": "Profile 9"})).is_err());
+    // kept across a broker restart (profiles.json)
+    let book = std::fs::read_to_string(p.profiles_file()).unwrap();
+    assert!(book.contains("\"Profile 1\"") && book.contains("\"default\""), "{}", book);
+    assert_eq!(state::read(&p)["agents"]["ana"]["driving"], "Chrome · perso");
+    for h in brokers.lock().unwrap().drain(..) {
+        h.shutdown();
+    }
     let _ = std::fs::remove_dir_all(&d);
 }
 

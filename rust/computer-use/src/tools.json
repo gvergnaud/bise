@@ -6,15 +6,16 @@
   },
   {
     "name": "open",
-    "description": "Open a URL in a new background tab of your own tab group in the user's browser (his logins, never his active tab). Returns {target, url, title}; target (tab:<id>) is what snapshot, screenshot and act take. At most 5 tabs: close one first. In run_typescript: const tab = await computer.browser.open(url) (skill computer-use).",
+    "description": "Open a URL in a new background tab of your own tab group in the user's browser (his logins, never his active tab). Returns {target, url, title, profile}; target (tab:<id>) is what snapshot, screenshot and act take; profile ({browser, dir, name}) is the browser profile it opened in. At most 5 tabs: close one first. In run_typescript: const tab = await computer.browser.open(url, { profile? }) (skill computer-use).",
     "inputSchema": {"type": "object", "properties": {
       "url": {"type": "string"},
-      "browser": {"type": "string", "description": "chrome, edge, brave, vivaldi, opera or arc; default: the one you already use, else the last connected"}
+      "browser": {"type": "string", "description": "chrome, edge, brave, vivaldi, opera or arc; default: the default profile's"},
+      "profile": {"type": "string", "description": "the browser profile, by its name (\"pro\"), its account email or its dir; default: the user's default profile (status lists them). An unknown one is refused, never replaced"}
     }, "required": ["url"], "additionalProperties": false}
   },
   {
     "name": "tabs",
-    "description": "Your own open tabs: [{target, url, title, user_touched}].",
+    "description": "Your own open tabs: [{target, url, title, user_touched, profile}].",
     "inputSchema": {"type": "object", "properties": {}, "additionalProperties": false}
   },
   {

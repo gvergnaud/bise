@@ -3,7 +3,23 @@
 
 use super::*;
 
-fn browsers_json(sh: &Arc<Shared>) -> Value {
+/// One entry's profile: {browser, dir, name} for agents (`choose::for_agents`),
+/// plus the email for state.json (Settings), and whether it is the default.
+fn profile_json(book: &Book, key: &str, p: &Profile, email: bool) -> Value {
+    let mut v = choose::for_agents(key, p);
+    if let (true, Some(e)) = (email, &p.email) {
+        v["email"] = json!(e);
+    }
+    if book.default.as_ref().is_some_and(|d| d.browser == key && d.dir == p.dir) {
+        v["default"] = json!(true);
+    }
+    v
+}
+
+/// The browsers: each connected extension (with its profile when known),
+/// the known profiles not open now, the installed browsers not connected.
+/// `email`: state.json's (Settings shows it); C1 `status` never has it.
+fn browsers_json(sh: &Arc<Shared>, email: bool) -> Value {
     let inner = lock(&sh.inner);
     let mut out: Vec<Value> = inner
         .browsers
@@ -15,10 +31,21 @@ fn browsers_json(sh: &Arc<Shared>) -> Value {
                 if let Some(build) = &l.extension_build {
                     v["extension_build"] = json!(build);
                 }
+                if let Some(p) = &l.profile {
+                    v["profile"] = profile_json(&inner.book, b.key, p, email);
+                }
                 v
             })
         })
         .collect();
+    // a profile he has, not open now ("○ not open" in Settings; an agent asks him to open it)
+    for k in &inner.book.known {
+        let open = inner.browsers.iter().any(|l| l.browser.map(|b| b.key) == Some(k.browser.as_str()) && l.profile.as_ref().is_some_and(|p| p.dir == k.profile.dir));
+        if !open {
+            let name = browsers::by_key(&k.browser).map_or(k.browser.as_str(), |b| b.name);
+            out.push(json!({"name": name, "version": Value::Null, "connected": false, "extension_version": Value::Null, "profile": profile_json(&inner.book, &k.browser, &k.profile, email)}));
+        }
+    }
     let p = &sh.opts.paths;
     for b in browsers::ALL.iter().filter(|b| b.installed(p)) {
         if !inner.browsers.iter().any(|l| l.browser.map(|x| x.key) == Some(b.key)) {
@@ -64,7 +91,7 @@ pub(super) fn status(sh: &Arc<Shared>, agent: Option<&str>) -> Value {
         let s = inner.agents.get(a).cloned().unwrap_or_default();
         json!({"stopped": s.stopped, "paused": s.paused})
     });
-    let mut v = json!({"browsers": browsers_json(sh), "apps": apps_json(sh)});
+    let mut v = json!({"browsers": browsers_json(sh, false), "apps": apps_json(sh)});
     if let Some(me) = me {
         v["me"] = me;
     }
@@ -89,7 +116,7 @@ pub(super) fn write_state(sh: &Arc<Shared>) {
     if sh.stop.load(Ordering::SeqCst) {
         return;
     }
-    let (b, a) = (browsers_json(sh), apps_json(sh));
+    let (b, a) = (browsers_json(sh, true), apps_json(sh));
     let v = {
         let inner = lock(&sh.inner);
         state::render(&inner.agents, b, a)
