@@ -19,6 +19,8 @@
 //! - `nm`: native messaging frames; `b64` and `image`: screenshots;
 //! - `state`: C6's state.json and events.jsonl;
 //! - `browsers`: the Chromium family, native host manifests, the shim;
+//! - `profiles`: which browser profile an extension runs in (its hello's
+//!   nonce, found in that profile's extension storage);
 //! - `broker`: the broker; `client`: connecting to it (and starting it);
 //! - `mcp`: the MCP server; `host`: the native host relay;
 //! - `cli`: `bise computer-use ...`.
@@ -41,6 +43,7 @@ pub mod mcp;
 pub mod nm;
 pub mod paths;
 pub mod policy;
+pub mod profiles;
 pub mod proto;
 pub mod refuse;
 pub mod state;

@@ -17,7 +17,7 @@ use serde_json::{json, Value};
 
 use crate::client::{self, Starter};
 use crate::paths::Paths;
-use crate::{browsers, nm};
+use crate::{browsers, nm, profiles};
 
 /// The browser's executable path of `pid` (the host's parent), macOS.
 #[cfg(target_os = "macos")]
@@ -42,6 +42,29 @@ pub fn refine_hello(mut msg: Value, parent_exe: Option<&str>) -> Value {
         let said = h.get("browser").and_then(Value::as_str).unwrap_or("chrome");
         if said == "chrome" && b.key != "chrome" {
             h["browser"] = json!(b.key);
+        }
+    }
+    msg
+}
+
+/// The hello with the profile that said it (`hello.profile`, found by its
+/// `profile_nonce` in the browser's user data dir, `profiles.rs`); the
+/// nonce goes no further. Not found: no `profile` (unknown, never guessed).
+pub fn add_profile(mut msg: Value, paths: &Paths) -> Value {
+    let Some(h) = msg.get_mut("hello").and_then(Value::as_object_mut) else { return msg };
+    let nonce = h.remove("profile_nonce").and_then(|n| n.as_str().map(String::from));
+    let browser = h.get("browser").and_then(Value::as_str).and_then(browsers::by_key);
+    if let (Some(nonce), Some(b)) = (nonce, browser) {
+        let user_data = paths.app_support().join(b.support);
+        // the extension's write lands before its hello; a slow disk gets a moment more
+        for i in 0..5 {
+            if let Some(p) = profiles::find(&profiles::read_user_data(&user_data, browsers::EXTENSION_ID), &nonce) {
+                h.insert("profile".into(), p.to_json());
+                break;
+            }
+            if i < 4 {
+                std::thread::sleep(Duration::from_millis(100));
+            }
         }
     }
     msg
@@ -110,7 +133,7 @@ pub fn run(paths: &Paths, start: Arc<Starter>, input: impl Read + Send + 'static
     let mut input = input;
     while let Ok(Some(msg)) = nm::read(&mut input) {
         let msg = if msg.get("hello").is_some() {
-            let mut m = refine_hello(msg, parent_exe.as_deref());
+            let mut m = add_profile(refine_hello(msg, parent_exe.as_deref()), paths);
             // the broker tells a quit browser from a stopped service worker by it
             if let (Some(pid), Some(h)) = (ppid, m.get_mut("hello")) {
                 h["pid"] = json!(pid);
@@ -156,5 +179,40 @@ mod tests {
         let e = json!({"hello": {"browser": "edge"}});
         assert_eq!(refine_hello(e, Some("/Applications/Arc.app/Contents/MacOS/Arc"))["hello"]["browser"], "edge");
         assert!(exe_of(std::process::id() as i32).is_some());
+    }
+
+    /// The real-format fixture (profiles.rs) as a fake home's Chrome.
+    fn home_with_chrome(name: &str) -> Paths {
+        let t = std::env::temp_dir().join(format!("{}-{}", name, std::process::id()));
+        let _ = std::fs::remove_dir_all(&t);
+        let paths = Paths::new(t.join("run"), t.join(".bise"), t.join("home"));
+        let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/chrome-profiles");
+        let dst = paths.app_support().join("Google/Chrome");
+        for f in ["Default", "Profile 1"] {
+            let src = fixture.join(f).join("Local Extension Settings").join(browsers::EXTENSION_ID);
+            let to = dst.join(f).join("Local Extension Settings").join(browsers::EXTENSION_ID);
+            std::fs::create_dir_all(&to).unwrap();
+            for e in std::fs::read_dir(src).unwrap().flatten() {
+                std::fs::copy(e.path(), to.join(e.file_name())).unwrap();
+            }
+        }
+        std::fs::copy(fixture.join("Local State"), dst.join("Local State")).unwrap();
+        paths
+    }
+
+    #[test]
+    fn the_hello_says_its_profile_and_drops_the_nonce() {
+        let paths = home_with_chrome("cu-host-profile");
+        let nonce = include_str!("../tests/fixtures/chrome-profiles/nonce-profile1.txt").trim();
+        let v = add_profile(json!({"hello": {"browser": "chrome", "profile_nonce": nonce}}), &paths);
+        assert_eq!(v["hello"]["profile"], json!({"dir": "Profile 1", "name": "Profile 1"}));
+        assert!(v["hello"].get("profile_nonce").is_none());
+        // another browser's folder, or a nonce nobody wrote: unknown, no guess
+        let e = add_profile(json!({"hello": {"browser": "edge", "profile_nonce": nonce}}), &paths);
+        assert!(e["hello"].get("profile").is_none());
+        let old = add_profile(json!({"hello": {"browser": "chrome"}}), &paths);
+        assert_eq!(old, json!({"hello": {"browser": "chrome"}}));
+        // not a hello: as is
+        assert_eq!(add_profile(json!({"id": 1}), &paths), json!({"id": 1}));
     }
 }

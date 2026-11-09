@@ -66,11 +66,28 @@ async function hello(p) {
     else if (brand("Brave") || nav.brave)
         [browser, b] = ["brave", brand("Brave")];
     const version = (b || brand("Chromium"))?.version || "";
+    const profile_nonce = await profileNonce();
     try {
-        p.postMessage({ hello: { browser, version, extension_version: chrome.runtime.getManifest().version, build: BUILD } });
+        p.postMessage({ hello: { browser, version, extension_version: chrome.runtime.getManifest().version, build: BUILD, ...(profile_nonce ? { profile_nonce } : {}) } });
     }
     catch {
         // disconnected meanwhile
+    }
+}
+/**
+ * Which browser profile this is, proven (rust/computer-use/src/profiles.rs):
+ * a fresh nonce written to this profile's extension storage, then said in
+ * the hello; the native host finds the profile folder whose storage holds
+ * it. No API names a profile. "" when the storage refuses.
+ */
+async function profileNonce() {
+    const nonce = "bise-" + crypto.randomUUID().replace(/-/g, "");
+    try {
+        await chrome.storage.local.set({ bise_profile: nonce });
+        return nonce;
+    }
+    catch {
+        return "";
     }
 }
 async function onHost(m) {
