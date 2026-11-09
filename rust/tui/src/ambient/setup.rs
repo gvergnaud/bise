@@ -61,6 +61,9 @@ pub enum Done {
     Connecting { id: String, project: Option<String>, said: Option<String>, res: Option<Result<(), String>> },
     /// the Mistral catalog fetched again (Err: its problem)
     Refreshed { project: Option<String>, res: Result<(), String> },
+    /// a change to one of his accounts ended (`cmd`: the command's name,
+    /// for its error); the list is sent again either way
+    AccountChanged { cmd: &'static str, project: Option<String>, res: Result<(), String> },
     /// the servers of a plugin he just added were tried once: their
     /// states are in the status files, the list is sent again
     Tried,
@@ -137,6 +140,15 @@ pub type PluginTryFn = Box<dyn Fn(PathBuf, bend_plugins::add::Ctx, Sender<Done>)
 /// on its own thread (his browser, then a poll up to 5 min),
 /// `Done::Connecting` at each step and at its end (never run by a test)
 pub type PluginConnectFn = Box<dyn Fn(&str, Option<String>, Sender<Done>) -> Result<(), String>>;
+/// (connector id, the account's connection name, the project, the
+/// channel): that account's login on its own thread (his browser, then a
+/// poll up to 5 min), `Done::Connecting` at each step and at its end
+/// (never run by a test)
+pub type PluginAccountConnectFn = Box<dyn Fn(&str, &str, Option<String>, Sender<Done>) -> Result<(), String>>;
+/// (connector id, the account's connection name, the change, the
+/// project, the channel): the change on Mistral then the catalog read
+/// again, on its own thread, `Done::AccountChanged` at its end
+pub type PluginAccountChangeFn = Box<dyn Fn(&str, &str, bend_plugins::connectors::AccountChange, Option<String>, Sender<Done>)>;
 /// (the project it was asked for, the channel): the catalog fetched on
 /// its own thread, `Done::Refreshed` at its end
 pub type PluginsRefreshFn = Box<dyn Fn(Option<String>, Sender<Done>)>;
@@ -219,6 +231,8 @@ pub struct SetupPorts {
     /// right after his confirm installed a plugin (never before)
     pub plugin_try: PluginTryFn,
     pub plugin_connect: PluginConnectFn,
+    pub plugin_account_connect: PluginAccountConnectFn,
+    pub plugin_account_change: PluginAccountChangeFn,
     pub plugins_refresh: PluginsRefreshFn,
     /// why his Mistral connectors may be missing or old (their cache's)
     pub connectors_problem: Box<dyn Fn() -> Option<bise_proto::app_rows::ConnectorsProblem>>,
@@ -684,6 +698,19 @@ pub fn live(flow: FlowFn) -> SetupPorts {
                 move |l| drop(tx.send(Done::Connecting { id: id1.clone(), project: project.clone(), said: Some(l), res: None })),
                 move |r| drop(tx2.send(Done::Connecting { id: id2, project: p2, said: None, res: Some(r) })),
             )
+        }),
+        plugin_account_connect: Box::new(|id, account, project, tx| {
+            let (tx2, p2, id1, id2) = (tx.clone(), project.clone(), id.to_string(), id.to_string());
+            crate::plugins::connect_account(
+                id,
+                account,
+                move |l| drop(tx.send(Done::Connecting { id: id1.clone(), project: project.clone(), said: Some(l), res: None })),
+                move |r| drop(tx2.send(Done::Connecting { id: id2, project: p2, said: None, res: Some(r) })),
+            )
+        }),
+        plugin_account_change: Box::new(|id, account, change, project, tx| {
+            let cmd = crate::plugins::change_cmd(&change);
+            crate::plugins::change_account(id, account, change, move |res| drop(tx.send(Done::AccountChanged { cmd, project, res })));
         }),
         connectors_problem: Box::new(crate::plugins::connectors_problem),
         plugins_refresh: Box::new(|project, tx| {

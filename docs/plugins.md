@@ -121,7 +121,17 @@ the bodies marked `todo!("plugins chunk ...")` come with their chunk.
   bound like the bootstrap's; a list that fails keeps that connector's
   last good accounts and never fails the catalog. They go in the same
   cache (an additive `accounts` per connector, still version 1) and on
-  the ready connector's row (`Plugin.accounts`).
+  the ready connector's row (`Plugin.accounts`, and `Plugin.next_account`:
+  the first free `account-N`, `next_account`, what 'connect another
+  account' asks for). His changes (`AppCmd::PluginAccount{Connect,
+  Rename,Default,Remove}`, `bise plugins account`): `connect_account`
+  opens `auth_url?credentials_name=<name>` (a new name: another account;
+  an existing one: its reconnect) and `poll`s (the one wait it shares
+  with `connect`) until that account is listed and not invalid;
+  `change_account` PATCHes `/v1/connectors/{id}/user/credentials`
+  (`{name, title}` or `{name, is_default: true}`) or DELETEs
+  `…/user/credentials/{name}` (final: the clients ask him first, the
+  core does not), then a forced load.
   `index_lines(&Catalog, &StateV2)`: the ready connectors' tools minus
   an off connector or tool, in the index format
   `<cid> <alias> <tool> : #<desc>[ | input: <schema>]`, with bise's

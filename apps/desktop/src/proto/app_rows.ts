@@ -208,7 +208,13 @@ login?: LoginState | null,
  * a ready Mistral connector's accounts, the default among them
  * (empty for every other kind, and while they are not read yet)
  */
-accounts?: Array<ConnectorAccount>, parts?: Array<PluginPart>, 
+accounts?: Array<ConnectorAccount>, 
+/**
+ * a ready Mistral connector: the connection name 'connect another
+ * account' asks for (`plugin_account_connect`), the first free
+ * `account-N` (`bend_plugins::connectors::next_account`)
+ */
+next_account?: string | null, parts?: Array<PluginPart>, 
 /**
  * what to try it with: its manifest's `dev.bise.prompts` (at most
  * 3, one line each); a click puts one in the composer, never sends it

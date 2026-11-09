@@ -163,6 +163,7 @@ fn plugin_row(i: &Inputs, p: &resolve::Plugin, names: &[(String, String, String)
         action: (on && needs).then_some(PluginAction::LogIn),
         login: None,
         accounts: Vec::new(),
+        next_account: None,
         prompts: prompts(&p.prompts),
         settings: settings_of(p, i.secrets_dir),
         needs_node: p.needs_node,
@@ -335,6 +336,8 @@ fn connector_row(st: &StateV2, c: &ConnectorEntry) -> Plugin {
         state: if on { PluginState::Loaded } else { PluginState::Disabled },
         login: Some(LoginState::In),
         accounts: c.accounts.clone(),
+        // a built-in has no account of his: no 'connect another account'
+        next_account: connectors::has_accounts(c).then(|| connectors::next_account(&c.accounts)),
         parts,
         ..connector_base(c, id)
     }
@@ -386,6 +389,7 @@ fn connector_base(c: &ConnectorEntry, id: PluginId) -> Plugin {
         action: None,
         login: None,
         accounts: Vec::new(),
+        next_account: None,
         parts: Vec::new(),
         prompts: Vec::new(),
         settings: Vec::new(),
@@ -443,6 +447,7 @@ fn skills_row(i: &Inputs, scope: SkillsScope) -> Option<Plugin> {
         action: None,
         login: None,
         accounts: Vec::new(),
+        next_account: None,
         parts,
         prompts: Vec::new(),
         settings: Vec::new(),

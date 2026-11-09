@@ -26,6 +26,10 @@ unit tests (rust/plugins/src/connectors/tests.rs). Checks:
    arguments; none sends no header; an unknown one is refused with the
    accounts listed and no request made; a tool whose schema takes its own
    `account` keeps it.
+9. his accounts from bise (`bise plugins account`): connect another opens
+   auth_url with its credentials_name and waits until it is listed;
+   rename and make default PATCH .../user/credentials; remove DELETEs
+   .../user/credentials/<name>; each reads the list again.
 
 Needs the bise binary (cd rust && cargo build -p bend-harness) and, for
 8, the bend compiler (skipped without it).
@@ -64,6 +68,8 @@ class Mistral:
         self.creds, self.cred_fail = [], set()
         # the gateway's tools/call requests: (cid, x-credentials-name or None, arguments)
         self.calls = []
+        # the account changes: (method, path, body)
+        self.edits = []
         self.accounts = {"c-slack": [
             {"name": "default", "title": "perso", "is_default": True, "authentication_type": "oauth2", "scope": "user",
              "status": {"status_type": "valid"}},
@@ -106,6 +112,12 @@ class Mistral:
                     return self.answer(200, {"credentials": m.accounts.get(cid, [])})
                 if u.path.endswith("/auth_url"):
                     cid = u.path.split("/")[3]
+                    name = parse_qs(u.query).get("credentials_name", [None])[0]
+                    if name is not None:
+                        # another account: listed at the next credentials read
+                        m.accounts.setdefault(cid, []).append(
+                            {"name": name, "is_default": False, "status": {"status_type": "valid"}})
+                        return self.answer(200, {"auth_url": "https://login.example.test/%s/%s" % (cid, name)})
                     m.pending.add(cid)
                     return self.answer(200, {"auth_url": "https://login.example.test/%s" % cid})
                 self.answer(404, {"detail": "not found"})
@@ -121,6 +133,24 @@ class Mistral:
                     m.pending.add(self.path.split("/")[3])
                     return self.answer(200, {"message": "ok"})
                 self.answer(404, {"detail": "not found"})
+
+            def do_PATCH(self):
+                n = int(self.headers.get("Content-Length") or 0)
+                body = json.loads(self.rfile.read(n) or b"{}")
+                m.edits.append(("PATCH", self.path, body))
+                cid = self.path.split("/")[3]
+                for a in m.accounts.get(cid, []):
+                    if body.get("is_default"):
+                        a["is_default"] = a["name"] == body["name"]
+                    if a["name"] == body["name"] and "title" in body:
+                        a["title"] = body["title"]
+                return self.answer(200, {"message": "ok"})
+
+            def do_DELETE(self):
+                m.edits.append(("DELETE", self.path, None))
+                cid, name = self.path.split("/")[3], self.path.split("/")[-1]
+                m.accounts[cid] = [a for a in m.accounts.get(cid, []) if a["name"] != name]
+                return self.answer(200, {"message": "ok"})
 
             def gateway(self, cid, body):
                 """MCP Streamable HTTP, JSON answers, no session"""
@@ -147,6 +177,31 @@ class Mistral:
 
 SCHEMA = {"type": "object", "properties": {"query": {"type": "string"}}}
 OWN = {"type": "object", "properties": {"account": {"type": "string"}}}
+
+
+def account_changes(m, run, cached, opened, check):
+    """9: bise plugins account, against this fake"""
+    def slack():
+        return next(c for c in cached()["connectors"] if c["name"] == "slack")
+
+    before = len(open(opened).read().split())
+    rc, out = run("account", "mistral:slack", "connect", "account-3")
+    urls = open(opened).read().split()
+    check("connect another: auth_url with its credentials_name opens, then it is listed",
+          rc == 0 and urls[before:] == ["https://login.example.test/c-slack/account-3"]
+          and "account-3" in [a["name"] for a in slack()["accounts"]], repr((rc, out, urls, slack())))
+    rc, out = run("account", "mistral:slack", "rename", "account-3", "work")
+    check("rename: a PATCH with its name and title, the list read again",
+          rc == 0 and m.edits[-1] == ("PATCH", "/v1/connectors/c-slack/user/credentials", {"name": "account-3", "title": "work"})
+          and {"name": "account-3", "title": "work", "status": "valid"} in slack()["accounts"], repr((rc, out, m.edits, slack())))
+    rc, out = run("account", "mistral:slack", "default", "account-3")
+    check("make default: a PATCH with is_default, the list read again",
+          rc == 0 and m.edits[-1] == ("PATCH", "/v1/connectors/c-slack/user/credentials", {"name": "account-3", "is_default": True})
+          and [a["name"] for a in slack()["accounts"] if a.get("default")] == ["account-3"], repr((rc, out, slack())))
+    rc, out = run("account", "mistral:slack", "remove", "account-2")
+    check("remove: a DELETE of that connection, the list read again",
+          rc == 0 and m.edits[-1] == ("DELETE", "/v1/connectors/c-slack/user/credentials/account-2", None)
+          and "account-2" not in [a["name"] for a in slack()["accounts"]], repr((rc, out, slack())))
 
 
 def account_calls(m, tmp, check):
@@ -297,6 +352,7 @@ def main():
         check("no Mistral key: no request, and it says so",
               rc == 1 and "no Mistral key" in out and len(m.auth) == n, repr((rc, out)))
         account_calls(m, tmp, check)
+        account_changes(m, run, cached, opened, check)
     m.srv.shutdown()
     if fails:
         sys.exit("FAIL %s" % fails)

@@ -77,6 +77,10 @@ pub const TAGS: &[&str] = &[
     "plugin_login",
     "plugin_logout",
     "plugin_connect",
+    "plugin_account_connect",
+    "plugin_account_rename",
+    "plugin_account_default",
+    "plugin_account_remove",
     "plugins_refresh",
     "plugin_add",
     "plugin_add_confirm",
@@ -526,6 +530,34 @@ impl Core {
                 }
                 ("plugin_connect", res)
             }
+            AppCmd::PluginAccountConnect { project, id, account } => {
+                let res = (p.plugin_account_connect)(&id, &account, project.clone(), s.tx.clone());
+                // its row shows login: pending until the login ends
+                if res.is_ok() {
+                    if let Some(s) = self.setup.as_mut() {
+                        s.logins.push(id);
+                    }
+                    let _ = self.emit_plugins(project);
+                }
+                ("plugin_account_connect", res)
+            }
+            AppCmd::PluginAccountRename { project, id, account, title } => {
+                let res = if title.trim().is_empty() {
+                    Err("an account's name can't be empty".to_string())
+                } else {
+                    (p.plugin_account_change)(&id, &account, bend_plugins::connectors::AccountChange::Rename(title), project, s.tx.clone());
+                    Ok(())
+                };
+                ("plugin_account_rename", res)
+            }
+            AppCmd::PluginAccountDefault { project, id, account } => {
+                (p.plugin_account_change)(&id, &account, bend_plugins::connectors::AccountChange::MakeDefault, project, s.tx.clone());
+                ("plugin_account_default", Ok(()))
+            }
+            AppCmd::PluginAccountRemove { project, id, account } => {
+                (p.plugin_account_change)(&id, &account, bend_plugins::connectors::AccountChange::Remove, project, s.tx.clone());
+                ("plugin_account_remove", Ok(()))
+            }
             AppCmd::PluginsRefresh { project } => {
                 // the other apps' configs are read again with the next rows
                 if let Some(s) = self.setup.as_mut() {
@@ -857,6 +889,12 @@ impl Core {
                 }
                 Done::Tried => {
                     let _ = self.emit_plugins(None);
+                }
+                Done::AccountChanged { cmd, project, res } => {
+                    if let Err(e) = res {
+                        self.setup_error(cmd, &e);
+                    }
+                    let _ = self.emit_plugins(project);
                 }
                 Done::Refreshed { project, res } => {
                     if let Err(e) = res {

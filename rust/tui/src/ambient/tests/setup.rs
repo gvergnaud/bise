@@ -63,6 +63,12 @@ struct World {
     signaling: Option<std::sync::mpsc::Sender<Done>>,
     /// a connect's channel, and the pending names each rows call saw
     connecting: Option<std::sync::mpsc::Sender<Done>>,
+    /// an account's login asked (connector id, account), its channel
+    account_logins: Vec<(String, String)>,
+    account_connecting: Option<std::sync::mpsc::Sender<Done>>,
+    /// a change to an account asked (connector id, account, change)
+    account_changes: Vec<(String, String, bend_plugins::connectors::AccountChange)>,
+    account_changing: Option<std::sync::mpsc::Sender<Done>>,
     pending_seen: Vec<Vec<String>>,
     add_root: PathBuf,
     /// the plugins whose servers were tried after a confirm, and the
@@ -94,6 +100,7 @@ fn setup(t: &mut T) -> Rc<RefCell<World>> {
     let ym = w.clone();
     let (ck, rc) = (w.clone(), w.clone());
     let sg = w.clone();
+    let (al, ah) = (w.clone(), w.clone());
     let gr = w.clone();
     let gs = w.clone();
     let (ad, am, ac, pc) = (w.clone(), w.clone(), w.clone(), w.clone());
@@ -212,6 +219,7 @@ fn setup(t: &mut T) -> Rc<RefCell<World>> {
                 action: None,
                 login: None,
                 accounts: vec![],
+                next_account: None,
                 prompts: vec![],
                 settings: vec![],
                 needs_node: false,
@@ -273,6 +281,19 @@ fn setup(t: &mut T) -> Rc<RefCell<World>> {
         plugin_connect: Box::new(move |_id, _project, tx| {
             pc.borrow_mut().connecting = Some(tx);
             Ok(())
+        }),
+        // an account's login never runs here (his browser); a change is
+        // recorded, its end sent by the test
+        plugin_account_connect: Box::new(move |id, account, _project, tx| {
+            let mut w = al.borrow_mut();
+            w.account_logins.push((id.into(), account.into()));
+            w.account_connecting = Some(tx);
+            Ok(())
+        }),
+        plugin_account_change: Box::new(move |id, account, change, _project, tx| {
+            let mut w = ah.borrow_mut();
+            w.account_changes.push((id.into(), account.into(), change));
+            w.account_changing = Some(tx);
         }),
         plugins_refresh: Box::new(|project, tx| drop(tx.send(Done::Refreshed { project, res: Err("no key".into()) }))),
         connectors_problem: Box::new(|| Some(bise_proto::app_rows::ConnectorsProblem::Locked)),
@@ -1246,4 +1267,50 @@ fn telemetry_acts_are_answered_by_their_view_and_an_unknown_act_by_nothing() {
     let o = t.take();
     assert!(evs(&o, "telemetry").is_empty() && evs(&o, "error").is_empty(), "{o:?}");
     assert_eq!(w.borrow().telemetry_acts, [TelemetryAct::Show, TelemetryAct::Off, TelemetryAct::Unknown]);
+}
+
+/// multi-accounts piece 4: each account command reaches its port with
+/// the connector, the account and the change; its end sends the list
+/// again, a failure as an error with the command's name.
+#[test]
+fn account_commands_reach_their_ports() {
+    use bend_plugins::connectors::AccountChange;
+    let mut t = T::new();
+    let w = setup(&mut t);
+    t.take();
+    // connect another account: pending in the rows until its end
+    app(&mut t, r#"{"cmd":"plugin_account_connect","id":"mistral:gmail","account":"account-2"}"#);
+    assert_eq!(w.borrow().account_logins, vec![("mistral:gmail".to_string(), "account-2".to_string())]);
+    assert_eq!(w.borrow().pending_seen.last().cloned().unwrap_or_default(), vec!["mistral:gmail".to_string()]);
+    t.take();
+    let tx = w.borrow_mut().account_connecting.take().expect("its login started");
+    tx.send(Done::Connecting { id: "mistral:gmail".into(), project: None, said: None, res: Some(Ok(())) }).unwrap();
+    t.until(|o| !evs(o, "plugins").is_empty());
+    t.take();
+    assert!(w.borrow().pending_seen.last().is_some_and(|p| p.is_empty()), "no longer pending");
+
+    for (cmd, change) in [
+        (r#"{"cmd":"plugin_account_rename","id":"mistral:gmail","account":"account-2","title":" pro "}"#, AccountChange::Rename(" pro ".into())),
+        (r#"{"cmd":"plugin_account_default","id":"mistral:gmail","account":"account-2"}"#, AccountChange::MakeDefault),
+        (r#"{"cmd":"plugin_account_remove","id":"mistral:gmail","account":"account-2"}"#, AccountChange::Remove),
+    ] {
+        app(&mut t, cmd);
+        assert_eq!(w.borrow().account_changes.last().cloned(), Some(("mistral:gmail".to_string(), "account-2".to_string(), change)));
+        let tx = w.borrow_mut().account_changing.take().expect("its change started");
+        tx.send(Done::AccountChanged { cmd: "plugin_account_x", project: None, res: Ok(()) }).unwrap();
+        t.until(|o| !evs(o, "plugins").is_empty());
+        t.take();
+    }
+    // a failure: an error with the command's name, then the list again
+    app(&mut t, r#"{"cmd":"plugin_account_remove","id":"mistral:gmail","account":"nope"}"#);
+    let tx = w.borrow_mut().account_changing.take().unwrap();
+    tx.send(Done::AccountChanged { cmd: "plugin_account_remove", project: None, res: Err("HTTP 404".into()) }).unwrap();
+    t.until(|o| !evs(o, "plugins").is_empty());
+    let out = t.take();
+    assert_eq!(evs(&out, "error")[0]["cmd"], "plugin_account_remove");
+    // an empty name is refused before Mistral is asked
+    let n = w.borrow().account_changes.len();
+    app(&mut t, r#"{"cmd":"plugin_account_rename","id":"mistral:gmail","account":"account-2","title":"  "}"#);
+    assert_eq!(evs(&t.take(), "error")[0]["cmd"], "plugin_account_rename");
+    assert_eq!(w.borrow().account_changes.len(), n);
 }

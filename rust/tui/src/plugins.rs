@@ -75,6 +75,45 @@ pub(crate) fn connect(id: &str, say: impl Fn(String) + Send + 'static, done: imp
     Ok(())
 }
 
+/// Log in account `account` of ready connector `id`
+/// (`plugin_account_connect`, `/plugins` on a connector): another
+/// account, or one to reconnect; his browser, then the list polled until
+/// it works (up to 5 min), on its own thread; `say` gets each step's
+/// line, `done` its end.
+pub(crate) fn connect_account(id: &str, account: &str, say: impl Fn(String) + Send + 'static, done: impl FnOnce(Result<(), String>) + Send + 'static) -> Result<(), String> {
+    let id = bend_plugins::id::PluginId::parse(id)?;
+    if !matches!(id, bend_plugins::id::PluginId::Mistral { .. }) {
+        return Err(format!("{id} is not a Mistral connector"));
+    }
+    let account = account.trim().to_string();
+    if account.is_empty() {
+        return Err("no account named".into());
+    }
+    std::thread::spawn(move || done(bend_plugins::connectors::connect_account_now(&id, &account, &|l| say(l.to_string()))));
+    Ok(())
+}
+
+/// The command that asks for `change` (its error's name).
+pub(crate) fn change_cmd(change: &bend_plugins::connectors::AccountChange) -> &'static str {
+    use bend_plugins::connectors::AccountChange;
+    match change {
+        AccountChange::Rename(_) => "plugin_account_rename",
+        AccountChange::MakeDefault => "plugin_account_default",
+        AccountChange::Remove => "plugin_account_remove",
+    }
+}
+
+/// One change to account `account` of connector `id` on Mistral
+/// (`plugin_account_rename|default|remove`), then the catalog read
+/// again, on its own thread; `done` with why not, if it failed.
+pub(crate) fn change_account(id: &str, account: &str, change: bend_plugins::connectors::AccountChange, done: impl FnOnce(Result<(), String>) + Send + 'static) {
+    let (id, account) = (id.to_string(), account.to_string());
+    std::thread::spawn(move || {
+        let r = bend_plugins::id::PluginId::parse(&id).and_then(|id| bend_plugins::connectors::change_account_now(&id, &account, &change));
+        done(r);
+    });
+}
+
 /// The Mistral catalog fetched again now (`plugins_refresh`, `/plugins
 /// refresh`), on its own thread; `done` with the fetch's problem, if any.
 pub(crate) fn refresh(done: impl FnOnce(Option<String>) + Send + 'static) {

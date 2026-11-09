@@ -233,6 +233,11 @@ pub struct Plugin {
     /// (empty for every other kind, and while they are not read yet)
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub accounts: Vec<ConnectorAccount>,
+    /// a ready Mistral connector: the connection name 'connect another
+    /// account' asks for (`plugin_account_connect`), the first free
+    /// `account-N` (`bend_plugins::connectors::next_account`)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_account: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub parts: Vec<PluginPart>,
     /// what to try it with: its manifest's `dev.bise.prompts` (at most

@@ -417,3 +417,26 @@ fn the_accounts_file_has_ready_connectors_on_with_accounts_only() {
     assert_eq!(accounts_file(&catalog(BODY), &StateV2::default()), "[]\n");
     assert!(ACCOUNTS_FILE.ends_with(".json") && include_str!("../../../../bend/runtime/plugins.bend").contains(&format!("\"/{ACCOUNTS_FILE}\"")), "plugins.bend reads the same name");
 }
+
+#[test]
+fn next_account_is_the_first_free_account_n() {
+    let a = |n: &str| ConnectorAccount { name: n.into(), title: None, default: false, status: AccountStatus::Valid };
+    assert_eq!(next_account(&[]), "account-2");
+    assert_eq!(next_account(&[a("default")]), "account-2");
+    assert_eq!(next_account(&[a("default"), a("account-2")]), "account-3");
+    assert_eq!(next_account(&[a("default"), a("account-3")]), "account-2", "a gap is used");
+}
+
+#[test]
+fn connect_waits_for_ready_and_connect_account_for_a_working_account() {
+    let entry = |auth, accounts: Vec<ConnectorAccount>| ConnectorEntry { name: "gmail".into(), display_name: "Gmail".into(), id: "c".into(), auth, tools: vec![], accounts };
+    let acct = |n: &str, status| ConnectorAccount { name: n.into(), title: None, default: false, status };
+    // connect(): the connector ready
+    let ready = |e: &ConnectorEntry| e.auth == ConnectorAuth::Ready;
+    assert!(ready(&entry(ConnectorAuth::Ready, vec![])) && !ready(&entry(ConnectorAuth::OAuth, vec![])));
+    // connect_account(): that account listed and not invalid
+    assert!(!account_works(&entry(ConnectorAuth::Ready, vec![acct("default", AccountStatus::Valid)]), "account-2"));
+    assert!(!account_works(&entry(ConnectorAuth::Ready, vec![acct("account-2", AccountStatus::Invalid)]), "account-2"), "a reconnect waits for it to work");
+    assert!(account_works(&entry(ConnectorAuth::Ready, vec![acct("account-2", AccountStatus::Valid)]), "account-2"));
+    assert!(account_works(&entry(ConnectorAuth::Ready, vec![acct("account-2", AccountStatus::Unknown)]), "account-2"), "not checked yet: listed is enough");
+}

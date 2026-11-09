@@ -22,6 +22,10 @@
 {"cmd":"plugin_setting","project":"acme-1a2b3c4d","name":"maps","var":"GOOGLE_MAPS_API_KEY","value":"fake-key"}
 {"cmd":"plugin_setting","name":"maps","var":"GOOGLE_MAPS_API_KEY"}
 {"cmd":"plugin_connect","id":"mistral:notion"}
+{"cmd":"plugin_account_connect","id":"mistral:gmail","account":"account-2"}
+{"cmd":"plugin_account_rename","id":"mistral:gmail","account":"account-2","title":"work"}
+{"cmd":"plugin_account_default","id":"mistral:gmail","account":"account-2"}
+{"cmd":"plugin_account_remove","id":"mistral:gmail","account":"account-2"}
 {"cmd":"plugins_refresh"}
 {"cmd":"plugins_refresh","project":"acme-1a2b3c4d"}
 {"cmd":"plugin_add","add":{"kind":"mcp","name":"payflows","command":"npx -y payflows-mcp","secrets":["PAYFLOWS_TOKEN"]}}

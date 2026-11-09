@@ -656,12 +656,15 @@ fn raw_id(cache: &Path, id: &PluginId) -> Result<String, String> {
 /// browser: Mistral's `GET /v1/connectors/{id}/auth_url` (the SDK's
 /// `beta.connectors.get_auth_url`).
 pub fn connect_url(key: &str, id: &PluginId) -> Result<String, String> {
-    auth_url(&base_url(), key, &raw_id(&bise_home::Home::from_env().connectors_cache(), id)?)
+    auth_url(&base_url(), key, &raw_id(&bise_home::Home::from_env().connectors_cache(), id)?, None)
 }
 
-/// [`connect_url`] for the raw id, at `base`.
-pub fn auth_url(base: &str, key: &str, raw: &str) -> Result<String, String> {
-    let body = request("GET", &format!("{}/v1/connectors/{}/auth_url", base, path_part(raw)), key, b"")?;
+/// [`connect_url`] for the raw id, at `base`; `account`: the connection
+/// it logs in (`credentials_name`: a new one for another account, an
+/// existing one to reconnect it), none for his default.
+pub fn auth_url(base: &str, key: &str, raw: &str, account: Option<&str>) -> Result<String, String> {
+    let q = account.map(|a| format!("?credentials_name={}", path_part(a))).unwrap_or_default();
+    let body = request("GET", &format!("{}/v1/connectors/{}/auth_url{}", base, path_part(raw), q), key, b"")?;
     let v: Value = serde_json::from_str(&body).map_err(|_| "Mistral's answer has no auth_url".to_string())?;
     v.get("auth_url").and_then(Value::as_str).filter(|u| u.starts_with("https://") || u.starts_with("http://")).map(String::from).ok_or_else(|| "Mistral's answer has no auth_url".into())
 }
@@ -736,22 +739,117 @@ pub fn connect(w: &World<'_>, id: &PluginId) -> Result<Connected, String> {
             return Err(format!("{} can't be connected from bise: see it on console.mistral.ai, Build › Connectors", c.display_name));
         }
         ConnectorAuth::OAuth | ConnectorAuth::CredentialsSetup => {
-            let url = auth_url(w.base, w.key, &c.id).map_err(|e| format!("{}: no login page from Mistral ({e}); set it up on console.mistral.ai, Build › Connectors", c.display_name))?;
+            let url = auth_url(w.base, w.key, &c.id, None).map_err(|e| format!("{}: no login page from Mistral ({e}); set it up on console.mistral.ai, Build › Connectors", c.display_name))?;
             (w.open)(&url)?;
             (w.say)(&format!("opened {}'s page in your browser; waiting for you to finish there", c.display_name));
         }
     }
+    poll(w, &fetch, &|e| e.auth == ConnectorAuth::Ready, id)
+        .then_some(Connected::Ready)
+        .ok_or_else(|| format!("{} is not connected after {} minutes: try again, or check it on console.mistral.ai", c.display_name, CONNECT_MAX_MS / 60_000))
+}
+
+/// A forced fetch every [`CONNECT_POLL_MS`] until connector `id` is in
+/// the catalog and `done` holds for it (true), or [`CONNECT_MAX_MS`]
+/// passed (false): [`connect`]'s and [`connect_account`]'s one wait.
+pub fn poll(w: &World<'_>, fetch: &Fetch<'_>, done: &dyn Fn(&ConnectorEntry) -> bool, id: &PluginId) -> bool {
     let t0 = (w.now_ms)();
     loop {
         (w.sleep_ms)(CONNECT_POLL_MS);
         let now = (w.now_ms)();
-        let cat = load_with(w.cache, now, true, &fetch);
-        if cat.find(id).is_some_and(|c| c.auth == ConnectorAuth::Ready) {
-            return Ok(Connected::Ready);
+        if load_with(w.cache, now, true, fetch).find(id).is_some_and(done) {
+            return true;
         }
         if now.saturating_sub(t0) >= CONNECT_MAX_MS {
-            return Err(format!("{} is not connected after {} minutes: try again, or check it on console.mistral.ai", c.display_name, CONNECT_MAX_MS / 60_000));
+            return false;
         }
+    }
+}
+
+// ---- his accounts on a connector ----
+
+/// The first free name of a new account (`account-2`, `account-3`...)
+/// among `accounts`: what "connect another account" asks Mistral for
+/// (the title he gives after the login is his name for it).
+pub fn next_account(accounts: &[ConnectorAccount]) -> String {
+    (2..).map(|n| format!("account-{n}")).find(|n| !accounts.iter().any(|a| &a.name == n)).unwrap_or_default()
+}
+
+/// Whether `name` is listed on `c` and its login works or is not checked
+/// yet (an invalid one waits for its reconnect).
+pub fn account_works(c: &ConnectorEntry, name: &str) -> bool {
+    c.accounts.iter().any(|a| a.name == name && a.status != AccountStatus::Invalid)
+}
+
+/// Log in account `name` of ready connector `id` (his click: another
+/// account, or one to reconnect): Mistral's auth URL for that connection
+/// in his browser, then [`poll`] until it is listed and works.
+pub fn connect_account(w: &World<'_>, id: &PluginId, name: &str) -> Result<(), String> {
+    let fetch = Fetch { bootstrap: &|| fetch(w.base, w.key), accounts: &|raw| fetch_accounts(w.base, w.key, raw) };
+    let cat = load_with(w.cache, (w.now_ms)(), false, &fetch);
+    let Some(c) = cat.find(id).filter(|c| c.auth == ConnectorAuth::Ready).cloned() else {
+        return Err(format!("{id} is not connected: connect it first"));
+    };
+    let url = auth_url(w.base, w.key, &c.id, Some(name)).map_err(|e| format!("{}: no login page from Mistral ({e})", c.display_name))?;
+    (w.open)(&url)?;
+    (w.say)(&format!("opened {}'s login in your browser; waiting for you to finish there", c.display_name));
+    poll(w, &fetch, &|e| account_works(e, name), id)
+        .then_some(())
+        .ok_or_else(|| format!("{}: the account is not connected after {} minutes: try again", c.display_name, CONNECT_MAX_MS / 60_000))
+}
+
+/// What he does to one of his accounts, besides logging it in.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AccountChange {
+    /// his name for it
+    Rename(String),
+    /// the account a call takes when it names none
+    MakeDefault,
+    /// gone from Mistral (final: the clients ask him first)
+    Remove,
+}
+
+/// One change to account `name` of connector `raw` at `base`: a PATCH of
+/// `/v1/connectors/{id}/user/credentials` (its title, or `is_default`),
+/// or the DELETE of `…/user/credentials/{name}`.
+pub fn change_account(base: &str, key: &str, raw: &str, name: &str, change: &AccountChange) -> Result<(), String> {
+    let at = format!("{}/v1/connectors/{}/user/credentials", base.trim_end_matches('/'), path_part(raw));
+    match change {
+        AccountChange::Rename(title) => request("PATCH", &at, key, json!({"name": name, "title": title.trim()}).to_string().as_bytes()),
+        AccountChange::MakeDefault => request("PATCH", &at, key, json!({"name": name, "is_default": true}).to_string().as_bytes()),
+        AccountChange::Remove => request("DELETE", &format!("{at}/{}", path_part(name)), key, b""),
+    }
+    .map(|_| ())
+}
+
+/// [`change_account`] in the real world (his key, Mistral or
+/// `BISE_MISTRAL_URL`), then a forced fetch so the cache and the rows
+/// follow. Blocks up to two requests' timeouts: run it on a thread.
+pub fn change_account_now(id: &PluginId, name: &str, change: &AccountChange) -> Result<(), String> {
+    let k = real_key()?;
+    let cache = bise_home::Home::from_env().connectors_cache();
+    change_account(&base_url(), &k, &raw_id(&cache, id)?, name, change)?;
+    match load(&cache, &Key::Key(k), now_ms(), true).error {
+        Some(e) => Err(format!("changed on Mistral, but the list was not read again: {e}")),
+        None => Ok(()),
+    }
+}
+
+/// [`connect_account`] in the real world; blocks up to [`CONNECT_MAX_MS`].
+pub fn connect_account_now(id: &PluginId, name: &str, say: &dyn Fn(&str)) -> Result<(), String> {
+    let k = real_key()?;
+    let cache = bise_home::Home::from_env().connectors_cache();
+    let base = base_url();
+    let w = World { cache: &cache, key: &k, base: &base, now_ms: &now_ms, sleep_ms: &|ms| std::thread::sleep(Duration::from_millis(ms)), open: &open, say };
+    connect_account(&w, id, name)
+}
+
+/// His Mistral key, or why there is none.
+fn real_key() -> Result<String, String> {
+    match key() {
+        Key::Key(k) => Ok(k),
+        Key::NoKey => Err(NO_KEY.into()),
+        Key::Locked => Err(LOCKED.into()),
     }
 }
 
@@ -759,11 +857,7 @@ pub fn connect(w: &World<'_>, id: &PluginId) -> Result<Connected, String> {
 /// `BISE_MISTRAL_URL`), the wall clock, his browser. Blocks up to
 /// [`CONNECT_MAX_MS`]: run it on a thread; `say` gets each step's line.
 pub fn connect_now(id: &PluginId, say: &dyn Fn(&str)) -> Result<Connected, String> {
-    let k = match key() {
-        Key::Key(k) => k,
-        Key::NoKey => return Err(NO_KEY.into()),
-        Key::Locked => return Err(LOCKED.into()),
-    };
+    let k = real_key()?;
     let cache = bise_home::Home::from_env().connectors_cache();
     let base = base_url();
     let w = World { cache: &cache, key: &k, base: &base, now_ms: &now_ms, sleep_ms: &|ms| std::thread::sleep(Duration::from_millis(ms)), open: &open, say };
@@ -796,6 +890,54 @@ pub fn main_refresh() -> i32 {
         }
         Some(e) => {
             eprintln!("{}", Style::stderr().fail(&format!("{e} (kept the last catalog: {line})")));
+            1
+        }
+    }
+}
+
+/// `bise plugins account mistral:<name> connect|default|remove <account>
+/// | rename <account> <title>`. Exit code.
+pub fn main_account(args: &[String]) -> i32 {
+    use bise_home::style::Style;
+    let err = |e: &str| eprintln!("{}", Style::stderr().fail(e));
+    let usage = "usage: bise plugins account mistral:<name> connect|default|remove <account> | rename <account> <title>";
+    let (Some(id), Some(verb), Some(account)) = (args.first(), args.get(1), args.get(2)) else {
+        err(usage);
+        return 2;
+    };
+    let id = match PluginId::parse(id) {
+        Ok(id @ PluginId::Mistral { .. }) => id,
+        _ => {
+            err(&format!("{id} is not a Mistral connector (mistral:<name>)"));
+            return 2;
+        }
+    };
+    let change = match (verb.as_str(), args.get(3)) {
+        ("connect", _) => None,
+        ("default", _) => Some(AccountChange::MakeDefault),
+        ("remove", _) => Some(AccountChange::Remove),
+        ("rename", Some(t)) if !t.trim().is_empty() => Some(AccountChange::Rename(t.clone())),
+        _ => {
+            err(usage);
+            return 2;
+        }
+    };
+    let r = match &change {
+        None => connect_account_now(&id, account, &|s| println!("{}", Style::stdout().dim(s))),
+        Some(c) => change_account_now(&id, account, c),
+    };
+    match r {
+        Ok(()) => {
+            println!("{}", Style::stdout().ok(&format!("{id}: {account} {}", match change {
+                None => "connected",
+                Some(AccountChange::MakeDefault) => "is the default now",
+                Some(AccountChange::Remove) => "removed",
+                Some(AccountChange::Rename(_)) => "renamed",
+            })));
+            0
+        }
+        Err(e) => {
+            err(&e);
             1
         }
     }

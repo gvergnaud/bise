@@ -201,6 +201,40 @@ pub enum AppCmd {
         project: Option<Project>,
         id: String,
     },
+    /// log in one of his accounts on a ready Mistral connector
+    /// (`mistral:<name>`): `account` is a connection's name, the row's
+    /// `next_account` for another account, an existing one to reconnect
+    /// it; his browser on Mistral's page (his click only, never a test),
+    /// then the list is read again until it works: `plugins` at its end
+    PluginAccountConnect {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        project: Option<Project>,
+        id: String,
+        account: String,
+    },
+    /// his name for one of his accounts on a connector: `plugins` after
+    PluginAccountRename {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        project: Option<Project>,
+        id: String,
+        account: String,
+        title: String,
+    },
+    /// the account a call takes when it names none: `plugins` after
+    PluginAccountDefault {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        project: Option<Project>,
+        id: String,
+        account: String,
+    },
+    /// remove one of his accounts on Mistral (final: the window asks him
+    /// first, the core does not): `plugins` after
+    PluginAccountRemove {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        project: Option<Project>,
+        id: String,
+        account: String,
+    },
     /// read the Mistral catalog again now: `plugins` and `browse`
     PluginsRefresh {
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -663,6 +697,10 @@ impl AppCmd {
         "plugin_grant",
         "plugin_setting",
         "plugin_connect",
+        "plugin_account_connect",
+        "plugin_account_rename",
+        "plugin_account_default",
+        "plugin_account_remove",
         "plugins_refresh",
         "plugin_add",
         "plugin_add_confirm",

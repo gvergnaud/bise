@@ -17,6 +17,8 @@ pub const USAGE: &str = "usage:
   bise plugins logout SERVER    forget its tokens
   bise plugins refresh          fetch your Mistral connectors' catalog now
   bise plugins connect mistral:NAME   connect a Mistral connector (its page opens in your browser)
+  bise plugins account mistral:NAME connect|default|remove ACCOUNT | rename ACCOUNT TITLE
+                                your accounts on a connector: log one in (a new name: another account), make it the default, remove it, name it
   bise plugins serve --dir DIR [--workspace DIR] [--parent PID] [--views-dir DIR]   (internal: the session bridge)
 
 Roots: bise's built-in plugins (<app root>/plugins), ~/.agents/plugins (or $BEND_PLUGINS_HOME)
@@ -139,6 +141,7 @@ pub fn main(args: &[String]) -> i32 {
         }
         "refresh" => crate::connectors::main_refresh(),
         "connect" => crate::connectors::main_connect(args.get(1).map(String::as_str)),
+        "account" => crate::connectors::main_account(&args[1..]),
         "login" | "logout" => crate::login::main(&args[1..], &workspace(args), sub == "logout"),
         "add" => crate::add::main(&args[1..]),
         "remove" => main_remove(&args[1..], &workspace(args)),
