@@ -27,7 +27,7 @@ import { SideRow } from './Flyout';
 import { groupParts, groupWords } from './lists';
 import { artifactObj, laterObj, procObj } from './objects';
 import { openTab } from './ports';
-import { openPr } from '@/review/openPr';
+import { useOpenPr } from '@/review/openPr';
 import { pinnedIn, procPinId, watchPinId, type PinSet } from '../pins';
 
 /** a row's object, css px */
@@ -38,6 +38,7 @@ const CHIP: Record<ReturnType<typeof kindOf>, AppIconName> = { pr: 'branch', pag
 /** `group`: its project's name on bise's own screen (designer m_45706: 'acme › perf'), on each row here. */
 export function ArtifactRow({ it, now, group, pinned = false }: { it: Item; now: number; group?: string; pinned?: boolean }) {
   const a = it.a;
+  const openPr = useOpenPr();
   const menu = useEntityMenu({ kind: 'artifact', project: it.project, id: a.id });
   // ⌘⏎ with the pointer on the row: its head's first button (artifacts/front.ts rowPrimary)
   const box = useRef<HTMLDivElement>(null);

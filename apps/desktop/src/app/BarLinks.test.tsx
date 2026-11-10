@@ -15,7 +15,7 @@ import { BarLinks } from './BarLinks';
 
 const doors = vi.hoisted(() => ({ pr: [] as [string, string, boolean][], tab: [] as unknown[] }));
 vi.mock('@/review/openPr', () => ({
-  openPr: (project: string, url: string, e?: { metaKey: boolean }) => {
+  useOpenPr: () => (project: string, url: string, e?: { metaKey: boolean }) => {
     doors.pr.push([project, url, e?.metaKey === true]);
   },
 }));

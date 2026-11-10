@@ -446,7 +446,7 @@ function Side({ project, scope, home, world, at: coinsAt, right, outerW, room }:
   };
   // the ⑂ #412 chip: that PR's tab (⌘: the forge's page); a mark with no PR (a land, a worktree) as before
   const openPr = (r: BarRow, e?: MouseEvent) => {
-    if (r.mark?.url != null && r.mark.url !== '') openPrTab(r.project, r.mark.url, e);
+    if (r.mark?.url != null && r.mark.url !== '') openPrTab(store, router, r.project, r.mark.url, e);
     else if (r.kind === 'orphan' && r.branch !== undefined) openChange(store, router, r.project, { branch: r.branch });
     else if (r.agent !== undefined) openChange(store, router, r.project, { agent: r.agent });
   };

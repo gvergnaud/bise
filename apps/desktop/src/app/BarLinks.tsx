@@ -10,7 +10,7 @@ import { useEffect, useRef, type MouseEvent, type RefObject } from 'react';
 import { AppIcon, Press, tipAttrs } from '@/ds';
 import { panel } from '@/proto/words_panel.gen';
 import { useAgents, useArtifacts, useCards, usePlaces } from '@/store';
-import { openPr } from '@/review/openPr';
+import { useOpenPr } from '@/review/openPr';
 import { agentLinksOf, noLinks } from './agentlinks';
 import { titleFit } from './giveway';
 import { useOpenChange } from '@/review/openChange';
@@ -78,6 +78,7 @@ function useTitleFit(box: RefObject<HTMLElement | null>): void {
 
 export function BarLinks({ project, agent }: { project: string; agent: string }) {
   const open = useOpenChange(project);
+  const openPr = useOpenPr();
   const a = useAgents(project).find((x) => x.name === agent);
   const links = agentLinksOf(a, usePlaces(project), useCards(project), useArtifacts(project));
   const box = useRef<HTMLSpanElement>(null);

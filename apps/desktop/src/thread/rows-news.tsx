@@ -17,7 +17,7 @@ import { wakeLine, wakeTail } from './wake';
 import { useRouter } from '@/app/router';
 import { useCut } from '@/app/side3d/Flyout';
 import type { RowCtx } from './rows';
-import { openPr } from '@/review/openPr';
+import { useOpenPr } from '@/review/openPr';
 import { retryOf, retryWords, typedRetry, type Retry } from './tiers';
 /** A news line's mark: what it means, never its color alone. */
 export function NewsLine({ mark, tone, testId, children }: { mark: AppIconName; tone: 'ok' | 'err' | 'plain' | 'dim'; testId: string; children: ReactNode }) {
@@ -90,6 +90,7 @@ export function LandedRow({ e, ctx }: { e: Entry; ctx: RowCtx }) {
 
 /** A PR's news: its number opens it; failing / done / news said by its mark and words. */
 export function PrRow({ e, ctx }: { e: Entry; ctx: RowCtx }) {
+  const openPr = useOpenPr();
   const p = e.pr;
   if (p == null) return <Marker>{e.text}</Marker>;
   // the TUI's PR mark (theme::G_PR '↑', render.rs pr_lines), toned by its state: failing in the

@@ -15,7 +15,7 @@ import type { Pr } from '@/proto';
 import { PageVignette, useBannerGutter } from '@/artifacts/hero/vignettes';
 import { useEntityMenu } from '@/app/menus/use';
 import { agentsOf, toneOf, wordsOf, type PrTone } from './prs';
-import { openPr } from './openPr';
+import { useOpenPr } from './openPr';
 import './review.css';
 import { useKeptScroll } from '@/app/keep';
 
@@ -58,6 +58,7 @@ export function PrsScreen({ project }: { project: string }) {
 }
 
 function PrRow({ project, p }: { project: string; p: Pr }) {
+  const openPr = useOpenPr();
   const tone = toneOf(p);
   const menu = useEntityMenu({ kind: 'pr', project, url: p.url });
   const tid = `prs.row.${String(p.number)}`;

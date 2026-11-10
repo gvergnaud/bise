@@ -14,7 +14,7 @@ import { Thumb } from './thumbs';
 import { useAllArtifacts } from './hooks';
 import { bridge, copyLink, openWithVersions, rowPrimary, usePutInMessage } from './Open';
 import { leaves, LEAVES, useGoArtifact } from './leave';
-import { openPr } from '@/review/openPr';
+import { useOpenPr } from '@/review/openPr';
 import { PrWords } from './PrWords';
 import './artifacts.css';
 import { Press } from '@/ds';
@@ -204,8 +204,9 @@ export function ArtifactList({ project, onOpen, testId = 'artifacts.panel' }: { 
   const put = usePutInMessage();
   // a browser-only one opens his browser (leave.ts), the others the frame's way
   const goArtifact = useGoArtifact();
+  const openPr = useOpenPr();
   const openIt = (it: Item) => {
-    // a PR: its own tab, as every PR door (review/openPr.ts)
+    // a PR: its own tab, its agent's thread in the centre, as every PR door (review/openPr.ts)
     if (it.a.pr != null && it.a.url !== '') openPr(it.project, it.a.url);
     else if (leaves(it.a)) goArtifact(it.project, it.a.id, it.a);
     else onOpen(it.a.id);
