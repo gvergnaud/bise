@@ -226,7 +226,8 @@ def _flags(p):
         if p.startswith(prefixes) or p in prefixes:
             out |= set(flags)
             break
-    if p.startswith(("kit/", "site/")):
+    # rust/usage's schema and bodies: bise.dev's telemetry endpoint keeps a copy (tests/site_telemetry.test.ts)
+    if p.startswith(("kit/", "site/", "rust/usage/schema.json", "rust/usage/tests/fixtures/")):
         out.add("kit")
     if p.startswith(("examples/plugins/", "tests/fixtures/mcp-apps/")):
         out.add("mcpapps")

@@ -100,6 +100,30 @@ fn law_pii_a_body_holds_nothing_of_the_fixture() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// The bodies this crate sends, as files: the server's validator
+/// (site/api/telemetry, tests/site_telemetry.test.ts) must take them
+/// whole. A change of the encoder or the packet fails here until
+/// `BISE_USAGE_BLESS=1 cargo test -p bise-usage` rewrites them.
+#[test]
+fn the_server_fixture_is_this_crates_body() {
+    let dir = std::env::temp_dir().join(format!("bise-usage-fixture-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let sources = spooled_day(&dir);
+    let batch = [packet_of(&sources, "2026.11.5-3"), packet_of(&[], "unknown")];
+    let id = InstallId::draw([0x3c; 16], day());
+    let fixtures = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+    for (name, body) in [("packets_body.json", encode::packets(&batch)), ("delete_body.json", encode::delete_request(&id))] {
+        let path = fixtures.join(name);
+        if bise_home::env::test_setting("BISE_USAGE_BLESS").is_some() {
+            std::fs::create_dir_all(&fixtures).unwrap();
+            std::fs::write(&path, &body).unwrap();
+        }
+        let old = std::fs::read(&path).unwrap_or_default();
+        assert!(old == body, "{name} is not what the crate sends: BISE_USAGE_BLESS=1 cargo test -p bise-usage, then node --test tests/site_telemetry.test.ts");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// The law fails on each kind of leak (so a green run means something).
 #[test]
 fn law_pii_catches_each_kind_of_leak() {

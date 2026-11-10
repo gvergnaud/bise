@@ -1,0 +1,272 @@
+// generated from _schema.mts by scripts/ts_emit.ts: never hand-edited (edit the .ts, then run it)
+// a byte copy of rust/usage/schema.json, the crate's exported schema: never hand-edited
+// (BLESS=1 node --experimental-strip-types --test tests/site_telemetry.test.ts rewrites it)
+export const SCHEMA = {
+    "body": {
+        "packets": {
+            "max_items": 30
+        }
+    },
+    "delete_body": {
+        "install_id": {
+            "type": "uuid4"
+        }
+    },
+    "packet": {
+        "active_days_28": {
+            "max": 28,
+            "min": 0,
+            "type": "integer"
+        },
+        "active_days_7": {
+            "max": 7,
+            "min": 0,
+            "type": "integer"
+        },
+        "arch": {
+            "type": "enum",
+            "values": [
+                "arm64",
+                "x86_64",
+                "other"
+            ]
+        },
+        "channel": {
+            "type": "enum",
+            "values": [
+                "stable",
+                "beta",
+                "dev"
+            ]
+        },
+        "cohort_week": {
+            "type": "iso_week"
+        },
+        "counts": {
+            "keys": {
+                "agent_created_by_agent": {
+                    "max": 999
+                },
+                "agent_created_by_main": {
+                    "max": 999
+                },
+                "agent_created_by_user": {
+                    "max": 999
+                },
+                "artifact_opened_code": {
+                    "max": 999
+                },
+                "artifact_opened_doc": {
+                    "max": 999
+                },
+                "artifact_opened_image": {
+                    "max": 999
+                },
+                "artifact_opened_link": {
+                    "max": 999
+                },
+                "artifact_opened_other": {
+                    "max": 999
+                },
+                "artifact_opened_page": {
+                    "max": 999
+                },
+                "artifact_opened_sheet": {
+                    "max": 999
+                },
+                "artifact_opened_slides": {
+                    "max": 999
+                },
+                "card_answered": {
+                    "max": 999
+                },
+                "card_opened": {
+                    "max": 999
+                },
+                "compaction": {
+                    "max": 999
+                },
+                "computer_use_call": {
+                    "max": 999
+                },
+                "connector_call": {
+                    "max": 999
+                },
+                "crash_app_child": {
+                    "max": 999
+                },
+                "crash_app_renderer": {
+                    "max": 999
+                },
+                "crash_core": {
+                    "max": 999
+                },
+                "crash_hub": {
+                    "max": 999
+                },
+                "crash_tui": {
+                    "max": 999
+                },
+                "dictation_started": {
+                    "max": 999
+                },
+                "inbox_opened": {
+                    "max": 999
+                },
+                "land": {
+                    "max": 999
+                },
+                "page_published": {
+                    "max": 999
+                },
+                "plugin_enabled": {
+                    "max": 999
+                },
+                "provider_retry": {
+                    "max": 999
+                },
+                "schedule_fired": {
+                    "max": 999
+                },
+                "schedule_set": {
+                    "max": 999
+                },
+                "search": {
+                    "max": 999
+                },
+                "setup_done": {
+                    "max": 999
+                },
+                "setup_failed_auth": {
+                    "max": 999
+                },
+                "setup_failed_network": {
+                    "max": 999
+                },
+                "setup_failed_other": {
+                    "max": 999
+                },
+                "setup_started": {
+                    "max": 999
+                },
+                "trigger_fired": {
+                    "max": 999
+                },
+                "trigger_set": {
+                    "max": 999
+                },
+                "turn_done": {
+                    "max": 999
+                },
+                "turn_failed": {
+                    "max": 999
+                },
+                "turn_stalled": {
+                    "max": 999
+                },
+                "user_message": {
+                    "max": 999
+                },
+                "voice_started": {
+                    "max": 999
+                },
+                "worktree_placed": {
+                    "max": 999
+                }
+            },
+            "type": "counts"
+        },
+        "day": {
+            "type": "day"
+        },
+        "first_today_of_week": {
+            "type": "boolean"
+        },
+        "hist": {
+            "keys": {
+                "peak_agents": {
+                    "buckets": [
+                        "1",
+                        "2",
+                        "3-4",
+                        "5-8",
+                        "9-16",
+                        "17+"
+                    ],
+                    "max": 999
+                }
+            },
+            "type": "hist"
+        },
+        "install_id": {
+            "type": "uuid4"
+        },
+        "milestones": {
+            "keys": [
+                "setup",
+                "first_agent",
+                "first_artifact",
+                "first_land"
+            ],
+            "type": "milestones",
+            "values": [
+                "under_1h",
+                "under_1d",
+                "under_7d",
+                "later"
+            ]
+        },
+        "minutes": {
+            "keys": {
+                "agent_work": {
+                    "max": 14400,
+                    "step": 5
+                },
+                "app_engaged": {
+                    "max": 1440,
+                    "step": 5
+                },
+                "app_focused": {
+                    "max": 1440,
+                    "step": 5
+                },
+                "app_open": {
+                    "max": 1440,
+                    "step": 5
+                },
+                "tui_attached": {
+                    "max": 1440,
+                    "step": 5
+                },
+                "tui_focused": {
+                    "max": 1440,
+                    "step": 5
+                }
+            },
+            "type": "minutes"
+        },
+        "os_major": {
+            "max": 99,
+            "min": 0,
+            "type": "integer"
+        },
+        "schema": {
+            "max": 1,
+            "min": 1,
+            "type": "integer"
+        },
+        "surface": {
+            "type": "enum",
+            "values": [
+                "desktop",
+                "terminal",
+                "both",
+                "headless"
+            ]
+        },
+        "version": {
+            "type": "version"
+        }
+    },
+    "schema": 1
+};

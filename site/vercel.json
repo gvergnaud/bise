@@ -50,10 +50,31 @@
       ]
     }
   ],
+  "regions": ["fra1"],
+  "crons": [
+    {
+      "path": "/api/telemetry/purge",
+      "schedule": "17 3 * * *"
+    }
+  ],
   "rewrites": [
     {
       "source": "/install",
       "destination": "/install.sh"
+    },
+    {
+      "source": "/v1/packets",
+      "has": [{ "type": "host", "value": "telemetry.bise.dev" }],
+      "destination": "/api/telemetry/packets"
+    },
+    {
+      "source": "/v1/delete",
+      "has": [{ "type": "host", "value": "telemetry.bise.dev" }],
+      "destination": "/api/telemetry/delete"
+    },
+    {
+      "source": "/telemetry",
+      "destination": "/api/telemetry/dashboard"
     },
     {
       "source": "/artifacts",

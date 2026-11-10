@@ -172,6 +172,43 @@ The app's core (`bise ambient-core`) counts with a `Usage`
   input (no key, no content) and a gesture's closed name
   (`apps/desktop/src/app/usage.ts`). An off-screen run starts none of it.
 
+## The server
+
+bise.dev's Vercel project (`site/`) receives and shows the packets
+(plan steps 7 and 8; architect m_58375). Functions in
+`site/api/telemetry/` (TypeScript `.mts`, the committed `.mjs` is what
+Vercel runs; no build step, no dependency), region `fra1`:
+
+- `telemetry.bise.dev/v1/packets` and `/v1/delete` (the app's
+  `DEFAULT_BASE`; `site/vercel.json` rewrites that host's two paths to
+  `api/telemetry/packets` and `delete`). A body is taken whole or refused
+  with a 4xx: JSON (plain or gzip), at most 64 KB, every field, key and
+  value checked against `_schema.mts`, a byte copy of `rust/usage/schema.json`
+  (the validator reads the schema's types, never a list of its own), each
+  day closed (before today, UTC) and at most 40 days old. No store yet: 503,
+  the app keeps its days.
+- the store: Neon Postgres (Vercel Marketplace, Frankfurt), reached over
+  Neon's HTTP SQL endpoint by `fetch` (`_sql.mts`). One table, `packets`, a
+  row per install and day (`PRIMARY KEY (install_id, day)`, a resend is
+  kept once), made at first use. Rows older than 13 months are deleted at
+  each ingest and by a daily cron (`/api/telemetry/purge`, no secret: it
+  only deletes what is past retention). "Delete my data" deletes every row
+  of that id.
+- `bise.dev/telemetry`: the dashboard, behind one password (Basic auth,
+  `TELEMETRY_DASHBOARD_PASSWORD` in the project's environment; unset, it
+  shows nothing). Its reads count installs per cell and never select
+  `install_id`; a number from 1 to 9 installs shows `< 10`.
+- never kept: the functions read the body and the content type, encoding
+  and length (and the dashboard's Authorization), never the address, the
+  user agent or another header, and log nothing. Vercel's own platform
+  logs see the request's address for a while: the privacy page says so at
+  step 9. No log drain and no Web Analytics on that project.
+
+Tests: `tests/site_telemetry.test.ts` (the crate's real bodies from
+`rust/usage/tests/fixtures`, each refusal, the routes end to end on a
+throwaway Postgres behind a fake of Neon's endpoint). After a deploy, by
+hand: `node scripts/telemetry_smoke.ts` (one test packet in, then deleted).
+
 ## What is never sent
 
 No text: no prompt, message, brief, file, path, name of a project or an

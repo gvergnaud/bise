@@ -13,5 +13,5 @@
     "noEmit": true,
     "skipLibCheck": true
   },
-  "include": ["annotate.ts", "bims-islands.ts", "download.ts", "book/paper.ts", "docs/docs.ts"]
+  "include": ["annotate.ts", "bims-islands.ts", "download.ts", "book/paper.ts", "docs/docs.ts", "api/telemetry/*.mts"]
 }

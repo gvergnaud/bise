@@ -250,6 +250,9 @@ TS_NODE_OPTIONS="--experimental-strip-types --disable-warning=ExperimentalWarnin
 kit_check() {
   local f tsc="$root/office/sdk/node_modules/.bin/tsc"; desktop_path
   for f in "$root"/kit/check.ts "$root"/kit/*.check.ts; do echo "node ${f#"$root"/}"; NODE_OPTIONS="$TS_NODE_OPTIONS" node "$f" || return 1; done
+  # bise.dev's telemetry endpoint and dashboard (~2 s; its Postgres part skipped with a line when no postgres binary)
+  echo "node --test tests/site_telemetry.test.ts"
+  NODE_OPTIONS="$TS_NODE_OPTIONS" node --test "$root/tests/site_telemetry.test.ts" || return 1
   if [ -x "$tsc" ]; then
     echo "tsc -p kit/tsconfig.node.json"; "$tsc" -p "$root/kit/tsconfig.node.json" || return 1
     # the page scripts: their types, and the committed .js is what their .ts emits
