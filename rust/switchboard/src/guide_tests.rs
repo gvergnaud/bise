@@ -100,10 +100,19 @@ fn the_request_carries_the_intent_the_old_titles_and_its_cost() {
     assert!(r.contains("the diff wins over it"));
     // the ids to place, last in his message
     let user = r.lines().nth(2).unwrap();
-    assert!(user.ends_with(&format!("All hunk ids to place (5): {}", ids(&files).join(" "))), "{user}");
+    assert!(user.ends_with(&format!("Parts: 1 to 2./nAll hunk ids to place (5): {}", ids(&files).join(" ")).replace("/n", "\\n")), "{user}");
     // the cost counts the second pass it may need: a quarter of the first call
     let first = r.chars().count() / 4 + 1_500;
     assert_eq!(tokens(&r) as usize, first + first / 4);
+}
+
+#[test]
+fn a_diff_gets_about_one_part_per_6_to_8_hunks() {
+    assert_eq!(parts_for(5), (1, 2));
+    assert_eq!(parts_for(41), (5, 7));
+    assert_eq!(parts_for(91), (8, 10));
+    assert_eq!(parts_for(514), (8, 10));
+    assert_eq!(parts_for(0), (1, 2));
 }
 
 #[test]

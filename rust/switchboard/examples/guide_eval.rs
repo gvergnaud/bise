@@ -15,6 +15,8 @@
 //! calls nothing: the cached answers only, and the cost of the rest.
 //! `--out <file>` keeps every diff's numbers and titles. `EVAL_MODEL`:
 //! mistral/mistral-small-latest by default, never the main model.
+//! `EVAL_TIMEOUT`: a call killed past it (180 s); each call's time is
+//! said, and the calls past the hub's 60 s counted.
 
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -33,6 +35,9 @@ struct Eval {
     spent: usize,
     sent: usize,
     cached: usize,
+    /// a call's longest wait, and the calls past the hub's 60 s
+    timeout: std::time::Duration,
+    slow: usize,
 }
 
 impl Eval {
@@ -61,16 +66,23 @@ impl Eval {
             return Err(format!("dry: {} not cached (~{} tokens)", what, cost));
         }
         if self.spent + cost > self.budget {
-            return Err(format!("over the budget: {} would pass {} tokens", what, self.budget));
+            return Err(format!("not sent: {} (about {} tokens) would take this run past --max-tokens {} ({} spent)", what, cost, self.budget, self.spent));
         }
         let repl = self.repl.clone().ok_or("EVAL_REPL: the repl-live to call")?;
         let req_file = self.key(req).with_extension("req");
         std::fs::write(&req_file, req).map_err(|e| e.to_string())?;
         let mut cmd = std::process::Command::new(&repl);
         switchboard::approvals::check::oneshot_env(&req_file, &self.model, &[]).apply(&mut cmd);
-        let out = cmd.current_dir(repl.parent().unwrap_or(Path::new("."))).stdin(std::process::Stdio::null()).output().map_err(|e| e.to_string())?;
+        let start = std::time::Instant::now();
+        let text = run_for(cmd.current_dir(repl.parent().unwrap_or(Path::new("."))), self.timeout);
+        let secs = start.elapsed().as_secs_f64();
         let _ = std::fs::remove_file(&req_file);
-        let text = String::from_utf8_lossy(&out.stdout).to_string();
+        eprintln!("{} · {:.0} s", what, secs);
+        // a call past the hub's 60 s fails there (daemon/small_ask.rs): said, and counted
+        if secs > 60.0 {
+            self.slow += 1;
+        }
+        let text = text?;
         // the model it ran on, when the REPL says it: never cached from another
         if let Some(used) = text.split("\"model\":\"").nth(1).and_then(|t| t.split('"').next()) {
             if used != self.model {
@@ -80,10 +92,31 @@ impl Eval {
         let reply = switchboard::role::oneshot_reply(&text)?;
         self.spent += cost;
         self.sent += 1;
-        let kept = json!({"model": self.model, "what": what, "req_chars": req.len(), "reply": reply});
+        let kept = json!({"model": self.model, "what": what, "req_chars": req.len(), "secs": secs, "reply": reply});
         std::fs::write(self.key(req), kept.to_string()).map_err(|e| e.to_string())?;
         Ok(reply)
     }
+}
+
+/// `cmd`'s stdout, or why not: killed past `timeout`.
+fn run_for(cmd: &mut std::process::Command, timeout: std::time::Duration) -> Result<String, String> {
+    let mut child = cmd.stdin(std::process::Stdio::null()).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::null()).spawn().map_err(|e| e.to_string())?;
+    let mut out = child.stdout.take().ok_or("no stdout")?;
+    let reader = std::thread::spawn(move || {
+        let mut s = String::new();
+        let _ = std::io::Read::read_to_string(&mut out, &mut s);
+        s
+    });
+    let start = std::time::Instant::now();
+    while child.try_wait().map_err(|e| e.to_string())?.is_none() {
+        if start.elapsed() > timeout {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(format!("no answer in {} s", timeout.as_secs()));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    }
+    Ok(reader.join().unwrap_or_default())
 }
 
 /// The diff of `range` as the hub reads it: git's, capped, typed and stamped.
@@ -127,6 +160,8 @@ fn main() {
         spent: 0,
         sent: 0,
         cached: 0,
+        timeout: std::time::Duration::from_secs(std::env::var("EVAL_TIMEOUT").ok().and_then(|t| t.parse().ok()).unwrap_or(180)),
+        slow: 0,
     };
     let mut diffs = vec![];
     for (i, o) in set.iter().enumerate().filter(|(i, _)| only.as_ref().is_none_or(|o| o.contains(i))) {
@@ -160,7 +195,11 @@ fn main() {
                     "rest_lines": c.rest, "rest_share": pct(c.rest, c.lines), "biggest_share": pct(c.biggest, c.lines),
                     "parts": c.parts, "second": match &w.second { Pass::None => "none".to_string(), Pass::Merged => "merged".into(), Pass::Failed(e) => format!("failed: {}", e) },
                     "still_over": first,
-                    "titles": w.guide.parts.iter().map(|p| format!("{}: {}", p.area, p.title)).collect::<Vec<_>>(),
+                    "titles": w.guide.parts.iter().map(|p| {
+                        // its changed lines, through guide::cover of a guide of this part alone
+                        let one = bise_proto::diff::Guide { overview: String::new(), parts: vec![p.clone()], rest: vec![] };
+                        json!({"area": p.area, "title": p.title, "hunks": p.hunks.len(), "lines": guide::cover(&one, files).biggest})
+                    }).collect::<Vec<_>>(),
                     "overview": w.guide.overview,
                 })
             }
@@ -188,7 +227,7 @@ fn main() {
         "parts_min": parts.iter().min(), "parts_max": parts.iter().max(),
         "second_passes": ok.iter().filter(|r| r["second"] != "none").count(),
         "errors": rows.iter().filter(|r| r.get("error").is_some()).count(),
-        "calls_sent": ev.sent, "calls_cached": ev.cached, "tokens_sent_about": ev.spent,
+        "calls_sent": ev.sent, "calls_cached": ev.cached, "calls_past_60s": ev.slow, "tokens_sent_about": ev.spent,
     });
     eprintln!("{}", serde_json::to_string_pretty(&summary).unwrap_or_default());
     if let Some(out) = flag("--out") {
