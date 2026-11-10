@@ -8,7 +8,7 @@ passed on the old version, or both ran and the switch failed.
 Two version dirs, A and B, from this tree (version_skew_e2e's version_dir). The hub runs A. The
 old core's restart is played by hand, as it starts: `A/bise sbd` the moment the socket stops
 answering (no client::open: an older client never waits for the switch), at most 3 starts like
-its home connector. Then `A/bise sbswitch --to B` (probation 8 s):
+its home connector. Then `A/bise sbswitch --to B` (probation 2 s):
 
   - the switch passes and the hub that runs is B (its hub.root), alone: one sbd for the folder;
   - the intruder did start (else this run proves nothing).
@@ -33,7 +33,9 @@ from e2e import check  # noqa: E402
 from version_skew_e2e import env_of, version_dir  # noqa: E402
 
 A, B = "aaaa111", "bbbb222"
-PROBATION = 8
+# the switcher's --probation (an input, fast-loop m_58863): the take-over is done before the
+# probation starts, so a short one sees the same end state
+PROBATION = 2
 
 
 def answers(sock):
