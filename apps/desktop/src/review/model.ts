@@ -13,6 +13,18 @@ export function openPrOf(agent: string | undefined, agents: readonly Agent[], pl
   return pr !== null && pr.url !== '' ? pr : null;
 }
 
+/**
+ * The agent's branch past its open PR (page pr-guided V2): its place's branch, its PR, and the
+ * hub's count of commits not on it (Place.ahead_of_pr, 0 once pushed); null without an open PR. Pure.
+ */
+export function aheadOf(agent: string, agents: readonly Agent[], places: readonly Place[]): { branch: string; pr: Pr; n: number } | null {
+  const a = agents.find((x) => x.name === agent);
+  const p = a === undefined ? undefined : placeOf(a, places);
+  const pr = p === undefined ? null : livePr(p);
+  if (p === undefined || pr === null) return null;
+  return { branch: p.branch ?? pr.branch, pr, n: p.ahead_of_pr ?? 0 };
+}
+
 /** A file's lines for the ds Diff: each hunk's header as a context line, then its lines. */
 export function linesOf(f: DiffFile): DsLine[] {
   const out: DsLine[] = [];

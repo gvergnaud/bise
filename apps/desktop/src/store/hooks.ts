@@ -13,7 +13,7 @@ import type { AnswerJump } from './store';
 import type { Acted } from './acted';
 import type { Refused } from './refused';
 import type { InboxItem } from '@/inbox/listed';
-import { guideForKey, guideKey, prActKey, prDetailKey, prDiffKey, prLogKey, type GuideEv, type PrActState } from './types';
+import { guideForKey, guideKey, prActKey, prDetailKey, prDiffKey, prLogKey, rangeDiffKey, type GuideEv, type PrActState } from './types';
 import { artDiffKey, branchDiffKey, diffErrKey, diffKey, toolOutKey, Store, type ToolOut, type Away, type Dictation, type HubLine, type Diff, type FilesAnswer, type Ev, type EvOf, type Pending, type PrsList, type BranchesList, type VersionsList, type PagesList, type ThreadHits, type ThreadOrder, type VoiceModeState, type TalkShot } from './store';
 
 /**
@@ -153,6 +153,9 @@ export const useGuideFor = (project: string, target: GuideTarget | null): GuideE
 /** A PR's diff by its link (askPrDiff); null until the hub answers. */
 export const usePrDiff = (project: string, url: string): Diff | null =>
   useSlice(prDiffKey(project, url), (s) => s.prDiff(project, url));
+/** A range's diff (askRangeDiff): null before the hub answers. */
+export const useRangeDiff = (project: string, range: string): Diff | null =>
+  useSlice(rangeDiffKey(project, range), (s) => s.rangeDiff(project, range));
 /** A PR tab's detail (askPrDetail): the last answer, a detail or a typed error; null before one. */
 export const usePrDetail = (project: string, url: string): EvOf<'pr_detail'> | null =>
   useSlice(prDetailKey(project, url), (s) => s.prDetail(project, url));

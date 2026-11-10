@@ -5,6 +5,8 @@
 import type { ReactNode } from 'react';
 import { AppIcon, KindIcon, iconKindOf } from '@/ds';
 import { panel } from '@/proto/words_panel.gen';
+import { pages } from '@/proto/words_pages.gen';
+import { aheadOf as aheadOfAgent } from '@/review/model';
 import { useAllArtifacts } from '@/artifacts';
 import { useAllProcesses } from '@/running';
 import { useProjects, useStore } from '@/store';
@@ -24,10 +26,12 @@ export function useTabLooks(): (tab: Tab) => TabLook {
   const procs = useAllProcesses();
   const store = useStore();
   const branchOf = (project: string, agent: string) => store.agents(project).find((a) => a.name === agent)?.branch ?? null;
-  return (tab) => lookOf(tab, projects, arts, procs, branchOf);
+  const ahead = (project: string, agent: string) => aheadOfAgent(agent, store.agents(project), store.places(project));
+  return (tab) => lookOf(tab, projects, arts, procs, branchOf, ahead);
 }
 
-function lookOf(tab: Tab, projects: ReturnType<typeof useProjects>, arts: ReturnType<typeof useAllArtifacts>, procs: ReturnType<typeof useAllProcesses>, branchOf: (project: string, agent: string) => string | null): TabLook {
+function lookOf(tab: Tab, projects: ReturnType<typeof useProjects>, arts: ReturnType<typeof useAllArtifacts>, procs: ReturnType<typeof useAllProcesses>, branchOf: (project: string, agent: string) => string | null,
+  aheadOf: (project: string, agent: string) => ReturnType<typeof aheadOfAgent>): TabLook {
   const what = tab.what;
   const project = what.kind === 'terminal' ? what.project : what.kind === 'thing' && 'project' in what.e ? what.e.project : undefined;
   const name = projects.find((p) => p.project === project)?.name ?? project ?? '';
@@ -52,9 +56,13 @@ function lookOf(tab: Tab, projects: ReturnType<typeof useProjects>, arts: Return
     }
     case 'agent':
       return { title: e.agent, icon: <AppIcon name="thread" size={14} /> };
-    case 'diff':
-      // the tab names the title's thing (designer m_58359): its branch, as a PR's tab its '#412'
+    case 'diff': {
+      // the tab names the title's thing (designer m_58359): its branch, as a PR's tab its '#412';
+      // its commits past the PR: '2 commits not on #412' (designer m_58488)
+      const ahead = e.since === undefined ? null : aheadOf(e.project, e.agent);
+      if (ahead !== null && ahead.n > 0) return { title: pages.review_ahead_title({ n: ahead.n, tag: `#${String(ahead.pr.number)}` }), icon: <AppIcon name="changes" size={14} /> };
       return { title: branchOf(e.project, e.agent) ?? panel.tab_changes({ agent: e.agent }), icon: <AppIcon name="changes" size={14} /> };
+    }
     case 'commit':
       return { title: e.sha.slice(0, 7), icon: <AppIcon name="branch" size={14} /> };
     case 'branch':

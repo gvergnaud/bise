@@ -168,8 +168,16 @@ export const pages = {
   review_guide_line: (a: { tag: string | number; n: number }): string => a.n === 1 ? "PR " + String(a.tag) + " · guided review ready · " + String(a.n) + " part" : "PR " + String(a.tag) + " · guided review ready · " + String(a.n) + " parts",
   /** the PR panel's line when the agent's branch has commits its PR has not yet (page pr-guided V2) */
   review_ahead_of_pr: (a: { branch: string | number; n: number; tag: string | number }): string => a.n === 1 ? String(a.branch) + " has " + String(a.n) + " commit not on " + String(a.tag) : String(a.branch) + " has " + String(a.n) + " commits not on " + String(a.tag),
-  /** its act: the agent's change, those commits with it */
+  /** its act: those commits alone, in the panel */
   review_ahead_show: "show them",
+  /** the title of those commits' tab and of their view */
+  review_ahead_title: (a: { n: number; tag: string | number }): string => a.n === 1 ? String(a.n) + " commit not on " + String(a.tag) : String(a.n) + " commits not on " + String(a.tag),
+  /** their view's facts, before the files' totals */
+  review_ahead_facts: (a: { branch: string | number; n: number }): string => a.n === 1 ? String(a.branch) + " · " + String(a.n) + " commit" : String(a.branch) + " · " + String(a.n) + " commits",
+  /** while their diff comes */
+  review_ahead_loading: (a: { tag: string | number }): string => "loading the commits not on " + String(a.tag) + "…",
+  /** none left: pushed */
+  review_ahead_none: (a: { tag: string | number }): string => String(a.tag) + " has every commit now",
   /** a guide part's quiet act (page pr-guided): its title and files in the agent's composer */
   review_ask_part: (a: { agent: string | number }): string => "Ask " + String(a.agent),
   /** its tip */

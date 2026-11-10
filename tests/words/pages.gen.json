@@ -162,6 +162,28 @@
     "one": null,
     "text": "Pull requests"
   },
+  "pages.review_ahead_facts": {
+    "args": [
+      "branch",
+      "n"
+    ],
+    "one": "{branch} · {n} commit",
+    "text": "{branch} · {n} commits"
+  },
+  "pages.review_ahead_loading": {
+    "args": [
+      "tag"
+    ],
+    "one": null,
+    "text": "loading the commits not on {tag}…"
+  },
+  "pages.review_ahead_none": {
+    "args": [
+      "tag"
+    ],
+    "one": null,
+    "text": "{tag} has every commit now"
+  },
   "pages.review_ahead_of_pr": {
     "args": [
       "branch",
@@ -175,6 +197,14 @@
     "args": [],
     "one": null,
     "text": "show them"
+  },
+  "pages.review_ahead_title": {
+    "args": [
+      "n",
+      "tag"
+    ],
+    "one": "{n} commit not on {tag}",
+    "text": "{n} commits not on {tag}"
   },
   "pages.review_ask_part": {
     "args": [

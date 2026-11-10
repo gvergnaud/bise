@@ -188,8 +188,16 @@ crate::words! { pages:
     review_guide_line(tag, n) = one "PR {tag} · guided review ready · {n} part" | "PR {tag} · guided review ready · {n} parts";
     /// the PR panel's line when the agent's branch has commits its PR has not yet (page pr-guided V2)
     review_ahead_of_pr(branch, n, tag) = one "{branch} has {n} commit not on {tag}" | "{branch} has {n} commits not on {tag}";
-    /// its act: the agent's change, those commits with it
+    /// its act: those commits alone, in the panel
     review_ahead_show = "show them";
+    /// the title of those commits' tab and of their view
+    review_ahead_title(n, tag) = one "{n} commit not on {tag}" | "{n} commits not on {tag}";
+    /// their view's facts, before the files' totals
+    review_ahead_facts(branch, n) = one "{branch} · {n} commit" | "{branch} · {n} commits";
+    /// while their diff comes
+    review_ahead_loading(tag) = "loading the commits not on {tag}…";
+    /// none left: pushed
+    review_ahead_none(tag) = "{tag} has every commit now";
     /// a guide part's quiet act (page pr-guided): its title and files in the agent's composer
     review_ask_part(agent) = "Ask {agent}";
     /// its tip

@@ -14,10 +14,10 @@ import { openPrOf } from './model';
 
 /**
  * A change to read: an agent's live one, a branch's against the trunk, or a commit on main.
- * `own`: the agent's change itself even when it has an open PR (the PR panel's 'show them': its
- * commits not on the PR yet).
+ * `since`: only the agent's commits past that sha, never its PR (the PR panel's 'show them': its
+ * commits not on the PR yet, `since` the PR's head; designer m_58488).
  */
-export type Change = { readonly agent: string; readonly own?: boolean } | { readonly branch: string } | { readonly commit: string };
+export type Change = { readonly agent: string; readonly since?: string } | { readonly branch: string } | { readonly commit: string };
 
 /** What the hub tells of the project: who works where, and their PRs. */
 export interface ChangeFacts {
@@ -39,7 +39,8 @@ export function changeDoor(project: string, c: Change, f: ChangeFacts): { readon
   if ('commit' in c) return { tab: { kind: 'commit', project, sha: c.commit }, centre: null };
   const agent = 'agent' in c ? c.agent : agentOfBranch(f.worktrees, c.branch);
   if (agent === undefined) return { tab: { kind: 'branch', project, branch: 'branch' in c ? c.branch : '' }, centre: null };
-  const pr = 'agent' in c && c.own === true ? null : openPrOf(agent, f.agents, f.places);
+  if ('agent' in c && c.since !== undefined) return { tab: { kind: 'diff', project, agent, since: c.since }, centre: { screen: 'thread', project, agent } };
+  const pr = openPrOf(agent, f.agents, f.places);
   const tab: Entity = pr === null ? { kind: 'diff', project, agent } : { kind: 'pr', project, url: pr.url };
   return { tab, centre: { screen: 'thread', project, agent } };
 }

@@ -35,8 +35,11 @@ export type Entity =
   | { readonly kind: 'commit'; readonly project: string; readonly sha: string }
   /** a branch's diff against its trunk, by its name ('sb/x', slashes kept): a try card's diff, '/diff sb/x' */
   | { readonly kind: 'branch'; readonly project: string; readonly branch: string }
-  /** an agent's changes, or one file of them (`path`, from the repo's root) */
-  | { readonly kind: 'diff'; readonly project: string; readonly agent: string; readonly path?: string }
+  /**
+   * an agent's changes, or one file of them (`path`, from the repo's root); `since`: only its commits
+   * past that sha (its open PR's head: the PR panel's 'show them', page pr-guided V2)
+   */
+  | { readonly kind: 'diff'; readonly project: string; readonly agent: string; readonly path?: string; readonly since?: string }
   /** a process an agent left running (running/: its id in the agent's list) */
   | { readonly kind: 'process'; readonly project: string; readonly agent: string; readonly id: string }
   /** a plugin by its id */
@@ -74,6 +77,7 @@ export function entityKey(e: Entity): string {
     case 'branch':
       return `branch:${e.project}/${e.branch}`;
     case 'diff':
+      if (e.since !== undefined) return `diff:${e.project}/${e.agent}@${e.since}`;
       return e.path === undefined ? `diff:${e.project}/${e.agent}` : `diff:${e.project}/${e.agent}/${e.path}`;
     case 'process':
       return `process:${e.project}/${e.agent}/${e.id}`;

@@ -38,7 +38,7 @@ export function ThingTab({ e, tabId }: { e: Exclude<Entity, { kind: 'tab' }>; ta
     case 'diff':
       return (
         <div className="pn-screen" data-testid="app.panel.diff">
-          <ChangeTab project={e.project} change={{ agent: e.agent }} />
+          <ChangeTab project={e.project} change={e.since === undefined ? { agent: e.agent } : { agent: e.agent, since: e.since }} />
         </div>
       );
     case 'commit':

@@ -399,3 +399,23 @@ pub struct Place {
     pub ahead_of_pr: Option<u32>,
 }
 
+#[cfg(test)]
+mod place_tests {
+    use super::Place;
+
+    /// page pr-guided V2 (architect m_58480): `ahead_of_pr` reads and
+    /// writes back; None is never written (the hub sends a count > 0
+    /// only); a Place of an older hub, without the key, reads None.
+    #[test]
+    fn ahead_of_pr_round_trips_and_an_older_place_reads_none() {
+        let old = r#"{"id":"wt:dark","branch":"sb/dark","agents":["perf"]}"#;
+        let p: Place = serde_json::from_str(old).unwrap();
+        assert_eq!(p.ahead_of_pr, None);
+        assert_eq!(serde_json::to_string(&p).unwrap(), old, "None is skipped");
+        let two = Place { ahead_of_pr: Some(2), ..p };
+        let j = serde_json::to_value(&two).unwrap();
+        assert_eq!(j["ahead_of_pr"], 2);
+        assert_eq!(serde_json::from_value::<Place>(j).unwrap(), two);
+    }
+}
+

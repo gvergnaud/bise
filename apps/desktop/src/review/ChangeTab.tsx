@@ -8,13 +8,13 @@
 // lander (main if none), main for a branch nobody works on. Owner: pr-artifacts.
 import { useCallback, useEffect, useMemo, type ReactNode } from 'react';
 import { Button, Head, Press } from '@/ds';
-import { branchDiffKey, diffKey, useAgents, useBranchDiff, useCards, useDiff, useDiffError, useMerged, usePlaces, useStore, useWorktrees, type Diff } from '@/store';
+import { branchDiffKey, diffKey, rangeDiffKey, useAgents, useBranchDiff, useCards, useDiff, useDiffError, useMerged, usePlaces, useRangeDiff, useStore, useWorktrees, type Diff } from '@/store';
 import type { GuideTarget } from '@/proto';
 import { clock } from '@/thread/entry';
 import { useKeptScroll } from '@/app/keep';
 import { MAIN } from '@/app/route';
 import { pages } from '@/proto/words_pages.gen';
-import { headLine, mergeCardOf, mergedSha, openPrOf, totals } from './model';
+import { aheadOf, headLine, mergeCardOf, mergedSha, openPrOf, totals } from './model';
 import { DiffFiles } from './DiffFiles';
 import { agentOfBranch, type Change } from './openChange';
 import './review.css';
@@ -28,6 +28,7 @@ export function ChangeTab({ project, change }: { project: string; change: Change
     if (branch !== null) store.command({ cmd: 'worktrees', project });
   }, [store, project, branch]);
   if ('commit' in change) return <AgentChange project={project} agent={MAIN} commit={change.commit} />;
+  if ('agent' in change && change.since !== undefined) return <AheadChange project={project} agent={change.agent} since={change.since} />;
   if ('agent' in change) return <AgentChange project={project} agent={change.agent} />;
   const agent = agentOfBranch(items, change.branch);
   if (agent !== undefined) return <AgentChange project={project} agent={agent} />;
@@ -91,6 +92,35 @@ function AgentChange({ project, agent, commit }: { project: string; agent: strin
           none={commit === undefined ? pages.review_no_changes : pages.review_no_commit_changes}
           to={to} from={commit === undefined ? `${agent} vs main` : `commit ${commit.slice(0, 7)}`}
           onEscape={() => undefined} guide={guide} lead={lead} />
+      )} />
+  );
+}
+
+/**
+ * An agent's commits not on its open PR yet (the PR panel's 'show them', designer m_58488): exactly
+ * the range from the PR's head to its branch's tip (the hub's `range` diff), titled '2 commits not
+ * on #412', its facts 'sb/dark · 2 commits · +x −y'. A quote goes to the agent. Pushed: none left.
+ */
+function AheadChange({ project, agent, since }: { project: string; agent: string; since: string }) {
+  const store = useStore();
+  const ahead = aheadOf(agent, useAgents(project), usePlaces(project));
+  const branch = ahead?.branch ?? '';
+  const range = branch === '' ? '' : `${since}..${branch}`;
+  const diff = useRangeDiff(project, range);
+  const failed = useDiffError(rangeDiffKey(project, range));
+  const ask = useCallback(() => {
+    if (range !== '') store.askRangeDiff(project, range);
+  }, [store, project, range]);
+  useEffect(ask, [ask]);
+  const tag = ahead === null ? '' : `#${String(ahead.pr.number)}`;
+  const n = diff?.commits ?? ahead?.n ?? 0;
+  return (
+    <Shell testId="ahead" project={project} title={pages.review_ahead_title({ n, tag })} dot={false}
+      diff={diff} line={pages.review_ahead_facts({ branch, n })} acts={null}
+      body={(lead) => (
+        <DiffFiles project={project} diff={diff} loading={pages.review_ahead_loading({ tag })} error={failed} onRetry={ask}
+          none={pages.review_ahead_none({ tag })} to={agent} from={`${branch} past ${tag}`}
+          onEscape={() => undefined} testId="ahead" lead={lead} />
       )} />
   );
 }

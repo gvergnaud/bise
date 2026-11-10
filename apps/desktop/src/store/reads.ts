@@ -50,6 +50,7 @@ import {
   type PrActState,
   prDetailKey,
   prDiffKey,
+  rangeDiffKey,
   prLogKey,
   type EvOf,
   type HubLine,
@@ -374,6 +375,19 @@ export class StoreReads extends StoreBase {
   }
   prDiff(project: string, url: string): Diff | null {
     return this.slice<Diff | null>(prDiffKey(project, url), null);
+  }
+  /**
+   * A range's diff (`<from>..<to>`: a branch's commits not on its PR yet, page pr-guided V2): the
+   * hub's `range` ask, known by its req as a PR's.
+   */
+  askRangeDiff(project: string, range: string): void {
+    const key = rangeDiffKey(project, range);
+    const req = this.prReq(key);
+    if (this.slices.get(diffErrKey(key)) != null) this.put(diffErrKey(key), null);
+    this.command({ cmd: "diff", project, range, req });
+  }
+  rangeDiff(project: string, range: string): Diff | null {
+    return this.slice<Diff | null>(rangeDiffKey(project, range), null);
   }
   /** A diff's guide (its state, the guide once written) by the diff's hash; null before the hub says. */
   guide(project: string, hash: string): GuideEv | null {

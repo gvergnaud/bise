@@ -379,6 +379,11 @@ export function prDiffKey(project: string, url: string): string {
   return `diff:${project}/pr:${url}`;
 }
 
+/** A range's diff (`from..to`, the `diff` ask's `range`; its answer is known by its `req`). */
+export function rangeDiffKey(project: string, range: string): string {
+  return `diff:${project}/range:${range}`;
+}
+
 /** A PR tab's detail (pr/detail's last answer for it). */
 export function prDetailKey(project: string, url: string): string {
   return `pr_detail:${project}/${url}`;

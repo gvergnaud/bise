@@ -161,20 +161,22 @@ function Lead({ project, url, art, s, tag, forge, out, merge }: {
 
 /**
  * The agent's branch has commits its PR has not yet (the hub counts them, Place.ahead_of_pr;
- * architect m_58451): 'sb/perf has 2 commits not on #412 · show them', which opens the agent's own
- * change (review-guided m_58314). A push makes the count 0: the line goes by itself.
+ * architect m_58451): 'sb/perf has 2 commits not on #412 · show them', which opens exactly those
+ * commits, the PR's head to the branch's tip (review-guided m_58314, designer m_58488). A push makes
+ * the count 0: the line goes by itself.
  */
 export function PrAhead({ project, url, tag }: { project: string; url: string; tag: string }) {
   const place = usePlaces(project).find((p) => p.pr?.url === url);
   const open = useOpenChange(project);
   const n = place?.ahead_of_pr ?? 0;
   const agent = place?.agents?.[0];
-  if (place === undefined || n <= 0 || agent === undefined) return null;
+  const since = place?.pr?.head_oid ?? '';
+  if (place === undefined || n <= 0 || agent === undefined || since === '') return null;
   return (
     <p className="prt-ahead" data-testid="prtab.ahead">
       <span>{pages.review_ahead_of_pr({ branch: place.branch ?? place.pr?.branch ?? '', n, tag })}</span>
       <span className="prt-sep" aria-hidden> · </span>
-      <Press look="prt-out" onClick={() => { open({ agent, own: true }); }} data-testid="prtab.ahead.show">{pages.review_ahead_show}</Press>
+      <Press look="prt-out" onClick={() => { open({ agent, since }); }} data-testid="prtab.ahead.show">{pages.review_ahead_show}</Press>
     </p>
   );
 }
