@@ -164,9 +164,36 @@ def ours(home):
     return [int(line.split()[0]) for line in out.splitlines() if home in line]
 
 
+def short_base():
+    """A folder short enough for the unix sockets under a HOME there (a socket path is at most
+    104 bytes: a deep $TMPDIR made every path's check fail to connect): $TMPDIR when short, else
+    /tmp (tests/e2e.py short_tmp's rule)."""
+    t = tempfile.gettempdir()
+    return t if len(t) <= 40 else "/tmp"
+
+
+def keep_logs(home, dest):
+    """What tells a red: the path's log and each hub's hub.log, hub.err, versions.json."""
+    os.makedirs(dest, exist_ok=True)
+    for src in [os.path.join(home, "path.log")] + [os.path.join(r, f) for r, _, fs in os.walk(os.path.join(home, ".bise", "hubs"))
+                                                    for f in fs if f in ("hub.log", "hub.err", "versions.json")]:
+        try:
+            shutil.copy2(src, os.path.join(dest, os.path.relpath(src, home).replace(os.sep, "_")))
+        except OSError:
+            pass
+
+
 def walk(tag, cand, out, probation):
-    """One path: (tag, verdict, why)."""
-    home = tempfile.mkdtemp(prefix="up-%s-" % tag.replace("desktop-v", ""), dir=out)
+    """One path: (verdict, why); its logs kept in <out>/<tag>, its HOME deleted."""
+    home = tempfile.mkdtemp(prefix="up-%s-" % tag.replace("desktop-v", ""), dir=short_base())
+    try:
+        return walk_in(home, tag, cand, probation)
+    finally:
+        keep_logs(home, os.path.join(out, tag))
+        shutil.rmtree(home, ignore_errors=True)
+
+
+def walk_in(home, tag, cand, probation):
     env = clean_env(home)
     log = open(os.path.join(home, "path.log"), "a")
     core = None
