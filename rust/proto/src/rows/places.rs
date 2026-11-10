@@ -393,5 +393,9 @@ pub struct Place {
     /// the worktree's folder (the ψ's hover names it); none for a feature
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
+    /// page pr-guided V2: its commits not on its open PR yet (`sb/perf
+    /// has 2 commits not on #412`); none when 0, unknown, or no open PR
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ahead_of_pr: Option<u32>,
 }
 

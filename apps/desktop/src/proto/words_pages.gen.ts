@@ -166,6 +166,10 @@ export const pages = {
   review_part_critical: "where a bug would hurt",
   /** the thread's quiet line when its PR's guide is ready (page pr-guided): a click opens the PR on it */
   review_guide_line: (a: { tag: string | number; n: number }): string => a.n === 1 ? "PR " + String(a.tag) + " · guided review ready · " + String(a.n) + " part" : "PR " + String(a.tag) + " · guided review ready · " + String(a.n) + " parts",
+  /** the PR panel's line when the agent's branch has commits its PR has not yet (page pr-guided V2) */
+  review_ahead_of_pr: (a: { branch: string | number; n: number; tag: string | number }): string => a.n === 1 ? String(a.branch) + " has " + String(a.n) + " commit not on " + String(a.tag) : String(a.branch) + " has " + String(a.n) + " commits not on " + String(a.tag),
+  /** its act: the agent's change, those commits with it */
+  review_ahead_show: "show them",
   /** a guide part's quiet act (page pr-guided): its title and files in the agent's composer */
   review_ask_part: (a: { agent: string | number }): string => "Ask " + String(a.agent),
   /** its tip */

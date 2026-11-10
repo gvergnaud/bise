@@ -186,6 +186,10 @@ crate::words! { pages:
     review_part_critical = "where a bug would hurt";
     /// the thread's quiet line when its PR's guide is ready (page pr-guided): a click opens the PR on it
     review_guide_line(tag, n) = one "PR {tag} · guided review ready · {n} part" | "PR {tag} · guided review ready · {n} parts";
+    /// the PR panel's line when the agent's branch has commits its PR has not yet (page pr-guided V2)
+    review_ahead_of_pr(branch, n, tag) = one "{branch} has {n} commit not on {tag}" | "{branch} has {n} commits not on {tag}";
+    /// its act: the agent's change, those commits with it
+    review_ahead_show = "show them";
     /// a guide part's quiet act (page pr-guided): its title and files in the agent's composer
     review_ask_part(agent) = "Ask {agent}";
     /// its tip

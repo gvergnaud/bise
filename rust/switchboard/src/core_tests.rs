@@ -2587,7 +2587,7 @@ fn a_private_worktree_is_a_place() {
     assert_eq!(w.len(), 1, "{:?}", w);
     assert!(w[0].head && w[0].branch.is_empty() && w[0].path == "/p/docs-wt");
     let read = |branch: &str, commits: u32| {
-        let local = vec![Local { place: "pt:/p/docs-wt".into(), branch: branch.into(), tip: None, commits: Some(commits), dirty: None }];
+        let local = vec![Local { place: "pt:/p/docs-wt".into(), branch: branch.into(), tip: None, commits: Some(commits), dirty: None, ahead_of_pr: None }];
         Input::Prs(Report { at_ms: 1_000, prs: None, local, activity: Vec::new(), followed: Vec::new() })
     };
     t.go(read("", 2));
@@ -2611,7 +2611,7 @@ fn a_private_worktree_is_a_place() {
         updated_at: "t".into(),
         facts: Default::default(),
     };
-    let local = vec![Local { place: "pt:/p/docs-wt".into(), branch: "feat/x".into(), tip: Some("h".into()), commits: Some(0), dirty: Some(false) }];
+    let local = vec![Local { place: "pt:/p/docs-wt".into(), branch: "feat/x".into(), tip: Some("h".into()), commits: Some(0), dirty: Some(false), ahead_of_pr: None }];
     let fx = t.go(Input::Prs(Report { at_ms: 2_000, prs: Some(Ok(vec![merged])), local, activity: Vec::new(), followed: Vec::new() }));
     assert!(!format!("{:?}", fx).contains("\"drop\""), "{:?}", fx);
     assert_eq!(view(&mut t)["agents"], json!(["docs", "api"]));
@@ -3009,7 +3009,7 @@ mod prs {
     }
 
     fn local(dirty: Option<bool>) -> Vec<Local> {
-        vec![Local { place: "wt:dark".into(), branch: "sb/dark".into(), tip: Some("tip1".into()), commits: Some(2), dirty }]
+        vec![Local { place: "wt:dark".into(), branch: "sb/dark".into(), tip: Some("tip1".into()), commits: Some(2), dirty, ahead_of_pr: None }]
     }
 
     pub(super) fn report(at: u64, prs: Result<Vec<PrSnapshot>, ForgeError>, dirty: Option<bool>) -> Input {
@@ -3570,6 +3570,9 @@ mod prs {
             Some(false)
         }
         fn checkout(&self, _w: &std::path::Path) -> Option<(Option<String>, Option<u32>)> {
+            None
+        }
+        fn ahead(&self, _from: &str, _to: &str) -> Option<u32> {
             None
         }
     }

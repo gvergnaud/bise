@@ -51,7 +51,7 @@ fn a_real_hub() -> (T, u64) {
         updated_at: "t".into(),
         facts: Default::default(),
     };
-    let local = vec![Local { place: "wt:dark".into(), branch: "sb/dark".into(), tip: Some("tip1".into()), commits: Some(2), dirty: None }];
+    let local = vec![Local { place: "wt:dark".into(), branch: "sb/dark".into(), tip: Some("tip1".into()), commits: Some(2), dirty: None, ahead_of_pr: None }];
     t.go(Input::Prs(Report { at_ms: 1_000, prs: Some(Ok(vec![pr])), local, activity: Vec::new(), followed: Vec::new() }));
     // his question (with options), bise's drop card (a worktree with work)
     t.req(MAIN, AgentReq::Card { text: "keep the banner?\n1. yes\n2. no".into(), for_msg: None, page: None, artifact: None, open: Vec::new(), about: None });

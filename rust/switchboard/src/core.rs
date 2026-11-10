@@ -757,6 +757,10 @@ pub struct Hub {
     /// merged PR was cleaned up (or kept, said once).
     pr_known: BTreeMap<String, crate::forge::Known>,
     pr_lids: BTreeMap<String, String>,
+    /// page pr-guided V2 (architect m_58451): a place's commits not on
+    /// its open PR yet, > 0 only (forge/poll.rs `ahead_of_pr`). Runtime
+    /// only, like `pr_lids`: no journal.
+    pr_ahead: BTreeMap<String, u32>,
     pr_ok_ms: BTreeMap<String, u64>,
     pub pr_late: Option<crate::forge::ForgeError>,
     pr_done: BTreeSet<String>,
@@ -920,6 +924,7 @@ impl Hub {
             feature_answers: BTreeMap::new(),
             pr_known: BTreeMap::new(),
             pr_lids: BTreeMap::new(),
+            pr_ahead: BTreeMap::new(),
             pr_ok_ms: BTreeMap::new(),
             pr_late: None,
             pr_done: BTreeSet::new(),
@@ -1418,6 +1423,16 @@ impl Hub {
                 }
                 None => {}
             }
+            // page pr-guided V2: the commits not on its PR yet (a push
+            // makes it 0 next round: the line goes)
+            let ahead = l.ahead_of_pr.filter(|n| *n > 0);
+            if self.pr_ahead.get(&l.place).copied() != ahead {
+                match ahead {
+                    Some(n) => self.pr_ahead.insert(l.place.clone(), n),
+                    None => self.pr_ahead.remove(&l.place),
+                };
+                self.dirty = true;
+            }
         }
         let prs = match r.prs {
             None => return,
@@ -1496,6 +1511,7 @@ impl Hub {
         self.pr_news.retain(&ids);
         self.prs.retain(|k, _| ids.contains(k.as_str()));
         self.pr_lids.retain(|k, _| ids.contains(k.as_str()));
+        self.pr_ahead.retain(|k, _| ids.contains(k.as_str()));
         self.pr_ok_ms.retain(|k, _| ids.contains(k.as_str()));
         // pr-merge: the ready-to-merge items against the PRs now
         self.merge_sync(fx, env);

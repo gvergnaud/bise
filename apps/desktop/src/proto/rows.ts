@@ -849,7 +849,12 @@ trying?: boolean,
 /**
  * the worktree's folder (the ψ's hover names it); none for a feature
  */
-path?: string | null, };
+path?: string | null, 
+/**
+ * page pr-guided V2: its commits not on its open PR yet (`sb/perf
+ * has 2 commits not on #412`); none when 0, unknown, or no open PR
+ */
+ahead_of_pr?: number | null, };
 
 /**
  * The role a model is config.toml's default for.

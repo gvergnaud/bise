@@ -76,7 +76,7 @@ fn pr(review: PrReview, in_review: bool) -> RowPr {
 
 #[test]
 fn a_place_row_has_the_words_places_draws() {
-    let row = rows::Place { id: "wt:dark".into(), branch: Some("sb/dark".into()), agents: vec!["dark".into(), "i18n".into()], pr: Some(pr(PrReview::None, true)), lid: Some(String::new()), landing: None, feature: false, trying: false, path: None };
+    let row = rows::Place { id: "wt:dark".into(), branch: Some("sb/dark".into()), agents: vec!["dark".into(), "i18n".into()], pr: Some(pr(PrReview::None, true)), lid: Some(String::new()), landing: None, feature: false, trying: false, path: None, ahead_of_pr: None };
     let p = Place::of_row(&row);
     let x = p.pr.as_ref().unwrap();
     assert_eq!((x.state.as_str(), x.review.as_str(), x.checks.as_str(), x.failing.len(), x.stale_ms), ("draft", "pending", "fail", 1, Some(720_000)));

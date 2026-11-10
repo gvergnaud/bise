@@ -128,6 +128,18 @@ pub struct Local {
     /// For a place whose PR is merged: uncommitted changes in its
     /// worktree (None: not looked at).
     pub dirty: Option<bool>,
+    /// page pr-guided V2 (architect m_58451): the commits on the branch
+    /// not on its open PR yet (`<pr head>..<tip>`), only asked when
+    /// [`wants_ahead`]; None: not asked, or the PR's head not fetched
+    /// here (never 0 for an unknown head).
+    pub ahead_of_pr: Option<u32>,
+}
+
+/// Whether the branch's tip `head` is worth one `rev-list --count` past
+/// its PR: an open PR (draft too) whose head is known and is not `head`
+/// (a pushed branch: zero git calls). Pure.
+pub fn wants_ahead(pr: &PrSnapshot, head: &str) -> bool {
+    matches!(pr.state, PrState::Open | PrState::Draft) && !pr.head_oid.is_empty() && !head.is_empty() && pr.head_oid != head
 }
 
 /// One answer for the hub (`Input::Prs`).
@@ -154,6 +166,9 @@ pub trait Git: Send {
     /// detached), and its commits not on the trunk (the workspace's
     /// HEAD). None: not a worktree (gone).
     fn checkout(&self, worktree: &Path) -> Option<(Option<String>, Option<u32>)>;
+    /// The commits in `to` not in `from` (`rev-list --count from..to`);
+    /// None when git can't say (`from` not fetched here).
+    fn ahead(&self, from: &str, to: &str) -> Option<u32>;
 }
 
 /// The workspace's git.
@@ -193,6 +208,9 @@ impl Git for RepoGit {
             crate::worktree::git(worktree, &["rev-list", "--count", &range]).ok()?.trim().parse().ok()
         });
         Some((branch, commits))
+    }
+    fn ahead(&self, from: &str, to: &str) -> Option<u32> {
+        crate::worktree::git(&self.workspace, &["rev-list", "--count", &format!("{}..{}", from, to)]).ok()?.trim().parse().ok()
     }
 }
 
@@ -370,12 +388,17 @@ impl Watcher {
                 };
                 // the tip is the watched branch's: none for another one
                 let tip = tip.filter(|_| branch == w.branch);
+                let ahead_of_pr = tip.as_deref().and_then(|t| {
+                    let pr = self.prs.get(&branch).filter(|pr| wants_ahead(pr, t))?;
+                    self.git.ahead(&pr.head_oid, t)
+                });
                 Local {
                     place: w.place.clone(),
                     branch,
                     tip,
                     commits,
                     dirty: merged.contains(&w.branch).then(|| self.git.dirty(Path::new(&w.path))).flatten(),
+                    ahead_of_pr,
                 }
             })
             .collect()
@@ -586,6 +609,49 @@ mod tests {
             let n = t.get(&format!("#{}", p)).and_then(|n| n.parse().ok());
             Some(((!b.is_empty()).then_some(b), n))
         }
+        /// `<from>..<to>` in the tips: its count; each ask is counted
+        /// under `asked-ahead`.
+        fn ahead(&self, from: &str, to: &str) -> Option<u32> {
+            let mut t = self.tips.lock().unwrap();
+            let n = t.get("asked-ahead").and_then(|n| n.parse::<u32>().ok()).unwrap_or(0);
+            t.insert("asked-ahead".into(), (n + 1).to_string());
+            t.get(&format!("{}..{}", from, to)).and_then(|n| n.parse().ok())
+        }
+    }
+
+    /// page pr-guided V2 (architect m_58451): one count only for an open
+    /// PR whose known head is not the tip; a pushed, merged or closed PR,
+    /// or an unknown head, asks git nothing.
+    #[test]
+    fn wants_ahead_asks_git_only_past_an_open_prs_head() {
+        let open = |head: &str| PrSnapshot { head_oid: head.into(), ..pr("sb/a", 1, PrState::Open, Checks::Pass) };
+        assert!(wants_ahead(&open("h1"), "h2"));
+        assert!(wants_ahead(&PrSnapshot { state: PrState::Draft, ..open("h1") }, "h2"));
+        assert!(!wants_ahead(&open("h2"), "h2"), "pushed: nothing to count");
+        assert!(!wants_ahead(&open(""), "h2"), "an unknown head is never 0");
+        assert!(!wants_ahead(&open("h1"), ""));
+        for s in [PrState::Merged, PrState::Closed] {
+            assert!(!wants_ahead(&PrSnapshot { state: s, ..open("h1") }, "h2"));
+        }
+    }
+
+    /// The watcher's local side: 2 commits past the open PR's head, then
+    /// pushed (head = tip): the count goes, and git is not asked again.
+    #[test]
+    fn a_branch_ahead_of_its_pr_says_its_count_until_pushed() {
+        let tips = Arc::new(Mutex::new(BTreeMap::from([("sb/a".to_string(), "t2".to_string()), ("h..t2".to_string(), "2".to_string())])));
+        let answer = Arc::new(Mutex::new(Ok(vec![pr("sb/a", 1, PrState::Open, Checks::Pass)])));
+        let forge = Fake { answer: answer.clone(), calls: Arc::new(Mutex::new(Vec::new())) };
+        let mut w = Watcher::new(RepoRef { host: "github.com".into(), owner: "o".into(), name: "r".into() }, Box::new(forge), Box::new(FakeGit { tips: tips.clone() }));
+        w.plan = Plan { watches: vec![watch("sb/a")], clients: true, followed: Vec::new() };
+        let r = w.step(1_000).expect("a report");
+        assert_eq!(r.local[0].ahead_of_pr, Some(2));
+        // pushed: the PR's head is the tip now
+        tips.lock().unwrap().insert("asked-ahead".into(), "0".into());
+        *answer.lock().unwrap() = Ok(vec![PrSnapshot { head_oid: "t2".into(), ..pr("sb/a", 1, PrState::Open, Checks::Pass) }]);
+        let r = w.step(1_000 + 10 * 60_000).expect("a report");
+        assert_eq!(r.local[0].ahead_of_pr, None);
+        assert_eq!(tips.lock().unwrap().get("asked-ahead").map(String::as_str), Some("0"), "zero git calls once pushed");
     }
 
     fn pr(branch: &str, n: u64, state: PrState, checks: Checks) -> PrSnapshot {

@@ -239,6 +239,9 @@ pub struct PlaceView {
     /// a feature (its agents' worktrees are theirs)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
+    /// page pr-guided V2: its commits not on its open PR yet (> 0 only)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ahead_of_pr: Option<u32>,
 }
 
 /// The PR as the TUI shows it. `stale_ms`: how old the last answer of
@@ -438,6 +441,7 @@ pub fn views(
     landing: &BTreeMap<String, u32>,
     stale: &BTreeMap<String, u64>,
     trying: &std::collections::BTreeSet<String>,
+    ahead: &BTreeMap<String, u32>,
 ) -> Vec<PlaceView> {
     places
         .iter()
@@ -452,6 +456,8 @@ pub fn views(
             feature: p.kind == PlaceKind::Feature,
             trying: trying.contains(&p.id),
             path: (p.kind == PlaceKind::Worktree && !p.path.is_empty()).then(|| p.path.clone()),
+            // only with its PR in the view: a merged or gone PR says nothing
+            ahead_of_pr: ahead.get(&p.id).copied().filter(|n| *n > 0 && p.pr.is_some()),
         })
         .collect()
 }
@@ -502,7 +508,7 @@ mod tests {
         assert_eq!(ps[1].agents, ["c"]);
         // the views: worktrees only, the lid by id
         let lids = BTreeMap::from([("wt:a".to_string(), "waits to land · 2nd".to_string())]);
-        let v = views(&ps, &lids, &BTreeMap::new(), &BTreeMap::new(), &Default::default());
+        let v = views(&ps, &lids, &BTreeMap::new(), &BTreeMap::new(), &Default::default(), &BTreeMap::new());
         assert_eq!(v.len(), 1);
         assert_eq!(v[0].lid.as_deref(), Some("waits to land · 2nd"));
         assert_eq!(v[0].pr, None);
@@ -533,7 +539,7 @@ mod tests {
         assert_eq!(place_of(&st, "a").as_deref(), Some("wt:a"));
         let trying = std::collections::BTreeSet::from(["feature:cu".to_string()]);
         let lids = BTreeMap::from([("feature:cu".to_string(), "feature · 2 commits · not tried".to_string())]);
-        let v = views(&ps, &lids, &BTreeMap::new(), &BTreeMap::new(), &trying);
+        let v = views(&ps, &lids, &BTreeMap::new(), &BTreeMap::new(), &trying, &BTreeMap::new());
         assert_eq!((v[0].feature, v[0].trying, v[0].lid.as_deref()), (true, true, Some("feature · 2 commits · not tried")));
         // all archived: no place left
         for n in ["a", "b"] {
@@ -578,7 +584,7 @@ mod tests {
         assert_eq!(ps[1].branch.as_deref(), Some("feat/x"));
         assert_eq!(id_of(&st.agents["a"]), "shared");
         // the views: a worktree like any other
-        let v = views(&ps, &BTreeMap::new(), &BTreeMap::new(), &BTreeMap::new(), &Default::default());
+        let v = views(&ps, &BTreeMap::new(), &BTreeMap::new(), &BTreeMap::new(), &Default::default(), &BTreeMap::new());
         assert!(v.iter().any(|p| p.id == "pt:/p/a-wt" && p.agents == ["c"]));
     }
 
@@ -615,6 +621,7 @@ mod tests {
             feature: false,
             trying: false,
             path: None,
+            ahead_of_pr: None,
         };
         let mut j = serde_json::to_value(&v).unwrap();
         // the facts ride along for the typed row (pr-integration); the

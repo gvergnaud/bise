@@ -324,6 +324,7 @@ pub fn places(snap: &Snapshot) -> Vec<bise_proto::rows::Place> {
             feature: p.feature,
             trying: p.trying,
             path: p.path,
+            ahead_of_pr: p.ahead_of_pr,
         })
         .collect()
 }

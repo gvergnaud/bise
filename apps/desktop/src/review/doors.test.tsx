@@ -20,6 +20,7 @@ import { artifact, artifacts, ev, projects, row } from '../../tests/feature/inpu
 import { ChangesScreen } from './ChangesScreen';
 import { PrsScreen } from './PrsScreen';
 import { prCentre } from './openPr';
+import { PrAhead } from './PrTab';
 
 const P = 'acme-1a2b3c4d';
 const URL = 'https://github.com/acme/web/pull/412';
@@ -116,6 +117,29 @@ describe('a change door: the panel, its agent in the centre, and back', () => {
     // a branch nobody works on: its own tab, the centre stays
     runNav({ out: 'nav', to: { project: P, branch: 'feat/x' } }, router, store);
     expect(front()).toEqual({ kind: 'thing', e: { kind: 'branch', project: P, branch: 'feat/x' } });
+    expect(router.get()).toEqual(from);
+  });
+
+  // review-guided m_58314, architect m_58451: the hub counts the branch's commits not on its PR
+  // (Place.ahead_of_pr); 'show them' opens the agent's own change, never the PR again. Mutation:
+  // changeDoor ignoring `own` lands on the PR tab and turns it red; a count of 0 shows nothing.
+  it("the PR panel's 'commits not on #412 · show them': the agent's own change, and back", () => {
+    const from: Route = { screen: 'artifacts', project: P };
+    const { store, router, wrap } = shell(from);
+    const places = (n: number) => [{ id: 'wt:perf', branch: 'sb/perf', agents: ['perf'], pr: status, ahead_of_pr: n }];
+    store.apply(ev('agents', { project: P, agents: [agent('main'), agent('perf'), agent('docs')], places: places(0) }));
+    const v = render(wrap(<PrAhead project={P} url={URL} tag="#412" />));
+    expect(v.queryByTestId('prtab.ahead'), 'nothing ahead: no line').toBeNull();
+    act(() => {
+      store.apply(ev('agents', { project: P, agents: [agent('main'), agent('perf'), agent('docs')], places: places(2) }));
+    });
+    expect(v.getByTestId('prtab.ahead').textContent).toBe('sb/perf has 2 commits not on #412 · show them');
+    fireEvent.click(v.getByTestId('prtab.ahead.show'));
+    expect(front()).toEqual({ kind: 'thing', e: { kind: 'diff', project: P, agent: 'perf' } });
+    expect(router.get()).toEqual(perf);
+    act(() => {
+      router.back();
+    });
     expect(router.get()).toEqual(from);
   });
 });

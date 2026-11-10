@@ -11,10 +11,11 @@
 // Owner: pr-artifacts.
 import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { Button, Empty, Head, Press, Skel, tipAttrs, type EntityMenu } from '@/ds';
-import { prDiffKey, useArtifacts, useDiffError, usePrActed, usePrCheckLog, usePrDetail, usePrDiff, useStore } from '@/store';
+import { prDiffKey, useArtifacts, useDiffError, usePlaces, usePrActed, usePrCheckLog, usePrDetail, usePrDiff, useStore } from '@/store';
 import type { Artifact, GuideTarget, Pr, PrCheck, PrDetail } from '@/proto';
 import { panel } from '@/proto/words_panel.gen';
 import { menus } from '@/proto/words_menus.gen';
+import { pages } from '@/proto/words_pages.gen';
 import { Markdown } from '@/thread/Markdown';
 import { useRouter } from '@/app/router';
 import { useNow } from '@/app/clock';
@@ -24,6 +25,7 @@ import { putTextInDraft } from '@/artifacts/put';
 import { prLine } from '@/artifacts/pr';
 import { PrWords } from '@/artifacts/PrWords';
 import { DiffFiles } from './DiffFiles';
+import { useOpenChange } from './openChange';
 import { actLine, askFixText, branchFacts, canClose, canMerge, checkMark, errWords, firstLine, forgeWord, verdictWord } from './prwords';
 import './prtab.css';
 
@@ -147,12 +149,33 @@ function Lead({ project, url, art, s, tag, forge, out, merge }: {
           </Button>
         )}
       </p>
+      <PrAhead project={project} url={url} tag={tag} />
       <Press look="prt-desc" aria-expanded={fold !== 'shut'} onClick={() => { setFold((f) => (f === 'shut' ? 'open' : 'shut')); }} data-testid="prtab.desc.fold">
         <span className="prt-desc-k">{fold === 'shut' ? '▸' : '▾'} {panel.prtab_desc_fold}</span>
         {fold === 'shut' && first !== '' && <span className="prt-desc-first">{first}</span>}
       </Press>
       {fold !== 'shut' && <Summary project={project} url={url} s={s} tag={tag} forge={forge} out={out} onChecks={fold === 'checks'} />}
     </div>
+  );
+}
+
+/**
+ * The agent's branch has commits its PR has not yet (the hub counts them, Place.ahead_of_pr;
+ * architect m_58451): 'sb/perf has 2 commits not on #412 · show them', which opens the agent's own
+ * change (review-guided m_58314). A push makes the count 0: the line goes by itself.
+ */
+export function PrAhead({ project, url, tag }: { project: string; url: string; tag: string }) {
+  const place = usePlaces(project).find((p) => p.pr?.url === url);
+  const open = useOpenChange(project);
+  const n = place?.ahead_of_pr ?? 0;
+  const agent = place?.agents?.[0];
+  if (place === undefined || n <= 0 || agent === undefined) return null;
+  return (
+    <p className="prt-ahead" data-testid="prtab.ahead">
+      <span>{pages.review_ahead_of_pr({ branch: place.branch ?? place.pr?.branch ?? '', n, tag })}</span>
+      <span className="prt-sep" aria-hidden> · </span>
+      <Press look="prt-out" onClick={() => { open({ agent, own: true }); }} data-testid="prtab.ahead.show">{pages.review_ahead_show}</Press>
+    </p>
   );
 }
 

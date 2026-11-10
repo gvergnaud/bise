@@ -162,6 +162,20 @@
     "one": null,
     "text": "Pull requests"
   },
+  "pages.review_ahead_of_pr": {
+    "args": [
+      "branch",
+      "n",
+      "tag"
+    ],
+    "one": "{branch} has {n} commit not on {tag}",
+    "text": "{branch} has {n} commits not on {tag}"
+  },
+  "pages.review_ahead_show": {
+    "args": [],
+    "one": null,
+    "text": "show them"
+  },
   "pages.review_ask_part": {
     "args": [
       "agent"

@@ -21,6 +21,7 @@ describe('a change opens in the panel, its agent in the centre', () => {
   it.each([
     ['an agent with an open PR: its PR', { agent: 'perf' }, 'open', { kind: 'pr', project: P, url: URL }, { screen: 'thread', project: P, agent: 'perf' }],
     ['a draft PR is open too', { agent: 'perf' }, 'draft', { kind: 'pr', project: P, url: URL }, { screen: 'thread', project: P, agent: 'perf' }],
+    ['its own change asked (the PR panel’s ‘show them’): never the PR', { agent: 'perf', own: true }, 'open', { kind: 'diff', project: P, agent: 'perf' }, { screen: 'thread', project: P, agent: 'perf' }],
     ['a merged PR: the agent’s own change', { agent: 'perf' }, 'merged', { kind: 'diff', project: P, agent: 'perf' }, { screen: 'thread', project: P, agent: 'perf' }],
     ['an agent with no PR: its change', { agent: 'docs' }, null, { kind: 'diff', project: P, agent: 'docs' }, { screen: 'thread', project: P, agent: 'docs' }],
     ['a branch an agent works on: that agent’s (its PR)', { branch: 'sb/perf' }, 'open', { kind: 'pr', project: P, url: URL }, { screen: 'thread', project: P, agent: 'perf' }],

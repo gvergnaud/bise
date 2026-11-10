@@ -17,6 +17,8 @@
 .prt-line > .prw { min-width: 0; }
 .prt-sep { white-space: pre; color: var(--c-text-3); }
 .prt-out { color: var(--c-text-2); white-space: nowrap; }
+/* the branch's commits not on the PR yet: a second quiet line, its act as the line's */
+.prt-ahead { display: flex; align-items: center; flex-wrap: wrap; margin: 0 0 var(--s-1); font-size: var(--t-13); color: var(--c-text-3); }
 .prt-out:hover { color: var(--c-text); }
 .prt-line > .b-btn { margin-left: var(--s-2); }
 .prt-desc { display: flex; gap: var(--s-2); width: 100%; min-width: 0; padding: var(--s-1) 0; font-size: var(--t-13); color: var(--c-text-2); text-align: left; }
