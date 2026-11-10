@@ -406,3 +406,12 @@
 .rv-out:hover {
   color: var(--c-text);
 }
+
+/* the thread's quiet line when its PR's guide is ready (GuideLine.tsx): the hub note's tier, ink on hover */
+.rv-guide-go {
+  color: inherit;
+  text-align: left;
+}
+.rv-guide-go:hover {
+  color: var(--c-text);
+}

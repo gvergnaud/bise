@@ -2,7 +2,7 @@
 // checked complete at compile time), the slices' list types, and the key and
 // compare helpers. Pure, no state. Split out of store.ts (pure move). Owner:
 // amb-core (the hub slices with amb-win).
-import type { AwayProject, CoreEv, FindHit, HubEv, InboxRecord, Mode, Part, Pr, PickFile, PickFolder, BranchRow, Page, VersionItem } from '@/proto';
+import type { AwayProject, CoreEv, FindHit, GuideTarget, HubEv, InboxRecord, Mode, Part, Pr, PickFile, PickFolder, BranchRow, Page, VersionItem } from '@/proto';
 export type Ev = HubEv | CoreEv;
 export type EvOf<T extends Ev['ev']> = Extract<Ev, { ev: T }>;
 
@@ -333,6 +333,29 @@ export function diffKey(project: string, agent: string, commit?: string): string
  *  commit with the same diff share it. */
 export function guideKey(project: string, hash: string): string {
   return `guide:${project}/${hash}`;
+}
+
+/**
+ * The change a guide answers for, as the hub's guide.rs target_key names it ('pr:<link>',
+ * 'agent:<name>', 'commit:<sha>', 'branch:<name>'; a PR's link in forge::pr_link's form, as the
+ * hub echoes it and the PR artifacts carry it). The one place the client spells it.
+ */
+export function guideTargetKey(t: GuideTarget): string {
+  switch (t.kind) {
+    case 'agent':
+      return `agent:${t.name}`;
+    case 'commit':
+      return `commit:${t.sha}`;
+    case 'pr':
+      return `pr:${t.url}`;
+    case 'branch':
+      return `branch:${t.name}`;
+  }
+}
+
+/** The hash of the diff a change's last guide answer was for (page pr-guided: a thread that never read the diff). */
+export function guideForKey(project: string, t: GuideTarget): string {
+  return `guide-for:${project}/${guideTargetKey(t)}`;
 }
 
 /** A `.diff` artifact's diff at its version (the `diff` ask's `artifact`, try-diff-open). */

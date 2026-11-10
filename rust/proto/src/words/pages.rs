@@ -184,6 +184,8 @@ crate::words! { pages:
     review_part_context = "context";
     /// a guide part's weight's tip on its ink dot
     review_part_critical = "where a bug would hurt";
+    /// the thread's quiet line when its PR's guide is ready (page pr-guided): a click opens the PR on it
+    review_guide_line(tag, n) = one "PR {tag} · guided review ready · {n} part" | "PR {tag} · guided review ready · {n} parts";
     /// a guide part's quiet act (page pr-guided): its title and files in the agent's composer
     review_ask_part(agent) = "Ask {agent}";
     /// its tip

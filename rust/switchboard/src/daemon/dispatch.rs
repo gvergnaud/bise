@@ -292,7 +292,7 @@ impl Shell {
             Msg::Serve { id, v, serve, root } => self.on_serve(&id, v, serve, root),
             Msg::RoleLine { dir, key, line } => self.step(Input::RoleLine { dir, key, line }),
             Msg::GuideSeen(s) => self.guide_seen(*s),
-            Msg::GuideDone { hash, got } => self.guide_done(hash, got),
+            Msg::GuideDone { hash, target, got } => self.guide_done(hash, target, got),
             Msg::UsageCounted(w) => {
                 let (ledger, week) = *w;
                 self.usage_counted(ledger);

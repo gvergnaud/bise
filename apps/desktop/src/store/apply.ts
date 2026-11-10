@@ -9,6 +9,7 @@ import {
   diffErrKey,
   artDiffKey,
   branchDiffKey,
+  guideForKey,
   guideKey,
   type Ev,
   type HubLine,
@@ -237,6 +238,8 @@ export function applyTyped(s: Store, ev: Ev): void {
     // a diff's guide by its hash: the answer to `guide`, or one written for every window
     case "guide":
       s.put(guideKey(ev.project, ev.hash), ev);
+      // the change it answers for (an older hub names none): its newest answer wins, a new head's too
+      if (ev.target != null) s.put(guideForKey(ev.project, ev.target), ev.hash);
       return;
     case "prefs":
       s.put("prefs", ev.prefs);

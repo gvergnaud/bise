@@ -33,7 +33,7 @@ import type {
   UpdateEv,
 } from "@/proto";
 import type { CoreState } from "@/shared/api";
-import type { BiseUpdate, Proc } from "@/proto";
+import type { BiseUpdate, GuideTarget, Proc } from "@/proto";
 import {
   type Away,
   type BranchesList,
@@ -43,6 +43,7 @@ import {
   diffErrKey,
   artDiffKey,
   branchDiffKey,
+  guideForKey,
   guideKey,
   type GuideEv,
   prActKey,
@@ -377,6 +378,15 @@ export class StoreReads extends StoreBase {
   /** A diff's guide (its state, the guide once written) by the diff's hash; null before the hub says. */
   guide(project: string, hash: string): GuideEv | null {
     return this.slice<GuideEv | null>(guideKey(project, hash), null);
+  }
+  /** A change's guide by what it is of (its last answer's hash, guideForKey); null before the hub names one. */
+  guideFor(project: string, target: GuideTarget): GuideEv | null {
+    const hash = this.guideHashFor(project, target);
+    return hash === null ? null : this.guide(project, hash);
+  }
+  /** The hash of the diff a change's last guide answer was for; null before the hub names one. */
+  guideHashFor(project: string, target: GuideTarget): string | null {
+    return this.slice<string | null>(guideForKey(project, target), null);
   }
   /** A branch's latest diff against the trunk (branchDiffKey). */
   branchDiff(project: string, branch: string): Diff | null {

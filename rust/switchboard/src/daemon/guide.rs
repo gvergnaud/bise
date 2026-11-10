@@ -39,15 +39,39 @@ fn target_key(t: &GuideTarget) -> String {
     match t {
         GuideTarget::Agent { name } => format!("agent:{}", name),
         GuideTarget::Commit { sha, .. } => format!("commit:{}", sha),
-        // one PR, one key, whatever link opened it (forge::pr_link's, the PR artifacts' key)
-        GuideTarget::Pr { url } => format!("pr:{}", crate::forge::pr_link(url).map_or_else(|| url.clone(), |l| l.url)),
+        // one PR, one key, whatever link opened it: the caller passes canonical()'s form
+        GuideTarget::Pr { url } => format!("pr:{}", url),
         GuideTarget::Branch { name } => format!("branch:{}", name),
+    }
+}
+
+/// The target as every answer names it: a PR by its link in forge::pr_link's
+/// form (the PR artifacts' key, the client's), the others as asked.
+fn canonical(t: GuideTarget) -> GuideTarget {
+    match t {
+        GuideTarget::Pr { url } => GuideTarget::Pr { url: crate::forge::pr_link(&url).map_or(url, |l| l.url) },
+        other => other,
+    }
+}
+
+#[cfg(test)]
+mod canonical_tests {
+    use super::*;
+
+    #[test]
+    fn a_pr_is_named_by_its_one_link_the_others_as_asked() {
+        let pr = canonical(GuideTarget::Pr { url: "https://github.com/Acme/Web/pull/412/files#x".into() });
+        assert_eq!(pr, GuideTarget::Pr { url: "https://github.com/acme/web/pull/412".into() });
+        let agent = GuideTarget::Agent { name: "perf".into() };
+        assert_eq!(canonical(agent.clone()), agent);
     }
 }
 
 /// What the read thread found, back on the loop.
 pub(super) struct Seen {
     why: Why,
+    /// the change, its PR's link in its one form: every answer names it
+    target: GuideTarget,
     hash: String,
     base: String,
     head: String,
@@ -80,6 +104,8 @@ impl Shell {
         };
         let (paths, read, tx) = (self.env.paths.clone(), self.diff_job(self.project(), ask), self.tx.clone());
         let dir = paths.guides_dir();
+        // the one form (forge::pr_link's for a PR): the key and every answer come from it
+        let target = canonical(target);
         let key = target_key(&target);
         std::thread::spawn(move || {
             let (files, hash, base) = match read() {
@@ -90,7 +116,7 @@ impl Shell {
             let kept = guide::read(&dir, &hash).map(|k| k.guide);
             let old = if kept.is_none() { guide::last_of(&dir, &key).map(|k| k.guide) } else { None };
             let request = guide::request(&guide::digest(&files, guide::DIGEST_CAP), &intent, old.as_ref());
-            let seen = Seen { why, small: guide::skip(&files), ids: guide::ids(&files), hash, base, head: key, kept, request };
+            let seen = Seen { why, target, small: guide::skip(&files), ids: guide::ids(&files), hash, base, head: key, kept, request };
             let _ = tx.send(Msg::GuideSeen(Box::new(seen)));
         });
     }
@@ -110,7 +136,7 @@ impl Shell {
                     let ask = state == GuideState::NeedsClick;
                     let tokens = ask.then_some(tokens);
                     let model = ask.then(|| small_ask::Small::of(self).model().to_string());
-                    self.proto_note(&[to], &HubEv::Guide { project: self.project(), hash: s.hash, state, guide, tokens, model });
+                    self.proto_note(&[to], &HubEv::Guide { project: self.project(), hash: s.hash, target: Some(s.target), state, guide, tokens, model });
                 }
             }
             Next::Start => self.guide_call(s, run),
@@ -123,7 +149,7 @@ impl Shell {
         let Some(small) = small else { return };
         self.guides.writing.insert(s.hash.clone());
         self.guides.failed.remove(&s.hash);
-        let ev = HubEv::Guide { project: self.project(), hash: s.hash.clone(), state: GuideState::Writing, guide: None, tokens: None, model: None };
+        let ev = HubEv::Guide { project: self.project(), hash: s.hash.clone(), target: Some(s.target.clone()), state: GuideState::Writing, guide: None, tokens: None, model: None };
         if let Why::Open { to, .. } = s.why {
             self.proto_note(&[to], &ev);
         }
@@ -141,13 +167,13 @@ impl Shell {
                     log_line(small.paths(), &format!("guide {}: not kept: {}", s.hash, e));
                 }
             }
-            let _ = tx.send(Msg::GuideDone { hash: s.hash, got });
+            let _ = tx.send(Msg::GuideDone { hash: s.hash, target: s.target, got });
         });
     }
 
     /// A call ended: every client gets it (a cache fill: the review that
     /// shows this diff takes it, the others drop it).
-    pub(super) fn guide_done(&mut self, hash: String, got: Result<Guide, String>) {
+    pub(super) fn guide_done(&mut self, hash: String, target: GuideTarget, got: Result<Guide, String>) {
         self.guides.writing.remove(&hash);
         let (state, guide) = match got {
             Ok(g) => (GuideState::Ready, Some(Box::new(g))),
@@ -159,7 +185,7 @@ impl Shell {
         };
         let ids = self.typed_ids();
         if !ids.is_empty() {
-            self.proto_note(&ids, &HubEv::Guide { project: self.project(), hash, state, guide, tokens: None, model: None });
+            self.proto_note(&ids, &HubEv::Guide { project: self.project(), hash, target: Some(target), state, guide, tokens: None, model: None });
         }
     }
 

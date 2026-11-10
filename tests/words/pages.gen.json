@@ -213,6 +213,14 @@
     "one": null,
     "text": "couldn't write the guide"
   },
+  "pages.review_guide_line": {
+    "args": [
+      "tag",
+      "n"
+    ],
+    "one": "PR {tag} · guided review ready · {n} part",
+    "text": "PR {tag} · guided review ready · {n} parts"
+  },
   "pages.review_guide_none": {
     "args": [],
     "one": null,

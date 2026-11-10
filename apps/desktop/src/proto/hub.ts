@@ -95,7 +95,14 @@ hash?: string | null, title?: string | null, req?: number | null, commits?: numb
  * a `.diff` artifact's diff (the `diff` ask's `artifact`): its id and
  * the version read; a client keys the answer by them
  */
-artifact?: string | null, version?: number | null, } | { "ev": "guide", project: string, hash: string, state: GuideState, guide?: Guide | null, tokens?: number | null, 
+artifact?: string | null, version?: number | null, } | { "ev": "guide", project: string, hash: string, 
+/**
+ * the change it answers for (page pr-guided, architect m_58377):
+ * the ask's target, a PR's link in forge::pr_link's form; so a
+ * thread that never read the diff knows its PR's guide. None: an
+ * older hub
+ */
+target?: GuideTarget | null, state: GuideState, guide?: Guide | null, tokens?: number | null, 
 /**
  * needs_click: the model his click runs (his main model: the
  * button names it, page review-guided)

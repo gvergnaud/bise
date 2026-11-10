@@ -242,7 +242,7 @@ enum Msg {
     /// A diff read for its guide (daemon/guide.rs): the loop decides.
     GuideSeen(Box<guide::Seen>),
     /// A guide's call is over (daemon/guide.rs): kept, or why not.
-    GuideDone { hash: String, got: Result<bise_proto::diff::Guide, String> },
+    GuideDone { hash: String, target: bise_proto::diff::GuideTarget, got: Result<bise_proto::diff::Guide, String> },
     /// A role-line call is over (BISE-126).
     RoleLine {
         dir: String,

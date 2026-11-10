@@ -366,6 +366,12 @@ pub enum HubEv {
     Guide {
         project: Project,
         hash: String,
+        /// the change it answers for (page pr-guided, architect m_58377):
+        /// the ask's target, a PR's link in forge::pr_link's form; so a
+        /// thread that never read the diff knows its PR's guide. None: an
+        /// older hub
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        target: Option<GuideTarget>,
         state: GuideState,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         guide: Option<Box<Guide>>,

@@ -6,14 +6,14 @@
 import { createContext, createElement, useContext, useEffect, useSyncExternalStore, type ReactNode } from 'react';
 import type { Account, Agent, FlowMode, Growth, ReleaseEv, SwitchRow, UpdateEv, Artifact, ComputerAgent, Card, Entry, Feature, Found, IndexRow, Job, JsonValue, Merged, Model, PickCommand, Place, PickSkill, Plugin, PluginPreview, PluginsSummary, ProjectRow, RoleRow, ScheduledTask, SetupGauge, Worktree, Folder } from '@/proto';
 import type { CorePort, CoreState } from '@/shared/api';
-import type { BiseUpdate, Proc } from '@/proto';
+import type { BiseUpdate, GuideTarget, Proc } from '@/proto';
 import { keep } from '@/app/keep';
 import type { AnsweredFrom } from './answered';
 import type { AnswerJump } from './store';
 import type { Acted } from './acted';
 import type { Refused } from './refused';
 import type { InboxItem } from '@/inbox/listed';
-import { guideKey, prActKey, prDetailKey, prDiffKey, prLogKey, type GuideEv, type PrActState } from './types';
+import { guideForKey, guideKey, prActKey, prDetailKey, prDiffKey, prLogKey, type GuideEv, type PrActState } from './types';
 import { artDiffKey, branchDiffKey, diffErrKey, diffKey, toolOutKey, Store, type ToolOut, type Away, type Dictation, type HubLine, type Diff, type FilesAnswer, type Ev, type EvOf, type Pending, type PrsList, type BranchesList, type VersionsList, type PagesList, type ThreadHits, type ThreadOrder, type VoiceModeState, type TalkShot } from './store';
 
 /**
@@ -145,6 +145,11 @@ export const useBranchDiff = (project: string, branch: string): Diff | null =>
 /** A diff's guide by the diff's hash (none: no hash, an older hub); null until the hub says. */
 export const useGuide = (project: string, hash: string | null): GuideEv | null =>
   useSlice(hash === null ? 'guide:none' : guideKey(project, hash), (s) => (hash === null ? null : s.guide(project, hash)));
+/** A change's guide by what it is of (page pr-guided: a PR's thread line); null until the hub names one. */
+export const useGuideFor = (project: string, target: GuideTarget | null): GuideEv | null => {
+  const hash = useSlice<string | null>(target === null ? 'guide-for:none' : guideForKey(project, target), (s) => (target === null ? null : s.guideHashFor(project, target)));
+  return useGuide(project, hash);
+};
 /** A PR's diff by its link (askPrDiff); null until the hub answers. */
 export const usePrDiff = (project: string, url: string): Diff | null =>
   useSlice(prDiffKey(project, url), (s) => s.prDiff(project, url));

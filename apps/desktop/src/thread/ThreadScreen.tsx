@@ -30,6 +30,7 @@ import { keep } from '@/app/keep';
 import { Tip } from '@/setup';
 import { useTour } from '@/setup/useTour';
 import { onQuotes, takeQuotes } from '@/review/quote';
+import { GuideLine } from '@/review/GuideLine';
 import { QuotePop } from '@/quote/QuotePop';
 import { Hint, hintUsed, hintsUserMessage, useHint } from '@/app/hints';
 import { HubNoteRow, InboxBlock, type Answering } from '@/inbox';
@@ -386,6 +387,8 @@ export function ThreadScreen({ project, agent, bise = false, projectName, artifa
         {!fresh && <PauseLine a={me} project={project} />}
         {/* a typed command's result (the hub's plain line): one quiet row, never under the composer (amb-home) */}
         <HubNoteRow project={project} />
+        {/* its PR's guided review is ready (page pr-guided V2): a status line, never a log entry */}
+        {!bise && <GuideLine project={project} agent={agent} />}
         {signIn.on && <SignInLine copied={signIn.copied} />}
         {/* the step at work, once: the growing fold '▸ <its words>  ∿ 10 s' (live-step.tsx) */}
         <StepLine tkey={tkey} project={project} agent={agent} working={workingRowShows(me)} typing={typing} />
