@@ -171,6 +171,12 @@ export default {
   mac: {
     category: 'public.app-category.developer-tools',
     icon: 'resources/icon.icns',
+    // Info.plist's LSMinimumSystemVersion: the oldest macOS the WHOLE app runs on. Electron 44
+    // alone says 13.0, but the helper (ScreenCaptureKit), bise and the runtime are built for 14.0
+    // (rust/.cargo/config.toml MACOSX_DEPLOYMENT_TARGET): on 13 the app opened and its bise
+    // couldn't. Equal to the update feed's min_macos (scripts/desktop_feed.py MIN_MACOS):
+    // tests/macos_floor_test.py keeps every place equal.
+    minimumSystemVersion: '14.0',
     target: ['dir'],
     // signing: electron-builder rewrites Info.plist and adds the helper and
     // bise, which breaks Electron's own seal, so a dir build is re-signed

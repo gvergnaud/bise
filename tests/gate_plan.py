@@ -104,6 +104,13 @@ SELFTESTS = [
     ("tip_check_test", "python3 -B tests/tip_check_test.py",
      ("scripts/tip_check.py", "scripts/tip_blame.py", "tests/tip_check_test.py")),
     ("tip_blame_test", "python3 -B tests/tip_blame_test.py", ("scripts/tip_blame.py", "tests/tip_blame_test.py")),
+    # update-safety: the cut's upgrade paths, the release halt, one macOS floor everywhere
+    ("upgrade_paths_test", "python3 -B tests/upgrade_paths_test.py", ("scripts/upgrade_paths.py", "tests/upgrade_paths_test.py")),
+    ("release_halt_test", "python3 -B tests/release_halt_test.py", ("scripts/release_halt.py", "tests/release_halt_test.py")),
+    ("desktop_tag_test", "python3 -B tests/desktop_tag_test.py", ("scripts/desktop_tag.py", "scripts/upgrade_paths.py", "tests/desktop_tag_test.py")),
+    ("macos_floor_test", "python3 -B tests/macos_floor_test.py",
+     ("tests/macos_floor_test.py", "rust/.cargo/config.toml", "apps/desktop/native/mac/build.sh", "apps/desktop/electron-builder.mjs",
+      "scripts/desktop_feed.py", "scripts/desktop_release.py")),
     ("shims_check_self", "python3 tests/shims_check.py --self-test", ("tests/shims_check.py",)),
     ("state_guard_self", "python3 tests/state_guard.py --self-test", ("tests/state_guard.py",)),
     ("js_guard_self", "python3 tests/js_guard.py --self-test", ("tests/js_guard.py",)),
