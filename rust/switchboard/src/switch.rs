@@ -442,9 +442,13 @@ fn crash_cause(paths: &Paths, marks: Marks) -> String {
 /// [`crash_cause`]'s words from the new hub's last error line and last
 /// log step (either may be empty). Pure.
 fn cause_of(err: &str, step: &str) -> String {
+    // it goes in versions.json and on the card: no control character (a
+    // colored panic's ANSI escapes, a stray \r), architect m_59049
+    let plain = |s: &str| s.chars().filter(|c| !c.is_control()).collect::<String>().trim().to_string();
+    let (err, step) = (plain(err), plain(step));
     match (err.is_empty(), step.is_empty()) {
-        (false, _) => format!("the hub stopped (crash): {}", crate::util::clip(err, 200)),
-        (true, false) => format!("the hub stopped (crash) after: {}", crate::util::clip(step, 160)),
+        (false, _) => format!("the hub stopped (crash): {}", crate::util::clip(&err, 200)),
+        (true, false) => format!("the hub stopped (crash) after: {}", crate::util::clip(&step, 160)),
         (true, true) => "the hub stopped (crash)".into(),
     }
 }
@@ -836,6 +840,8 @@ mod state_tests {
         assert_eq!(cause_of("thread 'main' panicked at daemon.rs:12: index out of bounds", "boot: journal read"), "the hub stopped (crash): thread 'main' panicked at daemon.rs:12: index out of bounds");
         assert_eq!(cause_of("", "boot: journal read (21 events)"), "the hub stopped (crash) after: boot: journal read (21 events)");
         assert_eq!(cause_of("", ""), "the hub stopped (crash)");
+        assert_eq!(cause_of("\u{1b}[31mpanicked\u{1b}[0m at x\r", ""), "the hub stopped (crash): [31mpanicked[0m at x", "no control character reaches the card");
+        assert_eq!(cause_of("\u{7}\r", "boot done"), "the hub stopped (crash) after: boot done", "a line of control characters only is no line");
     }
 
     #[test]
