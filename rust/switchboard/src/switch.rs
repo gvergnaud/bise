@@ -370,7 +370,7 @@ pub fn id_of(root: &Path) -> String {
 }
 
 /// Watch the new hub for the probation period. Err: the reason to roll back.
-fn probation(paths: &Paths, to: &Path, period: Duration) -> Result<(), String> {
+fn probation(paths: &Paths, to: &Path, period: Duration, marks: Marks) -> Result<(), String> {
     // the hub reads the deadline (on_probation: it reports its failures
     // and does not idle-exit): from now, not from before the backup and
     // the start, else the hub thought it over and idle-exited while this
@@ -387,7 +387,7 @@ fn probation(paths: &Paths, to: &Path, period: Duration) -> Result<(), String> {
         }
         match hub_pid(paths) {
             Some(p) if alive(p) => {}
-            _ => return Err("the hub stopped (crash)".into()),
+            _ => return Err(crash_cause(paths, marks)),
         }
         // the hub that answers runs `to`, never another bise that took the
         // workspace meanwhile (an older client's start: a pass then left
@@ -412,6 +412,41 @@ fn probation(paths: &Paths, to: &Path, period: Duration) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// Where hub.err and hub.log ended when the switch started the new hub:
+/// only the lines after them are the new hub's (an older line once
+/// passed for the cause).
+#[derive(Clone, Copy)]
+struct Marks {
+    err: u64,
+    log: u64,
+}
+
+impl Marks {
+    fn now(paths: &Paths) -> Marks {
+        Marks { err: file_len(&paths.state.join("hub.err")), log: file_len(&paths.log()) }
+    }
+}
+
+/// Why the new hub stopped during its probation, from its own lines
+/// (update-safety, B: Gauthier's card said only 'the hub stopped (crash)'):
+/// its last hub.err line (a panic says where), else its last hub.log
+/// step; the reason the update card shows ('couldn't update to …').
+fn crash_cause(paths: &Paths, marks: Marks) -> String {
+    let err = last_line(&read_from(&paths.state.join("hub.err"), marks.err), |_| true);
+    let step = last_line(&read_from(&paths.log(), marks.log), |l| !l.contains(" switch: ") && !crate::boot::is_heartbeat(l));
+    cause_of(&err, &step)
+}
+
+/// [`crash_cause`]'s words from the new hub's last error line and last
+/// log step (either may be empty). Pure.
+fn cause_of(err: &str, step: &str) -> String {
+    match (err.is_empty(), step.is_empty()) {
+        (false, _) => format!("the hub stopped (crash): {}", crate::util::clip(err, 200)),
+        (true, false) => format!("the hub stopped (crash) after: {}", crate::util::clip(step, 160)),
+        (true, true) => "the hub stopped (crash)".into(),
+    }
 }
 
 /// Probation seconds in a row the hub may run another root than the
@@ -596,7 +631,8 @@ fn run_locked(paths: &Paths, to: &Path, period: Duration, restart: bool, reload:
     // the phase is written: the hub sends its switch row ('reloading')
     phase_moved(paths);
 
-    let outcome = replace_hub(paths, &to, from == to, Late::Kill).and_then(|_| probation(paths, &to, period));
+    let marks = Marks::now(paths);
+    let outcome = replace_hub(paths, &to, from == to, Late::Kill).and_then(|_| probation(paths, &to, period, marks));
     let mut st = read_state(paths);
     st["probation_until"] = json!(0);
     match outcome {
@@ -790,6 +826,16 @@ mod state_tests {
         std::fs::write(d.join("hub.root"), old.to_string_lossy().as_bytes()).unwrap();
         assert!(runs_elsewhere(&paths, &new), "another root answers");
         let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// A crash during probation says the new hub's own last words (B of
+    /// page update-safety): the card shows them, never a bare 'crash'.
+    #[test]
+    fn a_crash_in_probation_says_its_cause() {
+        use super::cause_of;
+        assert_eq!(cause_of("thread 'main' panicked at daemon.rs:12: index out of bounds", "boot: journal read"), "the hub stopped (crash): thread 'main' panicked at daemon.rs:12: index out of bounds");
+        assert_eq!(cause_of("", "boot: journal read (21 events)"), "the hub stopped (crash) after: boot: journal read (21 events)");
+        assert_eq!(cause_of("", ""), "the hub stopped (crash)");
     }
 
     #[test]

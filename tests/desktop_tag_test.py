@@ -44,6 +44,16 @@ echo "${FAKE_CHECK_REDS:-}" | tr '|' '\\n' | grep . > "$d/reds.txt"
 [ -n "${FAKE_CHECK_REDS:-}" ] && exit 1
 exit "${FAKE_CHECK_RC:-0}"
 """
+# a fake upgrade_paths.py run (DESKTOP_TAG_UPGRADES, update-safety A): FAKE_UP_RED (a path's tag,
+# red), FAKE_UP_NET (a path's tag, not fetched)
+FAKE_UPGRADES = """#!/usr/bin/env bash
+echo "upgrades $*" >> "$FAKE_LOG"
+out=$1; mkdir -p "$out"
+printf 'desktop-v2026.10.1\\tgreen\\tswitched\\n' > "$out/verdicts.tsv"
+[ -n "${FAKE_UP_RED:-}" ] && { printf '%s\\tred\\tthe switch passed but the hub runs /old, not the candidate\\n' "$FAKE_UP_RED" >> "$out/verdicts.tsv"; exit 1; }
+[ -n "${FAKE_UP_NET:-}" ] && { printf '%s\\tnetwork\\tnetwork: HTTP 502\\n' "$FAKE_UP_NET" >> "$out/verdicts.tsv"; exit 3; }
+exit 0
+"""
 # no signing prompt in a throwaway repo (his global config signs)
 GIT_ENV = {"GIT_CONFIG_COUNT": "3", "GIT_CONFIG_KEY_0": "commit.gpgsign", "GIT_CONFIG_VALUE_0": "false",
            "GIT_CONFIG_KEY_1": "tag.gpgsign", "GIT_CONFIG_VALUE_1": "false",
@@ -111,17 +121,21 @@ def repo_flow():
         fake_checks = os.path.join(t, "checks")
         with open(fake_checks, "w") as f:
             f.write(FAKE_CHECKS)
-        env = dict(os.environ, BISE_HOME=bh, DESKTOP_TAG_NIGHTLY=fake, DESKTOP_TAG_CHECKS=fake_checks, FAKE_LOG=log)
+        fake_up = os.path.join(t, "upgrades")
+        with open(fake_up, "w") as f:
+            f.write(FAKE_UPGRADES)
+        env = dict(os.environ, BISE_HOME=bh, DESKTOP_TAG_NIGHTLY=fake, DESKTOP_TAG_CHECKS=fake_checks, DESKTOP_TAG_UPGRADES=fake_up, FAKE_LOG=log)
         # no heavy slot in the test: the argv as it is
         prios = []  # a release's run asks heavy-run's release lane (--prio)
         T.heavy_argv = lambda cmd, lock, prio=False: (prios.append(prio), [c for c in cmd if c not in ("/usr/bin/caffeinate", "-is")])[1]
         runs = os.path.join(bh, "run", "nightly", "desktop-runs.tsv")
         cruns = os.path.join(bh, "run", "nightly", "checks-verdicts.tsv")
+        uruns = os.path.join(bh, "run", "nightly", "upgrade-verdicts.tsv")
         calls = lambda: open(log).read().splitlines() if os.path.exists(log) else []  # noqa: E731
         nightlies = lambda: [c for c in calls() if c.startswith("nightly ")]  # noqa: E731
 
         def cut(tag, **extra):
-            for f in (runs, cruns):
+            for f in (runs, cruns, uruns):
                 if os.path.exists(f):
                     os.remove(f)
             try:
@@ -204,6 +218,13 @@ def repo_flow():
         check(r.startswith("ERR the desktop checks") and "no red named" in r, "checks: red with no name refuses: %s" % r)
         r = cut("desktop-v2026.10.6", FAKE_CHECK_REDS="history-perf")
         check(r == "nightly-desktop: owned-reds 1 %s 2026-10-18T05:00:00 (owners: land-reds)" % sha, "checks: an owned red: %s" % r)
+        # the upgrade paths (update-safety A, marketing m_58864): beside the checks, in the release
+        # lane; a broken path refuses the tag with its name; a release not fetched says network
+        r = cut("desktop-v2026.10.7", FAKE_UP_RED="desktop-v2026.10.0")
+        check(r.startswith("ERR the upgrade paths") and "desktop-v2026.10.0: the switch passed but the hub runs /old" in r and not g("tag", "-l", "desktop-v2026.10.7"), "upgrades: a red path refuses: %s" % r)
+        check(any(c.startswith("upgrades ") for c in calls()) and open(uruns).read().split("\t")[1:3] == [sha, "red"], "upgrades: run, its line kept: %s" % calls())
+        r = cut("desktop-v2026.10.7", FAKE_UP_NET="desktop-v2026.10.0")
+        check(r.startswith("ERR the upgrade paths") and "(network)" in r and "HTTP 502" in r, "upgrades: network says so: %s" % r)
         os.makedirs(os.path.join(t, "o-checks-red"))
         with open(os.path.join(t, "o-checks-red", "reds.txt"), "w") as f:
             f.write("app-start\n")
@@ -213,6 +234,8 @@ def repo_flow():
                 f.write("2026-10-18T05:00:00\t%s\tgreen\t%s\n" % (sha, os.path.join(t, "o-green")))
             with open(cruns, "w") as f:
                 f.write("2026-10-18T04:00:00\t%s\tred\t%s\n" % (sha, os.path.join(t, "o-checks-red")))
+            with open(uruns, "w") as f:
+                f.write("2026-10-18T04:00:00\t%s\tgreen\t%s\n" % (sha, os.path.join(t, "o-green")))
             r = T.cut("desktop-v2026.10.7", None, "", repo=repo, env=env)
         except T.TagError as e:
             r = "ERR " + str(e)

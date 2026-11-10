@@ -29,6 +29,7 @@ import os
 import re
 import subprocess
 import sys
+import threading
 
 HERE = os.path.dirname(os.path.realpath(__file__))
 REPO = os.path.dirname(HERE)
@@ -196,6 +197,52 @@ def checks_run(bh, sha, repo, env):
     return run
 
 
+def upgrade_run(bh, sha, repo, env):
+    """The upgrade paths on exactly `sha` (scripts/upgrade_paths.py, update-safety A): the last 4
+    app releases each update to this tree's build through their own switcher, their core attached.
+    The last run of `sha` in <bh>/run/nightly/upgrade-verdicts.tsv when it was green; else one now,
+    in heavy-run's release lane (marketing m_58864). {'when', 'verdict', 'out'}: verdict green,
+    red, network (a release that couldn't be fetched, never a red: fast-loop m_58863) or none."""
+    tsv = os.path.join(bh, "run", "nightly", "upgrade-verdicts.tsv")
+    run = last_run(read(tsv), sha)
+    if run is not None and run["verdict"] == "green":
+        return run
+    when = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    out = os.path.join(bh, "run", "nightly", "upgrade-paths-%s-%s" % (sha[:8], when.replace(":", "").replace("-", "")))
+    os.makedirs(out, exist_ok=True)
+    fake = env.get("DESKTOP_TAG_UPGRADES")
+    if fake:
+        cmd = ["bash", fake, out]
+    elif env.get("QA_BISE"):
+        import upgrade_paths  # noqa: PLC0415 (the cut's only user)
+        cand = upgrade_paths.candidate(repo, env["QA_BISE"], os.path.join(out, "candidate"), sha)
+        cmd = [sys.executable, os.path.join(HERE, "upgrade_paths.py"), "run", cand, "--out", out]
+    else:
+        cmd = None
+    if cmd is None:
+        verdict = "none"
+    else:
+        say("the upgrade paths of %s: the last app releases update to it (its out: %s)" % (sha[:12], out))
+        rc = subprocess.run(heavy_argv(cmd, os.path.join(bh, "run", "heavy.lock"), prio=True), cwd=repo, env=env).returncode
+        verdict = {0: "green", 1: "red", 3: "network"}.get(rc, "none")
+    os.makedirs(os.path.dirname(tsv), exist_ok=True)
+    with open(tsv, "a") as f:
+        f.write("%s\t%s\t%s\t%s\n" % (when, sha, verdict, out))
+    return {"when": when, "verdict": verdict, "out": out}
+
+
+def upgrade_refusal(run):
+    """None when every path is green, else why the tag is refused: each path that broke with its
+    words (verdicts.tsv). Pure on the run and its file."""
+    if run["verdict"] == "green":
+        return None
+    lines = [l.split("\t") for l in read(os.path.join(run["out"], "verdicts.tsv")).splitlines() if l.count("\t") >= 2]
+    bad = ["%s: %s" % (p[0], p[2]) for p in lines if p[1] != "green"]
+    head = {"red": "an update from a recent release breaks", "network": "a recent release couldn't be fetched (network): run the cut again",
+            "none": "the upgrade paths didn't run (no bise of this tree)"}.get(run["verdict"], "the upgrade paths: %s" % run["verdict"])
+    return "%s%s" % (head, (": " + "; ".join(bad)) if bad else "")
+
+
 def check(tag, repo=REPO):
     """CI's check of a pushed tag (its object fetched as it is: actions/checkout can leave a
     lightweight copy of the pushed tag, so the workflow fetches refs/tags/<tag> with --force)."""
@@ -244,7 +291,18 @@ def cut(tag, sha, notes, repo=REPO, env=None, why=None):
     # the desktop checks (tests/checks, Playwright) on that exact sha too (review-gates m_37177):
     # the tip runs none of them and nightly_desktop.sh only test:land's set, so a release with a
     # red check would pass whenever the night was red, skipped or never ran
-    ckind, cowned = judge_checks(checks_run(bh, sha, repo, env), known)
+    # the upgrade paths (update-safety A) run beside the checks: both need this tree's bise first
+    tree_bise(bh, repo, env)
+    upgrades = {}
+    th = threading.Thread(target=lambda: upgrades.update(run=upgrade_run(bh, sha, repo, env)))
+    th.start()
+    try:
+        ckind, cowned = judge_checks(checks_run(bh, sha, repo, env), known)
+    finally:
+        th.join()
+    refused = upgrade_refusal(upgrades.get("run") or {"verdict": "none", "out": ""})
+    if refused:
+        raise TagError("the upgrade paths of %s: %s: no tag" % (sha[:12], refused))
     if ckind != "green":
         kind, owned = "owned-reds", owned + cowned
     line = mark_line(kind, owned, sha, run["when"])
