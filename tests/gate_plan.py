@@ -124,6 +124,11 @@ SELFTESTS = [
     # a red e2e test keeps its world's logs
     ("keep_logs_test", "python3 -B tests/keep_logs_test.py", ("tests/keep_logs_test.py", "tests/e2e.py", "tests/flaky_keep.py",
                                                                "tests/run_all.sh", "tests/gate.sh")),
+    # every catalog word read by a client (a text scan, ~1 s, no cargo): on any path that can drop a
+    # read, a .rs, a desktop .ts/.tsx or a words .gen.json (4ff9ec771: two reads dropped in desktop TS
+    # only, the Rust test that held the rule never ran in that quick; architect m_58405)
+    ("words_read_check", "python3 -B tests/words_read_check.py",
+     ("*.rs", "apps/desktop/src/*.ts", "apps/desktop/src/*.tsx", "tests/words/*.gen.json", "tests/words_read_check.py")),
     # every agent's gate takes heavy-run's queue, one gate a tree (5 s)
     ("gate_queue_test", "python3 -B tests/gate_queue_test.py",
      ("tests/gate_queue_test.py", "tests/gate.sh", "scripts/heavy-run", "scripts/heavy_slot.py",

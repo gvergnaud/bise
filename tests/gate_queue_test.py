@@ -95,6 +95,46 @@ def proof_run_reaps_its_own(tmp):
           % (r.stdout[-200:] + r.stderr[-300:]))
 
 
+def words_read_check_holds(tmp):
+    """tests/words_read_check.py (architect m_58405): a planted word no client reads is red, a read
+    by either client makes it green (Rust '<area>::<name>' outside the catalog, desktop
+    '<area>.<name>' outside .gen.ts and tests, a whole name only), the real tree is green, and the
+    plan runs it on a .rs, a desktop .ts/.tsx and a words .gen.json."""
+    import json
+    import gate_plan
+    script = os.path.join(HERE, "words_read_check.py")
+    root = os.path.join(tmp, "words-tree")
+    for d in ("tests/words", "rust/proto/src/words", "rust/x/src", "apps/desktop/src/a"):
+        os.makedirs(os.path.join(root, d), exist_ok=True)
+    json.dump({"_": "generated", "zz.never_read": {"text": "x"}}, open(os.path.join(root, "tests/words/zz.gen.json"), "w"))
+
+    def run(files):
+        for p, text in files.items():
+            open(os.path.join(root, p), "w").write(text)
+        r = subprocess.run([sys.executable, "-B", script, root], capture_output=True, text=True)
+        for p in files:
+            os.unlink(os.path.join(root, p))
+        return r.returncode, r.stdout
+
+    rc, out = run({})
+    check(rc == 1 and "zz.never_read" in out, "words_read_check: a word nothing reads is red, named: %r" % out)
+    for files, what in [({"rust/proto/src/words/zz.rs": "zz::never_read"}, "the catalog's own mention"),
+                        ({"apps/desktop/src/a/b.test.ts": "zz.never_read"}, "a desktop test"),
+                        ({"apps/desktop/src/a/b.gen.ts": "zz.never_read"}, "a generated file"),
+                        ({"rust/x/src/l.rs": "zz::never_read_too"}, "a longer name")]:
+        check(run(files)[0] == 1, "words_read_check: %s is no read" % what)
+    for files, what in [({"rust/x/src/l.rs": "use w::zz::never_read;"}, "Rust"),
+                        ({"apps/desktop/src/a/b.tsx": "w.zz.never_read()"}, "the desktop")]:
+        check(run(files)[0] == 0, "words_read_check: a read by %s keeps it" % what)
+    r = subprocess.run([sys.executable, "-B", script], capture_output=True, text=True)
+    check(r.returncode == 0, "words_read_check: the real tree is green: %r" % r.stdout[-300:])
+    import fnmatch
+    globs = [g for n, _, gs in gate_plan.SELFTESTS if n == "words_read_check" for g in gs]
+    for p in ("rust/switchboard/src/x.rs", "apps/desktop/src/inbox/Block.tsx", "apps/desktop/src/a/b.ts",
+              "tests/words/inbox.gen.json"):
+        check(any(fnmatch.fnmatchcase(p, g) for g in globs), "gate_plan: %s runs words_read_check" % p)
+
+
 def desktop_check_quick_only():
     """A quick's whole-app desktop_check runs check:quick: check with test:quick
     (the unit project) for test and no build (quick builds nothing,
@@ -216,6 +256,7 @@ def main():
     seed_carries_deps_only(tmp, senv)
     proof_run_reaps_its_own(tmp)
     desktop_check_quick_only()
+    words_read_check_holds(tmp)
     # 4. the wiring a test can't run whole (a real gate): the nested gate and GATE_NO_HEAVY skip both
     src = open(GATE).read()
     check('if [ "$mode" != land ] && [ -z "$gate_outer" ] && [ -z "${GATE_NO_HEAVY:-}" ]; then' in src,

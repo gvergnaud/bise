@@ -402,13 +402,14 @@
   }
  },
  {
-  "name": "a rust file: the include map's self-test",
+  "name": "a rust file: the include map's self-test and the words read check",
   "paths": [
    "rust/tui/src/feed.rs"
   ],
   "want": {
    "selftests": [
-    "include_map_self"
+    "include_map_self",
+    "words_read_check"
    ]
   }
  },
