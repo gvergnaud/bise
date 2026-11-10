@@ -1,11 +1,11 @@
 // src/app/panel · a thing in a tab (page native-mac §4 #2: « toute entité s'y ouvre »): an artifact
-// in the browser (Browser.tsx), an agent's thread, its changes, a commit, a PR
-// (its project's pull requests), a process's output, a plugin's page, a scheduled task (the
+// in the browser (Browser.tsx), an agent's thread, its changes, a commit, a branch's diff, a PR
+// (each its guided review: ChangeTab, PrTab), a process's output, a plugin's page, a scheduled task (the
 // scheduled list), a project's lead thread, a project's office. Each draws the screen it has in the
 // centre, in the panel's width. Owner: nm-panel.
 import type { Entity } from '@/shared/entity';
 import { ThreadScreen } from '@/thread/ThreadScreen';
-import { ReviewScreen } from '@/review/ReviewScreen';
+import { ChangeTab } from '@/review/ChangeTab';
 import { PrTab } from '@/review/PrTab';
 import { PluginsScreen } from '@/plugins';
 import { SkillTab } from '@/plugins/SkillTab';
@@ -34,16 +34,23 @@ export function ThingTab({ e, tabId }: { e: Exclude<Entity, { kind: 'tab' }>; ta
         </div>
       );
     }
+    // a change, as a PR's tab draws its PR (page pr-guided V2: one home per change)
     case 'diff':
       return (
         <div className="pn-screen" data-testid="app.panel.diff">
-          <ReviewScreen project={e.project} agent={e.agent} />
+          <ChangeTab project={e.project} change={{ agent: e.agent }} />
         </div>
       );
     case 'commit':
       return (
         <div className="pn-screen" data-testid="app.panel.commit">
-          <ReviewScreen project={e.project} agent={MAIN} commit={e.sha} />
+          <ChangeTab project={e.project} change={{ commit: e.sha }} />
+        </div>
+      );
+    case 'branch':
+      return (
+        <div className="pn-screen" data-testid="app.panel.branch">
+          <ChangeTab project={e.project} change={{ branch: e.branch }} />
         </div>
       );
     case 'pr':

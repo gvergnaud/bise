@@ -4,11 +4,10 @@ import { MAIN } from '@/app/route';
 import { floatTarget } from './target';
 
 describe('floatTarget', () => {
-  it("a project's page writes to its main, an agent's review to that agent", () => {
+  it("a project's page writes to its main", () => {
     expect(floatTarget({ screen: 'agents', project: 'shop' }, 'home-1')).toEqual({ project: 'shop', agent: MAIN });
     expect(floatTarget({ screen: 'changes', project: 'shop' }, 'home-1')).toEqual({ project: 'shop', agent: MAIN });
     expect(floatTarget({ screen: 'artifacts', project: 'shop' }, 'home-1')).toEqual({ project: 'shop', agent: MAIN });
-    expect(floatTarget({ screen: 'review', project: 'shop', agent: 'perf' }, 'home-1')).toEqual({ project: 'shop', agent: 'perf' });
   });
   it("a page of no project (inbox, scheduled, plugins, processes, every project's artifacts) writes to bise's main", () => {
     for (const r of [{ screen: 'inbox' }, { screen: 'scheduled' }, { screen: 'plugins' }, { screen: 'running' }, { screen: 'artifacts', project: '' }] as const)

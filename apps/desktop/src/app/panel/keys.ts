@@ -61,7 +61,7 @@ export function panelKeyOf(e: KeyLike, open: boolean, own = false): PanelKey | u
 
 /** The agent in view: a thread's, else none (bise's own, a page). Pure. */
 export function agentInView(route: Route): { project: string; agent: string } | undefined {
-  return route.screen === 'thread' ? { project: route.project, agent: route.agent } : route.screen === 'review' ? { project: route.project, agent: route.agent } : undefined;
+  return route.screen === 'thread' ? { project: route.project, agent: route.agent } : undefined;
 }
 
 export interface PanelCtx {

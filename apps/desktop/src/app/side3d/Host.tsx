@@ -26,6 +26,7 @@
 // (z 15: over the composer's 10, under the palette's 20). Owner: nm-side.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { openPr as openPrTab } from '@/review/openPr';
+import { openChange } from '@/review/openChange';
 import { createPortal } from 'react-dom';
 import { useNowFor } from '../clock';
 import { useRoute, useRouter } from '../router';
@@ -435,18 +436,19 @@ function Side({ project, scope, home, world, at: coinsAt, right, outerW, room }:
   // the agents float: the Overview's AGENTS and ARCHIVED rows (folded-side v9: A's floats take Overview's rows)
   const ov = useAgentRows(scope, alt);
   const [archivedOpen, setArchivedOpen] = useState(false);
-  // a row opens its agent (main's on bise's own: bise's view); a mark or a head its PR's review, an orphan its branch
+  // a row opens its agent (main's on bise's own: bise's view); a mark or a head its PR's review, an
+  // orphan its branch, each change in the panel (review/openChange.ts)
   const openRow = (r: BarRow) => {
     if (all && r.main === true) router.go({ screen: 'bise' });
-    else if (r.kind === 'orphan' && r.branch !== undefined) router.go({ screen: 'branch', project: r.project, branch: r.branch });
+    else if (r.kind === 'orphan' && r.branch !== undefined) openChange(store, router, r.project, { branch: r.branch });
     else if (r.kind === 'group' && r.feature !== undefined) router.go({ screen: 'feature', project: r.project, name: r.feature });
     else if (r.agent !== undefined) router.go({ screen: 'thread', project: r.project, agent: r.agent });
   };
   // the ⑂ #412 chip: that PR's tab (⌘: the forge's page); a mark with no PR (a land, a worktree) as before
   const openPr = (r: BarRow, e?: MouseEvent) => {
     if (r.mark?.url != null && r.mark.url !== '') openPrTab(r.project, r.mark.url, e);
-    else if (r.kind === 'orphan' && r.branch !== undefined) router.go({ screen: 'branch', project: r.project, branch: r.branch });
-    else if (r.agent !== undefined) router.go({ screen: 'review', project: r.project, agent: r.agent });
+    else if (r.kind === 'orphan' && r.branch !== undefined) openChange(store, router, r.project, { branch: r.branch });
+    else if (r.agent !== undefined) openChange(store, router, r.project, { agent: r.agent });
   };
   // a click in the float that navigates (a row opens a thread, a page, an artifact or a task's tab; a
   // foot's 'all … ›') closes it, so his next esc goes to what it opened, never to the float left

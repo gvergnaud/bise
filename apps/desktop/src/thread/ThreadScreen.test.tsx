@@ -8,6 +8,7 @@ import { ThreadScreen } from './ThreadScreen';
 import { aboutParts } from './about';
 import { createRouter, RouterContext } from '@/app/router';
 import { handQuotes } from '@/review/quote';
+import { panelState } from '@/app/panel/state';
 
 // the composer is amb-web's: here a stand-in that counts its renders
 const composer = vi.hoisted(() => ({ renders: 0, props: null as null | { busy?: boolean; onSend: (o: { text: string; parts?: unknown[] }) => void; onReady?: (a: unknown) => void } }));
@@ -193,7 +194,7 @@ describe('the thread screen', () => {
     expect(v.getByTestId('thread.entry.950').querySelector('.b-rowmark')?.getAttribute('data-icon')).toBe('stop');
   });
 
-  it("thread/news-rows: a landing says who landed where, its short sha, and a click opens that commit", () => {
+  it("thread/news-rows: a landing says who landed where, its short sha, and a click opens that commit in the panel, the thread staying", () => {
     const { store } = setup();
     act(() => {
       store.apply({ ev: 'entry', project: P, agent: 'perf', entry: { pos: 27, at_ms: 1, kind: 'landed', text: '', landed: { agent: 'perf', target: 'main', from: 'sb/perf', sha: '1f4b96c00abc', files: 2, add: 10, del: 1 } } });
@@ -206,7 +207,9 @@ describe('the thread screen', () => {
     );
     expect(v.getByTestId('thread.landed.27').textContent).toContain('perf landed on main · 1f4b96c');
     fireEvent.click(v.getByTestId('thread.landed.27.sha'));
-    expect(router.get()).toEqual({ screen: 'commit', project: P, sha: '1f4b96c00abc' });
+    expect(router.get()).toEqual({ screen: 'bise' });
+    const front = panelState.get().tabs.list.find((t) => t.id === panelState.get().tabs.active)?.what;
+    expect(front).toEqual({ kind: 'thing', e: { kind: 'commit', project: P, sha: '1f4b96c00abc' } });
   });
 
   it('thread/approval-raw: his no is drawn from the approval entry, its ok a boolean on the row', () => {

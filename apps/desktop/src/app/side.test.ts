@@ -111,11 +111,8 @@ describe('the frame', () => {
     expect(crumbGoOf({ screen: 'prs', project: 'p' }, name)).toEqual([{ c: 'storefront', go: { screen: 'thread', project: 'p', agent: 'main' } }]);
     expect(crumbGoOf({ screen: 'environments', project: 'p' }, name)).toEqual([{ c: 'storefront', go: { screen: 'thread', project: 'p', agent: 'main' } }]);
     expect(crumbGoOf({ screen: 'artifacts', project: 'p' }, name)).toEqual([{ c: 'storefront', go: { screen: 'thread', project: 'p', agent: 'main' } }]);
-    // a feature, a commit and a branch: their word (the last) names one thing of the project, so the
-    // project's name is the only way back
+    // a feature: its word (the last) names one thing of the project, so the project's name is the only way back
     expect(crumbGoOf({ screen: 'feature', project: 'p', name: 'billing' }, name)).toEqual([{ c: 'storefront', go: { screen: 'thread', project: 'p', agent: 'main' } }]);
-    expect(crumbGoOf({ screen: 'commit', project: 'p', sha: 'a1b2c3d4e5f6' }, name)).toEqual([{ c: 'storefront', go: { screen: 'thread', project: 'p', agent: 'main' } }]);
-    expect(crumbGoOf({ screen: 'branch', project: 'p', branch: 'sb/x' }, name)).toEqual([{ c: 'storefront', go: { screen: 'thread', project: 'p', agent: 'main' } }]);
     // settings: its word goes to its root, the page's stays plain; a report and a lab: nothing before
     expect(crumbGoOf({ screen: 'settings', page: 'general' }, name)).toEqual([{ c: 'Settings', go: { screen: 'settings' } }]);
     // the page's crumb is the nav's title, never the route's id (designer m_42943: 'computer use')
@@ -231,11 +228,8 @@ describe("every crumb kind: each segment before the last opens that place (his a
     { screen: 'changes', project: 'p' },
     { screen: 'prs', project: 'p' },
     { screen: 'environments', project: 'p' },
-    { screen: 'review', project: 'p', agent: 'perf' },
     { screen: 'debug', project: 'p', agent: 'perf' },
     { screen: 'feature', project: 'p', name: 'billing' },
-    { screen: 'commit', project: 'p', sha: 'a1b2c3d4e5f6' },
-    { screen: 'branch', project: 'p', branch: 'sb/x' },
     { screen: 'artifacts', project: 'p' },
     { screen: 'artifacts', project: 'p', at: 'f/f-view' },
     { screen: 'artifacts', project: '', at: 'f/f-view' },

@@ -11,12 +11,9 @@
 //   agents/<p>                 a project's agents list (its live ones)
 //   agents/<p>/archived        its archived agents (/archived)
 //   changes/<p>                a project's changes (branches, merged today)
-//   review/<p>/<a>             an agent's change, to review and merge
 //   debug/<p>/<a>[/completion[/<provider>]]  /debug: an agent's raw session, or a request as sent
 //   feature/<p>/<name>         a feature: its branch, agents, try / merge / drop
 //   prs/<p>                    its open pull requests (the TUI's /prs)
-//   commit/<p>/<sha>           one commit already on main, read-only
-//   branch/<p>/<branch>        a branch's diff by its name ('/diff sb/x'; the branch keeps its slashes)
 //   artifacts/<p>[/<id>]       a project's artifacts (one opened)
 //   artifacts[/<p>]/~/<place>  the library at a place: recent, unfiled, f/<folder id> (artifacts/folders.ts atPath)
 //   environments/<p>           its worktrees and dev servers
@@ -28,7 +25,8 @@
 //   artifact in the panel's tab, shared/asks.ts artifactAskOf)
 //   lab/<composer|spotlight|pearl>             amb-web's labs, test mode only
 // Anything else parses to `notfound` with the string kept, never to bise:
-// a wrong link says so.
+// a wrong link says so. A change (an agent's, a branch's, a commit's) is no route: it opens in the
+// panel, its agent's thread in the centre (review/openChange.ts, page pr-guided V2).
 
 export type Route =
   | { screen: 'bise' }
@@ -37,13 +35,10 @@ export type Route =
   | { screen: 'agents'; project: string; archived?: true }
   | { screen: 'changes'; project: string }
   | { screen: 'prs'; project: string }
-  | { screen: 'review'; project: string; agent: string }
   /** /debug: an agent's raw session (history) or a request as its provider got it (completion,
       as `provider` would get it when named), the TUI's logview.rs */
   | { screen: 'debug'; project: string; agent: string; tab?: 'completion'; provider?: string }
   | { screen: 'feature'; project: string; name: string }
-  | { screen: 'commit'; project: string; sha: string }
-  | { screen: 'branch'; project: string; branch: string }
   /** `at`: the library's place (artifacts/folders.ts atPath: 'recent', 'unfiled', 'f/<id>'); none: all artifacts */
   | { screen: 'artifacts'; project: string; id?: string; at?: string }
   | { screen: 'environments'; project: string }
@@ -79,7 +74,6 @@ export type Screen = Route['screen'];
 /** The agent every project has: its main. */
 export const MAIN = 'main';
 
-const SHA = /^[0-9a-f]{4,40}$/;
 // a project id or an agent name: no slash, no space, not empty
 const NAME = /^[^/\s]+$/;
 
@@ -110,8 +104,6 @@ export function formatRoute(r: Route): string {
     case 'prs':
     case 'environments':
       return `${r.screen}/${r.project}`;
-    case 'review':
-      return `review/${r.project}/${r.agent}`;
     case 'debug': {
       const base = `debug/${r.project}/${r.agent}`;
       if (r.tab === undefined) return base;
@@ -119,10 +111,6 @@ export function formatRoute(r: Route): string {
     }
     case 'feature':
       return `feature/${r.project}/${r.name}`;
-    case 'commit':
-      return `commit/${r.project}/${r.sha}`;
-    case 'branch':
-      return `branch/${r.project}/${r.branch}`;
     case 'artifacts':
       // project '': every project's (the sidebar's '↗ artifacts', amb-kit)
       if (r.id !== undefined) return `artifacts/${r.project}/${r.id}`;
@@ -189,8 +177,6 @@ export function parseRoute(path: string): Route {
     case 'prs':
     case 'environments':
       return one !== undefined ? { screen: head, project: one } : nf;
-    case 'review':
-      return a !== undefined && b !== undefined ? { screen: head, project: a, agent: b } : nf;
     case 'debug': {
       // debug/<p>/<a>[/completion[/<provider or provider/model>]]
       const [p, ag, tab, ...prov] = args;
@@ -203,14 +189,6 @@ export function parseRoute(path: string): Route {
     }
     case 'feature':
       return a !== undefined && b !== undefined ? { screen: 'feature', project: a, name: b } : nf;
-    case 'commit':
-      return a !== undefined && b !== undefined && SHA.test(b) ? { screen: 'commit', project: a, sha: b } : nf;
-    case 'branch': {
-      // everything after the project is the branch, slashes kept ('sb/x')
-      const [p, ...rest] = args;
-      const branch = rest.join('/');
-      return p !== undefined && NAME.test(p) && rest.length > 0 && rest.every((x) => NAME.test(x)) ? { screen: 'branch', project: p, branch } : nf;
-    }
     case 'artifacts': {
       // the library's place after a '~' (never a project id nor an artifact's)
       const t = args.indexOf('~');
@@ -251,14 +229,12 @@ export function projectOf(r: Route): string | undefined {
   return 'project' in r ? r.project : undefined;
 }
 
-/** What the core's `open` asks for (a capsule's or a card's ⏎), as a route. */
-export function routeOfOpen(o: { project: string; what: 'thread' | 'review' | 'artifact' | 'worktree'; agent?: string | null; id?: string | null }): Route {
+/** What the core's `open` asks for (a capsule's or a card's ⏎), as a route (a review is no route: review/openChange.ts). */
+export function routeOfOpen(o: { project: string; what: 'thread' | 'artifact' | 'worktree'; agent?: string | null; id?: string | null }): Route {
   const agent = o.agent ?? MAIN;
   switch (o.what) {
     case 'thread':
       return { screen: 'thread', project: o.project, agent };
-    case 'review':
-      return { screen: 'review', project: o.project, agent };
     case 'artifact':
       return o.id == null ? { screen: 'artifacts', project: o.project } : { screen: 'artifacts', project: o.project, id: o.id };
     case 'worktree':

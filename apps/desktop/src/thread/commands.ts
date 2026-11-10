@@ -8,6 +8,7 @@
 // - runs 'hub': his line as he typed it, HubCmd slash (the TUI's router and
 //   handlers run it in the hub; architect m_11011).
 // Owner: amb-win. Pure.
+import type { Change } from '@/review/openChange';
 import type { ArgKind, PickCommand } from '@/composer';
 import type { AppCmd, HubCmd, PickArg, PickCommand as CoreCommand } from '@/proto';
 import { MAIN, type Route } from '@/app/route';
@@ -31,7 +32,14 @@ export const windowCommands: readonly PickCommand[] = [
  * one of the core's own commands (the one settings sends for the same
  * switch: /plugins off x, /theme light, /computer-use off), or quit.
  */
-export type WindowRun = { readonly go: Route } | { readonly inbox: true } | { readonly help: true } | { readonly app: AppCmd } | { readonly quit: true };
+export type WindowRun =
+  | { readonly go: Route }
+  /** /diff: a change in the panel, its agent's thread in the centre (review/openChange.ts) */
+  | { readonly change: Change }
+  | { readonly inbox: true }
+  | { readonly help: true }
+  | { readonly app: AppCmd }
+  | { readonly quit: true };
 
 const at0 = (args: string): string => args.trim().split(/\s+/)[0] ?? '';
 const at1 = (args: string): string => args.trim().split(/\s+/)[1] ?? '';
@@ -73,10 +81,11 @@ export function windowRun(name: string, args: string, at: { project: string; age
     case 'switch':
       return go(arg === '' ? { screen: 'agents', project: at.project } : { screen: 'thread', project: at.project, agent: arg });
     case 'diff': {
-      // a branch (it has a slash: sb/x, feat/y) opens its diff, an agent on it or none (R7, amb-win's route)
-      if (arg.includes('/')) return go({ screen: 'branch', project: at.project, branch: arg });
+      // a branch (it has a slash: sb/x, feat/y) opens its diff, an agent on it or none (R7); an
+      // agent its change; both in the panel (page pr-guided V2)
+      if (arg.includes('/')) return { change: { branch: arg } };
       const who = arg === '' ? at.agent : arg;
-      return go(who === MAIN ? { screen: 'changes', project: at.project } : { screen: 'review', project: at.project, agent: who });
+      return who === MAIN ? go({ screen: 'changes', project: at.project }) : { change: { agent: who } };
     }
     case 'prs':
       return go({ screen: 'prs', project: at.project });

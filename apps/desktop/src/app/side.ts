@@ -138,12 +138,9 @@ export function panelProject(route: Route, home: string | undefined, projects: n
       return route.project === home ? all : route.project;
     case 'agents':
     case 'changes':
-    case 'review':
     case 'debug':
     case 'feature':
     case 'prs':
-    case 'commit':
-    case 'branch':
     case 'environments':
       return route.project;
     default:
@@ -177,17 +174,11 @@ export function crumbOf(route: Route, name: (project: string) => string, place: 
       return [name(route.project), hero.prs_title];
     case 'environments':
       return [name(route.project), hero.environments_title];
-    case 'review':
-      return [name(route.project), route.agent, panel.crumb_changes];
     case 'debug':
       return [name(route.project), route.agent, panel.crumb_debug];
     case 'feature':
       // its name alone, no text glyph in the bar (ui-review m_43947 #3)
       return [name(route.project), route.name];
-    case 'commit':
-      return [name(route.project), route.sha.slice(0, 7)];
-    case 'branch':
-      return [name(route.project), route.branch];
     case 'artifacts':
       // the library's place after it: 'artifacts › desktop app › agent view' (artifacts/folders.ts crumbOf)
       return [...(route.project === '' ? [panel.artifacts] : [name(route.project), panel.artifacts]), ...(route.at === undefined ? [] : place(route.at).map((c) => c.name))];
@@ -231,7 +222,7 @@ export function crumbGoOf(route: Route, name: (project: string) => string, place
     }
     if ('project' in route && route.project !== '' && i === 0 && c === name(route.project))
       return { c, go: { screen: 'thread', project: route.project, agent: MAIN } };
-    if ((route.screen === 'review' || route.screen === 'debug') && i === 1)
+    if (route.screen === 'debug' && i === 1)
       return { c, go: { screen: 'thread', project: route.project, agent: route.agent } };
     // processes in a scope: its project's main, its agent's thread
     if (route.screen === 'running' && route.scope !== undefined)

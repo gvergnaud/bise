@@ -1,6 +1,7 @@
 // A thread's news rows: landed, PRs, artifacts, scheduled tasks, compaction,
 // notices, a task's brief, a handoff, a message not delivered. Owner: amb-win.
 // Split out of rows.tsx (pure move).
+import { useOpenChange } from '@/review/openChange';
 import { useArtifactOpener, useOpenArtifact } from './openArtifact';
 import { useRef, useState, type ReactNode } from 'react';
 import { Act, AppIcon, ArtName, BriefLine, Button, Fold, iconKindOf, KindIcon, Marker, Press, RowMark, SchedHead, type AppIconName, type IconKind } from '@/ds';
@@ -62,7 +63,7 @@ function Machine({ text }: { text: string }) {
 
 /** '✓ perf landed on main · a1b2c3d · 3 files +42 −18', quiet as a wake (H5): the sha opens the commit. */
 export function LandedRow({ e, ctx }: { e: Entry; ctx: RowCtx }) {
-  const router = useRouter();
+  const open = useOpenChange(ctx.project);
   const l = e.landed;
   if (l == null) return <Marker>{e.text}</Marker>;
   return (
@@ -71,7 +72,7 @@ export function LandedRow({ e, ctx }: { e: Entry; ctx: RowCtx }) {
       <Act
         kind="ref"
         onClick={() => {
-          router.go({ screen: 'commit', project: ctx.project, sha: l.sha });
+          open({ commit: l.sha });
         }}
         testId={`thread.landed.${e.pos}.sha`}
       >

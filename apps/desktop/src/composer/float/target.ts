@@ -35,8 +35,6 @@ export function floatTarget(r: Route, home: string | undefined, full = false): F
       // an open artifact has its one composer, the maker's
       if (r.id !== undefined && r.project !== '') return null;
       break;
-    case 'review':
-      return { project: r.project, agent: r.agent };
     default:
       break;
   }

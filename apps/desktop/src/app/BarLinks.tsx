@@ -1,5 +1,6 @@
 // A thread's agent's links in the window's bar, right after its name (designer m_57254): its open PR
-// ('#75286', its tab; ⌘: the forge's page), its worktree's branch ('ψ sb/perf', the branch screen),
+// ('#75286', its tab; ⌘: the forge's page), its worktree's branch ('ψ sb/perf', its change in the
+// panel: review/openChange.ts),
 // its newest page (its tab). Each a 24 high link, t-12 text-2, its text 8 from the next one's. No
 // room: the subtitle gives way first (cut with …, then out), then the links whole, last first (page,
 // then branch; the PR last): giveway.ts titleFit, measured here; one that gave way leaves the
@@ -12,7 +13,7 @@ import { useAgents, useArtifacts, useCards, usePlaces } from '@/store';
 import { openPr } from '@/review/openPr';
 import { agentLinksOf, noLinks } from './agentlinks';
 import { titleFit } from './giveway';
-import { useRouter } from './router';
+import { useOpenChange } from '@/review/openChange';
 import { openTab } from './panel/tabs';
 
 /** An element's width with the gap before it (its own left margin, or `gap`). */
@@ -76,7 +77,7 @@ function useTitleFit(box: RefObject<HTMLElement | null>): void {
 }
 
 export function BarLinks({ project, agent }: { project: string; agent: string }) {
-  const router = useRouter();
+  const open = useOpenChange(project);
   const a = useAgents(project).find((x) => x.name === agent);
   const links = agentLinksOf(a, usePlaces(project), useCards(project), useArtifacts(project));
   const box = useRef<HTMLSpanElement>(null);
@@ -94,7 +95,7 @@ export function BarLinks({ project, agent }: { project: string; agent: string })
       )}
       {branch !== null && (
         <Press look="app-bar-link" data-mono="" aria-label={branch.tip} {...tipAttrs(branch.tip)} disabled={branch.branch === null} onClick={() => {
-          if (branch.branch !== null) router.go({ screen: 'branch', project, branch: branch.branch });
+          if (branch.branch !== null) open({ agent });
         }} data-testid="app.bar.links.branch">
           ψ {branch.label}
         </Press>

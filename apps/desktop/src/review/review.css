@@ -373,3 +373,36 @@
   box-shadow: 0 0 0 2px var(--c-focus);
   border-radius: 3px;
 }
+
+/* a change in the panel (ChangeTab.tsx, page pr-guided V2): its title on the column's edge, then
+   its line of facts and acts scrolling away over the guide, as a PR's tab */
+.rv-tab {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+.rv-tab > .b-head {
+  padding-inline: var(--page-col-l, var(--pad-page-x)) var(--page-col-r, var(--pad-page-x));
+  white-space: normal;
+}
+.rv-lead {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-1) var(--s-2);
+  margin: 0 var(--pad-row-x) var(--s-3);
+  font-size: var(--t-13);
+  color: var(--c-text-2);
+}
+.rv-lead-facts {
+  min-width: 0;
+}
+.rv-out {
+  color: var(--c-text-2);
+  white-space: nowrap;
+}
+.rv-out:hover {
+  color: var(--c-text);
+}

@@ -17,6 +17,7 @@ import type { Agent, ProjectRow } from '@/proto';
 import type { At } from '@/artifacts/folders';
 import { liveOf, rankedOf } from '@/agents/model';
 import { MAIN, projectOf, type Route } from './route';
+import type { Change } from '@/review/openChange';
 import { projectsOf } from './siderows';
 import { sideShows } from './sideshows';
 import { panelKeyOf, type PanelKey } from './panel/keys';
@@ -45,6 +46,8 @@ export function menuEcho(keyAt: number | undefined, now: number): boolean {
 
 export type KeyAct =
   | { readonly go: Route }
+  /** ⌘D on an agent's thread: its change in the panel (review/openChange.ts: its PR if it has one) */
+  | { readonly change: { readonly project: string; readonly what: Change } }
   | { readonly palette: true }
   | { readonly help: true }
   | { readonly screen: ScreenAction }
@@ -152,7 +155,7 @@ export function keyAction(e: KeyLike, c: KeyCtx): KeyAct | undefined {
   if (only('meta', true) && e.code === 'KeyX') return { go: { screen: 'plugins' } };
   if (only('meta') && e.code === 'KeyD') {
     const r = c.route;
-    if (r.screen === 'thread' && r.agent !== MAIN) return { go: { screen: 'review', project: r.project, agent: r.agent } };
+    if (r.screen === 'thread' && r.agent !== MAIN) return { change: { project: r.project, what: { agent: r.agent } } };
     const p = here(c);
     return p ? { go: { screen: 'changes', project: p } } : undefined;
   }

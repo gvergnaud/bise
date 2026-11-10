@@ -56,9 +56,10 @@ describe('a command line runs as the TUI runs it', () => {
     expect(windowRun('/keychain', 'off', at)).toEqual({ app: { cmd: 'keychain', to: 'off' } });
     expect(windowRun('/keychain', '', at)).toEqual({ go: { screen: 'settings', page: 'keys' } });
     expect(windowRun('/quit', '', at), 'R5: quits, the agents keep running').toEqual({ quit: true });
-    expect(windowRun('/diff', 'sb/x', at), 'R7: a branch, with or without an agent').toEqual({ go: { screen: 'branch', project: P, branch: 'sb/x' } });
-    expect(windowRun('/diff', 'feat/a/b', at), 'its slashes kept').toEqual({ go: { screen: 'branch', project: P, branch: 'feat/a/b' } });
-    expect(windowRun('/diff', 'perf', at), 'an agent: its review').toEqual({ go: { screen: 'review', project: P, agent: 'perf' } });
+    // a change opens in the panel (page pr-guided V2: review/openChange.ts)
+    expect(windowRun('/diff', 'sb/x', at), 'R7: a branch, with or without an agent').toEqual({ change: { branch: 'sb/x' } });
+    expect(windowRun('/diff', 'feat/a/b', at), 'its slashes kept').toEqual({ change: { branch: 'feat/a/b' } });
+    expect(windowRun('/diff', 'perf', at), 'an agent: its change').toEqual({ change: { agent: 'perf' } });
     expect(windowRun('/new', 'x', at)).toBeUndefined();
   });
   it("a line he typed that isn't a window screen goes to the hub as typed (architect m_11011), never parsed here", () => {

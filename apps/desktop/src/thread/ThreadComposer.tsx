@@ -3,6 +3,7 @@
 // (composer/float, `floating`: no strip, '+' alone); its head the context strip (ComposerTab.tsx), its notice the hub's word on his
 // last line; and its pure helpers (about-an-artifact words, the docked card's target, the notice).
 // Split out of ThreadScreen.tsx (the file cap). Owner: nm-composer.
+import { openChange } from '@/review/openChange';
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ANCHOR_EVENT, type AnchorAct } from '@/artifacts/useFrameNote';
 import { load, save } from '@/composer/drafts';
@@ -226,6 +227,7 @@ export const ThreadComposer = memo(function ThreadComposer({
       const w = windowRun(name, args, at);
       if (w !== undefined) {
         if ('go' in w) router.go(w.go);
+        else if ('change' in w) openChange(store, router, project, w.change);
         // nothing waits anywhere: say so where he typed it, never a silent nothing (ghost-badge)
         else if ('inbox' in w) {
           if (!openInbox()) setNote({ level: 'info', text: composer.nothing_waits });

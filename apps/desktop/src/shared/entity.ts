@@ -33,6 +33,8 @@ export type Entity =
   | { readonly kind: 'pr'; readonly project: string; readonly url: string }
   /** a commit of a project, by its sha */
   | { readonly kind: 'commit'; readonly project: string; readonly sha: string }
+  /** a branch's diff against its trunk, by its name ('sb/x', slashes kept): a try card's diff, '/diff sb/x' */
+  | { readonly kind: 'branch'; readonly project: string; readonly branch: string }
   /** an agent's changes, or one file of them (`path`, from the repo's root) */
   | { readonly kind: 'diff'; readonly project: string; readonly agent: string; readonly path?: string }
   /** a process an agent left running (running/: its id in the agent's list) */
@@ -69,6 +71,8 @@ export function entityKey(e: Entity): string {
       return `pr:${e.project}/${e.url}`;
     case 'commit':
       return `commit:${e.project}/${e.sha}`;
+    case 'branch':
+      return `branch:${e.project}/${e.branch}`;
     case 'diff':
       return e.path === undefined ? `diff:${e.project}/${e.agent}` : `diff:${e.project}/${e.agent}/${e.path}`;
     case 'process':

@@ -10,8 +10,6 @@ const every: Route[] = [
   { screen: 'agents', project: 'p' },
   { screen: 'agents', project: 'p', archived: true },
   { screen: 'changes', project: 'p' },
-  { screen: 'review', project: 'p', agent: 'perf' },
-  { screen: 'commit', project: 'p', sha: '155ffb0' },
   { screen: 'artifacts', project: 'p' },
   { screen: 'artifacts', project: 'p', id: 'a-1' },
   { screen: 'artifacts', project: '', at: 'unfiled' },
@@ -44,13 +42,12 @@ describe('routes', () => {
   });
 
   it('the project of a route', () => {
-    expect(projectOf({ screen: 'review', project: 'p', agent: 'a' })).toBe('p');
+    expect(projectOf({ screen: 'debug', project: 'p', agent: 'a' })).toBe('p');
     expect(projectOf({ screen: 'scheduled' })).toBeUndefined();
   });
 
   it("the core's open becomes a route", () => {
     expect(routeOfOpen({ project: 'p', what: 'thread' })).toEqual({ screen: 'thread', project: 'p', agent: MAIN });
-    expect(routeOfOpen({ project: 'p', what: 'review', agent: 'perf' })).toEqual({ screen: 'review', project: 'p', agent: 'perf' });
     expect(routeOfOpen({ project: 'p', what: 'artifact', id: 'x' })).toEqual({ screen: 'artifacts', project: 'p', id: 'x' });
     expect(routeOfOpen({ project: 'p', what: 'worktree' })).toEqual({ screen: 'environments', project: 'p' });
   });
@@ -59,7 +56,9 @@ describe('routes', () => {
 describe('the start route of a test run', () => {
   it('#route=<route> opens that screen; none without it; a wrong one is notfound', () => {
     expect(startRouteOf('#route=agent/shop-ab9f3c3b/perf')).toEqual({ screen: 'thread', project: 'shop-ab9f3c3b', agent: 'perf' });
-    expect(startRouteOf('#route=commit%2Fp%2F155ffb0')).toEqual({ screen: 'commit', project: 'p', sha: '155ffb0' });
+    expect(startRouteOf('#route=agents%2Fp')).toEqual({ screen: 'agents', project: 'p' });
+    // a change is no screen anymore (page pr-guided V2: it opens in the panel): an old link is notfound
+    for (const old of ['review/p/perf', 'commit/p/155ffb0', 'branch/p/sb/x']) expect(startRouteOf(`#route=${old}`)).toEqual({ screen: 'notfound', path: old });
     expect(startRouteOf('')).toBeUndefined();
     expect(startRouteOf('#other')).toBeUndefined();
     expect(startRouteOf('#route=nope/x')).toEqual({ screen: 'notfound', path: 'nope/x' });
@@ -220,7 +219,7 @@ describe("the projects the window shows (the core's 'shown')", () => {
     expect(shownOf('home-1', { screen: 'thread', project: 'shop', agent: 'perf' })).toEqual(['home-1', 'shop']);
     expect(shownOf('home-1', { screen: 'bise' })).toEqual(['home-1']);
     expect(shownOf('home-1', { screen: 'thread', project: 'home-1', agent: 'main' })).toEqual(['home-1']);
-    expect(shownOf(undefined, { screen: 'review', project: 'shop', agent: 'a' })).toEqual(['shop']);
+    expect(shownOf(undefined, { screen: 'debug', project: 'shop', agent: 'a' })).toEqual(['shop']);
     // the sidebar's open folders show their agents (R26): their running hubs too, once each
     expect(shownOf('home-1', { screen: 'thread', project: 'shop', agent: 'perf' }, ['shop', 'docs'])).toEqual(['home-1', 'shop', 'docs']);
     expect(shownOf(undefined, { screen: 'scheduled' })).toEqual([]);

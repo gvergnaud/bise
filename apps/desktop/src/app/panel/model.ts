@@ -495,6 +495,8 @@ function entityOf(x: unknown): Entity | undefined {
       return s('project') && s('url') ? (x as Entity) : undefined;
     case 'commit':
       return s('project') && s('sha') ? (x as Entity) : undefined;
+    case 'branch':
+      return s('project') && s('branch') ? (x as Entity) : undefined;
     case 'diff':
       return s('project') && s('agent') ? (x as Entity) : undefined;
     case 'process':

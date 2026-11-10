@@ -13,7 +13,6 @@ describe("the right bar's scope (main m_25024, designer m_25031)", () => {
       { screen: 'thread', project: 'shop', agent: 'main' },
       { screen: 'agents', project: 'shop' },
       { screen: 'artifacts', project: 'shop' },
-      { screen: 'review', project: 'shop', agent: 'main' },
     ] as const) {
       const s = barScope(r, 'shop');
       expect(s).toEqual({ level: 'project' });
@@ -21,8 +20,8 @@ describe("the right bar's scope (main m_25024, designer m_25031)", () => {
       expect(scopeWords(s, 'scheduled', 'storefront')).toBeNull();
     }
   });
-  it("a sub-agent's thread, review or log: only its own, 'by perf' / 'for perf', their tips and lines at 0", () => {
-    for (const screen of ['thread', 'review', 'debug'] as const) {
+  it("a sub-agent's thread or log: only its own, 'by perf' / 'for perf', their tips and lines at 0", () => {
+    for (const screen of ['thread', 'debug'] as const) {
       const s = barScope({ screen, project: 'shop', agent: 'perf' }, 'shop');
       expect(s).toEqual({ level: 'agent', agent: 'perf' });
       expect(inScope(s, 'perf')).toBe(true);

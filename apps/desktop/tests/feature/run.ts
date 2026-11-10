@@ -7,6 +7,7 @@
 // Today the window is the Store: its port is an outbox (a sink: it answers nothing and holds no
 // state; the hub's answers come in through given()). When state-machine's step lands (fast-try
 // p4), the outbox becomes step's outputs and only this file changes, never a test.
+import { changeDoor } from '../../src/review/openChange';
 import {
   allItems,
   artifactGo,
@@ -199,8 +200,15 @@ export function feature(now = 1_791_100_000_000): Feature {
     // the app's edge (app/edge.tsx) runs these; here they are recorded, as sent() records commands
     s.onEffect((e) => {
       ran.push(e);
-      // a tab's open (a card's chip) leaves the route where it is (app/edge.tsx)
-      if (e.out === 'nav' && e.tab !== true) moveTo(navRoute(e.to));
+      // a branch's change: the door's tab and centre (review/openChange.ts, as app/edge.tsx runNav);
+      // a tab's open (a card's chip) leaves the route where it is
+      if (e.out !== 'nav') return;
+      const to = e.to;
+      if ('branch' in to) {
+        const d = changeDoor(to.project, { branch: to.branch }, { agents: s.agents(to.project), places: s.places(to.project), worktrees: s.worktrees(to.project) });
+        panel = openKept(panel, { kind: 'thing', e: d.tab }).kept;
+        if (d.centre !== null) moveTo(d.centre);
+      } else if (e.tab !== true) moveTo(navRoute(to));
     });
     return s;
   };

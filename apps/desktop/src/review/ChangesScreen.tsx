@@ -5,6 +5,7 @@
 // reached main today (a click opens the commit read-only). A branch's and a commit's '…' and right
 // click are their menu (useEntityMenu: open in a tab, a window). The floating composer's room at the
 // foot (--float-room). Owner: nm-pages-b (amb-win's before).
+import { useOpenChange } from './openChange';
 import { useEffect, useRef } from 'react';
 import { usePageColumn } from '@/app/pagecol';
 import { AppIcon, Dot, Empty, GroupLabel, ListRow, MoreButton, PageBanner } from '@/ds';
@@ -96,7 +97,7 @@ export function ChangesScreen({ project }: { project: string }) {
 
 /** A branch: as the TUI names it ('sb/checkout'), then whose worktree it is and how far from main. */
 function BranchRow({ project, w }: { project: string; w: Worktree }) {
-  const router = useRouter();
+  const open = useOpenChange(project);
   const agent = w.agent ?? undefined;
   const menu = useEntityMenu(agent === undefined ? { kind: 'project', project } : { kind: 'diff', project, agent });
   const tid = `changes.branch.${agent ?? 'his'}`;
@@ -110,14 +111,14 @@ function BranchRow({ project, w }: { project: string; w: Worktree }) {
       onContextMenu={agent === undefined ? undefined : menu.onContextMenu}
       end={agent === undefined ? undefined : <MoreButton menu={menu} testId={`${tid}.more`} />}
       onClick={agent === undefined ? undefined : () => {
-        router.go({ screen: 'review', project, agent });
+        open({ agent });
       }} />
   );
 }
 
 /** A commit that reached main today: its title, then its sha (mono), who and when; opens read-only. */
 function MergedRow({ project, m }: { project: string; m: Merged }) {
-  const router = useRouter();
+  const open = useOpenChange(project);
   const menu = useEntityMenu({ kind: 'commit', project, sha: m.sha });
   const tid = `changes.merged.${m.sha.slice(0, 7)}`;
   return (
@@ -128,7 +129,7 @@ function MergedRow({ project, m }: { project: string; m: Merged }) {
       onContextMenu={menu.onContextMenu}
       end={<MoreButton menu={menu} testId={`${tid}.more`} />}
       onClick={() => {
-        router.go({ screen: 'commit', project, sha: m.sha });
+        open({ commit: m.sha });
       }} />
   );
 }

@@ -31,10 +31,7 @@ export function sideShows(r: Route): boolean {
     case 'agents':
     case 'changes':
     case 'prs':
-    case 'review':
     case 'feature':
-    case 'commit':
-    case 'branch':
     case 'environments':
     case 'debug':
       return true;

@@ -7,7 +7,7 @@ import { AppIcon, KindIcon, iconKindOf } from '@/ds';
 import { panel } from '@/proto/words_panel.gen';
 import { useAllArtifacts } from '@/artifacts';
 import { useAllProcesses } from '@/running';
-import { useProjects } from '@/store';
+import { useProjects, useStore } from '@/store';
 import type { Tab } from './model';
 import { viewTitle } from '@/views/Tab';
 import { viewsStore } from '@/views/window';
@@ -22,10 +22,12 @@ export function useTabLooks(): (tab: Tab) => TabLook {
   const projects = useProjects();
   const arts = useAllArtifacts();
   const procs = useAllProcesses();
-  return (tab) => lookOf(tab, projects, arts, procs);
+  const store = useStore();
+  const branchOf = (project: string, agent: string) => store.agents(project).find((a) => a.name === agent)?.branch ?? null;
+  return (tab) => lookOf(tab, projects, arts, procs, branchOf);
 }
 
-function lookOf(tab: Tab, projects: ReturnType<typeof useProjects>, arts: ReturnType<typeof useAllArtifacts>, procs: ReturnType<typeof useAllProcesses>): TabLook {
+function lookOf(tab: Tab, projects: ReturnType<typeof useProjects>, arts: ReturnType<typeof useAllArtifacts>, procs: ReturnType<typeof useAllProcesses>, branchOf: (project: string, agent: string) => string | null): TabLook {
   const what = tab.what;
   const project = what.kind === 'terminal' ? what.project : what.kind === 'thing' && 'project' in what.e ? what.e.project : undefined;
   const name = projects.find((p) => p.project === project)?.name ?? project ?? '';
@@ -51,9 +53,12 @@ function lookOf(tab: Tab, projects: ReturnType<typeof useProjects>, arts: Return
     case 'agent':
       return { title: e.agent, icon: <AppIcon name="thread" size={14} /> };
     case 'diff':
-      return { title: panel.tab_changes({ agent: e.agent }), icon: <AppIcon name="changes" size={14} /> };
+      // the tab names the title's thing (designer m_58359): its branch, as a PR's tab its '#412'
+      return { title: branchOf(e.project, e.agent) ?? panel.tab_changes({ agent: e.agent }), icon: <AppIcon name="changes" size={14} /> };
     case 'commit':
       return { title: e.sha.slice(0, 7), icon: <AppIcon name="branch" size={14} /> };
+    case 'branch':
+      return { title: e.branch, icon: <AppIcon name="branch" size={14} /> };
     case 'pr': {
       // its row's tag, the hub's one read of the link ('#412', '!412'); the plain word until it comes
       const tag = arts.find((x) => x.project === e.project && x.a.pr != null && x.a.url === e.url)?.a.pr?.tag;

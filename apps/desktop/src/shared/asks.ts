@@ -31,6 +31,24 @@ export function artifactAskOf(path: string): ArtAsk | undefined {
   }
 }
 
+/** A branch's diff asked of the main window from outside it (the capsule's try card): 'tab?branch=<project>/<branch>'. */
+export type BranchAsk = { readonly project: string; readonly branch: string };
+
+/** The ask that opens a branch's change in the panel's tab, the window staying where it is (page pr-guided V2). */
+export const branchAsk = (b: BranchAsk): string => `tab?branch=${encodeURIComponent(b.project)}/${encodeURIComponent(b.branch)}`;
+
+/** The branch a branchAsk route asks for; anything else: undefined. */
+export function branchAskOf(path: string): BranchAsk | undefined {
+  const m = /^\/?tab\?branch=([^/\s&]+)\/([^/\s&]+)$/u.exec(path.trim());
+  if (m === null) return undefined;
+  const [, project = '', branch = ''] = m;
+  try {
+    return { project: decodeURIComponent(project), branch: decodeURIComponent(branch) };
+  } catch {
+    return undefined;
+  }
+}
+
 /** His words carried to an agent's composer from outside the window (the spotlight's ⏎ on a row
  *  under a message): its project, its agent, the words and chips as an entry (entry.ts). */
 export type DraftAsk = { readonly project: string; readonly agent: string; readonly entry: string };

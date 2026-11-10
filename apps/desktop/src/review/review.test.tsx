@@ -7,7 +7,7 @@ import { Store, StoreProvider, replay } from '@/store';
 import { createRouter, RouterContext } from '@/app/router';
 import { AgentsScreen } from '@/agents/AgentsScreen';
 import { branchEnd, fileHead, headLine, linesOf } from './model';
-import { ReviewScreen } from './ReviewScreen';
+import { ChangeTab } from './ChangeTab';
 
 const P = 'acme-1a2b3c4d';
 
@@ -28,21 +28,24 @@ function setup() {
 
 afterEach(cleanup);
 
-describe('the review', () => {
+describe('a change in the panel (page pr-guided V2)', () => {
   it("draws the fixture's diff for perf: hunks, signs, line numbers; asks diff and merged on open", () => {
     const { cmds, wrap } = setup();
-    const v = render(wrap(<ReviewScreen project={P} agent="perf" />));
+    const v = render(wrap(<ChangeTab project={P} change={{ agent: 'perf' }} />));
     expect(cmds).toContainEqual({ cmd: 'diff', project: P, agent: 'perf' });
     expect(cmds).toContainEqual({ cmd: 'merged', project: P });
     const file = v.getByTestId('review.file.0');
     expect(file.textContent).toContain('@@ -10,4 +10,6 @@ fn slow()');
-    expect(v.getByTestId('review.screen').textContent).toContain('sb/perf → main');
+    // its title says what changed, its task line; its facts on one line over the guide, scrolling away with it
+    expect(v.getByTestId('review.tab').querySelector('.t1')?.textContent).toBe('profiling the hub');
+    expect(v.getByTestId('review.line').textContent).toContain('perf · sb/perf → main');
+    expect(v.getByTestId('review.files').contains(v.getByTestId('review.line'))).toBe(true);
   });
 
   it("a merged change is read-only: 'merged · <short>', no merge button", () => {
     const { wrap } = setup();
-    const v = render(wrap(<ReviewScreen project={P} agent="old" />));
-    expect(v.getByTestId('review.screen').textContent).toContain('merged · e0f3df5');
+    const v = render(wrap(<ChangeTab project={P} change={{ agent: 'old' }} />));
+    expect(v.getByTestId('review.line').textContent).toContain('merged · e0f3df5');
     expect(v.queryByTestId('review.merge')).toBeNull();
     expect(v.getByTestId('review.files').textContent).toContain('old is archived and its folder is gone');
   });
@@ -50,7 +53,7 @@ describe('the review', () => {
   // pr-changes-blank: the PR chip's review stayed 'loading…' forever when the hub refused the diff
   it("a refused diff leaves 'loading…' for its words and a retry that asks again", () => {
     const { cmds, store, wrap } = setup();
-    const v = render(wrap(<ReviewScreen project={P} agent="ghost" />));
+    const v = render(wrap(<ChangeTab project={P} change={{ agent: 'ghost' }} />));
     expect(v.getByTestId('review.loading')).toBeTruthy();
     act(() => {
       store.apply({ ev: 'error', project: P, cmd: 'diff', text: "git couldn't read this diff: bad revision" });
@@ -66,7 +69,7 @@ describe('the review', () => {
 
   it("another command's refusal, or a diff this window never asked, leaves it loading", () => {
     const { store, wrap } = setup();
-    const v = render(wrap(<ReviewScreen project={P} agent="ghost" />));
+    const v = render(wrap(<ChangeTab project={P} change={{ agent: 'ghost' }} />));
     act(() => {
       store.apply({ ev: 'error', project: P, cmd: 'tool_out', text: 'no agent ghost' });
       store.apply({ ev: 'error', project: 'other-0000', cmd: 'diff', text: 'no agent ghost' });
@@ -83,23 +86,26 @@ describe('the review', () => {
     act(() => {
       store.apply({ ev: 'agents', project: P, agents: [...store.agents(P)], places: [{ id: 'wt:perf', branch: 'sb/perf', agents: ['perf'], pr }] });
     });
-    const v = render(wrap(<ReviewScreen project={P} agent="perf" />));
+    const v = render(wrap(<ChangeTab project={P} change={{ agent: 'perf' }} />));
     expect(v.getByTestId('review.open-pr').textContent).toBe(pages.review_open_pr);
     fireEvent.click(v.getByTestId('review.open-pr'));
     expect(opened).toEqual([url]);
     v.unmount();
     // a commit's review, and an agent with no open PR: no button
-    expect(render(wrap(<ReviewScreen project={P} agent="main" commit="155ffb0abc" />)).queryByTestId('review.open-pr')).toBeNull();
+    expect(render(wrap(<ChangeTab project={P} change={{ commit: '155ffb0abc' }} />)).queryByTestId('review.open-pr')).toBeNull();
     cleanup();
     act(() => {
       store.apply({ ev: 'agents', project: P, agents: [...store.agents(P)], places: [{ id: 'wt:perf', branch: 'sb/perf', agents: ['perf'], pr: { ...pr, state: 'merged' as const } }] });
     });
-    expect(render(wrap(<ReviewScreen project={P} agent="perf" />)).queryByTestId('review.open-pr')).toBeNull();
+    expect(render(wrap(<ChangeTab project={P} change={{ agent: 'perf' }} />)).queryByTestId('review.open-pr')).toBeNull();
   });
 
-  it('a commit route asks that commit and reads merged', () => {
+  it('a commit asks that commit and reads merged, read-only; its title is its subject', () => {
     const { cmds, wrap } = setup();
-    const v = render(wrap(<ReviewScreen project={P} agent="main" commit="155ffb0abc" />));
+    const landed = render(wrap(<ChangeTab project={P} change={{ commit: 'e0f3df5a9c1b' }} />));
+    expect(landed.getByTestId('review.tab').querySelector('.t1')?.textContent).toBe('perf: sort_unstable in the hot query');
+    landed.unmount();
+    const v = render(wrap(<ChangeTab project={P} change={{ commit: '155ffb0abc' }} />));
     expect(cmds).toContainEqual({ cmd: 'diff', project: P, agent: 'main', commit: '155ffb0abc' });
     expect(v.queryByTestId('review.merge')).toBeNull();
   });
@@ -167,7 +173,8 @@ describe('the window /commands (bar 2.1, A.2)', () => {
     // as the TUI: the archived agents only under /archived, never in /agents
     expect(runWindowCommand('/archived', '', { project: P, agent: 'main' })).toEqual({ screen: 'agents', project: P, archived: true });
     expect(runWindowCommand('diff', '', { project: P, agent: 'main' })).toEqual({ screen: 'changes', project: P });
-    expect(runWindowCommand('diff', 'perf', { project: P, agent: 'main' })).toEqual({ screen: 'review', project: P, agent: 'perf' });
+    // /diff perf is no screen: its change opens in the panel (thread/commands.test.ts)
+    expect(runWindowCommand('diff', 'perf', { project: P, agent: 'main' })).toBeUndefined();
     expect(runWindowCommand('switch', 'perf', { project: P, agent: 'main' })).toEqual({ screen: 'thread', project: P, agent: 'perf' });
     expect(runWindowCommand('new', 'x', { project: P, agent: 'main' })).toBeUndefined();
   });
@@ -175,7 +182,7 @@ describe('the window /commands (bar 2.1, A.2)', () => {
 
 describe('the review while its diff comes (designer m_15244: never a bare bar)', () => {
   it("says whose changes it loads, main as bise, a commit by its short sha", async () => {
-    const { loadingWords } = await import('./ReviewScreen');
+    const { loadingWords } = await import('./ChangeTab');
     expect(loadingWords('perf', undefined)).toBe(pages.review_loading({ agent: 'perf' }));
     expect(loadingWords('main', undefined)).toBe(pages.review_loading({ agent: 'bise' }));
     expect(loadingWords('main', '155ffb0aa1')).toBe(pages.review_loading_commit({ sha: '155ffb0' }));

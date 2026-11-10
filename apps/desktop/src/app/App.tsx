@@ -36,10 +36,9 @@ import { OnboardingScreen, useFirstLaunch } from '@/setup';
 import { paletteOpen } from '@/setup/useTour';
 import { AgentsScreen } from '@/agents/AgentsScreen';
 import { ChangesScreen } from '@/review/ChangesScreen';
-import { ReviewScreen } from '@/review/ReviewScreen';
 import { LogScreen } from '@/log/LogScreen';
 import { FeatureScreen } from '@/review/FeatureScreen';
-import { BranchScreen } from '@/review/BranchScreen';
+import { openChange } from '@/review/openChange';
 import { PrsScreen } from '@/review/PrsScreen';
 import { EnvironmentsScreen } from '@/review/EnvironmentsScreen';
 import { Skel } from '@/ds';
@@ -459,8 +458,6 @@ function ScreenOf({ route }: { route: Route }) {
       return <Known project={route.project}>{() => <AgentsScreen project={route.project} archived={route.archived === true} />}</Known>;
     case 'changes':
       return <Known project={route.project}>{() => <ChangesScreen project={route.project} />}</Known>;
-    case 'review':
-      return <Known project={route.project}>{() => <ReviewScreen project={route.project} agent={route.agent} />}</Known>;
     case 'prs':
       return <Known project={route.project}>{() => <PrsScreen project={route.project} />}</Known>;
     case 'debug':
@@ -472,11 +469,6 @@ function ScreenOf({ route }: { route: Route }) {
       );
     case 'feature':
       return <Known project={route.project}>{() => <FeatureScreen project={route.project} name={route.name} />}</Known>;
-    case 'commit':
-      return <Known project={route.project}>{() => <ReviewScreen project={route.project} agent="main" commit={route.sha} />}</Known>;
-    case 'branch':
-      // a branch's diff by name ('/diff sb/x', amb-web's windowRun)
-      return <Known project={route.project}>{() => <BranchScreen project={route.project} branch={route.branch} />}</Known>;
     case 'environments':
       return <Known project={route.project}>{() => <EnvironmentsScreen project={route.project} />}</Known>;
     case 'artifacts':
@@ -639,6 +631,7 @@ function useWindowKeys(openPalette: () => void, openHelp: () => void, onFrame: (
       // the Go menu's echo of the same key is dropped (app/menu.ts)
       noteWindowKey(Date.now());
       if ('go' in act) router.go(act.go);
+      else if ('change' in act) openChange(store, router, act.change.project, act.change.what);
       else if ('palette' in act) openPalette();
       else if ('help' in act) openHelp();
       else if ('frame' in act) {

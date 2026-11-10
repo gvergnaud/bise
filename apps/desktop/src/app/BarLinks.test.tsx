@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // A thread's agent's links in the bar (BarLinks.tsx, designer m_57254), on fake hub events: its PR
-// opens the PR's tab (⌘ passed on: the forge's page), its branch the branch screen, its page its
-// tab; none for an agent with nothing. Mutation: a link's onClick pointed at another's door turns
+// opens the PR's tab (⌘ passed on: the forge's page), its branch its change in the panel (its PR
+// when it has one: review/openChange.ts, page pr-guided V2), its page its tab; none for an agent with nothing. Mutation: a link's onClick pointed at another's door turns
 // this red.
 import { cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -65,7 +65,9 @@ describe('a thread\'s agent\'s links in the bar', () => {
     fireEvent.click(v.getByTestId('app.bar.links.page'));
     expect(doors.tab).toEqual([{ kind: 'artifact', project: P, id: 'pg' }]);
     fireEvent.click(v.getByTestId('app.bar.links.branch'));
-    expect(router.get()).toEqual({ screen: 'branch', project: P, branch: 'sb/perf' });
+    // one home per change: perf's branch has its open PR, so its PR's tab; its thread stays in the centre
+    expect(doors.tab.at(-1)).toEqual({ kind: 'pr', project: P, url: URL_PR });
+    expect(router.get()).toEqual({ screen: 'thread', project: P, agent: 'perf' });
   });
 
   it('his merge waits: the PR says it, in the accent (a merge card in the inbox for its place)', () => {

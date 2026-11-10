@@ -37,11 +37,8 @@ export const SCREENS: Record<Screen, readonly Rule[]> = {
   ],
   changes: [{ project: { name: 'changes', words: ['branches', 'merged', 'diff'], route: (p) => ({ screen: 'changes', project: p }) } }],
   prs: [{ project: { name: 'pull requests', words: ['prs'], route: (p) => ({ screen: 'prs', project: p }) } }],
-  review: [{ no: "one agent's change: ⌘D from its thread, the changes page" }],
   debug: [{ no: "an agent's raw session and requests: /debug only (Gabriel's ask, debug-cmd)" }],
   feature: [{ no: 'one feature by its name: /feature' }],
-  commit: [{ no: 'one commit by its sha: the changes page' }],
-  branch: [{ no: 'one branch by its name: /diff' }],
   artifacts: [
     { app: { name: 'artifacts', glyph: '↗', words: ['every project'], key: PLACE_KEYS.artifacts, route: { screen: 'artifacts', project: '' } } },
     { project: { name: 'artifacts', glyph: '↗', route: (p) => ({ screen: 'artifacts', project: p }) } },
