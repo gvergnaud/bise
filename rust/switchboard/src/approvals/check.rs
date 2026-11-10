@@ -411,8 +411,9 @@ fn write_private(file: &Path, text: &str) -> std::io::Result<()> {
 /// A one-shot REPL's environment: a REPL's (no internal variable of the
 /// hub's) with the REPLs' `keys` and models file, BISE_ONESHOT, and the
 /// main order of the model resolution with BISE_MODEL first (not the
-/// user's agent model).
-pub(crate) fn oneshot_env(req_file: &Path, model: &str, keys: &[(String, Option<String>)]) -> bise_home::env::ChildEnv {
+/// user's agent model). `pub` for examples/guide_eval only, which passes
+/// no keys (they come from his own shell's env) and prints none.
+pub fn oneshot_env(req_file: &Path, model: &str, keys: &[(String, Option<String>)]) -> bise_home::env::ChildEnv {
     let mut env = bise_home::env::for_child(bise_home::env::Child::Repl, [("BISE_ONESHOT", req_file.as_os_str())]);
     for (k, v) in keys {
         match v {

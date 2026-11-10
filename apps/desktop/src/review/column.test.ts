@@ -57,6 +57,13 @@ describe('the guide as a column (page review-guided, pick B)', () => {
     expect(heads.sort()).toEqual(['@@ a1 @@', '@@ a2 @@', '@@ b1 @@', '@@ c1 @@', '@@ d1 @@', '@@ e1 @@']);
   });
 
+  it('The rest shows only when it holds code (page review-groups, designer m_58538), with its facts', () => {
+    const placed: Guide = { ...guide, parts: [...guide.parts, { area: 'Docs', title: 'Say the slots', summary: '', hunks: ['d1'], weight: 'normal' }], rest: ['e1'] };
+    expect(guideColumn(diff, placed, [], new Set(), W).map((s) => s.key)).toEqual(['part-1', 'part-2', 'part-3', 'generated']);
+    const rest = guideColumn(diff, guide, [], new Set(), W).find((s) => s.key === 'rest');
+    expect(rest?.facts).toBe('1 files · +1');
+  });
+
   it('a guide that names no hunk of a file still leaves nothing out: the hub put it in rest', () => {
     expect(guidable(diff)).toBe(true);
     expect(guidable({ ...diff, files: [{ path: 'a.ts', status: 'modified', add: 0, del: 0, hunks: [{ header: '@@', lines: [] }] }] })).toBe(false);

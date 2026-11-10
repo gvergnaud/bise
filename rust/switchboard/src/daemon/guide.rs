@@ -4,8 +4,9 @@
 //! is read off the loop, the same way as the review's (`art::read_diff`),
 //! then the loop decides ([`crate::guide::next`]): a kept guide, a small
 //! change, one already being written, the model allowed; a call runs on
-//! its own thread through daemon/small_ask.rs and comes back as
-//! `Msg::GuideDone`. One call in flight per diff hash; a failed one is
+//! its own thread through daemon/small_ask.rs (the first call, then the
+//! second pass when guide::second says so, one after the other) and
+//! comes back as `Msg::GuideDone`. One call in flight per diff hash; a failed one is
 //! called again only by his click. A cache fill: nobody is told or woken,
 //! nothing is journaled (not sb-core's decision).
 
@@ -78,7 +79,8 @@ pub(super) struct Seen {
     small: bool,
     kept: Option<Guide>,
     request: String,
-    ids: Vec<String>,
+    /// the diff, for the second pass
+    files: Vec<bise_proto::diff::DiffFile>,
 }
 
 impl Shell {
@@ -115,8 +117,8 @@ impl Shell {
             };
             let kept = guide::read(&dir, &hash).map(|k| k.guide);
             let old = if kept.is_none() { guide::last_of(&dir, &key).map(|k| k.guide) } else { None };
-            let request = guide::request(&guide::digest(&files, guide::DIGEST_CAP), &intent, old.as_ref());
-            let seen = Seen { why, target, small: guide::skip(&files), ids: guide::ids(&files), hash, base, head: key, kept, request };
+            let request = guide::request(&files, &intent, old.as_ref());
+            let seen = Seen { why, target, small: guide::skip(&files), hash, base, head: key, kept, request, files };
             let _ = tx.send(Msg::GuideSeen(Box::new(seen)));
         });
     }
@@ -156,11 +158,13 @@ impl Shell {
         let (dir, tx) = (self.env.paths.guides_dir(), self.tx.clone());
         std::thread::spawn(move || {
             let req_file = dir.join(format!("req-{}.txt", s.hash));
-            let got = std::fs::create_dir_all(&dir)
-                .and_then(|_| std::fs::write(&req_file, &s.request))
-                .map_err(|e| e.to_string())
-                .and_then(|_| small.call(&req_file, "guide"))
-                .and_then(|reply| guide::parse(&reply, &s.ids));
+            // the first call, then the second pass if it needs one: one call at a time
+            let ask = |req: &str, what: &str| std::fs::write(&req_file, req).map_err(|e| e.to_string()).and_then(|_| small.call(&req_file, what));
+            let got = std::fs::create_dir_all(&dir).map_err(|e| e.to_string()).and_then(|_| guide::run(&s.request, &s.files, ask));
+            if let Ok(guide::Written { second: guide::Pass::Failed(e), .. }) = &got {
+                log_line(small.paths(), &format!("guide {}: its second pass failed, the first answer stands: {}", s.hash, e));
+            }
+            let got = got.map(|w| w.guide);
             if let Ok(g) = &got {
                 let k = guide::Kept { hash: s.hash.clone(), base: s.base, head: s.head, at_ms: now_ms(), guide: g.clone() };
                 if let Err(e) = guide::write(&dir, &k) {

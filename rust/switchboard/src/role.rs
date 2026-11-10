@@ -117,11 +117,13 @@ pub fn clean(reply: &str) -> Option<String> {
 }
 
 /// The result of a one-shot run: the text after the last `ONESHOT_OK `
-/// (newlines unescaped), or the error.
+/// (newlines unescaped; a reasoning model's `<think>…</think>` before
+/// its answer dropped: GLM 5.3 Flash on Mistral sends one), or the error.
 pub fn oneshot_reply(stdout: &str) -> Result<String, String> {
     for l in stdout.lines().rev() {
         if let Some(t) = l.strip_prefix("ONESHOT_OK ") {
-            return Ok(t.replace("\\n", "\n"));
+            let t = t.replace("\\n", "\n");
+            return Ok(t.rsplit_once("</think>").map_or(t.as_str(), |(_, answer)| answer.trim_start()).to_string());
         }
         if let Some(e) = l.strip_prefix("ONESHOT_ERR ") {
             return Err(e.to_string());
@@ -199,5 +201,7 @@ still thinking"), None, "unclosed: no line, the old one stays");
         assert_eq!(oneshot_reply("usage: 1 2\nONESHOT_OK a\\nb\n"), Ok("a\nb".to_string()));
         assert_eq!(oneshot_reply("ONESHOT_ERR ANTHROPIC_API_KEY is not set\n"), Err("ANTHROPIC_API_KEY is not set".to_string()));
         assert!(oneshot_reply("").is_err());
+        // a reasoning model's thinking, braces and all, never reaches the caller's parse
+        assert_eq!(oneshot_reply("ONESHOT_OK <think>answer {\"ok\": true} only\\n</think>\\n{\"ok\": true}\n"), Ok("{\"ok\": true}".to_string()));
     }
 }

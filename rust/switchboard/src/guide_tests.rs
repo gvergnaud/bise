@@ -92,13 +92,47 @@ fn the_request_carries_the_intent_the_old_titles_and_its_cost() {
     let mut files = nine();
     stamp(&mut files);
     let old = Guide { overview: String::new(), parts: vec![GuidePart { area: "Sidebar".into(), title: "Give the row's end one owner".into(), summary: String::new(), hunks: vec![], weight: Weight::Normal }], rest: vec![] };
-    let r = request(&digest(&files, DIGEST_CAP), &intent("fix the pin over the PR link", "done: the pin has its own slot"), Some(&old));
+    let r = request(&files, &intent("fix the pin over the PR link", "done: the pin has its own slot"), Some(&old));
     assert!(r.starts_with("MODEL default"));
     assert_eq!(r.lines().count(), 4, "one line per wire field");
     assert!(r.contains("Give the row's end one owner"));
     assert!(r.contains("fix the pin over the PR link"));
     assert!(r.contains("the diff wins over it"));
-    assert!(tokens(&r) > 1_500 && tokens(&r) < 3_000);
+    // the ids to place, last in his message
+    let user = r.lines().nth(2).unwrap();
+    assert!(user.ends_with(&format!("All hunk ids to place (5): {}", ids(&files).join(" "))), "{user}");
+    // the cost counts the second pass it may need: a quarter of the first call
+    let first = r.chars().count() / 4 + 1_500;
+    assert_eq!(tokens(&r) as usize, first + first / 4);
+}
+
+#[test]
+fn a_generated_files_hunks_are_never_asked_for() {
+    let mut files = nine();
+    files.push(DiffFile { generated: true, ..file("pnpm-lock.yaml", vec![hunk("@@ -1 +1 @@", &["lock: 1"])]) });
+    stamp(&mut files);
+    let lock = ids(&files).pop().unwrap();
+    let r = request(&files, "", None);
+    assert!(r.contains("All hunk ids to place (5): "));
+    assert!(!r.lines().nth(2).unwrap().rsplit("to place").next().unwrap().contains(&lock));
+}
+
+#[test]
+fn a_diff_past_250_hunks_gets_the_bigger_digest() {
+    let mut files: Vec<DiffFile> = (0..26).map(|i| file(&format!("src/f{i}.rs"), (0..10).map(|j| hunk(&format!("@@ -{j} +{j} @@"), &["x"])).collect())).collect();
+    assert_eq!(cap(&files[..25]), DIGEST_CAP, "250 hunks");
+    assert_eq!(cap(&files), DIGEST_CAP_BIG, "260 hunks");
+    assert_eq!(DIGEST_CAP_BIG, 120_000);
+    // the request reads it with that cap
+    let long: Vec<&str> = vec!["let x = a_long_line_of_code_that_repeats(1, 2, 3);"; 60];
+    for f in &mut files {
+        for h in &mut f.hunks {
+            *h = hunk(&h.header.clone(), &long);
+        }
+    }
+    stamp(&mut files);
+    let r = request(&files, "", None);
+    assert!(r.len() > DIGEST_CAP + 20_000, "{}", r.len());
 }
 
 fn ids_of(files: &[DiffFile]) -> Vec<String> {
@@ -147,8 +181,8 @@ fn parts_past_the_cap_go_to_rest() {
     let ids: Vec<String> = (0..20).map(|i| format!("{i:010x}")).collect();
     let parts: Vec<String> = ids.iter().map(|i| format!(r#"{{"area": "A", "title": "T", "summary": "S", "hunks": ["{i}"]}}"#)).collect();
     let g = parse(&format!(r#"{{"overview": "o", "parts": [{}], "rest": []}}"#, parts.join(",")), &ids).unwrap();
-    assert_eq!(g.parts.len(), MAX_PARTS);
-    assert_eq!(g.rest, ids[MAX_PARTS..].to_vec());
+    assert_eq!(g.parts.len(), 10);
+    assert_eq!(g.rest, ids[10..].to_vec());
 }
 
 #[test]
@@ -189,4 +223,177 @@ fn the_store_keeps_reads_finds_the_last_of_a_change_and_prunes() {
     let n = std::fs::read_dir(&dir).unwrap().count();
     assert_eq!(n, KEEP);
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A diff of `n` files, one hunk each, hunk i with `sizes[i]` added lines;
+/// the last file generated when `lock`.
+fn sized(sizes: &[usize], lock: bool) -> Vec<DiffFile> {
+    let mut files: Vec<DiffFile> = sizes
+        .iter()
+        .enumerate()
+        .map(|(i, n)| {
+            let add: Vec<String> = (0..*n).map(|k| format!("line {i} {k}")).collect();
+            file(&format!("src/f{i}.rs"), vec![hunk("@@ -1 +1 @@", &add.iter().map(String::as_str).collect::<Vec<_>>())])
+        })
+        .collect();
+    if lock {
+        files.push(DiffFile { generated: true, ..file("pnpm-lock.yaml", vec![hunk("@@ -1 +1 @@", &["a"; 500])]) });
+    }
+    stamp(&mut files);
+    files
+}
+
+fn guide(parts: &[&[String]], rest: &[String]) -> Guide {
+    Guide {
+        overview: "o".into(),
+        parts: parts.iter().enumerate().map(|(i, h)| GuidePart { area: format!("A{i}"), title: format!("Idea {i}"), summary: "s".into(), hunks: h.to_vec(), weight: Weight::Normal }).collect(),
+        rest: rest.to_vec(),
+    }
+}
+
+#[test]
+fn over_5_percent_of_the_lines_out_of_the_parts_calls_a_second_pass() {
+    // 100 lines of code, a 500-line lock file left out of the count
+    let files = sized(&[50, 44, 6], true);
+    let all = ids(&files);
+    let (a, b, c, lock) = (&all[0], &all[1], &all[2], &all[3]);
+    // 6 of 100 lines in rest: a second pass on that hunk alone
+    let g = guide(&[&[a.clone(), b.clone()]], &[c.clone(), lock.clone()]);
+    assert_eq!(second(&g, &files), Some(Second { left: vec![c.clone()], big: None }));
+    // 5 of 100: the first answer stands
+    let files5 = sized(&[50, 45, 5], true);
+    let all5 = ids(&files5);
+    let g5 = guide(&[&[all5[0].clone(), all5[1].clone()]], &[all5[2].clone(), all5[3].clone()]);
+    assert_eq!(second(&g5, &files5), None);
+    // the lock file alone in rest never calls one, however big
+    let g = guide(&[&[a.clone(), b.clone(), c.clone()]], std::slice::from_ref(lock));
+    assert_eq!(second(&g, &files), None);
+    let cv = cover(&g, &files);
+    assert_eq!((cv.lines, cv.rest, cv.biggest, cv.parts), (100, 0, 100, 1));
+}
+
+#[test]
+fn one_part_with_over_half_the_lines_of_a_big_diff_calls_a_second_pass() {
+    // 51 hunks: one of 60 lines, fifty of 1
+    let mut sizes = vec![60];
+    sizes.extend([1; 50]);
+    let files = sized(&sizes, false);
+    let all = ids(&files);
+    let g = guide(&[&all[..30], &all[30..]], &[]);
+    let s = second(&g, &files).unwrap();
+    assert_eq!(s.big, Some(0));
+    assert_eq!(s.left, all[..30].to_vec(), "the big part's hunks, in the diff's order");
+    // the same on a diff of 50 hunks: kept
+    let files50 = sized(&sizes[..50], false);
+    let all50 = ids(&files50);
+    assert_eq!(second(&guide(&[&all50[..30], &all50[30..]], &[]), &files50), None);
+    // just half: kept
+    let even = sized(&[{ 50 }].into_iter().chain([1; 50]).collect::<Vec<_>>(), false);
+    let ev = ids(&even);
+    assert_eq!(second(&guide(&[&ev[..1], &ev[1..]], &[]), &even), None);
+}
+
+#[test]
+fn the_second_request_holds_only_the_left_out_hunks_and_the_numbered_titles() {
+    let mut sizes = vec![60];
+    sizes.extend([1; 50]);
+    let files = sized(&sizes, false);
+    let all = ids(&files);
+    let g = guide(&[&all[..30], &all[30..50]], &all[50..]);
+    let s = second(&g, &files).unwrap();
+    let r = second_request(&g, &files, &s);
+    assert_eq!(r.lines().count(), 4, "one line per wire field");
+    assert!(r.contains("2. A1: Idea 1"));
+    assert!(!r.contains("1. A0"), "the big part is named apart, not numbered");
+    assert!(r.contains("held too much of the change") && r.contains("A0: Idea 0"));
+    assert!(r.contains(&format!("[{}]", all[0])) && r.contains(&format!("[{}]", all[50])));
+    assert!(!r.contains(&format!("[{}]", all[30])), "a placed hunk stays out");
+    let user = r.lines().nth(2).unwrap();
+    assert!(user.ends_with(&format!("ids to place (31): {}", s.left.join(" "))));
+}
+
+#[test]
+fn a_second_answer_places_the_left_out_hunks_each_once() {
+    let files = sized(&[10, 10, 10, 10, 10, 10], false);
+    let all = ids(&files);
+    let g = guide(&[&all[..1], &all[1..2]], &all[2..]);
+    let s = second(&g, &files).unwrap();
+    assert_eq!(s.left, all[2..].to_vec());
+    // one to part 2, two to a new part, one repeated, one unknown, a bad number, one left out
+    let reply = format!(
+        r#"{{"assign": {{"{}": 2, "{}": "1", "{}": 9, "zzzz": 1, "{}": 2}}, "new": [{{"area": "Tests", "title": "Cover the slot", "summary": "s", "hunks": ["{}", "{}", "{}"], "weight": "critical"}}, {{"title": "Empty", "hunks": ["{}"]}}]}}"#,
+        all[3], all[2], all[5], all[0], all[4], all[3], all[4], all[0]
+    );
+    let m = merge(g, &reply, &s).unwrap();
+    assert_eq!(m.parts.len(), 3);
+    assert_eq!(m.parts[0].hunks, vec![all[0].clone(), all[2].clone()], "a placed one never moves");
+    assert_eq!(m.parts[1].hunks, vec![all[1].clone(), all[3].clone()]);
+    assert_eq!((m.parts[2].title.as_str(), m.parts[2].hunks.clone(), m.parts[2].weight), ("Cover the slot", vec![all[4].clone()], Weight::Critical));
+    assert_eq!(m.rest, vec![all[5].clone()], "an id it did not place stays in rest");
+    let mut seen: Vec<&String> = m.parts.iter().flat_map(|p| &p.hunks).chain(&m.rest).collect();
+    seen.sort();
+    let mut want: Vec<&String> = all.iter().collect();
+    want.sort();
+    assert_eq!(seen, want);
+}
+
+#[test]
+fn a_split_part_keeps_what_the_second_answer_leaves_and_new_parts_stop_at_ten() {
+    let mut sizes = vec![30, 30];
+    sizes.extend([1; 50]);
+    let files = sized(&sizes, false);
+    let all = ids(&files);
+    // part 1 holds the two big hunks and ten small ones: over half
+    let mut nine: Vec<Vec<String>> = vec![all[..12].to_vec()];
+    nine.extend((0..8).map(|i| all[12 + i * 5..17 + i * 5].to_vec()));
+    let refs: Vec<&[String]> = nine.iter().map(Vec::as_slice).collect();
+    let g = guide(&refs, &all[52..]);
+    let s = second(&g, &files).unwrap();
+    assert_eq!(s.big, Some(0));
+    // the first big hunk to a new part, the second to another, the rest unsaid
+    let reply = format!(r#"{{"assign": {{}}, "new": [{{"title": "One", "hunks": ["{}"]}}, {{"title": "Two", "hunks": ["{}"]}}, {{"title": "Three", "hunks": ["{}"]}}]}}"#, all[0], all[1], all[2]);
+    let m = merge(g, &reply, &s).unwrap();
+    assert_eq!(m.parts.len(), 10, "9 parts and one new: the cap");
+    assert_eq!(m.parts[9].hunks, vec![all[0].clone()]);
+    assert_eq!(m.parts[0].hunks, all[1..12].to_vec(), "what it left stays in the big part, in order");
+}
+
+#[test]
+fn the_guide_runs_one_call_or_two_never_more() {
+    let files = sized(&[50, 44, 6], false);
+    let all = ids(&files);
+    let first = format!(r#"{{"overview": "o", "parts": [{{"title": "Core", "hunks": ["{}", "{}"]}}], "rest": []}}"#, all[0], all[1]);
+    let second_reply = format!(r#"{{"assign": {{"{}": 1}}, "new": []}}"#, all[2]);
+    // a fake model: its replies in order, the requests kept
+    let mut asked: Vec<String> = vec![];
+    let replies = [first.clone(), second_reply];
+    let w = run("REQ", &files, |req, _| {
+        asked.push(req.to_string());
+        Ok(replies[asked.len() - 1].clone())
+    })
+    .unwrap();
+    assert_eq!(asked.len(), 2);
+    assert_eq!(asked[0], "REQ");
+    assert!(asked[1].contains(&format!("({}): {}", 1, all[2])));
+    assert_eq!(w.second, Pass::Merged);
+    assert_eq!(w.guide.parts[0].hunks, all);
+    assert!(w.guide.rest.is_empty());
+    // a failed second pass: the first answer stands, the hunk in rest
+    let mut n = 0;
+    let w = run("REQ", &files, |_, _| {
+        n += 1;
+        if n == 1 { Ok(first.clone()) } else { Err("timeout".into()) }
+    })
+    .unwrap();
+    assert_eq!(w.second, Pass::Failed("timeout".into()));
+    assert_eq!(w.guide.rest, vec![all[2].clone()]);
+    // every hunk placed: one call
+    let all_in = format!(r#"{{"overview": "o", "parts": [{{"title": "Core", "hunks": ["{}", "{}", "{}"]}}]}}"#, all[0], all[1], all[2]);
+    let mut calls = 0;
+    let w = run("REQ", &files, |_, _| {
+        calls += 1;
+        Ok(all_in.clone())
+    })
+    .unwrap();
+    assert_eq!((calls, w.second), (1, Pass::None));
 }
