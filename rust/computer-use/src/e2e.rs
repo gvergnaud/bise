@@ -550,7 +550,7 @@ fn stop_pause_resume_and_drop() {
     assert_eq!(cli::control(&p, "stop", &json!({"agent": "api-v2"})).unwrap(), json!({"stopped": ["api-v2"]}));
     assert_eq!(slow.join().unwrap().unwrap_err()["code"], "stopped");
     assert!(t0.elapsed() < Duration::from_millis(2500));
-    assert!(ext.control().contains(&json!({"stop": "api-v2"})));
+    wait_until("the stop reaches the extension", || ext.control().contains(&json!({"stop": "api-v2"})));
     assert_eq!(code(&mut a, "snapshot", json!({"target": t}))["code"], "stopped");
     assert_eq!(code(&mut a, "open", json!({"url": "https://x.org"}))["code"], "stopped");
     assert_eq!(ok(&mut a, "status", json!({}))["me"]["stopped"], true);
@@ -887,7 +887,8 @@ fn the_user_takes_over_from_the_window() {
     let mut a = agent(&p, "api-v2", &d);
     let t = ok(&mut a, "open", json!({"url": "https://github.com/"}))["target"].as_str().unwrap().to_string();
     assert_eq!(ctl("pause").unwrap(), json!({"paused": "api-v2"}));
-    assert!(ext.control().contains(&json!({"pause": "api-v2"})));
+    // the broker writes the line before its reply; the fake reads it on its own thread
+    wait_until("the pause reaches the extension", || ext.control().contains(&json!({"pause": "api-v2"})));
     assert_eq!(state::read(&p)["agents"]["api-v2"]["paused"], true);
     assert_eq!(state::events(&p).last().unwrap()["event"], "paused");
     let e = code(&mut a, "act", json!({"target": t, "action": "click"}));
