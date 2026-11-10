@@ -112,12 +112,10 @@ def main():
         st = json.load(open(os.path.join(d, "versions.json")))
         log = open(os.path.join(d, "hub.log")).read()
         check(intruder.starts >= 1, "the older client's start never ran: nothing raced the switch")
-        check(sw.returncode == 0, "the switch failed (rc %d): %r
-%s" % (sw.returncode, st.get("switch"), log[-2000:]))
+        check(sw.returncode == 0, "the switch failed (rc %d): %r\n%s" % (sw.returncode, st.get("switch"), log[-2000:]))
         check((st.get("switch") or {}).get("phase") == "passed", "the switch's phase: %r" % st.get("switch"))
         root = os.path.basename(os.path.realpath(open(os.path.join(d, "hub.root")).read().strip()))
-        check(root == B, "the hub that runs is %s, the switch said %s passed
-%s" % (root, B, log[-2000:]))
+        check(root == B, "the hub that runs is %s, the switch said %s passed\n%s" % (root, B, log[-2000:]))
         wait.until(lambda: len(hubs_of(E.ws)) == 1, 20, lambda: "one hub for the folder: %r" % hubs_of(E.ws), poll=0.2)
         print("ok   an older client's start during the switch: B runs, alone (%d intruder starts%s)"
               % (intruder.starts, ", taken back" if "takes it back" in log else ", it gave way"), flush=True)
