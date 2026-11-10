@@ -85,10 +85,21 @@ export interface Pending {
 }
 
 let pending: Pending | null = null;
+/** the threads already shown (the review in the panel, its thread in the centre: page pr-guided) */
+const shown = new Set<() => void>();
 
-/** The review hands its quotes to the thread it opens. */
+/** The review hands its quotes to the thread it opens; a thread already shown is told at once. */
 export function handQuotes(p: Pending): void {
   pending = p;
+  for (const tell of [...shown]) tell();
+}
+
+/** A shown thread hears of quotes handed after it mounted (it takes its own with takeQuotes). */
+export function onQuotes(tell: () => void): () => void {
+  shown.add(tell);
+  return () => {
+    shown.delete(tell);
+  };
 }
 
 /** The thread takes the quotes meant for it (once). */

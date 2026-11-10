@@ -29,7 +29,7 @@ import { RefusedLine } from '@/app/Refused';
 import { keep } from '@/app/keep';
 import { Tip } from '@/setup';
 import { useTour } from '@/setup/useTour';
-import { takeQuotes } from '@/review/quote';
+import { onQuotes, takeQuotes } from '@/review/quote';
 import { QuotePop } from '@/quote/QuotePop';
 import { Hint, hintUsed, hintsUserMessage, useHint } from '@/app/hints';
 import { HubNoteRow, InboxBlock, type Answering } from '@/inbox';
@@ -162,19 +162,34 @@ export function ThreadScreen({ project, agent, bise = false, projectName, artifa
   // his bug 3: a selection in the thread, then a key, quotes it in the composer
   const section = useRef<HTMLElement>(null);
   const composer = useRef<ComposerActions | null>(null);
-  const onComposer = useCallback(
+  // V7: lines quoted in the review come in as chips, then the key he typed
+  const takeHanded = useCallback(
     (a: ComposerActions) => {
-      composer.current = a;
-      // V7: lines quoted in the review come in as chips, then the key he typed
       const q = takeQuotes(project, agent);
       if (q === null) return;
       // after the composer's own listeners are up (its strip reads the chips on an update)
       setTimeout(() => {
         for (const x of q.quotes) a.quote(x.text, q.from, x.at);
         a.insertText(q.key);
+        a.focusEnd();
       }, 0);
     },
     [project, agent],
+  );
+  const onComposer = useCallback(
+    (a: ComposerActions) => {
+      composer.current = a;
+      takeHanded(a);
+    },
+    [takeHanded],
+  );
+  // the review in the panel beside this thread (page pr-guided): its quotes come in here at once
+  useEffect(
+    () =>
+      onQuotes(() => {
+        if (composer.current !== null) takeHanded(composer.current);
+      }),
+    [takeHanded],
   );
   // the column where the window's sideLayout puts it (column.ts); the selection pop stays in it
   const column = useColumn(section);

@@ -1,8 +1,9 @@
 // @vitest-environment happy-dom
-// A PR's tab on a fake core (pr-integration A rules 7 to 12): its head from the hub's row only,
-// Open on GitHub always, Merge only when mergeable and at the head he sees, Close behind a confirm,
-// the Summary's waits and misses in words, Ask <agent> to fix that fills the composer and never
-// sends, and a late answer dropped. Owner: pr-artifacts.
+// A PR's tab on a fake core (pr-integration A rules 7 to 12, page pr-guided V2): its one state line
+// from the hub's row only, Open on GitHub always, Merge only when mergeable and at the head he sees,
+// its title's ▾ with Close behind a confirm, the description folded to its first line over the
+// guide, a failing check's piece that opens the checks, the Summary's waits and misses in words,
+// Ask <agent> to fix that fills the composer and never sends. Owner: pr-artifacts.
 import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { CoreCmd } from '@/shared/api';
@@ -44,15 +45,64 @@ function shell(s: Pr | null, bise: Record<string, unknown> = {}) {
 afterEach(cleanup);
 
 describe('a PR tab', () => {
-  it('says its head from the hub row, the status line pink when it waits on him, Open on GitHub always', () => {
+  it('one state line from the hub row, pink when it waits on him, Open on GitHub and Merge on it; the guide right under', () => {
     const { v } = shell(status());
     expect(v.getByTestId('prtab.title').textContent).toBe('Faster signup');
-    expect(v.getByTestId('prtab.facts').textContent).toBe('#412 · open · sb/perf → main · perf');
     // only what waits on him in the accent, first; the rest dim (designer m_54748)
     const said = v.getByTestId('prtab.status');
-    expect(said.textContent).toBe('your merge · approved · checks ✓ 12/12');
-    expect([...said.querySelectorAll('.prw-acc')].map((e) => e.textContent)).toEqual(['your merge']);
+    expect(said.textContent).toBe('#412 · your merge · approved · checks ✓ 12/12');
+    expect([...said.querySelectorAll('.prw-acc')].map((e) => e.textContent)).toEqual([' · your merge']);
+    const line = v.getByTestId('prtab.line');
+    expect(line.contains(v.getByTestId('prtab.open'))).toBe(true);
+    expect(line.contains(v.getByTestId('prtab.merge'))).toBe(true);
     expect(v.getByTestId('prtab.open').textContent).toBe(panel.prtab_open_on({ forge: 'GitHub' }));
+    // V2: no Summary | Changes tabs, the state and the description scroll away over the guide
+    expect(v.queryByTestId('prtab.tabs')).toBeNull();
+    expect(v.getByTestId('prtab.changes.files').contains(v.getByTestId('prtab.lead'))).toBe(true);
+  });
+
+  it('the description folded to its first line; open, the Summary under it (its branch first); shut again', () => {
+    const { v, store, last } = shell(status({ base: 'main' }));
+    act(() => {
+      store.apply({ ev: 'pr_detail', project: P, req: last('pr_detail')?.req ?? 0, url: URL, detail: { body: '## Cut the **growth**\n\nmore', checks: [], notes: [] } });
+    });
+    const fold = v.getByTestId('prtab.desc.fold');
+    expect(fold.textContent).toBe(`▸ ${panel.prtab_desc_fold}Cut the growth`);
+    expect(v.queryByTestId('prtab.summary')).toBeNull();
+    fireEvent.click(fold);
+    expect(v.getByTestId('prtab.facts').textContent).toBe('sb/perf → main · perf');
+    expect(v.getByTestId('prtab.body').textContent).toContain('more');
+    fireEvent.click(fold);
+    expect(v.queryByTestId('prtab.summary')).toBeNull();
+  });
+
+  it('a failing check in the line opens the description on its checks', () => {
+    const { v, store, last } = shell(status({ checks: 'fail', pieces: [{ text: 'checks ✗ 1', tone: 'fail' }] }));
+    act(() => {
+      store.apply({ ev: 'pr_detail', project: P, req: last('pr_detail')?.req ?? 0, url: URL, detail: { body: 'x', checks: [{ name: 'e2e', state: 'fail' }], notes: [] } });
+    });
+    expect(v.queryByTestId('prtab.checks')).toBeNull();
+    fireEvent.click(v.getByTestId('prtab.status.fail'));
+    expect(v.getByTestId('prtab.check.e2e').getAttribute('data-state')).toBe('fail');
+  });
+
+  it('its title is its menu: on GitHub, copy link and branch, Close; a right click opens the same', async () => {
+    const shown: string[][] = [];
+    const opened: string[] = [];
+    const { v } = shell(status(), {
+      popupMenu: (items: { id?: string }[]) => { shown.push(items.flatMap((i) => (i.id === undefined ? [] : [i.id]))); return Promise.resolve('open'); },
+      openExternal: (u: string) => { opened.push(u); },
+    });
+    await act(async () => {
+      fireEvent.click(v.getByTestId('prtab.menu'));
+      await Promise.resolve();
+    });
+    await act(async () => {
+      fireEvent.contextMenu(v.getByTestId('prtab.menu'));
+      await Promise.resolve();
+    });
+    expect(shown).toEqual([['open', 'copy-link', 'copy-branch', 'close'], ['open', 'copy-link', 'copy-branch', 'close']]);
+    expect(opened).toEqual([URL, URL]);
   });
 
   it('before its row comes: the plain wait, Open on GitHub beside it, no Merge', () => {
@@ -77,11 +127,11 @@ describe('a PR tab', () => {
     expect(v.getByTestId('prtab.acted').textContent).toBe(panel.prtab_err_moved);
   });
 
-  it('Close is in its ⋯ only, and asks first', async () => {
+  it('Close is in its title’s ▾ only, and asks first', async () => {
     const { v, last } = shell(status(), { popupMenu: () => Promise.resolve('close') });
     expect(v.queryByText(panel.prtab_close)).toBeNull();
     await act(async () => {
-      fireEvent.click(v.getByTestId('prtab.more'));
+      fireEvent.click(v.getByTestId('prtab.menu'));
       await Promise.resolve();
     });
     expect(v.getByTestId('prtab.confirm').textContent).toContain(panel.prtab_close_confirm({ tag: '#412', forge: 'GitHub' }));
@@ -92,6 +142,7 @@ describe('a PR tab', () => {
 
   it('the Summary: what it waits for, then the detail; a late answer in one line with a retry', () => {
     const { v, store, last } = shell(status());
+    fireEvent.click(v.getByTestId('prtab.desc.fold'));
     expect(v.getByTestId('prtab.loading').textContent).toContain(panel.prtab_loading_detail({ forge: 'GitHub' }));
     const first = last('pr_detail')?.req ?? 0;
     act(() => {
@@ -119,6 +170,7 @@ describe('a PR tab', () => {
     act(() => {
       store.apply({ ev: 'pr_detail', project: P, req, url: URL, detail: { body: '', checks: [{ name: 'e2e', state: 'fail' }], notes: [] } });
     });
+    fireEvent.click(v.getByTestId('prtab.desc.fold'));
     fireEvent.click(v.getByTestId('prtab.fix.e2e'));
     const ask = last('pr_check_log');
     expect(ask).toMatchObject({ url: URL, check: 'e2e' });

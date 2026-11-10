@@ -158,18 +158,18 @@ export const panel = {
   prtab_err_forge: (a: { forge: string | number; why: string | number }): string => String(a.forge) + " refused: " + String(a.why),
   /** any other refusal */
   prtab_err_other: "it didn't go through",
-  /** Close, in its ⋯ only */
+  /** Close, in its title's ▾ only */
   prtab_close: "Close pull request…",
-  /** Close's confirm (a close is seen by everyone on it) */
-  prtab_close_confirm: (a: { tag: string | number; forge: string | number }): string => "Close " + String(a.tag) + " on " + String(a.forge) + "? Everyone on it sees it closed; its branch stays.",
-  /** the confirm's yes */
-  prtab_close_yes: "Close it",
+  /** Close's confirm on one line (designer m_58303) */
+  prtab_close_confirm: (a: { tag: string | number; forge: string | number }): string => "close " + String(a.tag) + " on " + String(a.forge) + "?",
+  /** the confirm's yes, in err */
+  prtab_close_yes: "Close",
   /** the confirm's no */
-  prtab_close_no: "Keep it open",
-  /** its first tab */
-  prtab_summary: "Summary",
-  /** its second tab: the PR's diff */
-  prtab_changes: "Changes",
+  prtab_close_no: "Keep",
+  /** its title's ▾: the PR's menu (on its forge, copy, close) */
+  prtab_menu: "this pull request's menu",
+  /** the description folded to its first line, over the guided review (page pr-guided V2) */
+  prtab_desc_fold: "description",
   /** a tab whose row is not here yet */
   prtab_waiting_row: "waiting for the hub's row of this pull request…",
   /** the Summary while it comes */
@@ -188,8 +188,6 @@ export const panel = {
   prtab_unknown: "it didn't come",
   /** ask it again */
   prtab_retry: "Try again",
-  /** the Summary's description's title */
-  prtab_description: "Description",
   /** a PR with no description */
   prtab_no_description: "No description.",
   /** a description cut by the hub */

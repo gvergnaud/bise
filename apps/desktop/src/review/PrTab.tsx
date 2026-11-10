@@ -1,15 +1,18 @@
-// A PR's tab (pr-integration A, rules 7 to 12): one pull request the hub follows, by its link. Its
-// head from the hub's row only (ArtifactPr.status: title, #412, state, head → base, agents, last
-// push, the status line, pink only when it waits on him); Open on GitHub ↗ always; Merge as a ghost
-// button only when the forge says mergeable, at the head he sees (pr/act); Close only in its ⋯,
-// after a confirm. Summary (pr/detail: description as untrusted markdown, checks with 'Ask <agent>
-// to fix' that fills the composer and never sends, reviews read-only, its agents) and Changes (its
-// diff, the hub's pick of place or forge). Every wait says what it waits for, with the link out
-// beside a miss. Owner: pr-artifacts.
+// A PR's tab (pr-integration A, rules 7 to 12; page pr-guided V2: the PR IS its review): its title,
+// whose ▾ (and right click) is its menu (Open on GitHub ↗, copy its link and branch, Close after a
+// one-line confirm); then, scrolling away over its guided review, one state line from the hub's
+// row (ArtifactPr.status: '#412 · draft · conflicts · checks ✗ 1', pink only what waits on him; a
+// failing piece opens the checks) with Open on GitHub ↗ and Merge (a ghost button, only when the
+// forge says mergeable, at the head he sees: pr/act); its description folded to its first line,
+// which opens what the Summary was (its branch, the description as untrusted markdown, checks with
+// 'Ask <agent> to fix' that fills the composer and never sends, reviews read-only, its agents);
+// then its diff (the hub's pick of place or forge) as the guided review (DiffFiles: its bar sticky,
+// a part's 'Ask <agent>'). Every wait says what it waits for, with the link out beside a miss.
+// Owner: pr-artifacts.
 import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
-import { Button, Empty, Head, MoreButton, Press, Seg, Skel, tipAttrs, type EntityMenu } from '@/ds';
+import { Button, Empty, Head, Press, Skel, tipAttrs, type EntityMenu } from '@/ds';
 import { prDiffKey, useArtifacts, useDiffError, usePrActed, usePrCheckLog, usePrDetail, usePrDiff, useStore } from '@/store';
-import type { GuideTarget, Pr, PrCheck, PrDetail } from '@/proto';
+import type { Artifact, GuideTarget, Pr, PrCheck, PrDetail } from '@/proto';
 import { panel } from '@/proto/words_panel.gen';
 import { menus } from '@/proto/words_menus.gen';
 import { Markdown } from '@/thread/Markdown';
@@ -21,13 +24,16 @@ import { putTextInDraft } from '@/artifacts/put';
 import { prLine } from '@/artifacts/pr';
 import { PrWords } from '@/artifacts/PrWords';
 import { DiffFiles } from './DiffFiles';
-import { actLine, askFixText, canClose, canMerge, checkMark, errWords, forgeWord, headFacts, verdictWord } from './prwords';
+import { actLine, askFixText, branchFacts, canClose, canMerge, checkMark, errWords, firstLine, forgeWord, verdictWord } from './prwords';
 import './prtab.css';
 
 const bise = () => (window as Partial<Window>).bise;
 const openOut = (url: string) => {
   void bise()?.openExternal(url);
 };
+
+/** The description's fold: shut, open, or open on its checks (a failing piece's click). */
+type Fold = 'shut' | 'open' | 'checks';
 
 export function PrTab({ project, url }: { project: string; url: string }) {
   const store = useStore();
@@ -39,10 +45,8 @@ export function PrTab({ project, url }: { project: string; url: string }) {
   const forge = forgeWord(s?.provider);
   const acted = usePrActed(project, url);
   const said = actLine(acted, forge);
-  const [tab, setTab] = useState(0);
   const [confirming, setConfirming] = useState(false);
   const busy = acted !== null && !acted.done;
-  const now = useNow();
 
   const menu: EntityMenu = {
     onContextMenu: (e: MouseEvent<HTMLElement>) => {
@@ -53,16 +57,20 @@ export function PrTab({ project, url }: { project: string; url: string }) {
       void showMenu();
     },
   };
+  // its title's ▾: the PR's menu (review-guided m_58300); Open on GitHub stays on the line too
   async function showMenu(): Promise<void> {
     const popup = bise()?.popupMenu;
     if (popup === undefined) return;
     const items = [
+      { id: 'open', label: panel.prtab_open_on({ forge }) },
+      { type: 'separator' as const },
       { id: 'copy-link', label: menus.copy_link, icon: 'link' },
       ...(s === null ? [] : [{ id: 'copy-branch', label: menus.copy_branch }]),
       ...(canClose(s) && !busy ? [{ type: 'separator' as const }, { id: 'close', label: panel.prtab_close, destructive: true }] : []),
     ];
     const id = await popup(items);
-    if (id === 'copy-link') void bise()?.copy(url);
+    if (id === 'open') openOut(url);
+    else if (id === 'copy-link') void bise()?.copy(url);
     else if (id === 'copy-branch' && s !== null) void bise()?.copy(s.branch);
     else if (id === 'close') setConfirming(true);
   }
@@ -84,26 +92,14 @@ export function PrTab({ project, url }: { project: string; url: string }) {
   return (
     <section className="prt" data-testid="prtab" data-url={url}>
       <Head
-        title={<span data-testid="prtab.title">{art?.title ?? tag}</span>}
-        sub={<span data-testid="prtab.facts">{headFacts(tag, s, now).join(' · ')}</span>}
+        title={
+          <Press look="prt-title" aria-haspopup="menu" aria-label={panel.prtab_menu} {...tipAttrs(panel.prtab_menu)}
+            onClick={menu.open} onContextMenu={menu.onContextMenu} data-testid="prtab.menu">
+            <span className="prt-title-t" data-testid="prtab.title">{art?.title ?? tag}</span>
+            <span className="prt-caret" aria-hidden>▾</span>
+          </Press>
+        }
       />
-      {/* title → meta → status → acts (designer m_54748): the status under the meta it qualifies;
-          only what waits on him in the accent, a ✗ in err (PrWords) */}
-      {art !== undefined && line !== null && line.words !== '' && (
-        <p className="prt-status" data-testid="prtab.status">
-          <PrWords a={art} tag={false} />
-        </p>
-      )}
-      {/* its acts on their own line: a panel's width never cuts Open on GitHub (shots v1) */}
-      <div className="prt-acts" data-testid="prtab.acts">
-        {out}
-        {canMerge(s) && !busy && (
-          <Button kind="ghost" size="sm" onClick={merge} title={panel.prtab_merge_tip({ forge })} testId="prtab.merge">
-            {panel.prtab_merge}
-          </Button>
-        )}
-        <MoreButton menu={menu} testId="prtab.more" />
-      </div>
       {said !== null && (
         <p className={said.err ? 'prt-said prt-err' : 'prt-said'} data-testid="prtab.acted">{said.words}</p>
       )}
@@ -117,23 +113,61 @@ export function PrTab({ project, url }: { project: string; url: string }) {
       {art === undefined ? (
         <Empty testId="prtab.waiting" title={panel.prtab_waiting_row} action={out} />
       ) : (
-        <>
-          <Seg items={[panel.prtab_summary, panel.prtab_changes]} on={tab} onPick={setTab} testId="prtab.tabs" />
-          {tab === 0 ? <Summary project={project} url={url} s={s} tag={tag} forge={forge} out={out} /> : <Changes project={project} url={url} />}
-        </>
+        <Changes project={project} url={url}
+          lead={<Lead project={project} url={url} art={art} s={s} tag={tag} forge={forge} out={out} merge={canMerge(s) && !busy ? merge : null} />} />
       )}
     </section>
   );
 }
 
-function Summary({ project, url, s, tag, forge, out }: { project: string; url: string; s: Pr | null; tag: string; forge: string; out: ReactNode }) {
+/**
+ * What scrolls away over the guide (designer m_58284): the one state line, then the description
+ * folded to its first line; the guide's bar stays sticky under them.
+ */
+function Lead({ project, url, art, s, tag, forge, out, merge }: {
+  project: string; url: string; art: Artifact; s: Pr | null; tag: string; forge: string; out: ReactNode; merge: (() => void) | null;
+}) {
   const store = useStore();
-  const router = useRouter();
   const ans = usePrDetail(project, url);
+  const [fold, setFold] = useState<Fold>('shut');
   useEffect(() => {
     store.askPrDetail(project, url);
   }, [store, project, url]);
+  const first = ans?.detail == null ? '' : firstLine(ans.detail.body);
+  return (
+    <div className="prt-lead" data-testid="prtab.lead">
+      {/* the hub's words in one line, the acts after them: narrow, it wraps, an act is never cut */}
+      <p className="prt-line" data-testid="prtab.line">
+        <PrWords a={art} onFail={() => { setFold('checks'); }} testId="prtab.status" />
+        <span className="prt-sep" aria-hidden> · </span>
+        <Press look="prt-out" onClick={() => { openOut(url); }} data-testid="prtab.open">{panel.prtab_open_on({ forge })}</Press>
+        {merge !== null && (
+          <Button kind="ghost" size="sm" onClick={merge} title={panel.prtab_merge_tip({ forge })} testId="prtab.merge">
+            {panel.prtab_merge}
+          </Button>
+        )}
+      </p>
+      <Press look="prt-desc" aria-expanded={fold !== 'shut'} onClick={() => { setFold((f) => (f === 'shut' ? 'open' : 'shut')); }} data-testid="prtab.desc.fold">
+        <span className="prt-desc-k">{fold === 'shut' ? '▸' : '▾'} {panel.prtab_desc_fold}</span>
+        {fold === 'shut' && first !== '' && <span className="prt-desc-first">{first}</span>}
+      </Press>
+      {fold !== 'shut' && <Summary project={project} url={url} s={s} tag={tag} forge={forge} out={out} onChecks={fold === 'checks'} />}
+    </div>
+  );
+}
+
+function Summary({ project, url, s, tag, forge, out, onChecks }: { project: string; url: string; s: Pr | null; tag: string; forge: string; out: ReactNode; onChecks: boolean }) {
+  const store = useStore();
+  const router = useRouter();
+  const ans = usePrDetail(project, url);
+  const now = useNow();
+  const checks = useRef<HTMLHeadingElement>(null);
   const agents = s?.agents ?? [];
+  // opened from 'checks ✗ 1': its checks come into view
+  const shown = ans?.detail != null;
+  useEffect(() => {
+    if (onChecks && shown) checks.current?.scrollIntoView({ block: 'start' });
+  }, [onChecks, shown]);
   if (ans === null) return <p className="prt-wait" data-testid="prtab.loading"><Skel /> {panel.prtab_loading_detail({ forge })}</p>;
   if (ans.detail == null) {
     return (
@@ -147,12 +181,12 @@ function Summary({ project, url, s, tag, forge, out }: { project: string; url: s
   const d: PrDetail = ans.detail;
   return (
     <div className="prt-body" data-testid="prtab.summary">
-      <h3>{panel.prtab_description}</h3>
+      {s !== null && <p className="prt-facts" data-testid="prtab.facts">{branchFacts(s, now).join(' · ')}</p>}
       {d.body.trim() === '' ? <p className="prt-none">{panel.prtab_no_description}</p> : (
         <div className="prt-md" data-testid="prtab.body"><Markdown text={d.body} onLink={openOut} /></div>
       )}
       {d.body_cut === true && <p className="prt-none">{panel.prtab_body_cut({ forge })}</p>}
-      <h3>{panel.prtab_checks}</h3>
+      <h3 ref={checks}>{panel.prtab_checks}</h3>
       {d.checks.length === 0 ? <p className="prt-none">{panel.prtab_no_checks}</p> : (
         <ul className="prt-checks" data-testid="prtab.checks">
           {d.checks.map((c) => <CheckRow key={c.name} project={project} url={url} c={c} tag={tag} forge={forge} agent={agents[0]} />)}
@@ -224,7 +258,7 @@ function CheckRow({ project, url, c, tag, forge, agent }: { project: string; url
   );
 }
 
-function Changes({ project, url }: { project: string; url: string }) {
+function Changes({ project, url, lead }: { project: string; url: string; lead: ReactNode }) {
   const store = useStore();
   const router = useRouter();
   const diff = usePrDiff(project, url);
@@ -237,6 +271,6 @@ function Changes({ project, url }: { project: string; url: string }) {
   return (
     <DiffFiles project={project} diff={diff} loading={panel.prtab_loading_changes} error={failed}
       onRetry={() => { store.askPrDiff(project, url); }} none={panel.prtab_no_changes}
-      to={diff?.agent ?? ''} from={url} onEscape={() => { router.back(); }} testId="prtab.changes" guide={target} />
+      to={diff?.agent ?? ''} from={url} onEscape={() => { router.back(); }} testId="prtab.changes" guide={target} lead={lead} />
   );
 }

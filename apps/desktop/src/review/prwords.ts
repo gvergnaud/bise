@@ -26,12 +26,17 @@ export function stateWord(s: Pr['state']): string {
   }
 }
 
-/** Its head's facts after the title, '' ones left out: '#412 · open · sb/perf → main · perf · pushed 2 h ago'. */
-export function headFacts(tag: string, s: Pr | null, now: number): string[] {
-  if (s === null) return [tag].filter((x) => x !== '');
+/** Its branch's facts, the opened description's first line, '' ones left out: 'sb/perf → main · perf · pushed 2 h ago'. */
+export function branchFacts(s: Pr | null, now: number): string[] {
+  if (s === null) return [];
   const pushed = s.pushed_ms == null ? '' : panel.prtab_pushed({ age: shortAge(now - s.pushed_ms) });
   const branches = s.base == null || s.base === '' ? s.branch : panel.prtab_branches({ head: s.branch, base: s.base });
-  return [tag, stateWord(s.state), branches, s.agents.join(', '), pushed].filter((x) => x !== '');
+  return [branches, s.agents.join(', '), pushed].filter((x) => x !== '');
+}
+
+/** A description's first line in plain words (its markdown marks out): the folded description's. Pure. */
+export function firstLine(body: string): string {
+  return body.split('\n').map((l) => l.replace(/^\s*(#+|[-*>]|\d+\.)\s*/u, '').replace(/[*_`]/gu, '').replace(/\[([^\]]*)\]\([^)]*\)/gu, '$1').trim()).find((l) => l !== '') ?? '';
 }
 
 /** Merge shows only when the forge says it can, on an open PR whose head the hub knows. */

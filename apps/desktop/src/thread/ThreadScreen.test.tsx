@@ -7,11 +7,12 @@ import { answeredMark, approvalParts, cutWords, EntryRow, gapOf, type RowCtx, wi
 import { ThreadScreen } from './ThreadScreen';
 import { aboutParts } from './about';
 import { createRouter, RouterContext } from '@/app/router';
+import { handQuotes } from '@/review/quote';
 
 // the composer is amb-web's: here a stand-in that counts its renders
-const composer = vi.hoisted(() => ({ renders: 0, props: null as null | { busy?: boolean; onSend: (o: { text: string; parts?: unknown[] }) => void } }));
+const composer = vi.hoisted(() => ({ renders: 0, props: null as null | { busy?: boolean; onSend: (o: { text: string; parts?: unknown[] }) => void; onReady?: (a: unknown) => void } }));
 vi.mock('@/composer', () => ({
-  Composer: (props: { busy?: boolean; onSend: (o: { text: string; parts?: unknown[] }) => void }) => {
+  Composer: (props: { busy?: boolean; onSend: (o: { text: string; parts?: unknown[] }) => void; onReady?: (a: unknown) => void }) => {
     composer.renders += 1;
     composer.props = props;
     return <div data-testid="composer" />;
@@ -58,6 +59,25 @@ describe('the thread screen', () => {
     v.unmount();
     // (the inbox strip in the thread says its card_in_view too)
     expect(cmds.slice(before)).toContainEqual({ cmd: 'unsubscribe', project: P, agent: 'perf' });
+  });
+
+  it('shown beside the review in the panel (page pr-guided): a part asked there lands in its composer at once, focused', async () => {
+    const { store } = setup();
+    render(
+      <StoreProvider store={store}>
+        <RouterContext value={createRouter({ screen: 'thread', project: P, agent: 'perf' })}><ThreadScreen project={P} agent="perf" /></RouterContext>
+      </StoreProvider>,
+    );
+    const got: string[] = [];
+    act(() => {
+      composer.props?.onReady?.({ quote: (t: string) => got.push(`quote:${t}`), insertText: (t: string) => got.push(`text:${t}`), focusEnd: () => got.push('focus') });
+    });
+    handQuotes({ project: P, agent: 'main', from: 'x', quotes: [], key: 'not mine' });
+    handQuotes({ project: P, agent: 'perf', from: 'perf vs main', quotes: [{ at: { file: 'a.ts', new: '3', old: '' }, text: '+x' }], key: 'about it' });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(got).toEqual(['quote:+x', 'text:about it', 'focus']);
   });
 
   it("batch 3b: a scheduled entry is '◷ bise scheduled perf · …' (designer N2: no number, no chevron; main is 'bise', designer m_40683), its words open on a click; an ended one doesn't open", () => {

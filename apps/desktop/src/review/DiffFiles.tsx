@@ -5,9 +5,11 @@
 // language (diff-syntax: syntax.ts), after a first plain paint. Owner: nm-pages-b.
 import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode, type RefObject } from 'react';
 import { copyText, QuotePop } from '@/quote/QuotePop';
-import { flatRows, handQuotes, quotesOf, range, type RowAt, type Sel } from './quote';
-import { Button, Check, Diff, Empty, Fold, lineDigits, tipAttrs, type DiffLine as DsLine } from '@/ds';
+import { flatRows, handQuotes, quotesOf, range, span, type RowAt, type Sel } from './quote';
+import { Button, Check, Diff, Empty, Fold, lineDigits, Press, tipAttrs, type DiffLine as DsLine } from '@/ds';
+import { MAIN } from '@/app/route';
 import { pages } from '@/proto/words_pages.gen';
+import { panel } from '@/proto/words_panel.gen';
 import { diffRuns, langOfPath } from './syntax';
 import { lineRows, lineWindow, rowStarts, type Span } from './lineWindow';
 import { useRouter } from '@/app/router';
@@ -38,9 +40,11 @@ export interface DiffFilesProps {
   readonly testId?: string;
   /** the change its guide is asked for (page review-guided); none: By kind only (a .diff artifact) */
   readonly guide?: GuideTarget;
+  /** what scrolls away over the column, the bar sticky under it (a PR's state and description: page pr-guided V2) */
+  readonly lead?: ReactNode;
 }
 
-export function DiffFiles({ project, diff, loading, error, onRetry, none, to, from, onEscape, testId = 'review', guide }: DiffFilesProps) {
+export function DiffFiles({ project, diff, loading, error, onRetry, none, to, from, onEscape, testId = 'review', guide, lead }: DiffFilesProps) {
   const router = useRouter();
   const body = useRef<HTMLDivElement>(null);
   const at = useRef(-1);
@@ -122,6 +126,11 @@ export function DiffFiles({ project, diff, loading, error, onRetry, none, to, fr
     const qs = quotesOf(paths, fileLines, rows, sel);
     if (qs.length === 0) return;
     handQuotes({ project, agent: to, from, quotes: qs, key: '' });
+    router.go({ screen: 'thread', project, agent: to });
+  };
+  // a guide part's 'Ask <agent>' (page pr-guided): its title and files:lines in the composer, never sent
+  const askPart = (s: Section) => {
+    handQuotes({ project, agent: to, from, quotes: [], key: pages.review_ask_part_text({ title: s.title ?? s.label, places: partPlaces(s).join(', ') }) });
     router.go({ screen: 'thread', project, agent: to });
   };
   const copyClick = () => {
@@ -222,6 +231,7 @@ export function DiffFiles({ project, diff, loading, error, onRetry, none, to, fr
 
   return (
     <div className="rv-body" data-testid={`${testId}.files`} tabIndex={-1} ref={body} onKeyDown={onKey} onMouseDown={onMouseDown} onMouseOver={onMouseOver} onScroll={(e) => { nav.onScroll(); g.noteScroll(e.currentTarget.scrollTop); }} data-selecting={sel !== null || undefined}>
+      {lead}
       {/* never a bare grey bar (designer m_15244): say what it waits for, or that nothing differs */}
       {diff === null && error != null ? (
         <Empty
@@ -261,7 +271,8 @@ export function DiffFiles({ project, diff, loading, error, onRetry, none, to, fr
           ? cards.map((c, i) => fileAt(c, i))
           : sections.map((s) => (
               <div key={s.key} className="rv-part" data-section={s.key} data-testid={`${testId}.part.${s.key}`}>
-                <SectionHead s={s} number={numberOf(sections, s.key)} onToggle={() => { toggle(s.key); }} testId={`${testId}.part.${s.key}.fold`} />
+                <SectionHead s={s} number={numberOf(sections, s.key)} onToggle={() => { toggle(s.key); }} testId={`${testId}.part.${s.key}.fold`}
+                  ask={to === '' ? undefined : { who: to === MAIN ? panel.bise : to, go: () => { askPart(s); }, testId: `${testId}.part.${s.key}.ask` }} />
                 {!s.folded && blocksOf(s)}
               </div>
             ))}
@@ -436,7 +447,7 @@ const WORDS: Words = { kind: kindWord, files: (n) => pages.review_part_files({ n
  * area and title (a critical part's title gets an ink dot and bold; a context part a dim word,
  * open: the weight never folds, architect m_57259), its summary, its facts.
  */
-function SectionHead({ s, number, onToggle, testId }: { s: Section; number: string | null; onToggle: () => void; testId: string }) {
+function SectionHead({ s, number, onToggle, testId, ask }: { s: Section; number: string | null; onToggle: () => void; testId: string; ask?: { who: string; go: () => void; testId: string } | undefined }) {
   // folded, its files' names say what it holds ('words_pages.gen.ts'): one line in the column, the
   // list ends in '…' and its tip says it whole (his m_58129: 'The rest' ran under the side panel)
   const facts = ['', s.count, s.folded ? s.names.join(', ') : '', s.sum].filter((x, k) => k === 0 || x !== '').join(' · ');
@@ -455,11 +466,24 @@ function SectionHead({ s, number, onToggle, testId }: { s: Section; number: stri
       </Fold>
       <h3 className="rv-title" data-weight={s.weight ?? undefined}>
         {s.weight === 'critical' && <i className="rv-dot" {...tipAttrs(pages.review_part_critical)} />}
-        {s.title}
+        <span className="rv-title-t">{s.title}</span>
+        {ask !== undefined && (
+          <Press look="rv-ask" onClick={ask.go} {...tipAttrs(pages.review_ask_part_tip({ agent: ask.who }))} data-testid={ask.testId}>
+            {pages.review_ask_part({ agent: ask.who })}
+          </Press>
+        )}
       </h3>
       {s.summary !== null && s.summary !== '' && <p className="rv-summary">{s.summary}</p>}
     </>
   );
+}
+
+/** A part's files and the lines it changes, as a quote names them: 'src/a.ts:12-30'. Pure. */
+export function partPlaces(s: Pick<Section, 'blocks'>): string[] {
+  return s.blocks.flatMap((b) => b.cards).map((c) => {
+    const at = span(c.lines.flatMap((l) => (l.sign === '+' || l.sign === '-') && l.new != null ? [l.new] : []));
+    return at === '' ? c.path : `${c.path}:${at}`;
+  });
 }
 
 /** Row `i` of the flat list is in the selection. */

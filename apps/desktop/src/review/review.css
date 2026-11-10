@@ -166,10 +166,20 @@
   display: none;
 }
 @container rv (max-width: 680px) {
-  .rv-bar .rv-wide {
+  .rv-bar > :not(.rv-place) .rv-wide {
     display: none;
   }
-  .rv-bar .rv-narrow {
+  .rv-bar > :not(.rv-place) .rv-narrow {
+    display: inline;
+  }
+}
+/* the part's name: its number and title while there's room (a PR's panel at 744: designer m_58311),
+   cut with … when the slot needs room (useFit), its area word alone at the narrowest */
+@container rv (max-width: 480px) {
+  .rv-bar > .rv-place .rv-wide {
+    display: none;
+  }
+  .rv-bar > .rv-place .rv-narrow {
     display: inline;
   }
 }
@@ -254,6 +264,19 @@
 }
 .rv-title[data-weight='critical'] {
   font-weight: 600;
+}
+.rv-title-t {
+  min-width: 0;
+}
+/* a part's quiet 'Ask <agent>' at its title's end (page pr-guided; designer m_58284): text-2, ink on hover */
+.rv-ask {
+  flex: none;
+  margin-left: auto;
+  font: var(--t-12) var(--font-ui);
+  color: var(--c-text-2);
+}
+.rv-ask:hover {
+  color: var(--c-text);
 }
 .rv-dot {
   flex: none;

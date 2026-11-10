@@ -169,12 +169,17 @@ export function useFrontArt(): { readonly project: string; readonly id: string }
   return front?.kind === 'thing' && front.e.kind === 'artifact' ? front.e : undefined;
 }
 
-/** The kind (ds's iconKindOf) of the artifact in front of the panel; undefined for any other tab. */
+/** a PR's kind for its share of the window (ds's iconKindOf of a PR artifact) */
+const PR_KIND = 'pr';
+
+/** The kind (ds's iconKindOf) of the artifact in front of the panel, a PR's tab its 'pr' (page pr-guided: its guided review reads at 744 at 1440); undefined for any other tab. */
 export function useFrontArtKind(): string | undefined {
   const e = useFrontArt();
+  const s = usePanelState();
+  const front = s.tabs.list.find((t) => t.id === s.tabs.active)?.what;
   // no artifact in front: a project no row has, so it reads nothing ('' would read every project's)
   const a = useAllArtifacts(e?.project ?? '\u0000').find((x) => x.a.id === e?.id)?.a;
-  if (e === undefined) return undefined;
+  if (e === undefined) return front?.kind === 'thing' && front.e.kind === 'pr' ? PR_KIND : undefined;
   return a === undefined ? 'page' : iconKindOf(a);
 }
 

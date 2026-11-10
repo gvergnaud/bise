@@ -1,11 +1,30 @@
-/* A PR's tab (review/PrTab.tsx): its head, the status line, his act's words, Close's confirm, the
-   Summary's parts. The 4 px grid (--s-*), the ds colours only: ink at rest, the accent only on
+/* A PR's tab (review/PrTab.tsx, page pr-guided V2): its title and ▾, his act's words, Close's
+   confirm; in the guide's scroller, over its sticky bar: the state line, the folded description and
+   the Summary's parts it opens. The 4 px grid (--s-*), the ds colours only: ink at rest, the accent only on
    what waits on him (pink), err on a refusal. Light and dark from the tokens. Owner: pr-artifacts. */
-.prt { display: flex; flex-direction: column; min-height: 0; height: 100%; overflow: auto; padding: 0 var(--s-4) var(--s-6); }
-.prt > .b-head { padding-inline: 0; white-space: normal; }
-.prt-acts { display: flex; align-items: center; gap: var(--s-2); flex-wrap: wrap; margin: 0 0 var(--s-2); }
-.prt > .b-seg { margin: var(--s-3) 0 var(--s-2); }
-.prt-status, .prt-said { margin: 0 0 var(--s-2); font-size: var(--t-13); color: var(--c-text-2); }
+.prt { display: flex; flex-direction: column; min-height: 0; height: 100%; overflow: hidden; }
+.prt > .b-head { padding-inline: var(--page-col-l, var(--pad-page-x)) var(--page-col-r, var(--pad-page-x)); white-space: normal; }
+.prt > .b-empty, .prt > .prt-said, .prt > .prt-confirm { margin-inline: var(--page-col-l, var(--pad-page-x)) var(--page-col-r, var(--pad-page-x)); }
+.prt > .rv-body { flex: 1 1 auto; }
+/* the title is the PR's menu: its words in ink, a quiet ▾ after them (review-guided m_58300) */
+.prt-title { display: inline-flex; align-items: baseline; gap: var(--s-1); max-width: 100%; min-width: 0; color: inherit; font: inherit; text-align: left; }
+.prt-title-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.prt-caret { flex: none; font-size: var(--t-12); color: var(--c-text-3); }
+.prt-title:hover .prt-caret { color: var(--c-text); }
+/* what scrolls away over the guide: on the cards' edge, as the bar's words */
+.prt-lead { margin: 0 var(--pad-row-x) var(--s-3); }
+.prt-line { display: flex; align-items: center; flex-wrap: wrap; column-gap: 0; row-gap: var(--s-1); margin: 0 0 var(--s-1); font-size: var(--t-13); color: var(--c-text-2); }
+.prt-line > .prw { min-width: 0; }
+.prt-sep { white-space: pre; color: var(--c-text-3); }
+.prt-out { color: var(--c-text-2); white-space: nowrap; }
+.prt-out:hover { color: var(--c-text); }
+.prt-line > .b-btn { margin-left: var(--s-2); }
+.prt-desc { display: flex; gap: var(--s-2); width: 100%; min-width: 0; padding: var(--s-1) 0; font-size: var(--t-13); color: var(--c-text-2); text-align: left; }
+.prt-desc-k { flex: none; }
+.prt-desc:hover .prt-desc-k { color: var(--c-text); }
+.prt-desc-first { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--c-text-3); }
+.prt-facts { margin: var(--s-2) 0 var(--s-3); font-size: var(--t-13); color: var(--c-text-2); }
+.prt-said { margin: 0 0 var(--s-2); font-size: var(--t-13); color: var(--c-text-2); }
 .prt-err { color: var(--c-err); }
 .prt-confirm { display: flex; align-items: center; gap: var(--s-2); flex-wrap: wrap; margin: 0 0 var(--s-3); padding: var(--s-2) var(--s-3);
   border: 1px solid var(--c-line); border-radius: 6px; font-size: var(--t-13); color: var(--c-text); }
@@ -19,7 +38,7 @@
 .prt-notes > li { display: flex; flex-direction: column; gap: var(--s-1); }
 .prt-who { font-size: var(--t-12); color: var(--c-text-2); }
 .prt-mark { width: var(--s-4); text-align: center; color: var(--c-text-3); }
-.prt-mark.prt-pass { color: var(--c-ok); }
+.prt-mark.prt-pass { color: var(--c-text); }
 .prt-mark.prt-fail { color: var(--c-err); }
 .prt-link { color: var(--c-text); text-decoration: underline; text-decoration-color: var(--c-line-strong); }
 .prt-link:hover { text-decoration-color: currentColor; }

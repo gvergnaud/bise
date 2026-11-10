@@ -186,6 +186,12 @@ crate::words! { pages:
     review_part_context = "context";
     /// a guide part's weight's tip on its ink dot
     review_part_critical = "where a bug would hurt";
+    /// a guide part's quiet act (page pr-guided): its title and files in the agent's composer
+    review_ask_part(agent) = "Ask {agent}";
+    /// its tip
+    review_ask_part_tip(agent) = "ask {agent} about this part: its title and lines go in the composer, nothing is sent";
+    /// what it puts in the composer, before his words: the part's title, then its files and lines
+    review_ask_part_text(title, places) = "about “{title}” · {places}: ";
     /// the review bar's mode: the guide's parts (a segmented control)
     review_mode_guide = "Guide";
     /// the review bar's mode: the parts by kind and folder (no model)

@@ -10,6 +10,7 @@ import { Store, StoreProvider, type Diff } from '@/store';
 import { createRouter, RouterContext } from '@/app/router';
 import { pages } from '@/proto/words_pages.gen';
 import { DiffFiles } from './DiffFiles';
+import { takeQuotes } from './quote';
 
 const P = 'acme-1a2b3c4d';
 const H = '9f2c41d07a3be815';
@@ -43,9 +44,10 @@ function view() {
   const port: CorePort = { send: (c) => cmds.push(c), onEvent: () => () => undefined, onState: () => () => undefined, state: () => Promise.resolve('up') };
   const store = new Store(port);
   store.setCore('up');
+  const router = createRouter({ screen: 'bise' });
   const v = render(
     <StoreProvider store={store}>
-      <RouterContext value={createRouter({ screen: 'bise' })}>
+      <RouterContext value={router}>
         <DiffFiles project={P} diff={diff} loading="" none="" to="pr-access" from="pr-access vs main" onEscape={() => undefined} guide={{ kind: 'agent', name: 'pr-access' }} />
       </RouterContext>
     </StoreProvider>,
@@ -55,7 +57,7 @@ function view() {
       store.apply(ev);
     });
   };
-  return { v, cmds, send };
+  return { v, cmds, send, router };
 }
 
 const ready = { ev: 'guide' as const, project: P, hash: H, state: 'ready' as const, guide };
@@ -98,6 +100,20 @@ describe('the guided review', () => {
     expect(v.getByTestId('review.part.code')).toBeTruthy();
     fireEvent.click(v.getByTestId('review.bar.mode.guide'));
     expect(v.getByTestId('review.part.part-1')).toBeTruthy();
+  });
+
+  it("a part's 'Ask <agent>' (page pr-guided): its title and files:lines in the agent's composer, its thread shown, nothing sent", () => {
+    const { v, cmds, send, router } = view();
+    send(ready);
+    const ask = v.getByTestId('review.part.part-1.ask');
+    expect(ask.textContent).toBe(pages.review_ask_part({ agent: 'pr-access' }));
+    fireEvent.click(ask);
+    expect(takeQuotes(P, 'pr-access')?.key).toBe(pages.review_ask_part_text({ title: "Give the row's end one owner", places: 'apps/desktop/src/agents/rowEnd.ts:1, apps/desktop/src/agents/SidebarRow.tsx:1' }));
+    expect(router.get()).toEqual({ screen: 'thread', project: P, agent: 'pr-access' });
+    expect(cmds.some((c) => c.cmd === 'send')).toBe(false);
+    // By kind has no parts to ask about
+    fireEvent.click(v.getByTestId('review.bar.mode.kind'));
+    expect(v.queryByTestId('review.part.code.ask')).toBeNull();
   });
 
   it('ready after he scrolled: nothing moves, the slot offers it; Show it swaps', () => {

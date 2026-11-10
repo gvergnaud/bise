@@ -14,3 +14,6 @@
 .prw-fit > .prw-head { display: flex; min-width: 0; max-width: 100%; }
 .prw-head > .prw-shrink { flex: 0 1 auto; min-width: 0; overflow: hidden; white-space: pre; text-overflow: clip; }
 .prw-head > .prw-acc { flex: none; white-space: pre; }
+/* a failing piece that opens what it says (the PR tab's 'checks ✗ 1': its checks, page pr-guided V2) */
+.prw-press { color: inherit; }
+.prw-press:hover { text-decoration: underline; }

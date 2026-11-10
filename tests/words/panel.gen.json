@@ -675,11 +675,6 @@
     "one": null,
     "text": "{head} → {base}"
   },
-  "panel.prtab_changes": {
-    "args": [],
-    "one": null,
-    "text": "Changes"
-  },
   "panel.prtab_changes_asked": {
     "args": [],
     "one": null,
@@ -726,17 +721,17 @@
       "forge"
     ],
     "one": null,
-    "text": "Close {tag} on {forge}? Everyone on it sees it closed; its branch stays."
+    "text": "close {tag} on {forge}?"
   },
   "panel.prtab_close_no": {
     "args": [],
     "one": null,
-    "text": "Keep it open"
+    "text": "Keep"
   },
   "panel.prtab_close_yes": {
     "args": [],
     "one": null,
-    "text": "Close it"
+    "text": "Close"
   },
   "panel.prtab_closed_now": {
     "args": [
@@ -755,10 +750,10 @@
     "one": null,
     "text": "commented"
   },
-  "panel.prtab_description": {
+  "panel.prtab_desc_fold": {
     "args": [],
     "one": null,
-    "text": "Description"
+    "text": "description"
   },
   "panel.prtab_err_ended": {
     "args": [],
@@ -828,6 +823,11 @@
     ],
     "one": null,
     "text": "asking {forge} for its description, checks and reviews…"
+  },
+  "panel.prtab_menu": {
+    "args": [],
+    "one": null,
+    "text": "this pull request's menu"
   },
   "panel.prtab_merge": {
     "args": [],
@@ -916,11 +916,6 @@
     "args": [],
     "one": null,
     "text": "Reviews"
-  },
-  "panel.prtab_summary": {
-    "args": [],
-    "one": null,
-    "text": "Summary"
   },
   "panel.prtab_unknown": {
     "args": [],

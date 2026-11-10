@@ -162,6 +162,28 @@
     "one": null,
     "text": "Pull requests"
   },
+  "pages.review_ask_part": {
+    "args": [
+      "agent"
+    ],
+    "one": null,
+    "text": "Ask {agent}"
+  },
+  "pages.review_ask_part_text": {
+    "args": [
+      "title",
+      "places"
+    ],
+    "one": null,
+    "text": "about “{title}” · {places}: "
+  },
+  "pages.review_ask_part_tip": {
+    "args": [
+      "agent"
+    ],
+    "one": null,
+    "text": "ask {agent} about this part: its title and lines go in the composer, nothing is sent"
+  },
   "pages.review_commit": {
     "args": [
       "sha"

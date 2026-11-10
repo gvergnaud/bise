@@ -13,6 +13,7 @@ import { BarTabs } from './BarTabs';
 import { PanelHost } from './Host';
 import { panelState, panelToggle, reopenClosed, setFull, usePanelScope, usePanelState } from './state';
 import { PANEL_FULL_KEY } from './keys';
+import { artFit, shareOf } from './model';
 import { openTab } from './tabs';
 import { PANEL_KEYS } from './keys';
 import { panel } from '@/proto/words_panel.gen';
@@ -103,7 +104,8 @@ describe('the tabbed panel', () => {
     const tab = v.getByTestId(`app.panel.tab.pr:${ACME}/${PR(6)}`);
     expect(tab.getAttribute('aria-selected')).toBe('true');
     expect(tab.textContent).toContain('PR #6');
-    expect(v.getByTestId('app.panel').style.width).toBe('640px');
+    // a PR's tab is its guided review (page pr-guided): it takes a PR artifact's share, never the rows' one width
+    expect(v.getByTestId('app.panel').style.width).toBe(`${String(artFit(shareOf('pr', {}), window.innerWidth, 0).width)}px`);
     fireEvent.click(v.getByTestId(`app.panel.tab.pr:${ACME}/${PR(6)}.close`));
     expect(panelState.get().tabs.list).toEqual([]);
     expect(panelState.get().open).toBe(false);

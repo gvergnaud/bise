@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Pr } from '@/proto';
 import { panel } from '@/proto/words_panel.gen';
-import { actLine, askFixText, canClose, canMerge, forgeWord, headFacts } from './prwords';
+import { actLine, askFixText, canClose, canMerge, firstLine, forgeWord, branchFacts } from './prwords';
 
 const pr = (over: Partial<Pr> = {}): Pr => ({
   number: 412, url: 'https://github.com/acme/web/pull/412', branch: 'sb/perf', agents: ['perf'], state: 'open', checks: 'pass',
@@ -11,9 +11,15 @@ const pr = (over: Partial<Pr> = {}): Pr => ({
 });
 
 describe('a PR tab’s words', () => {
-  it('its head: tag, state, branch → base, agents, last push; only the tag before the hub says', () => {
-    expect(headFacts('#412', pr({ base: 'main', pushed_ms: 0 }), 2 * 3_600_000)).toEqual(['#412', 'open', 'sb/perf → main', 'perf', 'pushed 2 h ago']);
-    expect(headFacts('!7', null, 0)).toEqual(['!7']);
+  it('its branch: branch → base, agents, last push; nothing before the hub says', () => {
+    expect(branchFacts(pr({ base: 'main', pushed_ms: 0 }), 2 * 3_600_000)).toEqual(['sb/perf → main', 'perf', 'pushed 2 h ago']);
+    expect(branchFacts(null, 0)).toEqual([]);
+  });
+
+  it('a description folded: its first line with words, its markdown marks out', () => {
+    expect(firstLine('\n## Cut the **growth**\n\nmore')).toBe('Cut the growth');
+    expect(firstLine('- see [the issue](https://x/1) `now`')).toBe('see the issue now');
+    expect(firstLine('  \n')).toBe('');
   });
 
   it('Merge only open + mergeable + a known head; Close while open or draft', () => {

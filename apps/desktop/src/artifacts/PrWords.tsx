@@ -6,19 +6,21 @@
 // Artifacts page's cards and rows, and the PR tab's status line. Owner: pr-artifacts.
 import type { ReactNode } from 'react';
 import type { Artifact, PrTone } from '@/proto';
-import { tipAttrs } from '@/ds';
+import { Press, tipAttrs } from '@/ds';
 import { panel } from '@/proto/words_panel.gen';
 import { prLine } from './pr';
 import './prwords.css';
 
 const TONE: Record<PrTone, string> = { yours: 'prw-acc', fail: 'prw-fail', plain: 'prw-dim', unknown: 'prw-dim' };
 
-export function PrWords({ a, tag = true, fit = false, tail, testId }: {
+export function PrWords({ a, tag = true, fit = false, tail, onFail, testId }: {
   a: Pick<Artifact, 'pr'>;
   tag?: boolean;
   fit?: boolean;
   /** a last part, the first to go ('perf', its maker in a row) */
   tail?: string;
+  /** a failing piece ('checks ✗ 1') opens what it says (the PR tab's checks: page pr-guided V2) */
+  onFail?: () => void;
   testId?: string;
 }) {
   const l = prLine(a);
@@ -57,7 +59,9 @@ export function PrWords({ a, tag = true, fit = false, tail, testId }: {
       {parts.map((p, i) => (
         <span key={p.key} className={p.cls} data-acc={p.cls === 'prw-acc' ? '' : undefined} {...(p.tip === undefined ? {} : tipAttrs(p.tip))}>
           {i > 0 ? ' · ' : ''}
-          {p.node}
+          {onFail !== undefined && p.cls === 'prw-fail' ? (
+            <Press look="prw-press" onClick={onFail} data-testid={testId === undefined ? undefined : `${testId}.fail`}>{p.node}</Press>
+          ) : p.node}
         </span>
       ))}
     </span>
