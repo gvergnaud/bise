@@ -8,6 +8,11 @@
 //! switcher runs from the OLD (known good) binary, detached from both
 //! hubs, and watches the new one for the probation period:
 //! - the hub process died, or does not answer `ping` for ~10 s;
+//! - the hub that answers runs another app root (its `hub.root`) for
+//!   15 s: a client started an older bise meanwhile (update-safety); the
+//!   new hub takes the workspace back from such a start ([`claim`]), and
+//!   clients wait for a running switch instead of starting one
+//!   (client::open);
 //! - the hub reported a failure (`probation-fail`: a REPL of the new
 //!   version crashed, or could not start).
 //!
@@ -110,6 +115,10 @@ fn hub_pid(paths: &Paths) -> Option<u32> {
 use crate::procs::alive;
 
 mod ask;
+
+// who keeps the workspace when a starting hub finds another one there
+// during a switch (update-safety: an older core's restart races the switch)
+pub mod claim;
 
 fn ping(paths: &Paths) -> bool {
     client::request(
@@ -246,7 +255,12 @@ fn replace_hub(paths: &Paths, root: &Path, same: bool, late: Late) -> Result<(),
             std::thread::sleep(Duration::from_millis(200));
         }
     }
-    let _ = std::fs::remove_file(paths.socket());
+    // a stale socket goes; one that answers is another bise a client
+    // started meanwhile: left for the new hub to take back (switch::claim),
+    // never unlinked under it (two hubs then ran, update-safety)
+    if UnixStream::connect(paths.socket()).is_err() {
+        let _ = std::fs::remove_file(paths.socket());
+    }
     if !same {
         // an older version's hub would write its sb script through the link
         crate::tools_env::drop_agent_links(&paths.bin_dir());
@@ -356,7 +370,7 @@ pub fn id_of(root: &Path) -> String {
 }
 
 /// Watch the new hub for the probation period. Err: the reason to roll back.
-fn probation(paths: &Paths, period: Duration) -> Result<(), String> {
+fn probation(paths: &Paths, to: &Path, period: Duration) -> Result<(), String> {
     // the hub reads the deadline (on_probation: it reports its failures
     // and does not idle-exit): from now, not from before the backup and
     // the start, else the hub thought it over and idle-exited while this
@@ -365,7 +379,7 @@ fn probation(paths: &Paths, period: Duration) -> Result<(), String> {
     st["probation_until"] = json!(now_ms() + period.as_millis() as u64 + 5_000);
     write_state(paths, &st);
     let t0 = Instant::now();
-    let mut misses = 0;
+    let (mut misses, mut elsewhere) = (0, 0);
     while t0.elapsed() < period {
         std::thread::sleep(Duration::from_secs(1));
         if let Ok(r) = std::fs::read_to_string(fail_file(paths)) {
@@ -374,6 +388,19 @@ fn probation(paths: &Paths, period: Duration) -> Result<(), String> {
         match hub_pid(paths) {
             Some(p) if alive(p) => {}
             _ => return Err("the hub stopped (crash)".into()),
+        }
+        // the hub that answers runs `to`, never another bise that took the
+        // workspace meanwhile (an older client's start: a pass then left
+        // him on the old version, update-safety); a few seconds of grace
+        // while a new hub takes it back (switch::claim)
+        if runs_elsewhere(paths, to) {
+            elsewhere += 1;
+            if elsewhere >= TAKEOVER_GRACE {
+                let root = std::fs::read_to_string(paths.state.join("hub.root")).unwrap_or_default();
+                return Err(format!("another bise took the hub: {}", root.trim()));
+            }
+        } else {
+            elsewhere = 0;
         }
         if ping(paths) {
             misses = 0;
@@ -385,6 +412,20 @@ fn probation(paths: &Paths, period: Duration) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// Probation seconds in a row the hub may run another root than the
+/// switch's before it fails: the time a new hub takes the workspace back
+/// from an older client's start (switch::claim: its stop is bounded at 5 s,
+/// then a kill).
+const TAKEOVER_GRACE: u32 = 15;
+
+/// The live hub of `paths` says it runs another app root than `to`
+/// (its `hub.root`); unreadable: no.
+fn runs_elsewhere(paths: &Paths, to: &Path) -> bool {
+    let Ok(r) = std::fs::read_to_string(paths.state.join("hub.root")) else { return false };
+    let (r, to) = (Path::new(r.trim()), to.canonicalize().unwrap_or_else(|_| to.to_path_buf()));
+    r.canonicalize().is_ok_and(|r| r != to)
 }
 
 /// The hub whose state is `state` runs (a live socket or pid) or is being
@@ -555,7 +596,7 @@ fn run_locked(paths: &Paths, to: &Path, period: Duration, restart: bool, reload:
     // the phase is written: the hub sends its switch row ('reloading')
     phase_moved(paths);
 
-    let outcome = replace_hub(paths, &to, from == to, Late::Kill).and_then(|_| probation(paths, period));
+    let outcome = replace_hub(paths, &to, from == to, Late::Kill).and_then(|_| probation(paths, &to, period));
     let mut st = read_state(paths);
     st["probation_until"] = json!(0);
     match outcome {
@@ -732,6 +773,25 @@ fn clip_answer(a: &str) -> String {
 
 #[cfg(test)]
 mod state_tests {
+    /// The probation fails a switch whose answering hub runs another root
+    /// (update-safety: an older client's start passed for the new version).
+    #[test]
+    fn the_probation_sees_a_hub_of_another_root() {
+        use super::runs_elsewhere;
+        let d = std::env::temp_dir().join(format!("sb-elsewhere-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        let (old, new) = (d.join("v/old"), d.join("v/new"));
+        std::fs::create_dir_all(&old).unwrap();
+        std::fs::create_dir_all(&new).unwrap();
+        let paths = crate::paths::Paths { workspace: d.clone(), state: d.clone(), worktrees: d.join("w"), run: d.join("r") };
+        assert!(!runs_elsewhere(&paths, &new), "no hub.root: nothing known, no failure");
+        std::fs::write(d.join("hub.root"), new.to_string_lossy().as_bytes()).unwrap();
+        assert!(!runs_elsewhere(&paths, &new), "the switch's own root");
+        std::fs::write(d.join("hub.root"), old.to_string_lossy().as_bytes()).unwrap();
+        assert!(runs_elsewhere(&paths, &new), "another root answers");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
     #[test]
     fn a_launch_moves_the_hub_to_a_newer_installed_current_only() {
         use super::should_follow_install as follow;

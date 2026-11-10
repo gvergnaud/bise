@@ -16,3 +16,4 @@
 # tag is on no site (stale); a line that doesn't parse; a line whose removal release is out
 # (the highest tag of that kind merged into HEAD is at or past it): red in quick, full and the
 # nightly, a warning in land (the owner gets the red at their next quick gate).
+switch-intruder	update-safety	v2026.12.15	a new hub started by a version switch takes the workspace back from a hub an older client (desktop core or TUI up to 11.9: client::open did not wait for a running switch) started meanwhile from its own older root (switch::claim, daemon.rs take_over); for every update from 11.9 or older

@@ -140,6 +140,12 @@ pub fn open(paths: &Paths, exe: &Path, app_root: &Path) -> std::io::Result<UnixS
         Ok(s) => s,
         Err(_) => {
             jailed(paths)?;
+            // a version switch is replacing the hub: its new hub comes up,
+            // never one of this client's version beside it (update-safety:
+            // an older core's start raced the switch and kept the old bise)
+            if let Some(s) = wait_switch(paths, crate::switch::MOVE_BOUND) {
+                return Ok(s);
+            }
             let _start = start_lock(paths)?;
             // another client started it while this one waited for the lock
             if let Ok(s) = UnixStream::connect(paths.socket()) {
@@ -162,6 +168,21 @@ pub fn open(paths: &Paths, exe: &Path, app_root: &Path) -> std::io::Result<UnixS
         }
     };
     Ok(s)
+}
+
+/// While a switcher runs for `paths` (up to `bound`): its hub's connection
+/// once it listens. None: no switch runs, or its hub is not up within the
+/// bound (the caller starts one as before: a stale switch.pid never keeps
+/// him out for long).
+fn wait_switch(paths: &Paths, bound: Duration) -> Option<UnixStream> {
+    let t0 = Instant::now();
+    while crate::switch::switch_running(paths) && t0.elapsed() < bound {
+        if let Ok(s) = UnixStream::connect(paths.socket()) {
+            return Some(s);
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    UnixStream::connect(paths.socket()).ok()
 }
 
 /// Stop the hub of a workspace and every agent REPL. `keep_agents`:
@@ -197,36 +218,11 @@ fn older_words_in(state: &Path, user_home: &Path) -> String {
 /// `answer`: the wait for the hub's `initialize` answer; `wait`: for its
 /// socket to go once the stop is asked. Not gone: an error, never "stopped".
 fn stop_at(socket: &Path, keep_agents: bool, answer: Duration, wait: Duration) -> std::io::Result<bool> {
-    use bise_proto::hub::HubCmd;
-    use bise_proto::rpc::{self, Id, Init, InitializeParams, Message, Request};
-    let Ok(mut s) = UnixStream::connect(socket) else { return Ok(false) };
-    let params = serde_json::to_value(InitializeParams::new("bise", env!("CARGO_PKG_VERSION"))).unwrap_or_default();
-    writeln!(s, "{}", Message::Request(Request::new(Id::Num(0), rpc::INITIALIZE, params)).to_value())?;
-    s.set_read_timeout(Some(answer))?;
-    let mut lines = BufReader::new(s.try_clone()?).lines();
-    let project = loop {
-        let line = match lines.next() {
-            Some(Ok(line)) => line,
-            // no answer in 5 s: nothing was asked, the hub runs on
-            Some(Err(e)) if matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => {
-                return Err(std::io::Error::other(format!("{} {} s: it was not stopped", NO_ANSWER, answer.as_secs())));
-            }
-            // it closed the connection: going already
-            _ => return Ok(true),
-        };
-        match rpc::init_answer(&serde_json::from_str(&line).unwrap_or(Value::Null), &Id::Num(0)) {
-            Init::Ready(res) => break res.project,
-            // refused (it runs in an agent's process): the hub stays
-            Init::Refused(_) => return Ok(true),
-            // a hub from before client-protocol: never asked, it runs on
-            Init::NotRpc => return Err(std::io::Error::other(rpc::HUB_OLDER)),
-            Init::Other => {}
-        }
+    let mut s = match ask_stop_at(socket, keep_agents, answer)? {
+        Asked::NoHub => return Ok(false),
+        Asked::Going => return Ok(true),
+        Asked::Stop(s) => s,
     };
-    drop(lines);
-    if let Some(req) = rpc::request(Id::Num(1), &HubCmd::StopHub { project, keep_agents }) {
-        writeln!(s, "{}", Message::Request(req).to_value())?;
-    }
     // wait for the socket to go away, reading what the hub writes
     // (notifications): a full socket buffer would block the hub, which
     // would never stop
@@ -247,6 +243,59 @@ fn stop_at(socket: &Path, keep_agents: bool, answer: Duration, wait: Duration) -
         )));
     }
     Ok(true)
+}
+
+/// Ask the hub of `paths` to stop (`keep_agents`) and return at once: the
+/// caller waits on its pid, not its socket (daemon.rs take_over: a hub
+/// whose hub.pid is no longer its own leaves its socket in place).
+pub fn ask_stop(paths: &Paths, keep_agents: bool) -> std::io::Result<()> {
+    ask_stop_at(&paths.socket(), keep_agents, STOP_ANSWER).map(|_| ())
+}
+
+/// What [`ask_stop_at`] got.
+enum Asked {
+    /// no hub listens there
+    NoHub,
+    /// nothing asked: it is going already, or it refused (it runs in an
+    /// agent's process)
+    Going,
+    /// the stop is asked: the connection, to read until it closes
+    Stop(UnixStream),
+}
+
+/// `initialize`, then `hub/stop`.
+fn ask_stop_at(socket: &Path, keep_agents: bool, answer: Duration) -> std::io::Result<Asked> {
+    use bise_proto::hub::HubCmd;
+    use bise_proto::rpc::{self, Id, Init, InitializeParams, Message, Request};
+    let Ok(mut s) = UnixStream::connect(socket) else { return Ok(Asked::NoHub) };
+    let params = serde_json::to_value(InitializeParams::new("bise", env!("CARGO_PKG_VERSION"))).unwrap_or_default();
+    writeln!(s, "{}", Message::Request(Request::new(Id::Num(0), rpc::INITIALIZE, params)).to_value())?;
+    s.set_read_timeout(Some(answer))?;
+    let mut lines = BufReader::new(s.try_clone()?).lines();
+    let project = loop {
+        let line = match lines.next() {
+            Some(Ok(line)) => line,
+            // no answer in 5 s: nothing was asked, the hub runs on
+            Some(Err(e)) if matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => {
+                return Err(std::io::Error::other(format!("{} {} s: it was not stopped", NO_ANSWER, answer.as_secs())));
+            }
+            // it closed the connection: going already
+            _ => return Ok(Asked::Going),
+        };
+        match rpc::init_answer(&serde_json::from_str(&line).unwrap_or(Value::Null), &Id::Num(0)) {
+            Init::Ready(res) => break res.project,
+            // refused (it runs in an agent's process): the hub stays
+            Init::Refused(_) => return Ok(Asked::Going),
+            // a hub from before client-protocol: never asked, it runs on
+            Init::NotRpc => return Err(std::io::Error::other(rpc::HUB_OLDER)),
+            Init::Other => {}
+        }
+    };
+    drop(lines);
+    if let Some(req) = rpc::request(Id::Num(1), &HubCmd::StopHub { project, keep_agents }) {
+        writeln!(s, "{}", Message::Request(req).to_value())?;
+    }
+    Ok(Asked::Stop(s))
 }
 
 /// How long `stop` waits for the hub's `initialize` answer.
