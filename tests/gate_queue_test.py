@@ -135,6 +135,38 @@ def words_read_check_holds(tmp):
         check(any(fnmatch.fnmatchcase(p, g) for g in globs), "gate_plan: %s runs words_read_check" % p)
 
 
+def py_compile_check_holds(tmp):
+    """tests/py_compile_check.py (main m_59170, architect m_59182): 22cbd23c2's bug, a literal
+    newline in a string of an e2e file, is red and named with its line; tracked files only, any
+    folder but its SKIP (docs/); the plan runs it on any .py. The real tree is its own job."""
+    import fnmatch
+    import gate_plan
+    script = os.path.join(HERE, "py_compile_check.py")
+    root = os.path.join(tmp, "py-tree")
+    for d in ("tests/sub", "examples/p", "docs"):
+        os.makedirs(os.path.join(root, d), exist_ok=True)
+    subprocess.run(["git", "init", "-q", root], check=True)
+    broken = "check(ok, " + chr(34) + "the switch failed: %r" + chr(10) + "%s" + chr(34) + " % (a, b))" + chr(10)
+    files = {"examples/p/ok.py": "x = 1" + chr(10), "docs/make.py": broken, "untracked.py": broken}
+    for p, text in files.items():
+        open(os.path.join(root, p), "w").write(text)
+    subprocess.run(["git", "add", "examples", "docs"], cwd=root, check=True)
+
+    def run():
+        return subprocess.run([sys.executable, "-B", script, root], capture_output=True, text=True)
+
+    r = run()
+    check(r.returncode == 0, "py_compile_check: green when only docs/ and an untracked file break: %r" % r.stdout)
+    open(os.path.join(root, "tests", "sub", "x_e2e.py"), "w").write(broken)
+    subprocess.run(["git", "add", "tests"], cwd=root, check=True)
+    r = run()
+    check(r.returncode == 1 and "tests/sub/x_e2e.py:1:" in r.stdout,
+          "py_compile_check: 22cbd23c2's literal newline in a string is red, with its file and line: %r" % r.stdout)
+    globs = [g for n, _, gs in gate_plan.SELFTESTS if n == "py_compile_check" for g in gs]
+    for p in ("tests/switch_intruder_e2e.py", "scripts/disk_reclaim.py", "examples/plugins/x/serve.py"):
+        check(any(fnmatch.fnmatchcase(p, g) for g in globs), "gate_plan: %s runs py_compile_check" % p)
+
+
 def desktop_check_quick_only():
     """A quick's whole-app desktop_check runs check:quick: check with test:quick
     (the unit project) for test and no build (quick builds nothing,

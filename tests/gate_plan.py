@@ -136,6 +136,9 @@ SELFTESTS = [
     # only, the Rust test that held the rule never ran in that quick; architect m_58405)
     ("words_read_check", "python3 -B tests/words_read_check.py",
      ("*.rs", "apps/desktop/src/*.ts", "apps/desktop/src/*.tsx", "tests/words/*.gen.json", "tests/words_read_check.py")),
+    # every tracked .py compiles (~1 s, in memory; its SKIP says what not): an e2e file runs only
+    # after the land, so a SyntaxError in one reached main's tip unseen (22cbd23c2; main m_59170)
+    ("py_compile_check", "python3 -B tests/py_compile_check.py", ("*.py",)),
     # every agent's gate takes heavy-run's queue, one gate a tree (5 s)
     ("gate_queue_test", "python3 -B tests/gate_queue_test.py",
      ("tests/gate_queue_test.py", "tests/gate.sh", "scripts/heavy-run", "scripts/heavy_slot.py",

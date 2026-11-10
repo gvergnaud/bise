@@ -369,13 +369,14 @@
   }
  },
  {
-  "name": "wait.py: its test only, no other self-test",
+  "name": "wait.py: its test and the compile check, no other self-test",
   "paths": [
    "tests/wait.py"
   ],
   "want": {
    "selftests": [
-    "wait_test"
+    "wait_test",
+    "py_compile_check"
    ]
   }
  },
@@ -386,7 +387,8 @@
   ],
   "want": {
    "selftests": [
-    "gate_plan_test"
+    "gate_plan_test",
+    "py_compile_check"
    ]
   }
  },
@@ -397,7 +399,8 @@
   ],
   "want": {
    "selftests": [
-    "test_map_self"
+    "test_map_self",
+    "py_compile_check"
    ]
   }
  },
@@ -444,7 +447,8 @@
   ],
   "want": {
    "selftests": [
-    "hub_loop_held_test"
+    "hub_loop_held_test",
+    "py_compile_check"
    ]
   }
  },
@@ -455,7 +459,8 @@
   ],
   "want": {
    "selftests": [
-    "loop_blocking_self"
+    "loop_blocking_self",
+    "py_compile_check"
    ]
   }
  },
@@ -670,6 +675,7 @@
   "want": {
    "selftests": [
     "proof_run_test",
+    "py_compile_check",
     "gate_queue_test"
    ]
   }
