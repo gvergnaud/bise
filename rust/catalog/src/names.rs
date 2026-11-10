@@ -30,20 +30,43 @@ pub fn long_name(model: &str) -> String {
         let (head, ver) = parts.split_at(parts.len() - n);
         return format!("{} {}", head.join("-"), ver.join("."));
     }
+    // a dotted version and one word after it: glm-5-3-flash -> glm 5.3
+    // flash, deepseek-v4-1-flash -> deepseek v4.1 flash (a `vN` group
+    // starts it when a digit group follows)
+    if let Some((last, rest)) = parts.split_last() {
+        let n = rest.iter().rev().take_while(|p| digits(p)).count();
+        let v = rest.len() > n && is_v(rest[rest.len() - n - 1]);
+        let n = n + usize::from(n > 0 && v);
+        if n >= 2 && n < rest.len() {
+            let (head, ver) = rest.split_at(rest.len() - n);
+            return format!("{} {} {}", head.join("-"), ver.join("."), last);
+        }
+    }
     parts.join("-")
 }
 
+/// `v4`: a version's first group, a `v` and a digit or two.
+fn is_v(p: &str) -> bool {
+    p.len() >= 2 && p.len() <= 3 && p.starts_with('v') && p[1..].chars().all(|c| c.is_ascii_digit())
+}
+
 /// A model's family: the first word of its [`long_name`], with its
-/// version when that is glued to it (`gpt-5.1`, `gemini-2.5`): `opus`,
-/// `devstral`, `glm`.
+/// version when that is glued to it (`gpt-5.1`, `gemini-2.5`), and the
+/// word after its version (`glm 5.3 flash` -> `glm-flash`, never the
+/// family of `glm 5.3`): `opus`, `devstral`, `glm`.
 pub fn family(model: &str) -> String {
     let long = long_name(model);
-    let head = long.split(' ').next().unwrap_or("");
+    let mut parts = long.split(' ');
+    let head = parts.next().unwrap_or("");
     let mut words = head.split('-');
     let first = words.next().unwrap_or("").to_string();
-    match words.next() {
+    let fam = match words.next() {
         Some(v) if v.starts_with(|c: char| c.is_ascii_digit()) => format!("{}-{}", first, v),
         _ => first,
+    };
+    match parts.nth(1) {
+        Some(word) => format!("{}-{}", fam, word),
+        None => fam,
     }
 }
 

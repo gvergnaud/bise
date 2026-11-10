@@ -90,6 +90,24 @@ mod tests {
     }
 
     #[test]
+    fn a_newer_flash_is_news_for_the_older_flash_only() {
+        let cfg = "[models.\"mistral/deepseek-v4-2-flash\"]
+replaces = \"mistral/deepseek-v4-1-flash-1017\"
+
+[roles]
+main = \"mistral/deepseek-v4-1-flash-1017\"
+agents = \"mistral/zai-glm-5-3\"
+";
+        let s = Setup::from_text(Some(cfg), &|_| None);
+        let n = newer(&s, &|_| true, &[]).unwrap();
+        assert_eq!((n.model.as_str(), n.roles.as_slice()), ("mistral/deepseek-v4-2-flash", ["main"].as_slice()));
+        assert_eq!(crate::names::family(&n.model), crate::names::family(&n.replaces));
+        // the flash is no successor of the full GLM: no table line, no news
+        let s = Setup::from_text(Some("[roles]\nmain = \"mistral/zai-glm-5-3\"\n"), &|_| None);
+        assert_eq!(newer(&s, &|_| true, &[]), None);
+    }
+
+    #[test]
     fn the_walk_goes_to_the_latest_successor_and_a_loop_ends_it() {
         let cfg = "[models.\"anthropic/claude-opus-5-6\"]\nreplaces = \"anthropic/claude-opus-5-5\"\n\n[models.\"anthropic/claude-opus-5-7\"]\nreplaces = \"anthropic/claude-opus-5-6\"\n\n[models.\"anthropic/claude-opus-5-5\"]\nreplaces = \"anthropic/claude-opus-5-7\"\n\n[roles]\nmain = \"anthropic/claude-opus-5-5\"\n";
         let s = Setup::from_text(Some(cfg), &|_| None);

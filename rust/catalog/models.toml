@@ -416,6 +416,36 @@ vision = false
 reasoning = true
 context = 1048576
 
+# Z.ai GLM 5.3 Flash (GA 2026-10-22, docs.mistral.ai changelog). Checked
+# 2026-11-10: /v1/models gives the id (no alias), 1048576 context, vision,
+# function calling, reasoning; the model card: 128k max output, prices.
+# docs.mistral.ai/studio/conversations/reasoning: low, high, max ("none is
+# not supported")
+[models."mistral/zai-glm-5-3-flash"]
+vision = true
+reasoning = true
+efforts = "low,high,max"
+context = 1048576
+max_output = 131072
+input_price = 0.15
+output_price = 0.5
+cache_read_price = 0.03
+
+# DeepSeek V4.1 Flash 1017 (public preview, 2026-10-28). Checked
+# 2026-11-10: /v1/models gives the id (the docs page's slug,
+# deepseek-v4-flash-1017, is not it), 1048576 context, vision, function
+# calling, reasoning; the model card: 128k max output, prices. Efforts:
+# none, low, high, max (DeepSeek's own words; the Mistral docs list none)
+[models."mistral/deepseek-v4-1-flash-1017"]
+vision = true
+reasoning = true
+efforts = "none,low,high,max"
+context = 1048576
+max_output = 128000
+input_price = 0.3
+output_price = 1.2
+cache_read_price = 0.007
+
 # ---- OpenRouter (one key, many vendors) ----
 # Checked 2026-09-30: openrouter.ai/api/v1/models (ids, created dates,
 # context, max output, prices, input modalities, tools / reasoning).

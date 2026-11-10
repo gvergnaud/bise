@@ -180,6 +180,49 @@ fn model_ids_may_hold_slashes() {
 }
 
 #[test]
+fn mistral_hosts_glm_flash_and_deepseek_flash() {
+    // the ids of api.mistral.ai/v1/models (checked 2026-11-10)
+    let c = Catalog::builtin();
+    let glm = c.resolve("mistral/zai-glm-5-3-flash");
+    let ds = c.resolve("mistral/deepseek-v4-1-flash-1017");
+    for (m, efforts) in [(&glm, ["low", "high", "max"].as_slice()), (&ds, ["none", "low", "high", "max"].as_slice())] {
+        assert_eq!(m.known, Known::Listed, "{}", m.name);
+        assert!(m.caps.vision && m.caps.reasoning && m.caps.tools, "{}", m.name);
+        assert_eq!(m.caps.context, 1_048_576, "{}", m.name);
+        assert_eq!(m.efforts(), efforts, "{}", m.name);
+        assert_eq!(m.default_effort(), "high", "{}", m.name);
+    }
+    assert_eq!(glm.effort_for("none"), "high", "GLM 5.3 Flash takes no none");
+    assert_eq!((glm.price.input, glm.price.output), (Some(150_000), Some(500_000)));
+    assert_eq!((ds.price.input, ds.price.output), (Some(300_000), Some(1_200_000)));
+    assert_eq!(names::long_name(&glm.name), "glm 5.3 flash");
+    assert_eq!(names::long_name(&ds.name), "deepseek v4.1 flash");
+}
+
+#[test]
+fn every_builtin_effort_is_a_word_the_families_know() {
+    let c = Catalog::builtin();
+    for m in &c.models {
+        let r = c.resolve(&m.name());
+        for w in r.efforts() {
+            assert!(ANTHROPIC_EFFORTS.contains(&w.as_str()) || CHAT_EFFORTS.contains(&w.as_str()), "{}: {w}", r.name);
+        }
+    }
+}
+
+#[test]
+fn a_builtin_successor_is_of_the_same_family() {
+    // a flash never replaces a full model, nor the reverse: the news line
+    // would push a downgrade (architect m_58601)
+    let c = Catalog::builtin();
+    for m in &c.models {
+        if let Some(old) = &m.replaces {
+            assert_eq!(names::family(&m.name()), names::family(old), "{} replaces {old}", m.name());
+        }
+    }
+}
+
+#[test]
 fn old_bare_names_keep_working() {
     let c = Catalog::builtin();
     assert_eq!(c.canonical("opus-5.5"), "foundry/claude-opus-5-5");
