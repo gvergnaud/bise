@@ -32,10 +32,14 @@ is cold, that's why). Each deletion is a line in ~/.bise/run/reclaim.log:
 <epoch> <path> <idle min> <GB freed> <reason>.
 Never ~/.bise/dev/build (its target holds the try's own bise, which 'bise-ambient --real'
 swaps in; keep-current m_30630 found it gone, removed by hand), whatever the roots say:
-protected(), checked on each target's real path.
+protected(), checked on each target's real path; but for the desktop candidates' build target
+(desktop-cand/work/target, allowed(): a seed clone the launched .app never points into), busy
+while a candidate build holds desktop-cand/work.lock.
 A target: a dir named target with cargo's CACHEDIR.TAG or a .rustc_info.json (a clone of the
 gate seed had no tag: on 2026-11-08, 11 of 12 task targets were never seen). The roots
-include the tip check's tree (~/.bise/run/tip-check) and .land-check's (a dot project).
+(roots_caps(), each with its own-cap) include the tip check's tree (~/.bise/run/tip-check),
+.land-check's (a dot project), the nightly/tip gate's tree (~/.bise/run/nightly/tree, cap
+HEAVY_TIP_OWN_CAP_GB 45: it builds every landed sha whole) and ~/.bise/dev/build/desktop-cand.
 The trim (disk-hygiene, architect m_55867), before any deletion: a target whose green gate
 wrote <target>/.idle-since and that is idle --min-idle-min since is measured once: its own
 bytes are the files newer than its .seeded (gate.sh's mark of a seed clone; without it, all
@@ -82,10 +86,24 @@ def kept():
     return [os.path.realpath(p) for p in ks]
 
 
-def protected(path, keep):
-    """Whether `path` (resolved) is one of `keep` or under it. Pure but for realpath."""
+def allowed():
+    """Under a kept dir but a normal target all the same: the desktop candidates' build target
+    (try_build.py: a gate-seed clone; the .app he launches copies or hard-links its binaries out of
+    bins.sh's cache, never pointing into it; architect m_59204). HEAVY_RECLAIM_ALLOW (tests)."""
+    a = os.environ.get("HEAVY_RECLAIM_ALLOW")
+    xs = [p for p in a.split(":") if p] if a is not None else [os.path.expanduser("~/.bise/dev/build/desktop-cand/work/target")]
+    return [os.path.realpath(p) for p in xs]
+
+
+def _under(p, ks):
+    return any(p == k or p.startswith(k.rstrip(os.sep) + os.sep) for k in ks)
+
+
+def protected(path, keep, allow=()):
+    """Whether `path` (resolved) is one of `keep` or under it, and not one of `allow` or under it.
+    Pure but for realpath."""
     p = os.path.realpath(path)
-    return any(p == k or p.startswith(k.rstrip(os.sep) + os.sep) for k in keep)
+    return _under(p, keep) and not _under(p, allow)
 
 
 def plan(targets, free_gb, want_gb, now, idle_h, min_idle_min, strays=frozenset()):
@@ -159,6 +177,21 @@ def _self_test():
         assert protected(os.path.join(build, "target"), keep) and protected(build, keep)
         assert not protected(os.path.join(d, "state", "build2", "target"), keep), "a sibling with the same prefix"
         assert not protected(os.path.join(d, "wt", "rust", "target"), keep)
+        # the candidates' build target is let out of the kept dir; the dev build's own target is not
+        cand = os.path.join(build, "desktop-cand", "work", "target")
+        allow = [os.path.realpath(cand)]
+        assert not protected(cand, keep, allow) and not protected(os.path.join(cand, "debug"), keep, allow)
+        assert protected(os.path.join(build, "target"), keep, allow), "the try's own bise stays kept"
+        assert protected(os.path.join(build, "desktop-cand", "work", "src"), keep, allow)
+        # a candidate build holds work.lock (lockf) through every step: its target is busy then
+        os.makedirs(os.path.join(cand, "debug"))
+        open(os.path.join(cand, "debug", ".cargo-lock"), "w").close()
+        assert not busy(cand, [])
+        wl = os.open(os.path.join(build, "desktop-cand", "work.lock"), os.O_RDWR | os.O_CREAT)
+        fcntl.flock(wl, fcntl.LOCK_EX)
+        assert busy(cand, []), "a candidate builds: its work.lock is held"
+        os.close(wl)
+        assert not busy(cand, [])
         # a target: cargo's tag, or a seed clone's .rustc_info.json (no tag); never another dir named target
         for name, mark in (("a", "CACHEDIR.TAG"), ("b", ".rustc_info.json"), ("c", "README")):
             os.makedirs(os.path.join(d, name, "target"))
@@ -232,14 +265,26 @@ def free_kb():
     return s.f_bavail * s.f_frsize // 1024
 
 
-def roots():
+def roots_caps():
+    """[(root, own-cap GB)]: the task folders (.land-check's too: a dot project), the tip check's
+    tree, the nightly/tip gate's tree and the desktop candidates' build checkout (architect
+    m_59204: 41 and 24 GB of their own sat outside the roots on 2026-11-11). The nightly tree builds
+    every landed sha whole: its own cap, HEAVY_TIP_OWN_CAP_GB (45), over its steady state, so the
+    own-cap does not make every tip run cold; the others HEAVY_OWN_CAP_GB (10).
+    HEAVY_RECLAIM_ROOTS (tests): a ':' list instead, each with the default cap."""
+    cap = float(os.environ.get("HEAVY_OWN_CAP_GB", 10))
     r = os.environ.get("HEAVY_RECLAIM_ROOTS")
     if r:
-        return [p for p in r.split(":") if p]
+        return [(p, cap) for p in r.split(":") if p]
     base = os.path.expanduser("~/.bise/worktrees")
-    # the task folders (.land-check's too: a dot project), and the tip check's tree
-    return [os.path.join(base, h, a) for h in _ls(base) for a in _ls(os.path.join(base, h))] \
-        + [os.path.expanduser("~/.bise/run/tip-check")]
+    return [(os.path.join(base, h, a), cap) for h in _ls(base) for a in _ls(os.path.join(base, h))] \
+        + [(os.path.expanduser("~/.bise/run/tip-check"), cap),
+           (os.path.expanduser("~/.bise/run/nightly/tree"), float(os.environ.get("HEAVY_TIP_OWN_CAP_GB", 45))),
+           (os.path.expanduser("~/.bise/dev/build/desktop-cand"), cap)]
+
+
+def roots():
+    return [p for p, _ in roots_caps()]
 
 
 def stray(t):
@@ -370,6 +415,20 @@ def busy(t, exes, root="", cwds=()):
     # a heavy job runs in that worktree (a gate, a build): hands off
     if root and any((c.rstrip("/") + "/").startswith(root.rstrip("/") + "/") for c in cwds):
         return True
+    # the candidates' build checkout: a build holds <..>/desktop-cand/work.lock (lockf) through
+    # every step, cargo's and pnpm's alike (try_build.py)
+    work = os.path.dirname(t.rstrip("/"))
+    if os.path.basename(work) == "work" and os.path.exists(os.path.join(os.path.dirname(work), "work.lock")):
+        try:
+            fd = os.open(os.path.join(os.path.dirname(work), "work.lock"), os.O_RDWR)
+        except OSError:
+            return True
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            return True
+        finally:
+            os.close(fd)
     fds = lock_all(t)
     if fds is None:
         return True
@@ -630,16 +689,16 @@ def own_cap(cwd):
     each measured when own_due, trimmed over HEAVY_OWN_CAP_GB. What it did is
     printed (heavy-run shows it to the job) and logged."""
     cwd = os.path.realpath(cwd)
-    root = next((r for r in roots() if (cwd + "/").startswith(os.path.realpath(r).rstrip("/") + "/")), None)
+    root, cap = next(((r, c) for r, c in roots_caps() if (cwd + "/").startswith(os.path.realpath(r).rstrip("/") + "/")),
+                     (None, 0))
     if root is None:
         return
     run = os.path.expanduser("~/.bise/run")
     os.makedirs(run, exist_ok=True)
-    cap = float(os.environ.get("HEAVY_OWN_CAP_GB", 10))
     gap = float(os.environ.get("HEAVY_OWN_GAP_MIN", 10))
-    keep = kept()
+    keep, allow = kept(), allowed()
     for t in find_targets(root):
-        if protected(t, keep):
+        if protected(t, keep, allow):
             continue
         with target_lock(t) as mine:
             if not mine:
@@ -703,7 +762,8 @@ def main():
     now = time.time()
     cwds = job_cwds()
     keep = kept()
-    root_of = {t: r for r in roots() for t in find_targets(r) if not protected(t, keep)}
+    allow = allowed()
+    root_of = {t: r for r in roots() for t in find_targets(r) if not protected(t, keep, allow)}
     ts = [(t, last_used(t), busy(t, exes, r, cwds)) for t, r in root_of.items()]
     used = {t: u for t, u, _ in ts}
     log = os.path.join(run, "reclaim.log")
