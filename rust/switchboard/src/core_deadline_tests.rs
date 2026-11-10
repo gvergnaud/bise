@@ -26,7 +26,10 @@ fn fake_hub() -> (T, Rc<RefCell<Vec<String>>>) {
 /// `fake_hub`, the lines of an answer in lines `line_delay` s apart.
 fn fake_hub_with(line_delay: f64) -> (T, Rc<RefCell<Vec<String>>>) {
     let real = bise_home::env::test_setting("SB_CORE_BIN").map(PathBuf::from).unwrap_or_else(crate::core::default_core_bin);
-    let python = std::process::Command::new("sh").args(["-c", "command -v python3"]).output().expect("sh");
+    // the interpreter itself for the #! line, never `command -v python3`: a pyenv shim is a bash
+    // script, and macOS won't take a script as a #! interpreter (the fake ran under sh, no
+    // banner: 'sb-core did not start: ""', pr-guided-build m_58429)
+    let python = std::process::Command::new("python3").args(["-c", "import sys; print(sys.executable)"]).output().expect("python3");
     let python = String::from_utf8_lossy(&python.stdout).trim().to_string();
     assert!(!python.is_empty(), "python3 not found");
     let script = include_str!("testdata/fake_sb_core.py").replace("@REAL@", &real.display().to_string()).replace("@LINE_DELAY@", &line_delay.to_string());
