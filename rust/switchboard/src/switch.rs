@@ -439,6 +439,21 @@ fn crash_cause(paths: &Paths, marks: Marks) -> String {
     cause_of(&err, &step)
 }
 
+/// How many of the new hub's log lines a failed switch keeps for his report.
+const REPORT_LINES: usize = 50;
+
+/// The last `n` lines of `text` (the new hub's hub.log since the switch
+/// began), plain: no control character, each cut at 300 columns, the
+/// empty ones out. Pure.
+fn report_lines(text: &str, n: usize) -> Vec<String> {
+    let lines: Vec<String> = text
+        .lines()
+        .map(|l| crate::util::clip(l.chars().filter(|c| !c.is_control()).collect::<String>().trim(), 300))
+        .filter(|l| !l.is_empty())
+        .collect();
+    lines[lines.len().saturating_sub(n)..].to_vec()
+}
+
 /// [`crash_cause`]'s words from the new hub's last error line and last
 /// log step (either may be empty). Pure.
 fn cause_of(err: &str, step: &str) -> String {
@@ -670,8 +685,9 @@ fn run_locked(paths: &Paths, to: &Path, period: Duration, restart: bool, reload:
             if from != to {
                 st["previous"] = json!(to.to_string_lossy());
             }
-            st["failed"] =
-                json!({"version": to.to_string_lossy(), "reason": reason, "at": now_ms()});
+            // the new version's own last lines: his 'Copy report' on the update card (designer m_59048)
+            st["failed"] = json!({"version": to.to_string_lossy(), "reason": reason, "at": now_ms(),
+                "log": report_lines(&read_from(&paths.log(), marks.log), REPORT_LINES)});
             set_phase(&mut st, "rolled_back", &to_id, &from_id, Some(&reason));
             write_state(paths, &st);
             let _ = std::fs::remove_file(fail_file(paths));
@@ -840,6 +856,9 @@ mod state_tests {
         assert_eq!(cause_of("thread 'main' panicked at daemon.rs:12: index out of bounds", "boot: journal read"), "the hub stopped (crash): thread 'main' panicked at daemon.rs:12: index out of bounds");
         assert_eq!(cause_of("", "boot: journal read (21 events)"), "the hub stopped (crash) after: boot: journal read (21 events)");
         assert_eq!(cause_of("", ""), "the hub stopped (crash)");
+        let text: String = (1..=60).map(|i| format!("{i} line\u{1b}[0m\r\n\n")).collect();
+        let kept = super::report_lines(&text, 50);
+        assert_eq!((kept.len(), kept[0].as_str(), kept[49].as_str()), (50, "11 line[0m", "60 line[0m"), "the last 50, plain, no blank");
         assert_eq!(cause_of("\u{1b}[31mpanicked\u{1b}[0m at x\r", ""), "the hub stopped (crash): [31mpanicked[0m at x", "no control character reaches the card");
         assert_eq!(cause_of("\u{7}\r", "boot done"), "the hub stopped (crash) after: boot done", "a line of control characters only is no line");
     }

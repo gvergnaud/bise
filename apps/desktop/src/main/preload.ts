@@ -68,6 +68,7 @@ if (fence !== null) {
 
 const api: BiseApi = {
   platform: process.platform,
+  osVersion: process.getSystemVersion(),
   home,
   // only in an off-screen run: his window.bise has no 'offscreen' key at all
   ...(process.argv.includes(OFFSCREEN_ARG) ? { offscreen: true as const } : {}),

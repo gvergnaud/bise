@@ -58,6 +58,8 @@ pub struct Failed {
     pub id: String,
     pub at: u64,
     pub why: String,
+    /// the new version's last log lines (versions.json `failed.log`)
+    pub log: Vec<String>,
 }
 
 /// What a hub knows when it plans.
@@ -88,7 +90,7 @@ pub enum State {
     /// installed: this hub switches to it (one hub at a time)
     Updating,
     /// this hub's switch to it rolled back: not tried again
-    Failed { why: String },
+    Failed { why: String, log: Vec<String> },
     /// the user said later to this release
     Later,
     /// this hub runs it, or nothing newer
@@ -129,7 +131,7 @@ pub fn plan(f: &Facts) -> Option<Offer> {
     // a go for an older release is stale: the newer one is offered again
     if let Some(g) = f.go.filter(|g| g.id == l.id) {
         return match f.my_failed.filter(|x| x.id == g.id && x.at >= g.at) {
-            Some(x) => offer(State::Failed { why: x.why.clone() }, false),
+            Some(x) => offer(State::Failed { why: x.why.clone(), log: x.log.clone() }, false),
             None => offer(State::Updating, true),
         };
     }

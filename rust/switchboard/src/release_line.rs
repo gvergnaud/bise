@@ -111,7 +111,7 @@ pub fn row(o: &Offer, running: &str) -> Option<BiseUpdate> {
         State::Ready => (BiseUpdateState::Ready, String::new()),
         State::Installing => (BiseUpdateState::Installing, String::new()),
         State::Updating => (BiseUpdateState::Updating, String::new()),
-        State::Failed { why } => (BiseUpdateState::Failed, reason(why)),
+        State::Failed { why, .. } => (BiseUpdateState::Failed, reason(why)),
         State::Later | State::UpToDate => return None,
     };
     Some(BiseUpdate {
@@ -122,6 +122,11 @@ pub fn row(o: &Offer, running: &str) -> Option<BiseUpdate> {
         running: shown(running),
         state,
         why,
+        // his 'Copy report' (designer m_59048): the new version's last lines, failed only
+        log: match &o.state {
+            State::Failed { log, .. } => log.clone(),
+            _ => Vec::new(),
+        },
         waiting: Vec::new(),
     })
 }
@@ -225,7 +230,7 @@ impl Hub {
                 None => fx.push(notice(client, &format!("bise {name} is ready."))),
             },
             State::Installing | State::Updating => fx.push(notice(client, &format!("updating to {name}… your agents keep working."))),
-            State::Failed { why } => fx.push(notice(
+            State::Failed { why, .. } => fx.push(notice(
                 client,
                 &format!("couldn't update to {name}, you're still on {}: {}", shown(&self.updates.running_name), reason(&why)),
             )),
@@ -372,8 +377,8 @@ mod tests {
         assert_eq!(r.notes, ["the inbox keeps your place"]);
         assert_eq!(row(&offer(State::Installing), "x").unwrap().state, BiseUpdateState::Installing);
         assert_eq!(row(&offer(State::Updating), "x").unwrap().state, BiseUpdateState::Updating);
-        let f = row(&offer(State::Failed { why: "the hub died.".into() }), "x").unwrap();
-        assert_eq!((f.state, f.why.as_str()), (BiseUpdateState::Failed, "the hub died"));
+        let f = row(&offer(State::Failed { why: "the hub died.".into(), log: vec!["a".into()] }), "x").unwrap();
+        assert_eq!((f.state, f.why.as_str(), f.log.as_slice()), (BiseUpdateState::Failed, "the hub died", ["a".to_string()].as_slice()));
         assert_eq!(row(&offer(State::UpToDate), "x"), None);
     }
 

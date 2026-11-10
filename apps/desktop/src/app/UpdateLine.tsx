@@ -156,7 +156,7 @@ export function useHubUpdateLine(): StatusPart | null {
 export function biseUpdateLine(
   u: BiseUpdate | null,
   done: string | null,
-): { tone: StatusPart['tone']; state: string; words: string; short: string; act: string | null; lines: readonly string[] } | null {
+): { tone: StatusPart['tone']; state: string; words: string; short: string; act: string | null; lines: readonly string[]; copy?: string } | null {
   if (u === null || u.state === 'unknown') {
     if (done === null) return null;
     const words = `✓ ${settings.bise_updated({ version: done })}`;
@@ -187,9 +187,34 @@ export function biseUpdateLine(
         short: "▲ couldn't update",
         act: settings.bise_update_again,
         lines: [...(u.why ? [u.why] : []), settings.bise_update_unchanged({ running: u.running })],
+        // his report to send us (designer m_59048): the quiet act after the main one
+        copy: settings.bise_update_copy,
       };
   }
 }
+
+/**
+ * The failure's words split (designer m_59048): the head as it reads ('the hub stopped (crash):')
+ * and the new version's own raw words after it, drawn mono text-3 on one line, whole in its tip;
+ * no raw part: the whole reason is the head. Pure.
+ */
+export function causeParts(why: string): { head: string; tail: string } {
+  const m = /^(the hub stopped \(crash\)(?: after)?):\s*(\S.*)$/su.exec(why);
+  return m === null ? { head: why, tail: '' } : { head: `${m[1] ?? ''}:`, tail: m[2] ?? '' };
+}
+
+/**
+ * What 'Copy report' copies (designer m_59048), plain text ready to paste to bise or into an issue:
+ * 'bise <from> → <to> couldn't start', the cause, the new version's last log lines, the macOS
+ * version. Pure.
+ */
+export function updateReport(u: BiseUpdate, macos: string): string {
+  const log = u.log ?? [];
+  return [settings.bise_update_report_head({ from: u.running, to: u.version }), ...(u.why ? [u.why] : []), ...(log.length > 0 ? ['', ...log] : []), '', `macOS ${macos}`].join('\n');
+}
+
+/** How long the copy act says 'copied' (designer m_59048). */
+const COPIED_MS = 2000;
 
 /** How long '✓ updated to …' stays (designer m_45087). */
 const DONE_MS = 4000;
@@ -259,8 +284,26 @@ export function useBiseUpdateLine(): StatusPart | null {
     installed.current = true;
     void bise()?.update.install(formatRoute(route));
   }, [asked, moved, appReady, route]);
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return undefined;
+    const t = window.setTimeout(() => {
+      setCopied(false);
+    }, COPIED_MS);
+    return () => {
+      window.clearTimeout(t);
+    };
+  }, [copied]);
   const line = biseUpdateLine(u, done);
   if (line === null) return null;
+  const copy = () => {
+    const api = bise();
+    if (u === null || api === undefined) return;
+    void api.copy(updateReport(u, api.osVersion)).then(() => {
+      setCopied(true);
+    });
+  };
+  const cause = line.state === 'failed' && u?.why ? causeParts(u.why) : null;
   const go = () => {
     setAsked(true);
     store.command({ cmd: 'bise_update' });
@@ -283,13 +326,30 @@ export function useBiseUpdateLine(): StatusPart | null {
     short: line.short,
     ...(line.lines.length > 0
       ? {
-          more: (
-            <div className="app-core-last" data-testid="app.bise.tip">
-              {line.lines.join('\n')}
-            </div>
-          ),
+          more:
+            cause !== null && cause.tail !== '' ? (
+              <div className="app-core-last" data-testid="app.bise.tip">
+                {cause.head}{' '}
+                <span className="app-bise-cause" data-testid="app.bise.cause" title={cause.tail}>
+                  {cause.tail}
+                </span>
+                {'\n'}
+                {line.lines.slice(1).join('\n')}
+              </div>
+            ) : (
+              <div className="app-core-last" data-testid="app.bise.tip">
+                {line.lines.join('\n')}
+              </div>
+            ),
         }
       : {}),
-    ...(line.act === null ? {} : { acts: [{ id: 'update', text: line.act, onClick: go }] }),
+    ...(line.act === null
+      ? {}
+      : {
+          acts: [
+            { id: 'update', text: line.act, onClick: go },
+            ...(line.copy === undefined ? [] : [{ id: 'copy', text: copied ? settings.bise_update_copied : line.copy, onClick: copy, quiet: true }]),
+          ],
+        }),
   };
 }

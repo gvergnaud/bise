@@ -11,6 +11,8 @@ import type { ViewPerm } from './viewperms';
 export interface BiseApi {
   /** process.platform of the main process ('darwin', 'win32', 'linux'). */
   readonly platform: string;
+  /** The macOS version (process.getSystemVersion(): '14.5.0'), for a report he copies (the update card's 'Copy report'). */
+  readonly osVersion: string;
   /**
    * His home folder, a constant read once (main's os.homedir(); the test home
    * in a test run), for showing paths as ~/… (amb-win's shortPath).

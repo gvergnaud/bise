@@ -686,6 +686,12 @@ export const settings = {
   bise_update_failed: (a: { version: string | number }): string => "couldn't update to " + String(a.version),
   /** a newer bise: failed's action */
   bise_update_again: "try again",
+  /** a newer bise: failed's quiet act at the card's foot: copies the report (designer m_59048) */
+  bise_update_copy: "Copy report",
+  /** a newer bise: the copy act's word for 2 s once copied */
+  bise_update_copied: "copied",
+  /** a newer bise: the copied report's first line */
+  bise_update_report_head: (a: { from: string | number; to: string | number }): string => "bise " + String(a.from) + " → " + String(a.to) + " couldn't start",
   /** a newer bise: failed's tip after the reason */
   bise_update_unchanged: (a: { running: string | number }): string => "you're still on " + String(a.running) + ". nothing changed.",
   /** the terminal's status line: updating */

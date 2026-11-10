@@ -3420,7 +3420,7 @@ mod prs {
             (State::Installing, "updating"),
             (State::Updating, "updating"),
             (State::Later, "later"),
-            (State::Failed { why: "the hub died".into() }, "update failed"),
+            (State::Failed { why: "the hub died".into(), log: Vec::new() }, "update failed"),
         ] {
             let mut t = T::new();
             t.go(offer(State::Ready, false, false));

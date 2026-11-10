@@ -390,6 +390,16 @@
     "one": null,
     "text": "try again"
   },
+  "settings.bise_update_copied": {
+    "args": [],
+    "one": null,
+    "text": "copied"
+  },
+  "settings.bise_update_copy": {
+    "args": [],
+    "one": null,
+    "text": "Copy report"
+  },
   "settings.bise_update_failed": {
     "args": [
       "version"
@@ -420,6 +430,14 @@
     ],
     "one": null,
     "text": "you're on {running}"
+  },
+  "settings.bise_update_report_head": {
+    "args": [
+      "from",
+      "to"
+    ],
+    "one": null,
+    "text": "bise {from} → {to} couldn't start"
   },
   "settings.bise_update_tip": {
     "args": [],

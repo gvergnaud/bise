@@ -20,6 +20,8 @@ export type StatusAct = {
   readonly text: string;
   readonly onClick: () => void;
   readonly disabled?: boolean;
+  /** a second act that never takes the failure's tone ('Copy report', designer m_59048) */
+  readonly quiet?: boolean;
 };
 
 /**

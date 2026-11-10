@@ -1547,6 +1547,11 @@ running: string, state: BiseUpdateState,
  */
 why?: string, 
 /**
+ * failed: the new version's last log lines (at most 50, plain text),
+ * for his 'Copy report' (update-safety B, designer m_59048)
+ */
+log?: Array<string>, 
+/**
  * the machine's line only: the projects not on it yet (updating),
  * or the one whose switch failed (their names)
  */

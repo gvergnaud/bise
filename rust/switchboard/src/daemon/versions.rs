@@ -299,6 +299,7 @@ fn my_failed(paths: &Paths) -> Option<bise_home::release_offer::Failed> {
         id: crate::switch::id_of(Path::new(version)),
         at: f.get("at").and_then(Value::as_u64).unwrap_or(0),
         why: f.get("reason").and_then(Value::as_str).unwrap_or("").to_string(),
+        log: f.get("log").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_str).map(str::to_string).collect()).unwrap_or_default(),
     })
 }
 

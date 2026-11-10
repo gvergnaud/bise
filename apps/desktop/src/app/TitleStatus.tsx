@@ -109,7 +109,7 @@ function Pill({ part }: { part: StatusPart }) {
   const actions = (pop: boolean) => (
     <>
       {acts.map((a) => (
-        <Act key={a.id} tone={err ? 'err' : undefined} disabled={a.disabled} onClick={a.onClick} testId={pop ? `${id}.pop.${a.id}` : `${id}.${a.id}`}>
+        <Act key={a.id} tone={err && a.quiet !== true ? 'err' : undefined} disabled={a.disabled} onClick={a.onClick} testId={pop ? `${id}.pop.${a.id}` : `${id}.${a.id}`}>
           {a.text}
         </Act>
       ))}

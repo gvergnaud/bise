@@ -65,9 +65,9 @@ fn go_switches_every_hub_still_older_and_none_on_it() {
 fn a_failed_switch_is_not_retried_until_a_new_go_or_a_newer_release() {
     let l = latest("5");
     let go = Go { id: "5".into(), at: 100 };
-    let failed = Failed { id: "5".into(), at: 200, why: "the hub died".into() };
+    let failed = Failed { id: "5".into(), at: 200, why: "the hub died".into(), log: Vec::new() };
     let f = Facts { go: Some(&go), my_failed: Some(&failed), ..facts(&l, "4") };
-    assert_eq!(state(&f), (State::Failed { why: "the hub died".into() }, false));
+    assert_eq!(state(&f), (State::Failed { why: "the hub died".into(), log: Vec::new() }, false));
     // a new update now (later than the failure): tried again
     let again = Go { id: "5".into(), at: 300 };
     assert_eq!(state(&Facts { go: Some(&again), ..f.clone() }), (State::Updating, true));
@@ -81,7 +81,7 @@ fn only_ready_installing_and_updating_show() {
     let l = latest("5");
     let shown = |s: State| Offer { release: l.clone(), state: s, switch_me: false, install_me: false }.shown();
     assert!(shown(State::Ready) && shown(State::Installing) && shown(State::Updating));
-    assert!(!shown(State::Later) && !shown(State::UpToDate) && !shown(State::Failed { why: String::new() }));
+    assert!(!shown(State::Later) && !shown(State::UpToDate) && !shown(State::Failed { why: String::new(), log: Vec::new() }));
 }
 
 #[test]
@@ -171,7 +171,7 @@ fn auto_installs_a_ready_release_and_never_a_failed_one() {
     assert_eq!(auto(Facts { installing: Some("5"), ..facts(&l, "4") }), (State::Installing, false));
     let go = Go { id: "5".into(), at: 100 };
     assert_eq!(auto(Facts { go: Some(&go), ..facts(&l, "4") }), (State::Updating, false));
-    let failed = Failed { id: "5".into(), at: 200, why: "the hub died".into() };
+    let failed = Failed { id: "5".into(), at: 200, why: "the hub died".into(), log: Vec::new() };
     assert!(!auto(Facts { go: Some(&go), my_failed: Some(&failed), ..facts(&l, "4") }).1);
     assert_eq!(auto(facts(&l, "5")), (State::UpToDate, false));
     // off: never

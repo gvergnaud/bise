@@ -47,6 +47,10 @@ pub struct BiseUpdate {
     /// failed: why, one line
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub why: String,
+    /// failed: the new version's last log lines (at most 50, plain text),
+    /// for his 'Copy report' (update-safety B, designer m_59048)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub log: Vec<String>,
     /// the machine's line only: the projects not on it yet (updating),
     /// or the one whose switch failed (their names)
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

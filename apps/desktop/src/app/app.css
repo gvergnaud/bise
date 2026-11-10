@@ -739,6 +739,17 @@ body:has(.app-shell) {
   font-family: var(--font-mono);
 }
 
+/* a failed update's raw cause (the new version's last error line): one line, cut with …, whole in
+   its tip (designer m_59048); the line it sits in is already mono text-3 */
+.app-bise-cause {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
 /* the core's last stderr line, dim mono under the words */
 .app-core-last {
   margin-top: var(--gap-tight);
