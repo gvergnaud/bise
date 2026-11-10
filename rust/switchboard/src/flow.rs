@@ -120,6 +120,52 @@ pub fn land_after(text: &str) -> Option<String> {
     land_key(text, "after")
 }
 
+/// The guided review's config of the tracked config (`[review]`): how a
+/// part's area is read from its paths ([`crate::guide::area_of`]). Read
+/// from the shared checkout when the hub reads a diff for its guide.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ReviewConfig {
+    /// `[review] containers`: this repo's folders that hold modules rather
+    /// than name one, over the generic list (`["bend", "rust"]`)
+    pub containers: Vec<String>,
+    /// `[review.areas]`: names a folder can't spell (`"rust/tui" = "TUI"`),
+    /// the longest prefix first
+    pub areas: Vec<(String, String)>,
+}
+
+impl ReviewConfig {
+    /// `[review] containers` (a one-line array of strings) and the
+    /// `[review.areas]` table; anything else is ignored.
+    pub fn parse(text: &str) -> ReviewConfig {
+        let mut c = ReviewConfig::default();
+        let mut at = "";
+        for raw in text.lines() {
+            let l = raw.trim();
+            if l.starts_with('[') {
+                at = if is_header(l, "[review]") { "review" } else if is_header(l, "[review.areas]") { "areas" } else { "" };
+                continue;
+            }
+            let Some((k, v)) = l.split_once('=').filter(|_| !at.is_empty() && !l.starts_with('#')) else {
+                continue;
+            };
+            match at {
+                "review" if k.trim() == "containers" => {
+                    let list = v.split('#').next().unwrap_or("").trim().trim_start_matches('[').trim_end_matches(']');
+                    c.containers = list.split(',').map(toml_str).filter(|s| !s.trim().is_empty()).collect();
+                }
+                "areas" => {
+                    let (k, v) = (toml_str(k).trim_end_matches('/').to_string(), toml_str(v));
+                    if !k.is_empty() && !v.trim().is_empty() {
+                        c.areas.push((k, v));
+                    }
+                }
+                _ => {}
+            }
+        }
+        c
+    }
+}
+
 fn land_key(text: &str, key: &str) -> Option<String> {
     let mut in_land = false;
     for raw in text.lines() {

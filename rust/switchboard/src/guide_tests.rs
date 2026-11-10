@@ -379,7 +379,7 @@ fn the_guide_runs_one_call_or_two_never_more() {
     // a fake model: its replies in order, the requests kept
     let mut asked: Vec<String> = vec![];
     let replies = [first.clone(), second_reply];
-    let w = run("REQ", &files, |req, _| {
+    let w = run("REQ", &files, &crate::flow::ReviewConfig::default(), |req, _| {
         asked.push(req.to_string());
         Ok(replies[asked.len() - 1].clone())
     })
@@ -392,7 +392,7 @@ fn the_guide_runs_one_call_or_two_never_more() {
     assert!(w.guide.rest.is_empty());
     // a failed second pass: the first answer stands, the hunk in rest
     let mut n = 0;
-    let w = run("REQ", &files, |_, _| {
+    let w = run("REQ", &files, &crate::flow::ReviewConfig::default(), |_, _| {
         n += 1;
         if n == 1 { Ok(first.clone()) } else { Err("timeout".into()) }
     })
@@ -402,10 +402,76 @@ fn the_guide_runs_one_call_or_two_never_more() {
     // every hunk placed: one call
     let all_in = format!(r#"{{"overview": "o", "parts": [{{"title": "Core", "hunks": ["{}", "{}", "{}"]}}]}}"#, all[0], all[1], all[2]);
     let mut calls = 0;
-    let w = run("REQ", &files, |_, _| {
+    let w = run("REQ", &files, &crate::flow::ReviewConfig::default(), |_, _| {
         calls += 1;
         Ok(all_in.clone())
     })
     .unwrap();
     assert_eq!((calls, w.second), (1, Pass::None));
+}
+
+#[test]
+fn a_paths_area_is_the_segment_past_the_shared_and_container_folders() {
+    let no = crate::flow::ReviewConfig::default();
+    // a usual repo, no names of its own
+    for (path, area) in [("src/components/Button.tsx", "Components"), ("src/api/client.ts", "Api"), ("packages/api/src/x.ts", "Api"), ("README.md", "README"), ("lib/small_ask.rs", "Small ask"), (".github/workflows/ci.yml", "Github"), ("src/.env", "Env")] {
+        assert_eq!(area_of(path, "", &no), area, "{path}");
+    }
+    // a diff all under apps/desktop/src: the folders it shares are skipped
+    let paths = ["apps/desktop/src/review/openChange.ts", "apps/desktop/src/thread/Thread.test.tsx", "apps/desktop/src/app/keys.ts"];
+    let common = common_dir(&paths);
+    assert_eq!(common, "apps/desktop/src");
+    let areas: Vec<String> = paths.iter().map(|p| area_of(p, &common, &no)).collect();
+    // app is a container folder: its file names the area
+    assert_eq!(areas, ["Review", "Thread", "Keys"]);
+    // one file: its stem
+    assert_eq!(area_of("rust/switchboard/src/guide.rs", &common_dir(&["rust/switchboard/src/guide.rs"]), &no), "Guide");
+    // the repo's own names win, the longest prefix first, a whole folder only
+    // this repo's containers and the names its folders can't spell
+    let ours = crate::flow::ReviewConfig {
+        containers: vec!["bend".into(), "rust".into()],
+        areas: vec![("rust/tui".into(), "TUI".into()), ("rust/tui/src/pane".into(), "Pane UI".into())],
+    };
+    assert_eq!(area_of("bend/hub/core.bend", "", &ours), "Hub");
+    assert_eq!(area_of("rust/proto/src/diff.rs", "", &ours), "Proto");
+    assert_eq!(area_of("rust/newcrate/src/lib.rs", "", &ours), "Newcrate");
+    assert_eq!(area_of("rust/tui/src/sb.rs", "", &ours), "TUI");
+    // the longest name wins, a whole folder only
+    assert_eq!(area_of("rust/tui/src/pane/x.rs", "", &ours), "Pane UI");
+    assert_eq!(area_of("rust/tuix/a.rs", "", &ours), "Tuix");
+    // a diff all under rust/tui: its own name says nothing, the folders split it
+    assert_eq!(area_of("rust/tui/src/onboarding/a.rs", "rust/tui/src", &ours), "Onboarding");
+}
+
+#[test]
+fn a_parts_area_is_where_most_of_its_hunks_live_never_the_models_word() {
+    let mut files = vec![
+        file("src/hub/core.ts", vec![hunk("@@ -1 +1 @@", &["a"]), hunk("@@ -9 +9 @@", &["b"])]),
+        file("tests/hub_test.py", vec![hunk("@@ -1 +1 @@", &["c"])]),
+        file("src/tui/sb.ts", vec![hunk("@@ -1 +1 @@", &["d"])]),
+        file("docs/hub.md", vec![hunk("@@ -1 +1 @@", &["e"])]),
+    ];
+    stamp(&mut files);
+    let all = ids_of(&files);
+    // the model names areas: never kept; a tie goes to the first in reading order
+    let reply = format!(
+        r#"{{"overview": "o", "parts": [{{"area": "Sidebar", "title": "Wake the right agent", "hunks": ["{}", "{}", "{}"]}}, {{"area": "Runtime", "title": "Show it in the terminal", "hunks": ["{}", "{}"]}}]}}"#,
+        all[2], all[0], all[1], all[4], all[3]
+    );
+    let w = run("REQ", &files, &crate::flow::ReviewConfig::default(), |_, _| Ok(reply.clone())).unwrap();
+    let areas: Vec<&str> = w.guide.parts.iter().map(|p| p.area.as_str()).collect();
+    assert_eq!(areas, ["Hub", "Docs"]);
+    // the repo's names, passed in, win
+    let named = crate::flow::ReviewConfig { containers: vec![], areas: vec![("src/hub".into(), "Core".into())] };
+    let w = run("REQ", &files, &named, |_, _| Ok(reply.clone())).unwrap();
+    assert_eq!(w.guide.parts[0].area, "Core");
+}
+
+#[test]
+fn bise_toml_says_the_repos_containers_and_area_names() {
+    let text = "[land]\nafter = \"x\"\n[review]\ncontainers = [\"bend\", \"rust\"] # ours\n[review.areas]\n# spelling only\n\"rust/tui\" = \"TUI\"\n\"rust/jsrt/\" = \"JSRT\"\nempty = \"\"\n[other]\n\"a\" = \"B\"\ncontainers = [\"x\"]\n";
+    let c = crate::flow::ReviewConfig::parse(text);
+    assert_eq!(c.containers, ["bend", "rust"]);
+    assert_eq!(c.areas, vec![("rust/tui".to_string(), "TUI".to_string()), ("rust/jsrt".to_string(), "JSRT".to_string())]);
+    assert_eq!(crate::flow::ReviewConfig::parse("[flow]\nmode = \"x\"\n"), crate::flow::ReviewConfig::default());
 }

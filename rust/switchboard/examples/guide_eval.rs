@@ -179,13 +179,15 @@ fn main() {
         eprintln!("over the budget: ask first, then --max-tokens {}", todo);
         std::process::exit(2);
     }
+    // the repo's [review] config, as the hub reads it
+    let review = std::fs::read_to_string(dir.join(switchboard::flow::TRACKED)).map(|t| switchboard::flow::ReviewConfig::parse(&t)).unwrap_or_default();
     let mut rows = vec![];
     for ((i, range, label, files), req) in diffs.iter().zip(&requests) {
         if guide::skip(files) {
             rows.push(json!({"i": i, "range": range, "skip": true}));
             continue;
         }
-        let w = guide::run(req, files, |r, what| ev.ask(r, what));
+        let w = guide::run(req, files, &review, |r, what| ev.ask(r, what));
         let row = match w {
             Ok(w) => {
                 let c = guide::cover(&w.guide, files);

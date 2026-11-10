@@ -19,3 +19,15 @@ after = "scripts/tip_check.py"
 # m_48124). gate.sh seed never fails: no seed or a target there is one line.
 [worktree]
 setup = "tests/gate.sh seed"
+
+# The guided review's areas (rust/switchboard/src/guide.rs area_of, page
+# review-groups): a part's area is read from its paths, past the folders the
+# diff shares and the container folders (src, lib, apps... and ours below),
+# the next segment: bend/hub gives Hub, rust/proto gives Proto, a new crate
+# its own name. [review.areas] is for the names a folder can't spell.
+[review]
+containers = ["bend", "rust"]
+
+[review.areas]
+"rust/tui" = "TUI"
+"rust/jsrt" = "JSRT"

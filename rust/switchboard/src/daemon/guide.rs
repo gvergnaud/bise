@@ -81,6 +81,8 @@ pub(super) struct Seen {
     request: String,
     /// the diff, for the second pass
     files: Vec<bise_proto::diff::DiffFile>,
+    /// how areas are read, bise.toml's `[review]`
+    review: crate::flow::ReviewConfig,
 }
 
 impl Shell {
@@ -105,6 +107,7 @@ impl Shell {
             _ => String::new(),
         };
         let (paths, read, tx) = (self.env.paths.clone(), self.diff_job(self.project(), ask), self.tx.clone());
+        let tracked = std::path::Path::new(&self.hub.workspace).join(crate::flow::TRACKED);
         let dir = paths.guides_dir();
         // the one form (forge::pr_link's for a PR): the key and every answer come from it
         let target = canonical(target);
@@ -118,7 +121,8 @@ impl Shell {
             let kept = guide::read(&dir, &hash).map(|k| k.guide);
             let old = if kept.is_none() { guide::last_of(&dir, &key).map(|k| k.guide) } else { None };
             let request = guide::request(&files, &intent, old.as_ref());
-            let seen = Seen { why, target, small: guide::skip(&files), hash, base, head: key, kept, request, files };
+            let review = std::fs::read_to_string(&tracked).map(|t| crate::flow::ReviewConfig::parse(&t)).unwrap_or_default();
+            let seen = Seen { why, target, small: guide::skip(&files), hash, base, head: key, kept, request, files, review };
             let _ = tx.send(Msg::GuideSeen(Box::new(seen)));
         });
     }
@@ -160,7 +164,7 @@ impl Shell {
             let req_file = dir.join(format!("req-{}.txt", s.hash));
             // the first call, then the second pass if it needs one: one call at a time
             let ask = |req: &str, what: &str| std::fs::write(&req_file, req).map_err(|e| e.to_string()).and_then(|_| small.call(&req_file, what));
-            let got = std::fs::create_dir_all(&dir).map_err(|e| e.to_string()).and_then(|_| guide::run(&s.request, &s.files, ask));
+            let got = std::fs::create_dir_all(&dir).map_err(|e| e.to_string()).and_then(|_| guide::run(&s.request, &s.files, &s.review, ask));
             if let Ok(guide::Written { second: guide::Pass::Failed(e), .. }) = &got {
                 log_line(small.paths(), &format!("guide {}: its second pass failed, the first answer stands: {}", s.hash, e));
             }
