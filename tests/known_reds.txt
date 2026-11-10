@@ -6,4 +6,3 @@
 # 14 days after its since, or at "until YYYY-MM-DD" in its why. Expired: red in its owner's quick
 # gate until the line goes (fixed) or is renewed (a fresh since, why and until).
 
-send	c13d1c3dd	release-reds	load flake: red in 11.8's tag checks on c13d1c3dd ('ms from ⏎ to his words drawn in the thread': toBeLessThan, a timing bound) at load ~12 beside a quick gate; green alone 2/2 on the same sha and build (20-21 s); remove once a release's checks run is green (main removes it)
