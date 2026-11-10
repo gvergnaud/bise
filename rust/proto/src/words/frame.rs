@@ -40,9 +40,12 @@ crate::words! { frame:
     side_card = "Show side card";
     /// the same button dimmed: the window too narrow for the card
     side_no_room = "No room for the side card at this width";
-    /// the bar's back arrow (⌘[)
+    /// the bar's back arrow (⌘←, ⌘[ too)
     back = "Back";
-    /// the bar's forward arrow (⌘])
+    /// the ‹ › menu's row of a step that closed a thing in the panel, dim after its title and a
+    /// ' · ' ('perf notes · closed'; history-keys, designer m_58552)
+    step_closed = "closed";
+    /// the bar's forward arrow (⌘→, ⌘] too)
     forward = "Forward";
     /// the rail's last button: settings (⌘,)
     settings = "Settings";

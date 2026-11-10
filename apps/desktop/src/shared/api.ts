@@ -474,7 +474,7 @@ export interface A11y {
 }
 
 /** What a bise item of the application menu asks the focused window (src/main/menu.ts). */
-export type MenuAction = 'settings' | 'inbox' | 'find' | 'terminal' | 'save' | 'browser' | 'newProject' | 'newAgent' | 'sidebar' | 'panel' | 'panelFull' | 'reopenTab' | 'closeTab' | 'bims' | 'sideCard' | GoAction;
+export type MenuAction = 'settings' | 'inbox' | 'find' | 'terminal' | 'save' | 'browser' | 'newProject' | 'newAgent' | 'sidebar' | 'panel' | 'panelFull' | 'reopenTab' | 'closeTab' | 'bims' | 'sideCard' | 'back' | 'forward' | GoAction;
 
 /** The Go menu's places, the rail's (rail-keys): each a route of the main window (app/menu.ts routeOfMenu). */
 export type GoAction = 'bise' | 'inboxPage' | 'scheduled' | 'artifacts' | 'processes' | 'plugins';
@@ -498,6 +498,9 @@ export interface ViewSides {
   readonly sideCompact?: boolean;
   /** the window holds no card (too narrow, or a page with no side): the item dims */
   readonly sideCardCant?: boolean;
+  /** the window's history has a place behind / ahead (history-keys): Go › Back / Forward lit; none: dimmed */
+  readonly canBack?: boolean;
+  readonly canForward?: boolean;
 }
 
 /** A view command's answer as the hub gave it (window.bise.views.call). */

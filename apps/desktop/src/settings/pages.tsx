@@ -423,6 +423,21 @@ export function KeyList(): ReactNode {
                     <Kbd key={i}>{c.text}</Kbd>
                   ),
                 )}
+                {/* older keys that still work, dim after a ' · ' (history-keys, designer m_58552) */}
+                {r.also !== undefined && (
+                  <span className="settings-caps-also" data-testid="settings.keys.also">
+                    <span className="settings-caps-sep">·</span>
+                    {capsOf(r.also).map((c, i) =>
+                      c.sep ? (
+                        <span key={i} className="settings-caps-sep">
+                          {c.text}
+                        </span>
+                      ) : (
+                        <Kbd key={i}>{c.text}</Kbd>
+                      ),
+                    )}
+                  </span>
+                )}
               </span>
             ),
           }))}

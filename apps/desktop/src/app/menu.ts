@@ -120,6 +120,14 @@ export function useMenuRouting(router: Router) {
         if (!menuEcho(windowKeyAt, Date.now())) closeActive();
         return;
       }
+      // Go › Back ⌘[ / Forward ⌘] (history-keys): the window's history; the echo of the ⌘[ ⌘] the
+      // window took itself (esc-up.ts) is dropped, one press, one step
+      if (action === 'back' || action === 'forward') {
+        if (menuEcho(windowKeyAt, Date.now())) return;
+        if (action === 'back') router.back();
+        else router.forward();
+        return;
+      }
       // Go › bise as the rail's ':*': back to his last project or chat from a page (railback.ts)
       const to = action === 'bise' ? biseBack.go(router.get(), { projects: store.projects(), agents: (p) => store.agents(p) }) : routeOfMenu(action);
       if (to === undefined) emitAction(action);

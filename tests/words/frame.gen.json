@@ -124,6 +124,11 @@
     "one": null,
     "text": "Sidebar width"
   },
+  "frame.step_closed": {
+    "args": [],
+    "one": null,
+    "text": "closed"
+  },
   "frame.tip_key": {
     "args": [
       "what",

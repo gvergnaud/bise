@@ -24,6 +24,12 @@ export const PLACE_KEYS = {
   newProject: '⌘N',
 } as const;
 
+/** The window's history keys (history-keys, his m_58539, designer m_58552): ⌘← ⌘→ as a browser on
+ *  the ‹ › tips, their held keycaps and this list; the old ⌘[ ⌘] still work, Go › Back and Forward
+ *  show them (a menu ⌘← would take a field's caret move), and this list shows them dim. esc-up.ts
+ *  decides them. */
+export const HISTORY_KEYS = { back: '⌘←', forward: '⌘→', menuBack: '⌘[', menuForward: '⌘]' } as const;
+
 /** The artifacts library's rows (All artifacts, Recent, Unfiled, then the folders) take ⌘1 … ⌘9
  *  in its order, as the projects do (designer m_45492). */
 export const LIBRARY_ROWS_MAX = 9;
@@ -34,6 +40,8 @@ export interface KeyRow {
   readonly action: string;
   /** the TUI's key for the same action, when it differs */
   readonly tui?: string;
+  /** older keys that still work, drawn dim after a ' · ' (history-keys, designer m_58552) */
+  readonly also?: string;
 }
 
 export interface KeySection {
@@ -65,7 +73,7 @@ export const KEY_SECTIONS: readonly KeySection[] = [
       { keys: PLACE_KEYS.newProject, action: settings.key_new_project },
       { keys: '⇧⌘N', action: settings.key_new_agent },
       { keys: PLACE_KEYS.search, action: settings.key_find_agent },
-      { keys: '⌘[ / ⌘]', action: settings.key_back_forward },
+      { keys: `${HISTORY_KEYS.back} / ${HISTORY_KEYS.forward}`, action: settings.key_back_forward, also: `${HISTORY_KEYS.menuBack} / ${HISTORY_KEYS.menuForward}` },
       { keys: '⌘I', action: settings.key_inbox, tui: '/inbox, ctrl+1-9' },
       { keys: PLACE_KEYS.inbox, action: settings.key_inbox_page },
       { keys: PLACE_KEYS.scheduled, action: settings.key_scheduled },

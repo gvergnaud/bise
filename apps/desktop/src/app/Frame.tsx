@@ -18,7 +18,7 @@ import { AppIcon, Kbd, PickerPop, Press, tipAttrs } from "@/ds";
 import { BarButton } from "./barbutton";
 import { frame } from "@/proto/words_frame.gen";
 import { useModHeld } from "./held";
-import { FRAME_KEYS } from "./keys";
+import { FRAME_KEYS, HISTORY_KEYS } from "./keys";
 import { useAgents, useProjects } from "@/store";
 import { usePluginTitle } from "@/plugins/title";
 import { formatRoute, MAIN, type Route } from "./route";
@@ -38,6 +38,9 @@ import { crumbOf, NARROW_PX, PANEL_OPEN_PX } from "./side";
 import { barTitleOf, stateFactOf, windowTitleOf, type StateFact } from "./title";
 import { useNow } from "./clock";
 import { panelToggle, usePanelBox } from "./panel/state";
+import { useTabLooks } from "./panel/look";
+import { tabOf } from "./panel/model";
+import { parseStep } from "./panel/steps";
 import { usePlaceCrumb } from "@/artifacts/crumb";
 import { BarLinks } from "./BarLinks";
 
@@ -170,7 +173,8 @@ function HistoryArrows({ name }: { name: (p: string) => string }) {
   const router = useRouter();
   useRoute();
   const [menu, setMenu] = useState<Side | null>(null);
-  // ⌘ held: ⌘[ ⌘] under the arrows that can go (held.ts, designer m_21510)
+  const lookOf = useTabLooks();
+  // ⌘ held: ⌘← ⌘→ under the arrows that can go (held.ts, designer m_21510; history-keys m_58552)
   const cmd = useModHeld("Meta");
   const press = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const long = useRef(false);
@@ -218,7 +222,7 @@ function HistoryArrows({ name }: { name: (p: string) => string }) {
           look="app-bar-b"
           aria-label={label}
           disabled={!can}
-          {...tipAttrs(can ? frame.tip_key({ what: label, key: side === "back" ? "⌘[" : "⌘]" }) : undefined)}
+          {...tipAttrs(can ? frame.tip_key({ what: label, key: side === "back" ? HISTORY_KEYS.back : HISTORY_KEYS.forward }) : undefined)}
           onClick={() => {
             if (long.current) return;
             if (side === "back") router.back();
@@ -230,7 +234,7 @@ function HistoryArrows({ name }: { name: (p: string) => string }) {
         </Press>
         {cmd && can && (
           <span className="app-keyhint float" data-testid={`app.bar.${side}.hint`}>
-            <Kbd>{side === "back" ? "⌘[" : "⌘]"}</Kbd>
+            <Kbd>{side === "back" ? HISTORY_KEYS.back : HISTORY_KEYS.forward}</Kbd>
           </span>
         )}
         {menu === side && (
@@ -240,11 +244,29 @@ function HistoryArrows({ name }: { name: (p: string) => string }) {
             groups={[
               {
                 id: "places",
-                rows: router.places(side, MENU_PLACES).map((r, i) => ({
-                  id: String(i + 1),
-                  name: crumbOf(r, name).join(" › "),
-                  testId: `app.bar.${side}.place`,
-                })),
+                rows: router.steps(side, MENU_PLACES).map((p, i) => {
+                  // a step an artifact made (history-keys, designer m_58552): its icon and title, a
+                  // dim ' · closed' for a close; a place: its crumb
+                  const step = parseStep(p.step);
+                  if (step === undefined) return { id: String(i + 1), name: crumbOf(p.route, name).join(" › "), testId: `app.bar.${side}.place` };
+                  const look = lookOf(tabOf({ kind: "thing", e: step.e }));
+                  return {
+                    id: String(i + 1),
+                    glyph: look.icon,
+                    glyphKind: "thing",
+                    text: look.title,
+                    name:
+                      step.did === "close" ? (
+                        <>
+                          {look.title}
+                          <span className="app-hist-closed">{` · ${frame.step_closed}`}</span>
+                        </>
+                      ) : (
+                        look.title
+                      ),
+                    testId: `app.bar.${side}.${step.did}`,
+                  };
+                }),
               },
             ]}
             onPick={(id) => {

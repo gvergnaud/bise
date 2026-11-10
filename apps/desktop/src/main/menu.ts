@@ -142,9 +142,15 @@ export function menuTemplate(o: MenuOptions): MenuItemConstructorOptions[] {
   // settings/keys.ts PLACE_KEYS): bise ⌘0, the inbox block ⌘I and its page ⇧⌘I, Scheduled ⌘Y,
   // Artifacts ⇧⌘A, Processes ⇧⌘P, Plugins ⇧⌘X. The window's own key acts first; its echo here goes to the same
   // route, dropped (app/menu.ts)
+  // Back and Forward first (history-keys, designer m_58552), dimmed with nothing on that side: their
+  // menu keys are ⌘[ ⌘], never ⌘← ⌘→ (a menu key fires in a field too, and would take the caret's
+  // move to the line's start or end); the page's own ⌘← ⌘→ are the window's (app/esc-up.ts)
   const go: MenuItemConstructorOptions = {
     label: menus.go_menu,
     submenu: [
+      { ...item(menus.go_back, 'CmdOrCtrl+[', 'back'), enabled: o.sides?.canBack === true },
+      { ...item(menus.go_forward, 'CmdOrCtrl+]', 'forward'), enabled: o.sides?.canForward === true },
+      { type: 'separator' },
       item(menus.go_bise, 'CmdOrCtrl+0', 'bise'),
       item(menus.go_inbox, 'CmdOrCtrl+I', 'inbox'),
       item(menus.go_inbox_page, 'Shift+CmdOrCtrl+I', 'inboxPage'),

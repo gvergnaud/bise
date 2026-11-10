@@ -100,6 +100,12 @@ export function Help({ onClose, page: first = 'help' }: { onClose: () => void; p
                 <div className="help-row" key={r.keys} data-testid="help.row" data-keys={r.keys}>
                   <span className="k">
                     <Kbd>{r.keys}</Kbd>
+                    {r.also !== undefined && (
+                      <span className="also" data-testid="help.row.also">
+                        {' · '}
+                        <Kbd>{r.also}</Kbd>
+                      </span>
+                    )}
                   </span>
                   <span className="a">{r.action}</span>
                   {r.tui !== undefined && <span className="t">terminal: {r.tui}</span>}

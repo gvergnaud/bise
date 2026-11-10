@@ -6,7 +6,9 @@
 // width dragged re-renders the panel and the bar's tabs, never the shell or the composer. Every
 // door in: openTab (tabs.ts), the bar's ▯ and ⌥⌘B (⌥⌘0) (panelToggle), ⌃` (openShell), the
 // launcher's picks, ⇧⌘T (⌃⇧T) the last closed tab back (reopenClosed: a stack of closed tabs per
-// project's panel, not kept, as Chrome's per window). Owner: nm-panel; the per-project scope panel-scope.
+// project's panel, not kept, as Chrome's per window). A thing opened or closed is a step of the
+// window's history (bindPanelHistory, steps.ts; history-keys): back gives the panel as it was.
+// Owner: nm-panel; the per-project scope panel-scope.
 import { useEffect, useLayoutEffect, useState, useSyncExternalStore } from 'react';
 import { keep } from '@/app/keep';
 import { useRoute } from '@/app/router';
@@ -18,6 +20,9 @@ import { armHandoff } from '@/composer/handoff';
 import { activate, boxOf, clampShare, closeBackKept, closeKept, closeOthers, fitOf, launcherToReuse, moveIn, nextBrowser, nextLauncher, nextShell, openKept, pushClosed, reopenIn, stepIn, clampW, withOpen, FOLDED, dropGone, dropGoneArts, type Before, type Closed, type PanelBox, type PanelFit, type PanelKept, type TabWhat, type Tabs } from './model';
 import { parseRec, pruneScopes, putView, scopeOf, switchTo, viewOf, type PanelRec } from './scope';
 import { focusBackOf, noteFocus } from './focusback';
+import { parseSnap, restoreKept, sameSnap, snapOf, type PanelStep } from './steps';
+import type { Router } from '@/app/router';
+import type { Entity } from '@/shared/entity';
 
 const KEY = 'panel';
 
@@ -271,8 +276,54 @@ export function takeOpened(id: string): boolean {
   return true;
 }
 
-/** Opens `what` in a tab (an open one comes to the front), unfolding the panel; `instead`: the launcher it replaces. */
-export function openWhat(what: TabWhat, instead?: string): void {
+/** The window's history (app/router.ts), once the shell bound it: a thing opened or closed is a step of it (steps.ts). */
+let history: Pick<Router, 'mark' | 'replacePanel'> | undefined;
+/** A thing still there (an artifact in its list): a step that holds a gone one never brings its tab back. */
+let exists: (e: Entity) => boolean = () => true;
+
+/**
+ * The shell binds the window's router (history-keys, architect m_58553): opens and closes mark its
+ * steps, a tab brought to the front rewrites the current one, back and forward give the panel back
+ * as that step had it (restorePanel). The unbind it returns.
+ */
+export function bindPanelHistory(router: Pick<Router, 'mark' | 'replacePanel' | 'onRestore'>, isThere: (e: Entity) => boolean): () => void {
+  history = router;
+  exists = isThere;
+  const off = router.onRestore(restorePanel);
+  return () => {
+    off();
+    if (history === router) history = undefined;
+  };
+}
+
+/** Back or forward landed on a step that holds a panel: its project's panel as it was there; a bad one: nothing. Never a step. */
+function restorePanel(raw: unknown): void {
+  const snap = parseSnap(raw);
+  if (snap === undefined) return;
+  panelScope(snap.project);
+  if (snap.project !== '' && snap.project !== rec.at) return;
+  set(restoreKept(state, snap, exists));
+}
+
+/** A thing opened or closed (designer m_58552): a new step, the current one keeping the panel as it was. */
+function stepped(was: PanelKept, step: PanelStep): void {
+  const before = snapOf(rec.at, was);
+  const after = snapOf(rec.at, state);
+  if (!sameSnap(before, after)) history?.mark(before, after, step);
+}
+
+/** A tab brought to the front: the current step remembers it, no new step (designer m_58552). */
+function fronted(was: PanelKept): void {
+  if (was.tabs.active !== state.tabs.active) history?.replacePanel(snapOf(rec.at, state));
+}
+
+/**
+ * Opens `what` in a tab (an open one comes to the front), unfolding the panel; `instead`: the
+ * launcher it replaces. A thing that opens (a new tab, or the panel folded) is a step of his
+ * history unless `quiet` (an artifact's route opens its own tab: the route is the step).
+ */
+export function openWhat(what: TabWhat, instead?: string, quiet = false): void {
+  const was = state;
   const o = openKept(state, what, instead);
   const active = o.kept.tabs.active;
   opened = active;
@@ -283,6 +334,15 @@ export function openWhat(what: TabWhat, instead?: string): void {
   // a New tab that opens fresh starts with an empty field, whatever an earlier one of its number held
   if (!state.tabs.list.some((t) => t.id === active)) drafts.delete(beforeKey(active));
   set(o.kept);
+  if (what.kind !== 'thing' || quiet) return;
+  if (!was.open || !was.tabs.list.some((t) => t.id === active)) stepped(was, { did: 'open', e: what.e });
+  else fronted(was);
+}
+
+/** The thing the tab `id` shows, if it is one (a step's name). */
+function thingOf(k: PanelKept, id: string): Entity | undefined {
+  const what = k.tabs.list.find((t) => t.id === id)?.what;
+  return what?.kind === 'thing' ? what.e : undefined;
 }
 
 /**
@@ -364,8 +424,11 @@ function remember(ids: readonly string[]): void {
  */
 export function closeTabId(id: string, opts: { readonly remember?: boolean } = {}): void {
   if (opts.remember !== false) remember([id]);
+  const was = state;
   // the last tab closed: the panel folds (the outer card comes back), nothing left to show
   set(closeKept(state, id));
+  const e = thingOf(was, id);
+  if (e !== undefined) stepped(was, { did: 'close', e });
 }
 
 /**
@@ -387,9 +450,12 @@ const beforeKey = (id: string): string => `${rec.at}\n${id}`;
 /** Esc on the tab `id`: it closes, the panel as it was before it came (model.ts closeBack, app/escape.ts). */
 export function closeTabBack(id: string): void {
   remember([id]);
+  const was = state;
   const next = closeBackKept(state, id, before.get(beforeKey(id)));
   before.delete(beforeKey(id));
   set(next);
+  const e = thingOf(was, id);
+  if (e !== undefined) stepped(was, { did: 'close', e });
 }
 
 export function closeOthersId(id: string): void {
@@ -398,7 +464,9 @@ export function closeOthersId(id: string): void {
 }
 
 export function activateTab(id: string): void {
+  const was = state;
   setTabs(activate(state.tabs, id));
+  fronted(was);
 }
 
 export function moveTabTo(id: string, to: number): void {
@@ -407,7 +475,10 @@ export function moveTabTo(id: string, to: number): void {
 
 /** ⌘⇧] and ⌘⇧[ (only while the panel is open). */
 export function stepTab(dir: 1 | -1): void {
-  if (state.open) setTabs(stepIn(state.tabs, dir));
+  if (!state.open) return;
+  const was = state;
+  setTabs(stepIn(state.tabs, dir));
+  fronted(was);
 }
 
 /**

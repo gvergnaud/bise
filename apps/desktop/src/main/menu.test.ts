@@ -66,14 +66,29 @@ describe('the application menu (bar ⛔2)', () => {
     // the keyed items only (View › Hide the Bims has no key: outer-world v2, its own test below)
     const keys = new Map(items.filter((i) => i.click !== undefined && i.accelerator !== undefined).map((i) => [i.accelerator, i]));
     expect([...keys.keys()].sort()).toEqual([
-      'Alt+CmdOrCtrl+B', 'CmdOrCtrl+,', 'CmdOrCtrl+0', 'CmdOrCtrl+B', 'CmdOrCtrl+Enter', 'CmdOrCtrl+F', 'CmdOrCtrl+I', 'CmdOrCtrl+N', 'CmdOrCtrl+S', 'CmdOrCtrl+W', 'CmdOrCtrl+Y', 'Ctrl+`',
+      'Alt+CmdOrCtrl+B', 'CmdOrCtrl+,', 'CmdOrCtrl+0', 'CmdOrCtrl+B', 'CmdOrCtrl+Enter', 'CmdOrCtrl+F', 'CmdOrCtrl+I', 'CmdOrCtrl+N', 'CmdOrCtrl+S', 'CmdOrCtrl+W', 'CmdOrCtrl+Y', 'CmdOrCtrl+[', 'CmdOrCtrl+]', 'Ctrl+`',
       'Shift+Alt+CmdOrCtrl+B', 'Shift+CmdOrCtrl+A', 'Shift+CmdOrCtrl+I', 'Shift+CmdOrCtrl+N', 'Shift+CmdOrCtrl+P', 'Shift+CmdOrCtrl+T', 'Shift+CmdOrCtrl+X',
     ]);
-    for (const k of ['CmdOrCtrl+,', 'CmdOrCtrl+I', 'CmdOrCtrl+F', 'Ctrl+`', 'CmdOrCtrl+S', 'CmdOrCtrl+N', 'Shift+CmdOrCtrl+N', 'CmdOrCtrl+B', 'Alt+CmdOrCtrl+B', 'Shift+Alt+CmdOrCtrl+B', 'CmdOrCtrl+0', 'Shift+CmdOrCtrl+I', 'CmdOrCtrl+Y', 'Shift+CmdOrCtrl+A', 'Shift+CmdOrCtrl+P', 'Shift+CmdOrCtrl+X', 'Shift+CmdOrCtrl+T']) {
+    for (const k of ['CmdOrCtrl+,', 'CmdOrCtrl+I', 'CmdOrCtrl+F', 'Ctrl+`', 'CmdOrCtrl+S', 'CmdOrCtrl+N', 'Shift+CmdOrCtrl+N', 'CmdOrCtrl+B', 'Alt+CmdOrCtrl+B', 'Shift+Alt+CmdOrCtrl+B', 'CmdOrCtrl+0', 'Shift+CmdOrCtrl+I', 'CmdOrCtrl+Y', 'Shift+CmdOrCtrl+A', 'Shift+CmdOrCtrl+P', 'Shift+CmdOrCtrl+X', 'Shift+CmdOrCtrl+T', 'CmdOrCtrl+[', 'CmdOrCtrl+]']) {
       const click = keys.get(k)?.click as (() => void) | undefined;
       click?.();
     }
-    expect(sent).toEqual(['settings', 'inbox', 'find', 'terminal', 'save', 'newProject', 'newAgent', 'sidebar', 'panel', 'panelFull', 'bise', 'inboxPage', 'scheduled', 'artifacts', 'processes', 'plugins', 'reopenTab']);
+    expect(sent).toEqual(['settings', 'inbox', 'find', 'terminal', 'save', 'newProject', 'newAgent', 'sidebar', 'panel', 'panelFull', 'bise', 'inboxPage', 'scheduled', 'artifacts', 'processes', 'plugins', 'reopenTab', 'back', 'forward']);
+  });
+
+  it("Go › Back ⌘[ and Forward ⌘] first, dimmed with nothing on that side; never ⌘← ⌘→, a field's caret moves (history-keys, designer m_58552)", () => {
+    const sub = (sides?: { canBack?: boolean; canForward?: boolean }) => {
+      const go = menuTemplate({ platform: 'darwin', appName: 'bise', dev: false, send: () => undefined, ...(sides === undefined ? {} : { sides: { sidebar: true, panel: false, ...sides } }) }).find((i) => i.label === menus.go_menu);
+      return Array.isArray(go?.submenu) ? go.submenu : [];
+    };
+    const [back, forward] = sub();
+    expect([back?.label, back?.accelerator, back?.enabled]).toEqual([menus.go_back, 'CmdOrCtrl+[', false]);
+    expect([forward?.label, forward?.accelerator, forward?.enabled]).toEqual([menus.go_forward, 'CmdOrCtrl+]', false]);
+    const [b2, f2] = sub({ canBack: true });
+    expect([b2?.enabled, f2?.enabled]).toEqual([true, false]);
+    const all = build('darwin').items.map((i) => i.accelerator);
+    expect(all).not.toContain('CmdOrCtrl+Left');
+    expect(all).not.toContain('CmdOrCtrl+Right');
   });
 
   it("File › Reopen Closed Tab ⇧⌘T (his m_46187, designer m_46216), the focused window's own, never a route", () => {

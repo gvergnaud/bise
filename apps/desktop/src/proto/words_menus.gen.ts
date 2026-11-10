@@ -8,6 +8,10 @@ export const menus = {
   agent_menu: "Agent",
   /** the menu bar's Go menu: the rail's places, each with its key (rail-keys, designer m_45492) */
   go_menu: "Go",
+  /** Go › the window's history back, ⌘[ (the page's ⌘← too, never a menu key: it would take the caret's move in a field; history-keys, designer m_58552); dimmed with nothing behind */
+  go_back: "Back",
+  /** Go › the window's history forward, ⌘] (the page's ⌘→ too); dimmed with nothing ahead */
+  go_forward: "Forward",
   /** Go › bise's place, ⌘0 (the brand stays lowercase, designer m_45492) */
   go_bise: "bise",
   /** Go › the inbox block in place, ⌘I (b1/b2) */

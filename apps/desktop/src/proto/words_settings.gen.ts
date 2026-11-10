@@ -728,7 +728,7 @@ export const settings = {
   key_new_agent: "New agent",
   /** ⌘K */
   key_find_agent: "find an agent, a page or an artifact",
-  /** ⌘[ / ⌘] */
+  /** ⌘← / ⌘→, the old ⌘[ / ⌘] dim after a dot (history-keys, designer m_58552) */
   key_back_forward: "back / forward",
   /** ⌘I: the inbox block, in place (b1/b2) */
   key_inbox: "answer what waits, here",

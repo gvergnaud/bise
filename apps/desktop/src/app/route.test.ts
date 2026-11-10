@@ -131,7 +131,7 @@ describe('router', () => {
     const link = createRouter({ screen: 'changes', project: 'p' }, saved);
     expect(link.places('back', 10).map(formatRoute)).toEqual(['agent/p/a', 'bise']);
     expect(link.canForward()).toBe(false);
-    expect(restoreHistory({ screen: 'bise' }, { past: ['nope/x', 'lab/composer'], now: 'bise', future: [] })).toEqual({ past: [], future: [] });
+    expect(restoreHistory({ screen: 'bise' }, { past: ['nope/x', 'lab/composer'], now: 'bise', future: [] })).toEqual({ past: [], now: { r: { screen: 'bise' } }, future: [] });
     expect(stepOf({ screen: 'bise' }, { screen: 'bise' })).toBe('none');
   });
 });

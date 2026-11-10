@@ -32,7 +32,7 @@ export type ScreenAction = 'fold-all' | 'stop' | 'to-end' | 'copy-code' | 'side-
 export type FrameAction = 'sidebar' | 'panel' | 'panelFull';
 
 /** The keys the two sides show: settings/keys.ts's (the key list, a leaf module), re-exported here for the shell. */
-export { FRAME_KEYS, PLACE_KEYS } from '@/settings/keys';
+export { FRAME_KEYS, HISTORY_KEYS, PLACE_KEYS } from '@/settings/keys';
 
 /** How long after a window key the View menu's echo of the same key is dropped (Electron gives
  *  both: the page's keydown, then the menu item's accelerator), as the terminal's ⌃`. */

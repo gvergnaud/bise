@@ -82,10 +82,20 @@
     "one": null,
     "text": "Artifacts"
   },
+  "menus.go_back": {
+    "args": [],
+    "one": null,
+    "text": "Back"
+  },
   "menus.go_bise": {
     "args": [],
     "one": null,
     "text": "bise"
+  },
+  "menus.go_forward": {
+    "args": [],
+    "one": null,
+    "text": "Forward"
   },
   "menus.go_inbox": {
     "args": [],

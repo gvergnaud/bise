@@ -28,7 +28,8 @@ export function isFrameEsc(data: unknown): boolean {
 /** An artifact's route: the artifact in a panel tab (opened once per id), the maker's thread in the centre. */
 export function ArtifactRoute({ project, id }: { project: string; id: string }) {
   useEffect(() => {
-    openTab({ kind: 'artifact', project, id });
+    // the route is the history's step already: its tab opens quietly (panel/steps.ts)
+    openTab({ kind: 'artifact', project, id }, { quiet: true });
   }, [project, id]);
   return <ArtifactThread project={project} id={id} />;
 }

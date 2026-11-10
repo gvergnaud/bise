@@ -7,9 +7,12 @@ import type { Entity } from '@/shared/entity';
 import { panel } from '@/terminal/panel';
 import { closeOthersId, closeTabId, openWhat, panelState } from './state';
 
-/** Opens `e` in a tab of this window's panel (an open one comes to the front), unfolding the panel. */
-export function openTab(e: Entity): void {
-  openWhat({ kind: 'thing', e });
+/**
+ * Opens `e` in a tab of this window's panel (an open one comes to the front), unfolding the panel:
+ * a step of his history (steps.ts), unless `quiet` (an artifact's route: the route is the step).
+ */
+export function openTab(e: Entity, opts: { readonly quiet?: boolean } = {}): void {
+  openWhat({ kind: 'thing', e }, undefined, opts.quiet === true);
 }
 
 /** A tab's menu: Close. */

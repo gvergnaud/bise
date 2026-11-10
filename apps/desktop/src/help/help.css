@@ -85,6 +85,12 @@
   font-size: var(--t-12);
 }
 
+/* older keys that still work, dim after a ' · ' (history-keys, designer m_58552) */
+.help-row .also,
+.help-row .also .b-kbd {
+  color: var(--c-text-3);
+}
+
 .help-row .t,
 .help-none,
 .help-keys {

@@ -35,7 +35,7 @@ export interface HelpSection {
 /** The sections of a page with their rows that match `filter`; a section with none is left out. */
 export function helpRows(page: HelpPage, filter: string, sections: readonly KeySection[] = KEY_SECTIONS): HelpSection[] {
   const f = filter.trim().toLowerCase();
-  const hit = (s: KeySection, r: KeyRow) => f === '' || [s.title, r.keys, r.action, r.tui ?? ''].some((t) => t.toLowerCase().includes(f));
+  const hit = (s: KeySection, r: KeyRow) => f === '' || [s.title, r.keys, r.also ?? '', r.action, r.tui ?? ''].some((t) => t.toLowerCase().includes(f));
   return sections
     .map((s) => ({ id: s.id, title: s.title, rows: s.rows.filter((r) => (page === 'shortcuts' || TOP.has(r.keys)) && hit(s, r)) }))
     .filter((s) => s.rows.length > 0);

@@ -882,6 +882,10 @@ body:has(.app-shell) {
   position: relative;
   display: flex;
 }
+/* the ‹ › menu's row of a step that closed a thing: ' · closed' dim (history-keys, designer m_58552) */
+.app-hist-closed {
+  color: var(--c-text-3);
+}
 /* what slides over the window (under 1000 px): the sidebar from the left, the panel from the
    right, over a 45% scrim of the window's paper; esc or a click on the scrim closes it */
 .app-scrim {

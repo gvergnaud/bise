@@ -14,7 +14,7 @@ import { useArtifactFindKey } from '@/artifacts/find';
 import { inboxItemOpen } from '@/inbox';
 import { goLibrary, libraryPlaces } from '@/artifacts/library';
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { createRouter, RouterContext, useRoute, useRouter, type SavedHistory } from './router';
+import { createRouter, RouterContext, useRoute, useRouter, type Router, type SavedHistory, type SavedStep } from './router';
 import { useHistoryWays } from './esc-up';
 import { useAnswerJumps } from '@/thread/useAnswerJumps';
 import { formatRoute, inboxAtOf, MAIN, parseRoute, projectOf, shownOf, startRouteOf, type Route } from './route';
@@ -55,7 +55,7 @@ import { UnlessFull } from './panel/Full';
 import { SideHost } from './side3d/Host';
 import { FloatHost } from '@/composer/float/Host';
 import { ArtifactRoute } from './ArtifactView';
-import { panelState, reopenClosed, toggleFull, useFullPreview, usePanelFit, usePanelFull, usePanelScope, usePanelState } from './panel/state';
+import { bindPanelHistory, panelState, reopenClosed, toggleFull, useFullPreview, usePanelFit, usePanelFull, usePanelScope, usePanelState } from './panel/state';
 import { doPanelKey } from './panel/keys';
 import { TipLayer } from './TipLayer';
 import { noteJump, numbersOf } from '@/agents/model';
@@ -183,8 +183,10 @@ function sessionHistory(): SavedHistory | undefined {
     const v: unknown = JSON.parse(sessionStorage.getItem(HISTORY_KEY) ?? 'null');
     if (typeof v !== 'object' || v === null) return undefined;
     const { past, now, future } = v as Record<string, unknown>;
-    const strings = (x: unknown): x is string[] => Array.isArray(x) && x.every((s) => typeof s === 'string');
-    return strings(past) && typeof now === 'string' && strings(future) ? { past, now, future } : undefined;
+    // a step: its route string, or {r, panel, step} when it holds the panel (router.ts SavedStep; a bad one drops out there)
+    const step = (s: unknown): s is SavedStep => typeof s === 'string' || (typeof s === 'object' && s !== null && typeof (s as { r?: unknown }).r === 'string');
+    const steps = (x: unknown): x is SavedStep[] => Array.isArray(x) && x.every(step);
+    return steps(past) && step(now) && steps(future) ? { past, now, future } : undefined;
   } catch {
     return undefined;
   }
@@ -230,9 +232,21 @@ function useStill(): void {
   }, []);
 }
 
+/** The panel's opens and closes on this window's router; a step's artifact gone since never comes back (its list came without it). */
+function usePanelHistory(router: Router): void {
+  const store = useStore();
+  useEffect(
+    () =>
+      bindPanelHistory(router, (e) => e.kind !== 'artifact' || !store.artifactsCame(e.project) || store.artifacts(e.project).some((a) => a.id === e.id)),
+    [router, store],
+  );
+}
+
 function Shell() {
   const router = useRouter();
   useHistoryWays(router);
+  // an artifact opened or closed in the panel is a step of the window's history (panel/steps.ts)
+  usePanelHistory(router);
   // answer-in-thread A: his answer to another project's card takes the window to it
   useAnswerJumps(router);
   useStill();
@@ -322,12 +336,15 @@ function Shell() {
   const panelSheet = usePanelFit().over;
   const fullPreview = useFullPreview();
   const sidebarShown = frame.side || frame.over === 'side';
+  // Go › Back / Forward lit as the ‹ › arrows (history-keys; the route re-renders the shell)
+  const canBack = router.canBack();
+  const canForward = router.canForward();
   useEffect(() => {
     // a component test's window.bise may be a partial fake, and the page outside Electron has none
     const bise = (window as Partial<Window>).bise as Partial<Window['bise']> | undefined;
     // File › Close Tab ⌘W (cmd-w-artifact): live while the panel is open, or in a window of its own (it closes it)
-    bise?.viewMenu?.({ sidebar: sidebarShown, panel: panelOpen, closeTab: panelOpen || ownWindow() !== undefined, artifact: artifactShown, panelFull, panelFullCan: !panelSheet, ...(bimsHidden ? { bimsHidden } : {}), ...(sideIsCompact ? { sideCompact: true } : {}), ...(sideCardCant ? { sideCardCant } : {}) });
-  }, [sidebarShown, panelOpen, artifactShown, panelFull, panelSheet, bimsHidden, sideIsCompact, sideCardCant]);
+    bise?.viewMenu?.({ sidebar: sidebarShown, panel: panelOpen, closeTab: panelOpen || ownWindow() !== undefined, artifact: artifactShown, panelFull, panelFullCan: !panelSheet, ...(bimsHidden ? { bimsHidden } : {}), ...(sideIsCompact ? { sideCompact: true } : {}), ...(sideCardCant ? { sideCardCant } : {}), ...(canBack ? { canBack } : {}), ...(canForward ? { canForward } : {}) });
+  }, [sidebarShown, panelOpen, artifactShown, panelFull, panelSheet, bimsHidden, sideIsCompact, sideCardCant, canBack, canForward]);
   // a home not onboarded opens on the onboarding once (amb-home c44c926d)
   useFirstLaunch();
   // R8: a /model the core holds for its provider opens that provider's setup (amb-home)

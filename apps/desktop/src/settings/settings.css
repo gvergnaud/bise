@@ -80,6 +80,9 @@
 /* a key list row's keys: one keycap per key, a text-3 ' / ' or ' … ' between two (designer m_43941) */
 .settings-caps { display: inline-flex; align-items: center; gap: var(--s-1); flex: none; }
 .settings-caps-sep { font-size: var(--t-12); color: var(--c-text-3); }
+/* older keys that still work, dim after a ' · ' (history-keys, designer m_58552) */
+.settings-caps-also { display: inline-flex; align-items: center; gap: var(--s-1); color: var(--c-text-3); }
+.settings-caps-also .b-kbd { color: var(--c-text-3); }
 /* a step's button, and under it for 3 s the core's flash in text-2 */
 .settings-cu-act { display: inline-flex; flex-direction: column; align-items: flex-end; gap: var(--s-1); flex: none; }
 .settings-cu-flash { font-size: var(--t-12); color: var(--c-text-2); }
