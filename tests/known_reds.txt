@@ -5,4 +5,5 @@
 # release's checks run is green") when a recorded run after its since meets it; any other one
 # 14 days after its since, or at "until YYYY-MM-DD" in its why. Expired: red in its owner's quick
 # gate until the line goes (fixed) or is renewed (a fresh since, why and until).
+notify	1de898f72	release-reds	load flake: red in 11.10's tag checks on 1de898f72 ('what already waited at start never knocks': toEqual) beside other gates, disk ~9 GB; green alone 2/2 on the same sha and build (6 s); remove once a release's checks run is green (main removes it)
 
