@@ -20,8 +20,10 @@ export type StatusAct = {
   readonly text: string;
   readonly onClick: () => void;
   readonly disabled?: boolean;
-  /** a second act that never takes the failure's tone ('Copy report', designer m_59048) */
+  /** a second act only in the open popover, never in the failure's tone ('Copy report', designer m_59191) */
   readonly quiet?: boolean;
+  /** its words in the popover, where acts are buttons in sentence case ('Try again'); else `text` */
+  readonly cardText?: string;
 };
 
 /**

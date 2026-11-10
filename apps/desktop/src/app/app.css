@@ -739,15 +739,21 @@ body:has(.app-shell) {
   font-family: var(--font-mono);
 }
 
-/* a failed update's raw cause (the new version's last error line): one line, cut with …, whole in
-   its tip (designer m_59048); the line it sits in is already mono text-3 */
+/* a failed update's body: bise's sentences in sans text-2, like the card's other lines
+   (designer m_59191); the new version's raw cause under its head, mono text-3 on one line, cut with
+   …, whole in its tip (designer m_59048) */
+.app-bise-why {
+  margin-top: var(--gap-tight);
+  font-size: 12px;
+  color: var(--c-text-2);
+  overflow-wrap: anywhere;
+}
 .app-bise-cause {
-  display: inline-block;
-  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  vertical-align: bottom;
+  font-family: var(--font-mono);
+  color: var(--c-text-3, var(--c-text-2));
 }
 
 /* the core's last stderr line, dim mono under the words */

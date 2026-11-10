@@ -156,7 +156,7 @@ export function useHubUpdateLine(): StatusPart | null {
 export function biseUpdateLine(
   u: BiseUpdate | null,
   done: string | null,
-): { tone: StatusPart['tone']; state: string; words: string; short: string; act: string | null; lines: readonly string[]; copy?: string } | null {
+): { tone: StatusPart['tone']; state: string; words: string; short: string; act: string | null; actCard?: string; lines: readonly string[]; copy?: string } | null {
   if (u === null || u.state === 'unknown') {
     if (done === null) return null;
     const words = `✓ ${settings.bise_updated({ version: done })}`;
@@ -186,8 +186,9 @@ export function biseUpdateLine(
         words: `▲ ${settings.bise_update_failed({ version })}`,
         short: "▲ couldn't update",
         act: settings.bise_update_again,
+        actCard: settings.bise_update_again_card,
         lines: [...(u.why ? [u.why] : []), settings.bise_update_unchanged({ running: u.running })],
-        // his report to send us (designer m_59048): the quiet act after the main one
+        // his report to send us (designer m_59048): the quiet act after the main one, card only
         copy: settings.bise_update_copy,
       };
   }
@@ -213,8 +214,8 @@ export function updateReport(u: BiseUpdate, macos: string): string {
   return [settings.bise_update_report_head({ from: u.running, to: u.version }), ...(u.why ? [u.why] : []), ...(log.length > 0 ? ['', ...log] : []), '', `macOS ${macos}`].join('\n');
 }
 
-/** How long the copy act says 'copied' (designer m_59048). */
-const COPIED_MS = 2000;
+/** How long the copy act says 'Copied' (designer m_59191). */
+const COPIED_MS = 1500;
 
 /** How long '✓ updated to …' stays (designer m_45087). */
 const DONE_MS = 4000;
@@ -327,14 +328,19 @@ export function useBiseUpdateLine(): StatusPart | null {
     ...(line.lines.length > 0
       ? {
           more:
-            cause !== null && cause.tail !== '' ? (
-              <div className="app-core-last" data-testid="app.bise.tip">
-                {cause.head}{' '}
-                <span className="app-bise-cause" data-testid="app.bise.cause" title={cause.tail}>
-                  {cause.tail}
-                </span>
-                {'\n'}
-                {line.lines.slice(1).join('\n')}
+            // a failure: bise's sentences in sans text-2, only the new version's raw tail mono
+            // text-3 on one line (designer m_59191)
+            line.state === 'failed' && cause !== null ? (
+              <div className="app-bise-why" data-testid="app.bise.tip">
+                <div>{cause.head}</div>
+                {cause.tail !== '' && (
+                  <div className="app-bise-cause" data-testid="app.bise.cause" title={cause.tail}>
+                    {cause.tail}
+                  </div>
+                )}
+                {line.lines.slice(1).map((l) => (
+                  <div key={l}>{l}</div>
+                ))}
               </div>
             ) : (
               <div className="app-core-last" data-testid="app.bise.tip">
@@ -347,7 +353,7 @@ export function useBiseUpdateLine(): StatusPart | null {
       ? {}
       : {
           acts: [
-            { id: 'update', text: line.act, onClick: go },
+            { id: 'update', text: line.act, ...(line.actCard === undefined ? {} : { cardText: line.actCard }), onClick: go },
             ...(line.copy === undefined ? [] : [{ id: 'copy', text: copied ? settings.bise_update_copied : line.copy, onClick: copy, quiet: true }]),
           ],
         }),

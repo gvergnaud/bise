@@ -81,7 +81,7 @@ function useTight(box: RefObject<HTMLDivElement | null>, short: string): boolean
   return tight;
 }
 
-function Pill({ part }: { part: StatusPart }) {
+export function Pill({ part }: { part: StatusPart }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   // the popover closes on a click outside it or esc (esc never closes the pill itself)
@@ -108,11 +108,14 @@ function Pill({ part }: { part: StatusPart }) {
   const acts = part.acts ?? [];
   const actions = (pop: boolean) => (
     <>
-      {acts.map((a) => (
-        <Act key={a.id} tone={err && a.quiet !== true ? 'err' : undefined} disabled={a.disabled} onClick={a.onClick} testId={pop ? `${id}.pop.${a.id}` : `${id}.${a.id}`}>
-          {a.text}
-        </Act>
-      ))}
+      {/* the pill keeps its one act; a quiet one shows only in the open popover (designer m_59191) */}
+      {acts
+        .filter((a) => pop || a.quiet !== true)
+        .map((a) => (
+          <Act key={a.id} tone={err && a.quiet !== true ? 'err' : undefined} disabled={a.disabled} onClick={a.onClick} testId={pop ? `${id}.pop.${a.id}` : `${id}.${a.id}`}>
+            {pop ? (a.cardText ?? a.text) : a.text}
+          </Act>
+        ))}
       {part.close !== undefined && (
         <IconButton label="close" size="row" onClick={part.close} testId={pop ? `${id}.pop.close` : `${id}.close`}>
           ✕

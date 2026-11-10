@@ -390,10 +390,15 @@
     "one": null,
     "text": "try again"
   },
+  "settings.bise_update_again_card": {
+    "args": [],
+    "one": null,
+    "text": "Try again"
+  },
   "settings.bise_update_copied": {
     "args": [],
     "one": null,
-    "text": "copied"
+    "text": "Copied"
   },
   "settings.bise_update_copy": {
     "args": [],
