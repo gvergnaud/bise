@@ -114,6 +114,18 @@ def desktop_check_quick_only():
     src = open(GATE).read()
     check("pnpm -s typecheck && pnpm -s views:check" in src,
           "gate.sh: quick's by-path desktop_check runs views:check after typecheck")
+    # a change that reaches both: desktop_check next to the Rust tests, not after them (main's
+    # 11-10 audit: a Rust + desktop quick was their sum, p50 347 s)
+    start = src.find('{ desktop_check >"$out/desktop.res" 2>&1; echo $? >"$out/desktop.rc"; } &')
+    tests = src.find('step "test$(echo "$pkgs"')
+    check(0 < start < tests and 'if [ -n "$dwhy" ] && [ -n "$pkgs" ]; then' in src
+          and 'wait "$desk_pid"; cat "$out/desktop.res"' in src,
+          "gate.sh: with Rust and desktop changes, desktop_check starts before the Rust tests, its result read after")
+    # and a red Rust step leaves none of it: on_exit lists the run's tree before it kills the jobs
+    # (killed first, the background job's pnpm and eslint were orphans no longer under $$)
+    d, j = src.find('doomed="$(gate_procs "$(gate_mark "$run")" $$ $wt_bins)"'), src.find("  kill $(jobs -p) 2>/dev/null")
+    check(0 < d < j and 'gate_kill "$doomed"' in src,
+          "gate.sh on_exit: the run's process tree listed before kill $(jobs -p), then killed")
     uses = [l.strip() for l in src.splitlines() if "check:quick" in l and not l.strip().startswith("#")]
     check(len(uses) == 1 and '[ "$mode" = quick ] && [ "${1:-}" != strict ] && echo check:quick || echo check' in uses[0],
           "gate.sh: check:quick only in a quick's non-strict desktop_check, `check` everywhere else: %r" % uses)

@@ -659,8 +659,12 @@ locked="" out=""
 on_exit() {
   local rc=$?
   trap - EXIT INT TERM HUP
+  # the tree first, then the kills: a background job killed first (desktop_check next to the
+  # Rust tests) left its pnpm and eslint orphaned, no longer under $$, and alive after a red
+  # Rust step (fast-loop's stop check, architect m_58369)
+  local doomed; doomed="$(gate_procs "$(gate_mark "$run")" $$ $wt_bins)"
   kill $(jobs -p) 2>/dev/null
-  gate_kill "$(gate_procs "$(gate_mark "$run")" $$ $wt_bins)"
+  gate_kill "$doomed"
   [ -n "$out" ] && rm -rf "$out"
   [ -n "$locked" ] && [ "$(cut -d' ' -f1 "$LOCK/owner" 2>/dev/null)" = $$ ] && rm -rf "$LOCK"
   # a red run keeps run_all's logs for a day, nothing else (the tests'
@@ -1133,6 +1137,16 @@ if [ -n "$pkgs" ]; then
   else echo 1 >"$out/clippy.rc"; fi; } &
 clippy_pid=$!
 fi
+# the desktop's checks next to the Rust tests when the change reaches both (they share
+# nothing: node in apps/desktop, cargo in rust/): one after the other, a Rust + desktop quick
+# was the sum, ~130 s of tests then ~230 s of desktop_check (main's 11-10 audit: 13 of 49 runs,
+# their p50 347 s). Its lines are printed where it ran before; a red Rust step's exit stops it
+# (on_exit kills the jobs)
+desk_pid=""
+if [ -n "$dwhy" ] && [ -n "$pkgs" ]; then
+  { desktop_check >"$out/desktop.res" 2>&1; echo $? >"$out/desktop.rc"; } &
+  desk_pid=$!
+fi
 if [ -n "$pkgs" ]; then
   args=""; for p in $pkgs; do args="$args -p $p"; done
   if [ -n "${sbcore_pid:-}" ]; then
@@ -1167,7 +1181,9 @@ fi
 # the office skills' scripts, through bise office run (skipped with words when bise or bend-jsrt is not built)
 [ "${office_skills:-0}" = 1 ] && step office_skills python3 tests/office_skills_check.py
 # then the desktop's own checks, when the change reaches it (tests/test_map.py desktop)
-if [ -n "$dwhy" ]; then desktop_check || exit 1; fi
+if [ -n "$desk_pid" ]; then
+  wait "$desk_pid"; cat "$out/desktop.res"; [ "$(cat "$out/desktop.rc" 2>/dev/null)" = 0 ] || exit 1
+elif [ -n "$dwhy" ]; then desktop_check || exit 1; fi
 if [ -n "$clippy_pid" ]; then
   wait "$clippy_pid"
   [ "$(cat "$out/clippy.rc")" = 0 ] || fail clippy "$out/clippy.log"
