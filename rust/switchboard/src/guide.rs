@@ -279,11 +279,15 @@ pub fn parse(reply: &str, ids: &[String]) -> Result<Guide, String> {
     Ok(Guide { overview: words(&v, "overview", 400), parts, rest })
 }
 
-/// The JSON object of a model's answer (text around it ignored).
+/// The JSON object of a model's answer (text around it ignored). Its
+/// control characters read as spaces: the wire turns a `\n` the model
+/// wrote inside a string into a raw newline (role::oneshot_reply), which
+/// JSON refuses, and every word is one line anyway.
 fn json_of(reply: &str) -> Result<Value, String> {
     let (a, b) = (reply.find('{'), reply.rfind('}'));
     let (Some(a), Some(b)) = (a, b) else { return Err("the answer holds no JSON".into()) };
-    serde_json::from_str(reply.get(a..=b).unwrap_or("")).map_err(|e| format!("the answer's JSON: {}", e))
+    let text: String = reply.get(a..=b).unwrap_or("").chars().map(|c| if c.is_control() { ' ' } else { c }).collect();
+    serde_json::from_str(&text).map_err(|e| format!("the answer's JSON: {}", e))
 }
 
 /// A word field of the answer: one line, clipped.

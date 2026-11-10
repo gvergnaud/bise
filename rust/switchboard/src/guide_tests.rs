@@ -172,6 +172,9 @@ fn an_answer_never_hides_a_hunk() {
 fn an_answer_with_no_json_or_no_part_fails() {
     let ids = vec!["abc".to_string()];
     assert!(parse("sorry, I can't", &ids).is_err());
+    // a newline the wire unescaped inside a string (GLM 5.3 Flash writes them): read as a space
+    let g = parse("{\"overview\": \"one\ntwo\", \"parts\": [{\"title\": \"t\", \"summary\": \"a\n\tb\", \"hunks\": [\"abc\"]}]}", &ids).unwrap();
+    assert_eq!((g.overview.as_str(), g.parts[0].summary.as_str()), ("one two", "a b"));
     assert!(parse(r#"{"overview": "x", "parts": [], "rest": ["abc"]}"#, &ids).is_err());
     assert!(parse(r#"{"overview": "x", "parts": [{"title": "t", "hunks": ["nope"]}]}"#, &ids).is_err());
 }
