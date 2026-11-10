@@ -21,3 +21,5 @@ fake_repl_flood.py | time.sleep(0.005) | the flooding fake's steer-file reader (
 send_latency_e2e.py | time.sleep(float(os.environ.get("SEND_WARM_S", "60"))) | SEND_BURN's warm-up: the 1-min load average catches up before he sends (the load is the input, never a state to wait for)
 send_latency_e2e.py | time.sleep(0.25) | his sends' pace: one every 250 ms while the agents work is the input under test
 hub_flood_e2e.py | time.sleep(STATE_WINDOW_S) | the window the state events are counted in: at most ~10 per second while the REPLs flood is the behavior under test
+switch_intruder_e2e.py | time.sleep(1.0) | the older core's pace between its home hub starts (one start, then it reads its connection again): the intruder's timing is the input under test
+switch_intruder_e2e.py | time.sleep(0.005) | the older core's home connector reacting at once to its lost hub: the race with the switcher is the behavior under test

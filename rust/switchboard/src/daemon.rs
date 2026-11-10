@@ -2044,58 +2044,6 @@ fn wait_previous_hub(paths: &Paths) {
     log_line(paths, &format!("waited {} ms for the previous hub (pid {}) to stop", t0.elapsed().as_millis(), pid));
 }
 
-/// How long a taken-over hub gets to stop (its stop asked, then a TERM)
-/// before its kill: the switcher's own wait for a hub it replaces.
-const TAKEOVER_STOP: Duration = Duration::from_secs(5);
-
-/// This hub is the running switch's and another bise (an older client's
-/// start, switch::claim) holds the workspace: this hub's pid goes in
-/// first, so the switcher's probation always sees a live hub and the
-/// intruder's exit leaves pid and socket alone (11.5 to 11.9 remove
-/// them on a stop that keeps the agents only when they are its own;
-/// checked on each tag, update-safety). Then the intruder stops, its
-/// agents kept for this hub to adopt; no answer: TERM, then KILL, each
-/// bounded. Under hub.bind.lock: a client's start meanwhile waits.
-/// TODO(switch-intruder): goes in v2026.12.15 with switch::claim.
-fn take_over(paths: &Paths, app_root: &Path, pid: u32, root: Option<&Path>) -> std::io::Result<()> {
-    let theirs = root.map_or_else(|| "an unknown root".to_string(), |r| r.display().to_string());
-    log_line(
-        paths,
-        &format!("switch: another bise (pid {pid}, {theirs}) took the workspace during the switch to {}: this hub takes it back, its agents kept", app_root.display()),
-    );
-    std::fs::write(paths.pid_file(), std::process::id().to_string())?;
-    let asked = crate::client::ask_stop(paths, true);
-    let t0 = std::time::Instant::now();
-    let gone = |within: Duration| {
-        let t = std::time::Instant::now();
-        while crate::procs::alive(pid) && t.elapsed() < within {
-            std::thread::sleep(Duration::from_millis(50));
-        }
-        !crate::procs::alive(pid)
-    };
-    let how = if gone(TAKEOVER_STOP) {
-        "stopped"
-    } else {
-        crate::procs::terminate(pid);
-        if gone(TAKEOVER_STOP) {
-            "terminated"
-        } else {
-            crate::procs::kill_now(pid);
-            if gone(Duration::from_secs(1)) {
-                "killed"
-            } else {
-                "still running (its kill went unanswered)"
-            }
-        }
-    };
-    let asked = match asked {
-        Ok(_) => String::new(),
-        Err(e) => format!(", its stop not taken: {e}"),
-    };
-    log_line(paths, &format!("switch: the other bise (pid {pid}) {how} after {} ms{asked}", t0.elapsed().as_millis()));
-    Ok(())
-}
-
 /// What a hub that won its workspace holds: its two sockets and the lease
 /// on its app root.
 struct Claimed {
@@ -2111,7 +2059,7 @@ struct Claimed {
 /// `<state>/hub.bind.lock`, so two hubs that start at once never both
 /// write `hub.root`: the second one finds the first one's socket.
 fn claim(paths: &Paths, app_root: &Path) -> std::io::Result<Option<Claimed>> {
-    use crate::switch::claim::{plan, read, Claim};
+    use crate::switch::claim::{plan, read, take_over, Claim};
     use std::os::fd::AsRawFd;
     let me = std::process::id();
     if plan(&read(paths, app_root, me)) == Claim::Yield && UnixStream::connect(paths.socket()).is_ok() {

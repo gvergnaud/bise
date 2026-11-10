@@ -21,6 +21,7 @@
 use crate::paths::Paths;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 /// What a starting hub knows of its workspace, each fact read, never
 /// guessed: None when it could not be read.
@@ -84,6 +85,57 @@ pub fn read(paths: &Paths, app_root: &Path, me: u32) -> Facts {
         Other { pid, root, root_is_mine }
     });
     Facts { switch_running: super::switch_running(paths), current_is_me, reloading, other }
+}
+
+/// How long a taken-over hub gets to stop (its stop asked, then a TERM)
+/// before its kill: the switcher's own wait for a hub it replaces.
+const TAKEOVER_STOP: Duration = Duration::from_secs(5);
+
+/// [`Claim::Take`], run by daemon.rs `claim` under hub.bind.lock (a
+/// client's start meanwhile waits): this hub's pid goes in first, so the
+/// switcher's probation always sees a live hub and the intruder's exit
+/// leaves pid and socket alone (11.5 to 11.9 remove them on a stop that
+/// keeps the agents only when they are its own; checked on each tag).
+/// Then the intruder stops, its agents kept for this hub to adopt; no
+/// answer: TERM, then KILL, each bounded; hub.log names it before and
+/// after. Never on the hub's loop: before it binds its socket.
+pub fn take_over(paths: &Paths, app_root: &Path, pid: u32, root: Option<&Path>) -> std::io::Result<()> {
+    let theirs = root.map_or_else(|| "an unknown root".to_string(), |r| r.display().to_string());
+    super::log(
+        paths,
+        &format!("another bise (pid {pid}, {theirs}) took the workspace during the switch to {}: this hub takes it back, its agents kept", app_root.display()),
+    );
+    std::fs::write(paths.pid_file(), std::process::id().to_string())?;
+    let asked = crate::client::ask_stop(paths, true);
+    let t0 = Instant::now();
+    let gone = |within: Duration| {
+        let t = Instant::now();
+        while crate::procs::alive(pid) && t.elapsed() < within {
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        !crate::procs::alive(pid)
+    };
+    let how = if gone(TAKEOVER_STOP) {
+        "stopped"
+    } else {
+        crate::procs::terminate(pid);
+        if gone(TAKEOVER_STOP) {
+            "terminated"
+        } else {
+            crate::procs::kill_now(pid);
+            if gone(Duration::from_secs(1)) {
+                "killed"
+            } else {
+                "still running (its kill went unanswered)"
+            }
+        }
+    };
+    let asked = match asked {
+        Ok(()) => String::new(),
+        Err(e) => format!(", its stop not taken: {e}"),
+    };
+    super::log(paths, &format!("the other bise (pid {pid}) {how} after {} ms{asked}", t0.elapsed().as_millis()));
+    Ok(())
 }
 
 /// `pid` is a hub process (`... sbd ...`), not a later process that got its pid.
