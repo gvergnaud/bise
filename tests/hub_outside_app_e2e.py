@@ -71,7 +71,12 @@ def turns(c, name):
 
 def hubs_in(versions):
     """The hubs that run from that versions dir (whatever their workspace)."""
-    return [c for _, c in procs() if " sbd --workspace " in c and c.startswith(versions)]
+    return [c for _, c in hub_pids(versions)]
+
+
+def hub_pids(versions):
+    """The hubs that run from that versions dir: (pid, command)."""
+    return [(p, c) for p, c in procs() if " sbd --workspace " in c and c.startswith(versions)]
 
 
 def zombies(parent):
@@ -128,12 +133,14 @@ def main():
         check(zombies(core.p.pid) == [], "no zombie under the core: %r" % zombies(core.p.pid))
         # his home hub killed under the core: reaped, and the core starts it again (fn talked to
         # nothing until the app restarted)
+        # the hub on the socket is whichever won it (the home's or E.ws's, see above): kill that one
         at = core.mark()
-        old = [p for p, c in procs() if " sbd --workspace " in c and c.endswith(E.ws)][0]
+        old = hub_pids(versions[0])[0][0]
         os.kill(old, 9)
         wait.until(lambda: all(p != old for p, _ in procs()), 20, "the killed hub reaped (never <defunct>)", poll=0.2)
         core.wait(lambda e: e.get("ev") == "hub" and e.get("up") is True, 90, "the home hub up again", since=at)
-        again = [(p, c) for p, c in procs() if " sbd --workspace " in c and c.endswith(E.ws)]
+        wait.until(lambda: len(hub_pids(versions[0])) == 1, 30, "one hub on " + versions[0] + " again")
+        again = hub_pids(versions[0])
         check(len(again) == 1 and again[0][0] != old, "one new home hub: %r" % again)
         check(zombies(core.p.pid) == [], "still no zombie under the core: %r" % zombies(core.p.pid))
         core.cmd(cmd="send", text="still there?")
