@@ -50,7 +50,7 @@ function shell(agentName = 'perf', files = 3, recent: readonly Entity[] = []) {
   act(() => {
     openLauncher();
   });
-  return { v, store, opened, ctx: { route: router.get(), home: HOME, agents: (p: string) => store.agents(p) } };
+  return { v, store, opened, ctx: { route: router.get(), home: HOME, agents: (p: string) => store.agents(p), places: (p: string) => store.places(p) } };
 }
 
 const ids = (v: ReturnType<typeof render>, prefix: string) => v.getAllByTestId(new RegExp(`^${prefix.replace(/[.]/g, '\\.')}`)).map((e) => e.getAttribute('data-testid') ?? '');
@@ -71,6 +71,27 @@ describe('New tab, the launcher (r2-launcher)', () => {
       doPanelKey('changes', ctx);
     });
     expect(v.queryByTestId(`app.panel.tab.diff:${ACME}/perf`)).toBeNull();
+  });
+  // page pr-guided V2: one home per change. Mutation: ⌥⌘D opening the diff entity again turns it red
+  it('⌥⌘D on an agent with an open PR opens that PR (its guided review), one without its diff', () => {
+    const { v, store, ctx } = shell('perf', 3);
+    const url = 'https://github.com/acme/web/pull/412';
+    const pr = { number: 412, url, branch: 'sb/perf', agents: ['perf'], state: 'open' as const, checks: 'pass' as const, review: 'none' as const, words: '', text: '' };
+    act(() => {
+      store.apply(ev('agents', { project: ACME, agents: [agent('perf', 3)], places: [{ id: 'wt:perf', branch: 'sb/perf', agents: ['perf'], pr }] }));
+    });
+    act(() => {
+      doPanelKey('changes', ctx);
+    });
+    expect(v.getByTestId(`app.panel.tab.${entityKey({ kind: 'pr', project: ACME, url })}`)).toBeTruthy();
+    expect(v.queryByTestId(`app.panel.tab.diff:${ACME}/perf`)).toBeNull();
+    act(() => {
+      store.apply(ev('agents', { project: ACME, agents: [agent('perf', 3)], places: [{ id: 'wt:perf', branch: 'sb/perf', agents: ['perf'] }] }));
+    });
+    act(() => {
+      doPanelKey('changes', ctx);
+    });
+    expect(v.getByTestId(`app.panel.tab.diff:${ACME}/perf`)).toBeTruthy();
   });
   it('Artifacts: the picker of the 10 newest in this tab, newest first; the field filters; esc clears, then back to Open', () => {
     const { v } = shell();

@@ -20,6 +20,7 @@ import { RouterContext, useRoute, useRouter, type Router } from '../router';
 import { emitAction } from '../menu';
 import { askEntityAction } from './actions';
 import { keepSheet } from '@/agents/sheet';
+import { openChange } from '@/review/openChange';
 import { menuOf, type Act, type MenuFacts } from './registry';
 import { runAct, type MenuFx } from './run';
 
@@ -127,6 +128,9 @@ function fxOf(store: Store, router: Router | null): MenuFx {
       router?.go({ screen: 'agents', project: e.project });
     },
     openTab,
+    openChange: (project, agent) => {
+      openChange(store, router, project, { agent });
+    },
     openWindow: (to) => bise?.openWindow?.(to),
     copy: (text) => void bise?.copy?.(text),
     showInFinder: (path) => void bise?.showInFinder?.(path),

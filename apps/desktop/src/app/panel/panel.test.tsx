@@ -81,12 +81,13 @@ describe('the tabbed panel', () => {
     expect(v.getByTestId('app.panel.launcher.terminal').textContent).toContain('⌃`');
     expect(v.getByTestId('app.panel.launcher.none')).toBeTruthy();
   });
-  it("New tab's Changes opens the agent in view's changes in its place", () => {
+  it("New tab's Changes opens the agent in view's change where it lives, in its place", () => {
     const v = shell();
     fireEvent.click(v.getByTestId('app.panel.toggle'));
     fireEvent.click(v.getByTestId('app.panel.launcher.changes'));
     expect(v.queryByTestId('app.panel.tab.new:1')).toBeNull();
-    expect(v.getByTestId(`app.panel.tab.diff:${ACME}/perf`).getAttribute('aria-selected')).toBe('true');
+    // the fixtures' perf has PR #412 open: its change lives there (page pr-guided V2, one home per change)
+    expect(v.getByTestId(`app.panel.tab.pr:${ACME}/https://github.com/acme/web/pull/412`).getAttribute('aria-selected')).toBe('true');
   });
   it('a PR’s tab says its row’s tag, the plain word before its row comes, never a number read from the link', () => {
     const v = shell();

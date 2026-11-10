@@ -7,7 +7,8 @@
 // Owner: nm-panel.
 import type { KeyLike } from '@/app/keys';
 import { projectOf, type Route } from '@/app/route';
-import type { Agent } from '@/proto';
+import type { Agent, Place } from '@/proto';
+import { changeDoor } from '@/review/openChange';
 import { closeActive, openArtifacts, openBrowser, openLauncher, openShell, openWhat, reopenClosed, stepTab } from './state';
 import { hasChanges, type OpenRow } from './launch';
 
@@ -70,6 +71,8 @@ export interface PanelCtx {
   readonly home: string | undefined;
   /** a project's agents (the store's rows): whether the one in view has changes */
   readonly agents: (project: string) => readonly Agent[];
+  /** a project's places (the store's rows): its open PR, where its change lives (page pr-guided V2) */
+  readonly places: (project: string) => readonly Place[];
 }
 
 /** The agent in view has changes to show: the launcher's Changes row and ⌥⌘D only then. Pure. */
@@ -109,8 +112,10 @@ export function doPanelKey(k: PanelKey | OpenRow, c: PanelCtx, instead?: string)
       openArtifacts(instead);
       return;
     case 'changes': {
+      // its change where it lives (page pr-guided V2): its open PR's guided review, else its diff;
+      // the centre is its thread already
       const a = changesInView(c);
-      if (a !== undefined) openWhat({ kind: 'thing', e: { kind: 'diff', project: a.project, agent: a.agent } }, instead);
+      if (a !== undefined) openWhat({ kind: 'thing', e: changeDoor(a.project, { agent: a.agent }, { agents: c.agents(a.project), places: c.places(a.project), worktrees: [] }).tab }, instead);
       return;
     }
     case 'browser':

@@ -63,7 +63,7 @@ export function Launcher({ tabId, shown, artifacts = false }: { tabId: string; s
   const [now] = useState(() => Date.now());
   const field = useRef<HTMLInputElement>(null);
   const bise = (window as Partial<Window>).bise;
-  const ctx: PanelCtx = { route, home, agents: (p) => store.agents(p) };
+  const ctx: PanelCtx = { route, home, agents: (p) => store.agents(p), places: (p) => store.places(p) };
   const opens = openRows({ changes: changesInView(ctx) !== undefined, office: (projectOf(route) ?? home) !== undefined });
   // Recent: the project in front's own (his m_46444), the panel's scope (scope.ts scopeOf)
   const recent = recentIn(allRecent, scopeOf(route, home, panelAt()));

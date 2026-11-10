@@ -641,7 +641,7 @@ function useWindowKeys(openPalette: () => void, openHelp: () => void, onFrame: (
       else if ('library' in act) goLibrary(act.library);
       else if ('newProject' in act) addProject(router);
       else if ('newAgent' in act) newAgent(act.newAgent);
-      else if ('panel' in act) doPanelKey(act.panel, { route: router.get(), home: store.projects().find((p) => p.home)?.project, agents: (p) => store.agents(p) });
+      else if ('panel' in act) doPanelKey(act.panel, { route: router.get(), home: store.projects().find((p) => p.home)?.project, agents: (p) => store.agents(p), places: (p) => store.places(p) });
       else emitAction(act.screen);
     };
     window.addEventListener('keydown', onKey, true);

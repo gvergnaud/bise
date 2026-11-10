@@ -110,9 +110,9 @@ describe("Open's rows (r2-launcher)", () => {
   });
   it('the agent in view with changes: a thread or its review, none on a page', () => {
     const agents = () => [agent('perf', 3), agent('docs')];
-    expect(changesInView({ route: { screen: 'thread', project: 'acme', agent: 'perf' }, home: undefined, agents })).toEqual({ project: 'acme', agent: 'perf' });
-    expect(changesInView({ route: { screen: 'thread', project: 'acme', agent: 'docs' }, home: undefined, agents })).toBeUndefined();
-    expect(changesInView({ route: { screen: 'inbox' }, home: undefined, agents })).toBeUndefined();
+    expect(changesInView({ route: { screen: 'thread', project: 'acme', agent: 'perf' }, home: undefined, agents, places: () => [] })).toEqual({ project: 'acme', agent: 'perf' });
+    expect(changesInView({ route: { screen: 'thread', project: 'acme', agent: 'docs' }, home: undefined, agents, places: () => [] })).toBeUndefined();
+    expect(changesInView({ route: { screen: 'inbox' }, home: undefined, agents, places: () => [] })).toBeUndefined();
   });
 });
 

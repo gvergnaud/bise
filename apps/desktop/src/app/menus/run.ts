@@ -22,6 +22,8 @@ export interface MenuFx {
   /** ask the screen showing `e` (an agent) for its sheet on its model (nm-pages-b, designer m_43315) */
   readonly changeModel: (e: Entity) => void;
   readonly openTab: (e: Entity) => void;
+  /** an agent's change where it lives (review/openChange: its open PR's guided review, else its diff) */
+  readonly openChange: (project: string, agent: string) => void;
   readonly openWindow: (to: WindowOpen) => void;
   readonly copy: (text: string) => void;
   readonly showInFinder: (path: string) => void;
@@ -122,7 +124,7 @@ export function runAct(act: Act, f: MenuFacts, fx: MenuFx): void {
       return;
     }
     case 'changes':
-      if (e.kind === 'agent') fx.openTab({ kind: 'diff', project: e.project, agent: e.agent });
+      if (e.kind === 'agent') fx.openChange(e.project, e.agent);
       return;
     case 'move-right':
       fx.openTab(e);

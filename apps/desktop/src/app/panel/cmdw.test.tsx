@@ -75,7 +75,7 @@ function windowCmdW(router: Router): void {
   expect(act_).toEqual({ panel: 'close-tab' });
   act(() => {
     noteWindowKey(Date.now());
-    if (act_ !== undefined && 'panel' in act_) doPanelKey(act_.panel, { route: router.get(), home: undefined, agents: () => [] });
+    if (act_ !== undefined && 'panel' in act_) doPanelKey(act_.panel, { route: router.get(), home: undefined, agents: () => [], places: () => [] });
   });
 }
 
