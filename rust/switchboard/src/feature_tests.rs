@@ -204,7 +204,7 @@ fn a_feature_with_merges_lands_as_a_merge_commit() {
     // the revert guard judges base -> tip: the merge commit undoes nothing
     // (started after `init`: main's `main edits a` and `main moves` are recent)
     let since = (now_s() + 30) * 1000;
-    crate::land_revert::guard(&ws, "refs/heads/main", &before, &tip, since, "feature:cu", &[]).unwrap();
+    crate::land_revert::guard(&ws, "refs/heads/main", &before, &tip, since, "feature:cu", &[], crate::land_revert::Route::Revert).unwrap();
     let _ = std::fs::remove_dir_all(ws.parent().unwrap());
 }
 

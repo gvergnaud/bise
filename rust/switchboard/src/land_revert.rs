@@ -17,8 +17,18 @@
 //! own new lines gone from tip and its own removed lines back
 //! ([`hunk_undone`]; a hunk the lander rewrote has neither; `git apply
 //! --check` was too strict: a bless that wrote its own line where C's
-//! was matched neither way). Any: refused in one line
-//! ([`refusal`]), nothing moved. The guard judges the land's own diff,
+//! was matched neither way). Undone is not enough to refuse: taking out
+//! what C added is an edit like any other (the known_reds 'send' line,
+//! land-undo-fix). The land is refused when it proves an old copy
+//! ([`Verdict`]): C's own removed lines back in their place
+//! ([`in_place`]: in a row, beside an old neighbor; lines a new edit
+//! writes again by chance are not, a1d599824), a binary C changed back
+//! as it was; or when it takes all of C's change out of every one of
+//! C's files, C having [`WHOLE`] files or more (a revert by its shape:
+//! the killed bless's case). Refused in one line ([`refusal`]), nothing
+//! moved, with the way through that fits the place ([`Route`]): `git
+//! revert` on a worktree's branch, the commit named in the land's
+//! message from the shared folder. The guard judges the land's own diff,
 //! base -> tip: a C already undone at base (by anyone, a land from
 //! before the guard: native-lead m_42665) is not this land's doing.
 //!
@@ -100,22 +110,121 @@ pub fn named(messages: &str, sha: &str) -> bool {
         .any(|w| w.len() >= 7 && sha.starts_with(&w.to_ascii_lowercase()))
 }
 
-/// A file's `git diff -U0` patch as its hunks: (C's removed lines, C's
-/// added lines).
-pub fn hunks(patch: &str) -> Vec<(Vec<String>, Vec<String>)> {
-    let mut out: Vec<(Vec<String>, Vec<String>)> = Vec::new();
+/// A hunk of C's `git diff -U0` patch on a file.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Hunk {
+    /// C^1's first removed line (1-based, the header's `-<start>`)
+    pub start: usize,
+    /// C's removed lines, C's added lines
+    pub minus: Vec<String>,
+    pub plus: Vec<String>,
+}
+
+/// A file's `git diff -U0` patch as its hunks.
+pub fn hunks(patch: &str) -> Vec<Hunk> {
+    let mut out: Vec<Hunk> = Vec::new();
     for line in patch.lines() {
-        if line.starts_with("@@") {
-            out.push((Vec::new(), Vec::new()));
-        } else if let Some((minus, plus)) = out.last_mut() {
+        if let Some(head) = line.strip_prefix("@@ -") {
+            let start = head.split([',', ' ']).next().and_then(|s| s.parse().ok()).unwrap_or(0);
+            out.push(Hunk { start, minus: Vec::new(), plus: Vec::new() });
+        } else if let Some(h) = out.last_mut() {
             if let Some(l) = line.strip_prefix('-') {
-                minus.push(l.to_string());
+                h.minus.push(l.to_string());
             } else if let Some(l) = line.strip_prefix('+') {
-                plus.push(l.to_string());
+                h.plus.push(l.to_string());
             }
         }
     }
     out
+}
+
+/// C^1's removed block of `h` is back in its place in `tip`: its lines
+/// in a row, with C^1's line before them or after them beside them (the
+/// file's edge counts as one). Lines that a new edit writes again by
+/// chance are seldom all in a row, beside their old neighbor too.
+pub fn in_place(h: &Hunk, old: &[String], tip: &[String]) -> bool {
+    let n = h.minus.len();
+    if n == 0 || tip.len() < n {
+        return false;
+    }
+    let at = h.start.saturating_sub(1);
+    let prev = at.checked_sub(1).and_then(|i| old.get(i));
+    let next = old.get(at + n);
+    (0..=tip.len() - n).filter(|&k| tip[k..k + n] == h.minus[..]).any(|k| {
+        let p = match prev {
+            None => k == 0,
+            Some(p) => k > 0 && &tip[k - 1] == p,
+        };
+        let q = match next {
+            None => k + n == tip.len(),
+            Some(q) => tip.get(k + n) == Some(q),
+        };
+        p || q
+    })
+}
+
+/// A file of C, as the land leaves it: is C's change undone (a hunk's
+/// own lines gone, see [`hunk_undone`]), all of it (every hunk with an
+/// own line), and is that the proof of an old copy: C's own removed
+/// lines back in place ([`restored`]). Removing what C added is an edit
+/// like any other: never a proof alone (a whole commit is: [`WHOLE`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Verdict {
+    pub undone: bool,
+    pub all: bool,
+    pub proof: bool,
+}
+
+/// A land that takes out all of C's change in every one of C's files,
+/// when C has this many files or more, undoes C by its shape (a revert)
+/// even with no old line back: refused unless its message names C.
+/// Why 2 (architect m_58470): a one-file C taken out (a known_reds line,
+/// a const) is an edit far more often than a stale copy; the stale
+/// vectors we know (a reset --soft, a killed bless writing after the
+/// rebase, a squash on an old tree) take out whole multi-file commits.
+pub const WHOLE: usize = 2;
+
+/// C is undone as a whole: it has [`WHOLE`] files or more, and the land
+/// takes all of its change out of each (`all`: the files it does).
+pub fn whole(files: &[String], all: &BTreeSet<String>) -> bool {
+    files.len() >= WHOLE && files.iter().all(|f| all.contains(f))
+}
+
+/// The file's texts: C^1's (`before`), C's (`after`), the land's base
+/// and tip. Judged base -> tip: what base already had is not the land's.
+pub struct Texts<'a> {
+    pub before: &'a [String],
+    pub after: &'a [String],
+    pub base: &'a [String],
+    pub tip: &'a [String],
+}
+
+/// C's hunk `h` restored in `at`: undone there, with an own removed
+/// line, and C^1's block back in place.
+pub fn restored(h: &Hunk, before: &BTreeSet<&str>, after: &BTreeSet<&str>, old: &[String], at: &[String]) -> bool {
+    let own_removed = h.minus.iter().any(|l| !l.trim().is_empty() && !after.contains(l.as_str()));
+    own_removed && hunk_undone(&h.minus, &h.plus, before, after, &set_of(at)) && in_place(h, old, at)
+}
+
+/// [`Verdict`] of C's `patch` on a file, with its [`Texts`].
+pub fn verdict(patch: &str, t: &Texts) -> Verdict {
+    let (before, after) = (set_of(t.before), set_of(t.after));
+    let (at, was) = (set_of(t.tip), set_of(t.base));
+    let hs = hunks(patch);
+    let gone = |h: &Hunk, s: &BTreeSet<&str>| hunk_undone(&h.minus, &h.plus, &before, &after, s);
+    let undone = hs.iter().any(|h| gone(h, &at) && !gone(h, &was));
+    // every hunk with an own line (the ones `gone` can judge) gone
+    let judged: Vec<&Hunk> = hs
+        .iter()
+        .filter(|h| {
+            let (a, r) = own(&h.minus, &h.plus, &before, &after);
+            !a.is_empty() || !r.is_empty()
+        })
+        .collect();
+    let every = |s: &BTreeSet<&str>| !judged.is_empty() && judged.iter().all(|h| gone(h, s));
+    let all = every(&at) && !every(&was);
+    let proof = hs.iter().any(|h| restored(h, &before, &after, t.before, t.tip) && !restored(h, &before, &after, t.before, t.base));
+    Verdict { undone, all, proof }
 }
 
 /// A hunk of C is undone at tip when C's own new lines are gone from it
@@ -125,12 +234,18 @@ pub fn hunks(patch: &str) -> Vec<(Vec<String>, Vec<String>)> {
 /// A hunk with no own line is never undone; a hunk the lander rewrote
 /// (C's lines gone, the old ones too) is not.
 pub fn hunk_undone(minus: &[String], plus: &[String], before: &BTreeSet<&str>, after: &BTreeSet<&str>, tip: &BTreeSet<&str>) -> bool {
-    let added: Vec<&str> = plus.iter().map(String::as_str).filter(|l| !l.trim().is_empty() && !before.contains(l)).collect();
-    let removed: Vec<&str> = minus.iter().map(String::as_str).filter(|l| !l.trim().is_empty() && !after.contains(l)).collect();
+    let (added, removed) = own(minus, plus, before, after);
     if added.is_empty() && removed.is_empty() {
         return false;
     }
     added.iter().all(|l| !tip.contains(l)) && removed.iter().all(|l| tip.contains(l))
+}
+
+/// A hunk's own lines (see [`hunk_undone`]): (added, removed).
+fn own<'a>(minus: &'a [String], plus: &'a [String], before: &BTreeSet<&str>, after: &BTreeSet<&str>) -> (Vec<&'a str>, Vec<&'a str>) {
+    let added = plus.iter().map(String::as_str).filter(|l| !l.trim().is_empty() && !before.contains(l)).collect();
+    let removed = minus.iter().map(String::as_str).filter(|l| !l.trim().is_empty() && !after.contains(l)).collect();
+    (added, removed)
 }
 
 /// What a land undoes of one commit: who landed it (None: no agent's land
@@ -155,9 +270,20 @@ pub fn before_records(by: Option<&str>, committed_ms: u64, records: &[LandRecord
 /// The files named in a refusal before "and N more".
 const NAMED: usize = 5;
 
+/// How the lander undoes a commit on purpose, as its place allows: a
+/// worktree's branch takes its commits (`git revert <sha>`); a land
+/// from the shared folder or `--here` commits the files with the land's
+/// message (it never reads a commit made by hand), so the message names
+/// the commit ([`named`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Route {
+    Revert,
+    Name,
+}
+
 /// The one-line refusal for a land onto `target` that undoes `undone`
-/// (None: nothing undone).
-pub fn refusal(target: &str, undone: &[Undone]) -> Option<String> {
+/// (None: nothing undone), with the `route` that fits the lander's place.
+pub fn refusal(target: &str, undone: &[Undone], route: Route) -> Option<String> {
     let first = undone.first()?;
     let sha7: String = first.sha.chars().take(7).collect();
     let mut files: Vec<&str> = Vec::new();
@@ -181,9 +307,13 @@ pub fn refusal(target: &str, undone: &[Undone]) -> Option<String> {
     if undone.len() > 1 {
         whose = format!("{} and {} other commits", whose, undone.len() - 1);
     }
+    let (redo, purpose) = match route {
+        Route::Revert => ("commit, sb land again".to_string(), format!("git revert {}", sha7)),
+        Route::Name => ("sb land again".to_string(), format!("name it in your sb land message ('reverts {}')", sha7)),
+    };
     let mut line = format!(
-        "your land puts back old copies of {}, undoing {} on {}: your commits carry an old tree (a reset or a squash on a stale copy?). nothing moved: take their version (git checkout {} -- <file>), redo your change on top, commit, sb land again; to undo theirs on purpose: git revert {}",
-        list, whose, target, target, sha7
+        "your land puts back old copies of {}, undoing {} on {}: your commits carry an old tree (a reset or a squash on a stale copy?). nothing moved: take their version (git checkout {} -- <file>), redo your change on top, {}; to undo theirs on purpose: {}",
+        list, whose, target, target, redo, purpose
     );
     let old: Vec<String> = undone.iter().filter(|u| u.before_records).map(|u| u.sha.chars().take(7).collect()).collect();
     if !old.is_empty() {
@@ -199,7 +329,8 @@ pub fn refusal(target: &str, undone: &[Undone]) -> Option<String> {
 /// The guard on `base..tip` in the checkout `dir`, a land of `lander`
 /// onto `target` (a ref): Err its [`refusal`] when the land undoes a
 /// commit landed by someone else since `since_ms`.
-pub fn guard(dir: &Path, target: &str, base: &str, tip: &str, since_ms: u64, lander: &str, records: &[LandRecord]) -> Result<(), String> {
+#[allow(clippy::too_many_arguments)]
+pub fn guard(dir: &Path, target: &str, base: &str, tip: &str, since_ms: u64, lander: &str, records: &[LandRecord], route: Route) -> Result<(), String> {
     let changed = changed_paths(&git(dir, &["diff", "-M", "--name-status", "-z", base, tip])?);
     if changed.is_empty() {
         return Ok(());
@@ -224,13 +355,13 @@ pub fn guard(dir: &Path, target: &str, base: &str, tip: &str, since_ms: u64, lan
         if both.is_empty() {
             continue;
         }
-        let files = undone_files(dir, &c, base, tip, &both)?;
-        if !files.is_empty() {
+        let j = judge(dir, &c, base, tip, &both)?;
+        if !j.files.is_empty() && (j.proof || whole(&c.files, &j.all)) {
             let before_records = before_records(by.as_deref(), c.committed_ms, records);
-            undone.push(Undone { sha: c.sha, subject: c.subject, by, before_records, files });
+            undone.push(Undone { sha: c.sha, subject: c.subject, by, before_records, files: j.files });
         }
     }
-    match refusal(short(target), &undone) {
+    match refusal(short(target), &undone, route) {
         Some(e) => Err(e),
         None => Ok(()),
     }
@@ -240,11 +371,21 @@ fn set_of(v: &[String]) -> BTreeSet<&str> {
     v.iter().map(String::as_str).collect()
 }
 
-/// Of `both` (C's files the land changes too), the ones whose C change
-/// the land undoes, base -> tip: tip's equal to C^1's and base's not
-/// (fast path), else a hunk of C's back at tip and not at base. A file
-/// already C^1's at base is not this land's doing.
-fn undone_files(dir: &Path, c: &Recent, base: &str, tip: &str, both: &[&str]) -> Result<Vec<String>, String> {
+/// What a land does to C's files, base -> tip: the files whose C change
+/// it undoes, the ones it takes all of C's change out of, and whether
+/// one is the proof of an old copy ([`Verdict`]).
+struct Judged {
+    files: Vec<String>,
+    all: BTreeSet<String>,
+    proof: bool,
+}
+
+/// [`Judged`] of `both` (C's files the land changes too). Tip's file
+/// equal to C^1's (the fast path) is all of C's change out; a proof when
+/// C took own lines out of it (they are back in place: the whole old
+/// file), or changed it as a binary. Else C's hunks against tip's lines,
+/// and base's. A file already C^1's at base is not this land's doing.
+fn judge(dir: &Path, c: &Recent, base: &str, tip: &str, both: &[&str]) -> Result<Judged, String> {
     let parent = c.parent.as_deref().unwrap_or(EMPTY_TREE);
     let differ = |rev: &str| -> Result<BTreeSet<String>, String> {
         let mut args = vec!["--literal-pathspecs", "diff", "--no-renames", "--name-only", "-z", parent, rev, "--"];
@@ -252,32 +393,36 @@ fn undone_files(dir: &Path, c: &Recent, base: &str, tip: &str, both: &[&str]) ->
         Ok(git(dir, &args)?.split('\0').filter(|f| !f.is_empty()).map(str::to_string).collect())
     };
     let (at_tip, at_base) = (differ(tip)?, differ(base)?);
-    // already C^1's at base: undone before this land, whoever did it
-    let live: Vec<&str> = both.iter().copied().filter(|f| at_base.contains(*f)).collect();
-    let mut out: Vec<String> = live.iter().filter(|f| !at_tip.contains(**f)).map(|f| f.to_string()).collect();
-    let rest: Vec<&str> = live.into_iter().filter(|f| at_tip.contains(*f)).collect();
-    if rest.is_empty() {
-        return Ok(out);
-    }
-    // the mixed case: tip's file is neither C^1's nor C's: C's hunks
-    // against tip's lines, and base's
     let show = |rev: &str, f: &str| git(dir, &["show", &format!("{}:{}", rev, f)]).unwrap_or_default();
-    for f in rest {
-        // a file C made that tip still has: changed since, not undone
-        // (deleting it is, the fast path's)
-        if c.parent.is_none() || git(dir, &["cat-file", "-e", &format!("{}:{}", parent, f)]).is_err() {
-            continue;
+    let lines = |s: &str| s.lines().map(|l| l.to_string()).collect::<Vec<_>>();
+    let mut j = Judged { files: Vec::new(), all: BTreeSet::new(), proof: false };
+    // already C^1's at base: undone before this land, whoever did it
+    for f in both.iter().copied().filter(|f| at_base.contains(*f)) {
+        let fast = !at_tip.contains(f);
+        // a file C made: deleting it takes C's change out (no old line
+        // back: no proof); changing it since is not undoing it
+        let made = c.parent.is_none() || git(dir, &["cat-file", "-e", &format!("{}:{}", parent, f)]).is_err();
+        let v = if made {
+            Verdict { undone: fast, all: fast, proof: false }
+        } else {
+            let patch = git(dir, &["--literal-pathspecs", "diff", "--no-renames", "--no-color", "--no-ext-diff", "-U0", parent, &c.sha, "--", f])?;
+            let (b, a, t, s) = (lines(&show(parent, f)), lines(&show(&c.sha, f)), lines(&show(tip, f)), lines(&show(base, f)));
+            let v = verdict(&patch, &Texts { before: &b, after: &a, base: &s, tip: &t });
+            if fast {
+                Verdict { undone: true, all: true, proof: v.proof || hunks(&patch).is_empty() }
+            } else {
+                v
+            }
+        };
+        if v.undone {
+            j.files.push(f.to_string());
         }
-        let patch = git(dir, &["--literal-pathspecs", "diff", "--no-renames", "--no-color", "--no-ext-diff", "-U0", parent, &c.sha, "--", f])?;
-        let (b, a, t, s) = (show(parent, f), show(&c.sha, f), show(tip, f), show(base, f));
-        let lines = |s: &str| s.lines().map(|l| l.to_string()).collect::<Vec<_>>();
-        let (b, a, t, s) = (lines(&b), lines(&a), lines(&t), lines(&s));
-        let (before, after, at, was) = (set_of(&b), set_of(&a), set_of(&t), set_of(&s));
-        if hunks(&patch).iter().any(|(minus, plus)| hunk_undone(minus, plus, &before, &after, &at) && !hunk_undone(minus, plus, &before, &after, &was)) {
-            out.push(f.to_string());
+        if v.all {
+            j.all.insert(f.to_string());
         }
+        j.proof |= v.proof;
     }
-    Ok(out)
+    Ok(j)
 }
 
 #[cfg(test)]
@@ -324,7 +469,8 @@ mod tests {
     fn a_patch_reads_as_its_hunks_removed_and_added_lines() {
         let p = "diff --git a/f b/f\nindex 1..2 100644\n--- a/f\n+++ b/f\n@@ -1 +1 @@\n-a\n+A\n@@ -9,0 +10 @@\n+z\n";
         let v = |xs: &[&str]| xs.iter().map(|s| s.to_string()).collect::<Vec<_>>();
-        assert_eq!(hunks(p), vec![(v(&["a"]), v(&["A"])), (v(&[]), v(&["z"]))]);
+        let h = |start: usize, minus: &[&str], plus: &[&str]| Hunk { start, minus: v(minus), plus: v(plus) };
+        assert_eq!(hunks(p), vec![h(1, &["a"], &["A"]), h(9, &[], &["z"])]);
         assert!(hunks("Binary files a/x and b/x differ\n").is_empty(), "no hunk: never undone by lines");
     }
 
@@ -350,6 +496,28 @@ mod tests {
         assert!(!hunk_undone(&v(&[]), &v(&["}", ""]), &before, &after, &set(&["1"])));
     }
 
+    /// a1d599824's false refusal: C's old line written again by a new
+    /// edit, far from its old neighbors, is no old copy; back between
+    /// them (or beside one, at the file's edge) it is.
+    #[test]
+    fn an_old_block_is_back_only_in_its_place() {
+        let v = |xs: &[&str]| xs.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let old = v(&["1", "2", "3", "4"]);
+        let h = Hunk { start: 2, minus: v(&["2", "3"]), plus: v(&["two"]) };
+        assert!(in_place(&h, &old, &v(&["1", "2", "3", "4"])));
+        assert!(in_place(&h, &old, &v(&["0", "1", "2", "3", "x"])), "one neighbor is enough");
+        assert!(!in_place(&h, &old, &v(&["x", "2", "3", "y"])), "neither neighbor");
+        assert!(!in_place(&h, &old, &v(&["1", "2", "x", "3", "4"])), "not in a row");
+        let first = Hunk { start: 1, minus: v(&["1"]), plus: v(&[]) };
+        assert!(in_place(&first, &old, &v(&["1", "zz"])), "the file's start is its neighbor");
+        assert!(!in_place(&Hunk { start: 3, minus: v(&[]), plus: v(&["z"]) }, &old, &old), "nothing removed: nothing back");
+        // the whole-commit rule
+        let all = |xs: &[&str]| xs.iter().map(|s| s.to_string()).collect::<BTreeSet<_>>();
+        assert!(whole(&v(&["f", "g"]), &all(&["f", "g"])));
+        assert!(!whole(&v(&["f", "g"]), &all(&["f"])), "one file of two: an edit");
+        assert!(!whole(&v(&["known"]), &all(&["known"])), "a one-file commit: an edit");
+    }
+
     #[test]
     fn the_refusal_names_the_files_the_agent_and_what_to_do() {
         let u = |sha: &str, by: Option<&str>, files: &[&str]| Undone {
@@ -359,12 +527,19 @@ mod tests {
             before_records: false,
             files: files.iter().map(|s| s.to_string()).collect(),
         };
-        assert_eq!(refusal("feat", &[]), None);
+        assert_eq!(refusal("feat", &[], Route::Revert), None);
         assert_eq!(
-            refusal("feat", &[u("1a2b3c4d5e", Some("y"), &["b", "p/new"])]).unwrap(),
+            refusal("feat", &[u("1a2b3c4d5e", Some("y"), &["b", "p/new"])], Route::Revert).unwrap(),
             "your land puts back old copies of b, p/new, undoing @y's 1a2b3c4 \"y: b and p\" on feat: your commits carry an old tree (a reset or a squash on a stale copy?). nothing moved: take their version (git checkout feat -- <file>), redo your change on top, commit, sb land again; to undo theirs on purpose: git revert 1a2b3c4"
         );
-        let e = refusal("main", &[u("1a2b3c4d5e", None, &["a", "b", "c", "d"]), u("9f9f9f9f", Some("z"), &["d", "e", "f"])]).unwrap();
+        // the shared folder's land never reads a commit made by hand: its
+        // way through is the land's own message
+        assert_eq!(
+            refusal("main", &[u("1a2b3c4d5e", Some("y"), &["b"])], Route::Name).unwrap(),
+            "your land puts back old copies of b, undoing @y's 1a2b3c4 \"y: b and p\" on main: your commits carry an old tree (a reset or a squash on a stale copy?). nothing moved: take their version (git checkout main -- <file>), redo your change on top, sb land again; to undo theirs on purpose: name it in your sb land message ('reverts 1a2b3c4')"
+        );
+        assert!(named("chore: drop the line (reverts 1a2b3c4)", "1a2b3c4d5e"), "the words it offers pass");
+        let e = refusal("main", &[u("1a2b3c4d5e", None, &["a", "b", "c", "d"]), u("9f9f9f9f", Some("z"), &["d", "e", "f"])], Route::Revert).unwrap();
         assert!(e.starts_with("your land puts back old copies of a, b, c, d, e and 1 more, undoing a 1a2b3c4 \"y: b and p\" and 1 other commits on main"), "{}", e);
         assert!(!e.contains("land records"), "{}", e);
     }
@@ -389,7 +564,7 @@ mod tests {
         assert!(!before_records(Some("y"), 4_000, &records), "a record says whose");
         assert!(before_records(None, 6_000, &[]), "no record at all yet");
         let u = |sha: &str, old: bool| Undone { sha: sha.into(), subject: "s".into(), by: None, before_records: old, files: vec!["f".into()] };
-        let e = refusal("feat", &[u("723e639d5a", true), u("9f9f9f9f", false)]).unwrap();
+        let e = refusal("feat", &[u("723e639d5a", true), u("9f9f9f9f", false)], Route::Revert).unwrap();
         assert!(
             e.ends_with("git revert 723e639. 723e639 landed before bise kept land records: if you mean to undo it (your own earlier land, or a planned removal), name it in your commit message ('undoes 723e639') and land again"),
             "{}",

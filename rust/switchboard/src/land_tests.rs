@@ -285,7 +285,9 @@ fn a_file_both_edited_is_refused_only_when_the_others_lines_are_back() {
 /// native-lead's second case (5e44e9d26): a killed bless kept writing in
 /// x's worktree after its rebase: it deleted y's fresh generated file
 /// and rewrote the shared one without y's line; x's plain land (every
-/// change of a worktree it has alone) took it. Refused, naming both.
+/// change of a worktree it has alone) took it. Refused, naming both: no
+/// old line of y's is back (y only added), but all of y's 2-file commit
+/// is out (`land_revert::WHOLE`).
 #[test]
 fn a_dirty_worktree_that_drops_anothers_fresh_files_is_refused() {
     let ws = repo("revert-dirty");
@@ -321,5 +323,100 @@ fn a_change_already_undone_on_the_target_is_not_the_landers() {
     sh(&wx, "git rebase -q feat && sed -i.bak 's/^25$/twenty-five/' f && rm f.bak && git commit -qam 'x: 25'");
     land(&jx).unwrap();
     assert_eq!(git(&ws, &["show", "feat:f"]).unwrap().lines().filter(|l| l.contains('t')).collect::<Vec<_>>(), ["twenty-five"]);
+    let _ = std::fs::remove_dir_all(ws.parent().unwrap());
+}
+
+/// y lands `script` from its worktree onto main; x, in the shared folder
+/// since before it, gets main's files. The (repo, x's job) of a
+/// shared-folder land.
+fn shared_after(tag: &str, setup: &str, script: &str) -> (PathBuf, Job) {
+    let ws = repo(tag);
+    if !setup.is_empty() {
+        sh(&ws, &format!("{} && git add . && git commit -qm setup", setup));
+    }
+    let since = crate::util::now_ms() - 60_000;
+    let wy = ws.parent().unwrap().join("wt-y");
+    sh(&ws, &format!("git worktree add -q -b sb/y {} main", wt_path(&wy)));
+    let mut jy = job("y", &wy.canonicalize().unwrap(), &ws, &[], &[]);
+    (jy.place, jy.here) = ("wt:y".into(), false);
+    sh(&jy.dir, &format!("{} && git add -A && git commit -qm 'y: theirs'", script));
+    land(&jy).unwrap();
+    let mut jx = job("x", &ws, &ws, &[], &[]);
+    jx.since_ms = since;
+    (ws, jx)
+}
+
+fn wt_path(p: &Path) -> String {
+    p.display().to_string()
+}
+
+/// The known_reds 'send' line (70bf3c190, then fast-loop's f669dd292):
+/// y adds a line; x, later, removes it from the shared folder. Its file
+/// is y's old copy line for line, yet nothing old is back: an edit. It
+/// lands.
+#[test]
+fn removing_a_line_another_agent_added_lands() {
+    let (ws, mut jx) = shared_after("undo-line", "printf 'red\\nflake\\n' > known", "echo send >> known");
+    sh(&ws, "printf 'red\\nflake\\n' > known");
+    jx.files = vec!["known".into()];
+    run(&jx, &Queue::default(), &mut || {}).unwrap();
+    assert_eq!(git(&ws, &["show", "main:known"]).unwrap(), "red\nflake");
+    let _ = std::fs::remove_dir_all(ws.parent().unwrap());
+}
+
+/// a1d599824: x rewrites the lines y wrote; one of the lines y had
+/// replaced comes back, by chance, elsewhere in x's new code. Not in its
+/// place: an edit. It lands.
+#[test]
+fn an_old_line_written_again_out_of_its_place_lands() {
+    let (ws, mut jx) = shared_after("undo-coincidence", "seq 1 10 > f", "sed -i.bak 's/^5$/let y = 5;/' f && rm f.bak");
+    // y's line gone, its old `5` written again at the end, far from 4 and 6
+    sh(&ws, "seq 1 10 | sed 's/^5$/let x = 5;/' > f && echo 5 >> f");
+    jx.files = vec!["f".into()];
+    run(&jx, &Queue::default(), &mut || {}).unwrap();
+    assert!(git(&ws, &["show", "main:f"]).unwrap().contains("let x = 5;"));
+    let _ = std::fs::remove_dir_all(ws.parent().unwrap());
+}
+
+/// An old copy from the shared folder (y's replaced line back in its
+/// place) is refused with the shared folder's way through: name the
+/// commit in the land's message (a `git revert` there is a commit sb
+/// land never reads). Named, it lands.
+#[test]
+fn a_shared_folder_land_undoes_on_purpose_by_naming_the_commit() {
+    let (ws, mut jx) = shared_after("undo-named", "seq 1 10 > f", "sed -i.bak 's/^5$/five/' f && rm f.bak");
+    let y = git(&ws, &["rev-parse", "--short=7", "main"]).unwrap();
+    sh(&ws, "seq 1 10 > f");
+    jx.files = vec!["f".into()];
+    let e = run(&jx, &Queue::default(), &mut || {}).unwrap_err();
+    assert!(e.starts_with("your land puts back old copies of f, undoing @y's "), "{}", e);
+    assert!(e.ends_with(&format!("to undo theirs on purpose: name it in your sb land message ('reverts {}')", y)), "{}", e);
+    jx.message = format!("f: 5 again (reverts {})", y);
+    run(&jx, &Queue::default(), &mut || {}).unwrap();
+    assert_eq!(git(&ws, &["show", "main:f"]).unwrap(), (1..=10).map(|i| i.to_string()).collect::<Vec<_>>().join("\n"));
+    let _ = std::fs::remove_dir_all(ws.parent().unwrap());
+}
+
+/// A 2-file commit of y's: x taking y's line out of one file is an
+/// edit; taking all of y's change out of both is a revert by its shape
+/// ([`crate::land_revert::WHOLE`]): refused unless named.
+#[test]
+fn only_a_whole_multi_file_commit_taken_out_is_refused() {
+    let (ws, mut jx) = shared_after("undo-whole", "seq 1 5 > f && seq 1 5 > g", "echo y >> f && echo y >> g");
+    sh(&ws, "seq 1 5 > f");
+    jx.files = vec!["f".into()];
+    run(&jx, &Queue::default(), &mut || {}).unwrap();
+    // the other file's line too, in a later land: f is already y's old
+    // copy at its base, so g alone is not all of y's commit
+    sh(&ws, "seq 1 5 > g");
+    jx.files = vec!["g".into()];
+    run(&jx, &Queue::default(), &mut || {}).unwrap();
+    let _ = std::fs::remove_dir_all(ws.parent().unwrap());
+    // both at once: refused
+    let (ws, mut jx) = shared_after("undo-whole2", "seq 1 5 > f && seq 1 5 > g", "echo y >> f && echo y >> g");
+    sh(&ws, "seq 1 5 > f && seq 1 5 > g");
+    jx.files = vec!["f".into(), "g".into()];
+    let e = run(&jx, &Queue::default(), &mut || {}).unwrap_err();
+    assert!(e.starts_with("your land puts back old copies of f, g, undoing @y's "), "{}", e);
     let _ = std::fs::remove_dir_all(ws.parent().unwrap());
 }

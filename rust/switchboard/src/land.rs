@@ -427,10 +427,14 @@ pub fn run_onto(job: &Job, queue: &Queue, joined: &mut dyn FnMut(), onto_now: &m
     Ok(Outcome { target: short(&target).to_string(), sha, commits: 1, pushed, push_error, left_out, base, tip: new })
 }
 
-/// [`crate::land_revert::guard`] for `job`'s land onto `target`.
+/// [`crate::land_revert::guard`] for `job`'s land onto `target`: a
+/// worktree's branch undoes on purpose by `git revert`, a land of the
+/// shared folder's files by naming the commit in its message.
 fn revert_guard(job: &Job, target: &str, base: &str, tip: &str) -> Result<(), String> {
+    use crate::land_revert::Route;
     let records = crate::land_record::read(&job.lands);
-    crate::land_revert::guard(&job.dir, target, base, tip, job.since_ms, &job.agent, &records)
+    let route = if job.worktree && !job.here { Route::Revert } else { Route::Name };
+    crate::land_revert::guard(&job.dir, target, base, tip, job.since_ms, &job.agent, &records, route)
 }
 
 /// Move `main` (a ref) from `base` to `tip`, a fast-forward: in the
