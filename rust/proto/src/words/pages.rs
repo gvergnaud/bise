@@ -144,8 +144,6 @@ crate::words! { pages:
     // ---- an agent's change, a commit (route review, commit): its own head, no banner
     /// the review's action: merges through the agent's merge card
     review_merge = "Merge into main";
-    /// the review's action: back to the agent's thread
-    review_thread = "Thread";
     /// a commit's head title
     review_commit(sha) = "commit {sha}";
     /// nothing differs from main

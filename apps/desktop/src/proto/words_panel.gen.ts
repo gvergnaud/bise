@@ -374,8 +374,6 @@ export const panel = {
   tip_not_opened_from: (a: { what: string | number; who: string | number }): string => String(a.what) + ", from " + String(a.who),
   /** the scheduled row's count */
   tip_scheduled: (a: { n: number }): string => a.n === 1 ? String(a.n) + " scheduled task, in all your projects" : String(a.n) + " scheduled tasks, in all your projects",
-  /** the crumb of an agent's changes */
-  crumb_changes: "changes",
   /** the crumb of an agent's /debug (its history, its requests) */
   crumb_debug: "debug",
   /** the crumb of settings */

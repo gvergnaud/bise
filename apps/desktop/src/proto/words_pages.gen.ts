@@ -124,8 +124,6 @@ export const pages = {
   skill_no_file: "this skill's file isn't known yet: update bise's hubs.",
   /** the review's action: merges through the agent's merge card */
   review_merge: "Merge into main",
-  /** the review's action: back to the agent's thread */
-  review_thread: "Thread",
   /** a commit's head title */
   review_commit: (a: { sha: string | number }): string => "commit " + String(a.sha),
   /** nothing differs from main */

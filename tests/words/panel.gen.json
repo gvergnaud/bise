@@ -199,11 +199,6 @@
     "one": null,
     "text": "{n} working"
   },
-  "panel.crumb_changes": {
-    "args": [],
-    "one": null,
-    "text": "changes"
-  },
   "panel.crumb_debug": {
     "args": [],
     "one": null,

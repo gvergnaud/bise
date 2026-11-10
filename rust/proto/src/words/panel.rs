@@ -392,8 +392,6 @@ crate::words! { panel:
     tip_scheduled(n) = one "{n} scheduled task, in all your projects" | "{n} scheduled tasks, in all your projects";
 
     // ---- the desktop's title bar
-    /// the crumb of an agent's changes
-    crumb_changes = "changes";
     /// the crumb of an agent's /debug (its history, its requests)
     crumb_debug = "debug";
     /// the crumb of settings

@@ -388,11 +388,6 @@
     "one": null,
     "text": "Try again"
   },
-  "pages.review_thread": {
-    "args": [],
-    "one": null,
-    "text": "Thread"
-  },
   "pages.review_viewed": {
     "args": [],
     "one": null,
