@@ -38,10 +38,22 @@ gate seed had no tag: on 2026-11-08, 11 of 12 task targets were never seen). The
 include the tip check's tree (~/.bise/run/tip-check) and .land-check's (a dot project).
 The trim (disk-hygiene, architect m_55867), before any deletion: a target whose green gate
 wrote <target>/.idle-since and that is idle --min-idle-min since is measured once: its own
-bytes are the files newer than its .seeded (gate.sh's mark of a seed clone; without it, its
-incremental dirs only). Over HEAVY_TRIM_GB (4): its incremental dirs go when that brings it
-under, else it is replaced by a fresh clone of the seed (its worktree's `gate.sh seed-into`),
-under its cargo locks; a reclaim.log line `trim-incremental|trim-reclone`. While the disk is
+bytes are the files newer than its .seeded (gate.sh's mark of a seed clone; without it, all
+its files: it shares nothing with the seed). Over HEAVY_TRIM_GB (4): its incremental dirs go
+when that brings it under, else it is replaced by a fresh clone of the seed: its worktree's
+`gate.sh seed-into` builds the clone beside it, then, still not busy, under its cargo locks,
+the old one is swapped out and deleted; a failed clone leaves it as it was. A reclaim.log
+line `trim-incremental|trim-reclone` (`...-failed`, `...-skipped-busy`).
+The own-cap (--own <cwd>, fast-loop, architect m_59130; main m_59126: three active task
+targets reached 36+8+6 GB between trims, never idle 30 min nor green-marked, and every gate
+waited hours for disk): heavy-run runs it at each job's admission, before the job waits or
+builds. The targets of the job's agent dir, not busy, measured at most once per
+HEAVY_OWN_GAP_MIN (10) each (<target>.own-checked, written after the measure), over
+HEAVY_OWN_CAP_GB (10) of their own: the same trim, logged `trim-own-<act>`. One measure at
+a time per target (<target>.own-lock, a locked one is skipped); every error is a line, never
+a failed job. Each measure: a line in ~/.bise/run/own-checks.log
+<epoch> <target> <own GB> <seconds> <action or ->.
+While the disk is
 under --want, the idle targets' incremental dirs go first (`low-incremental`), whole targets
 after. Once an hour each agent tmp's size goes to ~/.bise/run/tmp-sizes.log, and a tmp over
 HEAVY_TMP_CAP_GB (2) is printed once (~/.bise/run/tmp-warned): measured a week before more.
@@ -115,6 +127,12 @@ def trim_candidates(targets, now, min_idle_min):
             if since is not None and not busy and now - used >= min_idle_min * 60]
 
 
+def own_due(busy, checked_at, now, gap_min):
+    """Whether the own-cap measures a target now: not busy, and not measured
+    in the last gap_min minutes (checked_at: its stamp's mtime, None: never)."""
+    return not busy and (checked_at is None or now - checked_at >= gap_min * 60)
+
+
 def tmp_over(sizes_gb, cap_gb, warned):
     """The agent tmps over cap_gb not warned yet. sizes_gb: {path: GB}."""
     return sorted(p for p, gb in sizes_gb.items() if gb > cap_gb and p not in warned)
@@ -155,6 +173,38 @@ def _self_test():
         with open(os.path.join(t, "new"), "wb") as fh:
             fh.write(b"y" * 8192)
         assert 8192 <= own_bytes(t, now + 1) < 16384 and own_bytes(t, None) >= 16384
+        # a target with no .seeded shares nothing with the seed: all of it is its own, deps too
+        u = os.path.join(d, "u", "target")
+        for sub in ("debug/deps", "debug/incremental"):
+            os.makedirs(os.path.join(u, sub))
+            with open(os.path.join(u, sub, "f"), "wb") as fh:
+                fh.write(b"z" * 8192)
+        open(os.path.join(u, "debug", ".cargo-lock"), "w").close()  # a profile dir: cargo's lock
+        own, inc = measure(u)
+        assert own * GB >= 16384 and 8192 <= inc * GB < 16384, (own, inc)
+        # a failed reclone leaves the target byte for byte as it was, with no sibling left
+        before = {p: open(p, "rb").read() for p in _all_files(u)}
+        log = os.path.join(d, "log")
+        r = trim_one(u, 0, log, seed=lambda wt, p: False, wt=d)
+        assert r is None and {p: open(p, "rb").read() for p in _all_files(u)} == before
+        assert sorted(os.listdir(os.path.dirname(u))) == ["target"], os.listdir(os.path.dirname(u))
+        assert open(log).read().split("\t")[-1].strip() == "trim-reclone-failed"
+        # busy when the clone is ready (something built there meanwhile): skipped, nothing moved
+        def seeded_copy(wt, p):
+            os.makedirs(p)
+            return True
+        r = trim_one(u, 0, log, seed=seeded_copy, wt=d, is_busy=lambda: True)
+        assert r is None and {p: open(p, "rb").read() for p in _all_files(u)} == before
+        assert sorted(os.listdir(os.path.dirname(u))) == ["target"]
+        assert open(log).read().splitlines()[-1].split("\t")[-1] == "trim-reclone-skipped-busy"
+        # not busy: the clone is swapped in, the old one gone
+        r = trim_one(u, 0, log, seed=seeded_copy, wt=d, is_busy=lambda: False, tag="trim-own")
+        assert r is not None and r[0] == "reclone" and _all_files(u) == [], r
+        assert sorted(os.listdir(os.path.dirname(u))) == ["target"]
+        assert open(log).read().splitlines()[-1].split("\t")[-1] == "trim-own-reclone"
+    assert own_due(False, None, now, 10), "never measured: due"
+    assert not own_due(True, None, now, 10), "busy: skipped"
+    assert not own_due(False, now - 9 * 60, now, 10) and own_due(False, now - 10 * 60, now, 10), "the gap"
     assert trim_action(3.9, 3, 4) is None
     assert trim_action(9, 6, 4) == "incremental", "dropping incremental/ brings it to 3 GB"
     assert trim_action(9, 2, 4) == "reclone"
@@ -399,58 +449,94 @@ def seed_into_from(t):
     return None
 
 
-def trim_one(t, trim_gb, log):
-    """Trim t (green-marked, idle): its own bytes measured, then nothing, its
-    incremental dirs dropped, or the whole target replaced by a fresh clone
-    of the seed (gate.sh seed-into), under its cargo locks. Without .seeded
-    (a target from before seed_mark), only incremental/ counts as its own.
-    Returns (action, GB freed) or None (busy, or under trim_gb)."""
+def measure(t):
+    """t's own GB and the part of them in incremental/: the files newer than
+    its .seeded; without one, all of them (it shares nothing with a seed)."""
     seeded = mtime(os.path.join(t, ".seeded"))
-    incs = incrementals(t)
-    inc = sum(own_bytes(i, seeded) for i in incs) / GB
-    own = own_bytes(t, seeded) / GB if seeded is not None else inc
+    return own_bytes(t, seeded) / GB, sum(own_bytes(i, seeded) for i in incrementals(t)) / GB
+
+
+def _all_files(t):
+    return sorted(os.path.join(dp, f) for dp, _, fs in os.walk(t) for f in fs)
+
+
+def seed_into(wt, path):
+    """`wt`'s gate.sh seed-into `path` (absent): a clone of the seed there; whether it worked."""
+    env = dict(os.environ, PATH=os.path.expanduser("~/.cargo/bin") + os.pathsep + os.environ.get("PATH", ""))
+    try:
+        return subprocess.run(["/bin/bash", os.path.join(wt, "tests", "gate.sh"), "seed-into", path], cwd=wt, env=env,
+                              capture_output=True, timeout=900).returncode == 0 and os.path.isdir(path)
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def _log(log, t, gb, reason):
+    with open(log, "a") as fh:
+        fh.write("%d\t%s\t%d\t%.1f\t%s%s" % (time.time(), t, 0, gb, reason, chr(10)))
+
+
+def trim_one(t, trim_gb, log, measured=None, tag="trim", seed=seed_into, wt=None, is_busy=None):
+    """Trim t: its own bytes (measured: (own GB, incremental GB), else measured
+    here), then nothing, its incremental dirs dropped, or the whole target
+    replaced by a fresh clone of the seed. The clone is built beside t
+    (<t>.reclone-<pid>, gate.sh seed-into); then, t still not busy
+    (is_busy(), checked again: anything may have started there meanwhile),
+    under its cargo locks, t is swapped out for it and deleted. A failed
+    clone, or t busy by then: the clone goes, t stays as it was. Returns
+    (action, GB freed) or None (busy, under trim_gb, or failed)."""
+    own, inc = measured if measured is not None else measure(t)
     try:
         os.remove(os.path.join(t, ".idle-since"))  # measured once per green gate
     except OSError:
         pass
     act = trim_action(own, inc, trim_gb)
-    wt = seed_into_from(t) if act == "reclone" else None
+    if act == "reclone" and wt is None:
+        wt = seed_into_from(t)
     if act == "reclone" and wt is None:
         act = "incremental"  # no seed to clone from here: the incremental part only
     if act is None:
         return None
+    before = free_kb()
+    fresh = None
+    if act == "reclone":
+        fresh = "%s.reclone-%d" % (t, os.getpid())
+        shutil.rmtree(fresh, ignore_errors=True)
+        if not seed(wt, fresh):
+            shutil.rmtree(fresh, ignore_errors=True)
+            _log(log, t, 0, "%s-reclone-failed" % tag)
+            return None
+    if (is_busy or (lambda: busy(t, running_exes())))():
+        if fresh:
+            shutil.rmtree(fresh, ignore_errors=True)
+        _log(log, t, 0, "%s-%s-skipped-busy" % (tag, act))
+        return None
     fds = lock_all(t)
     if fds is None:
+        if fresh:
+            shutil.rmtree(fresh, ignore_errors=True)
+        _log(log, t, 0, "%s-%s-skipped-busy" % (tag, act))
         return None
-    before = free_kb()
     away = []
     try:
-        for d in (incs if act == "incremental" else [t]):
+        for d in (incrementals(t) if act == "incremental" else [t]):
             a = gone_dir(d)
             os.rename(d, a)
             away.append(a)
+        if fresh:
+            os.rename(fresh, t)
+            fresh = None
     except OSError:
-        pass
+        if act == "reclone" and away and not os.path.exists(t):
+            os.rename(away.pop(), t)  # the swap failed half-way: the old one back
     finally:
         for f in fds:
             os.close(f)
-    if act == "reclone" and away:
-        env = dict(os.environ, PATH=os.path.expanduser("~/.cargo/bin") + os.pathsep + os.environ.get("PATH", ""))
-        try:
-            ok = subprocess.run(["/bin/bash", os.path.join(wt, "tests", "gate.sh"), "seed-into", t], cwd=wt, env=env,
-                                capture_output=True, timeout=900).returncode == 0
-        except (OSError, subprocess.SubprocessError):
-            ok = False
-        if not ok and not os.path.exists(t):
-            os.makedirs(t, exist_ok=True)
-            with open(os.path.join(t, "RECLAIMED.txt"), "w") as fh:
-                fh.write("heavy-run: this cargo target held %.1f GB of its own at %s and no seed clone could replace it "
-                         "(scripts/disk_reclaim.py): its next build is cold.\n" % (own, time.strftime("%Y-%m-%d %H:%M")))
+    if fresh:
+        shutil.rmtree(fresh, ignore_errors=True)
     for a in away:
         shutil.rmtree(a, ignore_errors=True)
     gb = max(0, free_kb() - before) / (GB / 1024)
-    with open(log, "a") as fh:
-        fh.write("%d\t%s\t%d\t%.1f\ttrim-%s\n" % (time.time(), t, 0, gb, act))
+    _log(log, t, gb, "%s-%s" % (tag, act))
     return act, gb
 
 
@@ -515,6 +601,67 @@ def log_tmps(run, now):
             fh.write("".join(t + "\n" for t in over))
 
 
+class target_lock:
+    """<t>.own-lock, without waiting: `with target_lock(t) as mine`, mine False
+    when another reclaim measures or trims t now (then skip it)."""
+
+    def __init__(self, t):
+        self.p = t.rstrip("/") + ".own-lock"
+        self.fd = None
+
+    def __enter__(self):
+        try:
+            self.fd = os.open(self.p, os.O_RDWR | os.O_CREAT, 0o644)
+            fcntl.flock(self.fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return True
+        except OSError:
+            if self.fd is not None:
+                os.close(self.fd)
+                self.fd = None
+            return False
+
+    def __exit__(self, *_):
+        if self.fd is not None:
+            os.close(self.fd)
+
+
+def own_cap(cwd):
+    """The own-cap of a job about to start in cwd: its agent dir's targets,
+    each measured when own_due, trimmed over HEAVY_OWN_CAP_GB. What it did is
+    printed (heavy-run shows it to the job) and logged."""
+    cwd = os.path.realpath(cwd)
+    root = next((r for r in roots() if (cwd + "/").startswith(os.path.realpath(r).rstrip("/") + "/")), None)
+    if root is None:
+        return
+    run = os.path.expanduser("~/.bise/run")
+    os.makedirs(run, exist_ok=True)
+    cap = float(os.environ.get("HEAVY_OWN_CAP_GB", 10))
+    gap = float(os.environ.get("HEAVY_OWN_GAP_MIN", 10))
+    keep = kept()
+    for t in find_targets(root):
+        if protected(t, keep):
+            continue
+        with target_lock(t) as mine:
+            if not mine:
+                continue
+            stamp = t.rstrip("/") + ".own-checked"
+            is_busy = lambda: busy(t, running_exes(), root, job_cwds())  # noqa: E731
+            if not own_due(is_busy(), mtime(stamp), time.time(), gap):
+                continue
+            s = time.time()
+            own, inc = measure(t)
+            secs = time.time() - s
+            open(stamp, "w").close()  # after the measure: a failed walk retries next time
+            r = None
+            if own > cap:
+                r = trim_one(t, cap, os.path.join(run, "reclaim.log"), measured=(own, inc), tag="trim-own", is_busy=is_busy)
+            with open(os.path.join(run, "own-checks.log"), "a") as fh:
+                fh.write("%d\t%s\t%.1f\t%.2f\t%s%s" % (time.time(), t, own, secs, r[0] if r else "-", chr(10)))
+            if r:
+                print("your cargo target %s held %.1f GB of its own (over HEAVY_OWN_CAP_GB %g): %s, %.1f GB freed"
+                      % (t, own, cap, "a fresh clone of the seed" if r[0] == "reclone" else "its incremental dirs dropped", r[1]))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--want", type=float, default=0, help="GB free to reach (0: idle ones only)")
@@ -522,9 +669,16 @@ def main():
     ap.add_argument("--min-idle-min", type=float, default=float(os.environ.get("HEAVY_MIN_IDLE_MIN", 30)))
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--self-test", action="store_true")
+    ap.add_argument("--own", metavar="CWD", help="the own-cap of the job that starts in CWD (heavy-run)")
     a = ap.parse_args()
     if a.self_test:
         _self_test()
+        return 0
+    if a.own:
+        try:
+            own_cap(a.own)
+        except Exception as e:  # never a failed job: a line, and the job goes on
+            print("disk_reclaim --own: %s: %s" % (type(e).__name__, e))
         return 0
     run = os.path.expanduser("~/.bise/run")
     os.makedirs(run, exist_ok=True)
@@ -549,7 +703,8 @@ def main():
     now = time.time()
     cwds = job_cwds()
     keep = kept()
-    ts = [(t, last_used(t), busy(t, exes, r, cwds)) for r in roots() for t in find_targets(r) if not protected(t, keep)]
+    root_of = {t: r for r in roots() for t in find_targets(r) if not protected(t, keep)}
+    ts = [(t, last_used(t), busy(t, exes, r, cwds)) for t, r in root_of.items()]
     used = {t: u for t, u, _ in ts}
     log = os.path.join(run, "reclaim.log")
     freed, n, trimmed = 0.0, 0, set()
@@ -559,7 +714,9 @@ def main():
         if a.dry_run:
             print("would measure %s for a trim" % t)
             continue
-        r = trim_one(t, float(os.environ.get("HEAVY_TRIM_GB", 4)), log)
+        with target_lock(t) as mine:
+            r = trim_one(t, float(os.environ.get("HEAVY_TRIM_GB", 4)), log,
+                         is_busy=lambda: busy(t, running_exes(), root_of[t], job_cwds())) if mine else None
         if r is not None:
             trimmed.add(t)
             freed += r[1]

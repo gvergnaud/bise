@@ -16,7 +16,9 @@
 #   starts; HEAVY_IDLE_TARGET_H (6) a target unused that long goes;
 #   HEAVY_MIN_IDLE_MIN (30) the least idle a target is trimmed or deleted at;
 #   HEAVY_TRIM_GB (4) a green-marked target's own bytes past which it is
-#   trimmed; HEAVY_TMP_CAP_GB (2) an agent tmp's size printed once; tests:
+#   trimmed; HEAVY_OWN_CAP_GB (10) a job's own targets' own bytes past which they
+#   are trimmed at its admission, measured at most every HEAVY_OWN_GAP_MIN (10);
+#   HEAVY_TMP_CAP_GB (2) an agent tmp's size printed once; tests:
 #   HEAVY_RECLAIM_ROOTS, HEAVY_RECLAIM_KEEP, HEAVY_TMP_ROOTS,
 #   HEAVY_FREE_KB_FILE, HEAVY_DISK_VOLUME, HEAVY_RECLAIM, HEAVY_RECLAIM_GAP.
 #   slot 1 = ~/.bise/run/heavy.lock (the old single lock: old callers still count)
@@ -595,6 +597,16 @@ ahead() {
 # "disk:<s> slot:<s> load:<s> batt:<s>" to the job's start line in heavy.log (waited=...)
 # HEAVY_DEADLINE must be an epoch: 'HH:MM' would make its -ge never fire, silently
 case "${HEAVY_DEADLINE:-}" in *[!0-9]*) echo "heavy-run: HEAVY_DEADLINE wants an epoch (seconds), got '$HEAVY_DEADLINE'" >&2; exit 2 ;; esac
+# the own-cap (fast-loop, architect m_59130; main m_59126): before the job waits for disk or a
+# slot, its own agent dir's cargo targets over HEAVY_OWN_CAP_GB of their own bytes are trimmed,
+# no idle time or green gate needed: nothing builds there until this job does. The rule is
+# disk_reclaim.py's (--own); here only the call. Never fails the job: its lines go to stderr.
+own_cap() {
+  local r="${HEAVY_RECLAIM:-/usr/bin/python3 $HOME/.bise/run/disk_reclaim.py}"
+  $r --own "$PWD" </dev/null 2>&1 | sed 's/^/heavy-run: /' >&2
+  return 0
+}
+own_cap
 wd=0 ws=0 wl=0 wb=0 why="" prev=$(date +%s)
 tally() {
   local now; now=$(date +%s)
