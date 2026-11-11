@@ -182,6 +182,9 @@ struct Store {
     others: Vec<Artifact>,
     /// this hub's id, and its name in the registry (the library's `here`)
     here: (String, String),
+    /// the hub's list came (a hub builds it off its loop: none yet for
+    /// a few seconds after its start, hub-loop)
+    came: bool,
 }
 
 thread_local! {
@@ -245,7 +248,13 @@ pub(crate) fn set_rows(items: &[bise_proto::rows::Artifact], seen_ms: Option<u64
         st.new = new;
         st.seen_ms = seen_ms;
         st.here.0 = project.to_string();
+        st.came = true;
     });
+}
+
+/// The hub's list came: before it, an empty list is not known empty.
+pub(crate) fn came() -> bool {
+    STORE.with(|st| st.borrow().came)
 }
 
 /// When you last looked, as the hub said (none from an older hub).
