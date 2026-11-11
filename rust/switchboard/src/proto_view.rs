@@ -485,6 +485,9 @@ pub fn artifacts(ev: &Value, page_url: impl Fn(&str) -> Option<String>, frame_ba
                 path,
                 frame_url,
                 versions,
+                // the art row's opener (artifacts.rs, from opens::pick)
+                opener: r.get("opener").and_then(|o| serde_json::from_value(o.clone()).ok()),
+                openers: r.get("openers").and_then(|o| serde_json::from_value(o.clone()).ok()).unwrap_or_default(),
                 title: s(r, "title"),
                 agent: s(r, "agent"),
                 version: version as u32,

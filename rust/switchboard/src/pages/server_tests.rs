@@ -750,6 +750,11 @@ fn a_view_with_a_folder_serves_its_own_files_only() {
     std::fs::create_dir_all(d.join("kit/view")).unwrap();
     std::fs::write(d.join("kit/view/view.js"), "kit").unwrap();
     std::fs::write(d.join("kit/view/.hidden.js"), "h").unwrap();
+    std::fs::create_dir_all(d.join("office/dist")).unwrap();
+    std::fs::write(d.join("office/dist/office.js"), "office").unwrap();
+    std::fs::write(d.join("office/dist/office-view.js"), "dom").unwrap();
+    std::fs::create_dir_all(dir.join("~kit/office/v1")).unwrap();
+    std::fs::write(dir.join("~kit/office/v1/office.js"), "plugin's own office").unwrap();
     let dir = dir.canonicalize().unwrap();
     let at = |host: &str, method: &str, target: &str, inm: Option<&str>| {
         let (path, query) = target.split_once('?').unwrap_or((target, ""));
@@ -768,6 +773,7 @@ fn a_view_with_a_folder_serves_its_own_files_only() {
     assert_eq!(at(&vh, "GET", &format!("/f/{s}/app.js"), Some(&etag)).status, 304, "cached by its version");
     assert_eq!(at(&vh, "GET", &format!("/f/{s}/lib/x.css"), None).status, 200);
     assert_eq!(text(&at(&vh, "GET", &format!("/f/{s}/~kit/view/view.js"), None)), "kit", "bise's kit, never the plugin's own ~kit");
+    assert_eq!(text(&at(&vh, "GET", &format!("/f/{s}/~kit/office/v1/office.js"), None)), "office", "bise's office reader, never the plugin's own");
     // the proxy: the base is the hub's, with this session
     let proxy = at(&vh, "GET", &format!("/mcp-app?s={s}"), None);
     assert!(text(&proxy).contains(&format!(r#"const BASE = "http://{vh}/f/{s}/";"#)), "{}", text(&proxy));
@@ -785,6 +791,10 @@ fn a_view_with_a_folder_serves_its_own_files_only() {
         format!("/f/{s}/index.html/x"),
         format!("/f/{s}/~kit/view/.hidden.js"),
         format!("/f/{s}/~kit/other.js"),
+        format!("/f/{s}/~kit/other/x.js"),
+        format!("/f/{s}/~kit/office/v1/office-view.js"),
+        format!("/f/{s}/~kit/office/v2/office.js"),
+        format!("/f/{s}/~kit/office/office.js"),
         format!("/f/{s_other}/app.js"),
         format!("/f/{}/app.js", "0".repeat(32)),
         "/f//app.js".to_string(),

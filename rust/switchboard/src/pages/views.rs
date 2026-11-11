@@ -144,6 +144,14 @@ impl Pages {
         ViewFolder { tag: view_folder::tag(&dir, Some(env!("CARGO_PKG_VERSION"))), dir }
     }
 
+    /// bise's DOM-free office reader (`office/dist/`) as a view's folder:
+    /// `/f/<session>/~kit/office/v1/<file>`, its allow-listed files only
+    /// (architect m_60402).
+    fn office_kit(&self) -> ViewFolder {
+        let dir = self.office_dir.canonicalize().unwrap_or(self.office_dir.clone());
+        ViewFolder { tag: view_folder::tag(&dir, Some(env!("CARGO_PKG_VERSION"))), dir }
+    }
+
     /// The sandbox of view origin `hash` for a proxy load with `session`:
     /// one `view/resource` made it (among the last [`SESSIONS`]), else none.
     fn sandbox_of(&self, hash: &str, session: Option<&str>) -> Option<ViewSandbox> {
@@ -190,6 +198,7 @@ fn own_file(pages: &Pages, req: &Request, hash: &str, session: &str, rel: &[&str
     let inm = req.header("if-none-match");
     match rel {
         [view_folder::KIT, "view", file] => view_folder::serve(&pages.view_kit(), &[file], inm, csp),
+        [view_folder::KIT, "office", view_folder::OFFICE_V, file] if view_folder::OFFICE_FILES.contains(file) => view_folder::serve(&pages.office_kit(), &[file], inm, csp),
         [view_folder::KIT, ..] => Response::missing("no such file"),
         _ => view_folder::serve(folder, rel, inm, csp),
     }

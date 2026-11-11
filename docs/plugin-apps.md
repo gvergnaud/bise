@@ -270,8 +270,12 @@ floor plus declared origins, permissions granted at the add.
   runs in the proxy's blob frame with `<base href="<origin>/f/<session>/">`
   written by the hub, so its CSP adds `'self'` to script, style, font,
   img and base-uri for that origin only (view_csp.rs, with its test); a
-  view without a folder keeps `base-uri 'none'` (architect m_59928). A
-  running server's `ui://` resource stays inline under `MAX_HTML`.
+  view without a folder keeps `base-uri 'none'` (architect m_59928).
+  Under `/f/<session>/`, `~kit/` names bise's own code from the app's
+  install, an allow-list (architect m_60402): `~kit/view/<file>` (the
+  view kit, `@bise/view`) and `~kit/office/v1/office.js` (office/dist's
+  DOM-free SDK); any other `~kit/…` and a plugin's own `~kit` folder:
+  404. A running server's `ui://` resource stays inline under `MAX_HTML`.
 - **Folder-documents with their own scripts** (sites, step 5; architect
   m_60421): their own origin per document, never opaque. plugins/sites'
   view declares `isolate: "document"`; the site's files are served on

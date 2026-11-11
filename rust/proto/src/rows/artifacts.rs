@@ -33,6 +33,14 @@ pub struct Artifact {
     /// from before it, an older hub)
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub versions: Vec<ArtifactVersion>,
+    /// the app that opens it on his click (docs/plugin-apps.md A2, A3):
+    /// `bend_plugins::opens::pick`'s, set by the hub, never matched by a
+    /// client; none: no app, the window says his Mac's
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opener: Option<crate::rows::Opener>,
+    /// the other apps that can open it, in pick's order (Open with)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub openers: Vec<crate::rows::Opener>,
     // the rest of the art store's row, as the terminal's /artifacts reads
     // it (client-protocol step 4, P4c): left out when empty, so an older
     // hub's row or an older client still reads

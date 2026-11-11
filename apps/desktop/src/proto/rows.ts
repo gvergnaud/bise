@@ -955,6 +955,16 @@ frame_url?: string | null,
  */
 versions?: Array<ArtifactVersion>, 
 /**
+ * the app that opens it on his click (docs/plugin-apps.md A2, A3):
+ * `bend_plugins::opens::pick`'s, set by the hub, never matched by a
+ * client; none: no app, the window says his Mac's
+ */
+opener?: Opener | null, 
+/**
+ * the other apps that can open it, in pick's order (Open with)
+ */
+openers?: Array<Opener>, 
+/**
  * who added it: `you`, `page` (a bise page), else the agent
  */
 by?: string, 

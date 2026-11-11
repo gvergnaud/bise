@@ -12,10 +12,11 @@
 //!   with `.` or holds a separator is refused before the disk is read,
 //!   and the file's realpath must stay under the folder's (a `../` or a
 //!   symlink out: 404); a type [`ctype`] doesn't know is not served;
-//! - `~kit/view/<file>`: bise's view kit (`kit/view/`, `@bise/view`),
-//!   the same files for every view with a folder, so a first-party view
-//!   loads it relatively under its `'self'`; a plugin's own `~kit` is
-//!   never served;
+//! - `~kit/view/<file>` (bise's view kit, `kit/view/`, `@bise/view`) and
+//!   `~kit/office/v1/office.js` (office/dist's DOM-free reader): bise's
+//!   own code from the app's install, the same for every view with a
+//!   folder, loaded relatively under its `'self'`; any other `~kit/…`
+//!   and a plugin's own `~kit` are never served;
 //! - cached by the plugin's version: the ETag is the folder's tag (its
 //!   plugin's root and version, [`tag`]) with the file's size and mtime,
 //!   `If-None-Match` gets a 304.
@@ -39,9 +40,16 @@ pub struct ViewFolder {
 
 /// The route's prefix on a view origin.
 pub const PREFIX: &str = "/f/";
-/// The first segment under `/f/<session>/` that names bise's view kit
-/// (`kit/view/`, `@bise/view`), never the view's own folder: `~kit/view/<file>`.
+/// The first segment under `/f/<session>/` that names bise's own code from
+/// the app's install, never the view's folder: `~kit/view/<file>` (the
+/// view kit, `@bise/view`) and `~kit/office/v1/<file>` (office/dist's
+/// DOM-free reader); any other `~kit/…`: 404 (an allow-list, architect
+/// m_60402).
 pub const KIT: &str = "~kit";
+/// The office reader's version in its path: a new shape is a new segment.
+pub const OFFICE_V: &str = "v1";
+/// The office reader's files a view may load.
+pub const OFFICE_FILES: &[&str] = &["office.js"];
 
 /// A folder's version tag: 16 hex of sha256(its plugin's root, its
 /// version), so a new install or version is a new tag.
