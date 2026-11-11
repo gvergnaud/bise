@@ -26,6 +26,7 @@ use crate::artifacts::{Meta, Store};
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::rc::Rc;
 
 /// The backstop: the rows are built again at least this often.
 pub(super) const BACKSTOP_MS: u64 = 5 * 60_000;
@@ -85,7 +86,9 @@ impl ArtJob {
 /// the build and gives its result back.
 #[derive(Debug, Default)]
 pub(super) struct ArtRows {
-    last: Option<(ArtKey, ArtView)>,
+    /// Shared: an ask is a pointer copy, never a copy of 1300 rows (a
+    /// clone of them took 380 ms at load 90).
+    last: Option<(ArtKey, Rc<ArtView>)>,
     /// A build runs off the loop.
     building: bool,
 }
@@ -94,12 +97,12 @@ impl ArtRows {
     /// The view for `key`: the last one built (None before the first),
     /// and true when the caller must start a build for `key` now (the
     /// key moved and none runs; it runs until [`ArtRows::built`]).
-    pub(super) fn ask(&mut self, key: ArtKey) -> (Option<ArtView>, bool) {
+    pub(super) fn ask(&mut self, key: ArtKey) -> (Option<Rc<ArtView>>, bool) {
         let start = !self.building && self.last.as_ref().is_none_or(|(k, _)| *k != key);
         if start {
             self.building = true;
         }
-        (self.last.as_ref().map(|(_, v)| v.clone()), start)
+        (self.last.as_ref().map(|(_, v)| Rc::clone(v)), start)
     }
 
     /// A build for `key` landed: its view is the one shown (even when a
@@ -108,7 +111,7 @@ impl ArtRows {
     /// and the rows changed: a change no stamp saw (hub.log says it).
     pub(super) fn built(&mut self, key: ArtKey, view: ArtView) -> bool {
         let by_backstop = self.last.as_ref().is_some_and(|(k, v)| (k.0, k.1, k.3) == (key.0, key.1, key.3) && k.2 != key.2 && v.rows != view.rows);
-        self.last = Some((key, view));
+        self.last = Some((key, Rc::new(view)));
         self.building = false;
         by_backstop
     }

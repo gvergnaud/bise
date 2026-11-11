@@ -173,7 +173,7 @@ impl Shell {
     /// The last rows built, and a build for `key` started off the loop
     /// when it moved (one at a time; its view comes back as
     /// `Msg::ArtBuilt`). None before the first build lands.
-    fn art_view(&self, now: u64) -> Option<super::art_rows::ArtView> {
+    fn art_view(&self, now: u64) -> Option<std::rc::Rc<super::art_rows::ArtView>> {
         let key = self.art_key(now);
         let (view, start) = self.art.rows.borrow_mut().ask(key);
         if start {
@@ -217,17 +217,18 @@ impl Shell {
     /// the first build of the rows lands (no event yet: the clients keep
     /// their loading state).
     pub(super) fn artifacts_ev(&self) -> Option<Value> {
-        let mut view = self.art_view(now_ms())?;
-        self.art_live_rows(&view.stored, &mut view.rows);
+        let view = self.art_view(now_ms())?;
+        let mut rows = view.rows.clone();
+        self.art_live_rows(&view.stored, &mut rows);
         // the library joined at send time (his rename in the desktop core
         // moves no store stamp): each row's folder resolved, the folders
         let lib = self.art_library();
-        artifacts::resolve_folders(&mut view.rows, &lib);
+        artifacts::resolve_folders(&mut rows, &lib);
         // each PR's status, the hub's row of it (a change re-sends the event)
-        artifacts::join_pr_status(&mut view.rows, &self.hub.pr_rows_by_url(now_ms()));
+        artifacts::join_pr_status(&mut rows, &self.hub.pr_rows_by_url(now_ms()));
         Some(json!({
             "ev": "artifacts",
-            "rows": view.rows,
+            "rows": rows,
             "new": view.new,
             "seen_ms": view.seen_ms,
             "folders": super::art_folders::folder_rows(&lib),

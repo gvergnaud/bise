@@ -21,12 +21,12 @@ fn key_changes_during_a_build_coalesce_into_one_more() {
     }
     r.built((1, 0, 0, 0), view(1));
     let (v, start) = r.ask((4, 0, 0, 0));
-    assert_eq!(v, Some(view(1)), "the landed view goes out while the newest builds");
+    assert_eq!(v.as_deref(), Some(&view(1)), "the landed view goes out while the newest builds");
     builds += start as usize;
     r.built((4, 0, 0, 0), view(4));
     let (v, start) = r.ask((4, 0, 0, 0));
     builds += start as usize;
-    assert_eq!(v, Some(view(4)));
+    assert_eq!(v.as_deref(), Some(&view(4)));
     assert_eq!(builds, 2);
 }
 
