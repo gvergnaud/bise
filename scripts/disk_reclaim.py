@@ -722,27 +722,31 @@ def own_cap(cwd):
                       % (t, own, cap, "a fresh clone of the seed" if r[0] == "reclone" else "its incremental dirs dropped", r[1]))
 
 
-def job_targets(tree, cargo_target_dir=None):
-    """The cargo targets a job in `tree` builds into: the ones job_kind looks at (rust/target,
-    target, ../target, CARGO_TARGET_DIR), each once (by real path), the existing ones."""
+CARGO_DIRS = ("rust/target", "target", "../target")
+
+
+def job_dirs(tree, dirs):
+    """The dirs a job in `tree` writes into (heavy-run's kind_dirs: relative to tree, or
+    absolute), each once (by real path), the existing ones."""
     out = []
-    for d in [cargo_target_dir] + [os.path.join(tree, p) for p in ("rust/target", "target", "../target")]:
-        if d and os.path.isdir(d) and os.path.realpath(d) not in [os.path.realpath(o) for o in out]:
-            out.append(d)
+    for d in dirs:
+        p = d if os.path.isabs(d) else os.path.join(tree, d)
+        if d and os.path.isdir(p) and os.path.realpath(p) not in [os.path.realpath(o) for o in out]:
+            out.append(p)
     return out
 
 
-def grown_kb(tree, t0, cargo_target_dir=None):
-    """What a job wrote into its own cargo targets (fast-loop, architect m_60754; main m_60751):
+def grown_kb(tree, t0, dirs=None):
+    """What a job wrote into its own dirs (fast-loop, architect m_60754, m_60879; main m_60751):
     the blocks of the files under them with an mtime at or after its start t0, through
     own_bytes, so a seed clone's shared blocks never count. An upper bound of its growth (a
     rewritten file counts whole, though its old blocks were freed): the safe side for a reserve.
     Before, a job's measure was the volume's free-space drop over it, which charged every other
     writer to it (cargo-warm's p90 was 19 GB, and one running warm job held 10 jobs at 31-36 GB
-    free, 11-11)."""
-    if cargo_target_dir is None:
-        cargo_target_dir = os.environ.get("CARGO_TARGET_DIR")
-    return int(sum(own_bytes(t, t0 - 1) for t in job_targets(tree, cargo_target_dir)) // 1024)
+    free, 11-11). dirs None: a cargo job's (its targets, CARGO_TARGET_DIR)."""
+    if dirs is None:
+        dirs = list(CARGO_DIRS) + [os.environ.get("CARGO_TARGET_DIR") or ""]
+    return int(sum(own_bytes(t, t0 - 1) for t in job_dirs(tree, dirs)) // 1024)
 
 
 def want_trim(ts, root_of, done, now, want, log):
@@ -787,14 +791,15 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--self-test", action="store_true")
     ap.add_argument("--own", metavar="CWD", help="the own-cap of the job that starts in CWD (heavy-run)")
-    ap.add_argument("--grown", nargs=2, metavar=("T0", "TREE"), help="KB a job grew its tree's targets since T0 (heavy-run)")
+    ap.add_argument("--grown", nargs="+", metavar="T0 TREE [DIR]",
+                    help="KB a job grew its dirs (relative to TREE; none: its cargo targets) since T0 (heavy-run)")
     a = ap.parse_args()
     if a.self_test:
         _self_test()
         return 0
     if a.grown:
         try:
-            print(grown_kb(a.grown[1], float(a.grown[0])))
+            print(grown_kb(a.grown[1], float(a.grown[0]), a.grown[2:] or None))
         except Exception as e:  # never a failed job: no number, heavy-run writes no row
             print("disk_reclaim --grown: %s: %s" % (type(e).__name__, e), file=sys.stderr)
             return 1

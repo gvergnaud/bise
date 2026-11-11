@@ -403,8 +403,13 @@ with tempfile.TemporaryDirectory() as home:
     rows = lambda: open(dtsv).read().splitlines() if os.path.exists(dtsv) else []  # noqa: E731
     check(r.returncode == 0 and wait_for(lambda: rows()), "a cargo job ends at once, its row comes after")
     d = rows()[-1].split("\t") if rows() else []
-    check(len(d) == 8 and d[1].startswith("cargo-") and d[2] == "4096" and d[7] == "src=target",
-          "a cargo job's disk.tsv row: its targets' growth (--grown), src=target: %r" % d)
+    check(len(d) == 8 and d[1].startswith("cargo-") and d[2] == "4096" and d[7] == "src=own",
+          "a cargo job's disk.tsv row: its targets' growth (--grown), src=own: %r" % d)
+    # each kind's dirs from one table (kind_dirs, architect m_60879): --grown gets them
+    kd = lambda k: subprocess.run(["bash", "-c", 'eval "$(sed -n -e "/^kind_dirs()/,/^}/p" "$0")"; kind_dirs "$1"', HEAVY, k],  # noqa: E731
+                                  env=dict(env, CARGO_TARGET_DIR=""), capture_output=True, text=True).stdout.split()
+    check(kd("cargo-warm") == ["rust/target", "target", "../target"] and "apps/desktop/out" in kd("desktop") and kd("other") == [],
+          "kind_dirs: cargo -> its targets, desktop -> its out/ and caches, other -> none (the free-drop row)")
     # 'desktop' (a quick gate whose heavy steps are desktop/office only, architect m_60481): its own
     # reserve the flat 2; what a RUNNING one may still write, flat 2 under 10 measured runs, then
     # their p90 (measured_gb), like the other kinds
@@ -420,6 +425,15 @@ with tempfile.TemporaryDirectory() as home:
     check(measured("cargo-warm", [19 * GB] * 9) == "3" and measured("cargo-warm", [5 * GB] * 10) == "5",
           "a running cargo-warm job: 9 src=target rows, flat 3; 10 at 5 GB, their p90 5")
     check(measured("other", [3 * GB] * 10, src="") == "3", "the other kinds keep their free-drop rows")
+    # any kind: its free-drop rows count until 10 own rows exist (src=own), then only the own ones
+    def mixed(kind, free_rows, own_rows):
+        with open(dtsv, "w") as fh:
+            fh.writelines("1\t%s\t%d\t0\t0\t0\tx\n" % (kind, kb) for kb in free_rows)
+            fh.writelines("1\t%s\t%d\t0\t0\t0\tx\tsrc=own\n" % (kind, kb) for kb in own_rows)
+        fn = 'eval "$(sed -n -e "/^measured_gb()/,/^}/p" -e "/^p90_gb()/,/^}/p" "$0")"; measured_gb "$1"'
+        return subprocess.run(["bash", "-c", fn, HEAVY, kind], env=dict(env, HOME=home), capture_output=True, text=True).stdout.strip()
+    check(mixed("desktop", [21 * GB] * 20, [0] * 9) == "21", "a running desktop job: 9 own rows, its free-drop rows still count (21)")
+    check(mixed("desktop", [21 * GB] * 20, [GB] * 10) == "1", "a running desktop job: 10 own rows at 1 GB: only they count (1)")
     # its kind from the tree's own plan (tests/gate_plan.py's JSON, as data): a fake tree
     gk = os.path.join(home, "gk", "tests")
     os.makedirs(gk, exist_ok=True)
