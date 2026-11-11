@@ -86,6 +86,26 @@ export function pathsOutside(paths: Record<string, string>, dirs: string[]): str
 }
 
 /**
+ * `p`'s realpath; for a folder not made yet (Electron's logs, crashDumps, a temp), the realpath of
+ * its deepest existing ancestor joined with the rest, so /tmp/bh-x/home/Logs never stays under
+ * /tmp while the run's dirs are under /private/tmp (architect m_59999).
+ */
+export function realOf(p: string): string {
+  const abs = path.resolve(p);
+  const rest: string[] = [];
+  for (let d = abs; ; d = path.dirname(d)) {
+    try { return path.join(realpathSync(d), ...rest.reverse()); } catch { /* not there yet */ }
+    if (path.dirname(d) === d) return abs;
+    rest.push(path.basename(d));
+  }
+}
+
+/** Each folder's realOf: pathsOutside's input. */
+export function realFolders(paths: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(Object.entries(paths).map(([n, p]) => [n, realOf(p)]));
+}
+
+/**
  * What a run may never add to his real home, as names (main m_59528, architect m_59538): his home's
  * top-level entries and ~/Library/CloudStorage's (a new File Provider domain folder). Never listed
  * inside a domain: listing one makes his real appex enumerate, reaching his real service.

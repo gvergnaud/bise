@@ -14,7 +14,7 @@ import { _electron as electron, test, type CDPSession, type ElectronApplication,
 import { DESKTOP_DIR, harnessElectron } from './electron';
 import { appEntryMissing } from './appentry';
 import type { FakeCore, FakeHelper } from './fakes/helper';
-import { adoptHome, harnessEnv, pathsOutside, Sentinel, testHome } from './isolation';
+import { adoptHome, harnessEnv, pathsOutside, realFolders, Sentinel, testHome } from './isolation';
 
 // loaded with -r before the app's main on every launch: Electron's folders under the test home
 // (Electron on macOS ignores $HOME; main m_59528), and no start on a home the harness didn't mark
@@ -200,7 +200,9 @@ async function start(args: string[], env: Record<string, string>, o: LaunchOptio
     watch = new Watch(pid ?? -1, (why) => { stopped = why; killTree(pid); });
     // read back before any spec gets the session: one Electron folder outside the run's own is a refusal
     const folders = await app.evaluate(({ app: a }, names) => Object.fromEntries(names.map((n) => [n, a.getPath(n as Parameters<typeof a.getPath>[0])])), ELECTRON_PATHS);
-    const outside = pathsOutside(folders, [realpathSync(h.home), realpathSync(h.root)]);
+    // compared as realpaths: Electron gives userData and temp back as set (/tmp/bh-*, not
+    // /private/tmp/bh-*); unresolved, every launch was refused (f69eeae98's test:land)
+    const outside = pathsOutside(realFolders(folders), [realpathSync(h.home), realpathSync(h.root)]);
     if (outside.length) throw new Error(`harness: refused launch: Electron folders outside the test home: ${outside.join(', ')}`);
     await installGuards(app);
     const page = await mainWindow(app);
@@ -229,8 +231,12 @@ async function start(args: string[], env: Record<string, string>, o: LaunchOptio
   } catch (e) {
     watch?.stop();
     const tree = await sentinel.tree();
-    await app?.close().catch(() => undefined);
-    killTree(app?.process().pid);
+    // never hides why the launch failed: an app whose process is already gone throws from close()
+    // and process() itself (f69eeae98's test:land: a TypeError here replaced the real error)
+    let appPid: number | undefined;
+    try { appPid = app?.process().pid; } catch { /* gone */ }
+    try { await app?.close(); } catch { /* gone */ }
+    killTree(appPid);
     await sentinel.stop(tree);
     if (stopped) throw new Error(`run stopped by the watch: ${stopped}`);
     throw e;

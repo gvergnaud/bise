@@ -1,11 +1,11 @@
 // Every launch's own home (main m_9882): a run can't reach his real home, and one that tries is
 // stopped. The pure parts on synthetic tables; then amb-mac's 22:33 case end to end with a fake
 // bise (fixtures/fake-bise.sh), the test runner's own HOME being his real one.
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
-import { adoptHome, breaches, declaredOwner, harnessEnv, homeProblem, inWorld, newInRealHome, noteSeen, pathsOutside, realHome, realHomeNames, TEST_HOME_MARKER, testHome } from '../isolation';
+import { adoptHome, breaches, declaredOwner, harnessEnv, homeProblem, inWorld, newInRealHome, noteSeen, pathsOutside, realFolders, realHome, realHomeNames, TEST_HOME_MARKER, testHome } from '../isolation';
 import { launchDesktop, launchPage } from '../launch';
 import { MARKER, testHomeOk } from '../paths/hook';
 
@@ -146,6 +146,15 @@ test('pathsOutside and newInRealHome: ui-review\'s case is red', () => {
   const h = testHome();
   const inRun = { home: h.home, documents: path.join(h.home, 'Documents'), userData: path.join(h.root, 'userdata') };
   expect(pathsOutside(inRun, [h.home, h.root])).toEqual([]);
+  // f69eeae98's test:land: Electron gives userData back as set (/tmp/bh-*), the run's dirs are
+  // realpaths (/private/tmp/bh-*): compared unresolved, every launch was refused
+  const dirs = [realpathSync(h.home), realpathSync(h.root)];
+  expect(pathsOutside(inRun, dirs), 'unresolved /tmp against /private/tmp: the bug').not.toEqual([]);
+  expect(pathsOutside(realFolders(inRun), dirs), 'realFolders first').toEqual([]);
+  // a folder not made yet, given under /tmp (Electron's logs before its first line): still inside
+  const notYet = { logs: path.join(h.root, 'home', 'Library', 'Logs', 'not-made-yet') };
+  expect(notYet.logs.startsWith('/tmp/'), 'given unresolved').toBe(true);
+  expect(pathsOutside(realFolders(notYet), dirs), 'resolved through its deepest existing parent').toEqual([]);
   expect(pathsOutside({ ...inRun, home: REAL }, [h.home, h.root])).toEqual([`home ${REAL}`]);
   const before = ['Documents', 'Library', path.join('Library', 'CloudStorage', 'GoogleDrive-x')];
   expect(newInRealHome(before, before, REAL)).toEqual([]);
