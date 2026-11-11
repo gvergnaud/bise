@@ -144,6 +144,13 @@ def trim_candidates(targets, now, min_idle_min):
             if since is not None and not busy and now - used >= min_idle_min * 60]
 
 
+def want_candidates(targets, now, idle_min):
+    """targets: [(path, last_used, busy)]. While a job waits for disk (--want), the own-cap's
+    rule on every root's target, not only the admitted job's (main m_60116, architect m_60481):
+    the ones not busy and unused idle_min minutes, least recently used first."""
+    return [p for p, used, b in sorted(targets, key=lambda x: x[1]) if not b and now - used >= idle_min * 60]
+
+
 def own_due(busy, checked_at, now, gap_min):
     """Whether the own-cap measures a target now: not busy, and not measured
     in the last gap_min minutes (checked_at: its stamp's mtime, None: never)."""
@@ -237,6 +244,9 @@ def _self_test():
     assert own_due(False, None, now, 10), "never measured: due"
     assert not own_due(True, None, now, 10), "busy: skipped"
     assert not own_due(False, now - 9 * 60, now, 10) and own_due(False, now - 10 * 60, now, 10), "the gap"
+    w = [("/new", now - 5 * 60, False), ("/old", now - 3 * 3600, False), ("/mid", now - 20 * 60, False),
+         ("/busy", now - 5 * 3600, True)]
+    assert want_candidates(w, now, 10) == ["/old", "/mid"], "while a job waits: idle 10 min, not busy, oldest first"
     assert trim_action(3.9, 3, 4) is None
     assert trim_action(9, 6, 4) == "incremental", "dropping incremental/ brings it to 3 GB"
     assert trim_action(9, 2, 4) == "reclone"
@@ -712,6 +722,63 @@ def own_cap(cwd):
                       % (t, own, cap, "a fresh clone of the seed" if r[0] == "reclone" else "its incremental dirs dropped", r[1]))
 
 
+def job_targets(tree, cargo_target_dir=None):
+    """The cargo targets a job in `tree` builds into: the ones job_kind looks at (rust/target,
+    target, ../target, CARGO_TARGET_DIR), each once (by real path), the existing ones."""
+    out = []
+    for d in [cargo_target_dir] + [os.path.join(tree, p) for p in ("rust/target", "target", "../target")]:
+        if d and os.path.isdir(d) and os.path.realpath(d) not in [os.path.realpath(o) for o in out]:
+            out.append(d)
+    return out
+
+
+def grown_kb(tree, t0, cargo_target_dir=None):
+    """What a job wrote into its own cargo targets (fast-loop, architect m_60754; main m_60751):
+    the blocks of the files under them with an mtime at or after its start t0, through
+    own_bytes, so a seed clone's shared blocks never count. An upper bound of its growth (a
+    rewritten file counts whole, though its old blocks were freed): the safe side for a reserve.
+    Before, a job's measure was the volume's free-space drop over it, which charged every other
+    writer to it (cargo-warm's p90 was 19 GB, and one running warm job held 10 jobs at 31-36 GB
+    free, 11-11)."""
+    if cargo_target_dir is None:
+        cargo_target_dir = os.environ.get("CARGO_TARGET_DIR")
+    return int(sum(own_bytes(t, t0 - 1) for t in job_targets(tree, cargo_target_dir)) // 1024)
+
+
+def want_trim(ts, root_of, done, now, want, log):
+    """While a job waits for disk (free under want GB): the own-cap on each root's idle target
+    (want_candidates; HEAVY_WANT_IDLE_MIN, 10), under its per-target lock, measured at most every
+    HEAVY_OWN_GAP_MIN (its .own-checked stamp, the same as the job's own-cap: never twice in a
+    row), trimmed over HEAVY_OWN_CAP_GB through trim_one (a reclone built beside, then swapped),
+    logged 'trim-want-<act>' in reclaim.log and a line in own-checks.log. Stops once free >= want.
+    Yields (target, (action, GB freed))."""
+    run = os.path.dirname(log)
+    cap = float(os.environ.get("HEAVY_OWN_CAP_GB", 10))
+    gap = float(os.environ.get("HEAVY_OWN_GAP_MIN", 10))
+    idle = float(os.environ.get("HEAVY_WANT_IDLE_MIN", 10))
+    for t in want_candidates(ts, now, idle):
+        if free_kb() / (GB / 1024) >= want:
+            return
+        if t in done or not os.path.isdir(t):
+            continue
+        with target_lock(t) as mine:
+            if not mine:
+                continue
+            stamp = t.rstrip("/") + ".own-checked"
+            is_busy = lambda: busy(t, running_exes(), root_of[t], job_cwds())  # noqa: E731
+            if not own_due(is_busy(), mtime(stamp), time.time(), gap):
+                continue
+            s = time.time()
+            own, inc = measure(t)
+            secs = time.time() - s
+            open(stamp, "w").close()
+            r = trim_one(t, cap, log, measured=(own, inc), tag="trim-want", is_busy=is_busy) if own > cap else None
+            with open(os.path.join(run, "own-checks.log"), "a") as fh:
+                fh.write("%d\t%s\t%.1f\t%.2f\t%s%s" % (time.time(), t, own, secs, ("want-" + r[0]) if r else "want-", chr(10)))
+        if r:
+            yield t, r
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--want", type=float, default=0, help="GB free to reach (0: idle ones only)")
@@ -720,9 +787,17 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--self-test", action="store_true")
     ap.add_argument("--own", metavar="CWD", help="the own-cap of the job that starts in CWD (heavy-run)")
+    ap.add_argument("--grown", nargs=2, metavar=("T0", "TREE"), help="KB a job grew its tree's targets since T0 (heavy-run)")
     a = ap.parse_args()
     if a.self_test:
         _self_test()
+        return 0
+    if a.grown:
+        try:
+            print(grown_kb(a.grown[1], float(a.grown[0])))
+        except Exception as e:  # never a failed job: no number, heavy-run writes no row
+            print("disk_reclaim --grown: %s: %s" % (type(e).__name__, e), file=sys.stderr)
+            return 1
         return 0
     if a.own:
         try:
@@ -773,6 +848,13 @@ def main():
             freed += r[1]
             n += 1
             print("disk_reclaim: trimmed %s (%s, %.1f GB)" % (t, r[0], r[1]))
+    # a job waits for disk: every idle target over the own-cap is trimmed, least recently used first
+    if free_kb() / (GB / 1024) < a.want and not a.dry_run:
+        for t, r in want_trim(ts, root_of, trimmed, now, a.want, log):
+            trimmed.add(t)
+            freed += r[1]
+            n += 1
+            print("disk_reclaim: trimmed %s (over the own-cap while a job waits: %s, %.1f GB)" % (t, r[0], r[1]))
     # the disk is low: first the incremental dirs of the idle targets, then whole targets
     if free_kb() / (GB / 1024) < a.want:
         for t, u, b in sorted(ts, key=lambda x: x[1]):

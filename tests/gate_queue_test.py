@@ -203,7 +203,24 @@ def desktop_check_quick_only():
           "gate.sh: check:quick only in a quick's non-strict desktop_check, `check` everywhere else: %r" % uses)
 
 
+def heavy_run_exports_cpus():
+    """heavy-run gives each job its share of the cpus, HEAVY_CPUS (the cpus over
+    the heavy jobs running at its start, itself included), beside HEAVY_SLOT:
+    vitest takes its workers from it (apps/desktop/src/test-workers.ts; 4 each
+    at load 45 timed out, 11-11, architect m_60250). The line is in the job's
+    own shell (JOB), and with 4 other jobs it gives the cpus / 5."""
+    src = open(os.path.join(TREE, "scripts", "heavy-run")).read()
+    job = src.split("\nJOB='", 1)[1].split("\n'\n", 1)[0] if "\nJOB='" in src else ""
+    lines = [l for l in job.splitlines() if l.startswith("export HEAVY_CPUS=")]
+    check(len(lines) == 1, "heavy-run: one 'export HEAVY_CPUS=' in the job's shell: %r" % lines)
+    if lines:
+        ncpu = int(subprocess.run(["/usr/sbin/sysctl", "-n", "hw.ncpu"], capture_output=True, text=True).stdout)
+        r = subprocess.run(["bash", "-c", "others=4; %s; echo $HEAVY_CPUS" % lines[0]], capture_output=True, text=True)
+        check(r.stdout.strip() == str(ncpu // 5), "heavy-run: HEAVY_CPUS with 4 other jobs is %d cpus / 5: %r" % (ncpu, r.stdout))
+
+
 def main():
+    heavy_run_exports_cpus()
     tmp = tempfile.mkdtemp(prefix="gate-queue-")
     rec = os.path.join(tmp, "heavy-run.args")
     fake = os.path.join(tmp, "heavy-run")

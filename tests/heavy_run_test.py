@@ -4,7 +4,9 @@ land check, the rest, --low), then first come first served; a dead waiter's
 ticket blocks nobody; heavy.log gets a start and an end line; --install puts
 the script in ~/.bise/run. Runs in a temp HOME with one slot (HEAVY_SLOTS=1),
 ~15 s."""
+import json
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -373,9 +375,9 @@ with tempfile.TemporaryDirectory() as home:
     d = open(dtsv).read().splitlines()[-1].split("\t")
     check(d[1] == "other" and d[2] == "-", "a reclaim still running at its end: written '-': %r" % d[:3])
 
-    def reserve(kind, rows):
+    def reserve(kind, rows, src="\tsrc=target"):
         with open(dtsv, "w") as fh:
-            fh.writelines("1\t%s\t%s\t0\t0\t0\tx\n" % (kind, kb) for kb in rows)
+            fh.writelines(("1\t%s\t%s\t0\t0\t0\tx" + src + "\n") % (kind, kb) for kb in rows)
         fn = 'eval "$(sed -n -e "/^reserve_gb()/,/^}/p" -e "/^p90_gb()/,/^}/p" "$0")"; reserve_gb "$1"'
         return subprocess.run(["bash", "-c", fn, HEAVY, kind], env=dict(env, HOME=home), capture_output=True, text=True).stdout.strip()
     check(reserve("cargo-cold", [1 * GB] * 4) == "10" and reserve("cargo-cold", []) == "10",
@@ -388,6 +390,62 @@ with tempfile.TemporaryDirectory() as home:
     check(reserve("other", [9 * GB] * 20) == "2" and reserve("cargo-cold", [GB] * 4 + ["bad"] * 3) == "10",
           "other 2; a bad line is skipped (4 left: flat)")
     check(reserve("cargo-cold", [GB] * 4 + ["-"]) == "10", "a '-' line: skipped, 4 left: flat")
+    # a cargo kind's rows count only when they measured its own targets' growth (src=target,
+    # architect m_60754): its old free-drop rows charged every other writer to it, and stay unread
+    check(reserve("cargo-cold", [GB // 2] * 20, src="") == "10", "cargo-cold: 20 free-drop rows (no src=target): unread, flat 10")
+    # a cargo job's end: its row is what disk_reclaim.py --grown says (here a fake: 4096 KB), src=target
+    os.remove(dtsv)
+    fake_grown = os.path.join(home, "fake_grown")
+    with open(fake_grown, "w") as fh:
+        fh.write('#!/bin/sh\n[ "$1" = --grown ] && echo 4096\nexit 0\n')
+    os.chmod(fake_grown, 0o755)
+    r = subprocess.run([HEAVY, "sh", "-c", "true", "cargo"], env=dict(envr, HEAVY_RECLAIM=fake_grown), capture_output=True, timeout=60)
+    rows = lambda: open(dtsv).read().splitlines() if os.path.exists(dtsv) else []  # noqa: E731
+    check(r.returncode == 0 and wait_for(lambda: rows()), "a cargo job ends at once, its row comes after")
+    d = rows()[-1].split("\t") if rows() else []
+    check(len(d) == 8 and d[1].startswith("cargo-") and d[2] == "4096" and d[7] == "src=target",
+          "a cargo job's disk.tsv row: its targets' growth (--grown), src=target: %r" % d)
+    # 'desktop' (a quick gate whose heavy steps are desktop/office only, architect m_60481): its own
+    # reserve the flat 2; what a RUNNING one may still write, flat 2 under 10 measured runs, then
+    # their p90 (measured_gb), like the other kinds
+    def measured(kind, rows, src="\tsrc=target"):
+        with open(dtsv, "w") as fh:
+            fh.writelines(("1\t%s\t%s\t0\t0\t0\tx" + src + "\n") % (kind, kb) for kb in rows)
+        fn = 'eval "$(sed -n -e "/^measured_gb()/,/^}/p" -e "/^p90_gb()/,/^}/p" "$0")"; measured_gb "$1"'
+        return subprocess.run(["bash", "-c", fn, HEAVY, kind], env=dict(env, HOME=home), capture_output=True, text=True).stdout.strip()
+    check(reserve("desktop", []) == "2" and reserve("desktop", [9 * GB] * 20) == "2", "desktop's own reserve: flat 2, never over")
+    check(measured("desktop", [5 * GB] * 9) == "2", "a running desktop job, 9 measured: the flat 2")
+    check(measured("desktop", [5 * GB] * 10) == "5", "a running desktop job, 10 measured: their p90, 5")
+    check(measured("cargo-warm", [19 * GB] * 20, src="") == "3", "a running cargo-warm job: 20 free-drop rows at 19 GB: unread, flat 3")
+    check(measured("cargo-warm", [19 * GB] * 9) == "3" and measured("cargo-warm", [5 * GB] * 10) == "5",
+          "a running cargo-warm job: 9 src=target rows, flat 3; 10 at 5 GB, their p90 5")
+    check(measured("other", [3 * GB] * 10, src="") == "3", "the other kinds keep their free-drop rows")
+    # its kind from the tree's own plan (tests/gate_plan.py's JSON, as data): a fake tree
+    gk = os.path.join(home, "gk", "tests")
+    os.makedirs(gk, exist_ok=True)
+    open(os.path.join(gk, "gate.sh"), "w").close()
+
+    def kind_of(plan, cmd=None):
+        p = dict({"pkgs": [], "hub_changed": 0, "bend_changed": 0, "core_gen": 0, "desktop": None}, **plan)
+        p["flags"] = dict({"proto_ts": 0, "office": 0, "office_skills": 0, "crossterm_changed": 0}, **plan.get("flags", {}))
+        with open(os.path.join(gk, "gate_plan.py"), "w") as fh:
+            fh.write("print(%r)\n" % json.dumps(p))
+        fn = 'eval "$(sed -n -e "/^gate_kind()/,/^}/p" -e "/^job_kind()/,/^}/p" "$0")"; job_kind "${@:1}"'
+        return subprocess.run(["bash", "-c", fn, HEAVY] + (cmd or ["bash", os.path.join(gk, "gate.sh"), "quick"]),
+                              cwd=home, env=dict(env, HOME=home), capture_output=True, text=True).stdout.strip()
+    dsk = {"desktop": {"why": "x"}}
+    check(kind_of(dsk) == "desktop" and kind_of({"flags": {"office": 1}}) == "desktop",
+          "a quick gate with a desktop or office step and no cargo one: kind desktop")
+    check(kind_of(dict(dsk, pkgs=["switchboard"])) == "cargo-cold" and kind_of(dict(dsk, bend_changed=1)) == "cargo-cold"
+          and kind_of(dict(dsk, flags={"proto_ts": 1})) == "cargo-cold", "a rust, PROOF or proto step too: a cargo kind")
+    check(kind_of({}) == "cargo-cold", "no heavy step (a light gate that queued anyway): a cargo kind, as before")
+    check(kind_of(dsk, ["bash", os.path.join(gk, "gate.sh"), "full"]) == "full", "a full gate stays full")
+    with open(os.path.join(gk, "gate_plan.py"), "w") as fh:
+        fh.write("raise SystemExit(1)\n")
+    check(kind_of.__call__ and subprocess.run(["bash", "-c", 'eval "$(sed -n -e "/^gate_kind()/,/^}/p" -e "/^job_kind()/,/^}/p" "$0")"; job_kind bash "$1" quick',
+                                              HEAVY, os.path.join(gk, "gate.sh")], cwd=home, env=dict(env, HOME=home),
+                                             capture_output=True, text=True).stdout.strip() == "cargo-cold",
+          "a plan that fails: a cargo kind, as before")
     # a job that outgrows its learned reserve (1 GB here) is still stopped by
     # the floor: under HEAVY_DISK_STOP_GB (5) free, rc=28
     reserve("other", [0] * 20)
