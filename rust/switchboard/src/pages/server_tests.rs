@@ -697,19 +697,19 @@ fn a_view_host_serves_its_proxy_and_nothing_else() {
     let vh = format!("v-{hash}.localhost:{}", p.port);
     assert_eq!(at(&vh, "GET", "/mcp-app").status, 404, "an origin the hub never registered");
     let declared = json!({"connectDomains": ["https://api.open-meteo.com", "*"], "domain": "https://evil.example"});
-    let session = p.view_sandbox(&hash, super::super::views::ViewSandbox { csp: declared.clone(), perms: vec!["microphone".into()] });
+    let session = p.view_sandbox(&hash, super::super::views::ViewSandbox { csp: declared.clone(), perms: vec!["microphone".into()], folder: None });
     assert!(session.len() == 32 && session.bytes().all(|b| b.is_ascii_hexdigit()), "{session}");
-    assert_ne!(session, p.view_sandbox(&hash, super::super::views::ViewSandbox { csp: declared.clone(), perms: vec!["microphone".into()] }), "a new session per view/resource");
+    assert_ne!(session, p.view_sandbox(&hash, super::super::views::ViewSandbox { csp: declared.clone(), perms: vec!["microphone".into()], folder: None }), "a new session per view/resource");
     assert_eq!(at(&vh, "GET", "/mcp-app").status, 404, "no session: a page that never asked the hub");
     assert_eq!(at(&vh, "GET", "/mcp-app?s=").status, 404);
     assert_eq!(at(&vh, "GET", &format!("/mcp-app?s={}", "0".repeat(32))).status, 404, "a wrong session");
     let other = super::super::views::hash("fake-app", "fake-app", "ui://fake-app/hostile");
     assert_eq!(at(&format!("v-{other}.localhost:{}", p.port), "GET", &format!("/mcp-app?s={session}")).status, 404, "another origin's session");
     assert_eq!(at(&vh, "GET", &format!("/mcp-app?x=1&s={session}")).status, 200, "an older session of the last 8 still loads");
-    let session = p.view_sandbox(&hash, super::super::views::ViewSandbox { csp: declared.clone(), perms: vec!["microphone".into()] });
+    let session = p.view_sandbox(&hash, super::super::views::ViewSandbox { csp: declared.clone(), perms: vec!["microphone".into()], folder: None });
     let r = at(&vh, "GET", &format!("/mcp-app?s={session}"));
     assert_eq!(r.status, 200);
-    assert_eq!(r.csp, super::super::view_csp::csp(&declared, p.port, p.view_dev), "the hub's policy, never the request's");
+    assert_eq!(r.csp, super::super::view_csp::csp(&declared, p.port, p.view_dev, false), "the hub's policy, never the request's");
     assert!(r.csp.contains("connect-src https://api.open-meteo.com;"), "{}", r.csp);
     let t = text(&r);
     assert!(t.contains("sandbox-proxy-ready") && t.contains(r#"const ALLOW = "microphone";"#), "{t}");
@@ -724,6 +724,85 @@ fn a_view_host_serves_its_proxy_and_nothing_else() {
     }
     // the main host has no proxy
     assert_eq!(get(&p, "/mcp-app").status, 404);
+    let _ = std::fs::remove_dir_all(d);
+}
+
+/// A view's own files (docs/plugin-apps.md A5): `/f/<session>/<rel>` on
+/// its origin, under a session `view/resource` minted for that origin;
+/// the proxy names it as the view's base and the CSP gets `'self'`; a
+/// `../`, a symlink out, another session or origin, a view with no
+/// folder: 404, like `/mcp-app`.
+#[test]
+fn a_view_with_a_folder_serves_its_own_files_only() {
+    use super::super::view_folder::{tag, ViewFolder};
+    use super::super::views::{hash as vhash, ViewSandbox};
+    let (p, d) = pages();
+    let plugin = d.join("plugin");
+    let dir = plugin.join("ai.mistral.vibe/views/grid");
+    std::fs::create_dir_all(dir.join("lib")).unwrap();
+    std::fs::write(dir.join("index.html"), "<script src=app.js></script>").unwrap();
+    std::fs::write(dir.join("app.js"), "1").unwrap();
+    std::fs::write(dir.join("lib/x.css"), "b{}").unwrap();
+    std::fs::write(plugin.join("secret.js"), "s").unwrap();
+    std::os::unix::fs::symlink(plugin.join("secret.js"), dir.join("out.js")).unwrap();
+    std::fs::create_dir_all(dir.join("~kit/view")).unwrap();
+    std::fs::write(dir.join("~kit/view/view.js"), "plugin's own").unwrap();
+    std::fs::create_dir_all(d.join("kit/view")).unwrap();
+    std::fs::write(d.join("kit/view/view.js"), "kit").unwrap();
+    std::fs::write(d.join("kit/view/.hidden.js"), "h").unwrap();
+    let dir = dir.canonicalize().unwrap();
+    let at = |host: &str, method: &str, target: &str, inm: Option<&str>| {
+        let (path, query) = target.split_once('?').unwrap_or((target, ""));
+        let mut headers = vec![("Host".to_string(), host.to_string())];
+        headers.extend(inm.map(|t| ("If-None-Match".to_string(), t.to_string())));
+        route(&p, &Request { method: method.into(), path: path.into(), query: query.into(), headers, body: vec![] })
+    };
+    let h = vhash("sheets", "~views", "ui://sheets/views/grid");
+    let vh = format!("v-{h}.localhost:{}", p.port);
+    let folder = ViewFolder { tag: tag(&plugin, Some("1.0.0")), dir: dir.clone() };
+    let s = p.view_sandbox(&h, ViewSandbox { csp: json!({}), perms: vec![], folder: Some(folder) });
+    let r = at(&vh, "GET", &format!("/f/{s}/app.js"), None);
+    assert_eq!((r.status, text(&r).as_str(), r.ctype), (200, "1", "text/javascript; charset=utf-8"));
+    assert!(r.csp.contains("script-src 'unsafe-inline' 'self'"), "{}", r.csp);
+    let etag = r.etag.clone().expect("an etag");
+    assert_eq!(at(&vh, "GET", &format!("/f/{s}/app.js"), Some(&etag)).status, 304, "cached by its version");
+    assert_eq!(at(&vh, "GET", &format!("/f/{s}/lib/x.css"), None).status, 200);
+    assert_eq!(text(&at(&vh, "GET", &format!("/f/{s}/~kit/view/view.js"), None)), "kit", "bise's kit, never the plugin's own ~kit");
+    // the proxy: the base is the hub's, with this session
+    let proxy = at(&vh, "GET", &format!("/mcp-app?s={s}"), None);
+    assert!(text(&proxy).contains(&format!(r#"const BASE = "http://{vh}/f/{s}/";"#)), "{}", text(&proxy));
+    assert!(proxy.csp.contains("base-uri 'self'"), "{}", proxy.csp);
+    // probes: each one a 404, never the file
+    let other = vhash("sheets", "~views", "ui://sheets/views/other");
+    let s_other = p.view_sandbox(&other, ViewSandbox { csp: json!({}), perms: vec![], folder: Some(ViewFolder { tag: "t".into(), dir: dir.clone() }) });
+    for bad in [
+        format!("/f/{s}/../../secret.js"),
+        format!("/f/{s}/%2e%2e/secret.js"),
+        format!("/f/{s}/lib/../app.js"),
+        format!("/f/{s}/out.js"),
+        format!("/f/{s}/"),
+        format!("/f/{s}/lib"),
+        format!("/f/{s}/index.html/x"),
+        format!("/f/{s}/~kit/view/.hidden.js"),
+        format!("/f/{s}/~kit/other.js"),
+        format!("/f/{s_other}/app.js"),
+        format!("/f/{}/app.js", "0".repeat(32)),
+        "/f//app.js".to_string(),
+    ] {
+        let r = at(&vh, "GET", &bad, None);
+        assert_eq!(r.status, 404, "{bad}");
+        assert!(r.etag.is_none(), "{bad}");
+    }
+    assert_eq!(at(&vh, "POST", &format!("/f/{s}/app.js"), None).status, 405, "read only");
+    assert_eq!(at(&vh, "GET", "/f", None).status, 403);
+    assert_eq!(get(&p, &format!("/f/{s}/app.js")).status, 404, "never on the main host");
+    // a server's view (no folder): no /f/, no base, the floor's base-uri
+    let srv = vhash("fake-app", "fake-app", "ui://fake-app/counter");
+    let vs = format!("v-{srv}.localhost:{}", p.port);
+    let s2 = p.view_sandbox(&srv, ViewSandbox { csp: json!({}), perms: vec![], folder: None });
+    assert_eq!(at(&vs, "GET", &format!("/f/{s2}/app.js"), None).status, 404);
+    let proxy = at(&vs, "GET", &format!("/mcp-app?s={s2}"), None);
+    assert!(text(&proxy).contains(r#"const BASE = "";"#) && proxy.csp.contains("base-uri 'none'") && !proxy.csp.contains("script-src 'unsafe-inline' 'self'"), "{}", proxy.csp);
     let _ = std::fs::remove_dir_all(d);
 }
 

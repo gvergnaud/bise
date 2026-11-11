@@ -23,6 +23,7 @@ pub mod site;
 pub mod store;
 pub mod ui;
 pub mod view_csp;
+pub mod view_folder;
 pub mod view_web;
 pub mod views;
 pub mod waiting;

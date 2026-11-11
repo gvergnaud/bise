@@ -67,7 +67,7 @@ pub fn post(pages: &Pages, segs: &[&str], body: &[u8]) -> Option<Response> {
 
 fn bundle(pages: &Pages, f: &str) -> Response {
     match std::fs::read(pages.office_dir.join(f)) {
-        Ok(body) => Response { status: 200, ctype: "text/javascript; charset=utf-8", body, csp: super::server::CSP.into(), location: None },
+        Ok(body) => Response { status: 200, ctype: "text/javascript; charset=utf-8", body, csp: super::server::CSP.into(), location: None, etag: None },
         Err(_) => Response::missing(&format!("no such file: kit/office/{f} (office/dist in the app root)")),
     }
 }

@@ -5,7 +5,9 @@
 //! two plugins. On such a host the server answers `GET /mcp-app`, the
 //! sandbox proxy page (from the spec's "sandbox proxy"), and nothing
 //! else: every other route is 403 there, `/mcp-app` is 404 on the main
-//! host.
+//! host. A view with its own folder on disk (a static view, `~views`)
+//! also answers `GET /f/<session>/<rel>`, its folder's files
+//! (view_folder.rs, docs/plugin-apps.md A5), under the same sessions.
 //!
 //! The proxy is not a security boundary: the view runs in a `blob:` frame
 //! the proxy makes (`allow-same-origin`), so it can run code in the proxy.
@@ -27,6 +29,7 @@
 //! [`view_csp`]: super::view_csp
 
 use super::server::{Request, Response};
+use super::view_folder::{self, ViewFolder};
 use super::Pages;
 use bise_proto::view_rules;
 use serde_json::Value;
@@ -39,11 +42,18 @@ use sha2::{Digest, Sha256};
 pub struct ViewSandbox {
     pub csp: Value,
     pub perms: Vec<String>,
+    /// its own files on disk (a static view's folder): served at
+    /// `/f/<session>/`, `'self'` in its CSP, the proxy's `<base>`
+    pub folder: Option<ViewFolder>,
 }
 
 /// At most this many proxy sessions per view origin: an older tab of
-/// that view past them loads it again through `view/resource`.
-pub const SESSIONS: usize = 8;
+/// that view past them loads it again through `view/resource`. Above the
+/// desktop's live views (apps/desktop/src/views/place.ts `MAX_LIVE`, 8)
+/// twice over: a live tab holds two sessions at most (a reload while the
+/// old one drains), so a live tab of a document app never loses its own
+/// (architect m_60156).
+pub const SESSIONS: usize = 16;
 /// At most this many view origins kept (the least recently loaded go
 /// first; a tab of one loads it again through `view/resource`).
 pub const ORIGINS: usize = 512;
@@ -126,6 +136,14 @@ impl Pages {
         session
     }
 
+    /// bise's view kit (`kit/view/`) as a view's folder: what
+    /// `/f/<session>/~kit/view/<file>` serves (view_folder.rs).
+    fn view_kit(&self) -> ViewFolder {
+        let dir = self.kit_dir.join("view");
+        let dir = dir.canonicalize().unwrap_or(dir);
+        ViewFolder { tag: view_folder::tag(&dir, Some(env!("CARGO_PKG_VERSION"))), dir }
+    }
+
     /// The sandbox of view origin `hash` for a proxy load with `session`:
     /// one `view/resource` made it (among the last [`SESSIONS`]), else none.
     fn sandbox_of(&self, hash: &str, session: Option<&str>) -> Option<ViewSandbox> {
@@ -136,23 +154,45 @@ impl Pages {
     }
 }
 
-/// Every request on view host `hash`: the proxy page, or 403.
+/// Every request on view host `hash`: the proxy page, its own files, or 403.
 pub fn route(pages: &Pages, req: &Request, hash: &str) -> Response {
-    if req.path != "/mcp-app" {
-        return Response::err(403, "a view's origin serves its proxy only");
+    let files = view_folder::split(&req.path);
+    if req.path != "/mcp-app" && files.is_none() {
+        return Response::err(403, "a view's origin serves its proxy and its own files only");
     }
     if req.method != "GET" {
         return Response::err(405, "GET only");
     }
+    if let Some((session, rel)) = files {
+        return own_file(pages, req, hash, session, &rel);
+    }
     // a session only view/resource gives (C6): a page that never asked
     // the hub (a .html file opened in his browser, which file: lets frame
     // the proxy) can't load the view's origin with its own html
-    let Some(s) = pages.sandbox_of(hash, req.param("s")) else { return Response::missing("no such view") };
-    let csp = super::view_csp::csp(&s.csp, pages.port, pages.view_dev);
-    let html = proxy_page(&csp, &view_rules::allow(&s.perms));
+    let Some(session) = req.param("s") else { return Response::missing("no such view") };
+    let Some(s) = pages.sandbox_of(hash, Some(session)) else { return Response::missing("no such view") };
+    let csp = super::view_csp::csp(&s.csp, pages.port, pages.view_dev, s.folder.is_some());
+    // the base is the hub's, written now: never from the view's html
+    let base = s.folder.as_ref().map(|_| format!("{}{}{session}/", view_rules::origin_of(hash, pages.port), view_folder::PREFIX)).unwrap_or_default();
+    let html = proxy_page(&csp, &view_rules::allow(&s.perms), &base);
     let mut r = Response::page(200, html);
     r.csp = csp.into();
     r
+}
+
+/// `GET /f/<session>/<rel>` on view host `hash`: a file of its folder, or
+/// of bise's view kit under `~kit/view/` (docs/plugin-apps.md A5);
+/// another origin's session, a view with no folder: 404, as `/mcp-app`.
+fn own_file(pages: &Pages, req: &Request, hash: &str, session: &str, rel: &[&str]) -> Response {
+    let Some(s) = pages.sandbox_of(hash, Some(session)) else { return Response::missing("no such file") };
+    let Some(folder) = s.folder.as_ref() else { return Response::missing("no such file") };
+    let csp = super::view_csp::csp(&s.csp, pages.port, pages.view_dev, true);
+    let inm = req.header("if-none-match");
+    match rel {
+        [view_folder::KIT, "view", file] => view_folder::serve(&pages.view_kit(), &[file], inm, csp),
+        [view_folder::KIT, ..] => Response::missing("no such file"),
+        _ => view_folder::serve(folder, rel, inm, csp),
+    }
 }
 
 /// JSON for an inline script: `<` never closes it.
@@ -166,8 +206,8 @@ fn script_json(s: &str) -> String {
 /// only, once, builds the view's blob frame (the hub's CSP in a meta,
 /// `allow=` the granted permissions) and relays JSON-RPC both ways, each
 /// way checking `event.source`.
-fn proxy_page(csp: &str, allow: &str) -> String {
-    PROXY.replace("__CSP__", &script_json(csp)).replace("__ALLOW__", &script_json(allow))
+fn proxy_page(csp: &str, allow: &str, base: &str) -> String {
+    PROXY.replace("__CSP__", &script_json(csp)).replace("__ALLOW__", &script_json(allow)).replace("__BASE__", &script_json(base))
 }
 
 const PROXY: &str = r#"<!doctype html>
@@ -183,6 +223,7 @@ const PROXY: &str = r#"<!doctype html>
   "use strict";
   const CSP = __CSP__;
   const ALLOW = __ALLOW__;
+  const BASE = __BASE__;
   const host = window.parent;
   if (host === window) return;
   let cross = false;
@@ -199,7 +240,10 @@ const PROXY: &str = r#"<!doctype html>
     // the meta goes after the view's own leading doctype: before it, the
     // document is in quirks mode (tables at 16 px, box sizing); nothing of
     // the view but that doctype comes before the meta
-    const meta = '<meta http-equiv="Content-Security-Policy" content="' + esc(CSP) + '">';
+    // a view with its own folder: its relative urls resolve at its
+    // /f/<session>/ (a blob has no base of its own), set before any of
+    // its markup
+    const meta = '<meta http-equiv="Content-Security-Policy" content="' + esc(CSP) + '">' + (BASE ? '<base href="' + esc(BASE) + '">' : "");
     const dt = /^\uFEFF?\s*<!doctype[^>]*>/i.exec(html);
     const doc = dt ? dt[0] + meta + html.slice(dt[0].length) : meta + html;
     f.src = URL.createObjectURL(new Blob([doc], { type: "text/html" }));
@@ -288,7 +332,7 @@ mod tests {
         }
         assert_eq!(o.sessions.len(), SESSIONS);
         assert_eq!(o.sessions.first().map(String::as_str), Some("s3"), "the oldest went first");
-        assert_eq!(o.sessions.last().map(String::as_str), Some("s10"));
+        assert_eq!(o.sessions.last().map(String::as_str), Some(format!("s{}", SESSIONS + 2).as_str()));
         assert_eq!(proxy_url("http://v-0123456789abcdef.localhost:47123", "ab"), "http://v-0123456789abcdef.localhost:47123/mcp-app?s=ab");
     }
 
@@ -306,7 +350,8 @@ mod tests {
 
     #[test]
     fn the_proxy_page_carries_the_hubs_policy_safely() {
-        let html = proxy_page("default-src 'none'</script><script>alert(1)", "camera");
+        let html = proxy_page("default-src 'none'</script><script>alert(1)", "camera", "http://x/</script><script>alert(2)");
+        assert!(!html.contains("</script><script>alert(2)"), "nor does a base");
         assert!(!html.contains("</script><script>alert"), "a policy never closes the script");
         assert!(html.contains(r#"const ALLOW = "camera";"#));
         assert!(html.contains("sandbox-proxy-ready") && html.contains("allow-scripts allow-same-origin allow-forms"));

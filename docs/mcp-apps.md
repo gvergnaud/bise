@@ -317,11 +317,19 @@ Signed by architect (m_50047), with these owners:
   proxy page) and nothing else. The session is 32 hex from the system's
   random source that `view/resource` made for that origin and answers in
   `ViewResource.proxy` (`<origin>/mcp-app?s=<session>`, the URL the hosts
-  frame); the last 8 per origin are kept (an older tab loads again through
-  `view/resource`), never logged. No session, a wrong one or another
+  frame); the last 16 per origin are kept (above the desktop's 8 live
+  views; an older tab loads again through `view/resource`), never logged.
+  No session, a wrong one or another
   origin's: 404, so a page that never asked the hub (a `.html` file opened
   in his browser, which `file:` in `frame-ancestors` lets frame the proxy)
-  can't feed the view's origin its own html. Else: `/api`, `/p`, `/kit`… answer 403. On the main host
+  can't feed the view's origin its own html. A view with its own folder
+  on disk (a static view, `~views`) also gets `GET /f/<session>/<rel>`
+  under the same sessions, its folder's files and bise's view kit at
+  `~kit/view/` (docs/plugin-apps.md A5, `pages/view_folder.rs`): the
+  proxy writes `<base href="<origin>/f/<session>/">` before the view's
+  markup and its CSP adds `'self'` to script, style, img, font and
+  base-uri; a view without a folder keeps the floor and no base
+  (architect m_59927). Else: `/api`, `/p`, `/kit`… answer 403. On the main host
   `/mcp-app` is 404. `host_ok` accepts `v-[0-9a-f]{16}.localhost:<port>`
   exactly (no other subdomain: the DNS-rebinding guard stays). That rule
   is `bise_proto::view_rules::view_host` (the desktop's `isViewOrigin`

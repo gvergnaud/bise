@@ -38,6 +38,7 @@
 use super::{log_line, ClientId, Msg, Shell};
 use crate::core::Input;
 use crate::util::now_ms;
+use crate::pages::view_folder::ViewFolder;
 use crate::view_call::{self, ViewFile, ViewParams};
 use crate::view_limits::{Limits, Servers, ViewKey};
 use bend_plugins::visibility::{self, Ask, Verdict, ViewOf};
@@ -162,6 +163,21 @@ fn is_gone(e: &RpcError) -> bool {
 
 fn gone(why: &str) -> RpcError {
     RpcError { code: -32000, message: format!("the view's server is not reachable: {why}"), data: Some(ErrorData { reason: Some(REASON_SERVER_GONE.into()), ..Default::default() }) }
+}
+
+/// The folder a static view (`~views`) may serve its own files from
+/// (docs/plugin-apps.md A5): its `index.html`'s, in its plugin as the
+/// resolver finds it now, tagged with that plugin's version. A server's
+/// view: none (its `ui://` resource stays inline). Off the loop: it reads
+/// the plugins.
+fn static_folder(f: &ViewFile, ws: &Path) -> Option<ViewFolder> {
+    if f.server != bend_plugins::views::SERVER {
+        return None;
+    }
+    let res = bend_plugins::resolve::resolve(&bend_plugins::resolve::Roots::standard(Some(ws)));
+    let p = res.loaded().find(|p| p.name == f.plugin)?;
+    let v = p.views.iter().find(|v| v.uri == f.uri)?;
+    Some(ViewFolder { dir: v.html.parent()?.to_path_buf(), tag: crate::pages::view_folder::tag(&p.root, p.version.as_deref()) })
 }
 
 /// A view's call judged off the loop: its views file (`file`), its
@@ -319,6 +335,7 @@ impl Shell {
         let bridge = self.bridge_json(&dir, &ViewKey::new(&p.agent, &p.call), own);
         let via_own = matches!(bridge, Ok((_, false)));
         let step = self.view_step();
+        let ws = self.opts.paths.workspace.clone();
         std::thread::spawn(move || {
             let read = || -> Result<(ViewFile, view_call::ResourceRead, Value, Vec<String>), RpcError> {
                 let text = std::fs::read_to_string(&file).map_err(|_| ViewError::Expired.rpc("view/resource"))?;
@@ -338,20 +355,24 @@ impl Shell {
             match read() {
                 Err(e) if via_own && is_gone(&e) => step(Box::new(move |sh: &mut Shell| sh.view_resource(p, dir, done, false))),
                 Err(e) => done(Err(e)),
-                Ok((f, r, tool, grant)) => step(Box::new(move |sh: &mut Shell| sh.view_resource_read(f, r, tool, grant, done))),
+                Ok((f, r, tool, grant)) => {
+                    let folder = static_folder(&f, &ws);
+                    step(Box::new(move |sh: &mut Shell| sh.view_resource_read(f, r, tool, grant, folder, done)))
+                }
             }
         });
     }
 
     /// The resource is read: its sandbox registered on the pages server,
     /// then its answer.
-    fn view_resource_read(&mut self, f: ViewFile, r: view_call::ResourceRead, tool: Value, grant: Vec<String>, done: ViewDone) {
+    #[allow(clippy::too_many_arguments)]
+    fn view_resource_read(&mut self, f: ViewFile, r: view_call::ResourceRead, tool: Value, grant: Vec<String>, folder: Option<ViewFolder>, done: ViewDone) {
         let Some(pages) = self.pg.pages.clone() else {
             return done(Err(RpcError::refused("this hub serves no pages: views need its pages server", None)));
         };
         let permissions = view_call::granted(&r.declared, &grant);
         let hash = crate::pages::views::hash(&f.plugin, &f.server, &f.uri);
-        let session = pages.view_sandbox(&hash, crate::pages::views::ViewSandbox { csp: r.csp.clone(), perms: permissions.clone() });
+        let session = pages.view_sandbox(&hash, crate::pages::views::ViewSandbox { csp: r.csp.clone(), perms: permissions.clone(), folder });
         let origin = crate::pages::views::origin(&f.plugin, &f.server, &f.uri, pages.port);
         let res = ViewResource {
             proxy: Some(crate::pages::views::proxy_url(&origin, &session)),
