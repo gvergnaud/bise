@@ -14,7 +14,12 @@ import { _electron as electron, test, type CDPSession, type ElectronApplication,
 import { DESKTOP_DIR, harnessElectron } from './electron';
 import { appEntryMissing } from './appentry';
 import type { FakeCore, FakeHelper } from './fakes/helper';
-import { adoptHome, harnessEnv, Sentinel, testHome } from './isolation';
+import { adoptHome, harnessEnv, pathsOutside, Sentinel, testHome } from './isolation';
+
+// loaded with -r before the app's main on every launch: Electron's folders under the test home
+// (Electron on macOS ignores $HOME; main m_59528), and no start on a home the harness didn't mark
+const PATHS_HOOK = path.join(__dirname, 'paths', 'hook.js');
+const ELECTRON_PATHS = ['home', 'appData', 'userData', 'sessionData', 'documents', 'desktop', 'downloads', 'music', 'pictures', 'videos', 'logs', 'crashDumps', 'temp'];
 import { prove, Watch, watcherBinary, type Proof } from './proof';
 
 export type LaunchOptions = {
@@ -189,10 +194,14 @@ async function start(args: string[], env: Record<string, string>, o: LaunchOptio
     // the nightly's map run (BISE_HARNESS_COVERAGE): V8's coverage of every JS target (coverage/hook.js, emitted from hook.ts)
     const cov = coverageLaunch();
     if (cov) appEnv['BISE_HARNESS_COVERAGE_OUT'] = cov.out;
-    app = await electron.launch({ executablePath: harnessElectron(), args: [...(cov ? ['-r', cov.hook] : []), ...chromiumArgs(o), ...args], env: appEnv });
+    app = await electron.launch({ executablePath: harnessElectron(), args: ['-r', PATHS_HOOK, ...(cov ? ['-r', cov.hook] : []), ...chromiumArgs(o), ...args], env: appEnv });
     const pid = app.process().pid;
     if (pid !== undefined) sentinel.follow(pid);
     watch = new Watch(pid ?? -1, (why) => { stopped = why; killTree(pid); });
+    // read back before any spec gets the session: one Electron folder outside the run's own is a refusal
+    const folders = await app.evaluate(({ app: a }, names) => Object.fromEntries(names.map((n) => [n, a.getPath(n as Parameters<typeof a.getPath>[0])])), ELECTRON_PATHS);
+    const outside = pathsOutside(folders, [realpathSync(h.home), realpathSync(h.root)]);
+    if (outside.length) throw new Error(`harness: refused launch: Electron folders outside the test home: ${outside.join(', ')}`);
     await installGuards(app);
     const page = await mainWindow(app);
     const cdp = await page.context().newCDPSession(page);

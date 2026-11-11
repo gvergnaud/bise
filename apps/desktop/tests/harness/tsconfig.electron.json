@@ -1,5 +1,5 @@
 {
-  "//": "The harness's two files Electron loads itself (pageapp/main.js, coverage/hook.js): CommonJS scripts, emitted from their .ts by scripts/ts_emit.ts and committed (Electron's node doesn't strip types)",
+  "//": "The harness's files Electron loads itself (pageapp/main.js, coverage/hook.js, paths/hook.js): CommonJS scripts, emitted from their .ts by scripts/ts_emit.ts and committed (Electron's node doesn't strip types)",
   "compilerOptions": {
     "target": "ES2023",
     "module": "CommonJS",
@@ -14,5 +14,5 @@
     "noEmit": true,
     "skipLibCheck": true
   },
-  "files": ["pageapp/main.ts", "coverage/hook.ts"]
+  "files": ["pageapp/main.ts", "coverage/hook.ts", "paths/hook.ts"]
 }

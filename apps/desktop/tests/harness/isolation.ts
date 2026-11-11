@@ -15,11 +15,22 @@
 //     at close it kills what the run left (its tree, and what it started that carries its home: a
 //     hub started through launchd) and removes the launchd jobs that ran them, then deletes the home.
 import { execFile, execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
 export type TestHome = { root: string; home: string; biseHome: string; tmp: string };
+
+/**
+ * The file that marks a home the harness made or adopted: paths/hook.ts (loaded before the app's
+ * main) starts Electron only on a HOME that holds it (architect m_59538: told by a marker, never by
+ * its path). The same name as paths/hook.ts's MARKER (self/isolation.spec.ts pins both).
+ */
+export const TEST_HOME_MARKER = '.bise-test-home';
+
+const mark = (home: string): void => {
+  writeFileSync(path.join(home, TEST_HOME_MARKER), 'a test home made by apps/desktop/tests/harness (isolation.ts)\n');
+};
 
 /** A throwaway home under /tmp (short: bise's sockets live under BISE_HOME, 104 bytes max). */
 export function testHome(): TestHome {
@@ -28,6 +39,7 @@ export function testHome(): TestHome {
   const biseHome = path.join(home, '.bise');
   const tmp = path.join(root, 'tmp');
   for (const d of [home, biseHome, tmp, path.join(home, 'bise')]) mkdirSync(d, { recursive: true });
+  mark(home);
   return { root, home, biseHome, tmp };
 }
 
@@ -60,7 +72,33 @@ export function adoptHome(dir: string): TestHome {
   const root = mkdtempSync(path.join('/tmp', 'bh-'));
   const tmp = path.join(root, 'tmp');
   mkdirSync(tmp, { recursive: true });
+  mark(home);
   return { root, home, biseHome: path.join(home, '.bise'), tmp };
+}
+
+/**
+ * Electron's folders the app reports (name -> path) that are outside the run's own folders (its home
+ * and its /tmp/bh-* root: userdata, tmp), as 'name path' lines. Pure; `dirs` and the paths are
+ * realpaths. launch.ts refuses a launch with any (main m_59528: getPath('home') was his real home).
+ */
+export function pathsOutside(paths: Record<string, string>, dirs: string[]): string[] {
+  return Object.entries(paths).filter(([, p]) => !dirs.some((d) => inside(p, d))).map(([n, p]) => `${n} ${p}`);
+}
+
+/**
+ * What a run may never add to his real home, as names (main m_59528, architect m_59538): his home's
+ * top-level entries and ~/Library/CloudStorage's (a new File Provider domain folder). Never listed
+ * inside a domain: listing one makes his real appex enumerate, reaching his real service.
+ */
+export function realHomeNames(real: string): string[] {
+  const ls = (d: string): string[] => { try { return readdirSync(d); } catch { return []; } };
+  return [...ls(real), ...ls(path.join(real, 'Library', 'CloudStorage')).map((n) => path.join('Library', 'CloudStorage', n))];
+}
+
+/** The names in `after` that were not in `before` (realHomeNames), as breaches. Pure. */
+export function newInRealHome(before: string[], after: string[], real: string): string[] {
+  const was = new Set(before);
+  return after.filter((n) => !was.has(n)).map((n) => `the run created ${path.join(real, n)} in his real home`);
 }
 
 const KEEP = ['PATH', 'LANG', 'LC_ALL', 'LC_CTYPE', 'USER', 'LOGNAME', 'SHELL', 'TERM', '__CF_USER_TEXT_ENCODING'];
@@ -241,7 +279,11 @@ export class Sentinel {
     this.onBreach = onBreach;
   }
 
+  /** his real home's top-level names and CloudStorage's at the start (realHomeNames) */
+  private realBefore: string[] = [];
+
   async start(): Promise<void> {
+    this.realBefore = realHomeNames(realHome());
     this.baseline = new Set((await processes()).map((p) => p.pid));
     this.timer = setInterval(() => { void this.scan(); }, 1000);
   }
@@ -317,6 +359,8 @@ export class Sentinel {
         try { process.kill(p.pid, 'SIGKILL'); cleaned.push(`pid ${p.pid}`); } catch { /* gone */ }
       }
     }
+    // nothing new in his real home's top level nor in ~/Library/CloudStorage (main m_59528)
+    for (const b of newInRealHome(this.realBefore, realHomeNames(realHome()), realHome())) if (!this.breaches.includes(b)) this.breaches.push(b);
     rmSync(this.h.root, { recursive: true, force: true });
     return cleaned;
   }

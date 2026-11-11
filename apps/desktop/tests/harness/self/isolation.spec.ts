@@ -5,8 +5,9 @@ import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:f
 import os from 'node:os';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
-import { adoptHome, breaches, declaredOwner, harnessEnv, homeProblem, inWorld, noteSeen, realHome, testHome } from '../isolation';
-import { launchDesktop } from '../launch';
+import { adoptHome, breaches, declaredOwner, harnessEnv, homeProblem, inWorld, newInRealHome, noteSeen, pathsOutside, realHome, realHomeNames, TEST_HOME_MARKER, testHome } from '../isolation';
+import { launchDesktop, launchPage } from '../launch';
+import { MARKER, testHomeOk } from '../paths/hook';
 
 const REAL = realHome();
 const FAKE_BISE = path.join(__dirname, '..', 'fixtures', 'fake-bise.sh');
@@ -124,6 +125,59 @@ test('an adopted home (qa-flows m_9931): only a world\'s under ~/.bise/gate/ or 
   const found = breaches(table, new Set([50]), 100, h, REAL);
   expect(found.some((b) => b.includes('pid 101'))).toBe(false);
   expect(found.some((b) => b.includes('pid 102') && b.includes('real bise home'))).toBe(true);
+});
+
+// Electron's own folders (main m_59528): on macOS app.getPath('home') ignores $HOME, so ui-review's
+// FakeCore specs wrote ~/w and ~/Library/CloudStorage/bise/Shared/Bise growth into his real home.
+test('paths hook: Electron starts only on a home the harness marked, never his real one (architect m_59538)', () => {
+  expect(MARKER).toBe(TEST_HOME_MARKER);
+  const marked = (p: string): boolean => p === `/t/home/${MARKER}` || p === `${REAL}/${MARKER}`;
+  expect(testHomeOk('/t/home', REAL, marked)).toBeNull();
+  expect(testHomeOk(REAL, REAL, marked), 'his home, even marked').toMatch(/real home/);
+  expect(testHomeOk(`${REAL}/`, REAL, marked)).toMatch(/real home/);
+  expect(testHomeOk('/t/other', REAL, marked), 'a home the harness did not make').toMatch(/holds no/);
+  expect(testHomeOk(undefined, REAL, marked)).toMatch(/no HOME/);
+  const h = testHome();
+  expect(existsSync(path.join(h.home, TEST_HOME_MARKER)), 'testHome() marks its home').toBe(true);
+  rmSync(h.root, { recursive: true, force: true });
+});
+
+test('pathsOutside and newInRealHome: ui-review\'s case is red', () => {
+  const h = testHome();
+  const inRun = { home: h.home, documents: path.join(h.home, 'Documents'), userData: path.join(h.root, 'userdata') };
+  expect(pathsOutside(inRun, [h.home, h.root])).toEqual([]);
+  expect(pathsOutside({ ...inRun, home: REAL }, [h.home, h.root])).toEqual([`home ${REAL}`]);
+  const before = ['Documents', 'Library', path.join('Library', 'CloudStorage', 'GoogleDrive-x')];
+  expect(newInRealHome(before, before, REAL)).toEqual([]);
+  expect(newInRealHome(before, [...before, 'w', path.join('Library', 'CloudStorage', 'bise')], REAL)).toEqual([
+    `the run created ${path.join(REAL, 'w')} in his real home`,
+    `the run created ${path.join(REAL, 'Library', 'CloudStorage', 'bise')} in his real home`,
+  ]);
+  rmSync(h.root, { recursive: true, force: true });
+});
+
+test('ui-review\'s case end to end: what a launch writes under getPath(\'home\') lands in its test home', async () => {
+  const before = realHomeNames(REAL);
+  const s = await launchPage(path.join(__dirname, '..', 'fixtures', 'typing.html'));
+  let wrote: Record<string, string> = {};
+  try {
+    wrote = await s.app.evaluate(({ app }) => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const fs = require('node:fs') as typeof import('node:fs');
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const p = require('node:path') as typeof import('node:path');
+      const home = app.getPath('home');
+      const notes = p.join(home, 'w', 'notes.md');
+      const shared = p.join(home, 'Library', 'CloudStorage', 'bise', 'Shared', 'Bise growth', 'plan.md');
+      for (const f of [notes, shared]) { fs.mkdirSync(p.dirname(f), { recursive: true }); fs.writeFileSync(f, 'x'); }
+      return { home, documents: app.getPath('documents'), downloads: app.getPath('downloads'), notes, shared };
+    });
+    for (const f of [wrote['notes'], wrote['shared']]) expect(existsSync(f ?? ''), `${f} written`).toBe(true);
+  } finally {
+    await s.close();
+  }
+  for (const k of ['home', 'documents', 'downloads', 'notes', 'shared']) expect(wrote[k] ?? '', k).toMatch(/^\/private\/tmp\/bh-/);
+  expect(newInRealHome(before, realHomeNames(REAL), REAL), 'nothing new in his real home').toEqual([]);
 });
 
 test.describe('the app on a fake bise (needs pnpm build)', () => {
