@@ -1567,3 +1567,140 @@ log?: Array<string>,
  * or the one whose switch failed (their names)
  */
 waiting?: Array<string>, };
+
+/**
+ * An app that opens a file: one opener entry that matched (A3).
+ */
+export type Opener = { 
+/**
+ * the plugin's name (`sheets`)
+ */
+plugin: string, 
+/**
+ * its opener tool (`open_sheet`; a static view's tool)
+ */
+tool: string, 
+/**
+ * the app's title, what he reads (`Sheets`)
+ */
+app: string, 
+/**
+ * the canonical type key of the entry that matched (`*.xlsx`):
+ * his pick's key in `opener_set`
+ */
+type: string, 
+/**
+ * the type's name (`Excel workbook`)
+ */
+type_title: string, 
+/**
+ * its icon's name or address (none: the window's own)
+ */
+icon?: string | null, 
+/**
+ * one of bise's own types not migrated yet (`opens::BUILTIN`): for
+ * the icon only, the window never branches on it (A3)
+ */
+builtin?: boolean, };
+
+/**
+ * How strongly an entry claims its type (A1): `option` is never picked
+ * by itself, only listed in Open with.
+ */
+export type OpenRank = "owner" | "default" | "option";
+
+/**
+ * One type a plugin opens, on its plugins-page row (A3).
+ */
+export type PluginOpens = { 
+/**
+ * the canonical type key: an extension's glob (`*.xlsx`), a folder
+ * rule (a folder holding an index.html), a path under the plugin's
+ * documents (`@documents/boards/…`)
+ */
+type: string, 
+/**
+ * the type's name (`Excel workbook`)
+ */
+title: string, rank: OpenRank, 
+/**
+ * the app that opens it (`Sheets`)
+ */
+app: string, };
+
+/**
+ * One kind of file a plugin makes (A1's `makes`): a row of the
+ * launcher's New ›.
+ */
+export type PluginMake = { 
+/**
+ * `.xlsx`, lowercase, with its dot
+ */
+ending: string, 
+/**
+ * the New › row's word (`Sheet`)
+ */
+title: string, 
+/**
+ * the app that makes it (`Sheets`)
+ */
+app: string, };
+
+/**
+ * Settings › Plugins › File types: one type some app opens (A3).
+ */
+export type FileType = { 
+/**
+ * the canonical type key (`*.xlsx`)
+ */
+type: string, 
+/**
+ * the type's name (`Excel workbook`)
+ */
+title: string, 
+/**
+ * the app that opens it now (none: only `option` apps, he picks)
+ */
+app?: Opener | null, 
+/**
+ * the other apps that can, in A2's order (Open with)
+ */
+others?: Array<Opener>, 
+/**
+ * `app` is his pick (`opener_set`), not A2's order: the row resets
+ */
+his?: boolean, };
+
+/**
+ * The add sheet's line for one type the new plugin opens (A3), one per
+ * type it opens (its `opens` row: `.xlsx and .csv files`): `now` when
+ * another app opens it now (`.xlsx opens in Sheets now · Keep Sheets /
+ * Use Tables`, keep by default), `wide` for a wide claim (`*.json`).
+ */
+export type OpenClaim = { 
+/**
+ * the canonical type key it claims
+ */
+type: string, 
+/**
+ * the type's name, as the new plugin says it
+ */
+title: string, 
+/**
+ * the new plugin's app (`Tables`)
+ */
+app: string, 
+/**
+ * its opener tool: `Use Tables` sends `opener_set {type, plugin,
+ * tool}`
+ */
+tool: string, 
+/**
+ * the app that opens it now, when another does (`Sheets`)
+ */
+now?: string | null, 
+/**
+ * a wide claim: a bare extension many apps' files share (`*.json`,
+ * `*.txt`, `*.html`), said on the sheet
+ */
+wide?: boolean, };

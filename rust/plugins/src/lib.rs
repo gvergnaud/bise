@@ -8,7 +8,10 @@
 //!   diagnostics (pure over the file system, no process started);
 //! - `skills`: the one scanner of the loose skill folders (roots, scan,
 //!   on/off, the session's skills index, the hub's fingerprint);
-//! - `state`: the on/off file (`plugins.json`);
+//! - `state`: the on/off file (`plugins.json`), its view grants and his
+//!   picks of the app that opens a type;
+//! - `opens`: plugin apps, the files a plugin's openers open
+//!   (docs/plugin-apps.md A1, A2);
 //! - `connectors`: his Mistral connectors' catalog, its cache and index
 //!   lines;
 //! - `catalog`: the one builder of the unified Plugins list (the wire
@@ -53,6 +56,7 @@ pub mod login;
 pub mod marketplace;
 pub mod model;
 pub mod oauth;
+pub mod opens;
 pub mod parent;
 pub mod remote;
 pub mod remove;

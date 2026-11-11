@@ -360,6 +360,8 @@ export const app_cmd: readonly AppCmd[] = [
   {"cmd":"plugin_set","name":"mistral:gmail#tool:send_email","on":false,"project":"acme-1a2b3c4d"},
   {"cmd":"plugin_grant","perms":["midi"],"plugin":"fake-app","project":"acme-1a2b3c4d","uri":"ui://fake-app/counter"},
   {"cmd":"plugin_grant","perms":[],"plugin":"fake-app","uri":"ui://fake-app/hostile"},
+  {"cmd":"opener_set","plugin":"sheets","project":"acme-1a2b3c4d","tool":"open_sheet","type":"*.csv"},
+  {"cmd":"opener_set","type":"*.csv"},
   {"cmd":"plugin_setting","name":"maps","project":"acme-1a2b3c4d","value":"fake-key","var":"GOOGLE_MAPS_API_KEY"},
   {"cmd":"plugin_setting","name":"maps","var":"GOOGLE_MAPS_API_KEY"},
   {"cmd":"plugin_connect","id":"mistral:notion"},

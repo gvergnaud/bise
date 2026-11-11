@@ -161,6 +161,38 @@ impl Home {
         &self.root
     }
 
+    /// His visible bise folder: `~/bise` (docs/plugin-apps.md A6), the
+    /// home workspace where agents write, plugins' documents
+    /// ([`Home::plugin_app_dir`]), `taste.md` and `people.md`; shared-kb's
+    /// Finder domain shows its entries. `$BISE_HOME_WORKSPACE` in the tests
+    /// (a throwaway folder, never his).
+    pub fn bise_root(&self) -> PathBuf {
+        match crate::env::test_setting("BISE_HOME_WORKSPACE") {
+            Some(d) => PathBuf::from(d),
+            None => self.user.join("bise"),
+        }
+    }
+
+    /// His taste rules, `<bise root>/taste.md` (`sb taste`).
+    pub fn taste_file(&self) -> PathBuf {
+        self.bise_root().join("taste.md")
+    }
+
+    /// Who is who for him, `<bise root>/people.md` (`sb people`).
+    pub fn people_file(&self) -> PathBuf {
+        self.bise_root().join("people.md")
+    }
+
+    /// A plugin's documents, `<bise root>/Plugins/<plugin>/`, given to its
+    /// processes as `PLUGIN_DOCUMENTS` (docs/plugin-apps.md A6): `None`
+    /// when `plugin` is not one safe path segment (empty, a `/`, a NUL,
+    /// a leading `.`). Its one caller outside tests is
+    /// `bend_plugins::documents_dir`, which passes a plugin's own name.
+    pub fn plugin_app_dir(&self, plugin: &str) -> Option<PathBuf> {
+        let safe = !plugin.is_empty() && !plugin.starts_with('.') && !plugin.contains(['/', '\\', '\0']);
+        safe.then(|| self.bise_root().join("Plugins").join(plugin))
+    }
+
     /// `config.toml` (`$BEND_CONFIG`).
     pub fn config_file(&self) -> PathBuf {
         self.or("BEND_CONFIG", self.root.join("config.toml"))

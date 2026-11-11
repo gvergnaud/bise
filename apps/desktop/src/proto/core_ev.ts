@@ -5,7 +5,7 @@
 import type { Account, AwayProject, CheckState, CheckWhy, ComputerAgent, ConnectorsProblem, CuProfile, CuRow, Found, IndexRow, OpenWhat, PeekShot, PhasePage, PickCommand, PickFile, PickFolder, PickSkill, Plugin, PluginPreview, PluginsSummary, PreviewAction, PreviewReport, PreviewWait, ProjectRow, RoleRow, SetupGauge, StateAgent, StateCard, VoiceLit } from './app_rows';
 import type { Mode } from './hub';
 import type { JsonValue } from './json';
-import type { BiseUpdate, Folder, Page, ScheduledTask } from './rows';
+import type { BiseUpdate, FileType, Folder, Page, ScheduledTask } from './rows';
 import type { SendResult } from './rpc';
 import type { Entry, PageRef } from './thread';
 
@@ -29,7 +29,12 @@ ms?: number | null, } | { "ev": "found", dir: string, items: Array<Found>, } | {
 /**
  * why his Mistral connectors may be missing or old (none: fine)
  */
-connectors?: ConnectorsProblem | null, } | { "ev": "browse", source: string, items: Array<Plugin>, 
+connectors?: ConnectorsProblem | null, 
+/**
+ * Settings › Plugins › File types (docs/plugin-apps.md A3): every
+ * type an on plugin's app opens, by type key
+ */
+file_types?: Array<FileType>, } | { "ev": "browse", source: string, items: Array<Plugin>, 
 /**
  * `mistral`'s: why the list may be missing or old
  */

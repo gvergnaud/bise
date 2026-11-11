@@ -2,7 +2,7 @@
 //! [`crate::app_cmd::AppCmd`]): the sidebar's projects, accounts, plugins,
 //! computer use, roles, the composer's pick lists and ⌘K's index.
 
-use crate::rows::{Agent, ArtLink, Artifact, Card, CardBatch, CardPage, Opt, ReportKind, ScheduledTask};
+use crate::rows::{Agent, ArtLink, Artifact, Card, CardBatch, CardPage, OpenClaim, Opt, PluginMake, PluginOpens, ReportKind, ScheduledTask};
 use crate::{Pos, Project};
 use serde::{Deserialize, Serialize};
 
@@ -258,6 +258,13 @@ pub struct Plugin {
     /// now; a server's login is its `mcp` part's `login`
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub logins: Vec<PluginLogin>,
+    /// the types its apps open (docs/plugin-apps.md A3), from its
+    /// openers' entries
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub opens: Vec<PluginOpens>,
+    /// what its apps make (A1's `makes`: the launcher's New ›)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub makes: Vec<PluginMake>,
 }
 
 /// One of a plugin's settings (`bend_plugins::resolve::Setting`): a field
@@ -481,6 +488,11 @@ pub struct PluginPreview {
     /// (docs/mcp-apps.md C8); a server's views come once it runs
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub views: Vec<PluginPart>,
+    /// what its apps would open (docs/plugin-apps.md A3): one line per
+    /// type another app opens now, or a wide claim; known before it runs
+    /// for its static views, a server's once it runs
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub claims: Vec<OpenClaim>,
 }
 
 /// One MCP server of a [`PluginPreview`].

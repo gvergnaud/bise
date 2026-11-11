@@ -605,6 +605,7 @@ fn check(b: Built, ctx: &Ctx, token: String, dir: PathBuf) -> Result<Staged, Add
         replaces,
         // its static views, their domains and permissions, never granted yet (C8: ticked on the add screen)
         views: crate::catalog::views::parts(&b.name, &p.views, &crate::state::Grants::new(), true),
+        claims: Vec::new(),
     };
     Ok(Staged { preview, token, dir, plugin: b.plugin, secrets: b.secrets })
 }

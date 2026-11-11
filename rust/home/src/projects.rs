@@ -69,15 +69,10 @@ pub fn canonical(p: &Path) -> PathBuf {
 }
 
 /// The home workspace (docs/ambient-pages.md §5.1): `~/bise`, a plain
-/// folder without git for non-code work; `$BISE_HOME_WORKSPACE` when set
-/// (the tests: a throwaway folder, never the user's). The one rule: the
-/// hub (switchboard::paths), the TUI and the ambient core call it.
+/// folder without git for non-code work. A shortcut, no logic of its own:
+/// [`Home::bise_root`] of this process's environment holds the rule.
 pub fn home_workspace() -> PathBuf {
-    if let Some(d) = crate::env::test_setting("BISE_HOME_WORKSPACE") {
-        return PathBuf::from(d);
-    }
-    let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
-    home.join("bise")
+    Home::from_env().bise_root()
 }
 
 /// `ws` is the home workspace: its hub's main is bise (bise desktop S2).

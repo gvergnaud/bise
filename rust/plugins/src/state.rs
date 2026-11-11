@@ -20,6 +20,11 @@
 //! - [`grants`], [`view_grant`]: the grants as read, and one view's, pure;
 //! - [`grant`]: sets one view's grant, under the same lock.
 //!
+//! `openers` (plugin apps, docs/plugin-apps.md A2) holds his picks of the
+//! app that opens a type, by canonical type key: `{"*.csv":
+//! "sheets#open_sheet"}` ([`picks`]; [`pick_set`] under the same lock). A
+//! plugin turned off keeps its picks; [`forget`] drops a removed one's.
+//!
 //! - [`read`]: the four lists as a [`StateV2`];
 //! - [`StateV2::is_on`]: the rule, pure;
 //! - [`set`]: the one writer of the file, for any [`PluginId`]. The TUI,
@@ -103,6 +108,11 @@ pub fn forget(path: &Path, plugin: &PluginId) -> std::io::Result<bool> {
         g.retain(|k, _| !PluginId::parse(k).is_ok_and(|id| *id.owner() == owner));
         changed |= g.len() != n;
     }
+    if let Some(o) = doc.get_mut("openers").and_then(Value::as_object_mut) {
+        let n = o.len();
+        o.retain(|_, v| !v.as_str().and_then(OpenerRef::parse).is_some_and(|r| r.plugin == name));
+        changed |= o.len() != n;
+    }
     if changed {
         save(path, &doc)?;
     }
@@ -163,6 +173,78 @@ pub fn grant(path: &Path, id: &PluginId, perms: &[String]) -> std::io::Result<bo
         doc["view_grants"] = json!({});
     }
     doc["view_grants"][key] = want;
+    save(path, &doc)?;
+    Ok(true)
+}
+
+/// The app he picked for a type: an opener tool of a plugin.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct OpenerRef {
+    pub plugin: String,
+    pub tool: String,
+}
+
+impl OpenerRef {
+    /// `<plugin>#<tool>`, as `plugins.json` keeps it.
+    pub fn to_key(&self) -> String {
+        format!("{}#{}", self.plugin, self.tool)
+    }
+
+    /// `<plugin>#<tool>`, both non-empty; none for anything else.
+    pub fn parse(s: &str) -> Option<OpenerRef> {
+        let (plugin, tool) = s.split_once('#')?;
+        let ok = |x: &str| !x.is_empty() && !x.contains(['#', '/']);
+        (ok(plugin) && ok(tool)).then(|| OpenerRef { plugin: plugin.into(), tool: tool.into() })
+    }
+}
+
+/// His picks, by canonical type key ([`crate::opens::type_key`]).
+pub type Picks = std::collections::BTreeMap<String, OpenerRef>;
+
+/// `plugins.json`'s `openers` (docs/plugin-apps.md A2): `{"*.csv":
+/// "sheets#open_sheet"}`. A key that is not canonical or a value that
+/// does not parse: left out (kept in the file).
+pub fn picks(path: &Path) -> Picks {
+    let doc = doc(path);
+    let Some(map) = doc.get("openers").and_then(Value::as_object) else { return Picks::new() };
+    map.iter()
+        .filter(|(k, _)| crate::opens::type_key(k).as_deref() == Some(k.as_str()))
+        .filter_map(|(k, v)| Some((k.clone(), OpenerRef::parse(v.as_str()?)?)))
+        .collect()
+}
+
+/// Set his pick for `type_key` (any form: normalised by
+/// [`crate::opens::type_key`]) to `to`; none forgets it (back to A2's
+/// order). A pick of a plugin turned off stays (it may come back on);
+/// [`forget`] drops a removed plugin's. Returns whether the file changed.
+pub fn pick_set(path: &Path, type_key: &str, to: Option<&OpenerRef>) -> std::io::Result<bool> {
+    let invalid = |m: String| std::io::Error::new(std::io::ErrorKind::InvalidInput, m);
+    let key = crate::opens::type_key(type_key).ok_or_else(|| invalid(format!("{type_key:?} is not a file type")))?;
+    if let Some(r) = to {
+        OpenerRef::parse(&r.to_key()).ok_or_else(|| invalid(format!("{:?} is not an opener", r.to_key())))?;
+    }
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let _lock = lock(&path.with_extension("json.lock"))?;
+    let mut doc = doc(path);
+    let now = doc.get("openers").and_then(|o| o.get(&key)).cloned();
+    let want = to.map(|r| json!(r.to_key()));
+    if now == want {
+        return Ok(false);
+    }
+    if !doc.get("openers").is_some_and(Value::is_object) {
+        doc["openers"] = json!({});
+    }
+    let map = doc["openers"].as_object_mut().expect("an object, just set");
+    match want {
+        Some(v) => {
+            map.insert(key, v);
+        }
+        None => {
+            map.remove(&key);
+        }
+    }
     save(path, &doc)?;
     Ok(true)
 }
@@ -349,6 +431,48 @@ mod tests {
         // the plugin removed: its grants go with it
         assert!(forget(&p, &PluginId::plugin("fake-app")).unwrap());
         assert_eq!(grants(&p), Grants::new());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn his_pick_is_kept_by_its_canonical_key_and_forgotten_with_its_plugin() {
+        let dir = tmp("picks");
+        let p = dir.join("plugins.json");
+        let sheets = OpenerRef { plugin: "sheets".into(), tool: "open_sheet".into() };
+        let tables = OpenerRef { plugin: "tables".into(), tool: "open".into() };
+        assert_eq!(picks(&p), Picks::new(), "no file: no pick");
+        // Vibe's extension and the glob are one type
+        assert!(pick_set(&p, ".CSV", Some(&sheets)).unwrap());
+        assert!(!pick_set(&p, "*.csv", Some(&sheets)).unwrap(), "the same pick writes nothing");
+        assert!(pick_set(&p, "*.xlsx", Some(&tables)).unwrap());
+        assert!(set(&p, &id("docs"), false).unwrap(), "the other keys live beside it");
+        let got = picks(&p);
+        assert_eq!(got.get("*.csv"), Some(&sheets));
+        assert_eq!(got.get("*.xlsx"), Some(&tables));
+        assert_eq!(read(&p).disabled, vec!["docs".to_string()]);
+        // refused: not a type, not an opener; nothing written
+        assert!(pick_set(&p, "*", Some(&sheets)).is_err());
+        assert!(pick_set(&p, "*.md", Some(&OpenerRef { plugin: "a#b".into(), tool: "t".into() })).is_err());
+        // back to A2's order
+        assert!(pick_set(&p, "*.xlsx", None).unwrap());
+        assert!(!pick_set(&p, "*.xlsx", None).unwrap());
+        assert_eq!(picks(&p).len(), 1);
+        // turned off: kept; removed: gone
+        assert!(set(&p, &id("sheets"), false).unwrap());
+        assert_eq!(picks(&p).get("*.csv"), Some(&sheets));
+        assert!(forget(&p, &PluginId::plugin("sheets")).unwrap());
+        assert_eq!(picks(&p), Picks::new());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_pick_the_file_holds_wrong_is_left_out() {
+        let dir = tmp("picks-bad");
+        let p = dir.join("plugins.json");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(&p, r#"{"openers": {"*.CSV": "sheets#open", ".md": "docs#open", "*.txt": "nohash", "*.json": 3, "*.png": "media#preview"}}"#).unwrap();
+        let got = picks(&p);
+        assert_eq!(got.keys().collect::<Vec<_>>(), ["*.png"]);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

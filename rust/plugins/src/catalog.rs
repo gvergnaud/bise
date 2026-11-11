@@ -169,6 +169,8 @@ fn plugin_row(i: &Inputs, p: &resolve::Plugin, names: &[(String, String, String)
         needs_node: p.needs_node,
         logins: Vec::new(),
         parts,
+        opens: Vec::new(),
+        makes: Vec::new(),
     };
     // the `@` menu says what a pickable one waits on (at-plugins)
     if row.pickable {
@@ -395,6 +397,8 @@ fn connector_base(c: &ConnectorEntry, id: PluginId) -> Plugin {
         settings: Vec::new(),
         needs_node: false,
         logins: Vec::new(),
+        opens: Vec::new(),
+        makes: Vec::new(),
     }
 }
 
@@ -453,6 +457,8 @@ fn skills_row(i: &Inputs, scope: SkillsScope) -> Option<Plugin> {
         settings: Vec::new(),
         needs_node: false,
         logins: Vec::new(),
+        opens: Vec::new(),
+        makes: Vec::new(),
     })
 }
 

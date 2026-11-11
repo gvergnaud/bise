@@ -23,6 +23,8 @@ struct World {
     /// plugins.json's toggles, the plugin logins started, the logouts
     plugin_sets: Vec<(String, bool)>,
     grants: Vec<(String, String, Vec<String>)>,
+    /// his picks of a type's app: (type key, (plugin, tool) or none)
+    opener_sets: Vec<(String, Option<(String, String)>)>,
     settings: Vec<(String, String, Option<String>)>,
     plugin_logins: Vec<(PathBuf, String)>,
     plugin_logouts: Vec<(PathBuf, String)>,
@@ -105,6 +107,7 @@ fn setup(t: &mut T) -> Rc<RefCell<World>> {
     let sg = w.clone();
     let (al, ah) = (w.clone(), w.clone());
     let gr = w.clone();
+    let op = w.clone();
     let gs = w.clone();
     let (ad, am, ac, pc) = (w.clone(), w.clone(), w.clone(), w.clone());
     let (kn, ks, pt) = (w.clone(), w.clone(), w.clone());
@@ -228,6 +231,8 @@ fn setup(t: &mut T) -> Rc<RefCell<World>> {
                 needs_node: false,
                 logins: vec![],
                 parts,
+                opens: vec![],
+                makes: vec![],
             };
             let notion = Plugin { id: "mistral:notion".into(), name: "mistral:notion".into(), kind: PluginKind::Mistral, state: PluginState::Available, on: false, ..p("notion", false, vec![]) };
             vec![p("linear", true, vec![login("linear")]), p("computer", !off, vec![]), notion]
@@ -241,6 +246,10 @@ fn setup(t: &mut T) -> Rc<RefCell<World>> {
         }),
         plugin_grant: Box::new(move |plugin, uri, perms| {
             gr.borrow_mut().grants.push((plugin.into(), uri.into(), perms.to_vec()));
+            Ok(())
+        }),
+        opener_set: Box::new(move |key, to| {
+            op.borrow_mut().opener_sets.push((key.into(), to.map(|(p, t)| (p.into(), t.into()))));
             Ok(())
         }),
         plugin_setting: Box::new(move |_ws, plugin, var, value| {
@@ -621,6 +630,13 @@ fn the_window_lists_toggles_and_logs_in_to_plugins() {
 
     app(&mut t, r#"{"cmd":"plugin_grant","project":"shop","plugin":"fake-app","uri":"ui://fake-app/counter","perms":["midi"]}"#);
     assert_eq!(w.borrow().grants, vec![("fake-app".to_string(), "ui://fake-app/counter".to_string(), vec!["midi".to_string()])]);
+    // his pick of a type's app (docs/plugin-apps.md A2): set, reset, half given refused
+    t.take();
+    app(&mut t, r#"{"cmd":"opener_set","project":"shop","type":"*.csv","plugin":"sheets","tool":"open_sheet"}"#);
+    app(&mut t, r#"{"cmd":"opener_set","project":"shop","type":"*.csv"}"#);
+    app(&mut t, r#"{"cmd":"opener_set","project":"shop","type":"*.csv","plugin":"sheets"}"#);
+    assert_eq!(w.borrow().opener_sets, vec![("*.csv".to_string(), Some(("sheets".to_string(), "open_sheet".to_string()))), ("*.csv".to_string(), None)]);
+    assert_eq!(evs(&t.take(), "plugins").len(), 3, "the plugins again after each");
     // a plugin's setting (dev.bise.settings): given, forgotten, refused
     t.take();
     app(&mut t, r#"{"cmd":"plugin_setting","project":"shop","name":"maps","var":"GOOGLE_MAPS_API_KEY","value":"k"}"#);

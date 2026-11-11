@@ -94,8 +94,8 @@ impl Shell {
     pub(super) fn keeps_op(&mut self, cmd: &str, k: &bise_proto::sb::Keep) -> Value {
         use crate::keeps;
         use bise_proto::sb::Keep;
-        let name = if cmd == "taste" { keeps::TASTE } else { keeps::PEOPLE };
-        let path = match keeps::file(name) {
+        let kept = if cmd == "taste" { keeps::Kept::Taste } else { keeps::Kept::People };
+        let path = match keeps::file(kept, &self.opts.home) {
             Ok(p) => p,
             Err(e) => return json!({"ok": false, "error": e}),
         };
@@ -170,11 +170,12 @@ impl Shell {
         use crate::keeps;
         let pages = self.pg.pages.clone()?;
         let meta = pages.store.meta("about-you")?;
-        let read = |n: &str| keeps::file(n).ok().and_then(|p| std::fs::read_to_string(p).ok()).unwrap_or_default();
+        let home = &self.opts.home;
+        let read = |k: keeps::Kept| keeps::file(k, home).ok().and_then(|p| std::fs::read_to_string(p).ok()).unwrap_or_default();
         let p = crate::pages::store::Publish {
             agent: meta.agent.clone(),
             id: Some("about-you".into()),
-            html: keeps::about_you(&read(keeps::TASTE), &read(keeps::PEOPLE)),
+            html: keeps::about_you(&read(keeps::Kept::Taste), &read(keeps::Kept::People)),
             ..Default::default()
         };
         let gone: Vec<String> = self.hub.st.agents.keys().filter(|n| self.page_agent_gone(n)).cloned().collect();
@@ -260,11 +261,10 @@ impl Shell {
                 }
                 // --taste: the rules of ~/bise/taste.md now (the frame says
                 // 'following your taste · N rules'); no file: nothing
-                let taste = r.taste.then(|| {
-                    std::fs::read_to_string(crate::paths::home_workspace().join("taste.md")).ok().map(|t| crate::pages::store::taste_rules(&t))
-                });
+                let taste_file = self.opts.home.taste_file();
+                let taste = r.taste.then(|| std::fs::read_to_string(&taste_file).ok().map(|t| crate::pages::store::taste_rules(&t)));
                 if taste == Some(None) {
-                    return json!({"ok": false, "error": format!("--taste: no {} (read it, or publish without --taste)", crate::paths::home_workspace().join("taste.md").display())});
+                    return json!({"ok": false, "error": format!("--taste: no {} (read it, or publish without --taste)", taste_file.display())});
                 }
                 let p = crate::pages::store::Publish {
                     taste: taste.flatten(),

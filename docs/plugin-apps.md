@@ -144,10 +144,18 @@ rows; the desktop and the TUI never match themselves.
 ## A4. Opening (the deterministic call) and handles
 
 `view/open {project, target}` on hub.sock (beside C5's methods),
-`target`: `{artifact: id, version?}` | `{entry: <row id>}` (an id
-`folder/list` minted), plus `opener?` (Open with's pick; else A2's).
-**Ids, never paths**: the window returns only ids the hub gave it; a
-made-up id or a path string is refused (a test). The hub:
+`target` an `OpenTarget` (serde-tagged, with an `Unknown` arm; one type
+in `bise_proto::files`, apps-hub-files'): `{kind: "artifact", id,
+version?}` | `{kind: "entry", id}` (an id `folder/list` minted), plus
+`opener?` (Open with's pick; else A2's). **Ids, never paths**: the
+window returns only ids the hub gave it; a made-up id or a path string
+is refused (a test); an unknown `kind` is refused. `view/open` and
+`view/close` are client-socket methods only, refused on agent.sock and
+in sb ops (his click, no card; architect m_60316, m_60317, signed with
+apps-hub-views m_60315). A view method with both `{agent, call}` and
+`{doc}`, or neither, is refused. The opener is picked again at each
+open (A2; an `opener` of an off plugin is refused), never taken from a
+row the window holds. The hub:
 
 1. picks the opener (A2) and mints a **handle**: `view-file://<32 hex>`,
    opaque, bound to (the view session, a typed target): `Artifact {id,
@@ -157,12 +165,14 @@ made-up id or a path string is refused (a test). The hub:
 2. calls the opener tool with `{"file": {"name", "resourceUri": <handle>}}`
    (the RFC's shape) through the views bridge (C5), as **his** act: no
    approval card (it is his click; a server tool runs only on it).
-3. answers what `view/resource` answers (origin, proxy, html or folder
-   url, csp, permissions, declared, the tool's result) plus `doc` (the
-   view session's id, 32 hex, hub-minted: every later method of that
-   view carries `{doc}` instead of C5's `{agent, call}`), `handle`,
-   `document {name, type, version?, size, writable}` and `opener {plugin,
-   tool, app}`; for a BUILTIN opener, `{frame: url}` only.
+3. answers a `ViewOpened` (serde-tagged, with an `Unknown` arm):
+   `{kind: "view", ...}`, what `view/resource` answers (origin, proxy,
+   html or folder url, csp, permissions, declared, the tool's result)
+   plus `doc` (the view session's id, 32 hex, hub-minted: every later
+   method of that view carries `{doc}` instead of C5's `{agent, call}`),
+   `handle`, `document {name, type, version?, size, writable}` and
+   `opener {plugin, tool, app}`; for a BUILTIN opener `{kind: "frame",
+   frame: url}`.
 
 **One document, one write path** (architect m_59941): when the hub mints
 a handle for an entry whose realpath is an artifact's current target, it
@@ -262,11 +272,13 @@ floor plus declared origins, permissions granted at the add.
   `ui/initialize`. The view sets it as it changes, so an unload needs no
   round trip. Kept by the host per document tab, in the window's memory
   (no hub state).
-- **Notes and selection**: `dev.bise/selection {anchor, text?, key?}`
+- **Notes and selection**: `dev.bise/selection {anchor, text?, key?, take?}`
   (view → host; `key`: the printable character he typed over a
   selection, which the host takes as "start the message about this with
   it", as kit/office/select.js does today, since a view's keys never
-  reach the host) and `dev.bise/notes {notes: [{id, anchor, ...}]}` (host → view).
+  reach the host; `take: true`: his click on the kit's "type to ask
+  about it" pill, the same as key without a character. The host takes a
+  selection only with `key` or `take`) and `dev.bise/notes {notes: [{id, anchor, ...}]}` (host → view).
   An anchor is the view's opaque string (at most 512 bytes), stored by
   the hub per (artifact, version, anchor); a note whose anchor a new
   version doesn't have shows detached, never lost (the view says which
@@ -274,6 +286,20 @@ floor plus declared origins, permissions granted at the add.
   files carry no notes this round. `@bise/view` (a small
   library, kit/view/) does the view's side for first-party views; any
   plugin may use it.
+- `dev.bise/detached {ids: [note id]}` (view → host notification): the
+  notes of this version (from `dev.bise/notes`) whose anchor the view
+  could not place; the whole list each time (replace), `[]` when all are
+  placed; the host drops ids it never sent and lists the rest under the
+  tab's head; no answer, no error.
+- Keep mine as a copy: its own hub method `view/copy {doc, text | blob}`
+  → `{artifact}`, called by the host on his click with the body the hub
+  answered conflict to (a view can't call it; `dev.bise/resources/copy`
+  through `view/call` is refused, tested). The hub writes `<name>
+  (copy).<ext>` beside the handle's file (`(copy 2)`…, name parts from
+  the words catalog, never an overwrite), adds it as an artifact by
+  `you` in the source's library folder (a root file's: Unfiled); errors
+  as a write's (-32039, -32040 `no_grant`); an older version may be
+  copied. Owner apps-hub-files.
 - Host context: as C7 (theme, tokens, locale) plus `document: {name,
   type, version?, size, writable}`.
 
@@ -296,10 +322,19 @@ Owner: desktop `apps/desktop/src/views/` and `app/panel/`
   realpath under the root when it mints, a symlink out of it refused,
   hidden files only when asked. The window never reads the disk and
   never sends a path.
+- Ids (architect m_60046): one stable id table for ~/bise, owned by the
+  home hub (apps-hub-files: crate bise_ids, pure diff with table tests;
+  an FSEvents watcher on `Home::bise_root()` off the loop; the map
+  persisted through a Home fn, one writer). Wire ids are `e:<n>` for
+  folder/list rows, view/open and shared-kb's Finder edge; a rename or a
+  safe save keeps the id; an unknown id is refused; id → path always
+  through the map, checked under the root. The desktop core subscribes
+  to the id changes and asks `files/mint {path}` after a Finder create;
+  it never mints or persists.
 - **Outputs**: anywhere, as today. They join the gallery when an agent
   adds them (`sb artifact add`, which answers `opens in Sheets`), or
-  (q-auto, if he says yes) when a plugin's tool answers a
-  `resource_link` to a file it wrote: taken only under that plugin's
+  when a plugin's tool answers an MCP ResourceLink (`resource_link`,
+  Gabriel's yes on q-auto, m_60006) to a file it wrote: taken only under that plugin's
   documents or the project's workspace, realpath'd; anything else
   ignored with a diagnostic.
 - A plugin's documents show in its own home (the launcher's New tab ›
@@ -347,12 +382,11 @@ Owner: desktop `apps/desktop/src/views/` and `app/panel/`
   A2 matcher, and its handle is a third typed target, `Shared {mount,
   item}`, whose read and write go through the kb protocol, never a
   second file path.
-- The open point (architect m_59843 #4): `~/bise` as a visible folder
-  and shared-kb's File Provider domain, which also shows "bise" in
-  Finder. One story before apps-gallery's folder tabs: Gabriel's q-finder
-  on page plugin-apps (pick A: one "bise" in Finder, the domain, showing
-  Library, Shared and ~/bise's files through a local-dir backend built
-  on shared-kb; ~/bise stays where agents write, not in the sidebar).
+- Settled by Gabriel (q-finder, m_60000): one "bise" in Finder,
+  shared-kb's File Provider domain, its root Library · Shared · ~/bise's
+  top-level entries through a local-dir backend (kb-fileprovider, on
+  shared-kb); ~/bise stays where agents write and is not added to
+  Finder's sidebar. `Home::bise_root()` is the one path both use.
 
 ## Fixtures (piece 0)
 
@@ -380,7 +414,7 @@ Owner: desktop `apps/desktop/src/views/` and `app/panel/`
 | 3 | docx, pptx | docs, slides | their arms, docx.js, slides.js |
 | 4 | xlsx, csv | sheets | `office_kind`, sheet.js, `/a/<id>/view`, viewer.js, save.rs moved under A4's write |
 | 5 | sites | sites | `site` arm (isolation decided first) |
-| 6 | bise pages | pages | per q-pages |
+| 6 | bise pages | pages | all the way (Gabriel's q-pages, m_60010): a Pages app in the sandbox, its questions, ticks, drafts and notes through host methods any app may ask and he grants; its host contract (A9) written with architect before step 6 |
 
 Pinned (architect m_59941): a test that `bend_plugins::opens::BUILTIN`'s
 rows and `viewer_kind`'s arms name exactly the same types; each step
