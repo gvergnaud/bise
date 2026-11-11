@@ -264,12 +264,34 @@ floor plus declared origins, permissions granted at the add.
   img and base-uri for that origin only (view_csp.rs, with its test); a
   view without a folder keeps `base-uri 'none'` (architect m_59928). A
   running server's `ui://` resource stays inline under `MAX_HTML`.
-- **Folder-documents with their own scripts** (sites, step 5): the
-  document gets its own origin (the artifact id in the hash), or runs
-  opaque as today (site.rs `ARTIFACT_CSP`); decided before step 5, with
-  a test that two sites can't read each other's storage.
+- **Folder-documents with their own scripts** (sites, step 5; architect
+  m_60421): their own origin per document, never opaque. plugins/sites'
+  view declares `isolate: "document"`; the site's files are served on
+  that origin at `/h/<session>/<handle id>/<rel>` (A4's `resources/url`
+  on a folder copy: read only, realpath under the copy, a folder rel
+  gives its index.html, no listing); an html there gets the view CSP's
+  floor with `'self'` and `'unsafe-inline'` on script and style, `'self'`
+  on img, media, font and connect, and the view CSP's own
+  `frame-ancestors` list (every ancestor is checked: the Sites view, the
+  proxy, the desktop or the web host), no `sandbox` (the proxy's outer
+  sandbox still holds). The Sites view frames the site same-origin and
+  reads its DOM for block anchors and links (`ui/open-link` outside);
+  a site's scripts can do what that view can (read its document, a
+  selection, viewState): no write, no server, no `ui/message`. The
+  browser keeps its storage (localStorage, indexedDB, cookies), so
+  kit/storage.js, site-select.js and artifacts_storage go; a kept
+  storage.json is seeded once into the real localStorage at the first
+  open (a host-only method, the doc's own map; a shim in
+  tests/shims.txt, removed one release after). Probes, permanent rows of
+  hostile-opener: two sites can't read each other's localStorage,
+  indexedDB or cookies, `Domain=localhost` cookies included (Electron 44
+  refuses them from `v-*.localhost`: host-only cookies only, m_60437).
 - **isolate: "document"** in `dev.bise/ui` (opt-in; architect m_60354):
-  the view origin's hash includes the target's id (artifact or entry), so
+  the view origin's hash includes the target's id, `artifact:<project>/<id>`
+  (artifact ids are per project and cookies ignore ports, m_60439) or
+  `entry:<id>` (bise_ids are machine-wide), never the version (a site's
+  versions share one storage), built by one fn `origin_key` (a test: the
+  same artifact id in two projects, two hashes), so
   two documents never share storage; grants stay keyed by the view, not
   the origin; the ORIGINS bound keeps its eviction (oldest unseen), with
   a test; two sites can't read each other: test. Default: one origin per
@@ -414,6 +436,96 @@ Owner: desktop `apps/desktop/src/views/` and `app/panel/`
   shared-kb); ~/bise stays where agents write and is not added to
   Finder's sidebar. `Home::bise_root()` is the one path both use.
 
+## A9. Pages: what a document view may ask of bise (architect m_60436)
+
+Step 6, Gabriel's q-pages (m_60010): "all the way: a pages plugin drawn
+in the sandbox like any app, its questions and ticks through the host, no
+exception for first-party". Today a page is served at `/p/<id>` on the
+pages server's origin with `<meta name="bise-token">`, and the kit calls
+`/api/p/<id>/{notes,send,answer}`, reads `/p/<id>/{meta,versions,v/<n>/body}`
+and listens to `/p/<id>/events`. A9 replaces that private path: every
+method below is generic (any document view may ask it), answered from
+the artifact the `doc`'s handle names, never from an id the view sends.
+
+- **The app**: plugins/pages (bundled, first-party), one static view
+  `ui://pages/page` whose folder holds the page kit, moved from kit/ to
+  plugins/pages/view/ with its laws; sb page lint and the mirror's export
+  read it from there through one const path; `/kit/*` stops serving page
+  viewers; kit/view (`@bise/view`) stays. The hub names a page artifact
+  `<id>.page` for A2, in one place (where rows are built); plugins/pages
+  matches `*.page` (rank owner, title "bise page"). Opened like any
+  document: `view/open {kind: "artifact", id}`, a handle `Artifact {id,
+  version}`; `resources/read` gives the version's html as published (its
+  styles inline: page.css goes).
+- **Facts** (host context `document`, C7), built by one fn
+  (`DocumentFacts`, bise_proto, with its test of who sees what):
+  to every document view `name, type, version, size, writable` plus
+  `latest` (the newest version) and `versions: [{n, at_ms}]`; only to a
+  view granted `notes`: `agent` (who made it), `activity {state: writing
+  | updating | ready, progress?, ask?, agent_status?}` (sb page start's
+  writing view, an agent revising any document), `went [{kind, ref, url,
+  at, block?}]` (its urls can be his private links), `watch {every,
+  checked_ms, until_ms} | null`, `shared`; `taste {rules} | null` to a
+  first-party view only. A change arrives as the spec's
+  `ui/notifications/host-context-changed`; `progress` coalesced (a few a
+  second per doc at most).
+- **Older versions**: `resources/read {uri, version}` on the same handle,
+  read only, any version of the bound artifact; a write only to the
+  version the handle was minted on, and only while it is the latest.
+  A6b's "Open v5" is the host opening again, not a second handle.
+- **Notes** (permission `notes`): `dev.bise/notes/draft {notes: [{id?,
+  anchor, kind, text?, quote?, before?, after?}]}` → `{notes}`, his draft
+  notes on this version, the whole list; kinds as the page store's
+  (note, voice, edit, keep, drop, unsure, pick, approve, skip, tick,
+  start, stop); `dev.bise/notes` (host → view, A5) carries every note
+  with its status (draft, sent, done, answered) and the `voice` pin. One
+  store, one door: a page becomes `Target::Artifact` with `view` anchors
+  read through `bise_proto::anchor::as_view_key` (m_60380), nothing
+  rewritten; the view → hub note writes are apps-viewkit's (A5).
+- **Sending is his act, drawn by the host**: a view only drafts.
+  `dev.bise/notes/ready` (permission `notes`) asks the host to show its
+  send bar in the tab's chrome, outside the view's frame ("Send 3 notes
+  to perf", a preview he can open); the send needs user activation and
+  runs in the host's handler (for Pages the kit's own button may be the
+  bar, its click still through the host's handler with user
+  activation). Every note reaches the agent with its provenance (`via
+  <plugin>`). `start`/`stop` notes go to main as today.
+- **Questions**: `dev.bise/asks` (host → view, permission `notes`): the
+  open question cards anchored on this document `[{block, options,
+  reply?}]`. `dev.bise/answer {block, option | text}`: his click (user
+  activation), only a question card anchored on THIS document (one card,
+  one answer); never an approval card nor anything from auto-approve,
+  which answer only in bise's own UI (as WhatsApp's on_mac; a test: a
+  view's answer to an approval card is refused). With no open card the
+  hub keeps it as a pick note. His tick is a `tick` note; a tick made
+  elsewhere (`sb page tick`, its card) shows in the notes list.
+- **Moving**: `dev.bise/open {artifact, block?}` (his click, user
+  activation, else -32037): an `artifact:<id>` or `/p/<id>` link opens
+  that artifact in its app (A2), as his click on its chip; http(s) goes
+  through `ui/open-link`. Copying a draft: `clipboardWrite` (C8).
+- **Grants**: one permission, `notes` (draft, read notes and asks, ask
+  for the send bar), granted at the add (C8 `view_grants`), first-party
+  pre-granted at install. Sending and answering are not permissions:
+  they are his click through the host.
+- **The hub by itself**: `view/open` of an artifact marks it opened
+  (the capsule's unopened count), for every artifact; `sb page start`
+  tells the window to open that artifact (A7's exception), the window
+  calls `view/open`; the writing view is the Pages view with
+  `activity.state = writing`.
+- **Goes with step 6**: `/api/p/<id>/{notes,send,answer}`,
+  `/p/<id>/{meta,versions,v/<n>/body,v/<n>/page.css,events}`, the html
+  shell and its token; `/p/<id>` (and `/p/<id>/v/<n>`) **replaced by a
+  redirect** that opens the page through the web host (C9), never a 404
+  (old links live in Slack, mails, other pages, sb output); BUILTIN,
+  `viewer_kind` and the purity allowlist. Until step 6, BUILTIN's row
+  for pages is `{match: "*.page", app: "Pages", type_title: "bise
+  page", plugin: "pages"}`, its frame today's `/p/<id>`.
+- **What stays outside the window**: his browser's `/p/<id>` links (the
+  redirect above, into the web host); the public mirror (export.rs:
+  static, no token, no notes, no stream) and page-partagee's copies are
+  static files that never call the pages server: they keep working, the
+  export reading the kit from plugins/pages/view/.
+
 ## Fixtures (piece 0)
 
 `tests/fixtures/plugin-apps/`:
@@ -439,8 +551,8 @@ Owner: desktop `apps/desktop/src/views/` and `app/panel/`
 | 2 | pdf, video | media ("Preview") | the pdf and video arms, pdf.js, video.js, `STREAMED_KINDS` |
 | 3 | docx, pptx | docs, slides | their arms, docx.js, slides.js |
 | 4 | xlsx, csv | sheets | `office_kind`, sheet.js, `/a/<id>/view`, viewer.js, save.rs moved under A4's write |
-| 5 | sites | sites | `site` arm (isolation decided first) |
-| 6 | bise pages | pages | all the way (Gabriel's q-pages, m_60010): a Pages app in the sandbox, its questions, ticks, drafts and notes through host methods any app may ask and he grants; its host contract (A9) written with architect before step 6 |
+| 5 | sites | sites | `site` arm, kit/office/site.js, site-select.js, storage.js, artifacts_storage (after its seed shim), `/a/<id>/<v>/framed/` (A5, m_60421) |
+| 6 | bise pages | pages | all the way (Gabriel's q-pages, m_60010): a Pages app in the sandbox through A9; the token, `/api/p/*`, `/p/*`'s html (a redirect), BUILTIN, `viewer_kind`, the purity allowlist |
 
 Pinned (architect m_59941): a test that `bend_plugins::opens::BUILTIN`'s
 rows and `viewer_kind`'s arms name exactly the same types; each step
