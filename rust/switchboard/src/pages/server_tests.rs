@@ -752,7 +752,7 @@ fn a_view_with_a_folder_serves_its_own_files_only() {
     std::fs::write(d.join("kit/view/.hidden.js"), "h").unwrap();
     std::fs::create_dir_all(d.join("office/dist")).unwrap();
     std::fs::write(d.join("office/dist/office.js"), "office").unwrap();
-    std::fs::write(d.join("office/dist/office-view.js"), "dom").unwrap();
+    std::fs::write(d.join("office/dist/office-x.js"), "not allow-listed").unwrap();
     std::fs::create_dir_all(dir.join("~kit/office/v1")).unwrap();
     std::fs::write(dir.join("~kit/office/v1/office.js"), "plugin's own office").unwrap();
     let dir = dir.canonicalize().unwrap();
@@ -792,7 +792,7 @@ fn a_view_with_a_folder_serves_its_own_files_only() {
         format!("/f/{s}/~kit/view/.hidden.js"),
         format!("/f/{s}/~kit/other.js"),
         format!("/f/{s}/~kit/other/x.js"),
-        format!("/f/{s}/~kit/office/v1/office-view.js"),
+        format!("/f/{s}/~kit/office/v1/office-x.js"),
         format!("/f/{s}/~kit/office/v2/office.js"),
         format!("/f/{s}/~kit/office/office.js"),
         format!("/f/{s_other}/app.js"),
