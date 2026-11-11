@@ -392,29 +392,47 @@ fn probation(paths: &Paths, to: &Path, period: Duration, marks: Marks) -> Result
             Some(p) if alive(p) => {}
             _ => return Err(crash_cause(paths, marks)),
         }
-        // the hub that answers runs `to`, never another bise that took the
-        // workspace meanwhile (an older client's start: a pass then left
-        // him on the old version, update-safety); a few seconds of grace
-        // while a new hub takes it back (switch::claim)
-        if runs_elsewhere(paths, to) {
-            elsewhere += 1;
-            if elsewhere >= TAKEOVER_GRACE {
+        let away = runs_elsewhere(paths, to);
+        // no ping while another root holds hub.root: nothing answers then
+        (misses, elsewhere) = match watch(misses, elsewhere, away, away || ping(paths)) {
+            Ok(next) => next,
+            Err(Lost::Elsewhere) => {
                 let root = std::fs::read_to_string(paths.state.join("hub.root")).unwrap_or_default();
                 return Err(format!("another bise took the hub: {}", root.trim()));
             }
-        } else {
-            elsewhere = 0;
-        }
-        if ping(paths) {
-            misses = 0;
-        } else {
-            misses += 1;
-            if misses >= 4 {
-                return Err("the hub no longer answers".into());
-            }
-        }
+            Err(Lost::Silent) => return Err("the hub no longer answers".into()),
+        };
     }
     Ok(())
+}
+
+/// Why a probation second failed the switch.
+#[derive(Debug, PartialEq, Eq)]
+enum Lost {
+    Elsewhere,
+    Silent,
+}
+
+/// One probation second: `(misses, elsewhere)` after it, or why it fails.
+/// The hub that answers runs `to`, never another bise that took the
+/// workspace meanwhile (an older client's start: a pass then left him on
+/// the old version, update-safety). While another root holds hub.root the
+/// new hub is taking it back (switch::claim: the intruder stops, bounded
+/// ~11 s, then the new hub writes hub.root and binds): the socket is
+/// between two hubs and its silence is no miss (fast-loop m_59423: 'the
+/// hub no longer answers' 4 s into a take-back); bounded by
+/// TAKEOVER_GRACE. Pure.
+fn watch(misses: u32, elsewhere: u32, away: bool, answers: bool) -> Result<(u32, u32), Lost> {
+    if away {
+        return if elsewhere + 1 >= TAKEOVER_GRACE { Err(Lost::Elsewhere) } else { Ok((0, elsewhere + 1)) };
+    }
+    if answers {
+        Ok((0, 0))
+    } else if misses + 1 >= 4 {
+        Err(Lost::Silent)
+    } else {
+        Ok((misses + 1, 0))
+    }
 }
 
 /// Where hub.err and hub.log ended when the switch started the new hub:
@@ -872,6 +890,26 @@ mod state_tests {
         assert!(probation_over(s(2), s(2), 0), "over, the switch's root: good");
         assert!(!probation_over(s(3), s(2), 1), "over, but another root answers: it waits");
         assert!(probation_over(s(9), s(2), 0), "taken back: good");
+    }
+
+    /// A take-back's silent socket is no miss; it stays bounded
+    /// (fast-loop m_59423).
+    #[test]
+    fn a_take_back_is_no_miss() {
+        use super::{watch, Lost, TAKEOVER_GRACE};
+        // 3 misses, then another root: the take-back runs, misses forgotten
+        assert_eq!(watch(3, 0, true, false), Ok((0, 1)));
+        // 10 silent seconds of take-back, then the new hub answers: good
+        let mut s = (0, 0);
+        for _ in 0..10 {
+            s = watch(s.0, s.1, true, false).unwrap();
+        }
+        assert_eq!(watch(s.0, s.1, false, true), Ok((0, 0)));
+        // another root for TAKEOVER_GRACE seconds: it fails
+        assert_eq!(watch(0, TAKEOVER_GRACE - 1, true, true), Err(Lost::Elsewhere));
+        // the switch's own root, silent 4 s: it fails as before
+        assert_eq!(watch(3, 0, false, false), Err(Lost::Silent));
+        assert_eq!(watch(2, 0, false, false), Ok((3, 0)));
     }
 
     /// A crash during probation says the new hub's own last words (B of
