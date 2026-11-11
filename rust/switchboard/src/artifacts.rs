@@ -38,6 +38,7 @@
 use crate::artifacts_assets;
 use crate::artifacts_turns::{self, Place, Rev, Sitting, Turn};
 use bise_proto::anchor::Anchor;
+use bise_proto::rows::SavedBy;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -93,6 +94,17 @@ pub struct Version {
 }
 
 impl Version {
+    /// Who saved it: him (a sitting), else its turn's agent; none for a
+    /// version from before both (a document tab's "perf saved a newer
+    /// version" line, docs/plugin-apps.md A6b).
+    pub fn saved_by(&self) -> Option<SavedBy> {
+        match (&self.sitting, &self.turn) {
+            (Some(_), _) => Some(SavedBy::You),
+            (None, Some(t)) => Some(SavedBy::Agent { name: t.agent.clone() }),
+            (None, None) => None,
+        }
+    }
+
     /// Its newest save's number (1 for a version from before revs).
     pub fn rev(&self) -> u32 {
         self.revs.last().map_or(1, |r| r.rev)
@@ -898,7 +910,7 @@ impl Store {
         let dir = self.dir().join(&m.id);
         let version = |v: &Version| {
             json!({
-                "v": v.v, "ts_ms": v.at_ms, "target": v.target,
+                "v": v.v, "ts_ms": v.at_ms, "target": v.target, "by": v.saved_by(),
                 "copy": v.copy.as_ref().map(|c| dir.join(c).to_string_lossy().to_string()),
                 // why it has no copy: a video too big to copy is framed from its own file (site::served)
                 "no_copy": v.no_copy,

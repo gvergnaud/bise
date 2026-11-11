@@ -233,5 +233,22 @@ pub struct ArtifactVersion {
     /// with no copy served or no page server (architect m_23970)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub frame_url: Option<String>,
+    /// who saved it (docs/plugin-apps.md A6b's save line, `perf saved a
+    /// newer version`); none for a version from before (architect m_60168)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub by: Option<SavedBy>,
+}
+
+/// Who saved a version: him (his sitting in a viewer) or an agent (its
+/// turn). The window words `You` from its catalog, never from this.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SavedBy {
+    You,
+    Agent { name: String },
+    /// a kind this version doesn't know (a newer hub)
+    #[serde(other)]
+    Unknown,
 }
 

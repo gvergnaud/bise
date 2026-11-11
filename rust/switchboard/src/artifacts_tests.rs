@@ -717,3 +717,14 @@ fn law_rows_read_the_folder_through_the_library() {
     assert_eq!(rows_of(&state, "", &lib).len(), 2, "delete never deletes an artifact");
     assert_eq!(std::fs::read_to_string(state.join("artifacts/a-md/meta.json")).unwrap(), before);
 }
+
+/// Who saved a version (docs/plugin-apps.md A6b's save line): his sitting
+/// says `you`, else its turn's agent; a version from before both: none.
+#[test]
+fn a_version_says_who_saved_it() {
+    let turn = Some(crate::artifacts_turns::Turn { agent: "perf".into(), started_ms: 1 });
+    let sitting = Some(crate::artifacts_turns::Sitting { by: "you".into(), session: "s".into(), seq: 1 });
+    assert_eq!(Version { turn: turn.clone(), ..Default::default() }.saved_by(), Some(SavedBy::Agent { name: "perf".into() }));
+    assert_eq!(Version { sitting, turn, ..Default::default() }.saved_by(), Some(SavedBy::You));
+    assert_eq!(Version::default().saved_by(), None);
+}

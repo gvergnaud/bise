@@ -468,6 +468,7 @@ pub fn artifacts(ev: &Value, page_url: impl Fn(&str) -> Option<String>, frame_ba
                             copy: Some(s(x, "copy")).filter(|c| !c.is_empty()),
                             // the row's rule, per version (architect m_23970)
                             frame_url: frame_of(x, n, n == version),
+                            by: x.get("by").and_then(|b| serde_json::from_value(b.clone()).ok()),
                         }
                     })
                     .collect()

@@ -1054,7 +1054,18 @@ export type ArtifactVersion = { v: number, at_ms: number, note?: string | null, 
  * `/a/<id>/<v>/view` for an older one, else its copy's link); none
  * with no copy served or no page server (architect m_23970)
  */
-frame_url?: string | null, };
+frame_url?: string | null, 
+/**
+ * who saved it (docs/plugin-apps.md A6b's save line, `perf saved a
+ * newer version`); none for a version from before (architect m_60168)
+ */
+by?: SavedBy | null, };
+
+/**
+ * Who saved a version: him (his sitting in a viewer) or an agent (its
+ * turn). The window words `You` from its catalog, never from this.
+ */
+export type SavedBy = { "kind": "you" } | { "kind": "agent", name: string, } | { "kind": "unknown" };
 
 /**
  * The words a window draws over an artifact its maker saves while he
