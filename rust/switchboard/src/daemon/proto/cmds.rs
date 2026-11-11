@@ -709,9 +709,11 @@ impl Shell {
                 }
             }
             Slash::Artifacts(None) => {
-                let ev = self.artifacts_ev();
-                let arts = self.proto_artifacts(&ev);
-                self.proto_send(id, &arts);
+                // none before the rows' first build: it goes to all then
+                if let Some(ev) = self.artifacts_ev() {
+                    let arts = self.proto_artifacts(&ev);
+                    self.proto_send(id, &arts);
+                }
             }
             // the TUI's `artifacts` op's add (art_add), in this agent's view
             Slash::Artifacts(Some(target)) => {

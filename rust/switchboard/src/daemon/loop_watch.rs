@@ -300,6 +300,7 @@ impl Msg {
             Msg::Placed { name, .. } => format!("placed {name}"),
             Msg::Unplaced { name, .. } => format!("unplaced {name}"),
             Msg::CommitStyle(_) => "commit style".to_string(),
+            Msg::ArtBuilt(_) => "artifact rows built".to_string(),
             _ => "a hub message".into(),
         }
     }

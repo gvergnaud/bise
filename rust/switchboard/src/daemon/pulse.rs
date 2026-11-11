@@ -168,8 +168,11 @@ impl Shell {
             }
         };
         if self.pulse.arts.is_none() {
-            let rows = self.artifact_rows(&self.artifacts_ev());
-            self.pulse_artifacts(&rows);
+            // none before the artifact rows' first build (daemon/art_rows.rs)
+            if let Some(ev) = self.artifacts_ev() {
+                let rows = self.artifact_rows(&ev);
+                self.pulse_artifacts(&rows);
+            }
         }
         let arts = self.pulse.arts.as_deref().unwrap_or_default();
         let artifacts_at = pulse::cap(arts.iter().map(|a| a.0).filter(|t| *t >= from).collect());

@@ -795,7 +795,13 @@ impl Store {
     /// the current version); an id both use goes to the stored one first
     /// and the page gets `-page`.
     pub fn all(&self) -> Vec<Meta> {
-        let mut out = self.stored();
+        self.all_with(self.stored())
+    }
+
+    /// [`Store::all`] from the stored metas read already (one read of
+    /// the store per build of the rows, daemon/art_rows.rs).
+    pub fn all_with(&self, stored: Vec<Meta>) -> Vec<Meta> {
+        let mut out = stored;
         let base = self.pages_base();
         let filed = self.pages_filed();
         for p in self.pages() {
@@ -874,13 +880,25 @@ impl Store {
 
     /// The `artifacts` event's rows (docs/artifacts.md, "the row").
     pub fn rows(&self, who: Who, workspace: &str) -> Vec<Value> {
+        self.rows_from(&self.all(), who, workspace)
+    }
+
+    /// [`Store::rows`] of `all` (read once by the caller); each base
+    /// folder resolved once for the whole list (`keys`' canonicalize was
+    /// a realpath per version and base: half the build on his hub).
+    pub fn rows_from(&self, all: &[Meta], who: Who, workspace: &str) -> Vec<Value> {
         let put_away = self.archived();
-        self.all().iter().map(|m| self.row(m, who, workspace, put_away.get(&m.id).copied())).collect()
+        let canon = Canon::default();
+        all.iter().map(|m| self.row_with(m, who, workspace, put_away.get(&m.id).copied(), &canon)).collect()
     }
 
     /// `archived_at`: when the artifact itself was archived (`sb artifact
     /// archive`), or None; `archived` is its agent's.
     pub fn row(&self, m: &Meta, who: Who, workspace: &str, archived_at: Option<u64>) -> Value {
+        self.row_with(m, who, workspace, archived_at, &Canon::default())
+    }
+
+    fn row_with(&self, m: &Meta, who: Who, workspace: &str, archived_at: Option<u64>, canon: &Canon) -> Value {
         let (agent, archived) = who(&m.agent).unwrap_or_else(|| (m.agent.clone(), false));
         let page = m.by == "page";
         let notes = |v: u64| -> String {
@@ -928,7 +946,7 @@ impl Store {
             "gone": gone,
             "detail": detail,
             "pr": crate::forge::pr_link(&cur.target).map(|l| json!({"repo": l.repo, "number": l.number, "tag": l.tag()})),
-            "keys": keys(m, workspace),
+            "keys": keys_with(m, workspace, canon),
             "versions": m.versions.iter().map(version).collect::<Vec<_>>(),
             // raw: the hub resolves it against the library (artifacts_ev)
             "folder": m.folder,
@@ -979,10 +997,14 @@ impl Store {
 
     /// How many came after the user last looked (the archived ones never).
     pub fn new_count(&self, now: u64) -> usize {
+        self.new_count_from(&self.all(), now)
+    }
+
+    /// [`Store::new_count`] of `all` (read once by the caller).
+    pub fn new_count_from(&self, all: &[Meta], now: u64) -> usize {
         let seen = self.seen_ms(now);
         let put_away = self.archived();
-        self.all()
-            .iter()
+        all.iter()
             .filter(|m| m.by != "you" && !put_away.contains_key(&m.id) && m.current().is_some_and(|v| v.at_ms > seen))
             .count()
     }
@@ -1109,6 +1131,21 @@ pub fn rows_of(state: &Path, workspace: &str, lib: &bise_home::library::Library)
 /// link with and without its scheme; the path absolute, relative to the
 /// folder it was added from and to the workspace.
 pub fn keys(m: &Meta, workspace: &str) -> Vec<String> {
+    keys_with(m, workspace, &Canon::default())
+}
+
+/// Each base folder canonicalized once, for one build of the rows only
+/// (a moved workspace is seen at the next build).
+#[derive(Default)]
+pub struct Canon(std::cell::RefCell<std::collections::HashMap<String, PathBuf>>);
+
+impl Canon {
+    fn of(&self, base: &str) -> PathBuf {
+        self.0.borrow_mut().entry(base.to_string()).or_insert_with(|| Path::new(base).canonicalize().unwrap_or_else(|_| PathBuf::from(base))).clone()
+    }
+}
+
+fn keys_with(m: &Meta, workspace: &str, canon: &Canon) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     let mut push = |s: String| {
         if !s.is_empty() && !out.contains(&s) {
@@ -1127,7 +1164,7 @@ pub fn keys(m: &Meta, workspace: &str) -> Vec<String> {
                 if base.is_empty() {
                     continue;
                 }
-                let canon = Path::new(base).canonicalize().unwrap_or_else(|_| PathBuf::from(base));
+                let canon = canon.of(base);
                 if let Ok(rel) = Path::new(t).strip_prefix(&canon).or_else(|_| Path::new(t).strip_prefix(base)) {
                     push(rel.to_string_lossy().to_string());
                 }

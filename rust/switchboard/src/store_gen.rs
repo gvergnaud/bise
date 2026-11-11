@@ -10,14 +10,16 @@
 //! Every write of both stores goes through the hub process (the loop,
 //! and the page server's thread for a page's drafts): each store's write
 //! doors call [`bump`] (pages/store.rs `write_atomic`, artifacts.rs
-//! `write_atomic` and `copy_whole`, artifacts_archive.rs's removal), and so
-//! does each change of what a page row reads from memory (pages/mod.rs
-//! `set_busy`, `done_at`). What changes outside the hub is in the keys
-//! too: [`dir_stamp`], the mtimes of the pages' folder and of each page's
-//! folder (a page written by another process: artifacts_e2e, release-45
-//! m_35739), and of the artifacts' folder; an artifact's target file the
-//! user deletes (its row's `gone`) by the artifacts memo's backstop, a
-//! 10 s time bucket.
+//! `write_atomic` and `copy_whole`, artifacts_archive.rs's removal); each
+//! change of what a page row reads from memory (pages/mod.rs `set_busy`,
+//! `done_at`) calls [`bump_mem`], which moves the pages' key ([`now`])
+//! and never the artifacts' ([`disk_now`]: hub-loop, a set_busy at each
+//! turn rebuilt 1300 artifact rows). What changes outside the hub is in
+//! the keys too: [`dir_stamp`], the mtimes of the pages' folder and of
+//! each page's folder (a page written by another process: artifacts_e2e,
+//! release-45 m_35739), and of the artifacts' folder; an artifact's
+//! target file the user deletes (its row's `gone`) by the artifact rows'
+//! 5 min backstop (daemon/art_rows.rs, built off the loop).
 //!
 //! A memo only derives; it never decides (architect m_35024).
 
@@ -25,14 +27,29 @@ use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 static GEN: AtomicU64 = AtomicU64::new(1);
+static MEM: AtomicU64 = AtomicU64::new(0);
 
-/// A write to a store (or to what a row reads) happened.
+/// A write to a store on disk happened (the pages' or the artifacts').
 pub fn bump() {
     GEN.fetch_add(1, Ordering::AcqRel);
 }
 
-/// The stores' generation now.
+/// What a page row reads from the hub's memory changed (pages/mod.rs
+/// `set_busy`, `mark_done`): the pages' rows move, never the artifacts'
+/// (hub-loop: a set_busy at each turn rebuilt 1300 artifact rows).
+pub fn bump_mem() {
+    MEM.fetch_add(1, Ordering::AcqRel);
+}
+
+/// The generation of what the pages' rows read: the stores and the
+/// hub's memory.
 pub fn now() -> u64 {
+    GEN.load(Ordering::Acquire) + MEM.load(Ordering::Acquire)
+}
+
+/// The generation of the stores on disk only (what the artifacts' rows
+/// read).
+pub fn disk_now() -> u64 {
     GEN.load(Ordering::Acquire)
 }
 
@@ -121,7 +138,19 @@ mod tests {
             assert_eq!(code.matches("crate::store_gen::bump()").count(), bumps, "{name}: its write doors bump the generation");
         }
         let pages = include_str!("pages/mod.rs");
-        assert_eq!(pages.split("#[cfg(test)]").next().unwrap_or(pages).matches("crate::store_gen::bump()").count(), 2, "pages/mod.rs: set_busy and mark_done (a row's `held`) bump");
+        let code = pages.split("#[cfg(test)]").next().unwrap_or(pages);
+        assert_eq!(code.matches("crate::store_gen::bump_mem()").count(), 2, "pages/mod.rs: set_busy and mark_done (a row's `held`) bump the memory's generation");
+        assert_eq!(code.matches("crate::store_gen::bump()").count(), 0, "pages/mod.rs: an in-memory change never moves the disk generation (the artifacts' rows)");
+    }
+
+    /// hub-loop: what only the pages' rows read (a set_busy) moves the
+    /// pages' key, never the artifacts' (their rows took 5 s to build).
+    #[test]
+    fn a_memory_bump_moves_the_pages_key_not_the_disks() {
+        let (d, p) = (disk_now(), now());
+        bump_mem();
+        assert_eq!(disk_now(), d);
+        assert!(now() > p);
     }
 
     /// A page written by another process (no bump) moves the stamp:

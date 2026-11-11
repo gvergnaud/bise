@@ -262,6 +262,10 @@ impl Shell {
             Msg::Placed { name, ws, err } => self.step(Input::Placed { name, ws, err }),
             Msg::Unplaced { name, snapshot, err } => self.step(Input::Unplaced { name, snapshot, err }),
             Msg::CommitStyle(style) => self.commit_style = style,
+            Msg::ArtBuilt(b) => {
+                let (key, view) = *b;
+                self.art_built(key, view);
+            }
             Msg::XHub { token, stream, v } => self.xhub_op(token, stream, v),
             Msg::Version { mut stream, v, asker } => {
                 let from = v.get("from").and_then(|x| x.as_str()).unwrap_or("").to_string();

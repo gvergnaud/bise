@@ -23,6 +23,7 @@ mod agent_req;
 mod answers;
 mod art;
 mod art_folders;
+mod art_rows;
 mod attach;
 mod boot;
 mod capsule;
@@ -239,6 +240,8 @@ enum Msg {
     /// The repo's commit style, read off the loop (`git log`, at the start
     /// and after each land: Shell::ask_commit_style).
     CommitStyle(Option<String>),
+    /// The artifact rows built off the loop (daemon/art_rows.rs).
+    ArtBuilt(Box<(art_rows::ArtKey, art_rows::ArtView)>),
     /// A diff read for its guide (daemon/guide.rs): the loop decides.
     GuideSeen(Box<guide::Seen>),
     /// A guide's call is over (daemon/guide.rs): kept, or why not.

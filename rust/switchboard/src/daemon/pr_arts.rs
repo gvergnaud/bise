@@ -22,7 +22,7 @@ impl Shell {
     /// them), newest first, `poll::FOLLOW_MAX` at most. The store is read
     /// again only when it changed (its generation).
     pub(super) fn pr_followed(&self) -> Vec<String> {
-        let gen = crate::store_gen::now();
+        let gen = crate::store_gen::disk_now();
         let open = {
             let mut cache = self.art.prs.borrow_mut();
             match cache.as_ref().filter(|(g, _)| *g == gen) {

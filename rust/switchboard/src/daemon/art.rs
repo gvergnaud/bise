@@ -44,30 +44,15 @@ pub(super) struct Art {
     /// hub started (events::seed).
     seeded: bool,
     /// The store's rows, its metas (for `live`), new and seen_ms, built
-    /// again only when a store write, the agents' names or the 10 s
-    /// backstop move them (crate::store_gen, send-fast): the state push
-    /// and the view ask for them up to 10 times a second.
-    memo: std::cell::RefCell<crate::store_gen::Memo<(u64, u64, u64, u64), ArtView>>,
+    /// off the loop when their key moves (daemon/art_rows.rs, hub-loop):
+    /// the state push and the view ask for them up to 10 times a second.
+    pub(super) rows: std::cell::RefCell<super::art_rows::ArtRows>,
     /// The library's folders, read by its mtime (daemon/art_folders.rs).
     pub(super) lib: super::art_folders::LibCache,
     /// The open PR artifacts' links, newest first, by the store's
     /// generation (daemon/pr_arts.rs: the PRs the poller follows).
     pub(super) prs: std::cell::RefCell<Option<(u64, Vec<String>)>>,
 }
-
-/// What the artifacts event is built from (the memo's value).
-#[derive(Clone, Debug, Default)]
-struct ArtView {
-    rows: Vec<Value>,
-    stored: BTreeMap<String, artifacts::Meta>,
-    new: usize,
-    seen_ms: u64,
-}
-
-/// The backstop of the artifacts memo: a row reads what changes outside
-/// the hub (its target's file there or `gone`), so the rows are built
-/// again at least this often.
-const ART_BACKSTOP_MS: u64 = 10_000;
 
 /// Where an agent works and what its changes are measured against.
 #[derive(Clone, Debug)]
@@ -175,37 +160,78 @@ impl Shell {
         self.artifacts_refresh(false);
     }
 
-    /// `{"ev":"artifacts","rows":[…],"new":N,"seen_ms":T}`.
-    pub(super) fn artifacts_ev(&self) -> Value {
-        let now = now_ms();
-        // the folders' stamps: a page or an artifact written by another process
+    /// What the artifact rows read, as one key (daemon/art_rows.rs): the
+    /// stores' disk generation, the agents' names, the backstop's bucket
+    /// and the folders' stamps (a page or an artifact written by another
+    /// process).
+    fn art_key(&self, now: u64) -> super::art_rows::ArtKey {
         let st = &self.opts.paths.state;
         let disk = crate::store_gen::dir_stamp(&st.join("pages")) ^ crate::store_gen::dir_stamp(&st.join("artifacts")).rotate_left(1);
-        let key = (crate::store_gen::now(), self.art_who_key(), now / ART_BACKSTOP_MS, disk);
-        let mut view = self.art.memo.borrow_mut().get(key, || {
-            let store = self.art_store();
-            let who = self.art_who();
-            ArtView {
-                rows: store.rows(&who, &self.hub.workspace),
-                stored: store.stored().into_iter().map(|m| (m.id.clone(), m)).collect(),
-                new: store.new_count(now),
-                seen_ms: store.seen_ms(now),
+        (crate::store_gen::disk_now(), self.art_who_key(), now / super::art_rows::BACKSTOP_MS, disk)
+    }
+
+    /// The last rows built, and a build for `key` started off the loop
+    /// when it moved (one at a time; its view comes back as
+    /// `Msg::ArtBuilt`). None before the first build lands.
+    fn art_view(&self, now: u64) -> Option<super::art_rows::ArtView> {
+        let key = self.art_key(now);
+        let (view, start) = self.art.rows.borrow_mut().ask(key);
+        if start {
+            let job = super::art_rows::ArtJob {
+                state: self.opts.paths.state.clone(),
+                workspace: self.hub.workspace.clone(),
+                who: self
+                    .hub
+                    .st
+                    .agents
+                    .values()
+                    .map(|a| super::art_rows::WhoRow { name: a.name.clone(), dir: a.dir.clone(), aliases: a.aliases.clone(), archived: a.status() == crate::model::Status::Archived })
+                    .collect(),
+                now,
+            };
+            let tx = self.tx.clone();
+            let spawned = std::thread::Builder::new().name("art-rows".into()).spawn(move || {
+                let view = job.build();
+                let _ = tx.send(Msg::ArtBuilt(Box::new((key, view))));
+            });
+            if let Err(e) = spawned {
+                self.art.rows.borrow_mut().failed();
+                log_line(&self.opts.paths, &format!("artifacts: the rows' build did not start: {e}"));
             }
-        });
+        }
+        view
+    }
+
+    /// A build of the rows landed (`Msg::ArtBuilt`): kept, and the list to
+    /// the clients when it changed (a key that moved meanwhile starts the
+    /// next build there).
+    pub(super) fn art_built(&mut self, key: super::art_rows::ArtKey, view: super::art_rows::ArtView) {
+        if self.art.rows.borrow_mut().built(key, view) {
+            log_line(&self.opts.paths, "artifacts: the 5 min backstop found a change no stamp saw");
+        }
+        self.state_gate.changed();
+        self.artifacts_refresh(false);
+    }
+
+    /// `{"ev":"artifacts","rows":[…],"new":N,"seen_ms":T}`; None until
+    /// the first build of the rows lands (no event yet: the clients keep
+    /// their loading state).
+    pub(super) fn artifacts_ev(&self) -> Option<Value> {
+        let mut view = self.art_view(now_ms())?;
         self.art_live_rows(&view.stored, &mut view.rows);
         // the library joined at send time (his rename in the desktop core
         // moves no store stamp): each row's folder resolved, the folders
         let lib = self.art_library();
         artifacts::resolve_folders(&mut view.rows, &lib);
         // each PR's status, the hub's row of it (a change re-sends the event)
-        artifacts::join_pr_status(&mut view.rows, &self.hub.pr_rows_by_url(now));
-        json!({
+        artifacts::join_pr_status(&mut view.rows, &self.hub.pr_rows_by_url(now_ms()));
+        Some(json!({
             "ev": "artifacts",
             "rows": view.rows,
             "new": view.new,
             "seen_ms": view.seen_ms,
             "folders": super::art_folders::folder_rows(&lib),
-        })
+        }))
     }
 
     /// One number for what `art_who` answers: each agent's names and
@@ -222,7 +248,7 @@ impl Shell {
     /// Send the list when it changed since the last one sent (`force`:
     /// always).
     pub(super) fn artifacts_refresh(&mut self, force: bool) {
-        let ev = self.artifacts_ev();
+        let Some(ev) = self.artifacts_ev() else { return };
         let s = ev.to_string();
         if force || s != self.art.last {
             self.art.last = s;
