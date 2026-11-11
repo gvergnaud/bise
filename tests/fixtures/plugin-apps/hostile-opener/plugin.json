@@ -1,0 +1,9 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "hostile-opener",
+  "version": "0.1.0",
+  "description": "Test fixture for plugin apps (docs/plugin-apps.md, Fixtures): an opener of *.hostile whose view probes the handles, the write grant and the view's own files (/f/); and two site documents that try to read each other's storage.",
+  "extensions": {
+    "ai.mistral.vibe": { "schemaVersion": 1 }
+  }
+}

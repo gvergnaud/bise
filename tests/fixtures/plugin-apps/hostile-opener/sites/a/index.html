@@ -1,0 +1,27 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>site a</title></head>
+<body>
+<h1>site a</h1>
+<ul id="rows"></ul>
+<script>
+// Site a of the two-sites probe (docs/plugin-apps.md A5, step 5): it
+// leaves a secret in its own storage; site b, opened as another document,
+// must not read it. Its control: the write itself (an opaque origin
+// throws a SecurityError, which is a refusal too: b's probe says which).
+const li = document.createElement("li");
+li.dataset.probe = "control-site-a-store";
+li.dataset.kind = "control";
+let detail;
+try {
+  localStorage.setItem("plugin-apps-secret", "from-site-a");
+  document.cookie = "plugin-apps-secret=from-site-a; SameSite=Strict";
+  detail = localStorage.getItem("plugin-apps-secret") === "from-site-a" ? "stored" : "not stored";
+} catch (err) { detail = "storage refused: " + (err && err.name); }
+li.dataset.result = detail === "stored" || detail.startsWith("storage refused: SecurityError") ? "ok" : "broken";
+li.textContent = "control-site-a-store: " + li.dataset.result + " (" + detail + ")";
+document.getElementById("rows").appendChild(li);
+document.body.dataset.done = "1";
+</script>
+</body>
+</html>

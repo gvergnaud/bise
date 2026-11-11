@@ -1,0 +1,15 @@
+{
+  "about": "One tiny file per first-party type (docs/plugin-apps.md, Fixtures): its type key (A2's canonical form), the app that opens it once its migration step lands, and that step.",
+  "files": [
+    { "path": "tiny.png", "kind": "file", "type": "*.png", "app": "Preview", "plugin": "media", "step": 1 },
+    { "path": "tiny.md", "kind": "file", "type": "*.md", "app": "Writer", "plugin": "docs", "step": 1 },
+    { "path": "tiny.pdf", "kind": "file", "type": "*.pdf", "app": "Preview", "plugin": "media", "step": 2 },
+    { "path": "tiny.mp4", "kind": "file", "type": "*.mp4", "app": "Preview", "plugin": "media", "step": 2 },
+    { "path": "tiny.docx", "kind": "file", "type": "*.docx", "app": "Writer", "plugin": "docs", "step": 3 },
+    { "path": "tiny.pptx", "kind": "file", "type": "*.pptx", "app": "Slides", "plugin": "slides", "step": 3 },
+    { "path": "tiny.xlsx", "kind": "file", "type": "*.xlsx", "app": "Sheets", "plugin": "sheets", "step": 4 },
+    { "path": "tiny.csv", "kind": "file", "type": "*.csv", "app": "Sheets", "plugin": "sheets", "step": 4 },
+    { "path": "site", "kind": "folder", "type": "*/index.html", "app": "Sites", "plugin": "sites", "step": 5 },
+    { "path": "bise-page", "kind": "page", "type": "page", "app": "Pages", "plugin": "pages", "step": 6 }
+  ]
+}

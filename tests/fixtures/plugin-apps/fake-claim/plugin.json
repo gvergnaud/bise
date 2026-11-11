@@ -1,0 +1,9 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "fake-claim",
+  "version": "0.1.0",
+  "description": "Test fixture for plugin apps (docs/plugin-apps.md, Fixtures): a static opener that claims *.fake too (Vibe's entrypoint only: rank default, same specificity as fake-opener's owner entry) and *.json (a wide claim the add sheet says).",
+  "extensions": {
+    "ai.mistral.vibe": { "schemaVersion": 1 }
+  }
+}

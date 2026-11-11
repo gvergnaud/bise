@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "name": "claim",
+  "description": "Open a .fake file or any .json file (a test fixture's wide claim).",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "file": {
+        "type": "object",
+        "properties": { "name": { "type": "string" }, "resourceUri": { "type": "string" } },
+        "required": ["name", "resourceUri"]
+      }
+    },
+    "required": ["file"]
+  },
+  "ui": {
+    "csp": { "connectDomains": [], "resourceDomains": [], "frameDomains": [], "baseUriDomains": [] },
+    "permissions": {}
+  },
+  "_meta": {
+    "ai.mistral.vibe/ui": {
+      "entrypoints": [
+        { "type": "file", "extensions": [".FAKE", ".json"], "title": "Claim" }
+      ]
+    },
+    "dev.bise/ui": {
+      "files": [
+        { "match": ["*.json"], "title": "JSON file" }
+      ]
+    }
+  }
+}
