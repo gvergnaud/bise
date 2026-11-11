@@ -9,7 +9,9 @@
 //!   `view.json` + `index.html`, no server), loaded by [`load`] and
 //!   served by [`Virtual`], the plugin's virtual server [`SERVER`]
 //!   (`<base>/<plugin>/~views`): each view is a tool that answers its
-//!   arguments as `structuredContent`, its HTML a `ui://` resource;
+//!   arguments as `structuredContent`, its HTML a `ui://` resource, its
+//!   `view.json` `_meta` listed on its tool as a server's would be (an
+//!   opener's files, docs/plugin-apps.md A1);
 //! - the `ui://` resource cache of one server ([`ResourceCache`]): a
 //!   view's HTML read once per server start.
 
@@ -117,6 +119,20 @@ pub struct StaticView {
     /// `view.json`'s `ui` (`csp`, `permissions`, `prefersBorder`): the
     /// resource's `_meta.ui`
     pub ui: Value,
+    /// `view.json`'s `_meta` (an object, none: `{}`) but its `ui`: the
+    /// rest of its tool's `_meta` as [`Virtual::tools`] lists it, such
+    /// as an opener's file entrypoints (docs/plugin-apps.md A1)
+    pub meta: Map<String, Value>,
+}
+
+impl StaticView {
+    /// Its tool as a server lists it: `_meta.ui.resourceUri` beside the
+    /// rest of its `view.json` `_meta`.
+    pub fn tool(&self) -> Value {
+        let mut meta = self.meta.clone();
+        meta.insert("ui".into(), json!({"resourceUri": self.uri}));
+        json!({"name": self.tool, "description": self.description, "inputSchema": self.input_schema, "_meta": meta})
+    }
 }
 
 fn view_diag(plugin: &str, message: String) -> Diagnostic {
@@ -188,6 +204,11 @@ fn load_one(plugin: &str, root: &Path, dir: &Path, folder: &str) -> Result<Stati
         Some(u @ Value::Object(_)) => u.clone(),
         Some(_) => return Err("\"ui\" must be an object".into()),
     };
+    let meta = match o.get("_meta") {
+        None => Map::new(),
+        Some(Value::Object(m)) => m.iter().filter(|(k, _)| *k != "ui").map(|(k, v)| (k.clone(), v.clone())).collect(),
+        Some(_) => return Err("\"_meta\" must be an object".into()),
+    };
     Ok(StaticView {
         name: name.to_string(),
         tool: identifier(name),
@@ -197,6 +218,7 @@ fn load_one(plugin: &str, root: &Path, dir: &Path, folder: &str) -> Result<Stati
         html,
         root: root.to_path_buf(),
         ui,
+        meta,
     })
 }
 
@@ -235,12 +257,11 @@ impl Virtual {
         format!("{}/{}", self.plugin, SERVER)
     }
 
-    /// Its tools as a server lists them (`_meta.ui.resourceUri` on each).
+    /// Its tools as a server lists them: `_meta.ui.resourceUri` on each,
+    /// beside the rest of its `view.json` `_meta` (an opener's files:
+    /// `crate::opens::parse` reads them as a server's).
     pub fn tools(&self) -> Vec<Value> {
-        self.views
-            .iter()
-            .map(|v| json!({"name": v.tool, "description": v.description, "inputSchema": v.input_schema, "_meta": {"ui": {"resourceUri": v.uri}}}))
-            .collect()
+        self.views.iter().map(StaticView::tool).collect()
     }
 
     /// The JSON-RPC answer (no `id`): `{"result"}` or `{"error"}`.

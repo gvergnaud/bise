@@ -132,7 +132,15 @@ rows; the desktop and the TUI never match themselves.
   wire depends on it): the migration's own state, pinned by a test that
   BUILTIN's rows and `viewer_kind`'s arms name exactly the same types, so
   each step deletes both or goes red. The table and the test go at
-  step 6.
+  step 6. Its rows: png, jpg, jpeg, gif, webp, pdf, mp4, mov, webm, m4v
+  (Preview); md, markdown, docx (Writer); pptx (Slides); xlsx (Sheets);
+  html, htm and a folder holding an index.html (Sites); `*.page`
+  (Pages: the hub names a page artifact `<id>.page`, A9). Not csv: it
+  opens on his Mac today, and becomes Sheets' type at step 4 (apps-lead
+  m_60449). A BUILTIN row is ranked owner and first-party: a third
+  party's claim never wins a tie against it without his pick, and a row
+  is hidden once its own plugin has a candidate for the file (the step
+  landed, or both on a branch; architect m_60451).
 - `app_rows::Plugin` gains `opens: [{type, title, rank}]` and `makes`.
 - Settings › Plugins › File types: rows `{type, title, app, others,
   his: bool}`; commands `opener_set {type, plugin?, tool?}` (none:
@@ -308,8 +316,12 @@ floor plus declared origins, permissions granted at the add.
   `ui/initialize`. The view sets it as it changes, so an unload needs no
   round trip. Kept by the host per document tab, in the window's memory
   (no hub state).
-- **Notes and selection**: `dev.bise/selection {anchor, text?, key?, take?}`
-  (view → host; `key`: the printable character he typed over a
+- **Notes and selection**: `dev.bise/selection {anchor, text?, label?, key?, take?}`
+  (view → host; `label`: the view's own short name for the place
+  (`page 2 · a box`, `0:12`), at most 60 chars, stored in `Anchor::View
+  {key, quote?, label?}` so a chip reads `page 2 · "net revenue…"` like
+  today's typed anchors; the host copies it into the chip's anchor like
+  quote (apps-viewkit m_60507). `key`: the printable character he typed over a
   selection, which the host takes as "start the message about this with
   it", as kit/office/select.js does today, since a view's keys never
   reach the host; `take: true`: his click on the kit's "type to ask

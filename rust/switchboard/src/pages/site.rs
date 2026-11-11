@@ -418,6 +418,31 @@ pub fn ctype(path: &str) -> Option<&'static str> {
 mod tests {
     use super::*;
     use crate::artifacts::Version as ArtVersion;
+
+    /// bend_plugins::opens::BUILTIN and [`viewer_kind`]'s arms name the
+    /// same types (docs/plugin-apps.md A3, architect m_59941): each
+    /// migration step deletes both in one change, or this goes red.
+    #[test]
+    fn builtin_openers_and_viewer_kinds_name_the_same_types() {
+        use bend_plugins::opens::BUILTIN;
+        // every row draws as its kind today; a page (`<id>.page`, A9) is
+        // framed at its own /p/<id>, not by the viewer
+        for b in BUILTIN.iter().filter(|b| b.kind != "page") {
+            let sample = if b.folder { "site/".to_string() } else { format!("v1/x{}", b.key.trim_start_matches('*')) };
+            assert_eq!(viewer_kind(&sample), Some(b.kind), "{b:?}");
+        }
+        // every ending the viewer draws has its row
+        let ends = bise_proto::parts::IMAGE_EXTS.iter().chain(VIDEO_EXTS).chain(&["pdf", "md", "markdown", "html", "htm", "docx", "pptx", "xlsx"]);
+        for e in ends {
+            let kind = viewer_kind(&format!("v1/x.{e}")).unwrap_or_else(|| panic!("the viewer draws .{e}"));
+            assert!(BUILTIN.iter().any(|b| !b.folder && b.key == format!("*.{e}") && b.kind == kind), ".{e} ({kind}) has no BUILTIN row");
+        }
+        assert!(BUILTIN.iter().any(|b| b.folder && b.kind == "site"), "a site folder has its row");
+        assert_eq!(BUILTIN.iter().filter(|b| b.kind == "page").map(|b| b.key).collect::<Vec<_>>(), ["*.page"], "a page has its row");
+        assert_eq!(viewer_kind("v1/x.page"), None);
+        // and nothing else: an ending outside both lists draws nothing
+        assert_eq!(viewer_kind("v1/x.zip"), None);
+    }
     use crate::artifacts_storage::Kept;
     use crate::pages::store::Version;
 

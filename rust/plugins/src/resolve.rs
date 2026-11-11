@@ -1117,8 +1117,11 @@ fn load_mcp(p: &mut Plugin, out: &mut Vec<Diagnostic>) {
 fn load_views(p: &mut Plugin, vibe: bool, out: &mut Vec<Diagnostic>) {
     if vibe {
         let (views, diags) = crate::views::load(&p.name, &p.root);
-        p.views = views;
+        // its openers' bad entries, said once at load (docs/plugin-apps.md A1)
+        let tools: Vec<_> = views.iter().map(crate::views::StaticView::tool).collect();
         out.extend(diags);
+        out.extend(crate::opens::openers_of(&p.name, &tools).1);
+        p.views = views;
     }
 }
 

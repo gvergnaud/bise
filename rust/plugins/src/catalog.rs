@@ -144,6 +144,10 @@ fn plugin_row(i: &Inputs, p: &resolve::Plugin, names: &[(String, String, String)
         p.description.clone().filter(|d| !d.trim().is_empty())
     };
     let needs = parts.iter().any(|x| x.login == Some(LoginState::Needs));
+    // what its apps open and make (docs/plugin-apps.md A3): its static
+    // views' openers, known before it runs
+    let tools: Vec<_> = p.views.iter().map(crate::views::StaticView::tool).collect();
+    let (opens, makes) = crate::opens::plugin_rows(&crate::opens::openers_of(&p.name, &tools).0);
     let mut row = Plugin {
         id: id.to_string(),
         name: p.name.clone(),
@@ -169,8 +173,8 @@ fn plugin_row(i: &Inputs, p: &resolve::Plugin, names: &[(String, String, String)
         needs_node: p.needs_node,
         logins: Vec::new(),
         parts,
-        opens: Vec::new(),
-        makes: Vec::new(),
+        opens,
+        makes,
     };
     // the `@` menu says what a pickable one waits on (at-plugins)
     if row.pickable {
