@@ -295,8 +295,24 @@ p90_gb() {
 # small cargo tests; a running gate quick writes 3-4). The 5 GB stop guards
 # a guess that comes out low: one job killed with rc 28, never the disk.
 measured_gb() {
-  local flat; case "$1" in full|cargo-cold) flat=10 ;; cargo-warm) flat=3 ;; *) flat=2 ;; esac
+  # a running warm job counts 10 too until 10 own rows exist (architect m_61208: at its flat 3, 4
+  # cargo jobs got in at once on 11-11 and the disk fell to 11 GB free; a guess must err high)
+  local flat; case "$1" in full|cargo-cold|cargo-warm) flat=10 ;; *) flat=2 ;; esac
   p90_gb "$1" 10 "$flat" 0 ""
+}
+# the cargo ceiling (architect m_61208): at most HEAVY_CARGO_MAX cargo jobs (full, cargo-warm,
+# cargo-cold) run at once, max(1, cpus / 6) (2 on a 12-core Mac), whatever the load wait says:
+# on 11-11 the 600 s load wait ran out and let 4 in at load 85. Desktop and other jobs are
+# outside it; --prio (his release) and --alone too.
+cargo_max() { local c; c=$(( $(/usr/sbin/sysctl -n hw.ncpu 2>/dev/null || echo 8) / 6 )); echo "${HEAVY_CARGO_MAX:-$(( c < 1 ? 1 : c ))}"; }
+# the cargo jobs running now: the live reserve files of a cargo kind
+cargo_running() {
+  local f n=0
+  for f in "$HOME/.bise/run/reserve/"*; do
+    [ -e "$f" ] && kill -0 "${f##*.}" 2>/dev/null || continue
+    case "$(rfield "$f" 5)" in full|cargo-warm|cargo-cold) n=$((n + 1)) ;; esac
+  done
+  echo "$n"
 }
 # the running jobs, for the queue's waiting line (main m_36953: 7 waiters
 # waited 3-5 h behind a hung --alone job no line named): "<slot> <agent or
@@ -731,6 +747,12 @@ while :; do
     # 'already locked' on every try, which buried a job's real last lines.
     free=""
     for s in $slots; do /usr/bin/lockf -k -t 0 "$s" /usr/bin/true 2>/dev/null && free="$free $s"; done
+    # the cargo ceiling (cargo_max): a cargo job waits while that many run, the load wait or not
+    if [ -n "$free" ] && [ "$PRIO" = 0 ] && case "$HEAVY_KIND" in full|cargo-warm|cargo-cold) true ;; *) false ;; esac \
+       && [ "$(cargo_running)" -ge "$(cargo_max)" ]; then
+      held=1; free=""
+      [ -n "${cargowait:-}" ] || { echo "heavy-run: a slot is free but $(cargo_max) cargo jobs run already (HEAVY_CARGO_MAX), waiting" >&2; cargowait=1; }
+    fi
     # the load (mac-budget): while a heavy job runs, another one starts only
     # under HEAVY_LOAD_MAX (2 x the cores) and HEAVY_START_GAP (20) s after
     # the last start, so the 1-min load has seen it (at 10:20 on 2026-10-21

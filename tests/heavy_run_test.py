@@ -421,9 +421,25 @@ with tempfile.TemporaryDirectory() as home:
     check(reserve("desktop", []) == "2" and reserve("desktop", [9 * GB] * 20) == "2", "desktop's own reserve: flat 2, never over")
     check(measured("desktop", [5 * GB] * 9) == "2", "a running desktop job, 9 measured: the flat 2")
     check(measured("desktop", [5 * GB] * 10) == "5", "a running desktop job, 10 measured: their p90, 5")
-    check(measured("cargo-warm", [19 * GB] * 20, src="") == "3", "a running cargo-warm job: 20 free-drop rows at 19 GB: unread, flat 3")
-    check(measured("cargo-warm", [19 * GB] * 9) == "3" and measured("cargo-warm", [5 * GB] * 10) == "5",
-          "a running cargo-warm job: 9 src=target rows, flat 3; 10 at 5 GB, their p90 5")
+    check(measured("cargo-warm", [19 * GB] * 20, src="") == "10", "a running cargo-warm job: 20 free-drop rows at 19 GB: unread, flat 10")
+    check(measured("cargo-warm", [GB] * 9) == "10" and measured("cargo-warm", [5 * GB] * 10) == "5",
+          "a running cargo-warm job: 9 own rows, its flat 10 (a guess errs high, architect m_61208); 10 at 5 GB, their p90 5")
+    # the cargo ceiling (architect m_61208): max(1, cpus / 6), HEAVY_CARGO_MAX wins; the cargo
+    # jobs running are the live reserve files of a cargo kind
+    cm = lambda **e: subprocess.run(["bash", "-c", 'eval "$(sed -n -e "/^cargo_max()/p" "$0")"; cargo_max', HEAVY],  # noqa: E731
+                                    env=dict(env, **e), capture_output=True, text=True).stdout.strip()
+    ncpu = int(subprocess.run(["/usr/sbin/sysctl", "-n", "hw.ncpu"], capture_output=True, text=True).stdout)
+    check(cm() == str(max(1, ncpu // 6)) and cm(HEAVY_CARGO_MAX="3") == "3", "cargo_max: max(1, cpus / 6), HEAVY_CARGO_MAX wins")
+    rdir = os.path.join(home, "cr", ".bise", "run", "reserve")
+    os.makedirs(rdir, exist_ok=True)
+    me = os.getpid()
+    for name, kind in (("heavy.lock.%d" % me, "cargo-warm"), ("heavy2.lock.%d" % me, "desktop"),
+                       ("heavy3.lock.%d" % me, "full"), ("heavy4.lock.999999", "cargo-cold")):
+        with open(os.path.join(rdir, name), "w") as fh:
+            fh.write("3\t/x\t0\tcmd\t%s\n" % kind)
+    cr = subprocess.run(["bash", "-c", 'eval "$(sed -n -e "/^cargo_running()/,/^}/p" -e "/^rfield()/p" "$0")"; cargo_running', HEAVY],
+                        env=dict(env, HOME=os.path.join(home, "cr")), capture_output=True, text=True).stdout.strip()
+    check(cr == "2", "cargo_running: the live cargo-warm and full jobs, not the desktop one nor a dead pid's: %r" % cr)
     check(measured("other", [3 * GB] * 10, src="") == "3", "the other kinds keep their free-drop rows")
     # any kind: its free-drop rows count until 10 own rows exist (src=own), then only the own ones
     def mixed(kind, free_rows, own_rows):
