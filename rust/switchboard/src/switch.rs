@@ -376,11 +376,14 @@ fn probation(paths: &Paths, to: &Path, period: Duration, marks: Marks) -> Result
     // the start, else the hub thought it over and idle-exited while this
     // loop still watched it, and its exit read as a crash
     let mut st = read_state(paths);
-    st["probation_until"] = json!(now_ms() + period.as_millis() as u64 + 5_000);
+    // the loop may outlast its period by a take-back (probation_over, up to
+    // TAKEOVER_GRACE): the hub's deadline covers it, else it idle-exited
+    // meanwhile and a false crash rolled back (architect m_59368)
+    st["probation_until"] = json!(now_ms() + (period + Duration::from_secs(u64::from(TAKEOVER_GRACE)) + Duration::from_secs(5)).as_millis() as u64);
     write_state(paths, &st);
     let t0 = Instant::now();
     let (mut misses, mut elsewhere) = (0, 0);
-    while t0.elapsed() < period {
+    while !probation_over(t0.elapsed(), period, elsewhere) {
         std::thread::sleep(Duration::from_secs(1));
         if let Ok(r) = std::fs::read_to_string(fail_file(paths)) {
             return Err(r);
@@ -473,6 +476,16 @@ fn cause_of(err: &str, step: &str) -> String {
 /// from an older client's start (switch::claim: its stop is bounded at 5 s,
 /// then a kill).
 const TAKEOVER_GRACE: u32 = 15;
+
+/// The probation passes once its period is over AND the hub runs the
+/// switch's root: while a new hub still takes the workspace back
+/// (switch::claim: up to ~11 s, hub.root written once it has), a short
+/// probation never says 'good' with the intruder's root still there; it
+/// waits, bounded by TAKEOVER_GRACE (fast-loop m_59362: red 3 of 3 on
+/// 631a4c684 with a 2 s probation). Pure.
+fn probation_over(elapsed: Duration, period: Duration, elsewhere: u32) -> bool {
+    elapsed >= period && elsewhere == 0
+}
 
 /// The live hub of `paths` says it runs another app root than `to`
 /// (its `hub.root`); unreadable: no.
@@ -846,6 +859,19 @@ mod state_tests {
         std::fs::write(d.join("hub.root"), old.to_string_lossy().as_bytes()).unwrap();
         assert!(runs_elsewhere(&paths, &new), "another root answers");
         let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// A short probation never passes while the hub still runs another
+    /// root: it waits for the take-back (fast-loop m_59362).
+    #[test]
+    fn the_probation_waits_for_the_take_back() {
+        use super::probation_over;
+        use std::time::Duration;
+        let s = Duration::from_secs;
+        assert!(!probation_over(s(1), s(2), 0), "the period runs");
+        assert!(probation_over(s(2), s(2), 0), "over, the switch's root: good");
+        assert!(!probation_over(s(3), s(2), 1), "over, but another root answers: it waits");
+        assert!(probation_over(s(9), s(2), 0), "taken back: good");
     }
 
     /// A crash during probation says the new hub's own last words (B of
