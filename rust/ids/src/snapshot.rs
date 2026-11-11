@@ -2,7 +2,7 @@
 //! index, what a walk saw ([`Scan`], [`Cover`]) and what changed
 //! ([`Change`]). The diff itself is in [`crate::diff`].
 //!
-//! Persisted as `{next, entries: [{path, id, ino, kind, size, mtime_ms}]}`
+//! Persisted as `{next, entries: [{path, id, dev, ino, kind, size, mtime_ms}]}`
 //! (serde): the reverse index is rebuilt on load, and a load that breaks a
 //! rule (an untracked path, an id twice, an id not below `next`) is
 //! refused, never repaired.
@@ -21,9 +21,12 @@ pub enum Kind {
     Folder,
 }
 
-/// What a walk read of one path (its `lstat`).
+/// What a walk read of one path (its `lstat`). An ino is unique only on
+/// its device: a mount inside the root can repeat one, so a file is known
+/// by `(dev, ino)` (architect m_60095).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Entry {
+    pub dev: u64,
     pub ino: u64,
     pub kind: Kind,
     pub size: u64,

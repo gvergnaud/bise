@@ -4,8 +4,12 @@
 
 use crate::*;
 
+/// The root's device; [`Entry::dev`] of every helper below.
+const DEV: u64 = 1;
+
 fn f(ino: u64) -> Entry {
     Entry {
+        dev: DEV,
         ino,
         kind: Kind::File,
         size: 10,
@@ -15,6 +19,7 @@ fn f(ino: u64) -> Entry {
 
 fn f_at(ino: u64, size: u64, mtime_ms: u64) -> Entry {
     Entry {
+        dev: DEV,
         ino,
         kind: Kind::File,
         size,
@@ -22,8 +27,14 @@ fn f_at(ino: u64, size: u64, mtime_ms: u64) -> Entry {
     }
 }
 
+/// A file on another device (a mount inside the root).
+fn f_on(dev: u64, ino: u64) -> Entry {
+    Entry { dev, ..f(ino) }
+}
+
 fn d(ino: u64) -> Entry {
     Entry {
+        dev: DEV,
         ino,
         kind: Kind::Folder,
         size: 0,
@@ -288,6 +299,21 @@ fn diff_table() {
             changes: vec!["moved e:1 a.md -> c.md"],
         },
         Case {
+            name: "one ino on two devices (a mount inside the root): two files, two ids",
+            steps: vec![
+                full(vec![("a.md", f(5)), ("m", d(9))]),
+                full(vec![("m", d(9)), ("m/b.md", f_on(2, 5))]),
+            ],
+            ids: vec![("m", "e:2"), ("m/b.md", "e:3")],
+            changes: vec!["removed e:1 a.md", "added e:3 m/b.md"],
+        },
+        Case {
+            name: "same ino, another device, same path: a replace, never the same file",
+            steps: vec![full(vec![("a.md", f(5))]), full(vec![("a.md", f_on(2, 5))])],
+            ids: vec![("a.md", "e:1")],
+            changes: vec!["changed e:1 a.md"],
+        },
+        Case {
             name: "paths are bytes: NFC and NFD of one name are two names",
             steps: vec![
                 full(vec![("caf\u{e9}.md", f(1))]),
@@ -401,7 +427,9 @@ fn persisted_round_trip() {
 #[test]
 fn persisted_load_refuses_a_broken_table() {
     let row = |path: &str, id: &str| {
-        format!(r#"{{"path":"{path}","id":"{id}","ino":1,"kind":"file","size":0,"mtime_ms":0}}"#)
+        format!(
+            r#"{{"path":"{path}","id":"{id}","dev":1,"ino":1,"kind":"file","size":0,"mtime_ms":0}}"#
+        )
     };
     let rows: &[(&str, String)] = &[
         (

@@ -51,6 +51,7 @@ CRATES = [
     (("rust/vendor/crossterm/",), ["bend-tui", "bend-harness"]),
     (("rust/switchboard/",), ["switchboard", "bend-harness"]),
     (("rust/peer/",), ["bise-peer", "switchboard", "bend-harness"]),
+    (("rust/ids/",), ["bise-ids"]),
     (("rust/harness/",), ["bend-harness"]),
     (("rust/session/",), ["bise-session", "switchboard", "bend-harness"]),
     (("rust/usage/",), ["bise-usage", "bend-tui", "switchboard", "bend-harness"]),

@@ -16,7 +16,9 @@
 //! So a rename and a replace in one window keep the ids by ino first, then
 //! by path. Two paths of one ino (a hard link): pass 1 keeps both; a new
 //! link finds the ino taken and gets a new id, so a move never takes
-//! another path's id. Kinds must match in every pass.
+//! another path's id. Kinds must match in every pass, and "the same ino"
+//! means the same `(dev, ino)`: a mount inside the root can repeat an ino
+//! of another device (architect m_60095).
 //!
 //! An old row nothing took stays where its folder went: a folder that
 //! moved carries the rows under it ([`Change::Moved`] for each, ids kept),
@@ -49,7 +51,7 @@ impl Snapshot {
         // 1. same path, same ino
         for (path, entry) in &scan.0 {
             match old.get(path) {
-                Some(row) if row.entry.ino == entry.ino && row.entry.kind == entry.kind => {
+                Some(row) if same_file(&row.entry, entry) => {
                     taken.insert(path, path.clone());
                     placed.insert(
                         path.clone(),
@@ -67,18 +69,15 @@ impl Snapshot {
         }
 
         // 2. same ino, another path
-        let mut by_ino: HashMap<(u64, Kind), Vec<&str>> = HashMap::new();
+        let mut by_ino: HashMap<(u64, u64, Kind), Vec<&str>> = HashMap::new();
         for (path, row) in &old {
             if !taken.contains_key(path.as_str()) {
-                by_ino
-                    .entry((row.entry.ino, row.entry.kind))
-                    .or_default()
-                    .push(path);
+                by_ino.entry(file_key(&row.entry)).or_default().push(path);
             }
         }
         left.retain(|(path, entry)| {
             let Some(from) = by_ino
-                .get_mut(&(entry.ino, entry.kind))
+                .get_mut(&file_key(entry))
                 .and_then(|paths| (!paths.is_empty()).then(|| paths.remove(0)))
             else {
                 return true;
@@ -223,6 +222,15 @@ enum Origin {
     From(String),
     /// Pass 4.
     New,
+}
+
+/// One file on disk: its device, its ino, its kind.
+fn file_key(e: &Entry) -> (u64, u64, Kind) {
+    (e.dev, e.ino, e.kind)
+}
+
+fn same_file(a: &Entry, b: &Entry) -> bool {
+    file_key(a) == file_key(b)
 }
 
 /// [`Change::Changed`] for a file whose content moved: a new ino
