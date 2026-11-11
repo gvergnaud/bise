@@ -202,6 +202,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "bise-ids"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "bise-peer"
 version = "0.1.0"
 dependencies = [

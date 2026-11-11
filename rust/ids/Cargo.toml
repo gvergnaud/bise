@@ -1,0 +1,12 @@
+[package]
+name = "bise-ids"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+description = "Stable ids for the files under ~/bise: a snapshot of what a walk saw and a pure diff, so a file keeps its id across a save, a rename and a move (architect m_60046, m_60052)."
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1"
