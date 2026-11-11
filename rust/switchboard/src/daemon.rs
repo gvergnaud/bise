@@ -2078,6 +2078,13 @@ fn claim(paths: &Paths, app_root: &Path) -> std::io::Result<Option<Claimed>> {
     match plan(&read(paths, app_root, me)) {
         Claim::Take { pid, root } => take_over(paths, app_root, pid, root.as_deref())?,
         Claim::Yield => {
+            // a hub that answers is the live one: give way at once, never
+            // wait for IT to stop (a start queued on the lock during a
+            // take-back then waited 15 s beside the new hub: two sbd,
+            // switch_intruder_e2e red on e37ba6a6e, marketing m_59649)
+            if UnixStream::connect(paths.socket()).is_ok() {
+                return Ok(None);
+            }
             wait_previous_hub(paths);
             if UnixStream::connect(paths.socket()).is_ok() {
                 return Ok(None);

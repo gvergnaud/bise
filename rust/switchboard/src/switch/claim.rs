@@ -108,12 +108,16 @@ pub fn take_over(paths: &Paths, app_root: &Path, pid: u32, root: Option<&Path>) 
     std::fs::write(paths.pid_file(), std::process::id().to_string())?;
     let asked = crate::client::ask_stop(paths, true);
     let t0 = Instant::now();
+    // an exited hub its parent has not reaped yet (a zombie) is gone: kill
+    // -0 still sees it, `ps` no longer shows its `sbd` command (the take-back
+    // waited 11 s for one, marketing m_59649)
+    let here = || crate::procs::alive(pid) && is_hub(pid);
     let gone = |within: Duration| {
         let t = Instant::now();
-        while crate::procs::alive(pid) && t.elapsed() < within {
-            std::thread::sleep(Duration::from_millis(50));
+        while here() && t.elapsed() < within {
+            std::thread::sleep(Duration::from_millis(100));
         }
-        !crate::procs::alive(pid)
+        !here()
     };
     let how = if gone(TAKEOVER_STOP) {
         "stopped"

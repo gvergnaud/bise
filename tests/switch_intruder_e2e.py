@@ -69,6 +69,15 @@ def hubs_of(ws):
     return [line.split()[0] for line in out.splitlines() if " sbd " in line and os.path.realpath(ws) in line]
 
 
+def start(args, **kw):
+    """A hub started as a client starts one: its parent reaps it the moment it exits (the core's
+    reap thread, client.rs). Unreaped, a stopped hub stayed a zombie that kill -0 still saw: the
+    switcher and the take-back waited for it (red on e37ba6a6e, marketing m_59649)."""
+    p = subprocess.Popen(args, stdin=subprocess.DEVNULL, **kw)
+    threading.Thread(target=p.wait, daemon=True).start()
+    return p
+
+
 class Intruder(threading.Thread):
     """The older core's home connector: the hub gone, it starts one from its own root at once."""
 
@@ -81,7 +90,7 @@ class Intruder(threading.Thread):
         while not self.stop and self.starts < 3:
             if not answers(self.sock):
                 self.starts += 1
-                self.procs.append(subprocess.Popen(self.args, cwd=self.root, env=self.env, stdin=subprocess.DEVNULL, stdout=self.err, stderr=self.err))
+                self.procs.append(start(self.args, cwd=self.root, env=self.env, stdout=self.err, stderr=self.err))
                 time.sleep(1.0)
             time.sleep(0.005)
 
@@ -99,7 +108,7 @@ def main():
     intruder = None
     try:
         exe = os.path.join(dirs[A], "bise")
-        procs.append(subprocess.Popen([exe, "sbd", "--workspace", E.ws], cwd=dirs[A], env=env, stdin=subprocess.DEVNULL, stdout=err, stderr=err))
+        procs.append(start([exe, "sbd", "--workspace", E.ws], cwd=dirs[A], env=env, stdout=err, stderr=err))
         d = wait.until(lambda: hub_dir(home, E.ws), 30, "the hub of the folder", poll=0.1)
         sock = os.path.join(d, "hub.sock")
         wait.until(lambda: answers(sock), 30, "the hub answers", poll=0.1)

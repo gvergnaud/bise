@@ -71,3 +71,27 @@ fn a_second_hub_leaves_the_first_ones_hub_root() {
     drop(first);
     let _ = std::fs::remove_dir_all(&t);
 }
+
+/// marketing m_59649: a start that queued on hub.bind.lock during a
+/// take-back found the new hub answering, and still waited 15 s for it to
+/// stop (wait_previous_hub on its live pid): two sbd for the folder. A hub
+/// that answers is the live one: the start gives way at once.
+#[test]
+fn a_start_gives_way_at_once_to_a_hub_that_answers() {
+    let t = std::env::temp_dir().join(format!("sb-claim-live-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&t);
+    let paths = Paths { workspace: t.join("ws"), state: t.join("st"), worktrees: t.join("wt"), run: t.join("run") };
+    std::fs::create_dir_all(&paths.state).unwrap();
+    paths.prepare_socket().unwrap();
+    let first = claim(&paths, &t.join("v1")).unwrap().expect("the first hub claims the workspace");
+    // hub.pid names a live process that isn't this one (the new hub)
+    let mut live = std::process::Command::new("sleep").arg("30").spawn().unwrap();
+    std::fs::write(paths.pid_file(), live.id().to_string()).unwrap();
+    let t0 = std::time::Instant::now();
+    assert!(claim(&paths, &t.join("v2")).unwrap().is_none(), "a second hub claimed it");
+    assert!(t0.elapsed() < Duration::from_secs(2), "it waited {:?} for the live hub to stop", t0.elapsed());
+    let _ = live.kill();
+    let _ = live.wait();
+    drop(first);
+    let _ = std::fs::remove_dir_all(&t);
+}
