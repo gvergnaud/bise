@@ -23525,7 +23525,7 @@ function checkPackage(zip) {
 }
 
 // src/anchor.gen.ts
-var ANCHOR_KINDS = ["block", "cell", "slide", "shape", "para", "region", "text", "time"];
+var ANCHOR_KINDS = ["block", "cell", "slide", "shape", "para", "region", "text", "time", "view"];
 
 // src/core/anchor.ts
 var KINDS_OF = {
@@ -23542,7 +23542,9 @@ var FIELDS = {
   region: { page: "count?", rect: "rect" },
   text: { line: "count", quote: "string?" },
   // a video's moment, or a box on its frame there (video-view): t in seconds, finite, 0 or more
-  time: { t: "seconds", rect: "rect?" }
+  time: { t: "seconds", rect: "rect?" },
+  // a plugin's view's own place (plugin-apps A5): its opaque key, and what he selected
+  view: { key: "string", quote: "string?", label: "string?" }
 };
 function readAnchor(v) {
   if (!v || typeof v !== "object" || Array.isArray(v)) throw new OfficeError("anchor_shape", `an anchor is an object with a "kind", not ${JSON.stringify(v)}`);

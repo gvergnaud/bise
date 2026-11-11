@@ -43,6 +43,7 @@ type AnchorRect = { x: number; y: number; w: number; h: number };
 type Anchor = {
   kind?: string; block?: string; blocks?: string[]; quote?: string; offset?: number; sheet?: string; range?: string;
   slide?: number; shape?: string | number; para?: number; rect?: AnchorRect | null; page?: number | null; line?: number; t?: number;
+  key?: string; label?: string;
 };
 /** What block anchoring reads of a note (notes.js's). */
 type BlockNote = { block?: string | null; kind?: string; blocks?: string[]; after?: string; before?: string; quote?: string; offset?: number };

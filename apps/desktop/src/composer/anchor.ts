@@ -56,6 +56,11 @@ export function anchorLabel(a: Anchor): string {
     case 'time':
       // a video's moment, or a box on its frame there (video-view)
       return a.rect === undefined ? clock(a.t) : `${clock(a.t)} · a box`;
+    case 'view':
+      // a plugin's view: its key is opaque; its label names the place, his words what is there
+      // (plugin-apps A5, architect m_60509)
+      if (has(a.label)) return has(a.quote) ? `${a.label} · ${quoted(a.quote)}` : a.label;
+      return has(a.quote) ? quoted(a.quote) : 'a part';
     default:
       return 'a part';
   }

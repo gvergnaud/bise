@@ -13,7 +13,10 @@
 //!   (a pdf passage: its words' box and its words);
 //! - `text`: a line of any text file, `{line, quote?}`;
 //! - `time`: a moment of a video, or a box on its frame there, `{t, rect?}`
-//!   (`t` in seconds from its start, finite and never negative; video-view).
+//!   (`t` in seconds from its start, finite and never negative; video-view);
+//! - `view`: a place a plugin's view names itself, `{key, quote?}` (`key`
+//!   its opaque string, 1..=512 bytes; `quote` cleaned on read:
+//!   [`clean_quote`]; plugin-apps A5, kit/view's anchors).
 //!
 //! Slides, pages and lines count from 1. A [`Rect`] is in % of the
 //! frame (the slide, the image, the page): `0..=100` each.
@@ -97,6 +100,21 @@ pub enum Anchor {
         #[cfg_attr(feature = "ts", ts(optional))]
         rect: Option<Rect>,
     },
+    /// a place a plugin's view names itself (plugin-apps A5, architect
+    /// m_59942): its opaque `key` (1..=512 bytes) and the words he saw
+    /// selected (one line, at most [`QUOTE_MAX`] characters, no control
+    /// characters: cleaned on read), and its own short name for the place
+    /// (`label`: `page 2 · a box`, `0:12`; at most [`LABEL_MAX`]
+    /// characters, cleaned the same way; display only: the place is the
+    /// key alone, architect m_60509)
+    View {
+        #[serde(deserialize_with = "view_key")]
+        key: String,
+        #[serde(default, skip_serializing_if = "String::is_empty", deserialize_with = "view_quote")]
+        quote: String,
+        #[serde(default, skip_serializing_if = "String::is_empty", deserialize_with = "view_label")]
+        label: String,
+    },
     /// a kind this version doesn't know (or a known one with bad fields):
     /// the whole object, written back as it came
     #[serde(untagged)]
@@ -112,6 +130,45 @@ fn moment<'de, D: serde::Deserializer<'de>>(d: D) -> Result<f64, D::Error> {
         true => Ok(t),
         false => Err(serde::de::Error::custom("a moment is seconds, 0 or more")),
     }
+}
+
+/// The longest key a view may give its anchor, in bytes.
+pub const VIEW_KEY_MAX: usize = 512;
+/// The most characters a view's quote keeps (kit/office/select.js's
+/// `quoteOf` cap).
+pub const QUOTE_MAX: usize = 200;
+
+/// A view's key: 1..=[`VIEW_KEY_MAX`] bytes; anything else makes the anchor
+/// `Unknown`, kept as it came.
+fn view_key<'de, D: serde::Deserializer<'de>>(d: D) -> Result<String, D::Error> {
+    let key = String::deserialize(d)?;
+    match !key.is_empty() && key.len() <= VIEW_KEY_MAX {
+        true => Ok(key),
+        false => Err(serde::de::Error::custom("a view's key is 1 to 512 bytes")),
+    }
+}
+
+fn view_quote<'de, D: serde::Deserializer<'de>>(d: D) -> Result<String, D::Error> {
+    Ok(clean_quote(&String::deserialize(d)?))
+}
+
+fn view_label<'de, D: serde::Deserializer<'de>>(d: D) -> Result<String, D::Error> {
+    Ok(short(&one_line(&String::deserialize(d)?), LABEL_MAX))
+}
+
+/// The most characters a view's label keeps.
+pub const LABEL_MAX: usize = 60;
+
+/// One line: control characters gone, whitespace runs one space.
+fn one_line(s: &str) -> String {
+    s.split(|c: char| c.is_whitespace() || c.is_control()).filter(|w| !w.is_empty()).collect::<Vec<_>>().join(" ")
+}
+
+/// What a view says he selected, as bise keeps it: control characters
+/// gone, whitespace runs one space, at most [`QUOTE_MAX`] characters (`…`
+/// when cut). A view's text is third-party input.
+pub fn clean_quote(s: &str) -> String {
+    short(&one_line(s), QUOTE_MAX)
 }
 
 /// A moment as a player says it: `0:12`, `12:05`, `1:02:05` (whole seconds).
@@ -163,6 +220,16 @@ pub fn label(a: &Anchor) -> String {
         Anchor::Text { line, .. } => format!("line {line}"),
         Anchor::Time { t, rect: None } => clock(*t),
         Anchor::Time { t, rect: Some(_) } => format!("{} · a box", clock(*t)),
+        // a view names its place itself (`label`), his words say what is there
+        Anchor::View { quote, label, .. } => {
+            let (q, l) = (clean_quote(quote), short(&one_line(label), LABEL_MAX));
+            match (l.is_empty(), q.is_empty()) {
+                (false, false) => format!("{l} · {}", quoted(&q)),
+                (false, true) => l,
+                (true, false) => quoted(&q),
+                (true, true) => "a part".into(),
+            }
+        }
         Anchor::Unknown(_) => "a part".into(),
     }
 }
@@ -189,7 +256,7 @@ fn short(s: &str, max: usize) -> String {
 
 impl Anchor {
     /// The kinds this version knows, as on the wire.
-    pub const KINDS: &'static [&'static str] = &["block", "cell", "slide", "shape", "para", "region", "text", "time"];
+    pub const KINDS: &'static [&'static str] = &["block", "cell", "slide", "shape", "para", "region", "text", "time", "view"];
 
     /// The kind as on the wire (an unknown one's own, `""` when it has none).
     pub fn kind(&self) -> &str {
@@ -202,6 +269,7 @@ impl Anchor {
             Anchor::Region { .. } => "region",
             Anchor::Text { .. } => "text",
             Anchor::Time { .. } => "time",
+            Anchor::View { .. } => "view",
             Anchor::Unknown(v) => v.get("kind").and_then(Value::as_str).unwrap_or(""),
         }
     }
@@ -229,6 +297,7 @@ mod tests {
             json!({"kind": "text", "line": 40}),
             json!({"kind": "time", "t": 12.5}),
             json!({"kind": "time", "t": 3725.0, "rect": {"x": 10.0, "y": 20.0, "w": 30.0, "h": 5.5}}),
+            json!({"kind": "view", "key": "card:42"}),
         ];
         let mut seen = std::collections::BTreeSet::new();
         for l in lines {
@@ -264,6 +333,46 @@ mod tests {
             assert!(Anchor::KINDS.contains(&a.kind()), "{line}");
             assert_eq!(serde_json::to_string(&a).unwrap(), line);
         }
+    }
+
+    /// architect m_59942: a view's key is opaque, 1..=512 bytes; outside
+    /// that the anchor is Unknown and comes back as it came.
+    #[test]
+    fn a_view_key_is_one_to_512_bytes() {
+        let at = |key: &str| json!({"kind": "view", "key": key});
+        assert!(matches!(read(at(&"k".repeat(VIEW_KEY_MAX))), Anchor::View { .. }));
+        for bad in [at(""), at(&"k".repeat(VIEW_KEY_MAX + 1)), json!({"kind": "view", "key": 7}), json!({"kind": "view"})] {
+            let a = read(bad.clone());
+            assert!(matches!(a, Anchor::Unknown(_)), "{bad}");
+            assert_eq!(a.kind(), "view");
+            assert_eq!(serde_json::to_value(&a).unwrap(), bad);
+        }
+    }
+
+    /// A view's quote is its text: one line, no control characters, at most
+    /// QUOTE_MAX characters, cleaned on read so a label never shows raw input.
+    #[test]
+    fn a_view_quote_is_cleaned_on_read() {
+        let a = read(json!({"kind": "view", "key": "p3", "quote": "  net\u{0007} revenue\n\tgrew\u{001b}[2J "}));
+        assert_eq!(a, Anchor::View { key: "p3".into(), quote: "net revenue grew [2J".into(), label: String::new() });
+        let Anchor::View { quote, .. } = read(json!({"kind": "view", "key": "p3", "quote": "é".repeat(QUOTE_MAX + 5)})) else { panic!() };
+        assert_eq!(quote.chars().count(), QUOTE_MAX);
+        assert!(quote.ends_with('…'));
+        assert_eq!(label(&Anchor::View { key: "p3".into(), quote: String::new(), label: String::new() }), "a part");
+    }
+
+    /// architect m_60509: a view's label is its own short name for the
+    /// place, cleaned and cut on read like quote; display only.
+    #[test]
+    fn a_view_label_is_cleaned_and_said_before_the_quote() {
+        let Anchor::View { label: l, .. } = read(json!({"kind": "view", "key": "b1", "label": "page 2\n·\u{0007} a box"})) else { panic!() };
+        assert_eq!(l, "page 2 · a box");
+        let Anchor::View { label: l, .. } = read(json!({"kind": "view", "key": "b1", "label": "x".repeat(LABEL_MAX + 9)})) else { panic!() };
+        assert_eq!(l.chars().count(), LABEL_MAX);
+        let v = |quote: &str, label: &str| Anchor::View { key: "b1".into(), quote: quote.into(), label: label.into() };
+        assert_eq!(super::label(&v("net revenue", "page 2")), "page 2 · \"net revenue\"");
+        assert_eq!(super::label(&v("", "0:12 · a box")), "0:12 · a box");
+        assert_eq!(super::label(&v("net revenue", "")), "\"net revenue\"");
     }
 
     #[test]

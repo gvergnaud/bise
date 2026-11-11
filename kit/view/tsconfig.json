@@ -1,0 +1,18 @@
+{
+  "//": "@bise/view (docs/plugin-apps.md A5): the library a plugin's view loads from its own origin (~kit/view/view.js under the hub's base, apps-hub-views' /f/). ES modules that import each other by relative URL (./core.js, resolved here to the .ts next door). Emitted next to their .ts by scripts/ts_emit.ts and committed (cargo and the release never run node). typescript is office/sdk's.",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": [],
+    "strict": true,
+    "alwaysStrict": false,
+    "erasableSyntaxOnly": true,
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "include": ["*.ts"],
+  "exclude": ["*.check.ts"]
+}

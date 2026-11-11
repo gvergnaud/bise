@@ -3,64 +3,17 @@
 <head>
 <meta charset="utf-8">
 <title>fake</title>
-<style>
-  body { margin: 0; padding: 12px; font: 13px/1.4 var(--font-sans, system-ui);
-         color: var(--color-text-primary, CanvasText); background: var(--color-background-primary, Canvas); }
-  textarea { width: 100%; min-height: 8em; font: inherit; }
-</style>
+<!-- @bise/view, served on this view's origin under the hub's <base> (docs/plugin-apps.md A5) -->
+<link rel="stylesheet" href="~kit/view/view.css">
+<link rel="stylesheet" href="fake.css">
+<script type="module" src="fake.js"></script>
 </head>
 <body>
 <p id="name" data-testid="name">waiting for the file…</p>
 <textarea id="text" data-testid="text"></textarea>
 <button id="save" data-testid="save" disabled>Save</button>
 <p id="state" data-testid="state"></p>
-<script>
-// fake-opener's static opener (docs/plugin-apps.md, Fixtures): its tool
-// input is {"file": {"name", "resourceUri": <view-file:// handle>}} (A4);
-// it reads the file through the handle and saves it back (the write
-// grant), with the etag of its last read as ifMatch.
-const pending = new Map();
-let nextId = 1, handle = null, etag = null;
-function request(method, params) {
-  const id = nextId++;
-  window.parent.postMessage({ jsonrpc: "2.0", id, method, params }, "*");
-  return new Promise((resolve, reject) => pending.set(id, { resolve, reject }));
-}
-const $ = (id) => document.getElementById(id);
-const say = (t) => { $("state").textContent = t; };
-async function load(file) {
-  handle = file.resourceUri;
-  $("name").textContent = file.name;
-  const r = await request("resources/read", { uri: handle });
-  const c = (r.contents || [])[0] || {};
-  etag = c._meta && c._meta.etag;
-  $("text").value = c.text !== undefined ? c.text : "";
-  $("save").disabled = !(c._meta && c._meta.writable);
-  say(c._meta && c._meta.writable ? "saved" : "read only");
-}
-$("save").onclick = async () => {
-  say("saving…");
-  try {
-    const r = await request("ai.mistral.vibe/resources/write", { uri: handle, ifMatch: etag, text: $("text").value });
-    if (r.outcome === "saved") etag = r.etag;
-    say(r.outcome);
-  } catch (err) { say("error " + (err && err.code)); }
-};
-window.addEventListener("message", (e) => {
-  if (e.source !== window.parent) return;
-  const m = e.data || {};
-  if (m.method === "ui/notifications/tool-input") {
-    const file = (m.params.arguments || {}).file;
-    if (file) load(file).catch((err) => say("error " + JSON.stringify(err).slice(0, 120)));
-    return;
-  }
-  const p = m.id !== undefined && !m.method && pending.get(m.id);
-  if (!p) return;
-  pending.delete(m.id);
-  m.error ? p.reject(m.error) : p.resolve(m.result);
-});
-request("ui/initialize", { appInfo: { name: "fake-opener fake", version: "0.1.0" }, appCapabilities: {}, protocolVersion: "2026-01-26" })
-  .then(() => window.parent.postMessage({ jsonrpc: "2.0", method: "ui/notifications/initialized" }, "*"));
-</script>
+<ol id="lines" data-testid="lines"></ol>
+<p id="notes" data-testid="notes"></p>
 </body>
 </html>

@@ -93,6 +93,12 @@ export function readAnchor(v: unknown): Anchor | null {
       const rect = readRect(v.rect);
       return rect === null ? null : { kind, t: v.t, rect };
     }
+    case 'view': {
+      // a plugin's view's own place: its key 1..=512 bytes (bise_proto::anchor's `view_key`)
+      const q = optStr(v, 'quote');
+      const label = v.label === undefined ? {} : str(v.label) ? { label: v.label } : null;
+      return str(v.key) && v.key !== '' && new TextEncoder().encode(v.key).length <= 512 && q !== null && label !== null ? { kind, key: v.key, ...q, ...label } : null;
+    }
   }
 }
 

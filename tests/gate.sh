@@ -249,7 +249,7 @@ TS_NODE_OPTIONS="--experimental-strip-types --disable-warning=ExperimentalWarnin
 # the checks, then their types (office/sdk owns typescript: skipped without its node_modules)
 kit_check() {
   local f tsc="$root/office/sdk/node_modules/.bin/tsc"; desktop_path
-  for f in "$root"/kit/check.ts "$root"/kit/*.check.ts; do echo "node ${f#"$root"/}"; NODE_OPTIONS="$TS_NODE_OPTIONS" node "$f" || return 1; done
+  for f in "$root"/kit/check.ts "$root"/kit/*.check.ts "$root"/kit/view/*.check.ts; do echo "node ${f#"$root"/}"; NODE_OPTIONS="$TS_NODE_OPTIONS" node "$f" || return 1; done
   # bise.dev's telemetry endpoint and dashboard (~2 s; its Postgres part skipped with a line when no postgres binary)
   echo "node --test tests/site_telemetry.test.ts"
   NODE_OPTIONS="$TS_NODE_OPTIONS" node --test "$root/tests/site_telemetry.test.ts" || return 1
@@ -259,10 +259,13 @@ kit_check() {
     echo "tsc -p kit/tsconfig.json"; "$tsc" -p "$root/kit/tsconfig.json" || return 1
     # the artifact viewer's modules (kit/office): theirs, on office/dist's types
     echo "tsc -p kit/office/tsconfig.json"; "$tsc" -p "$root/kit/office/tsconfig.json" || return 1
+    # @bise/view (kit/view: the library a plugin's view loads) and its checks' types
+    echo "tsc -p kit/view/tsconfig.json"; "$tsc" -p "$root/kit/view/tsconfig.json" || return 1
+    echo "tsc -p kit/view/tsconfig.check.json"; "$tsc" -p "$root/kit/view/tsconfig.check.json" || return 1
     # bise.dev's own scripts (Vercel serves the committed .js)
     echo "tsc -p site/tsconfig.json"; "$tsc" -p "$root/site/tsconfig.json" || return 1
-    echo "ts_emit kit/tsconfig.json kit/office/tsconfig.json site/tsconfig.json --check"
-    NODE_OPTIONS="$TS_NODE_OPTIONS" node "$root/scripts/ts_emit.ts" "$root/kit/tsconfig.json" "$root/kit/office/tsconfig.json" "$root/site/tsconfig.json" --check || return 1
+    echo "ts_emit kit/tsconfig.json kit/office/tsconfig.json kit/view/tsconfig.json site/tsconfig.json --check"
+    NODE_OPTIONS="$TS_NODE_OPTIONS" node "$root/scripts/ts_emit.ts" "$root/kit/tsconfig.json" "$root/kit/office/tsconfig.json" "$root/kit/view/tsconfig.json" "$root/site/tsconfig.json" --check || return 1
   else echo "skipped kit types: no office/sdk/node_modules (pnpm -C office/sdk install)"; fi
 }
 # the extension's unit tests (no browser), then the types of its tests and the bench

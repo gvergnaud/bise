@@ -15,3 +15,6 @@
 {"kind":"text","line":1,"quote":"# bise"}
 {"kind":"time","t":12.5}
 {"kind":"time","t":0.0,"rect":{"x":10.0,"y":20.0,"w":30.0,"h":5.5}}
+{"kind":"view","key":"card:42"}
+{"kind":"view","key":"row/7","quote":"net revenue grew"}
+{"kind":"view","key":"t:12.5","label":"0:12 · a box"}

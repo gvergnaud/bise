@@ -10,7 +10,7 @@ export type Rect = { x: number, y: number, w: number, h: number, };
 /**
  * Where a note sits (the module's doc says each kind).
  */
-export type Anchor = { "kind": "block", block: string, quote?: string, } | { "kind": "cell", sheet: string, range: string, } | { "kind": "slide", slide: number, rect?: Rect, } | { "kind": "shape", slide: number, shape: string, quote?: string, } | { "kind": "para", para: string, quote?: string, } | { "kind": "region", page?: number, rect: Rect, quote?: string, } | { "kind": "text", line: number, quote?: string, } | { "kind": "time", t: number, rect?: Rect, };
+export type Anchor = { "kind": "block", block: string, quote?: string, } | { "kind": "cell", sheet: string, range: string, } | { "kind": "slide", slide: number, rect?: Rect, } | { "kind": "shape", slide: number, shape: string, quote?: string, } | { "kind": "para", para: string, quote?: string, } | { "kind": "region", page?: number, rect: Rect, quote?: string, } | { "kind": "text", line: number, quote?: string, } | { "kind": "time", t: number, rect?: Rect, } | { "kind": "view", key: string, quote?: string, label?: string, };
 
 /** the kinds this version knows (bise_proto::anchor::Anchor::KINDS) */
-export const ANCHOR_KINDS = ["block", "cell", "slide", "shape", "para", "region", "text", "time"] as const;
+export const ANCHOR_KINDS = ["block", "cell", "slide", "shape", "para", "region", "text", "time", "view"] as const;

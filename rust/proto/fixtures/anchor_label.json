@@ -21,5 +21,10 @@
   {"anchor": {"kind": "time", "t": 12, "rect": {"x": 10, "y": 20, "w": 30, "h": 5}}, "label": "0:12 · a box"},
   {"anchor": {"kind": "time", "t": 3725}, "label": "1:02:05"},
   {"anchor": {"kind": "time", "t": 0}, "label": "0:00"},
+  {"anchor": {"kind": "view", "key": "card:42"}, "label": "a part"},
+  {"anchor": {"kind": "view", "key": "row/7", "quote": "net revenue grew"}, "label": "\"net revenue grew\""},
+  {"anchor": {"kind": "view", "key": "row/7", "quote": "the quarter closed with net revenue above the plan for the third time"}, "label": "\"the quarter closed with net revenue abo…\""},
+  {"anchor": {"kind": "view", "key": "b1", "label": "page 2 · a box"}, "label": "page 2 · a box"},
+  {"anchor": {"kind": "view", "key": "p2", "label": "page 2", "quote": "net revenue grew"}, "label": "page 2 · \"net revenue grew\""},
   {"anchor": {"kind": "voxel", "x": 1}, "label": "a part"}
 ]

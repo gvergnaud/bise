@@ -125,7 +125,7 @@
   }
 
   // ---- the chip's words (bise_proto::anchor::label; designer signs them)
-  const KINDS = ["block", "cell", "slide", "shape", "para", "region", "text", "time"];
+  const KINDS = ["block", "cell", "slide", "shape", "para", "region", "text", "time", "view"];
   // one line, at most `max` characters, `…` when cut
   function short(s: unknown, max: number) {
     const one = norm(s);
@@ -156,6 +156,10 @@
         return a.page != null ? `page ${a.page} · a box` : "a box";
       case "text": return `line ${a.line}`;
       case "time": return a.rect ? `${clock(a.t)} · a box` : clock(a.t);
+      // a plugin's view: its key is opaque; its label names the place, his words what is there
+      case "view":
+        if (has(a.label)) return has(a.quote) ? `${short(a.label, 60)} · ${q(a.quote)}` : short(a.label, 60);
+        return has(a.quote) ? q(a.quote) : "a part";
       default: return "a part";
     }
   }

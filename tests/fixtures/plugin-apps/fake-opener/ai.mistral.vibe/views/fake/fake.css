@@ -1,0 +1,5 @@
+body { margin: 0; padding: 12px; font: 13px/1.4 var(--font-sans, system-ui);
+       color: var(--color-text-primary, CanvasText); background: var(--color-background-primary, Canvas); }
+textarea { width: 100%; min-height: 8em; font: inherit; }
+#lines { padding-left: 2em; }
+#lines li { padding: 2px 6px; cursor: pointer; }

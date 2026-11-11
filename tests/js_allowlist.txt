@@ -15,3 +15,4 @@ plugins/*/test/**                      # the gallery plugins' node:test units (g
 plugins/.view-kit/**                   # the gallery's shared view kit, inlined as-is into each view's HTML by its server at resources/read (no build step)
 plugins/*/vendor/**                    # vendored third-party code a gallery plugin ships with its LICENSE (mermaid)
 plugins/*/views/**                     # a gallery view's own scripts (dataviz's chart renderers), inlined into its HTML by its server at resources/read (no build step)
+tests/fixtures/plugin-apps/*/ai.mistral.vibe/views/*/*.js  # a static view fixture's own script, served as is from its folder (/f/) like a third-party plugin ships it: no build step
