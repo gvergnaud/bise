@@ -119,6 +119,11 @@ fi
 
 ulimit -n 10240 2>/dev/null
 unset SB_AGENT SB_SOCKET CARGO_TARGET_DIR
+# the tip tree builds each landed sha once, CI work: incremental buys nothing there (architect
+# m_59204). Measured 2026-11-11, cargo test --workspace --no-run from a seed clone then 10 lands
+# on: 267 s + 180 s and 11.4 GB of its own with it, 220 s + 161 s and 2.7 GB without; its target
+# had reached 41 GB of its own, 20 of them incremental/. desktop_try exports the same.
+export CARGO_INCREMENTAL=0
 
 # the night's end (review-gates m_32494): NIGHTLY_END, an epoch set when the night is queued, the
 # next NIGHTLY_UNTIL (default 06:00; empty: no end, a run by hand in the day) within 12 h; else

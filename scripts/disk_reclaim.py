@@ -37,9 +37,8 @@ protected(), checked on each target's real path; but for the desktop candidates'
 while a candidate build holds desktop-cand/work.lock.
 A target: a dir named target with cargo's CACHEDIR.TAG or a .rustc_info.json (a clone of the
 gate seed had no tag: on 2026-11-08, 11 of 12 task targets were never seen). The roots
-(roots_caps(), each with its own-cap) include the tip check's tree (~/.bise/run/tip-check),
-.land-check's (a dot project), the nightly/tip gate's tree (~/.bise/run/nightly/tree, cap
-HEAVY_TIP_OWN_CAP_GB 45: it builds every landed sha whole) and ~/.bise/dev/build/desktop-cand.
+include the tip check's tree (~/.bise/run/tip-check), .land-check's (a dot project), the
+nightly/tip gate's tree (~/.bise/run/nightly/tree) and ~/.bise/dev/build/desktop-cand.
 The trim (disk-hygiene, architect m_55867), before any deletion: a target whose green gate
 wrote <target>/.idle-since and that is idle --min-idle-min since is measured once: its own
 bytes are the files newer than its .seeded (gate.sh's mark of a seed clone; without it, all
@@ -265,26 +264,18 @@ def free_kb():
     return s.f_bavail * s.f_frsize // 1024
 
 
-def roots_caps():
-    """[(root, own-cap GB)]: the task folders (.land-check's too: a dot project), the tip check's
-    tree, the nightly/tip gate's tree and the desktop candidates' build checkout (architect
-    m_59204: 41 and 24 GB of their own sat outside the roots on 2026-11-11). The nightly tree builds
-    every landed sha whole: its own cap, HEAVY_TIP_OWN_CAP_GB (45), over its steady state, so the
-    own-cap does not make every tip run cold; the others HEAVY_OWN_CAP_GB (10).
-    HEAVY_RECLAIM_ROOTS (tests): a ':' list instead, each with the default cap."""
-    cap = float(os.environ.get("HEAVY_OWN_CAP_GB", 10))
+def roots():
+    """The task folders (.land-check's too: a dot project), the tip check's tree, the nightly/tip
+    gate's tree and the desktop candidates' build checkout (architect m_59204: 41 and 24 GB of their
+    own sat outside the roots on 2026-11-11). One own-cap for all: with CARGO_INCREMENTAL=0
+    (nightly_gate.sh), a tip run from a fresh seed clone leaves 2.7 GB of its own, far under it.
+    HEAVY_RECLAIM_ROOTS (tests): a ':' list instead."""
     r = os.environ.get("HEAVY_RECLAIM_ROOTS")
     if r:
-        return [(p, cap) for p in r.split(":") if p]
+        return [p for p in r.split(":") if p]
     base = os.path.expanduser("~/.bise/worktrees")
-    return [(os.path.join(base, h, a), cap) for h in _ls(base) for a in _ls(os.path.join(base, h))] \
-        + [(os.path.expanduser("~/.bise/run/tip-check"), cap),
-           (os.path.expanduser("~/.bise/run/nightly/tree"), float(os.environ.get("HEAVY_TIP_OWN_CAP_GB", 45))),
-           (os.path.expanduser("~/.bise/dev/build/desktop-cand"), cap)]
-
-
-def roots():
-    return [p for p, _ in roots_caps()]
+    return [os.path.join(base, h, a) for h in _ls(base) for a in _ls(os.path.join(base, h))] \
+        + [os.path.expanduser(p) for p in ("~/.bise/run/tip-check", "~/.bise/run/nightly/tree", "~/.bise/dev/build/desktop-cand")]
 
 
 def stray(t):
@@ -689,12 +680,12 @@ def own_cap(cwd):
     each measured when own_due, trimmed over HEAVY_OWN_CAP_GB. What it did is
     printed (heavy-run shows it to the job) and logged."""
     cwd = os.path.realpath(cwd)
-    root, cap = next(((r, c) for r, c in roots_caps() if (cwd + "/").startswith(os.path.realpath(r).rstrip("/") + "/")),
-                     (None, 0))
+    root = next((r for r in roots() if (cwd + "/").startswith(os.path.realpath(r).rstrip("/") + "/")), None)
     if root is None:
         return
     run = os.path.expanduser("~/.bise/run")
     os.makedirs(run, exist_ok=True)
+    cap = float(os.environ.get("HEAVY_OWN_CAP_GB", 10))
     gap = float(os.environ.get("HEAVY_OWN_GAP_MIN", 10))
     keep, allow = kept(), allowed()
     for t in find_targets(root):
