@@ -407,11 +407,15 @@ Owner: desktop `apps/desktop/src/views/` and `app/panel/`
   write grant in that mode), offscreen, one at a time, on idle, 5 s cap,
   cached per version. Icons from the opener. No per-kind arms in the
   window.
-- The check: `tests/apps_purity_check` (a lint in the quick gate): a
-  renderer import outside plugins/ or a switch on a file type/kind
-  outside `bend_plugins::opens` fails with its file:line; a shrinking
-  allow-list, each entry naming the step that removes it; deleted with
-  BUILTIN at the end.
+- The check: `tests/apps_purity_check.py` (a lint in the quick gate,
+  architect m_60354, m_60429): a renderer import outside plugins/
+  (office/sdk included) or a switch on a file type/kind in the host
+  (apps/desktop/src, kit/, rust/switchboard/src, rust/tui/src) fails with
+  its file:line; `tests/apps_purity.txt` is the only way past, one line a
+  file with its exact count: a step line names the step that removes it
+  (`step 1`..`step 6`, `thumbs`, `gallery`) and only shrinks; a `keep`
+  line is a hit that is no file type (a code fence's tag), says what the
+  word is there, and needs architect's sign; every run prints `N kept`.
 
 ## A7. Agents and the terminal
 
@@ -557,6 +561,9 @@ the artifact the `doc`'s handle names, never from an id the view sends.
 Pinned (architect m_59941): a test that `bend_plugins::opens::BUILTIN`'s
 rows and `viewer_kind`'s arms name exactly the same types; each step
 deletes both in one change. The table and the test go at step 6.
+Each step also deletes its lines of `tests/apps_purity.txt`; at step 6
+the step lines go with BUILTIN, and the check and its `keep` lines stay,
+so a type switch can't creep back into the host (architect m_60429).
 
 ## Who owns what
 

@@ -1,0 +1,89 @@
+# tests/apps_purity_check.py's list: the type-specific view code still outside plugins/
+# (docs/plugin-apps.md A6b, architect m_60354), one line per file:
+# `<path> | <n> | <step> | <why>`, n its hits (exact: more or fewer is refused).
+# step: the change that removes the file's hits: `step 1`..`step 6` (the contract's migration
+# order; a file the steps share names its last), `thumbs` (A6b thumbnails, icons, previews:
+# apps-thumbs), `gallery` (cards and filter by app: apps-gallery). Those lines only shrink,
+# and go with BUILTIN when the last type moves. `keep`: no file type, the why says what the
+# word is there; a NEW keep line needs architect's sign (m_60429); the check prints `N kept`
+# on every run and stays after the migration, with its keep lines.
+
+# ---- step 1: image, markdown (media's Preview, docs' Writer)
+kit/office/image.ts | 4 | step 1 | the image viewer, moves to plugins/media
+kit/office/zoom.ts | 1 | step 1 | the image viewer's zoom, moves with it
+kit/office/markdown.ts | 2 | step 1 | the markdown viewer, moves to plugins/docs
+office/sdk/src/view/markdown.ts | 1 | step 1 | the markdown renderer's entry, moves to plugins/docs/src (architect m_60401)
+apps/desktop/src/artifacts/pagezoom.test.ts | 3 | step 1 | reads kit/office/zoom.ts's MAX_K: goes with the image viewer
+apps/desktop/tests/checks/artifacts/md-view.spec.ts | 3 | step 1 | the markdown viewer's page by /kit/office/ urls
+apps/desktop/src/plugins/SkillTab.tsx | 1 | step 1 | a skill's .md file drawn as markdown: opens in Writer
+
+# ---- step 2: pdf, video (media's Preview)
+kit/office/pdf.ts | 3 | step 2 | the pdf viewer, moves to plugins/media
+kit/office/video.ts | 2 | step 2 | the video player, moves to plugins/media
+office/sdk/src/view/pdf.ts | 2 | step 2 | pdf.js's entry, moves to plugins/media/src
+office/sdk/src/view/pdf-worker.ts | 2 | step 2 | pdf.js's worker entry, moves with it
+
+# ---- step 3: docx, pptx (docs, slides)
+kit/office/docx.ts | 4 | step 3 | the docx viewer, moves to plugins/docs
+kit/office/slides.ts | 3 | step 3 | the pptx viewer, moves to plugins/slides
+office/sdk/src/view/index.ts | 2 | step 3 | docx-preview's entry (office-view.js), moves to plugins/docs/src
+
+# ---- step 4: xlsx, csv (sheets), and the viewer shell the office types share
+kit/office/sheet.ts | 6 | step 4 | the xlsx viewer, moves to plugins/sheets
+kit/office/office-sheet.d.ts | 1 | step 4 | the Univer grid's types, move with it
+office/sdk/src/view/sheet.ts | 7 | step 4 | Univer's entry (office-sheet.js), moves to plugins/sheets/src
+office/sdk/src/view/sheet.pin.ts | 2 | step 4 | the grid's copy pin, moves with it
+office/sdk/build.ts | 4 | step 4 | the view bundles' entries (steps 1-4 each move theirs)
+office/sdk/test/viewer.test.ts | 9 | step 4 | the viewers' units, move with their views (steps 1-4)
+office/sdk/test/notes.offscreen.ts | 3 | step 4 | the viewer page's notes check, by /kit/office/ urls
+office/sdk/test/sheet-grid.offscreen.ts | 3 | step 4 | the grid's offscreen check, by /kit/office/ urls
+office/sdk/test/swap.offscreen.ts | 3 | step 4 | the viewer's swap check, by /kit/office/ urls
+kit/office/select.ts | 2 | step 4 | the viewers' selection and notes, replaced by @bise/view's
+kit/office/swap.ts | 1 | step 4 | the viewer's live swap to a new version
+kit/office/theme.ts | 1 | step 4 | the viewer page's theme, replaced by the host context's
+kit/office/globals.d.ts | 1 | step 4 | the viewers' globals
+kit/pointer.check.ts | 2 | step 4 | lists kit/office/viewer.css and select.css among the kit's sheets
+rust/switchboard/src/daemon/art.rs | 1 | step 4 | only an xlsx saves in the viewer: save.rs moves under A4's write
+rust/switchboard/src/pages/artifact/mod.rs | 2 | step 4 | /kit/office/ bundles for /a/<id>/view
+rust/switchboard/src/pages/artifact/view.rs | 7 | step 5 | /a/<id>/view's shell, by kind (site the last)
+
+# ---- step 5: sites
+kit/office/site.ts | 3 | step 5 | the site frame, moves to plugins/sites
+kit/office/viewer.ts | 1 | step 5 | the viewer shell, until its last kind moves
+kit/office/frame.ts | 1 | step 5 | the viewer's frame messages, until its last kind moves
+apps/desktop/src/artifacts/frameNote.test.ts | 3 | step 5 | reads kit/office/frame.js's FRAME
+rust/switchboard/src/pages/site.rs | 10 | step 5 | viewer_kind, office_kind, VIDEO_EXTS and the sites' list: each step deletes its arms
+
+# ---- thumbs: thumbnails, icons and previews from the opener (A6b, apps-thumbs)
+apps/desktop/src/main/thumbs/make.ts | 5 | thumbs | LOOKS, the text excerpt, the image and timed arms: Quick Look, else the app's view
+apps/desktop/src/main/thumbs/media.ts | 2 | thumbs | a video's and a sound's length by container
+apps/desktop/src/main/thumbs/prune.ts | 1 | thumbs | the cache's .png files, rewritten with the cache per version
+apps/desktop/src/artifacts/thumbs/plan.ts | 3 | thumbs | the card's plan by kind
+apps/desktop/src/artifacts/thumbs/Thumb.tsx | 1 | thumbs | a markdown excerpt drawn in the card
+apps/desktop/src/ds/icons.tsx | 7 | thumbs | iconKindOf: the icon from the opener
+apps/desktop/src/search/rank.ts | 2 | thumbs | spotlight's glyph by kind
+apps/desktop/src/thread/peek/peek.ts | 2 | thumbs | the peek's preview by kind: the app's view or Quick Look
+apps/desktop/src/inbox/about.ts | 1 | thumbs | the inbox card's icon by kind
+apps/desktop/src/app/side3d/objects.ts | 9 | thumbs | the 3D side's object by kind: the opener's
+rust/tui/src/commands.rs | 5 | thumbs | the TUI's artifact glyph by kind and ending
+
+# ---- gallery: cards and filter by app (A6b, apps-gallery)
+apps/desktop/src/artifacts/gallery.ts | 7 | gallery | the card's type words and the picture/video/doc groups
+apps/desktop/src/artifacts/model.ts | 3 | gallery | kindOf: the kind tabs the filter by app replaces
+apps/desktop/src/artifacts/find.ts | 2 | gallery | search's no-words types: name, type and app from A2
+apps/desktop/src/app/usage.ts | 3 | gallery | the open gesture by kind: by app
+rust/switchboard/src/artifacts.rs | 8 | gallery | path_kind by ending: the row's opener (A3)
+
+# ---- keep: no file type
+apps/desktop/src/log/Completion.tsx | 1 | keep | "md": a log line's body kind
+apps/desktop/src/log/model.ts | 3 | keep | "md": a log line's body kind
+apps/desktop/src/main/skillfile.ts | 1 | keep | a skill's SKILL.md name check
+apps/desktop/src/main/viewrules.ts | 1 | keep | 'video': a media permission (the camera)
+apps/desktop/src/review/parts.ts | 1 | keep | a diff's words-and-docs group (md, mdx, txt) in the review
+rust/switchboard/src/daemon/attach.rs | 1 | keep | an image attached for the model, found beside its path
+rust/switchboard/src/daemon/session_log.rs | 1 | keep | the session log's own .txt files
+rust/switchboard/src/diff.rs | 1 | keep | a diff's binary image file
+rust/switchboard/src/pages/lint.rs | 2 | keep | html tag names in the page lint
+rust/tui/src/mdlive.rs | 1 | keep | a code fence's tag
+rust/tui/src/syntax.rs | 1 | keep | syntax highlighting's language names
+rust/tui/src/voicemode/speak.rs | 3 | keep | file endings said aloud

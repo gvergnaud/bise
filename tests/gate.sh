@@ -960,6 +960,8 @@ if [ "$mode" = full ]; then
   python3 tests/state_guard.py || { echo "GATE full FAILED"; exit 1; }
   # no new hand-written JS (js-to-ts, ~0.1 s)
   python3 tests/js_guard.py || { echo "GATE full FAILED"; exit 1; }
+  # no type-specific view code outside plugins/ past tests/apps_purity.txt (plugin-apps A6b, ~0.5 s)
+  python3 tests/apps_purity_check.py || { echo "GATE full FAILED"; exit 1; }
   # every gate self-test, whatever changed (quick runs them by path; ~30 s); the ratchets
   python3 tests/sleep_check.py >/dev/null || { python3 tests/sleep_check.py; echo "GATE full FAILED"; exit 1; }
   python3 tests/conflict_markers.py || { echo "GATE full FAILED"; exit 1; }
@@ -1043,6 +1045,9 @@ python3 "$root/tests/known_reds.py" --expire || { echo "GATE quick FAILED: your 
 python3 "$root/tests/state_guard.py" || { echo "GATE quick FAILED"; exit 1; }
 # no new hand-written JS: generated, vendored or on tests/js_allowlist.txt (js-to-ts, ~0.1 s)
 python3 "$root/tests/js_guard.py" || { echo "GATE quick FAILED"; exit 1; }
+# no renderer import outside plugins/, no switch on a file type in the host, past the
+# shrinking tests/apps_purity.txt (docs/plugin-apps.md A6b, architect m_60354; ~0.5 s)
+python3 "$root/tests/apps_purity_check.py" || { echo "GATE quick FAILED"; exit 1; }
 # no new Bool.pick walk that never stops; the list of old ones only shrinks; no
 # def that calls itself twice with the same arguments (2^n: hub-tick) (tests/pick_gate.py)
 python3 "$root/tests/pick_gate.py" || { echo "GATE quick FAILED"; exit 1; }
