@@ -215,6 +215,14 @@ Methods for a view (through the host, C7):
   thread (temp file, fsync, hash), committed on the loop (decide from a
   stat, rename, version).
 - `folder/list` and `file/new` types live in `bise_proto::files`.
+- `resources/url {uri}` → `{url}` (architect m_60354): a session URL on
+  the view's own origin, `/h/<session>/<handle id>`, the /f/ gate (no
+  session, another origin's, a handle of another session: 404), GET and
+  HEAD only, Range honoured, the handle's target only, dies with the
+  session; a bearer: never logged. For streaming (`<video>`) and ranged
+  reads (pdf.js, big xlsx). A view opened on a document gets `'self'` in
+  media-src, img-src and connect-src (view_csp, with its test);
+  connect-src stays `'none'` for every other view.
 - A tool call from a file-opened view to its own server gets
   `_meta["ai.mistral.vibe/resource"].path` (the real path), set by the
   hub, server side only.
@@ -260,6 +268,12 @@ floor plus declared origins, permissions granted at the add.
   document gets its own origin (the artifact id in the hash), or runs
   opaque as today (site.rs `ARTIFACT_CSP`); decided before step 5, with
   a test that two sites can't read each other's storage.
+- **isolate: "document"** in `dev.bise/ui` (opt-in; architect m_60354):
+  the view origin's hash includes the target's id (artifact or entry), so
+  two documents never share storage; grants stay keyed by the view, not
+  the origin; the ORIGINS bound keeps its eviction (oldest unseen), with
+  a test; two sites can't read each other: test. Default: one origin per
+  view.
 - **Live tabs**: a tab is the view, kept live by the views layer (C7:
   the frame never reloads when a tab moves). At most N live view tabs
   (N in the host's constants); the oldest unseen unloads, its state
@@ -364,6 +378,18 @@ Owner: desktop `apps/desktop/src/views/` and `app/panel/`
   read only, older version (`v3 · there's a newer version (v5) · Open
   v5`), file gone. A document already open focuses its tab; Open with
   another app swaps the view in the same tab.
+- Thumbnails (architect m_60354): Quick Look first for any file macOS
+  previews (the native helper's QLThumbnailGenerator); the app's view in
+  `displayMode: "thumbnail"` only for types Quick Look can't draw (a
+  static view; a server opener only with `thumbnail: true`, read-only, no
+  write grant in that mode), offscreen, one at a time, on idle, 5 s cap,
+  cached per version. Icons from the opener. No per-kind arms in the
+  window.
+- The check: `tests/apps_purity_check` (a lint in the quick gate): a
+  renderer import outside plugins/ or a switch on a file type/kind
+  outside `bend_plugins::opens` fails with its file:line; a shrinking
+  allow-list, each entry naming the step that removes it; deleted with
+  BUILTIN at the end.
 
 ## A7. Agents and the terminal
 
