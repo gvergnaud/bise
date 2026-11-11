@@ -119,6 +119,7 @@ pub mod util;
 pub mod view;
 pub mod view_bridge;
 pub mod view_call;
+pub mod view_files;
 pub mod view_limits;
 pub mod wake;
 pub mod watch;

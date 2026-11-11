@@ -7,3 +7,5 @@ description = "Who is at the other end of a socket: the process table with each 
 
 [dependencies]
 libc = "0.2"
+# fsx: the content hash of ~/bise's atomic replace (plugin-apps A4)
+sha2 = "0.10"

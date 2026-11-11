@@ -14,6 +14,7 @@ export type * from './ops';
 export type * from './inbox';
 export type * from './hub';
 export type * from './rpc';
+export type * from './files';
 export type * from './commands';
 export type * from './draft';
 export type * from './app_rows';

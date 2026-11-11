@@ -12,12 +12,16 @@
 //! - [`judge`]: pure, a peer pid and a table in, who it is out
 //!   ([`judge::judge`] for one hub, [`judge::judge_any`] for a
 //!   machine-wide service);
-//! - [`os`]: the peer pid of a unix socket.
+//! - [`os`]: the peer pid of a unix socket;
+//! - [`fsx`]: the one atomic replace of a `~/bise` file with its `ifMatch`
+//!   (plugin-apps A4), shared by the hub's view writes and the desktop
+//!   core's Finder writes (architect m_60037).
 //!
 //! The rest of the process tracking (which processes to kill, the REPLs'
 //! sessions, spawning) stays in `switchboard::procs`, which re-exports
 //! these.
 
+pub mod fsx;
 pub mod judge;
 pub mod os;
 pub mod table;

@@ -229,3 +229,34 @@ export type ViewCallResult = Record<string, unknown>;
  * prefersBorder, ready, error?}]}`.
  */
 export type PluginViewsResult = { views: Array<Record<string, unknown>> };
+
+/**
+ * Why a view may not write its file: `data.reason` of a
+ * [`ViewError::NoWrite`] (architect m_59962 #3: the host says "there's a
+ * newer version" on the second, never "not allowed").
+ */
+export type NoWrite = "no_grant" | "older_version";
+
+/**
+ * A `resources/read`'s `_meta` (A4): what a view needs to save it back.
+ */
+export type ReadMeta = { 
+/**
+ * what a write sends back as `ifMatch`: an artifact's `<v>.<rev>`, a
+ * root file's content hash
+ */
+etag: string, 
+/**
+ * its `write` grant, on the newest version
+ */
+writable: boolean, 
+/**
+ * the whole file's bytes (a range reads part of it)
+ */
+size: number, };
+
+/**
+ * An `ai.mistral.vibe/resources/write`'s answer (A4). A refusal (no
+ * grant, an older version, a bad handle) is an error, never an outcome.
+ */
+export type WriteOutcome = { "outcome": "saved", etag: string, } | { "outcome": "conflict", etag: string, } | { "outcome": "too-large", maxBytes: number, };

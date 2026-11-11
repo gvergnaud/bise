@@ -44,6 +44,12 @@ export const VIEW_ERR = {
   noGesture: -32037,
   /** a ui/update-model-context over the hub's 16 KB (review d5) */
   tooLarge: -32038,
+  /** plugin-apps A4: a view-file:// handle the hub refuses (one answer whatever the reason) */
+  badHandle: -32039,
+  /** a write without the 'write' grant (data.reason no_grant) or on an older version (older_version) */
+  noWrite: -32040,
+  /** the handle's file or version is no more */
+  gone: -32041,
 } as const;
 
 /** The real door: window.bise.views.call; with none (a test page, an older preload) every ask is refused. */

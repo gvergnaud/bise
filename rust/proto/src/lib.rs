@@ -85,6 +85,7 @@ pub mod core;
 pub mod diff;
 pub mod draft;
 pub mod envelope;
+pub mod files;
 pub mod helper;
 pub mod hub;
 pub mod inbox;
