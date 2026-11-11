@@ -4,6 +4,7 @@ import type { Entry, Part } from "@/proto";
 import type { CoreCmd } from "@/shared/api";
 import { allFixtureEvents, replay } from "./replay";
 import { sentWords } from "./types";
+import { OLDER_LIMIT } from "./window";
 import {
   Store,
   TAGS,
@@ -603,6 +604,14 @@ what is in this picture?`,
     expect(sent).toEqual([
       { cmd: "page", project: P, agent: "perf", before: 50, limit: 20 },
     ]);
+  });
+  it("his scroll up asks OLDER_LIMIT entries a page, never the hub's default 40 (thread-older)", () => {
+    // mutation: olderPage's default limit dropped (the hub's 40) turns it red
+    const { store, sent } = fake();
+    store.apply({ ev: "thread", project: P, agent: "main", entries: [entry(50, "x")], before: 50, more: true });
+    store.olderPage(P, "main");
+    expect(sent).toEqual([{ cmd: "page", project: P, agent: "main", before: 50, limit: OLDER_LIMIT }]);
+    expect(OLDER_LIMIT).toBe(200);
   });
   it("C/A/B: commands asked once per core, skills per project, an @ query resolves with its newest rid only", async () => {
     const { sent, store } = fake();

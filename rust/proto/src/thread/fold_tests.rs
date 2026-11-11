@@ -427,6 +427,34 @@ fn a_page_keeps_the_newest_and_says_what_is_before() {
     assert_eq!((before, more), (Some(10), true));
 }
 
+/// thread-older: a window of lines that fold to no entry (main's long runs
+/// of wakes and usage) still gives a cursor, and the hub's page goes on back
+/// to the window before it, so a client's scroll up never stops there.
+/// Mutations: `page`'s `or_else` dropped (before None) or `page_back`'s
+/// hop loop gone turn it red.
+#[test]
+fn a_page_that_folds_to_nothing_goes_on_back() {
+    use crate::thread::{page_back, BACK_HOPS};
+    let none = |_: &str| None;
+    let ctx = ctx_with(&[], &none);
+    let l = |pos: u64, line: &str| (pos, 1_000 + pos, line.to_string());
+    // 1..=4: his message and its answer; 5..=40: plumbing no entry shows
+    let mut all: Vec<Line> = vec![l(1, "sb you : go"), l(2, "  obs: turn_started"), l(3, "  obs: assistant: on it"), l(4, "  obs: turn_done: completed")];
+    all.extend((5..=40).map(|p| l(p, "  obs: usage: 10 in 2 out")));
+    let window = |before: u64| -> Vec<Line> { all.iter().filter(|x| x.0 < before && x.0 + 10 >= before).cloned().collect() };
+    // the newest window (31..=40) folds to nothing: a cursor all the same
+    let (e, before, more) = page(&window(41), &[], &ctx, 60);
+    assert_eq!((e.len(), before, more), (0, Some(31), true));
+    // the hub's page reads back until it meets entries
+    let mut read = |b: u64| window(b);
+    let (e, _, more) = page_back(window(41), Vec::new(), &ctx, 60, BACK_HOPS, &mut read);
+    assert_eq!(e.iter().map(|x| x.text.as_str()).collect::<Vec<_>>(), vec!["go", "on it"], "{e:?}");
+    assert!(!more);
+    // out of hops: still a cursor to go on from
+    let (e, before, more) = page_back(window(41), Vec::new(), &ctx, 60, 1, &mut read);
+    assert_eq!((e.len(), before, more), (0, Some(21), true));
+}
+
 /// Law (architect m_16543): a page cut between a steered message and its
 /// receipt still shows steered_at: the page reads the lines after it up to
 /// its last turn's end; a receipt after that end marks nothing (it can't

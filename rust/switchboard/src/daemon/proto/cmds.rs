@@ -101,7 +101,10 @@ impl Shell {
                 let facts = self.facts();
                 let setup = self.config.setup();
                 let ctx = Ctx { open_cards: &facts.open, page: &|p: &str| facts.page(p), provider: &|i: &str, k: &str| provider_name(setup, i, k), width: &width, offset: &offset, attached: &crate::attached::split };
-                let (mut entries, before, more) = pthread::page(&lines, &ahead, &ctx, limit.map_or(LIMIT, |l| (l as usize).clamp(1, MAX_LIMIT)));
+                // lines that fold to no entry: the windows before them (thread-older)
+                let tix = self.tix.clone();
+                let mut back = |b: u64| lines_of(crate::daemon::history::page_lines_in(&tix, &path, Some(b as usize), LINES));
+                let (mut entries, before, more) = pthread::page_back(lines, ahead, &ctx, limit.map_or(LIMIT, |l| (l as usize).clamp(1, MAX_LIMIT)), pthread::BACK_HOPS, &mut back);
                 self.expire_views(&dir, &mut entries);
                 self.proto_send(id, &HubEv::Thread { project, agent, entries, before, more, cached: false });
             }

@@ -37,6 +37,13 @@ export const JUMP_LIMIT = 60;
 export const NEWER_LINES = 150;
 /** A newer page's entries (the hub's MAX_LIMIT). */
 export const NEWER_LIMIT = 200;
+/**
+ * An older page's entries, as he scrolls up (the hub's MAX_LIMIT, never its default 40): one page
+ * is a round trip to a hub that may be busy (harness's: 140 ms a page, seconds behind its state
+ * pushes), and main's 600 lines hold ~240 short entries (agents' messages), so 40 a page made
+ * his scroll up wait at 'older messages…' every screen or two (thread-older).
+ */
+export const OLDER_LIMIT = 200;
 
 /** What a jump to `pos` does. Pure. */
 export type JumpPlan =

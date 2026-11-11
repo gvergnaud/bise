@@ -913,8 +913,35 @@ pub fn page(lines: &[Line], ahead: &[Line], ctx: &Ctx, limit: usize) -> (Vec<Ent
     }
     let more = older || entries.len() > limit;
     let entries = entries.split_off(entries.len().saturating_sub(limit));
-    let before = entries.first().map(|e| e.pos).filter(|_| more);
+    // lines that fold to no entry still give a cursor: their first line (never `more` without
+    // `before`: a client had nothing to ask again from, thread-older)
+    let before = entries.first().map(|e| e.pos).or_else(|| lines.first().map(|l| l.0)).filter(|_| more);
     (entries, before, more)
+}
+
+/// Windows [`page_back`] reads back at most past ones that fold to no entry
+/// (8 × the hub's 600 lines).
+pub const BACK_HOPS: usize = 8;
+
+/// [`page`], going on back while its lines fold to no entry (a long run of
+/// lines no entry shows: wakes, usage, tool plumbing): `read(before)` gives
+/// the lines before `before` (the next window back, none at the start), at
+/// most `hops` windows more; the window read last is the page's `ahead`.
+/// Still empty after them: its cursor, a client asks again from there
+/// (thread-older: the desktop, its keys unchanged by an empty page, never
+/// asked again and his scroll stopped at 'older messages…').
+pub fn page_back(lines: Vec<Line>, ahead: Vec<Line>, ctx: &Ctx, limit: usize, hops: usize, read: &mut dyn FnMut(Pos) -> Vec<Line>) -> (Vec<Entry>, Option<Pos>, bool) {
+    let (mut lines, mut ahead) = (lines, ahead);
+    for _ in 0..hops {
+        let p = page(&lines, &ahead, ctx, limit);
+        let Some(first) = p.1.filter(|_| p.0.is_empty()) else { return p };
+        let back = read(first);
+        if back.is_empty() {
+            return p;
+        }
+        ahead = std::mem::replace(&mut lines, back);
+    }
+    page(&lines, &ahead, ctx, limit)
 }
 
 pub mod find;

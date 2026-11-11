@@ -44,3 +44,16 @@ export function GapRow({ project, agent }: { project: string; agent: string }) {
     </div>
   );
 }
+
+/**
+ * The 'older messages…' line over the oldest row while older ones exist (the list's head): the gap
+ * row's look, on the column as every row (thread.css's column rule, .th-older), never at the list's
+ * left edge (his screenshot, thread-older).
+ */
+export function OlderLine() {
+  return (
+    <div className="th-gap th-older" data-testid="thread.older">
+      <Marker>{thread.older_messages}</Marker>
+    </div>
+  );
+}

@@ -45,6 +45,23 @@ pub(super) fn transcript_ahead(path: &Path, from: usize, count: usize) -> Vec<(u
     transcript_page(path, from + count, count).into_iter().filter(|l| l.0 >= from).collect()
 }
 
+/// [`Shell::page_lines`] over the Shell's indexes alone (a clone shares
+/// them): the page arm's reads back (`page_back`, thread-older) while
+/// the rest of the Shell is borrowed.
+pub(super) fn page_lines_in(tix: &super::tindex::Indexes, path: &Path, before: Option<usize>, count: usize) -> Vec<(usize, Option<u64>, String)> {
+    let at = |ix: &super::tindex::TIndex| {
+        let before = before.unwrap_or(ix.lines() + 1);
+        ix.read(path, before.saturating_sub(count), before)
+    };
+    if tix.ensure(path) {
+        if let Some(lines) = tix.with(path, at) {
+            return lines;
+        }
+    }
+    let before = before.unwrap_or_else(|| super::lines::transcript_len(path) + 1);
+    transcript_page(path, before, count)
+}
+
 impl Shell {
     /// The lines of `path` at [before - count, before), `before` None: its
     /// end (the newest page). Through the transcript's offset index
@@ -52,17 +69,7 @@ impl Shell {
     /// first time has none yet: read the old way, once, while a worker
     /// builds it.
     pub(super) fn page_lines(&self, path: &Path, before: Option<usize>, count: usize) -> Vec<(usize, Option<u64>, String)> {
-        let at = |ix: &super::tindex::TIndex| {
-            let before = before.unwrap_or(ix.lines() + 1);
-            ix.read(path, before.saturating_sub(count), before)
-        };
-        if self.tix.ensure(path) {
-            if let Some(lines) = self.tix.with(path, at) {
-                return lines;
-            }
-        }
-        let before = before.unwrap_or_else(|| super::lines::transcript_len(path) + 1);
-        transcript_page(path, before, count)
+        page_lines_in(&self.tix, path, before, count)
     }
 
     /// The lines of `path` at [from, from + count), as [`Self::page_lines`]

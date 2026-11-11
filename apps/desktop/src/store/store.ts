@@ -51,7 +51,7 @@ import {
   typed,
 } from "./types";
 import { applyTyped } from "./apply";
-import { answers, listsLive, merged, planJump, planNewer } from "./window";
+import { answers, listsLive, merged, OLDER_LIMIT, planJump, planNewer } from "./window";
 import { trim } from "./trim";
 import { mergeArchived } from "./archived";
 import { sendRefusedOf, sentOf } from "./echo";
@@ -520,17 +520,11 @@ export class Store extends StoreVoice {
     if (t !== undefined) this.setSyncing(key, t, false);
     this.command({ cmd: "unsubscribe", project, agent });
   }
-  /** The page before the oldest entry held (nothing when there is no more). */
-  olderPage(project: string, agent: string, limit?: number): void {
+  /** The page before the oldest entry held (nothing when there is no more): OLDER_LIMIT entries. */
+  olderPage(project: string, agent: string, limit: number = OLDER_LIMIT): void {
     const v = this.threadOrder(threadKey(project, agent));
     if (!v.more || v.before === null) return;
-    this.command({
-      cmd: "page",
-      project,
-      agent,
-      before: v.before,
-      ...(limit === undefined ? {} : { limit }),
-    });
+    this.command({ cmd: "page", project, agent, before: v.before, limit });
   }
   /**
    * Bring the entry at `pos` into the view (his answer weeks back, a find's hit): 'held' with the

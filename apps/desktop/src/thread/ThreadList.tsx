@@ -68,7 +68,9 @@ export interface ThreadListProps {
   row: (key: string) => ReactNode;
   /** older rows exist before the first one */
   more: boolean;
-  /** ask the page before the first row (called again only after keys change) */
+  /** the older page's cursor (the view's `before`): a new one is asked again, the same one once */
+  before: number | null;
+  /** ask the page before the first row (called again only once `before` changed) */
   onOlder: () => void;
   /** above the oldest row while `more` (a loading line) */
   head?: ReactNode;
@@ -110,6 +112,26 @@ export function nextFirstIndex(prev: { first: string | undefined; index: number 
   if (k > 0) return { first, index: prev.index - k };
   const j = first === undefined ? -1 : before.indexOf(first);
   return { first, index: k < 0 && j > 0 ? prev.index + j : prev.index };
+}
+
+/** Rows still above the drawn range when the older page is asked (a screen or two of short rows). */
+export const OLDER_AHEAD = 60;
+
+/**
+ * Whether the older page goes now: the drawn range (Virtuoso's, with firstItemIndex: `start`) is
+ * within OLDER_AHEAD rows of the first row (`first`, the list's firstItemIndex). Pure.
+ */
+export function asksOlder(start: number, first: number): boolean {
+  return start - first < OLDER_AHEAD;
+}
+
+/**
+ * Whether the older page may be asked: there is more, and its cursor (the view's `before`) is not
+ * the one asked last. Keyed on the cursor, never on the first row: a page that folds to no entry
+ * moves the cursor and leaves the rows as they were (architect m_59149, thread-older). Pure.
+ */
+export function olderAsk(more: boolean, before: number | null, asked: number | null): boolean {
+  return more && before !== null && before !== asked;
 }
 
 /**
@@ -193,7 +215,7 @@ export function followOpened(rowTop: number, toEnd: number): { by: number; stuck
   return { by: room, stuck: false };
 }
 
-export function ThreadList({ keys, row, more, onOlder, head, tail, cue, testId, ref, keepKey, holdPart, reactKey, onReading, onRead }: ThreadListProps) {
+export function ThreadList({ keys, row, more, before, onOlder, head, tail, cue, testId, ref, keepKey, holdPart, reactKey, onReading, onRead }: ThreadListProps) {
   const virtuoso = useRef<VirtuosoHandle>(null);
   // the anchor of firstItemIndex, moved during render (React's
   // "state from the previous render" pattern): no effect, no extra frame
@@ -285,13 +307,13 @@ export function ThreadList({ keys, row, more, onOlder, head, tail, cue, testId, 
     [measure],
   );
 
-  // one older page at a time: asked again only once the keys changed
-  const asked = useRef<string | undefined>(undefined);
+  // one older page at a time: asked again only once its cursor moved (olderAsk)
+  const asked = useRef<number | null>(null);
   const startReached = useCallback(() => {
-    if (!more || asked.current === keys[0]) return;
-    asked.current = keys[0];
+    if (!olderAsk(more, before, asked.current)) return;
+    asked.current = before;
     onOlder();
-  }, [more, keys, onOlder]);
+  }, [more, before, onOlder]);
 
   // M2 / N11: scrolled up, a bar takes him back to the newest, with how
   // many rows came meanwhile (the TUI's 'back to the bottom · N new')
@@ -602,9 +624,16 @@ export function ThreadList({ keys, row, more, onOlder, head, tail, cue, testId, 
   useLayoutEffect(() => {
     placeRef.current = keepPlace;
   }, [keepPlace]);
-  const onRange = useCallback(() => {
-    keepPlace();
-  }, [keepPlace]);
+  // the older page is asked while OLDER_AHEAD rows are still above what he reads, not when he
+  // reaches the first one (Virtuoso's startReached): it comes while he scrolls (thread-older). Only
+  // scrolled up: a thread opened at its end asks nothing more of its hub
+  const onRange = useCallback(
+    (r: { startIndex: number }) => {
+      keepPlace();
+      if (!stick.current && asksOlder(r.startIndex, next.index)) startReached();
+    },
+    [keepPlace, next.index, startReached],
+  );
 
   const toEnd = useCallback(() => {
     setStick(true);

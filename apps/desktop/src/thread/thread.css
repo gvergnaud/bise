@@ -414,6 +414,7 @@ body:has(.th-screen > .art-give) .s3-side {
 .th-tip,
 .th-answer-miss,
 .th-cu,
+.th-screen .th-older,
 .th-history {
   box-sizing: border-box;
   width: var(--th-col);

@@ -2,9 +2,8 @@
 // runs of messages between agents, and the first-run block over an empty main thread. Split out
 // of ThreadScreen.tsx (the file cap); ThreadScreen mounts it. Owner: amb-win.
 import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
-import { Marker, Press } from '@/ds';
+import { Press } from '@/ds';
 import type { ComposerActions } from '@/composer';
-import { thread } from '@/proto/words.gen';
 import { useAgents, useEntry, useProjects, usePending, useStore, useThreadOrder } from '@/store';
 import { usePartialText } from '@/shared/partial';
 import { LIVE, liveKey, useLive, useStill } from './live';
@@ -21,7 +20,7 @@ import { TurnLine } from './TurnLine';
 import { absolute } from './paths';
 import { FoldsContext } from './folds';
 import { FindMarkContext } from './findmark';
-import { GapRow, isGapKey, withGap } from './gap';
+import { GapRow, OlderLine, isGapKey, withGap } from './gap';
 import { SyncCue } from './syncCue';
 import { useArtifactOpener } from './openArtifact';
 import { ArtPeekContext, type PeekSource } from './peek/ArtPeek';
@@ -334,7 +333,7 @@ export const Rows = memo(function Rows({ tkey, project, agent, bise, listRef, on
   // its artifact pills show their preview on hover (peek/ArtPeek)
   return (
     <ArtPeekContext.Provider value={peek}>
-      <ThreadList key={tkey} ref={listRef} keys={keys} row={row} more={view.more} onOlder={onOlder} head={<Marker>{thread.older_messages}</Marker>} tail={tail} cue={cue} testId="thread.list" keepKey={tkey} holdPart=".th-row" reactKey={reactKey} onRead={onRead} {...(onReading === undefined ? {} : { onReading })} />
+      <ThreadList key={tkey} ref={listRef} keys={keys} row={row} more={view.more} before={view.before} onOlder={onOlder} head={<OlderLine />} tail={tail} cue={cue} testId="thread.list" keepKey={tkey} holdPart=".th-row" reactKey={reactKey} onRead={onRead} {...(onReading === undefined ? {} : { onReading })} />
     </ArtPeekContext.Provider>
   );
 });
