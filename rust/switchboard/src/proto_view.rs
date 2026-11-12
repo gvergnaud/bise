@@ -487,7 +487,7 @@ pub fn artifacts(ev: &Value, page_url: impl Fn(&str) -> Option<String>, frame_ba
                 title: s(r, "title"),
                 agent: s(r, "agent"),
                 version: version as u32,
-                new: s(r, "by") != "you" && at_ms > seen,
+                new: crate::artifacts::is_new(&s(r, "by"), at_ms, seen),
                 at_ms,
                 url,
                 kind,

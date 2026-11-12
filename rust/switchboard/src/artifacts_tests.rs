@@ -4,6 +4,12 @@
 use super::*;
 use serde_json::json;
 
+/// `sb artifact list <words> [--agent <a>]` as the store reads it, days at UTC.
+fn list(s: &Store, words: &str, agent: Option<&str>, archived: bool, now: u64) -> String {
+    let f = crate::artifacts_filter::of_list(words, agent.into_iter().map(String::from).collect(), None).unwrap();
+    s.list_text(&f, archived, now, &|_| 0)
+}
+
 fn tmp(name: &str) -> PathBuf {
     let d = std::env::temp_dir().join(format!("sb-artifacts-{}-{}", name, std::process::id()));
     let _ = std::fs::remove_dir_all(&d);
@@ -104,7 +110,7 @@ fn a_gone_file_still_opens_the_copy() {
     assert_eq!(rows[0]["agent"], "subs-lead");
     let copy = rows[0]["copy"].as_str().unwrap();
     assert_eq!(std::fs::read(copy).unwrap(), b"doc");
-    assert!(s.list_text("", None, false, 20).contains("▲ gone from disk · bise kept a copy"));
+    assert!(list(&s, "", None, false, 20).contains("▲ gone from disk · bise kept a copy"));
 }
 
 #[test]
@@ -343,12 +349,12 @@ fn the_thread_record_keeps_its_fields_whole() {
 fn list_text_filters_by_words_and_agent() {
     let root = tmp("listtext");
     let s = Store::new(&root.join("state"));
-    assert!(s.list_text("", None, false, 1).starts_with("no artifacts yet."));
+    assert!(list(&s, "", None, false, 1).starts_with("no artifacts yet."));
     add(&s, &root, "https://github.com/acme/web/pull/6", Some("gateway head checks"), 10).unwrap();
-    let t = s.list_text("gateway", None, false, 20);
+    let t = list(&s, "gateway", None, false, 20);
     assert!(t.starts_with("[gateway head checks](artifact:gateway-head-checks) · pr · v1 · pricing-page"), "{t}");
-    assert_eq!(s.list_text("deck", None, false, 20), "nothing matches.");
-    assert_eq!(s.list_text("", Some("launch"), false, 20), "nothing matches.");
+    assert_eq!(list(&s, "deck", None, false, 20), "nothing matches.");
+    assert_eq!(list(&s, "", Some("launch"), false, 20), "nothing matches.");
 }
 
 /// The typed `artifacts` (proto_view::artifacts, the window's and, from
@@ -476,10 +482,10 @@ fn archive_takes_it_out_of_the_list_and_keeps_only_the_newest_copy() {
     let row = rows.iter().find(|r| r["id"] == "old-shot").unwrap();
     assert_eq!(row["archived_at"], 50);
     assert_eq!(rows.iter().find(|r| r["id"] == "bise-dev-docs").unwrap()["archived_at"], Value::Null);
-    let t = s.list_text("", None, false, 60);
+    let t = list(&s, "", None, false, 60);
     assert!(!t.contains("artifact:old-shot"), "{}", t);
     assert!(t.ends_with("1 archived · sb artifact list --archived"), "{}", t);
-    assert!(s.list_text("", None, true, 60).contains("artifact:old-shot"));
+    assert!(list(&s, "", None, true, 60).contains("artifact:old-shot"));
     s.set_seen(0).unwrap();
     assert_eq!(s.new_count(60), 2);
     assert!(archived_text(&done).starts_with("archived old-shot · 1 KB freed"));
@@ -497,7 +503,7 @@ fn unarchive_brings_the_row_back_and_archiving_again_keeps_its_time() {
     assert_eq!(back, vec!["old-shot".to_string()]);
     assert_eq!(not, vec!["bise-dev-docs".to_string()]);
     assert!(s.archived().is_empty());
-    assert!(s.list_text("", None, false, 60).contains("artifact:old-shot"));
+    assert!(list(&s, "", None, false, 60).contains("artifact:old-shot"));
     // the old copy stays gone: only the row comes back
     assert_eq!(s.get("old-shot").unwrap().versions[0].no_copy.as_deref(), Some("archived"));
     assert_eq!(unarchived_text(&back, &not), "old-shot is back in the list\nnot archived: bise-dev-docs.");
@@ -517,7 +523,7 @@ fn archive_picks_by_agent_before_and_kind_and_a_page_archives_too() {
     // a bise page: out of the list, its store untouched
     let done = s.archive(&Pick { ids: vec!["gate-index".into()], ..Default::default() }, 50).unwrap();
     assert_eq!(done.ids, vec!["gate-index".to_string()]);
-    assert!(!s.list_text("", None, false, 60).contains("gate-index"));
+    assert!(!list(&s, "", None, false, 60).contains("gate-index"));
     assert!(s.get("gate-index").is_some());
 }
 
@@ -766,7 +772,7 @@ fn law_a_keep_is_all_or_none_and_rows_say_who_kept_it() {
     assert!(err.contains("no artifact nope"), "{err}");
     assert!(s.marks().marks.is_empty(), "an unknown id keeps nothing");
     s.keep_t(&["learnings-notebook".into()], artifacts_marks::Who::Agent("learnings"), true, 5).unwrap();
-    assert!(s.list_text("", None, false, 9).ends_with(" · ◆ kept by learnings"), "sb artifact list says who kept it");
+    assert!(list(&s, "", None, false, 9).ends_with(" · ◆ kept by learnings"), "sb artifact list says who kept it");
     // the row names the keeper by its name now (a renamed agent)
     let renamed = |a: &str| (a == "learnings").then(|| ("notebook".to_string(), false));
     let row = &s.rows(&renamed, "/")[0];

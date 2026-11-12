@@ -1044,16 +1044,32 @@ impl Store {
         let seen = self.seen_ms(now);
         let put_away = self.archived();
         all.iter()
-            .filter(|m| m.by != "you" && !put_away.contains_key(&m.id) && m.current().is_some_and(|v| v.at_ms > seen))
+            .filter(|m| !put_away.contains_key(&m.id) && m.current().is_some_and(|v| is_new(&m.by, v.at_ms, seen)))
             .count()
     }
 
     /// What `sb artifact list` prints: one line each, newest first,
-    /// filtered by words (title, agent, kind, id) and agent; the archived
-    /// ones only with `archived` (else a last line counts them).
-    pub fn list_text(&self, words: &str, agent: Option<&str>, archived: bool, now: u64) -> String {
+    /// filtered by `f` (artifacts_filter: words, agents, since, local days
+    /// by `tz`, each time's offset); the archived ones only with `archived`
+    /// (else a last line counts them).
+    pub fn list_text(&self, f: &crate::artifacts_filter::Filter, archived: bool, now: u64, tz: &dyn Fn(u64) -> i32) -> String {
         let put_away = self.archived();
         let marks = self.marks();
+        let seen = self.seen_ms(now);
+        let keeps = |m: &Meta| {
+            let at = m.current().map_or(m.created_ms, |v| v.at_ms);
+            let note = (m.by == "page").then(|| self.page_note_ms(&m.id)).flatten();
+            let row = crate::artifacts_filter::Row {
+                id: &m.id,
+                title: &m.title,
+                agent: &m.agent,
+                kind: &m.kind,
+                by: &m.by,
+                new: !archived && is_new(&m.by, at, seen),
+                touched_ms: artifacts_marks::touched(at, marks.opened_ms(&m.id), note),
+            };
+            crate::artifacts_filter::keeps(f, &row, now, tz)
+        };
         let all = self.all();
         let hidden = all.iter().filter(|m| put_away.contains_key(&m.id) != archived).count();
         let foot = if archived || hidden == 0 {
@@ -1062,11 +1078,7 @@ impl Store {
             format!("\n{} archived · sb artifact list --archived", hidden)
         };
         let all: Vec<Meta> = all.into_iter().filter(|m| put_away.contains_key(&m.id) == archived).collect();
-        let hits: Vec<&Meta> = all
-            .iter()
-            .filter(|m| agent.is_none_or(|a| m.agent == a))
-            .filter(|m| matches(m, words))
-            .collect();
+        let hits: Vec<&Meta> = all.iter().filter(|m| keeps(m)).collect();
         if hits.is_empty() {
             return if archived {
                 "nothing archived.".into()
@@ -1168,6 +1180,13 @@ pub fn join_sections(rows: &mut [Value], waiting: &std::collections::BTreeSet<St
         r["done"] = json!(done);
         r["section"] = json!(artifacts_marks::section(audience, r["kept"].is_object(), done).word());
     }
+}
+
+/// The hub's one `new` rule: a version after he last looked (`seen_ms`),
+/// never one he added himself. The new count, the rows' `new` and the
+/// filter's `since:last` (artifacts_filter) all read it.
+pub fn is_new(by: &str, at_ms: u64, seen_ms: u64) -> bool {
+    by != "you" && at_ms > seen_ms
 }
 
 /// The rows' `folder`, raw from their metas, as readers read it: the

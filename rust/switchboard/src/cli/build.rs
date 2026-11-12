@@ -336,7 +336,7 @@ fn inspect(rest: &[String]) -> Result<Inspect, String> {
 
 /// `sb artifact add|keep|unkeep|move|folders|list|archive|unarchive`.
 fn artifact(rest: &[String]) -> Result<Artifact, String> {
-    let usage = "usage: sb artifact add <path or link> [--title \"<t>\"] [--kind <k>] [--folder <name|theme/task>] [--for-you] | sb artifact keep|unkeep <id>... | sb artifact move <id>... <folder> | --unfiled | sb artifact folders | sb artifact list [<words>] [--agent <a>] [--archived] | sb artifact archive|unarchive <id>... | --agent <a> | --before <YYYY-MM-DD[THH:MM]> | --kind <k>";
+    let usage = "usage: sb artifact add <path or link> [--title \"<t>\"] [--kind <k>] [--folder <name|theme/task>] [--for-you] | sb artifact keep|unkeep <id>... | sb artifact move <id>... <folder> | --unfiled | sb artifact folders | sb artifact list [<words>] [--agent <a>]... [--since last|today|week|older] [--project <p>] [--archived] | sb artifact archive|unarchive <id>... | --agent <a> | --before <YYYY-MM-DD[THH:MM]> | --kind <k>";
     let (pos, o) = parse_args(rest, &["title", "kind", "agent", "before", "folder"], &["archived", "unfiled", "for-you"])?;
     let opt = |k: &str| o.contains_key(k).then(|| str_of(&o, k));
     let agent = || opt("agent").map(|a| a.trim_start_matches('@').to_string());
@@ -363,7 +363,15 @@ fn artifact(rest: &[String]) -> Result<Artifact, String> {
             }
         }
         Some("folders") if pos.len() == 1 => Artifact::Folders,
-        Some("list") => Artifact::List { words: pos[1..].join(" "), agent: agent(), archived: o.contains_key("archived") },
+        Some("list") => {
+            let since = match opt("since") {
+                // a value this sb doesn't know is refused here, never sent as no filter
+                Some(s) => Some(serde_json::from_value::<bise_proto::sb::When>(json!(s)).ok().filter(|w| *w != bise_proto::sb::When::Unknown).ok_or(crate::artifacts_filter::SINCE_WORDS)?),
+                None => None,
+            };
+            let agents = super::list_of(o.get("agent")).into_iter().map(|a| a.trim_start_matches('@').to_string()).collect();
+            Artifact::List { words: pos[1..].join(" "), agent: None, agents, project: opt("project"), since, archived: o.contains_key("archived") }
+        }
         Some(d @ ("archive" | "unarchive")) => {
             if pos.len() == 1 && !["agent", "kind", "before"].iter().any(|k| o.contains_key(*k)) {
                 return Err(usage.into());

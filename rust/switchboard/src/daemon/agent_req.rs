@@ -155,6 +155,8 @@ impl Shell {
             r @ (AgentReq::PagePublish(_) | AgentReq::PageStart { .. } | AgentReq::PageTick { .. } | AgentReq::PageWaiting | AgentReq::PageList | AgentReq::PageNotes { .. }) => self.page_op(&from, r),
             AgentReq::Taste(k) => self.keeps_op("taste", &k),
             AgentReq::People(k) => self.keeps_op("people", &k),
+            // --project: another project's store, read off the loop (art_folders)
+            AgentReq::Artifact(a @ bise_proto::sb::Artifact::List { project: Some(_), .. }) => return self.art_list(stream, &from, a),
             AgentReq::Artifact(a) => self.artifact_cmd(&from, a),
             AgentReq::ProjectList => xhub::list_body(&self.opts.home),
             req => return self.core_files(token, stream, from, req, asker),

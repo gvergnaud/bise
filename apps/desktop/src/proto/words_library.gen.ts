@@ -212,6 +212,34 @@ export const library = {
   nothing_matches: (a: { q: string | number }): string => "nothing matches “" + String(a.q) + "”.",
   /** no result: clear the words */
   clear_search: "clear the search",
+  /** the When chip, nothing picked */
+  when: "When",
+  /** the When chip's values: changed since he last looked */
+  when_last: "Since you last looked",
+  /** the When chip's values: touched today, his local day */
+  when_today: "Today",
+  /** the When chip's values: the 7 days up to today */
+  when_week: "This week",
+  /** the When chip's values: before those 7 days */
+  when_older: "Older",
+  /** the × on a set chip, for VoiceOver */
+  when_clear: "any time",
+  /** the bar's Clear (only when something is set): the When, the tokens and the words, never the project */
+  clear: "Clear",
+  /** the by: completion: the user himself */
+  by_you: "you",
+  /** the by: completion's head */
+  by_head: "by",
+  /** a filtered view that holds nothing: `nothing in Sheets · acme since you last looked` */
+  nothing_in: (a: { what: string | number }): string => "nothing in " + String(a.what),
+  /** a filtered view that holds nothing, with nothing to name */
+  nothing_here: "nothing here",
+  /** the empty view's way out: the same filters in every project */
+  search_everywhere: (a: { n: string | number }): string => "Search all projects · " + String(a.n),
+  /** the empty view's way out: the ones that sit in From agents */
+  from_agents_show: (a: { n: string | number }): string => String(a.n) + " from agents · Show",
+  /** the empty view's way out: every filter and word taken out */
+  clear_filters: "Clear filters",
   /** a kind chip */
   kind_shots: "shots",
   /** a kind chip */

@@ -353,7 +353,12 @@ sb artifact add <path or link> [--title "<t>"] [--kind <k>]
   -> the plan is unchanged: still v1 · link it as [the plan](artifact:the-plan)
   -> added launch film (video) · v1 · no copy kept (over 50 MB) · link it as [launch film](artifact:launch-film)
   -> error: no file or link at notes/plan.md.
-sb artifact list [<words>] [--agent <a>] [--archived]
+sb artifact list [<words>] [--agent <a>]... [--since last|today|week|older] [--project <p>] [--archived]
+  (the gallery's filter bar in flags, one rule: switchboard/src/artifacts_filter.rs, its twin
+   apps/desktop/src/artifacts/filters.ts, both tested on tests/fixtures/artifacts-filter.json.
+   AND across flags, OR between --agent's; --agent you = what the user added; --since last =
+   the row's new, today/week/older = its last touch by the local day; --project reads another
+   registered project's store once, off the hub loop; an unknown --since is refused)
 sb artifact archive|unarchive <id>... | --agent <a> | --before <date> | --kind <k>
   -> [pricing page](artifact:pricing-page) · page · v3 · pricing-page · 12 min ago · http://127.0.0.1:47438/p/pricing-page
      (one per line, newest first, 50 at most; "▲ gone from disk · bise kept a copy" at the end of a gone one)

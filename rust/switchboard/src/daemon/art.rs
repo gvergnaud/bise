@@ -449,9 +449,13 @@ impl Shell {
                     Err(e) => json!({"ok": false, "error": e}),
                 }
             }
-            Artifact::List { words, agent, archived } => {
-                let agent = agent.filter(|a| !a.is_empty());
-                json!({"ok": true, "text": store.list_text(&words, agent.as_deref(), archived, now_ms())})
+            Artifact::List { words, agent, mut agents, project: _, since, archived } => {
+                // TODO(artifacts-list-agent): an older sb's one --agent, goes in a later release
+                agents.extend(agent);
+                match crate::artifacts_filter::of_list(&words, agents, since) {
+                    Ok(f) => json!({"ok": true, "text": store.list_text(&f, archived, now_ms(), &crate::artifacts_filter::local_offset_min)}),
+                    Err(e) => json!({"ok": false, "error": e}),
+                }
             }
             Artifact::Keep { ids } => self.artifact_keep(from, &ids, true),
             Artifact::Unkeep { ids } => self.artifact_keep(from, &ids, false),

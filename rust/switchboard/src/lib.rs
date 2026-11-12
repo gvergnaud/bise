@@ -38,6 +38,7 @@ pub mod approvals;
 pub mod artifacts;
 pub mod artifacts_assets;
 pub mod artifacts_filing;
+pub mod artifacts_filter;
 pub mod artifacts_marks;
 pub mod artifacts_probe;
 pub mod artifacts_serve;

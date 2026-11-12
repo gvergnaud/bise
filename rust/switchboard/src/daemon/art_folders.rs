@@ -216,6 +216,53 @@ impl Shell {
         Ok(())
     }
 
+    /// `sb artifact list --project <p>`: this hub's own (its name or id)
+    /// at once; another registered project's store read once off the loop
+    /// (like artifacts/library, never watched), its answer written from
+    /// that thread.
+    pub(super) fn art_list(&mut self, mut stream: std::os::unix::net::UnixStream, from: &str, r: bise_proto::sb::Artifact) {
+        let away = match &r {
+            bise_proto::sb::Artifact::List { project: Some(p), .. } => {
+                let own = self.project();
+                let rows = bise_home::projects::list(&self.opts.home, &bise_home::Home::from_env().bise_root());
+                let p = p.trim().trim_start_matches('@');
+                match rows.iter().find(|x| x.name == p).or_else(|| rows.iter().find(|x| x.id == p)) {
+                    _ if p.is_empty() => None,
+                    Some(row) if row.id == own => None,
+                    Some(row) => Some(Ok(row.path.clone())),
+                    None => Some(Err(format!("no project named {p} (sb project list)"))),
+                }
+            }
+            _ => None,
+        };
+        let ws = match away {
+            None => {
+                write_json(&mut stream, &self.artifact_cmd(from, r));
+                return;
+            }
+            Some(Err(e)) => {
+                write_json(&mut stream, &json!({"ok": false, "error": e}));
+                return;
+            }
+            Some(Ok(ws)) => ws,
+        };
+        let bise_proto::sb::Artifact::List { words, agent, mut agents, since, archived, .. } = r else { return };
+        // TODO(artifacts-list-agent): an older sb's one --agent, goes in a later release
+        agents.extend(agent);
+        let f = match crate::artifacts_filter::of_list(&words, agents, since) {
+            Ok(f) => f,
+            Err(e) => {
+                write_json(&mut stream, &json!({"ok": false, "error": e}));
+                return;
+            }
+        };
+        let state = crate::paths::Paths::for_workspace(&ws).state;
+        std::thread::spawn(move || {
+            let text = Store::new(&state).list_text(&f, archived, now_ms(), &crate::artifacts_filter::local_offset_min);
+            write_json(&mut stream, &json!({"ok": true, "text": text}));
+        });
+    }
+
     /// `artifacts/library`: the other registered projects' rows, read
     /// from their stores off the loop (never watched), and the folders.
     pub(super) fn art_library_typed(&mut self, id: ClientId) {

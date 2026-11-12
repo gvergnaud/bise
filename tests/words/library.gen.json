@@ -59,10 +59,30 @@
     "one": null,
     "text": "← For you"
   },
+  "library.by_head": {
+    "args": [],
+    "one": null,
+    "text": "by"
+  },
+  "library.by_you": {
+    "args": [],
+    "one": null,
+    "text": "you"
+  },
   "library.cancel": {
     "args": [],
     "one": null,
     "text": "Cancel"
+  },
+  "library.clear": {
+    "args": [],
+    "one": null,
+    "text": "Clear"
+  },
+  "library.clear_filters": {
+    "args": [],
+    "one": null,
+    "text": "Clear filters"
   },
   "library.clear_search": {
     "args": [],
@@ -186,6 +206,13 @@
     "args": [],
     "one": null,
     "text": "in all folders · ⏎ opens the first, esc clears"
+  },
+  "library.from_agents_show": {
+    "args": [
+      "n"
+    ],
+    "one": null,
+    "text": "{n} from agents · Show"
   },
   "library.head_save": {
     "args": [],
@@ -458,6 +485,18 @@
     "one": null,
     "text": "nothing from {project} in this folder."
   },
+  "library.nothing_here": {
+    "args": [],
+    "one": null,
+    "text": "nothing here"
+  },
+  "library.nothing_in": {
+    "args": [
+      "what"
+    ],
+    "one": null,
+    "text": "nothing in {what}"
+  },
   "library.nothing_matches": {
     "args": [
       "q"
@@ -610,6 +649,13 @@
     ],
     "one": null,
     "text": "type a name in the search: \"in:{example}\""
+  },
+  "library.search_everywhere": {
+    "args": [
+      "n"
+    ],
+    "one": null,
+    "text": "Search all projects · {n}"
   },
   "library.search_placeholder": {
     "args": [],
@@ -791,6 +837,36 @@
     "args": [],
     "one": null,
     "text": "what has no folder yet: what you added yourself, and what came before folders."
+  },
+  "library.when": {
+    "args": [],
+    "one": null,
+    "text": "When"
+  },
+  "library.when_clear": {
+    "args": [],
+    "one": null,
+    "text": "any time"
+  },
+  "library.when_last": {
+    "args": [],
+    "one": null,
+    "text": "Since you last looked"
+  },
+  "library.when_older": {
+    "args": [],
+    "one": null,
+    "text": "Older"
+  },
+  "library.when_today": {
+    "args": [],
+    "one": null,
+    "text": "Today"
+  },
+  "library.when_week": {
+    "args": [],
+    "one": null,
+    "text": "This week"
   },
   "library.work_of": {
     "args": [

@@ -74,16 +74,19 @@ export interface PickerPopProps extends Omit<PickerProps, "style" | "maxHeight" 
   match?: boolean;
   /** a press outside, esc, or a resize that hid the anchor: the caller closes it */
   onClose: () => void;
+  /** the keys stay the caller's (a field he types in, its completion under it): the pop never takes
+   *  the focus, `active` is the caller's row */
+  callerKeys?: boolean;
 }
 
 /** The Picker floating from its anchor; rendered while open. Its floating is hooks.ts's usePop. */
-export function PickerPop({ anchor, box, align = "auto", side = "below", match = false, onClose, ...picker }: PickerPopProps) {
+export function PickerPop({ anchor, box, align = "auto", side = "below", match = false, onClose, callerKeys = false, ...picker }: PickerPopProps) {
   const { place, mount, focus, layer } = usePop(anchor, { box, align, side, match }, onClose);
   return createPortal(
     <div ref={mount} className="b-picker-pop" onFocus={focus.onFocus} onBlur={focus.onBlur}
       // its keys are its own: never the screen's under it (React bubbles through the portal)
       onKeyDown={(e: KeyboardEvent<HTMLDivElement>) => { e.stopPropagation(); }}>
-      {place !== null && <Picker {...picker} ownKeys onClose={onClose} style={place.style} maxHeight={place.maxHeight} />}
+      {place !== null && <Picker {...picker} ownKeys={!callerKeys} onClose={onClose} style={place.style} maxHeight={place.maxHeight} />}
     </div>,
     layer,
   );

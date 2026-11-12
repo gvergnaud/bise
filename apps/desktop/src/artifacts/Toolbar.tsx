@@ -8,8 +8,9 @@
 // filters and the keys do stays the screen's (Screen.tsx). Under 900 the library's crumb (its
 // column folded, Fold.tsx) leads the row. Owner: m-artifacts (nm-pages-a's page).
 import { useLayoutEffect, useRef, useState, type ChangeEvent, type KeyboardEvent, type ReactNode, type Ref } from 'react';
-import { AppIcon, Dropdown, Filters, ListBar, ListSearch, Press, sentenceCase, tipAttrs } from '@/ds';
+import { AppIcon, Button, cx, Dropdown, Filters, ListBar, ListSearch, Press, sentenceCase, tipAttrs } from '@/ds';
 import { library } from '@/proto/words_library.gen';
+import type { Facet, When } from './filters';
 import type { View } from './gridKeys';
 import './toolbar.css';
 
@@ -44,7 +45,44 @@ export interface ToolbarProps {
   readonly searchRef: Ref<HTMLInputElement>;
   /** + add files (Drops.tsx AddButton) */
   readonly add: ReactNode;
+  /** the When chip (filters.ts): its rows with their counts, the one picked; null: not drawn */
+  readonly when?: WhenProps | null;
+  /** Clear (designer m_61790): only while something is set; never the project or the place */
+  readonly onClearAll?: (() => void) | null;
+  /** under the field: the by: completion (filters.ts whoOptions), while a token is typed */
+  readonly completion?: ReactNode;
   readonly testId: string;
+}
+
+export interface WhenProps {
+  readonly rows: readonly Facet[];
+  readonly on: When | null;
+  readonly onPick: (w: When | null) => void;
+}
+
+/** The When chip's words. */
+export const WHEN_WORD: Record<When, string> = {
+  last: library.when_last, today: library.when_today, week: library.when_week, older: library.when_older,
+};
+
+/** The When chip (designer m_61790): 'When ▾' quiet; set, its value alone in ink and its × beside. */
+export function WhenChip({ rows, on, onPick, testId }: WhenProps & { readonly testId: string }) {
+  return (
+    <span className={cx('art-when', on !== null && 'on')} data-testid={testId}>
+      <Dropdown look="chip" testId={`${testId}.pick`} label={on === null ? library.when : WHEN_WORD[on]}
+        groups={[{ id: 'when', rows: rows.map((r) => ({
+          id: r.key, name: WHEN_WORD[r.key as When], trailing: String(r.n), current: on === r.key,
+          // no dead ends: a value that holds nothing is shown, never picked
+          disabled: r.n === 0 && on !== r.key, testId: `${testId}.${r.key}`,
+        })) }]}
+        onPick={(id) => { onPick(id as When); }} />
+      {on !== null && (
+        <Press look="art-when-x" aria-label={library.when_clear} onClick={() => { onPick(null); }} data-testid={`${testId}.x`}>
+          <AppIcon name="close" size={14} />
+        </Press>
+      )}
+    </span>
+  );
 }
 
 /** How many filters are on (the folded menu's count). Pure. */
@@ -52,7 +90,7 @@ export function filtersOn(kind: string, project: string): number {
   return (kind === 'all' ? 0 : 1) + (project === '' ? 0 : 1);
 }
 
-export function Toolbar({ lead, kinds: kindOpts, kind, onKind, scope, projects, project, onProject, view, onView, q, onQ, onQKey, onClear, searchRef, add, testId }: ToolbarProps) {
+export function Toolbar({ lead, kinds: kindOpts, kind, onKind, scope, projects, project, onProject, view, onView, q, onQ, onQKey, onClear, searchRef, add, when = null, onClearAll = null, completion = null, testId }: ToolbarProps) {
   const box = useRef<HTMLDivElement>(null);
   const [folded, setFolded] = useState(false);
   // the filters fold once the row has less room than they need beside the right side (never an
@@ -100,6 +138,7 @@ export function Toolbar({ lead, kinds: kindOpts, kind, onKind, scope, projects, 
             <Press look="art-view" aria-pressed={view === 'list'} aria-label={library.tip_list} onClick={() => { onView('list'); }} data-testid="artifacts.view.list" {...tipAttrs(library.tip_list)}><AppIcon name="list" size={16} /></Press>
           </span>
           <ListSearch ref={searchRef} value={q} placeholder={library.search_placeholder} onChange={onQ} onKeyDown={onQKey} onClear={onClear} testId="artifacts.search" />
+          {completion}
           {add}
         </>
       }>
@@ -118,6 +157,8 @@ export function Toolbar({ lead, kinds: kindOpts, kind, onKind, scope, projects, 
           {scope}
         </>
       )}
+      {when !== null && <WhenChip {...when} testId="artifacts.when" />}
+      {onClearAll !== null && <Button kind="ghost" onClick={onClearAll} testId="artifacts.clear">{library.clear}</Button>}
     </ListBar>
   );
 }
