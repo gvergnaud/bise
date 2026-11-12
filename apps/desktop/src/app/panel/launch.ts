@@ -8,6 +8,7 @@
 import type { Item } from '@/artifacts/model';
 import type { Agent } from '@/proto';
 import type { Entity } from '@/shared/entity';
+import type { MakeOpt } from './make';
 import { RECENT_MAX } from './model';
 
 /** How many found artifacts the launcher lists. */
@@ -82,7 +83,9 @@ export type LaunchRow =
   | { readonly kind: 'open'; readonly row: OpenRow }
   | { readonly kind: 'recent'; readonly e: Entity }
   | { readonly kind: 'found'; readonly item: Item }
-  | { readonly kind: 'url'; readonly url: string };
+  | { readonly kind: 'url'; readonly url: string }
+  /** New › (make.ts, docs/plugin-apps.md A6b): one type an on app makes; a pick asks the hub's file/new */
+  | { readonly kind: 'new'; readonly make: MakeOpt };
 
 /** His words filter the rows (or the tab is the Artifacts picker): the found list shows, not Open and Recent. Pure. */
 export function isListing(q: string, picker: boolean): boolean {
@@ -96,11 +99,15 @@ export function launchRows(o: {
   readonly found: readonly Item[];
   readonly open: readonly OpenRow[];
   readonly recent: readonly Entity[];
+  /** New ›'s rows, his words applied (make.ts newRows); the Artifacts picker has none */
+  readonly makes?: readonly MakeOpt[];
 }): readonly LaunchRow[] {
-  if (!isListing(o.q, o.picker)) return [...o.open.map((row) => ({ kind: 'open' as const, row })), ...o.recent.map((e) => ({ kind: 'recent' as const, e }))];
+  const made = o.picker ? [] : (o.makes ?? []).map((make) => ({ kind: 'new' as const, make }));
+  if (!isListing(o.q, o.picker)) return [...o.open.map((row) => ({ kind: 'open' as const, row })), ...made, ...o.recent.map((e) => ({ kind: 'recent' as const, e }))];
   const t = o.q.trim();
   const url: readonly LaunchRow[] = !o.picker && looksLikeUrl(t) ? [{ kind: 'url', url: t.includes('://') ? t : `https://${t}` }] : [];
-  return [...url, ...o.found.map((item) => ({ kind: 'found' as const, item }))];
+  // typing filters New and the artifacts together (designer's block 4)
+  return [...url, ...made, ...o.found.map((item) => ({ kind: 'found' as const, item }))];
 }
 
 /** No row highlighted: the field has the keys alone. */

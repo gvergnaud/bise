@@ -450,6 +450,12 @@ export const panel = {
   launch_office: "Office",
   /** Recent with nothing opened yet */
   launch_none: "nothing opened yet",
+  /** New ›'s group (docs/plugin-apps.md A6b): one row per type an on app makes, `Sheet  Sheets` */
+  launch_new: "New",
+  /** New › when the hub can't make files yet (an older hub, or before its step) */
+  launch_new_not_yet: "bise can't make files yet",
+  /** New › when making it failed, the hub's reason after it */
+  launch_new_failed: (a: { why: string | number }): string => "couldn't make it: " + String(a.why),
   /** what the search found: nothing */
   launch_no_match: "no artifact by that name",
   /** a recent artifact's line: its kind and who made it */

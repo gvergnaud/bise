@@ -1,0 +1,11 @@
+/* The folder tab (FolderTab.tsx): the crumb, then the rows as the ☰ list's. Owner: apps-gallery. */
+.bise-folder { display: flex; flex-direction: column; min-height: 0; padding: var(--s-3) var(--s-3) 0; }
+.bise-crumb { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s-1); margin: 0 0 var(--s-2) var(--s-3); font-size: 13px; line-height: 18px; }
+.bise-crumb-part { display: inline-flex; align-items: baseline; gap: var(--s-1); }
+.bise-crumb-sep { color: var(--c-text-3); }
+.bise-crumb-here { color: var(--c-ink); font-weight: 600; }
+.bise-crumb-up { color: var(--c-text-2); }
+.bise-crumb-up:hover { color: var(--c-ink); text-decoration: underline; }
+.bise-folder-rows { display: flex; flex-direction: column; }
+.bise-folder-size { color: var(--c-text-3); font-size: 12px; font-variant-numeric: tabular-nums; padding-right: var(--s-3); }
+.bise-folder-said { color: var(--c-text-3); margin: var(--s-2) var(--s-3); font-size: 13px; }

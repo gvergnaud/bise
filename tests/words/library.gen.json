@@ -223,6 +223,18 @@
     "one": null,
     "text": "nothing here yet"
   },
+  "library.folder_empty": {
+    "args": [],
+    "one": null,
+    "text": "empty"
+  },
+  "library.folder_failed": {
+    "args": [
+      "why"
+    ],
+    "one": null,
+    "text": "couldn't list this folder: {why}"
+  },
   "library.folder_kind": {
     "args": [],
     "one": null,
@@ -232,6 +244,11 @@
     "args": [],
     "one": null,
     "text": "folder name"
+  },
+  "library.folder_not_yet": {
+    "args": [],
+    "one": null,
+    "text": "bise can't list this folder yet"
   },
   "library.folder_switch": {
     "args": [],

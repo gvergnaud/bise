@@ -12,6 +12,7 @@
 // VoiceOver reaches it (ui-review m_42482 #6). The tab in front draws; a shell's tab stays mounted
 // hidden (its shell runs on, the same one when it comes back), the others mount when in front.
 // The tabs of an agent no longer in the rows go (model.ts dropGone). Owner: nm-panel.
+import { FolderTab } from '@/artifacts/bise/FolderTab';
 import { useEffect, useRef, useState, type PointerEvent as RPointerEvent, type RefObject } from 'react';
 import { AppIcon, IconButton, Press, tipAttrs } from '@/ds';
 import { useRoute } from '@/app/router';
@@ -105,6 +106,8 @@ function Body({ tab, shown }: { tab: Tab; shown: boolean }) {
       return <BlankBrowser tabId={tab.id} shown={shown} />;
     case 'thing':
       return what.e.kind === 'tab' ? null : <ThingTab e={what.e} tabId={tab.id} />;
+    case 'folder':
+      return <FolderTab entry={what.entry} tabId={tab.id} />;
   }
 }
 

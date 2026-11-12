@@ -59,6 +59,11 @@ describe("the New tab's rows (his m_46444, designer m_46449)", () => {
     const found = launchMatches(items, 'perf');
     expect(launchRows({ q: 'perf', picker: false, found, open, recent }).map((r) => r.kind)).toEqual(['found', 'found']);
     expect(launchRows({ q: 'bise.dev', picker: false, found: [], open, recent })).toEqual([{ kind: 'url', url: 'https://bise.dev' }]);
+    // New › (docs/plugin-apps.md A6b): between Open and Recent; typing keeps the ones it matches, before the artifacts; never in the picker
+    const make = { plugin: 'sheets', app: 'Sheets', ending: '.xlsx', title: 'Sheet' };
+    expect(launchRows({ q: '', picker: false, found: [], open, recent, makes: [make] }).map((r) => r.kind)).toEqual(['open', 'open', 'new', 'recent']);
+    expect(launchRows({ q: 'perf', picker: false, found, open, recent, makes: [make] }).map((r) => r.kind)).toEqual(['new', 'found', 'found']);
+    expect(launchRows({ q: '', picker: true, found, open, recent, makes: [make] }).map((r) => r.kind)).toEqual(['found', 'found']);
     // the picker searches artifacts only
     expect(launchRows({ q: 'bise.dev', picker: true, found: [], open, recent })).toEqual([]);
   });

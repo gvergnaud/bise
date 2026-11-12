@@ -11,9 +11,11 @@ import { IPC, type ViewAnswerWire } from '../shared/api';
 
 /**
  * The view commands, by their cmd tag; plugin_views: a plugin's views once it runs (the add's step
- * 2, C8); view_open, view_close, view_copy, view_notes: a document's view (docs/plugin-apps.md A4, A5).
+ * 2, C8); view_open, view_close, view_copy, view_notes: a document's view (docs/plugin-apps.md A4, A5);
+ * folder_list, file_new: ~/bise's folders and New › (A6), the window's own (a view's bridge never
+ * reaches them: the hub refuses them there, apps-hub-files m_63095).
  */
-export const VIEW_CMDS: readonly string[] = ['view_resource', 'view_call', 'view_message', 'view_context', 'plugin_views', 'view_open', 'view_close', 'view_copy', 'view_notes'];
+export const VIEW_CMDS: readonly string[] = ['view_resource', 'view_call', 'view_message', 'view_context', 'plugin_views', 'view_open', 'view_close', 'view_copy', 'view_notes', 'folder_list', 'file_new'];
 
 /**
  * The string ids a command must carry, none empty: a plugin's; a document's open (its target is an
@@ -21,7 +23,7 @@ export const VIEW_CMDS: readonly string[] = ['view_resource', 'view_call', 'view
  */
 function idsOf(c: Record<string, unknown>): readonly string[] {
   if (c['cmd'] === 'plugin_views') return ['project', 'plugin'];
-  if (c['cmd'] === 'view_open') return ['project'];
+  if (c['cmd'] === 'view_open' || c['cmd'] === 'folder_list' || c['cmd'] === 'file_new') return ['project'];
   if (c['cmd'] === 'view_close' || c['cmd'] === 'view_copy' || c['cmd'] === 'view_notes' || 'doc' in c) return ['project', 'doc'];
   return ['project', 'agent', 'call'];
 }

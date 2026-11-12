@@ -280,6 +280,14 @@ crate::words! { library:
     /// past five tabs, the menu that holds the rest: `More ▾`
     apps_more = "More";
 
+    // ---- a folder of bise (docs/plugin-apps.md A6): the folder tab, from the hub's folder/list
+    /// a folder with nothing in it
+    folder_empty = "empty";
+    /// the hub can't list folders yet (an older hub, or before its step)
+    folder_not_yet = "bise can't list this folder yet";
+    /// the listing failed, the hub's reason after it
+    folder_failed(why) = "couldn't list this folder: {why}";
+
     // ---- the filter bar (his pick 'A + jetons', designer m_61790; apps/desktop/src/artifacts/filters.ts)
     /// the When chip, nothing picked
     when = "When";

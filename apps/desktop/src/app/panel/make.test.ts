@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { newRows, usesOf, type MakeOpt } from './make';
+import { makesOf, newRows, usesOf, type MakeOpt } from './make';
 
 const sheet: MakeOpt = { plugin: 'sheets', app: 'Sheets', ending: '.xlsx', title: 'Sheet' };
 const board: MakeOpt = { plugin: 'boards', app: 'Boards', ending: '.board.json', title: 'Board' };
@@ -23,5 +23,19 @@ describe("New ›: one row per type his apps make, the most-used app first", () 
 
   it("an app's use: how many rows its opener picked, plugins only", () => {
     expect([...usesOf([{ opener: { plugin: 'sheets' } }, { opener: null }, {}, { opener: { plugin: 'sheets' } }])]).toEqual([['sheets', 2]]);
+  });
+});
+
+describe("New ›'s rows come from the on plugins' makes", () => {
+  it('each make of an on plugin, by its plugin id; an off plugin makes nothing', () => {
+    const plugins = [
+      { id: 'sheets', on: true, makes: [{ ending: '.xlsx', title: 'Sheet', app: 'Sheets' }, { ending: '.csv', title: 'CSV', app: 'Sheets' }] },
+      { id: 'boards', on: false, makes: [{ ending: '.board.json', title: 'Board', app: 'Boards' }] },
+      { id: 'linear', on: true },
+    ];
+    expect(makesOf(plugins)).toEqual([
+      { plugin: 'sheets', app: 'Sheets', ending: '.xlsx', title: 'Sheet' },
+      { plugin: 'sheets', app: 'Sheets', ending: '.csv', title: 'CSV' },
+    ]);
   });
 });

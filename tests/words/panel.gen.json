@@ -292,6 +292,23 @@
     "one": null,
     "text": "Latest artifacts"
   },
+  "panel.launch_new": {
+    "args": [],
+    "one": null,
+    "text": "New"
+  },
+  "panel.launch_new_failed": {
+    "args": [
+      "why"
+    ],
+    "one": null,
+    "text": "couldn't make it: {why}"
+  },
+  "panel.launch_new_not_yet": {
+    "args": [],
+    "one": null,
+    "text": "bise can't make files yet"
+  },
   "panel.launch_no_artifact": {
     "args": [],
     "one": null,

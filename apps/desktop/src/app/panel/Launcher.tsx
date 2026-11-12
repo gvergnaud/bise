@@ -17,7 +17,7 @@ import { panel } from '@/proto/words_panel.gen';
 import { useAllArtifacts } from '@/artifacts';
 import { ago } from '@/agents/model';
 import type { Item } from '@/artifacts/model';
-import { useAgents, useProjects, useStore } from '@/store';
+import { useAgents, usePlugins, useProjects, useStore } from '@/store';
 import { useRoute } from '@/app/router';
 import { projectOf } from '@/app/route';
 import { ThingPic } from '@/app/side3d/Bubbles';
@@ -28,6 +28,7 @@ import { closeTabId, launcherDraft, launcherHome, openWhat, panelAt, setLauncher
 import { scopeOf } from './scope';
 import { useTabLooks } from './look';
 import { tabOf } from './model';
+import { makesOf, makeKey, newRows, usesOf, type MakeOpt } from './make';
 import { enterRow, firstAt, isListing, latestArtifacts, launchMatches, launchRows, NO_ROW, openRows, recentIn, walkAt, type LaunchRow, type OpenRow } from './launch';
 
 /** Each Open row: its label, its icon, its key when it has one. */
@@ -39,6 +40,15 @@ const ROW: Readonly<Record<OpenRow, { readonly label: string; readonly icon: App
   // the bims head, the side's agents bubble's object (designer m_44218: 16, no key)
   office: { label: panel.launch_office, icon: 'head' },
 };
+
+/** The hub's error code for a method it can't serve yet (views VIEW_ERR.notSupported). */
+const NOT_SUPPORTED = -32034;
+
+/** file/new's answer: the artifact it added, or null when it isn't one. Pure. */
+function artifactOf(x: unknown): string | null {
+  const id = x !== null && typeof x === 'object' ? (x as Record<string, unknown>)['artifact'] : undefined;
+  return typeof id === 'string' && id !== '' ? id : null;
+}
 
 /** A New tab: search, Open, Recent; or its Artifacts picker. `tabId`: its own tab, which a pick replaces. */
 export function Launcher({ tabId, shown, artifacts = false }: { tabId: string; shown: boolean; artifacts?: boolean }) {
@@ -67,6 +77,11 @@ export function Launcher({ tabId, shown, artifacts = false }: { tabId: string; s
   const opens = openRows({ changes: changesInView(ctx) !== undefined, office: (projectOf(route) ?? home) !== undefined });
   // Recent: the project in front's own (his m_46444), the panel's scope (scope.ts scopeOf)
   const recent = recentIn(allRecent, scopeOf(route, home, panelAt()));
+  // New › (make.ts, docs/plugin-apps.md A6b): what the on apps of the project in front make, the
+  // app he uses most first; his words filter it with the rest. Made in the project's Unfiled.
+  const newIn = projectOf(route) ?? home ?? '';
+  const plugins = usePlugins(newIn === '' ? undefined : newIn);
+  const [newSaid, setNewSaid] = useState<string | null>(null);
   // a New tab he just opened, or the picker it turned into: the field takes the keys; back in
   // front by a project switch, his focus stays where it was (his m_46543, state.ts takeOpened);
   // ⌘T on it again (openedN): the keys back in its field, his words selected (designer m_46965)
@@ -84,15 +99,27 @@ export function Launcher({ tabId, shown, artifacts = false }: { tabId: string; s
   }
   const found = useMemo(() => (artifacts ? latestArtifacts(arts, q) : launchMatches(arts, q)), [arts, q, artifacts]);
   const listing = isListing(q, artifacts);
-  const rows = launchRows({ q, picker: artifacts, found, open: opens, recent });
+  const makes = newRows(makesOf(plugins ?? []), isListing(q, artifacts) ? q : '', usesOf(arts.filter((x) => x.project === newIn).map((x) => x.a)));
+  const rows = launchRows({ q, picker: artifacts, found, open: opens, recent, makes });
   const pick = (e: Entity) => {
     openWhat({ kind: 'thing', e }, tabId);
   };
   const open = (x: Item) => {
     pick({ kind: 'artifact', project: x.project, id: x.a.id });
   };
+  // a New › row: the hub makes the file, then its tab takes this one's place (its name ready to type: the document tab's)
+  const make = (m: MakeOpt) => {
+    const views = bise?.views;
+    if (views === undefined || newIn === '') { setNewSaid(panel.launch_new_not_yet); return; }
+    void views.call({ cmd: 'file_new', project: newIn, make: { plugin: m.plugin, ending: m.ending } }).then((a) => {
+      const id = 'result' in a ? artifactOf(a.result) : null;
+      if (id !== null) { openWhat({ kind: 'thing', e: { kind: 'artifact', project: newIn, id } }, tabId); return; }
+      setNewSaid('error' in a && a.error.code !== NOT_SUPPORTED ? panel.launch_new_failed({ why: a.error.message }) : panel.launch_new_not_yet);
+    });
+  };
   const go = (r: LaunchRow) => {
-    if (r.kind === 'open') doPanelKey(r.row, ctx, tabId);
+    if (r.kind === 'new') make(r.make);
+    else if (r.kind === 'open') doPanelKey(r.row, ctx, tabId);
     else if (r.kind === 'recent') pick(r.e);
     else if (r.kind === 'found') open(r.item);
     else void bise?.openExternal(r.url);
@@ -176,6 +203,19 @@ export function Launcher({ tabId, shown, artifacts = false }: { tabId: string; s
                       }}
                       testId="app.panel.launcher.url"
                     />
+                  ) : r.kind === 'new' ? (
+                    <PickRow
+                      key={`new:${makeKey(r.make)}`}
+                      id={optId(i)}
+                      on={i === at}
+                      icon={<AppIcon name="file" size={16} />}
+                      title={r.make.title}
+                      sub={r.make.app}
+                      onPick={() => {
+                        go(r);
+                      }}
+                      testId={`app.panel.launcher.new.${makeKey(r.make)}`}
+                    />
                   ) : r.kind === 'found' ? (
                     <PickRow
                       key={`${r.item.project}/${r.item.a.id}`}
@@ -223,6 +263,26 @@ export function Launcher({ tabId, shown, artifacts = false }: { tabId: string; s
                 );
               })}
             </div>
+            {makes.length > 0 && (
+              <>
+                <h3 className="pn-lh">{panel.launch_new}</h3>
+                {makes.map((m, k) => (
+                  <PickRow
+                    key={`new:${makeKey(m)}`}
+                    id={optId(opens.length + k)}
+                    on={opens.length + k === at}
+                    icon={<AppIcon name="file" size={16} />}
+                    title={m.title}
+                    sub={m.app}
+                    onPick={() => {
+                      make(m);
+                    }}
+                    testId={`app.panel.launcher.new.${makeKey(m)}`}
+                  />
+                ))}
+              </>
+            )}
+            {newSaid !== null && <p className="pn-none" data-testid="app.panel.launcher.new.said">{newSaid}</p>}
             <h3 className="pn-lh">{panel.launch_recent}</h3>
             {recent.length === 0 ? (
               <p className="pn-none" data-testid="app.panel.launcher.none">
@@ -230,7 +290,7 @@ export function Launcher({ tabId, shown, artifacts = false }: { tabId: string; s
               </p>
             ) : (
               recent.map((e, j) => {
-                const i = opens.length + j;
+                const i = opens.length + makes.length + j;
                 const l = look(tabOf({ kind: 'thing', e }));
                 const sub = e.kind === 'artifact' ? arts.find((x) => x.project === e.project && x.a.id === e.id) : undefined;
                 return (

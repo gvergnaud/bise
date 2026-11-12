@@ -46,6 +46,9 @@ function lookOf(tab: Tab, projects: ReturnType<typeof useProjects>, arts: Return
         title: what.n === 0 ? panel.tab_terminal({ project: name }) : panel.tab_terminal_n({ n: what.n + 1, project: name }),
         icon: <AppIcon name="terminal" size={14} />,
       };
+    case 'folder':
+      // a folder of bise (FolderTab.tsx): its name at the last listing, the root 'bise'
+      return { title: what.name === '' ? panel.bise : what.name, icon: <AppIcon name="folder" size={14} /> };
     case 'thing':
       break;
   }

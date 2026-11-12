@@ -37,6 +37,11 @@ export function newRows(makes: readonly MakeOpt[], q: string, uses: ReadonlyMap<
     .toSorted((x, y) => (uses.get(y.plugin) ?? 0) - (uses.get(x.plugin) ?? 0) || x.title.localeCompare(y.title) || x.app.localeCompare(y.app));
 }
 
+/** What the on plugins make (each plugin row's `makes`, A1), as New › rows; an off plugin makes nothing. Pure. */
+export function makesOf(plugins: readonly { readonly id: string; readonly on: boolean; readonly makes?: readonly { readonly ending: string; readonly title: string; readonly app: string }[] | null }[]): MakeOpt[] {
+  return plugins.flatMap((p) => (p.on ? (p.makes ?? []).map((m) => ({ plugin: p.id, app: m.app, ending: m.ending, title: m.title })) : []));
+}
+
 /** How many of these documents follow each plugin's app (the hub's opener on each row). Pure. */
 export function usesOf(rows: readonly { readonly opener?: { readonly plugin: string } | null }[]): Map<string, number> {
   const n = new Map<string, number>();

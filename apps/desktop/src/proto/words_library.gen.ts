@@ -242,6 +242,12 @@ export const library = {
   apps_label: "apps",
   /** past five tabs, the menu that holds the rest: `More ▾` */
   apps_more: "More",
+  /** a folder with nothing in it */
+  folder_empty: "empty",
+  /** the hub can't list folders yet (an older hub, or before its step) */
+  folder_not_yet: "bise can't list this folder yet",
+  /** the listing failed, the hub's reason after it */
+  folder_failed: (a: { why: string | number }): string => "couldn't list this folder: " + String(a.why),
   /** the When chip, nothing picked */
   when: "When",
   /** the When chip's values: changed since he last looked */

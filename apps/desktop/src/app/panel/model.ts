@@ -15,7 +15,13 @@ export type TabWhat =
   /** a shell in a project's folder; n 0 is the project's first (the bottom panel's too) */
   | { readonly kind: 'terminal'; readonly project: string; readonly n: number }
   /** a thing he opened: an artifact, a PR, a commit, a diff, a process, a plugin, an agent's thread */
-  | { readonly kind: 'thing'; readonly e: Entity };
+  | { readonly kind: 'thing'; readonly e: Entity }
+  /**
+   * a folder of ~/bise (docs/plugin-apps.md A6, apps-gallery): `entry` the id folder/list minted
+   * (opaque: never built or split here), null its root; `name` its name at the last listing, the
+   * tab's title before the next. A folder row opens in place (the tab takes the new what).
+   */
+  | { readonly kind: 'folder'; readonly entry: string | null; readonly name: string };
 
 export interface Tab {
   /** one per thing: 'new:2', 'term:<project>#1', or the entity's key */
@@ -46,6 +52,8 @@ export function tabIdOf(what: TabWhat): string {
       return `term:${what.project}#${String(what.n)}`;
     case 'thing':
       return entityKey(what.e);
+    case 'folder':
+      return `dir:${what.entry ?? ''}`;
   }
 }
 
@@ -526,6 +534,11 @@ function whatOf(x: unknown): TabWhat | undefined {
     case 'thing': {
       const e = entityOf(x['e']);
       return e === undefined ? undefined : { kind: 'thing', e };
+    }
+    case 'folder': {
+      const entry = x['entry'];
+      if ((typeof entry !== 'string' || entry === '') && entry !== null) return undefined;
+      return { kind: 'folder', entry, name: typeof x['name'] === 'string' ? x['name'] : '' };
     }
     default:
       return undefined;
