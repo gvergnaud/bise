@@ -17,6 +17,8 @@ use bend_plugins::id::{PartKind, PluginId};
 use bend_plugins::model::{ConnectorAuth, ConnectorEntry, StateV2, ToolEntry};
 use bend_plugins::{bridge, resolve, secrets, state, status};
 
+mod common;
+
 /// The loose skill folders of every bridge in this binary: one of the
 /// test's own (`$BISE_SKILL_ROOTS`, set the same by each test), never the
 /// user's HOME or the repo's `.agents/skills`.
@@ -47,10 +49,48 @@ fn fixture_root(tag: &str) -> (PathBuf, PathBuf) {
     (base.canonicalize().unwrap(), plugins)
 }
 
+/// The bound of a wait that only guards a hang (fast-loop, architect m_62412): at load
+/// 20-33 a bridge and its servers start far slower than idle. A claim about speed keeps
+/// its own bound.
+const HANG: Duration = Duration::from_secs(60);
+
+/// The ready wait of a test that is not about it: its `ready` then means every server is
+/// up (the bridge's own READY_WAIT, 12 s, lets a loaded machine's REPL see an empty index).
+const READY_ALL: Duration = Duration::from_secs(45);
+
+/// A bridge's options for these tests: `bridge::Opts::new`'s, but READY_ALL.
+fn opts(dir: PathBuf, parent: Option<u32>, roots: resolve::Roots) -> bridge::Opts {
+    bridge::Opts { ready_wait: READY_ALL, ..bridge::Opts::new(dir, parent, roots) }
+}
+
+/// The fixtures' servers are `python3` from PATH, which the bridge starts. On his Mac that
+/// is pyenv's shim (`~/.pyenv/shims/python3`, `pyenv exec` in bash): at load ~30 it took
+/// 10-17 s to start an interpreter, the real one 0.1-0.2 s (fast-loop, 2026-11-12), so the
+/// servers missed the bridge's 30 s initialize window and 9-14 of these 18 tests went red.
+/// Once per binary, a dir holding `python3`, a link to common::python3 (the first one on
+/// PATH that is no version manager's shim), goes first on PATH. None: PATH as it is.
+fn real_python_first() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        let path = std::env::var_os("PATH").unwrap_or_default();
+        let real = common::python3();
+        if !real.is_absolute() {
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("bp-bridge-python-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let link = dir.join("python3");
+        let _ = std::fs::remove_file(&link);
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        let dirs = std::iter::once(dir).chain(std::env::split_paths(&path)).collect::<Vec<_>>();
+        std::env::set_var("PATH", std::env::join_paths(dirs).unwrap());
+    });
+}
+
 fn wait_until(what: &str, f: impl Fn() -> bool) {
     let t0 = Instant::now();
     while !f() {
-        assert!(t0.elapsed() < Duration::from_secs(20), "never: {}", what);
+        assert!(t0.elapsed() < HANG, "never: {}", what);
         std::thread::sleep(Duration::from_millis(25));
     }
 }
@@ -88,6 +128,7 @@ fn post(r: &mut BufReader<TcpStream>, path: &str, body: &str) -> (u32, String) {
 
 #[test]
 fn fixture_plugin_end_to_end() {
+    real_python_first();
     let (base, plugins) = fixture_root("e2e");
     let dir = base.join("run/plugins");
     let mut parent = std::process::Command::new("sleep").arg("60").spawn().unwrap();
@@ -98,11 +139,11 @@ fn fixture_plugin_end_to_end() {
         data: base.join("data"),
         state: Default::default(),
     };
-    let opts = bridge::Opts::new(dir.clone(), Some(parent.id()), roots);
+    let opts = opts(dir.clone(), Some(parent.id()), roots);
     let server = std::thread::spawn(move || bridge::serve(opts));
     let t0 = Instant::now();
     while !dir.join("ready").exists() {
-        assert!(t0.elapsed() < Duration::from_secs(15), "bridge never ready");
+        assert!(t0.elapsed() < HANG, "bridge never ready");
         std::thread::sleep(Duration::from_millis(50));
     }
 
@@ -167,6 +208,7 @@ fn fixture_plugin_end_to_end() {
 
 #[test]
 fn failing_server_is_a_diagnostic() {
+    real_python_first();
     let (base, plugins) = fixture_root("fail");
     std::fs::write(
         plugins.join("hello-plugin/mcp.json"),
@@ -183,7 +225,7 @@ fn failing_server_is_a_diagnostic() {
         state: Default::default(),
     };
     let mut parent = std::process::Command::new("sleep").arg("60").spawn().unwrap();
-    let opts = bridge::Opts::new(dir.clone(), Some(parent.id()), roots);
+    let opts = opts(dir.clone(), Some(parent.id()), roots);
     let server = std::thread::spawn(move || bridge::serve(opts));
     wait_until("the bridge ready", || dir.join("ready").exists());
     assert_eq!(std::fs::read_to_string(dir.join("mcp-index.txt")).unwrap(), "");
@@ -204,6 +246,7 @@ fn failing_server_is_a_diagnostic() {
 /// the files are written, the server joins the index when it is up.
 #[test]
 fn limits_filter_tools_bound_calls_and_late_servers_join() {
+    real_python_first();
     let (base, plugins) = fixture_root("limits");
     std::fs::write(
         plugins.join("hello-plugin/mcp.json"),
@@ -223,11 +266,11 @@ fn limits_filter_tools_bound_calls_and_late_servers_join() {
         data: base.join("data"),
         state: Default::default(),
     };
-    let opts = bridge::Opts { ready_wait: Duration::from_secs(4), ..bridge::Opts::new(dir.clone(), Some(parent.id()), roots) };
+    let opts = bridge::Opts { ready_wait: Duration::from_secs(4), ..opts(dir.clone(), Some(parent.id()), roots) };
     let server = std::thread::spawn(move || bridge::serve(opts));
     let t0 = Instant::now();
     while !dir.join("ready").exists() {
-        assert!(t0.elapsed() < Duration::from_secs(15), "bridge never ready");
+        assert!(t0.elapsed() < HANG, "bridge never ready");
         std::thread::sleep(Duration::from_millis(50));
     }
     assert!(t0.elapsed() < Duration::from_secs(7), "the ready wait waited for the slow server: {:?}", t0.elapsed());
@@ -241,7 +284,7 @@ fn limits_filter_tools_bound_calls_and_late_servers_join() {
         if index.contains("/hello-plugin/nap") {
             break index;
         }
-        assert!(t1.elapsed() < Duration::from_secs(20), "nap never joined: {}", index);
+        assert!(t1.elapsed() < HANG, "nap never joined: {}", index);
         std::thread::sleep(Duration::from_millis(100));
     };
     // "off" lists shout but turned it off: the one shout is "nap"'s
@@ -276,7 +319,7 @@ fn limits_filter_tools_bound_calls_and_late_servers_join() {
         if b.contains("HELLO-PLUGIN:X") {
             break;
         }
-        assert!(t0.elapsed() < Duration::from_secs(30), "the slow server never came up: {}", b);
+        assert!(t0.elapsed() < HANG, "the slow server never came up: {}", b);
         std::thread::sleep(Duration::from_millis(200));
     }
     parent.kill().unwrap();
@@ -334,6 +377,7 @@ const SHOUT: &str = r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"
 /// server turned on again starts and answers.
 #[test]
 fn connectors_and_toggles_reach_the_index_within_a_poll() {
+    real_python_first();
     let (base, plugins) = fixture_root("toggles");
     let (dir, sp) = (base.join("run/plugins"), base.join("plugins.json"));
     let mut parent = std::process::Command::new("sleep").arg("60").spawn().unwrap();
@@ -344,7 +388,7 @@ fn connectors_and_toggles_reach_the_index_within_a_poll() {
         status_dir: Some(sd.clone()),
         poll: Duration::from_millis(100),
         grace: Duration::from_millis(500),
-        ..bridge::Opts::new(dir.clone(), Some(parent.id()), roots_of(&base, Some(plugins)))
+        ..opts(dir.clone(), Some(parent.id()), roots_of(&base, Some(plugins)))
     };
     let server = std::thread::spawn(move || bridge::serve(opts));
     wait_until("the bridge ready", || dir.join("ready").exists());
@@ -399,6 +443,7 @@ fn connectors_and_toggles_reach_the_index_within_a_poll() {
 /// off words (architect m_39853).
 #[test]
 fn a_removed_plugins_server_is_retired_within_a_poll() {
+    real_python_first();
     let (base, plugins) = fixture_root("removed");
     let dir = base.join("run/plugins");
     let mut parent = std::process::Command::new("sleep").arg("60").spawn().unwrap();
@@ -408,7 +453,7 @@ fn a_removed_plugins_server_is_retired_within_a_poll() {
         state_path: Some(ctx.state.clone()),
         poll: Duration::from_millis(100),
         grace: Duration::from_millis(500),
-        ..bridge::Opts::new(dir.clone(), Some(parent.id()), roots)
+        ..opts(dir.clone(), Some(parent.id()), roots)
     };
     let server = std::thread::spawn(move || bridge::serve(opts));
     wait_until("the bridge ready", || dir.join("ready").exists());
@@ -431,11 +476,12 @@ fn a_removed_plugins_server_is_retired_within_a_poll() {
 /// fresh) and stops with its parent.
 #[test]
 fn the_bridge_stays_up_with_no_server_and_stops_with_its_parent() {
+    real_python_first();
     let base = std::env::temp_dir().join(format!("bp-bridge-alone-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
     let dir = base.join("run/plugins");
     let mut parent = std::process::Command::new("sleep").arg("60").spawn().unwrap();
-    let opts = bridge::Opts { catalog: Some(fake_catalog()), poll: Duration::from_millis(100), ..bridge::Opts::new(dir.clone(), Some(parent.id()), roots_of(&base, None)) };
+    let opts = bridge::Opts { catalog: Some(fake_catalog()), poll: Duration::from_millis(100), ..opts(dir.clone(), Some(parent.id()), roots_of(&base, None)) };
     let server = std::thread::spawn(move || bridge::serve(opts));
     wait_until("the bridge ready", || dir.join("ready").exists());
     assert!(index(&dir).contains("c0ffee-gmail gmail send_email"), "{}", index(&dir));
@@ -453,6 +499,7 @@ fn the_bridge_stays_up_with_no_server_and_stops_with_its_parent() {
 /// report names the variable.
 #[test]
 fn an_env_var_falls_back_to_his_mcp_secrets() {
+    real_python_first();
     let (base, plugins) = fixture_root("secret-env");
     std::fs::write(
         plugins.join("hello-plugin/mcp.json"),
@@ -464,7 +511,7 @@ fn an_env_var_falls_back_to_his_mcp_secrets() {
     let calls = base.join("from-secret.txt");
     let start = |dir: &Path| {
         let parent = std::process::Command::new("sleep").arg("60").spawn().unwrap();
-        let opts = bridge::Opts { env_dir: Some(secrets_dir.clone()), ..bridge::Opts::new(dir.to_path_buf(), Some(parent.id()), roots_of(&base, Some(plugins.clone()))) };
+        let opts = bridge::Opts { env_dir: Some(secrets_dir.clone()), ..opts(dir.to_path_buf(), Some(parent.id()), roots_of(&base, Some(plugins.clone()))) };
         let server = std::thread::spawn(move || bridge::serve(opts));
         wait_until("the bridge ready", || dir.join("ready").exists());
         (parent, server)
@@ -495,6 +542,7 @@ fn an_env_var_falls_back_to_his_mcp_secrets() {
 /// is refused at once, before any poll retires its server.
 #[test]
 fn an_opt_in_plugins_tool_is_refused_once_it_leaves_enabled() {
+    real_python_first();
     let (base, plugins) = fixture_root("opt-in");
     let manifest = plugins.join("hello-plugin/plugin.json");
     let mut m: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&manifest).unwrap()).unwrap();
@@ -507,7 +555,7 @@ fn an_opt_in_plugins_tool_is_refused_once_it_leaves_enabled() {
         state_path: Some(sp.clone()),
         // no poll during the test: the refusal is the call's own check
         poll: Duration::from_secs(600),
-        ..bridge::Opts::new(dir.clone(), Some(parent.id()), roots_of(&base, Some(plugins)))
+        ..opts(dir.clone(), Some(parent.id()), roots_of(&base, Some(plugins)))
     };
     let server = std::thread::spawn(move || bridge::serve(opts));
     wait_until("the bridge ready", || dir.join("ready").exists());
@@ -531,6 +579,7 @@ fn an_opt_in_plugins_tool_is_refused_once_it_leaves_enabled() {
 /// line each).
 #[test]
 fn lazy_servers_start_once_for_n_cold_bridges_and_on_a_call() {
+    real_python_first();
     let (base, plugins) = fixture_root("lazy");
     let starts = base.join("starts.txt");
     std::fs::write(
@@ -549,7 +598,7 @@ fn lazy_servers_start_once_for_n_cold_bridges_and_on_a_call() {
             tools_cache: Some(place(&cache)),
             status_dir: Some(sd.clone()),
             idle_stop: Duration::from_secs(2),
-            ..bridge::Opts::new(dir.to_path_buf(), Some(parent.id()), roots_of(&base, Some(plugins.clone())))
+            ..opts(dir.to_path_buf(), Some(parent.id()), roots_of(&base, Some(plugins.clone())))
         };
         (parent, std::thread::spawn(move || bridge::serve(opts)))
     };
@@ -620,7 +669,7 @@ fn cached_bridge(base: &Path, plugins: &Path, cache: &Path, dir: &Path, env_dir:
     let opts = bridge::Opts {
         tools_cache: Some(place(cache)),
         env_dir,
-        ..bridge::Opts::new(dir.to_path_buf(), Some(parent.id()), roots_of(base, Some(plugins.to_path_buf())))
+        ..opts(dir.to_path_buf(), Some(parent.id()), roots_of(base, Some(plugins.to_path_buf())))
     };
     let server = std::thread::spawn(move || bridge::serve(opts));
     wait_until("the bridge ready", || dir.join("ready").exists());
@@ -653,6 +702,7 @@ fn counted_server(plugins: &Path, starts: &Path, env: &str) {
 /// the same value again is served from the cache.
 #[test]
 fn a_server_listed_with_another_env_value_is_listed_again_not_served_from_the_cache() {
+    real_python_first();
     let (base, plugins) = fixture_root("cache-env");
     let starts = base.join("starts.txt");
     counted_server(&plugins, &starts, r#"{"HELLO_TOOLS":"${BP_CACHE_TOOLSET}"}"#);
@@ -691,6 +741,7 @@ fn a_server_listed_with_another_env_value_is_listed_again_not_served_from_the_ca
 /// another session never sees it.
 #[test]
 fn a_list_after_list_changed_reaches_its_session_never_the_cache() {
+    real_python_first();
     let (base, plugins) = fixture_root("cache-changed");
     let starts = base.join("starts.txt");
     counted_server(&plugins, &starts, r#"{"HELLO_GROW":"1"}"#);
@@ -722,6 +773,7 @@ fn a_list_after_list_changed_reaches_its_session_never_the_cache() {
 /// still has keeps the entry.
 #[test]
 fn an_unknown_tool_relists_the_session_and_drops_a_stale_entry_once() {
+    real_python_first();
     let (base, plugins) = fixture_root("cache-unknown");
     let (starts, tools) = (base.join("starts.txt"), base.join("tools.txt"));
     std::fs::write(&tools, "old").unwrap();
@@ -761,6 +813,7 @@ fn an_unknown_tool_relists_the_session_and_drops_a_stale_entry_once() {
 /// tools/list first").
 #[test]
 fn a_routes_tools_list_never_starts_a_listed_server() {
+    real_python_first();
     let (base, plugins) = fixture_root("cache-list");
     let starts = base.join("starts.txt");
     counted_server(&plugins, &starts, "{}");
@@ -790,6 +843,7 @@ fn a_routes_tools_list_never_starts_a_listed_server() {
 /// that hears the exit as an event passes.
 #[test]
 fn a_bridge_and_its_servers_are_gone_within_a_second_or_two_of_its_repl() {
+    real_python_first();
     let (base, plugins) = fixture_root("parent-exit");
     let starts = base.join("starts.txt");
     // two plugins (one tool name each), one server each; the wrapper
@@ -810,7 +864,7 @@ fn a_bridge_and_its_servers_are_gone_within_a_second_or_two_of_its_repl() {
     }
     let dir = base.join("run/plugins");
     let mut parent = std::process::Command::new("sleep").arg("60").spawn().unwrap();
-    let opts = bridge::Opts { chores: Duration::from_secs(10), ..bridge::Opts::new(dir.clone(), Some(parent.id()), roots_of(&base, Some(plugins))) };
+    let opts = bridge::Opts { chores: Duration::from_secs(10), ..opts(dir.clone(), Some(parent.id()), roots_of(&base, Some(plugins))) };
     let (done_tx, done_rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
         let r = bridge::serve(opts);
@@ -871,12 +925,13 @@ fn mcp_apps_root(tag: &str, log: &Path) -> (PathBuf, PathBuf) {
 /// bridge is.
 #[test]
 fn views_reach_the_index_and_their_servers_answer() {
+    real_python_first();
     let log = std::env::temp_dir().join(format!("bp-bridge-apps-log-{}", std::process::id()));
     let _ = std::fs::remove_file(&log);
     let (base, plugins) = mcp_apps_root("apps", &log);
     let dir = base.join("run/plugins");
     let mut parent = std::process::Command::new("sleep").arg("60").spawn().unwrap();
-    let opts = bridge::Opts::new(dir.clone(), Some(parent.id()), roots_of(&base, Some(plugins)));
+    let opts = opts(dir.clone(), Some(parent.id()), roots_of(&base, Some(plugins)));
     let server = std::thread::spawn(move || bridge::serve(opts));
     wait_until("ready", || dir.join("ready").exists());
 
@@ -943,11 +998,12 @@ fn views_reach_the_index_and_their_servers_answer() {
 /// the off words; the plugin off: its route is gone.
 #[test]
 fn a_static_view_turned_off_is_refused() {
+    real_python_first();
     let log = std::env::temp_dir().join(format!("bp-bridge-apps-off-log-{}", std::process::id()));
     let (base, plugins) = mcp_apps_root("apps-off", &log);
     let (dir, sp) = (base.join("run/plugins"), base.join("plugins.json"));
     let mut parent = std::process::Command::new("sleep").arg("60").spawn().unwrap();
-    let mut opts = bridge::Opts::new(dir.clone(), Some(parent.id()), roots_of(&base, Some(plugins)));
+    let mut opts = opts(dir.clone(), Some(parent.id()), roots_of(&base, Some(plugins)));
     opts.state_path = Some(sp.clone());
     opts.poll = Duration::from_millis(100);
     let server = std::thread::spawn(move || bridge::serve(opts));
@@ -1001,11 +1057,12 @@ fn post_call(r: &mut BufReader<TcpStream>, path: &str, ask: &str, body: &str) ->
 /// calls get two ids; a static view's call is kept too.
 #[test]
 fn a_call_with_a_view_keeps_its_full_result() {
+    real_python_first();
     let log = std::env::temp_dir().join(format!("bp-bridge-apps-c2-log-{}", std::process::id()));
     let (base, plugins) = mcp_apps_root("apps-c2", &log);
     let (dir, views) = (base.join("run/plugins"), base.join("agent/views"));
     let mut parent = std::process::Command::new("sleep").arg("60").spawn().unwrap();
-    let mut opts = bridge::Opts::new(dir.clone(), Some(parent.id()), roots_of(&base, Some(plugins)));
+    let mut opts = opts(dir.clone(), Some(parent.id()), roots_of(&base, Some(plugins)));
     opts.views_dir = Some(views.clone());
     let server = std::thread::spawn(move || bridge::serve(opts));
     wait_until("ready", || dir.join("ready").exists());
@@ -1053,11 +1110,12 @@ fn a_call_with_a_view_keeps_its_full_result() {
 /// resource declares (C8's add screen); an unknown plugin is a 404.
 #[test]
 fn the_ui_route_lists_a_plugins_views_and_what_they_declare() {
+    real_python_first();
     let log = std::env::temp_dir().join(format!("bp-bridge-apps-ui-log-{}", std::process::id()));
     let (base, plugins) = mcp_apps_root("apps-ui", &log);
     let dir = base.join("run/plugins");
     let mut parent = std::process::Command::new("sleep").arg("60").spawn().unwrap();
-    let opts = bridge::Opts::new(dir.clone(), Some(parent.id()), roots_of(&base, Some(plugins)));
+    let opts = opts(dir.clone(), Some(parent.id()), roots_of(&base, Some(plugins)));
     let server = std::thread::spawn(move || bridge::serve(opts));
     wait_until("ready", || dir.join("ready").exists());
     let b: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(dir.join(bridge::BRIDGE_FILE)).unwrap()).unwrap();
