@@ -5,7 +5,7 @@ import { diffStat } from './diffstat';
 describe('a diffstat', () => {
   it('sums every file, a cut one too, and rounds each share down (his GitHub shot: +438 −151)', () => {
     const s = diffStat([{ add: 400, del: 100 }, { add: 38, del: 51 }, { add: 0, del: 0 }]);
-    expect([s.add, s.del]).toEqual([438, 151]);
+    expect([s.add, s.del, s.files]).toEqual([438, 151, 3]);
     expect(s.squares).toEqual(['add', 'add', 'add', 'del', 'none']);
   });
 
@@ -19,7 +19,7 @@ describe('a diffstat', () => {
   });
 
   it('no file, or no line changed (a binary): zero and zero, five neutral', () => {
-    expect(diffStat([])).toEqual({ add: 0, del: 0, squares: ['none', 'none', 'none', 'none', 'none'] });
+    expect(diffStat([])).toEqual({ add: 0, del: 0, files: 0, squares: ['none', 'none', 'none', 'none', 'none'] });
     expect(diffStat([{ add: 0, del: 0 }]).squares).toEqual(['none', 'none', 'none', 'none', 'none']);
   });
 });

@@ -128,6 +128,10 @@ export const panel = {
   prtab_gitlab: "GitLab",
   /** the link out, always in its head */
   prtab_open_on: (a: { forge: string | number }): string => "Open on " + String(a.forge) + " ↗",
+  /** the tip of the PR's size at its line's end, its lines ('+123 −81'; designer m_62857) */
+  prtab_stat_lines: (a: { n: number; del: string | number }): string => a.n === 1 ? String(a.n) + " line added, " + String(a.del) + " removed" : String(a.n) + " lines added, " + String(a.del) + " removed",
+  /** the same tip, its files, after a ' · ' */
+  prtab_stat_files: (a: { n: number }): string => a.n === 1 ? String(a.n) + " file" : String(a.n) + " files",
   /** its head's branch line */
   prtab_branches: (a: { head: string | number; base: string | number }): string => String(a.head) + " → " + String(a.base),
   /** its head's last push */

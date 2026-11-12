@@ -917,6 +917,21 @@
     "one": null,
     "text": "Reviews"
   },
+  "panel.prtab_stat_files": {
+    "args": [
+      "n"
+    ],
+    "one": "{n} file",
+    "text": "{n} files"
+  },
+  "panel.prtab_stat_lines": {
+    "args": [
+      "n",
+      "del"
+    ],
+    "one": "{n} line added, {del} removed",
+    "text": "{n} lines added, {del} removed"
+  },
   "panel.prtab_unknown": {
     "args": [],
     "one": null,
