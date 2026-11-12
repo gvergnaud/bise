@@ -127,6 +127,11 @@ describe('the plugins place', () => {
   it("nothing installed: the list starts at 'Not installed'; nothing to add either: one plain line", () => {
     place({ rows: [] });
     expect(order()).toEqual(['plugins.avail.head', 'plugins.avail.mistral']);
+    // the band says only what the list can't: no connector cards (the rows below), its import and marketplace lines (designer m_63123)
+    expect(screen.queryByTestId('plugins.band.mistral:linear')).toBeNull();
+    expect(screen.queryByTestId('plugins.band.sub')).toBeNull();
+    expect(screen.getByTestId('plugins.band.import')).toBeTruthy();
+    expect(screen.getByTestId('plugins.band.market')).toBeTruthy();
     cleanup();
     place({ rows: [], browse: [] });
     expect(screen.getByTestId('plugins.none').textContent).toBe(settings.plugins_nothing_installed);

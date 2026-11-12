@@ -31,6 +31,7 @@ import {
   gives,
   groupWords,
   groupsOf,
+  installed,
   itemsOf,
   keyOf,
   kindWords,
@@ -100,6 +101,9 @@ export function PlaceView({ rows, summary, browse, problem, project, projectName
   const all = useMemo(() => rows ?? [], [rows]);
   const groups = useMemo(() => groupsOf(all, kind, q), [all, kind, q]);
   const avail = useMemo(() => availableOf(browse, all, kind, q), [browse, all, kind, q]);
+  // nothing installed: the band's connector cards would repeat the Not installed rows just below
+  // (designer m_63123 #2), so it keeps only its other lines
+  const cards = rows === null || all.some(installed);
   // browse (the add menu's, the band's): every row back, then the eye lands on its head
   const goTo = (to: string) => {
     setKind('all');
@@ -133,10 +137,10 @@ export function PlaceView({ rows, summary, browse, problem, project, projectName
       <PageBanner title={hero.plugins_title} sentence={settings.plugins_place_sub} edge="column" gutter={gutter} icon="plugins" testId="plugins.head"
         {...(summary !== null ? { facts: <span data-testid="plugins.counts">{settings.plugins_place_counts({ on: summary.on, off: summary.off })}{summary.waiting > 0 && <>{' · '}<BannerWait>{settings.plugins_place_waits({ n: summary.waiting })}</BannerWait></>}</span> } : {})}
         visual={<div className="plg-room" data-bleed data-testid="plugins.room">{room ?? <Room rows={all} project={project} fallback={<PlainRoom rows={all} project={project} />} onOpen={ports.open} />}</div>} />
-      {(bandShows(summary) && summary !== null) || problem != null ? (
+      {(bandShows(summary, cards) && summary !== null) || problem != null ? (
         <div className="plg-sec">
-          {bandShows(summary) && summary !== null && (
-            <Band summary={summary} browse={browse.find((b) => b.source === 'mistral')?.items ?? []} projectName={projectName}
+          {bandShows(summary, cards) && summary !== null && (
+            <Band summary={summary} browse={browse.find((b) => b.source === 'mistral')?.items ?? []} projectName={projectName} cards={cards}
               onConnect={(id) => { ports.send({ cmd: 'plugin_connect', ...at, id }); }}
               onImport={() => { ports.add('import'); }}
               onWorkspace={() => { setKind('all'); setQ(''); }}
@@ -289,11 +293,13 @@ export function PlaceRow({ h, project, onOpen, onSet, onConnect, onLogin, onSetU
 }
 
 /** 'connect your tools' (page plugins v48): what to connect, import or look at, from the summary. */
-export function Band({ summary, browse, projectName, onConnect, onImport, onWorkspace, onBrowse }: {
+export function Band({ summary, browse, projectName, cards, onConnect, onImport, onWorkspace, onBrowse }: {
   summary: PluginsSummary;
   /** Mistral's connectors not connected yet (their words) */
   browse: readonly Plugin[];
   projectName: string | undefined;
+  /** its connector cards and their sub (false: nothing installed, the list's rows say them) */
+  cards: boolean;
   onConnect: (id: string) => void;
   onImport: () => void;
   onWorkspace: () => void;
@@ -317,9 +323,9 @@ export function Band({ summary, browse, projectName, onConnect, onImport, onWork
           <span className="plg-dim">{settings.plugins_band_through}</span>
           <span className="plg-band-count" data-testid="plugins.band.count">{settings.plugins_band_count({ connected: summary.connected, total: summary.connectors })}</span>
         </div>
-        <div className="plg-band-sub" data-testid="plugins.band.sub">{words?.sub ?? settings.plugins_band_sub}</div>
+        {cards && <div className="plg-band-sub" data-testid="plugins.band.sub">{words?.sub ?? settings.plugins_band_sub}</div>}
       </div>
-      {mistral !== undefined && words !== null && (
+      {cards && mistral !== undefined && words !== null && (
         <div className="plg-cards">
           {ids.slice(0, cells.shown).map((id, i) => {
             const row = byId.get(id);

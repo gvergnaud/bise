@@ -283,9 +283,14 @@ export function newKey(s: PluginsSummary | null): string {
     .join('|');
 }
 
-/** The band shows: something to connect, import or look at. */
-export function bandShows(s: PluginsSummary | null): boolean {
-  return newKey(s) !== '';
+/**
+ * The band shows: something to connect, import or look at. Without its connector cards (nothing
+ * installed: the list's Not installed rows say them; designer m_63123 #2), only for a line the list
+ * can't say (an import, a project's skills, a marketplace).
+ */
+export function bandShows(s: PluginsSummary | null, cards = true): boolean {
+  if (newKey(s) === '') return false;
+  return cards || itemsOf(s, 'import').length + itemsOf(s, 'workspace').length + itemsOf(s, 'marketplace').length > 0;
 }
 
 /** A band card's words: the line under its title, and its tip. */

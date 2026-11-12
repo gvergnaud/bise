@@ -68,8 +68,11 @@
 /* the list's second part (his m_62905, designer m_62916): one 'Not installed' head --gap-page under
    the installed rows (none above it when nothing is installed), then its source groups */
 .plg-avail { display: flex; flex-direction: column; gap: var(--gap-block); }
-.plg-sec > .plg-group + .plg-avail { margin-top: calc(var(--gap-page) - var(--gap-block)); }
+/* the seam (designer m_63123 #1): --gap-page, a hairline across the list's width, then the head one
+   step up from the kind labels under it (text-2, 500) */
+.plg-sec > .plg-group + .plg-avail { margin-top: calc(var(--gap-page) - var(--gap-block)); padding-top: var(--gap-block); border-top: 1px solid var(--c-line); }
 .plg-avail-head .b-glabel, .plg-avail-label .b-glabel { margin-top: 0; }
+.plg-avail-head .b-glabel { font-weight: 500; color: var(--c-text-2); }
 /* browse landed here: the hover tint for ~1 s so the eye lands (Place.tsx LIT_MS); no fade under
    reduced motion */
 .plg-avail-head, .plg-avail-label { border-radius: var(--r-2); transition: background-color 300ms ease; }
