@@ -265,7 +265,7 @@ fn boot_phases_on_a_real_journal() {
         u => panic!("{u:?}"),
     };
     phase(&mut lines, &boot, "boot: usable (mark of all)", &mut at);
-    assert_eq!(boot.restore(&st).unwrap(), Ok(()));
+    assert_eq!(boot.restore(&st, &mut |_, _| {}).unwrap(), Ok(()));
     drop(st);
     phase(&mut lines, &boot, "boot: restore", &mut at);
     for ev in events[..k].iter().filter(|ev| crate::forge::is_pr_line(ev)) {
