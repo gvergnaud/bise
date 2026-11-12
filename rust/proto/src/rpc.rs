@@ -275,6 +275,9 @@ pub const NOTIFICATIONS: &[NoteRow] = &[
     n("card/open", "card_open", Scope::One),
     // MCP Apps C9: a terminal's `app ↗`, to the desktop connections only
     n("app/open", "app_open", Scope::One),
+    // plugin-apps A5: an artifact's notes were written (ids only): its
+    // document views ask view/notes again
+    n("artifact/notes", "artifact_notes", Scope::Hub),
     // inbox-record: a card closed, or its answer's position came
     n("inbox/recorded", "inbox_recorded", Scope::Hub),
     n("client/focused", "focused", Scope::One),

@@ -208,6 +208,10 @@ pub fn title_of(id: &str) -> String {
 
 pub struct Store {
     pub dir: PathBuf,
+    /// where the hub hears the pages (set once by `Pages::connect_hub`):
+    /// here, so the one writer of an artifact's notes tells it (A5,
+    /// architect m_61664), whatever door wrote them
+    to_hub: std::sync::Mutex<Option<super::ToHub>>,
 }
 
 /// Whose notes (architect m_23701 §9.5: one notes system for every
@@ -259,7 +263,20 @@ fn write_json<T: Serialize>(p: &Path, v: &T) -> Result<(), String> {
 
 impl Store {
     pub fn new(state: &Path) -> Store {
-        Store { dir: state.join("pages") }
+        Store { dir: state.join("pages"), to_hub: std::sync::Mutex::new(None) }
+    }
+
+    /// Where the hub hears the pages (the pages server's news and the
+    /// notes' writes).
+    pub(crate) fn connect_hub(&self, f: super::ToHub) {
+        *self.to_hub.lock().unwrap_or_else(|e| e.into_inner()) = Some(f);
+    }
+
+    /// Tell the hub (a send: no I/O, never waits); none connected: nobody.
+    pub(crate) fn tell_hub(&self, m: super::PageMsg) {
+        if let Some(f) = self.to_hub.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+            f(m);
+        }
     }
 
     fn page_dir(&self, id: &str) -> PathBuf {
@@ -313,12 +330,19 @@ impl Store {
         self.save_notes_of(&Target::Page(id.to_string()), notes)
     }
 
+    /// The one writer of a page's or an artifact's notes; an artifact's
+    /// write tells the hub (`PageMsg::ArtifactNotes`: its document views
+    /// ask `view/notes` again), whichever door it came through.
     pub fn save_notes_of(&self, t: &Target, notes: &[Note]) -> Result<(), String> {
         let p = self.notes_file(t).ok_or_else(|| format!("{} is not an id", t.id()))?;
         if let Some(d) = p.parent() {
             std::fs::create_dir_all(d).map_err(|e| format!("{}: {e}", d.display()))?;
         }
-        write_json(&p, &notes)
+        write_json(&p, &notes)?;
+        if let Target::Artifact(id) = t {
+            self.tell_hub(super::PageMsg::ArtifactNotes { id: id.clone() });
+        }
+        Ok(())
     }
 
     /// The page's question blocks and their cards (§4.2).
@@ -440,6 +464,14 @@ impl Store {
     /// done and answered notes never change here. A note without a
     /// usable id gets the next `n<k>`. The notes after.
     pub fn set_drafts(&self, t: &Target, given: &[Value], version: u64, now: u64) -> Result<Vec<Note>, String> {
+        let notes = self.drafts_merged(t, given, version, now)?;
+        self.save_notes_of(t, &notes)?;
+        Ok(notes)
+    }
+
+    /// [`Store::set_drafts`]'s notes, not written (a caller that changes
+    /// them further writes once: one write, one `ArtifactNotes`).
+    pub fn drafts_merged(&self, t: &Target, given: &[Value], version: u64, now: u64) -> Result<Vec<Note>, String> {
         let mut notes: Vec<Note> = self.notes_of(t).into_iter().filter(|x| x.status != "draft").collect();
         for g in given {
             let mut n: Note = serde_json::from_value(g.clone()).map_err(|e| format!("a note: {e}"))?;
@@ -460,7 +492,6 @@ impl Store {
             }
             notes.push(n);
         }
-        self.save_notes_of(t, &notes)?;
         Ok(notes)
     }
 

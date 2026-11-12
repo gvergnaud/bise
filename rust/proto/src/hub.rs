@@ -145,6 +145,12 @@ pub enum HubEv {
     /// the answer to `artifacts_move`: each artifact moved and its folder
     /// before (his undo)
     ArtifactsMoved { project: Project, moved: Vec<ArtifactMoved> },
+    /// plugin-apps (A5, architect m_61664): artifact `artifact`'s notes
+    /// changed (his send, the browser's drafts or send, a version that
+    /// answers one): a client with a document view open on it asks
+    /// `view/notes` again. Ids only, never a note's words; client sockets
+    /// only
+    ArtifactNotes { project: Project, artifact: String },
     /// the answer to `artifacts_folders`: the folders after his change;
     /// `made` the folder a make made (or found)
     Folders {
@@ -615,7 +621,7 @@ pub enum HubEv {
 }
 
 impl HubEv {
-    pub const TAGS: &'static [&'static str] = &["welcome", "agents", "cards", "thread", "thread_hits", "entry", "typing", "partial", "artifacts", "artifacts_moved", "folders", "library", "scheduled", "worktrees", "processes", "proc_out", "merged", "features", "prs", "pr_acted", "pr_detail", "pr_check_log", "models", "tool_out", "queued_taken", "log", "completion", "log_body", "diff", "guide", "branches", "versions", "release", "update", "route", "route_done", "jobs", "job_end", "followed_end", "activity", "flow", "paused", "switch", "growth", "pulse", "bise_update", "usage", "pages", "page_changed", "card_open", "app_open", "inbox_history", "inbox_recorded", "focused", "approvals", "notice", "refused", "error"];
+    pub const TAGS: &'static [&'static str] = &["welcome", "agents", "cards", "thread", "thread_hits", "entry", "typing", "partial", "artifacts", "artifacts_moved", "artifact_notes", "folders", "library", "scheduled", "worktrees", "processes", "proc_out", "merged", "features", "prs", "pr_acted", "pr_detail", "pr_check_log", "models", "tool_out", "queued_taken", "log", "completion", "log_body", "diff", "guide", "branches", "versions", "release", "update", "route", "route_done", "jobs", "job_end", "followed_end", "activity", "flow", "paused", "switch", "growth", "pulse", "bise_update", "usage", "pages", "page_changed", "card_open", "app_open", "inbox_history", "inbox_recorded", "focused", "approvals", "notice", "refused", "error"];
 
     pub fn decode(line: &str) -> Result<HubEv, String> {
         Self::from_value(parse(line)?)

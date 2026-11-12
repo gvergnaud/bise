@@ -333,6 +333,12 @@ impl Shell {
             crate::pages::PageMsg::Opened { .. } => {
                 self.state_now();
             }
+            // an artifact's notes were written (any door): its document
+            // views ask view/notes again (A5, architect m_61664)
+            crate::pages::PageMsg::ArtifactNotes { id } => {
+                let ev = bise_proto::hub::HubEv::ArtifactNotes { project: self.project(), artifact: id };
+                self.proto_note_all(&ev);
+            }
             // his edits in the viewer's grid: the file and the version (daemon/art.rs)
             crate::pages::PageMsg::Save { id, req, reply } => {
                 let (status, body) = self.art_save(&pages, &id, req);

@@ -22,6 +22,8 @@ export const TAGS = {
   folders: true,
   library_folders: true,
   artifacts_moved: true,
+  // plugin-apps A5: an artifact's notes were written; its document tabs ask view/notes again
+  artifact_notes: true,
   library: true,
   scheduled: true,
   worktrees: true,

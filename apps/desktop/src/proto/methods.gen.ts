@@ -114,6 +114,7 @@ export const NOTIFICATIONS = {
   "route/done": { ev: "route_done", scope: "hub" },
   "card/open": { ev: "card_open", scope: "one" },
   "app/open": { ev: "app_open", scope: "one" },
+  "artifact/notes": { ev: "artifact_notes", scope: "hub" },
   "inbox/recorded": { ev: "inbox_recorded", scope: "hub" },
   "client/focused": { ev: "focused", scope: "one" },
   "hub/notice": { ev: "notice", scope: "one" },

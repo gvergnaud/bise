@@ -567,9 +567,11 @@ mod tests {
         // inbox_recorded: one record that changed; the history is read
         // with inbox/history, not carried in the state; activity (les
         // bims): what happens after a client's initialize, never replayed;
-        // guide: a diff's guide just written, read again with guide/get
+        // guide: a diff's guide just written, read again with guide/get;
+        // artifact_notes: an artifact's notes just written, read again with
+        // view/notes when its document view opens (plugin-apps A5)
         let moments: BTreeSet<&str> =
-            ["job_end", "followed_end", "route", "route_done", "page_changed", "inbox_recorded", "activity", "guide"].into_iter().collect();
+            ["job_end", "followed_end", "route", "route_done", "page_changed", "inbox_recorded", "activity", "guide", "artifact_notes"].into_iter().collect();
         let src = include_str!("rpc.rs");
         let body = src.split("fn hub_state(&mut self, id: ClientId)").nth(1).and_then(|s| s.split("\n    }\n").next()).unwrap();
         for row in rpc::NOTIFICATIONS.iter().filter(|r| r.scope == rpc::Scope::Hub) {

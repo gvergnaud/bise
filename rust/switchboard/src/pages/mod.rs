@@ -47,6 +47,9 @@ pub enum PageMsg {
     Sent { target: store::Target, agent: String, text: String, notes: Vec<store::Note> },
     /// the drafts of page `id` changed (its open notes count)
     Notes { id: String },
+    /// artifact `id`'s notes were written (store.rs `save_notes_of`, every
+    /// door): the hub tells its clients (`HubEv::ArtifactNotes`)
+    ArtifactNotes { id: String },
     /// the user answered question `block` of page `id` on the page
     /// (§4.2): `reply` goes to its card, as from the capsule
     Answer { id: String, block: String, reply: String },
@@ -82,7 +85,6 @@ pub struct Pages {
     pub office_dir: PathBuf,
     /// SSE streams of each page id ("" = the home list)
     subs: Mutex<HashMap<String, Vec<Sender<String>>>>,
-    to_hub: Mutex<Option<ToHub>>,
     /// each page's last `progress` frames
     progress: Mutex<HashMap<String, std::collections::VecDeque<String>>>,
     /// each artifact's last live words, for a new stream's first frame
@@ -177,7 +179,6 @@ impl Pages {
             kit_dir: app_root.join("kit"),
             office_dir: app_root.join("office").join("dist"),
             subs: Mutex::new(HashMap::new()),
-            to_hub: Mutex::new(None),
             progress: Mutex::new(HashMap::new()),
             art_live: Mutex::new(HashMap::new()),
             busy: Mutex::new(std::collections::BTreeSet::new()),
@@ -222,19 +223,14 @@ impl Pages {
         busy || self.done_at.lock().unwrap_or_else(|e| e.into_inner()).get(&(id.to_string(), name.to_string())).is_some_and(|v| version <= *v)
     }
 
-    /// Where the hub hears the server.
+    /// Where the hub hears the server (kept by the store, whose notes
+    /// writer tells it too: one link).
     pub fn connect_hub(&self, f: ToHub) {
-        if let Ok(mut s) = self.to_hub.lock() {
-            *s = Some(f);
-        }
+        self.store.connect_hub(f);
     }
 
     pub(crate) fn tell_hub(&self, m: PageMsg) {
-        if let Ok(s) = self.to_hub.lock() {
-            if let Some(f) = s.as_ref() {
-                f(m);
-            }
-        }
+        self.store.tell_hub(m);
     }
 
     /// One writer at a time on the store.

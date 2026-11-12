@@ -343,6 +343,15 @@ floor plus declared origins, permissions granted at the add.
   could not place; the whole list each time (replace), `[]` when all are
   placed; the host drops ids it never sent and lists the rest under the
   tab's head; no answer, no error.
+- `view/notes {doc}` (hub.sock) answers the session's artifact's notes
+  `{notes, detached}` (docs/client-protocol.md); `artifact_notes
+  {project, artifact}` (hub → clients, ids only) says a write to that
+  artifact's notes happened (any door: his send, the browser's drafts or
+  send; emitted by their one writer, `Store::save_notes_of`): the host
+  asks `view/notes` again for its open sessions on it. A new version
+  shows up through its row and a new `view/open` (`Open v5`), never
+  through this event; an open view keeps its own version's notes until
+  then (architect m_61664, m_61696).
 - Keep mine as a copy: its own hub method `view/copy {doc, text | blob}`
   → `{artifact}`, called by the host on his click with the body the hub
   answered conflict to (a view can't call it; `dev.bise/resources/copy`

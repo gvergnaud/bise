@@ -281,7 +281,8 @@ pub fn record_said(pages: &Pages, said: &[Part], now: u64) -> Vec<String> {
             let before: Vec<String> = drafts.iter().filter_map(|d| d["id"].as_str().map(str::to_string)).collect();
             let mut all = drafts;
             all.push(note);
-            let after = s.set_drafts(&t, &all, *version, now)?;
+            // merged, then sent, then written once (one ArtifactNotes)
+            let after = s.drafts_merged(&t, &all, *version, now)?;
             let mut notes = after;
             for n in notes.iter_mut().filter(|n| n.status == "draft" && !before.contains(&n.id)) {
                 n.status = "sent".into();
