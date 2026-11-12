@@ -52,6 +52,7 @@ kit/office/site.ts | 3 | step 5 | the site frame, moves to plugins/sites
 kit/office/viewer.ts | 1 | step 5 | the viewer shell, until its last kind moves
 kit/office/frame.ts | 1 | step 5 | the viewer's frame messages, until its last kind moves
 apps/desktop/src/artifacts/frameNote.test.ts | 3 | step 5 | reads kit/office/frame.js's FRAME
+rust/switchboard/src/app_openers.rs | 1 | step 5 | target_of's site row as a folder of index.html: goes when a site row carries its own entries
 rust/switchboard/src/pages/site.rs | 10 | step 5 | viewer_kind, office_kind, VIDEO_EXTS and the sites' list: each step deletes its arms
 
 # ---- thumbs: thumbnails, icons and previews from the opener (A6b, apps-thumbs)
