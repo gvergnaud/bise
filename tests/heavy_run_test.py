@@ -487,7 +487,8 @@ with tempfile.TemporaryDirectory() as home:
             fh.write("print(%r)\n" % json.dumps(p))
         fn = 'eval "$(sed -n -e "/^gate_kind()/,/^}/p" -e "/^job_kind()/,/^}/p" "$0")"; job_kind "${@:1}"'
         return subprocess.run(["bash", "-c", fn, HEAVY] + (cmd or ["bash", os.path.join(gk, "gate.sh"), "quick"]),
-                              cwd=home, env=dict(env, HOME=home), capture_output=True, text=True).stdout.strip()
+                              # no inherited CARGO_TARGET_DIR: a gate's warm one made every cargo kind warm (11.10's tip gate)
+                              cwd=home, env=dict(env, HOME=home, CARGO_TARGET_DIR=""), capture_output=True, text=True).stdout.strip()
     dsk = {"desktop": {"why": "x"}}
     check(kind_of(dsk) == "desktop" and kind_of({"flags": {"office": 1}}) == "desktop",
           "a quick gate with a desktop or office step and no cargo one: kind desktop")
@@ -498,7 +499,7 @@ with tempfile.TemporaryDirectory() as home:
     with open(os.path.join(gk, "gate_plan.py"), "w") as fh:
         fh.write("raise SystemExit(1)\n")
     check(kind_of.__call__ and subprocess.run(["bash", "-c", 'eval "$(sed -n -e "/^gate_kind()/,/^}/p" -e "/^job_kind()/,/^}/p" "$0")"; job_kind bash "$1" quick',
-                                              HEAVY, os.path.join(gk, "gate.sh")], cwd=home, env=dict(env, HOME=home),
+                                              HEAVY, os.path.join(gk, "gate.sh")], cwd=home, env=dict(env, HOME=home, CARGO_TARGET_DIR=""),
                                              capture_output=True, text=True).stdout.strip() == "cargo-cold",
           "a plan that fails: a cargo kind, as before")
     # a job that outgrows its learned reserve (1 GB here) is still stopped by
