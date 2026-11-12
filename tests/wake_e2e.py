@@ -2,7 +2,7 @@
 
 A real hub (bise sbd, scripted model), a throwaway home:
 - t1's bash command goes to the background (BEND_BG_AFTER 2 s), t1 ends
-  its turn; when the command ends (WAKE_SECS, 120 by default) bise wakes
+  its turn; when the command ends (WAKE_SECS, 20 by default) bise wakes
   t1 once, with its rc and its last lines, within ~2 s of its end;
 - `sb wake --on-exit <pid>`: the end of a process wakes t1 the same way;
 - `sb wake --on-file <path>`: the file appearing wakes t1, with its rc,
@@ -11,7 +11,13 @@ A real hub (bise sbd, scripted model), a throwaway home:
 - a watch survives a hub restart; one wake per event (the watch ends);
 - a dropped task's watches end with it (wake_end `gone` in the journal).
 
-Run: python3 -u tests/wake_e2e.py   (WAKE_SECS=20 for a quick run)
+Run: python3 -u tests/wake_e2e.py   (WAKE_SECS=120 for a long command)
+
+20 s by default (release-speed plan A step 1, architect m_62929): the command
+still goes to the background after BEND_BG_AFTER's 2 s, and the wake's
+timing is the same at 20 as at 120 (5 runs each on 11-12, at 120 load 19-51,
+at 20 load 21-48: every wake 0.1-1.1 s after the end; a run 150-171 s at 120,
+51-67 s at 20); the 100 s more were 1.7 min of every release pass. Its rules are wake_tests.rs's 13 Rust tests.
 """
 import json
 import os
@@ -24,7 +30,7 @@ import e2e  # noqa: E402
 import wait  # noqa: E402
 from e2e import EXE, check  # noqa: E402
 
-SECS = int(os.environ.get("WAKE_SECS", "120"))
+SECS = int(os.environ.get("WAKE_SECS", "20"))
 LATE = 2.5  # the wake within ~2 s of the end (a look every second, a tick every 0.5 s)
 
 
