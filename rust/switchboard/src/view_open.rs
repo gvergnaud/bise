@@ -82,11 +82,11 @@ mod tests {
 
     #[test]
     fn the_facts_say_the_version_opened_and_the_newest() {
-        let art = Resolved { target: FileTarget::Artifact { id: "q3".into(), version: 2 }, name: "q3.xlsx".into(), kind: Kind::File, size: 9, documents_of: None };
+        let art = Resolved { target: FileTarget::Artifact { id: "q3".into(), version: 2 }, name: "q3.xlsx".into(), kind: Kind::File, size: 9, documents_of: None, older: false };
         let f = facts(&art, "Excel workbook", false, &[(1, 10), (2, 20), (3, 30)]);
         assert_eq!((f.version, f.latest, f.writable, f.versions.len()), (Some(2), Some(3), false, 3));
         assert_eq!(f.type_title, "Excel workbook");
-        let file = Resolved { target: FileTarget::RootFile { path: "/r/a.csv".into() }, name: "a.csv".into(), kind: Kind::File, size: 3, documents_of: None };
+        let file = Resolved { target: FileTarget::RootFile { path: "/r/a.csv".into() }, name: "a.csv".into(), kind: Kind::File, size: 3, documents_of: None, older: false };
         let f = facts(&file, "CSV table", true, &[]);
         assert_eq!((f.version, f.latest, f.versions.len(), f.writable), (None, None, 0, true));
     }

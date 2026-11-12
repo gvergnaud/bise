@@ -31,3 +31,5 @@ serde_json = "1"
 toml = "1"
 brush-parser = "=0.4.0"
 sha2 = "0.10"
+# a document view's blob reads and writes (daemon/view_files.rs, plugin-apps A4)
+base64 = "0.22"

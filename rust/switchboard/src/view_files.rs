@@ -61,6 +61,9 @@ pub struct Resolved {
     pub size: u64,
     /// the plugin whose documents (`~/bise/Plugins/<name>/`) hold it
     pub documents_of: Option<String>,
+    /// an artifact's version older than its newest: read only
+    /// ([`Binding::older`])
+    pub older: bool,
 }
 
 /// The view a handle was minted for: its plugin (the `write` grant is
@@ -110,8 +113,17 @@ pub struct Files {
     by: HashMap<String, Binding>,
     /// a URL's token -> its handle's 32 hex
     urls: HashMap<String, String>,
+    /// root files' content hashes by (size, mtime) when hashed, so a
+    /// video's ranges and a write's decide hash it once
+    hashes: HashMap<PathBuf, (Stamp, String)>,
     seq: u64,
 }
+
+/// A file's (size, mtime): what a cached content hash stays true for.
+pub type Stamp = (u64, std::time::SystemTime);
+
+/// At most this many content hashes kept.
+pub const HASHES: usize = 256;
 
 /// Where a URL's file is on disk, for the pages server's `/h/` route
 /// (ranges and headers are its own).
@@ -166,6 +178,20 @@ impl Files {
     /// request's origin is the session's).
     pub fn by_url(&self, token: &str) -> Option<&Binding> {
         self.by.get(self.urls.get(token)?)
+    }
+
+    /// `path`'s content hash, when the one kept is for `stamp`.
+    pub fn hash_of(&self, path: &std::path::Path, stamp: Stamp) -> Option<String> {
+        self.hashes.get(path).filter(|(s, _)| *s == stamp).map(|(_, h)| h.clone())
+    }
+
+    /// Keep `path`'s content hash for `stamp`; past [`HASHES`], all go
+    /// (the next read hashes again).
+    pub fn keep_hash(&mut self, path: &std::path::Path, stamp: Stamp, hash: &str) {
+        if self.hashes.len() >= HASHES && !self.hashes.contains_key(path) {
+            self.hashes.clear();
+        }
+        self.hashes.insert(path.to_path_buf(), (stamp, hash.to_string()));
     }
 
     /// The binding of `uri` for a request of `session`; anything else is
@@ -304,6 +330,21 @@ mod tests {
         assert_eq!(f.by_url("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"), None, "a made-up token");
         f.end("s1");
         assert_eq!(f.by_url(tok), None, "gone with its session");
+    }
+
+    #[test]
+    fn a_content_hash_is_kept_for_its_stamp_only() {
+        let mut f = Files::default();
+        let t = std::time::UNIX_EPOCH;
+        let p = std::path::Path::new("/r/v.mp4");
+        f.keep_hash(p, (10, t), "h1");
+        assert_eq!(f.hash_of(p, (10, t)).as_deref(), Some("h1"));
+        assert_eq!(f.hash_of(p, (11, t)), None, "its size moved");
+        assert_eq!(f.hash_of(p, (10, t + std::time::Duration::from_millis(1))), None, "its mtime moved");
+        for i in 0..HASHES + 1 {
+            f.keep_hash(&std::path::PathBuf::from(format!("/r/{i}")), (1, t), "h");
+        }
+        assert!(f.hashes.len() <= HASHES, "bounded");
     }
 
     #[test]

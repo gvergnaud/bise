@@ -339,11 +339,6 @@ impl Shell {
                 let ev = bise_proto::hub::HubEv::ArtifactNotes { project: self.project(), artifact: id };
                 self.proto_note_all(&ev);
             }
-            // his edits in the viewer's grid: the file and the version (daemon/art.rs)
-            crate::pages::PageMsg::Save { id, req, reply } => {
-                let (status, body) = self.art_save(&pages, &id, req);
-                reply.send(status, body);
-            }
             // a view's request from the web host (pages/view_web.rs, C9):
             // the views dispatcher (daemon/views.rs), answered when it can
             crate::pages::PageMsg::View { method, params, reply } => {

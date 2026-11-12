@@ -11,7 +11,7 @@
 //! time (`-32037`, reason `no-gesture`): no Electron main sees a click in
 //! a browser, so nothing can vouch for one (risk 1).
 
-use super::artifact::save::Reply;
+use super::Reply;
 use super::server::{esc, Response};
 use super::{PageMsg, Pages};
 use bise_proto::rpc::RpcError;

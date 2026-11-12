@@ -76,6 +76,7 @@ mod usage;
 mod usage_spool;
 mod view_out;
 mod tick;
+mod view_files;
 mod view_open;
 mod views;
 mod wake_look;
@@ -454,6 +455,9 @@ struct Shell {
     /// plugin-apps (A3): the apps that open the artifacts, on their rows
     /// (daemon/apps.rs, crate::app_openers)
     apps: apps::Apps,
+    /// plugin-apps A4: the document files' one writer thread
+    /// (daemon/view_files.rs).
+    files: view_files::DocFiles,
     /// `sb land`'s line: one land at a time per target ref (dev-flow §5).
     lands: crate::land::Queue,
     /// The feature branches (dev-flow §5.1): the registry, their facts,
@@ -1816,6 +1820,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
         ),
         views: views::Views::default(),
         apps: apps::Apps::default(),
+        files: view_files::DocFiles::default(),
         lands: crate::land::Queue::default(),
         features: features::Features::load(&paths.state, &|n| paths.feature_diff(n)),
         prs: None,

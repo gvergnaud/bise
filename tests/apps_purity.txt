@@ -43,7 +43,6 @@ kit/office/swap.ts | 1 | step 4 | the viewer's live swap to a new version
 kit/office/theme.ts | 1 | step 4 | the viewer page's theme, replaced by the host context's
 kit/office/globals.d.ts | 1 | step 4 | the viewers' globals
 kit/pointer.check.ts | 2 | step 4 | lists kit/office/viewer.css and select.css among the kit's sheets
-rust/switchboard/src/daemon/art.rs | 1 | step 4 | only an xlsx saves in the viewer: save.rs moves under A4's write
 rust/switchboard/src/pages/artifact/mod.rs | 2 | step 4 | /kit/office/ bundles for /a/<id>/view
 rust/switchboard/src/pages/artifact/view.rs | 7 | step 5 | /a/<id>/view's shell, by kind (site the last)
 

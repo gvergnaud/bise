@@ -149,4 +149,10 @@ crate::words! { views:
     tui_list_keys = "⏎ open in the app   b in your browser   esc back";
     /// /views with none
     tui_list_empty = "no views in this thread yet.";
+
+    // ---- a document's file (docs/plugin-apps.md A6b)
+    /// Keep mine as a copy: the copy's name after its file's, `q3 (copy).xlsx`
+    copy_first = "(copy)";
+    /// the next free one when `(copy)` is taken, `q3 (copy 2).xlsx`
+    copy_nth(n) = "(copy {n})";
 }

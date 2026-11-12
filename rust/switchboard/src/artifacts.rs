@@ -185,6 +185,11 @@ pub struct Add {
     /// diff: `<feature>-diff`); taken by another one, or none: from its
     /// title. A next version keeps its id.
     pub id: Option<String>,
+    /// A copy staged off the hub's loop ([`Store::stage_copy`], a view's
+    /// write, docs/plugin-apps.md A4): renamed in as the version's copy
+    /// instead of copying the file on the loop; the caller already
+    /// decided it is a new save.
+    pub staged: Option<PathBuf>,
 }
 
 /// An add's folder: `Asked` (`--folder`) files it, a next version too;
@@ -721,7 +726,9 @@ impl Store {
                     _ => false,
                 }
             };
-            if same_sig || same_bytes() {
+            // a staged save was decided new by its caller: never read both
+            // files on the hub's loop to doubt it
+            if a.staged.is_none() && (same_sig || same_bytes()) {
                 self.save(&meta)?;
                 return Ok(Added { meta, new_version: false, page: false, not_artifact: false, replaced: false, ..Added::none() });
             }
@@ -750,7 +757,16 @@ impl Store {
                     let vdir = self.dir().join(&meta.id).join(format!("v{}", v));
                     // its files first, the html last: a reader of the html finds them there
                     let linked = assets.files.iter().try_for_each(|f| copy_whole(&root.join(f), &vdir.join(f)));
-                    match linked.and_then(|()| copy_whole(p, &self.dir().join(&meta.id).join(&rel))) {
+                    let to = self.dir().join(&meta.id).join(&rel);
+                    let copied = match &a.staged {
+                        // staged off the loop: a rename, the copy's bytes the file's
+                        Some(s) if assets.files.is_empty() => std::fs::create_dir_all(&vdir).and_then(|()| {
+                            crate::store_gen::bump();
+                            std::fs::rename(s, &to)
+                        }),
+                        _ => copy_whole(p, &to),
+                    };
+                    match linked.and(copied) {
                         Ok(()) => (Some(rel), None),
                         Err(e) => (None, Some(format!("copy failed: {}", e))),
                     }
@@ -778,6 +794,20 @@ impl Store {
         Ok(Added { meta, new_version: true, page: false, not_artifact: false, replaced: same, assets: assets.files.len(), unkept: assets.unkept, scripts: assets.scripts })
     }
 
+    /// A view's save of artifact `id`, staged as its next copy off the
+    /// hub's loop (docs/plugin-apps.md A4): `bytes` in a temp file inside
+    /// the artifact's folder, so [`Store::add`] with [`Add::staged`] only
+    /// renames it. The caller deletes it when the save loses its decide.
+    pub fn stage_copy(&self, id: &str, bytes: &[u8]) -> std::io::Result<PathBuf> {
+        static N: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let dir = self.dir().join(id);
+        std::fs::create_dir_all(&dir)?;
+        let p = dir.join(format!(".staged-{}-{}", std::process::id(), N.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
+        std::fs::write(&p, bytes)?;
+        std::fs::File::open(&p)?.sync_all()?;
+        Ok(p)
+    }
+
     /// The bytes of bise's copy of version `v` (None: no copy, or unreadable).
     pub fn copy_bytes(&self, meta: &Meta, v: &Version) -> Option<Vec<u8>> {
         std::fs::read(self.copy_path(meta, v)?).ok()
@@ -786,21 +816,6 @@ impl Store {
     /// Where bise's copy of version `v` is (None: no copy kept).
     pub fn copy_path(&self, meta: &Meta, v: &Version) -> Option<PathBuf> {
         Some(self.dir().join(&meta.id).join(v.copy.as_ref()?))
-    }
-
-    /// His edits of a file artifact in the viewer (pages/artifact/save.rs,
-    /// daemon/art.rs `art_save`): `bytes` over its file, through a temp file
-    /// and a rename (a reader never sees half a file). Err: its folder is
-    /// gone (an archived agent's temp folder), or the write failed.
-    pub fn write_source(&self, meta: &Meta, bytes: &[u8]) -> Result<PathBuf, String> {
-        let p = PathBuf::from(&meta.source);
-        let dir = p.parent().filter(|d| d.is_dir()).ok_or_else(|| format!("{} is gone", meta.source))?;
-        let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-        let tmp = dir.join(format!(".{name}.bise-save"));
-        std::fs::write(&tmp, bytes).map_err(|e| e.to_string())?;
-        crate::store_gen::bump();
-        std::fs::rename(&tmp, &p).map_err(|e| e.to_string())?;
-        Ok(p)
     }
 
     /// Every artifact, stored ones and pages, newest first (the time of

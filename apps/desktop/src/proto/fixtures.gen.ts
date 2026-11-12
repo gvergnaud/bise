@@ -254,6 +254,7 @@ export const hub_cmd: readonly HubCmd[] = [
   {"cmd":"view_notes","doc":"0123456789abcdef0123456789abcdef","project":"acme-1a2b3c4d"},
   {"cmd":"view_open","opener":{"plugin":"sheets","tool":"open_sheet"},"project":"acme-1a2b3c4d","target":{"id":"q3-budget","kind":"artifact","version":2}},
   {"cmd":"view_open","project":"acme-1a2b3c4d","target":{"id":"e:42","kind":"entry"}},
+  {"cmd":"view_copy","doc":"0123456789abcdef0123456789abcdef","project":"acme-1a2b3c4d","text":"a,b\n1,2\n"},
 ];
 
 /** rust/proto/fixtures/core_ev.jsonl */

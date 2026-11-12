@@ -14,7 +14,7 @@
 
 use super::super::server::Response;
 use super::super::{PageMsg, Pages};
-use super::save::Reply;
+use super::super::Reply;
 use crate::artifacts_probe as probe;
 use crate::artifacts_serve::{self as serve, Holder, Open, Serve, Why};
 use std::sync::mpsc::channel;

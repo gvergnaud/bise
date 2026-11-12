@@ -9,6 +9,7 @@
 //! root given to [`Pages::new`].
 
 pub mod checklist;
+pub mod doc_files;
 pub mod drafts;
 pub mod export;
 pub mod icon;
@@ -36,6 +37,28 @@ use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 use store::{Meta, Publish, Store};
 
+/// The hub's answer to a page thread that waits for it: (status, body).
+pub struct Reply(pub std::sync::mpsc::Sender<(u16, Value)>);
+
+impl Reply {
+    pub fn send(self, status: u16, body: Value) {
+        let _ = self.0.send((status, body));
+    }
+}
+
+impl std::fmt::Debug for Reply {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Reply")
+    }
+}
+
+/// Two messages are equal on what they carry; a reply channel is no fact.
+impl PartialEq for Reply {
+    fn eq(&self, _: &Reply) -> bool {
+        true
+    }
+}
+
 /// What the page server tells the hub.
 #[derive(Debug, PartialEq)]
 pub enum PageMsg {
@@ -56,17 +79,14 @@ pub enum PageMsg {
     Answer { id: String, block: String, reply: String },
     /// the user opened a newer version of page `id` in a browser
     Opened { id: String },
-    /// his edits of artifact `id` in the viewer's grid (artifact/save.rs):
-    /// the hub decides, writes the file and the version, and answers `reply`
-    Save { id: String, req: artifact::save::SaveReq, reply: artifact::save::Reply },
     /// the door of local site `id` (artifact/live.rs) found its port free:
     /// the hub starts its recipe again (daemon/revive.rs) and answers
     /// `reply` (200 `{pid}`, else `{why}`); the door waits for the port
-    Revive { id: String, reply: artifact::save::Reply },
+    Revive { id: String, reply: Reply },
     /// a view's request from the web host (`POST /api/view`, C9): C5's
     /// `method` and `params`; the hub answers `reply` (200 `{result}` or
     /// `{error}`) through the same dispatcher as hub.sock's
-    View { method: String, params: Value, reply: artifact::save::Reply },
+    View { method: String, params: Value, reply: Reply },
     /// the user's mirror of the public pages failed after a publish of `id`
     /// (mirror.rs): one line in main's thread
     Mirror { id: String, error: String },
@@ -117,6 +137,9 @@ pub struct Pages {
     /// the on plugins' app icons (`/icon/<plugin>`, icon.rs): set by the
     /// hub after each gather of the openers; read out of the lock first
     icons: Mutex<icon::Icons>,
+    /// `Home::bise_root()`: a root file's handle is re-checked under it on
+    /// every use (doc_files.rs)
+    pub bise_root: PathBuf,
     /// the app's dev server, who may also frame a view (view_csp.rs): a
     /// hub run with `BISE_DEV` only
     pub view_dev: Option<&'static str>,
@@ -192,6 +215,7 @@ impl Pages {
             views: Mutex::new(HashMap::new()),
             files: Mutex::default(),
             icons: Mutex::default(),
+            bise_root: bise_home::Home::from_env().bise_root(),
             view_dev: view_csp::dev_ancestor(std::env::var("BISE_DEV").ok().as_deref()),
         }
     }

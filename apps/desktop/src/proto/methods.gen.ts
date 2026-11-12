@@ -82,6 +82,7 @@ export const METHODS = {
   "view/close": { cmd: "view_close", result: null },
   "view/notes": { cmd: "view_notes", result: null },
   "view/open": { cmd: "view_open", result: null },
+  "view/copy": { cmd: "view_copy", result: null },
 } as const;
 
 export const NOTIFICATIONS = {
@@ -146,5 +147,6 @@ export const RESULTS = {
   "view/call": "ViewCallResult",
   "view/open": "ViewOpened",
   "plugin/views": "PluginViewsResult",
+  "view/copy": "ViewCopyResult",
   "app/open": "AppOpenResult",
 } as const;

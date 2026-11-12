@@ -161,6 +161,8 @@ pub const METHODS: &[MethodRow] = &[
     m("view/notes", "view_notes", None),
     // his click opens a document in its app (A4): client sockets only
     m("view/open", "view_open", None),
+    // plugin-apps A6b: Keep mine as a copy, the host's own (architect m_60222)
+    m("view/copy", "view_copy", None),
 ];
 
 /// The protocol's own methods (no [`HubCmd`]).
@@ -204,6 +206,8 @@ pub const OWN_RESULTS: &[(&str, &str)] = &[
     ("view/call", "ViewCallResult"),
     ("view/open", "ViewOpened"),
     ("plugin/views", "PluginViewsResult"),
+    // plugin-apps A6b
+    ("view/copy", "ViewCopyResult"),
     // MCP Apps C9: how many desktop connections got it
     ("app/open", "AppOpenResult"),
 ];

@@ -110,3 +110,4 @@
 {"cmd":"view_notes","project":"acme-1a2b3c4d","doc":"0123456789abcdef0123456789abcdef"}
 {"cmd":"view_open","project":"acme-1a2b3c4d","target":{"kind":"artifact","id":"q3-budget","version":2},"opener":{"plugin":"sheets","tool":"open_sheet"}}
 {"cmd":"view_open","project":"acme-1a2b3c4d","target":{"kind":"entry","id":"e:42"}}
+{"cmd":"view_copy","project":"acme-1a2b3c4d","doc":"0123456789abcdef0123456789abcdef","text":"a,b\n1,2\n"}

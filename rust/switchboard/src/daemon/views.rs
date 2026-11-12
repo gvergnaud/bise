@@ -146,6 +146,7 @@ fn method_of(cmd: HubCmd) -> Option<(&'static str, Value)> {
         HubCmd::ViewClose { doc, .. } => ("view/close", json!({"doc": doc})),
         HubCmd::ViewNotes { doc, .. } => ("view/notes", json!({"doc": doc})),
         HubCmd::ViewOpen { project, target, opener } => ("view/open", json!({"project": project, "target": target, "opener": opener})),
+        HubCmd::ViewCopy { doc, text, blob, .. } => ("view/copy", json!({"doc": doc, "text": text, "blob": blob})),
         _ => return None,
     })
 }
@@ -275,6 +276,10 @@ impl Shell {
             "plugin/views" => return self.plugin_views(params, done),
             "view/close" => return self.view_close(params, done),
             "view/open" => return self.view_open(params, done),
+            "view/copy" => {
+                let doc = params.get("doc").and_then(Value::as_str).unwrap_or("").to_string();
+                return self.view_copy(doc, params, done);
+            }
             _ => {}
         }
         let p = match view_call::Key::of(&params) {
@@ -575,8 +580,11 @@ impl Shell {
         // the session's opener, copied out of the pages' table (its end is
         // the pages server's, with the session)
         let Some(d) = self.pg.pages.as_ref().and_then(|p| p.doc_opener(&doc)) else { return done(Err(ViewError::Expired.rpc(&what))) };
-        if method != "tools/call" {
-            return done(Err(ViewError::NotSupported.rpc(&what)));
+        // its file: the hub's own, never its server's (daemon/view_files.rs)
+        match super::view_files::doc_route(&method) {
+            super::view_files::DocRoute::File => return self.doc_file(doc, &method, inner, done),
+            super::view_files::DocRoute::Unknown => return done(Err(ViewError::NotSupported.rpc(&what))),
+            super::view_files::DocRoute::Tool => {}
         }
         let key = ViewKey::new("", &doc);
         if !self.views.limits.call(&key, now_ms()) {
@@ -677,6 +685,21 @@ impl Shell {
 mod tests {
     use super::*;
     use crate::view_bridge::tests::{fake_bridge, tmp};
+
+    /// A document view's methods: its file's three go to the hub, a tool
+    /// call to its opener; the host's own copy (A6b) and anything else is
+    /// unknown (architect m_60137).
+    #[test]
+    fn a_doc_views_methods_route_and_the_hosts_copy_is_unknown() {
+        use super::super::view_files::{doc_route, DocRoute};
+        for m in ["resources/read", "resources/url", "ai.mistral.vibe/resources/write"] {
+            assert_eq!(doc_route(m), DocRoute::File, "{m}");
+        }
+        assert_eq!(doc_route("tools/call"), DocRoute::Tool);
+        for m in ["dev.bise/resources/copy", "view/copy", "resources/write", "resources/list", ""] {
+            assert_eq!(doc_route(m), DocRoute::Unknown, "{m}");
+        }
+    }
 
     /// C5 on fake-app: an app-only tool runs, a model-visible one asks,
     /// a model-only one or another server's is refused, the plugin off

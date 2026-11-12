@@ -15,6 +15,18 @@
     "one": null,
     "text": "change it"
   },
+  "views.copy_first": {
+    "args": [],
+    "one": null,
+    "text": "(copy)"
+  },
+  "views.copy_nth": {
+    "args": [
+      "n"
+    ],
+    "one": null,
+    "text": "(copy {n})"
+  },
   "views.doc_app_off": {
     "args": [
       "app"

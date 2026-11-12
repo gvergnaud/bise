@@ -620,22 +620,6 @@ fn his_saves_in_one_sitting_make_one_version() {
     assert_eq!(his(b"PK s1 after the agent", "s1", 4, 70).meta.current().unwrap().v, 6, "the newest by the agent: v+1 even with his sitting");
 }
 
-/// write_source: over the file through a temp file; a gone folder says so.
-#[test]
-fn his_save_writes_the_file_and_refuses_a_gone_folder() {
-    let root = tmp("write-source");
-    let (state, work) = (root.join("state"), root.join("work"));
-    std::fs::create_dir_all(&work).unwrap();
-    std::fs::write(work.join("q3.xlsx"), b"PK one").unwrap();
-    let s = Store::new(&state);
-    let m = add(&s, &work, "q3.xlsx", None, 10).unwrap().meta;
-    s.write_source(&m, b"PK two").unwrap();
-    assert_eq!(std::fs::read(work.join("q3.xlsx")).unwrap(), b"PK two");
-    assert_eq!(std::fs::read_dir(&work).unwrap().count(), 1, "no temp file left");
-    std::fs::remove_dir_all(&work).unwrap();
-    assert!(s.write_source(&m, b"PK three").unwrap_err().contains("is gone"));
-}
-
 fn filed(store: &Store, cwd: &Path, target: &str, folder: Option<Filed>, now: u64) -> Added {
     let a = Add { target: target.into(), agent: "s1".into(), by: "s1".into(), cwd: cwd.to_string_lossy().to_string(), folder, ..Default::default() };
     store.add(&a, now).unwrap()
