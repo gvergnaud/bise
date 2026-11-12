@@ -162,6 +162,21 @@ pub fn view_host(host: &str, port: u16) -> Option<&str> {
     view_rules::view_host(host).filter(|(_, p)| *p == port).map(|(h, _)| h)
 }
 
+/// Where a document's file is served by its url (`resources/url`, A4):
+/// `/h/<token>` on its session's view origin.
+pub const DOC_FILE_PREFIX: &str = "/h/";
+
+/// A document file's own CSP: it is data the view fetches or plays,
+/// never a page (opened alone, nothing in it runs).
+pub const DOC_FILE_CSP: &str = "default-src 'none'; sandbox";
+
+/// The token of a `/h/<token>` path (`pages::new_token`'s 32 lowercase
+/// hex), else None.
+pub fn doc_file_token(path: &str) -> Option<&str> {
+    let t = path.strip_prefix(DOC_FILE_PREFIX)?;
+    (t.len() == 32 && t.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))).then_some(t)
+}
+
 
 impl Pages {
     /// `view/resource` registers (or updates) the sandbox of view origin
@@ -273,7 +288,7 @@ pub fn route(pages: &Pages, req: &Request, hash: &str) -> Response {
     // the proxy) can't load the view's origin with its own html
     let Some(session) = req.param("s") else { return Response::missing("no such view") };
     let Some(s) = pages.sandbox_of(hash, Some(session)) else { return Response::missing("no such view") };
-    let csp = super::view_csp::csp(&s.csp, pages.port, pages.view_dev, s.folder.is_some());
+    let csp = super::view_csp::csp(&s.csp, pages.port, pages.view_dev, s.folder.is_some(), pages.doc_of(session).is_some());
     // the base is the hub's, written now: never from the view's html
     let base = s.folder.as_ref().map(|_| format!("{}{}{session}/", view_rules::origin_of(hash, pages.port), view_folder::PREFIX)).unwrap_or_default();
     let html = proxy_page(&csp, &view_rules::allow(&s.perms), &base);
@@ -288,7 +303,7 @@ pub fn route(pages: &Pages, req: &Request, hash: &str) -> Response {
 fn own_file(pages: &Pages, req: &Request, hash: &str, session: &str, rel: &[&str]) -> Response {
     let Some(s) = pages.sandbox_of(hash, Some(session)) else { return Response::missing("no such file") };
     let Some(folder) = s.folder.as_ref() else { return Response::missing("no such file") };
-    let csp = super::view_csp::csp(&s.csp, pages.port, pages.view_dev, true);
+    let csp = super::view_csp::csp(&s.csp, pages.port, pages.view_dev, true, pages.doc_of(session).is_some());
     let inm = req.header("if-none-match");
     match rel {
         [view_folder::KIT, "view", file] => view_folder::serve(&pages.view_kit(), &[file], inm, csp),

@@ -26,8 +26,11 @@ const MAX_PER_LIST: usize = 32;
 /// `own_files`: the view loads its own folder from its origin
 /// (view_folder.rs, docs/plugin-apps.md A5): `'self'` joins script, style,
 /// img, font and base-uri (the proxy's `<base>` names `/f/<session>/`);
-/// without it the floor is as it was, `base-uri` included.
-pub fn csp(declared: &Value, pages_port: u16, dev: Option<&str>, own_files: bool) -> String {
+/// without it the floor is as it was, `base-uri` included. `doc`: a
+/// document view's session (`view/open`, A4): its file's url
+/// (`/h/<token>`, `resources/url`) is on its own origin, so `'self'`
+/// joins img, media and connect, for that view only.
+pub fn csp(declared: &Value, pages_port: u16, dev: Option<&str>, own_files: bool, doc: bool) -> String {
     let list = |key: &str| origins(declared.get(key), pages_port);
     let connect = list("connectDomains");
     let resource = list("resourceDomains");
@@ -44,12 +47,15 @@ pub fn csp(declared: &Value, pages_port: u16, dev: Option<&str>, own_files: bool
     let or_none = |extra: &[String]| if extra.is_empty() { "'none'".to_string() } else { extra.join(" ") };
     let own = |floor: &str| if own_files { format!("{floor} 'self'") } else { floor.to_string() };
     let base = if own_files { [vec!["'self'".to_string()], base].concat() } else { base };
+    let docs = |floor: &str| if doc { format!("{floor} 'self'") } else { floor.to_string() };
+    let img = if own_files || doc { format!("{} 'self'", "data: blob:") } else { "data: blob:".to_string() };
+    let connect = if doc { [vec!["'self'".to_string()], connect].concat() } else { connect };
     [
         "default-src 'none'".to_string(),
         format!("script-src {}", with(&own("'unsafe-inline'"), &resource)),
         format!("style-src {}", with(&own("'unsafe-inline'"), &resource)),
-        format!("img-src {}", with(&own("data: blob:"), &resource)),
-        format!("media-src {}", with("data: blob:", &resource)),
+        format!("img-src {}", with(&img, &resource)),
+        format!("media-src {}", with(&docs("data: blob:"), &resource)),
         format!("font-src {}", with(&own("data:"), &resource)),
         format!("connect-src {}", or_none(&connect)),
         // blob: the view's own frame (views.rs): a blob url carries the
@@ -154,7 +160,7 @@ mod tests {
     #[test]
     fn nothing_declared_is_the_floor() {
         for declared in [json!(null), json!({}), json!("x"), json!({"connectDomains": "https://a.com"})] {
-            let c = csp(&declared, PORT, None, false);
+            let c = csp(&declared, PORT, None, false, false);
             assert_eq!(
                 c,
                 "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; media-src data: blob:; font-src data:; connect-src 'none'; frame-src blob:; base-uri 'none'; form-action 'none'; frame-ancestors 'self' file: http://127.0.0.1:47123 http://localhost:47123",
@@ -175,6 +181,7 @@ mod tests {
             }),
             PORT,
             None,
+            false,
             false,
         );
         assert_eq!(directive(&c, "connect-src"), "connect-src https://api.open-meteo.com wss://live.example.com");
@@ -228,9 +235,9 @@ mod tests {
             assert_eq!(origin(b, PORT), None, "{b:?} passed");
         }
         let all = json!({"connectDomains": bad, "resourceDomains": bad, "frameDomains": bad, "baseUriDomains": bad, "domain": "https://evil.com"});
-        assert_eq!(csp(&all, PORT, None, false), csp(&json!({}), PORT, None, false), "bad entries leave the floor as it is");
+        assert_eq!(csp(&all, PORT, None, false, false), csp(&json!({}), PORT, None, false, false), "bad entries leave the floor as it is");
         // non-strings in a list: skipped, the rest kept
-        let c = csp(&json!({"connectDomains": [1, null, {"a": 1}, "https://ok.example"]}), PORT, None, false);
+        let c = csp(&json!({"connectDomains": [1, null, {"a": 1}, "https://ok.example"]}), PORT, None, false, false);
         assert_eq!(directive(&c, "connect-src"), "connect-src https://ok.example");
     }
 
@@ -238,7 +245,7 @@ mod tests {
     /// proxy itself; never another local server; a dev server in a dev build only.
     #[test]
     fn only_the_app_and_this_web_host_frame_a_view() {
-        let fa = |dev| directive(&csp(&json!({}), PORT, dev, false), "frame-ancestors").to_string();
+        let fa = |dev| directive(&csp(&json!({}), PORT, dev, false, false), "frame-ancestors").to_string();
         assert_eq!(fa(None), "frame-ancestors 'self' file: http://127.0.0.1:47123 http://localhost:47123");
         assert!(!fa(None).contains(":*") && !fa(None).contains("5173"));
         assert_eq!(fa(Some(DEV_ORIGIN)), format!("frame-ancestors 'self' file: http://127.0.0.1:47123 http://localhost:47123 {DEV_ORIGIN}"));
@@ -254,20 +261,38 @@ mod tests {
     #[test]
     fn own_files_add_self_where_the_view_loads_them_only() {
         let declared = json!({"resourceDomains": ["https://cdn.example"], "baseUriDomains": ["https://b.example"]});
-        let off = csp(&declared, PORT, None, false);
-        let on = csp(&declared, PORT, None, true);
+        let off = csp(&declared, PORT, None, false, false);
+        let on = csp(&declared, PORT, None, true, false);
         assert!(!off.contains("'self'") || directive(&off, "frame-ancestors").contains("'self'"));
         assert_eq!(off.matches("'self'").count(), 1, "only frame-ancestors' without a folder: {off}");
-        assert_eq!(directive(&csp(&json!({}), PORT, None, false), "base-uri"), "base-uri 'none'");
+        assert_eq!(directive(&csp(&json!({}), PORT, None, false, false), "base-uri"), "base-uri 'none'");
         assert_eq!(directive(&on, "script-src"), "script-src 'unsafe-inline' 'self' https://cdn.example");
         assert_eq!(directive(&on, "style-src"), "style-src 'unsafe-inline' 'self' https://cdn.example");
         assert_eq!(directive(&on, "img-src"), "img-src data: blob: 'self' https://cdn.example");
         assert_eq!(directive(&on, "font-src"), "font-src data: 'self' https://cdn.example");
         assert_eq!(directive(&on, "base-uri"), "base-uri 'self' https://b.example");
-        assert_eq!(directive(&csp(&json!({}), PORT, None, true), "base-uri"), "base-uri 'self'");
+        assert_eq!(directive(&csp(&json!({}), PORT, None, true, false), "base-uri"), "base-uri 'self'");
         for d in ["default-src", "media-src", "connect-src", "frame-src", "form-action", "frame-ancestors"] {
             assert_eq!(directive(&on, d), directive(&off, d), "{d} moves with a folder");
         }
+    }
+
+    /// A document view (A4/A5, architect m_60434): its file's url is on its
+    /// own origin, so `'self'` joins img, media and connect, and nothing
+    /// else moves; a view that is no document's keeps the floor.
+    #[test]
+    fn a_document_view_reads_its_own_origin_for_its_file_only() {
+        let declared = json!({"connectDomains": ["https://api.example"], "resourceDomains": ["https://cdn.example"]});
+        let off = csp(&declared, PORT, None, false, false);
+        let on = csp(&declared, PORT, None, false, true);
+        assert_eq!(directive(&on, "img-src"), "img-src data: blob: 'self' https://cdn.example");
+        assert_eq!(directive(&on, "media-src"), "media-src data: blob: 'self' https://cdn.example");
+        assert_eq!(directive(&on, "connect-src"), "connect-src 'self' https://api.example");
+        assert_eq!(directive(&csp(&json!({}), PORT, None, false, true), "connect-src"), "connect-src 'self'");
+        for d in ["default-src", "script-src", "style-src", "font-src", "frame-src", "base-uri", "form-action", "frame-ancestors"] {
+            assert_eq!(directive(&on, d), directive(&off, d), "{d} moves for a document");
+        }
+        assert_eq!(directive(&csp(&declared, PORT, None, true, true), "img-src"), "img-src data: blob: 'self' https://cdn.example", "one 'self' with a folder too");
     }
 
     #[test]
@@ -275,10 +300,10 @@ mod tests {
         assert_eq!(origin(" HTTPS://API.Example.com/ ", PORT).as_deref(), Some("https://api.example.com"));
         assert_eq!(origin("https://a.com:8443", PORT).as_deref(), Some("https://a.com:8443"));
         assert_eq!(origin("http://localhost:3000", PORT).as_deref(), Some("http://localhost:3000"), "a local API on its own port");
-        let c = csp(&json!({"connectDomains": ["https://a.com", "https://A.com/", "https://a.com"]}), PORT, None, false);
+        let c = csp(&json!({"connectDomains": ["https://a.com", "https://A.com/", "https://a.com"]}), PORT, None, false, false);
         assert_eq!(directive(&c, "connect-src"), "connect-src https://a.com");
         let many: Vec<String> = (0..100).map(|i| format!("https://h{i}.example")).collect();
-        let c = csp(&json!({ "connectDomains": many }), PORT, None, false);
+        let c = csp(&json!({ "connectDomains": many }), PORT, None, false, false);
         assert_eq!(directive(&c, "connect-src").split(' ').count(), 1 + MAX_PER_LIST);
     }
 }

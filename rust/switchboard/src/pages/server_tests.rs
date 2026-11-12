@@ -709,7 +709,7 @@ fn a_view_host_serves_its_proxy_and_nothing_else() {
     let session = p.view_sandbox(&hash, super::super::views::ViewSandbox { csp: declared.clone(), perms: vec!["microphone".into()], folder: None });
     let r = at(&vh, "GET", &format!("/mcp-app?s={session}"));
     assert_eq!(r.status, 200);
-    assert_eq!(r.csp, super::super::view_csp::csp(&declared, p.port, p.view_dev, false), "the hub's policy, never the request's");
+    assert_eq!(r.csp, super::super::view_csp::csp(&declared, p.port, p.view_dev, false, false), "the hub's policy, never the request's");
     assert!(r.csp.contains("connect-src https://api.open-meteo.com;"), "{}", r.csp);
     let t = text(&r);
     assert!(t.contains("sandbox-proxy-ready") && t.contains(r#"const ALLOW = "microphone";"#), "{t}");
@@ -954,5 +954,73 @@ fn a_sessions_end_ends_its_handles() {
         p.view_sandbox(&h, ViewSandbox::default());
     }
     assert_eq!(p.doc_opener(&first), None, "pushed out by its origin's cap: its handles end");
+    let _ = std::fs::remove_dir_all(d);
+}
+
+/// A document view's file by its url (`resources/url` → `/h/<token>`,
+/// A4/A5, architect m_60434): served on its session's origin only, GET
+/// and HEAD with byte ranges, under a CSP where nothing runs; another
+/// origin, an unknown token or another method gets nothing. A reader that
+/// stalls holds no lock: the handle table answers meanwhile, and another
+/// request of the same file is served.
+#[test]
+fn a_documents_file_is_served_by_its_url_on_its_origin_only() {
+    use super::super::views::{ViewSandbox, DOC_FILE_CSP};
+    use crate::view_files::{Binding, FileTarget, Opener};
+    use std::io::{Read, Write};
+    let (mut p, d) = pages();
+    let root = d.join("root");
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(root.join("notes.txt"), "0123456789").unwrap();
+    // big enough to fill the socket's buffers when no one reads it
+    std::fs::write(root.join("big.txt"), vec![b'x'; 16 << 20]).unwrap();
+    p.bise_root = root.clone();
+    let p = std::sync::Arc::new(p);
+    let (doc, hash) = (crate::pages::new_token(), "0123456789abcdef");
+    let opener = Opener { plugin: "fake".into(), server: "s".into(), uri: "ui://fake/v".into() };
+    let bind = |name: &str| p.mint_handle(Binding::new(&doc, opener.clone(), FileTarget::RootFile { path: root.join(name) }, false));
+    let (small, big) = (bind("notes.txt"), bind("big.txt"));
+    p.view_sandbox_as(hash, &doc, ViewSandbox::default());
+    let path_of = |handle: &str| {
+        let url = p.doc_url(&doc, handle).unwrap();
+        assert!(url.starts_with(&format!("http://v-{hash}.localhost:{}/h/", p.port)), "{url}");
+        url.split_once(".localhost").unwrap().1.split_once('/').map(|(_, rest)| format!("/{rest}")).unwrap()
+    };
+    let (small_path, big_path) = (path_of(&small), path_of(&big));
+    let l = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let port = l.local_addr().unwrap().port();
+    serve(l, p.clone());
+    let open = |method: &str, path: &str, host: &str, extra: &str| {
+        let mut s = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+        s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        s.write_all(format!("{method} {path} HTTP/1.1\r\nHost: {host}\r\n{extra}Connection: close\r\n\r\n").as_bytes()).unwrap();
+        s
+    };
+    let ask = |method: &str, path: &str, host: &str, extra: &str| {
+        let mut out = Vec::new();
+        let _ = open(method, path, host, extra).read_to_end(&mut out);
+        String::from_utf8_lossy(&out).to_string()
+    };
+    let own = format!("v-{hash}.localhost:{}", p.port);
+    let r = ask("GET", &small_path, &own, "");
+    assert!(r.starts_with("HTTP/1.1 200") && r.ends_with("\r\n\r\n0123456789"), "{r}");
+    assert!(r.contains("Content-Type: text/plain") && r.contains(&format!("Content-Security-Policy: {DOC_FILE_CSP}\r\n")), "{r}");
+    let r = ask("GET", &small_path, &own, "Range: bytes=2-5\r\n");
+    assert!(r.starts_with("HTTP/1.1 206") && r.contains("Content-Range: bytes 2-5/10") && r.ends_with("\r\n\r\n2345"), "{r}");
+    let r = ask("HEAD", &small_path, &own, "");
+    assert!(r.starts_with("HTTP/1.1 200") && r.contains("Content-Length: 10") && r.ends_with("\r\n\r\n"), "a HEAD: its head alone: {r}");
+    let other = format!("v-fedcba9876543210.localhost:{}", p.port);
+    assert!(ask("GET", &small_path, &other, "").starts_with("HTTP/1.1 404"), "another view's origin");
+    assert!(ask("GET", &small_path, &format!("127.0.0.1:{}", p.port), "").starts_with("HTTP/1.1 404"), "the main host: no /h/ there");
+    assert!(ask("GET", &format!("/h/{}", "0".repeat(32)), &own, "").starts_with("HTTP/1.1 404"), "an unknown token");
+    assert!(ask("POST", &small_path, &own, "Content-Length: 0\r\n").starts_with("HTTP/1.1 405"));
+    // a reader that never reads: its sender blocks on the socket, with no lock held
+    let stalled = open("GET", &big_path, &own, "");
+    std::thread::sleep(Duration::from_millis(300));
+    let t = std::time::Instant::now();
+    assert!(p.doc_binding(&doc, &big).is_ok() && p.file_of_url(big_path.trim_start_matches("/h/"), hash).is_some());
+    assert!(t.elapsed() < Duration::from_secs(1), "the table answered while a read stalls: {:?}", t.elapsed());
+    assert!(ask("GET", &small_path, &own, "").starts_with("HTTP/1.1 200"), "another request served meanwhile");
+    drop(stalled);
     let _ = std::fs::remove_dir_all(d);
 }

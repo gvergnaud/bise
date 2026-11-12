@@ -210,6 +210,24 @@ fn handle(stream: TcpStream, pages: &Pages) {
             return;
         }
     }
+    // a document's file by its url (resources/url, A4): only on its
+    // session's view origin, GET or HEAD, byte ranges, never logged
+    let view = req.header("host").and_then(|h| super::views::view_host(h, pages.port));
+    if let Some((hash, token)) = view.zip(super::views::doc_file_token(&req.path)) {
+        if !matches!(req.method.as_str(), "GET" | "HEAD") {
+            let _ = w.write_all(&Response::err(405, "GET or HEAD only").bytes());
+            return;
+        }
+        // the table is read and let go before the file is (doc_files.rs)
+        if let Some(f) = pages.file_of_url(token, hash) {
+            let _ = w.set_write_timeout(Some(Duration::from_secs(30)));
+            if super::media::send(&mut w, &f.path, &f.mime, super::views::DOC_FILE_CSP, req.header("range"), req.method == "HEAD") {
+                return;
+            }
+        }
+        let _ = w.write_all(&Response::missing("no such file").bytes());
+        return;
+    }
     let resp = route(pages, &req);
     let _ = w.write_all(&resp.bytes());
 }
