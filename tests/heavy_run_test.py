@@ -60,7 +60,7 @@ with tempfile.TemporaryDirectory() as home:
     # on AC as far as heavy-run knows (HEAVY_ON_BATTERY=0): the --alone cases run on battery too
     env = dict(os.environ, HOME=home, HEAVY_SLOTS="1", HEAVY_FREE_KB_FILE=os.path.join(home, "plenty_kb"), HEAVY_ON_BATTERY="0",
                # the machine's real load never holds a job here (the load cases fake it)
-               HEAVY_LOAD_MAX="9999", HEAVY_START_GAP="0", HEAVY_RECLAIM_GAP="0", HEAVY_RECLAIM="true")
+               HEAVY_LOAD_CEILING="9999", HEAVY_START_GAP="0", HEAVY_RECLAIM_GAP="0", HEAVY_RECLAIM="true")
     env.pop("SB_AGENT", None)
     env.pop("HEAVY_SLOT", None)
     env.pop("HEAVY_SUBMIT", None)
@@ -586,53 +586,70 @@ with tempfile.TemporaryDirectory() as home:
         os.remove(dtsv)
     # plenty again for the cases below (their waits are the load's, not the disk's)
     open(freef, "w").write(str(40 * GB))
-    # the load (mac-budget): with a heavy job running, a new one waits while
-    # the load is over HEAVY_LOAD_MAX; a lone job never waits for it
+    # the admission (main m_63076 m_63082, architect m_63083 m_63085 m_63105): the facts are a
+    # file here (HEAVY_ADMIT_FILE: quiet windows, our jobs' CPU, the lanes), the load another
     loadf = os.path.join(home, "load")
-    open(loadf, "w").write("50")
-    envl = dict(envr, HEAVY_LOAD_FILE=loadf, HEAVY_LOAD_MAX="24")
-    ran3 = os.path.join(home, "ran3")
-    lone = subprocess.run([HEAVY, "sh", "-c", 'touch "$0"', ran3], env=envl, capture_output=True, timeout=30)
-    check(lone.returncode == 0 and os.path.exists(ran3), "load 50, no heavy job: a lone job runs")
-    go_l = os.path.join(home, "go_load")
-    hold = subprocess.Popen([HEAVY, "sh", "-c", 'while [ ! -e "$0" ]; do sleep 0.1; done', go_l], env=envl,
-                            stderr=subprocess.DEVNULL)
-    # its start line, not a probe of the lock (a probe can meet a waiter's own try)
-    wait_for(lambda: any(l.split("\t")[2] == "-" and "go_load" in l for l in lines()), what="slot 1 held")
-    ran4 = os.path.join(home, "ran4")
-    e4 = open(os.path.join(home, "err4"), "w+")
-    w4 = subprocess.Popen([HEAVY, "sh", "-c", 'touch "$0"', ran4], env=envl, stderr=e4)
-    check(stays(lambda: not os.path.exists(ran4), 3, "it waits"), "load 50, a heavy job runs: the next one waits %r" % lines()[-3:])
-    e4.seek(0)
-    check("the machine is busy (load 50, the limit 24" in e4.read(), "the wait says the load")
-    # the load gate keeps the queue's order (rank, then submit time) and
-    # never holds the --prio lane (review-gates m_36096)
-    lorder = os.path.join(home, "load_order")
-    rest_a = subprocess.Popen([HEAVY, "sh", "-c", 'echo rest-a >> "$0"', lorder], env=dict(envl, HEAVY_SUBMIT="5000"),
-                              stderr=subprocess.DEVNULL)
-    rest_b = subprocess.Popen([HEAVY, "sh", "-c", 'echo rest-b >> "$0"', lorder], env=dict(envl, HEAVY_SUBMIT="5001"),
-                              stderr=subprocess.DEVNULL)
-    land2 = subprocess.Popen([HEAVY, "--land", "sh", "-c", 'echo land >> "$0"', lorder], env=dict(envl, HEAVY_SUBMIT="5002"),
-                             stderr=subprocess.DEVNULL)
+    admitf = os.path.join(home, "admit")
+    envl = dict(envr, HEAVY_LOAD_FILE=loadf, HEAVY_LOAD_CEILING="24", HEAVY_JOBS_CPU="900", HEAVY_ADMIT_FILE=admitf)
+
+    def admits(load, facts, what, extra=None, args=()):
+        """Whether a job starts within 3 s with that load and those facts; its stderr."""
+        open(loadf, "w").write(str(load))
+        open(admitf, "w").write(facts)
+        ran = os.path.join(home, "ran-%d" % len(os.listdir(home)))
+        e = open(os.path.join(home, "err-%d" % len(os.listdir(home))), "w+")
+        p = subprocess.Popen([HEAVY, *args, "sh", "-c", 'touch "$0"', ran], env=dict(envl, **(extra or {})), stderr=e)
+        went = wait_for(lambda: os.path.exists(ran), 3, what)
+        if not went:
+            p.kill()
+            p.wait()
+        else:
+            job_ends(p, 30)
+        e.seek(0)
+        return went, e.read()
+
+    # the bar is on our jobs' CPU, not the Mac's load: load 20 (under the ceiling), ours low: goes
+    ok, _ = admits(20, "quiet=- cpu=300 agents=1 low=0", "ours 300%")
+    check(ok, "load 20, our jobs at 300 pct: a second agent job starts")
+    ok, err = admits(10, "quiet=- cpu=1000 agents=1 low=0", "ours 1000%")
+    check(not ok and "our running jobs use 1000% CPU, the bar 900%" in err, "our jobs at 1000 pct: the next one waits " + repr(err[-200:]))
+    # a lane's floor: none of its jobs runs, it goes whatever our CPU
+    ok, _ = admits(10, "quiet=- cpu=2000 agents=0 low=0", "floor")
+    check(ok, "the agents' lane runs nothing: its first job goes past the bar")
+    ok, _ = admits(10, "quiet=- cpu=2000 agents=1 low=0", "low floor", args=("--low",))
+    check(ok, "the low lane runs nothing, 1 agent job: its first job goes")
+    ok, _ = admits(10, "quiet=- cpu=2000 agents=2 low=0", "low floor full", args=("--low",))
+    check(not ok, "the low lane runs nothing but 2 agent jobs run: it waits")
+    # over the ceiling: a floor goes when the load isn't ours (ours under half the bar), noted in
+    # heavy.log; a runaway of ours holds it; a job past its floor waits
+    ok, err = admits(50, "quiet=- cpu=300 agents=0 low=0", "over ceiling, not ours")
+    check(ok and "admitted over ceiling, load 50, ours 300%" in err, "load 50, ours 300 pct: the floor goes " + repr(err[-200:]))
+    check(any("admitted over ceiling, load 50, ours 300%" in l for l in lines()), "heavy.log notes it %r" % lines()[-2:])
+    ok, err = admits(50, "quiet=- cpu=600 agents=0 low=0", "over ceiling, ours")
+    check(not ok and "the ceiling 24; ours 600%" in err, "load 50, ours 600 pct (over half the bar): the floor waits " + repr(err[-200:]))
+    ok, _ = admits(50, "quiet=- cpu=100 agents=1 low=0", "over ceiling, past floor")
+    check(not ok, "load 50 with an agent job running: the next one waits")
+    # the quiet window: nothing new starts, floors included; the release lane's job does
+    ok, err = admits(5, "quiet=tip-e2e cpu=0 agents=0 low=0", "quiet")
+    check(not ok and "its quiet window" in err, "the release's quiet window and an empty agent lane: it waits %r" % err[-200:])
     r = subprocess.run([HEAVY, "--prio", "sh", "-c", 'echo "$HEAVY_SLOT"'], env=dict(envl, HEAVY_NO_LANE=""), capture_output=True,
                        text=True, timeout=30)
-    check(r.returncode == 0 and r.stdout.startswith("heavy5.lock"), "load 50: a --prio job still runs in the lane: %r" % r.stdout)
-    check(wait_for(lambda: len(os.listdir(q)) >= 4), "the held jobs wait with their tickets")
-    open(loadf, "w").write("10")
-    check(job_ends(w4, 30) == 0 and os.path.exists(ran4), "load 10: it runs")
-    for j in (rest_a, rest_b, land2):
-        job_ends(j, 60)
-    # the load never starves a job: past HEAVY_LOAD_WAIT_MAX it goes
-    open(loadf, "w").write("50")
-    ran6 = os.path.join(home, "ran6")
-    r = subprocess.run([HEAVY, "sh", "-c", 'touch "$0"', ran6], env=dict(envl, HEAVY_LOAD_WAIT_MAX="3"), capture_output=True,
-                       text=True, timeout=60)
-    check(r.returncode == 0 and os.path.exists(ran6) and "3 s at most" in r.stderr,
-          "load 50 for good: the job goes after HEAVY_LOAD_WAIT_MAX: %r" % r.stderr[-300:])
-    got = open(lorder).read().split() if os.path.exists(lorder) else []
-    check(got == ["land", "rest-a", "rest-b"], "after the load wait, by rank then submit time: %r" % got)
-    open(go_l, "w").close()
-    job_ends(hold, 30)
+    check(r.returncode == 0 and r.stdout.startswith("heavy5.lock"), "quiet: the release lane's job still runs: %r" % r.stdout)
+    # the wrapper: its flock is the window while its command runs; a killed one frees it
+    sys.path.insert(0, os.path.join(HERE, "..", "scripts"))
+    import disk_reclaim as dq
+    qdir = os.path.join(run, "quiet")
+    ready = os.path.join(home, "quiet-ready")
+    w = subprocess.Popen([HEAVY, "quiet", "tip-e2e", "--", "sh", "-c", 'touch "$0"; sleep 30', ready], env=envl,
+                         start_new_session=True)
+    check(wait_for(lambda: os.path.exists(ready), 10, "the window's command"), "heavy-run quiet runs its command")
+    check(dq.quiet_held(qdir) == ["tip-e2e"], "its window is open while it runs: %r" % dq.quiet_held(qdir))
+    os.killpg(w.pid, 9)
+    w.wait()
+    check(wait_for(lambda: dq.quiet_held(qdir) == [], 10, "the lock freed"), "a killed wrapper's window is gone")
+    r = subprocess.run([HEAVY, "quiet", "as-he-does", "--", "true"], env=envl, capture_output=True, text=True, timeout=30)
+    q = [l.split("\t") for l in lines() if l.startswith("quiet\t")]
+    check(r.returncode == 0 and q and q[-1][1] == "as-he-does", "one heavy.log line a window: %r" % q[-1:])
     # the time limit: a job over HEAVY_MAX_MIN is stopped, rc=124
     r = subprocess.run([HEAVY, "sh", "-c", "sleep 60 & wait"], env=dict(envr, HEAVY_MAX_MIN="1", HEAVY_MAX_SEC="2"),
                        capture_output=True, text=True, timeout=40)

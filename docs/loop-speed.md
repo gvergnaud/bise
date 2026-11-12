@@ -496,11 +496,16 @@ What changed (no test dropped, no coverage lost):
    job starts on battery under 30 % (10-20: the Mac ran its jobs on battery
    to 1 %, slept at 21:43 and hibernated to 10:20). CPU: a slot gets `CARGO_BUILD_JOBS=4`,
    `RUST_TEST_THREADS=4`, `SB_TEST_JOBS=2` (an `--alone` job keeps the
-   defaults); while a heavy job runs, a new one (not `--prio`) starts only
-   under load 2 x cores (the hub's own "loaded", send-fast's load.rs) and
-   20 s after the last start, so the 1-min load has seen it; 600 s at most
-   (`HEAVY_LOAD_WAIT_MAX`), then it goes in its turn: the load that is not
-   heavy-run's (50-90 on 10-21 with no rustc running) never starves it.
+   defaults). Admission of a job outside the release lane (`--prio`), since
+   11-12 (main m_63076, architect m_63083 m_63105): a release quiet window
+   open (`heavy-run quiet <what> -- <cmd>` around its timing-bound steps)
+   holds everyone; the 1-min load at 2 x cores (`HEAVY_LOAD_CEILING`) holds
+   everyone but a lane's first job while heavy-run's own jobs use under half
+   the bar (noted in heavy.log and the gate's output); a lane with none of
+   its jobs running starts its first one; else our jobs' CPU (their process
+   trees) under 75 % of the cores (`HEAVY_JOBS_CPU`) and 20 s after the last
+   start. Before, the bar was the whole Mac's load: 147 min of waits on 11-12
+   came with 0-1 of our jobs running.
 
 ## 11. Change-based test selection (loop-speed-4, the user's yes on q1)
 

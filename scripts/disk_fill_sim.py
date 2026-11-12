@@ -76,7 +76,7 @@ def run(a, tmp, vol):
     env = {k: v for k, v in os.environ.items() if not k.startswith(("HEAVY_", "SB_AGENT"))}
     env.update(HOME=home, HEAVY_DISK_VOLUME=vol, HEAVY_DISK_WAIT_GB=str(floor), HEAVY_DISK_STOP_GB=str(stop),
                HEAVY_RESERVE_GB="2", HEAVY_DISK_POLL="1", HEAVY_RECLAIM_GAP="3", HEAVY_START_GAP="0",
-               HEAVY_LOAD_MAX="9999", HEAVY_ON_BATTERY="0", HEAVY_NO_LANE="1",
+               HEAVY_LOAD_CEILING="9999", HEAVY_ON_BATTERY="0", HEAVY_NO_LANE="1",
                HEAVY_RECLAIM="%s %s" % (sys.executable, RECLAIM),
                HEAVY_RECLAIM_ROOTS=":".join(wts), HEAVY_MIN_IDLE_MIN="0.1", HEAVY_IDLE_TARGET_H="1")
     start_free = free_gb(vol)
