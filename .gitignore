@@ -76,3 +76,6 @@ events.jsonl
 /site/content/type-*.html
 /docs/brand/readme/preview.html
 /docs/brand/video/
+
+# heavy-run's disk_reclaim locks next to a worktree's target (0 bytes, never source)
+*.own-lock
