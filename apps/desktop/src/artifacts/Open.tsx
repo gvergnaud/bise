@@ -297,12 +297,13 @@ export function LiveStrip({ live, gone, onBack }: { live: ArtifactLive | null; g
  */
 export function PageDown({ reach, words, onAgain, onReveal }: { reach: 'checking' | 'down'; words: DownWords; onAgain: () => void; onReveal?: (path: string) => void }) {
   // asked, or not answering yet inside reach.ts's LOAD_GRACE_MS: a loading state, never the error
-  // (artifact-loading, his m_60703); a hub bise is starting says so (its own words, no 'try again')
+  // (artifact-loading, his m_60703); a hub bise is starting says so (its own words, no 'try again').
+  // Its line first, where the title replaces it, the skeleton where the reason comes (designer m_61710)
   if (reach === 'checking' && !words.starting) {
     return (
       <div className="art-down art-loading" data-testid="artifact.checking" role="status" aria-busy="true">
-        <Skel />
         <span className="art-loading-line">{panel.art_loading}</span>
+        <Skel />
       </div>
     );
   }
