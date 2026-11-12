@@ -240,6 +240,7 @@ export async function connect(opts: Options): Promise<View> {
           version: () => doc()?.version ?? null,
           notes: view.notes,
           detached: (ids) => bridge.notify(M.detached, { ids }),
+          changed: () => core.changedOf(ctx),
         });
       },
     },

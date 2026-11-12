@@ -254,6 +254,50 @@ fn short(s: &str, max: usize) -> String {
     }
 }
 
+/// A note's place as a plugin's view names it (plugin-apps A5): the
+/// view's own key, and the words he selected there.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ViewKey {
+    pub key: String,
+    pub quote: String,
+}
+
+/// A note's anchor as a view sees it (architect m_60380, signed with
+/// apps-media): a `view` anchor gives its key (its label stays out: the
+/// place is the key alone, m_60509); a typed kind (a note made before its
+/// type moved onto a plugin's view) becomes the canonical JSON of the
+/// anchor without its quote (sorted keys, no whitespace), so the view that
+/// now opens the type can place it; `Unknown`, or a key over
+/// [`VIEW_KEY_MAX`] bytes, is None: the host shows that note detached, its
+/// text kept. Pure; nothing on disk is rewritten.
+pub fn as_view_key(a: &Anchor) -> Option<ViewKey> {
+    let (key, quote) = match a {
+        Anchor::View { key, quote, .. } => (key.clone(), quote.clone()),
+        Anchor::Unknown(_) => return None,
+        typed => {
+            let mut v = serde_json::to_value(typed).ok()?;
+            let quote = v.as_object_mut()?.remove("quote").and_then(|q| q.as_str().map(str::to_string)).unwrap_or_default();
+            (serde_json::to_string(&canonical(v)).ok()?, quote)
+        }
+    };
+    (!key.is_empty() && key.len() <= VIEW_KEY_MAX).then_some(ViewKey { key, quote })
+}
+
+/// A JSON value with every object's keys sorted (a Map is ordered by key
+/// unless serde_json's preserve_order is on: this keeps the key the same
+/// either way).
+fn canonical(v: Value) -> Value {
+    match v {
+        Value::Object(m) => {
+            let mut kv: Vec<(String, Value)> = m.into_iter().map(|(k, v)| (k, canonical(v))).collect();
+            kv.sort_by(|a, b| a.0.cmp(&b.0));
+            Value::Object(kv.into_iter().collect())
+        }
+        Value::Array(a) => Value::Array(a.into_iter().map(canonical).collect()),
+        other => other,
+    }
+}
+
 impl Anchor {
     /// The kinds this version knows, as on the wire.
     pub const KINDS: &'static [&'static str] = &["block", "cell", "slide", "shape", "para", "region", "text", "time", "view"];
@@ -373,6 +417,39 @@ mod tests {
         assert_eq!(super::label(&v("net revenue", "page 2")), "page 2 · \"net revenue\"");
         assert_eq!(super::label(&v("", "0:12 · a box")), "0:12 · a box");
         assert_eq!(super::label(&v("net revenue", "")), "\"net revenue\"");
+    }
+
+    /// architect m_60380: every kind as a view sees it, one row each.
+    #[test]
+    fn as_view_key_per_kind() {
+        let k = |v: Value| as_view_key(&read(v)).map(|x| (x.key, x.quote));
+        let s = |key: &str, quote: &str| Some((key.to_string(), quote.to_string()));
+        let rows = [
+            (json!({"kind": "block", "block": "b3", "quote": "the plan"}), s(r#"{"block":"b3","kind":"block"}"#, "the plan")),
+            (json!({"kind": "cell", "sheet": "Q3", "range": "B4:D9"}), s(r#"{"kind":"cell","range":"B4:D9","sheet":"Q3"}"#, "")),
+            (json!({"kind": "slide", "slide": 2, "rect": {"y": 20.0, "x": 10.0, "w": 30.0, "h": 5.5}}), s(r#"{"kind":"slide","rect":{"h":5.5,"w":30.0,"x":10.0,"y":20.0},"slide":2}"#, "")),
+            (json!({"kind": "shape", "slide": 3, "shape": "12", "quote": "Revenue"}), s(r#"{"kind":"shape","shape":"12","slide":3}"#, "Revenue")),
+            (json!({"kind": "para", "para": "3F2A1B00", "quote": "net"}), s(r#"{"kind":"para","para":"3F2A1B00"}"#, "net")),
+            (json!({"kind": "region", "page": 2, "rect": {"x": 1.0, "y": 2.0, "w": 3.0, "h": 4.0}, "quote": "grew"}), s(r#"{"kind":"region","page":2,"rect":{"h":4.0,"w":3.0,"x":1.0,"y":2.0}}"#, "grew")),
+            (json!({"kind": "text", "line": 40}), s(r#"{"kind":"text","line":40}"#, "")),
+            (json!({"kind": "time", "t": 12.5}), s(r#"{"kind":"time","t":12.5}"#, "")),
+            (json!({"kind": "view", "key": "row:7", "quote": "net", "label": "row 7"}), s("row:7", "net")),
+            (json!({"kind": "voxel", "x": 1}), None),
+            (json!({"kind": "cell", "sheet": "Q3"}), None),
+            (json!({"kind": "block", "block": "b".repeat(VIEW_KEY_MAX)}), None),
+        ];
+        for (a, want) in rows {
+            assert_eq!(k(a.clone()), want, "{a}");
+        }
+    }
+
+    /// architect m_60509 (1): two anchors that differ only by label are
+    /// the same place (the label is display only).
+    #[test]
+    fn a_view_label_never_changes_the_place() {
+        let a = read(json!({"kind": "view", "key": "box:1", "label": "page 2 · a box"}));
+        let b = read(json!({"kind": "view", "key": "box:1", "label": "page 3"}));
+        assert_eq!(as_view_key(&a), as_view_key(&b));
     }
 
     #[test]

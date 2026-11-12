@@ -189,6 +189,12 @@ impl Pages {
         self.files.lock().unwrap_or_else(|e| e.into_inner()).of_session(doc).map(|b| b.opener.clone())
     }
 
+    /// The file a document session (`doc`) opened, copied out (the lock is
+    /// never held across I/O): what its notes are read on (A5).
+    pub fn doc_target(&self, doc: &str) -> Option<crate::view_files::FileTarget> {
+        self.files.lock().unwrap_or_else(|e| e.into_inner()).of_session(doc).map(|b| b.target.clone())
+    }
+
     /// bise's view kit (`kit/view/`) as a view's folder: what
     /// `/f/<session>/~kit/view/<file>` serves (view_folder.rs).
     fn view_kit(&self) -> ViewFolder {

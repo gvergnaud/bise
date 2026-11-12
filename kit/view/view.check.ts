@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import * as core from "./core.ts";
 import { Bridge, M, RpcError } from "./rpc.ts";
 import { connect, isGone, type Port } from "./view.js";
-import { MARK } from "./notes.js";
+import { CHANGED, MARK, mountNotes } from "./notes.js";
 
 const laws: [string, () => void | Promise<void>][] = [];
 const law = (name: string, fn: () => void | Promise<void>) => laws.push([name, fn]);
@@ -103,6 +103,13 @@ law("marks: open notes marked where placed, detached where not; ✓ only on the 
   assert.deepEqual(at5.marked.map((m) => m.note.id), ["a", "f"]);
   assert.deepEqual(at5.detached.map((x) => x.id), ["b"]);
   assert.equal(core.markOf({ status: "done", done_in: 4 }, null), null);
+});
+
+law("what changed: the host context's keys, checked; none or malformed: nothing", () => {
+  assert.deepEqual(core.changedOf({ "dev.bise/changed": { from: 3, to: 5, anchors: ["s:2", "s:2", "", 7, "s:4"] } }), { from: 3, to: 5, anchors: ["s:2", "s:4"] });
+  assert.equal(core.changedOf({ "dev.bise/changed": { from: 3, anchors: ["s:2"] } }), null);
+  assert.equal(core.changedOf({ "dev.bise/changed": { from: 3, to: 5, anchors: [] } }), null);
+  assert.equal(core.changedOf({}), null);
 });
 
 law("the state: JSON of 64 KiB at most; the theme: tokens, never rules", () => {
@@ -270,6 +277,28 @@ class Part {
   setAttribute(k: string, v: string) { this.attrs.set(k, v); }
   removeAttribute(k: string) { this.attrs.delete(k); }
 }
+
+law("changed parts: outlined once when the view places them, then gone (no observer here)", async () => {
+  const parts: Record<string, Part> = { "s:2": new Part() };
+  const listeners = new Set<(n: readonly core.Note[]) => void>();
+  const layer = mountNotes({
+    place: (a) => parts[a] as unknown as Element,
+    version: () => 5,
+    notes: { all: () => [], on: (fn) => (listeners.add(fn), () => listeners.delete(fn)) },
+    detached: () => {},
+    changed: () => ({ from: 3, to: 5, anchors: ["s:2", "s:4"] }),
+  });
+  assert.equal(parts["s:2"].getAttribute(CHANGED), "flash");
+  // s:4 drawn later: its outline comes then, once
+  parts["s:4"] = new Part();
+  layer.redraw();
+  assert.equal(parts["s:4"].getAttribute(CHANGED), "flash");
+  await new Promise((r) => setTimeout(r, core.CHANGED_MS + 50));
+  assert.equal(parts["s:2"].getAttribute(CHANGED), null);
+  layer.redraw();
+  assert.equal(parts["s:2"].getAttribute(CHANGED), null, "never twice");
+  layer.unmount();
+});
 
 law("notes: marked on the parts the view places, the rest told as detached, again on each list", async () => {
   const h = fakeHost();

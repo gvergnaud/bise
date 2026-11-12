@@ -157,6 +157,8 @@ pub const METHODS: &[MethodRow] = &[
     // plugin-apps (docs/plugin-apps.md A4): a document view's session ends
     // (his tab); client sockets only, as view/*
     m("view/close", "view_close", None),
+    // A5: a document view's notes ({notes, detached}), client sockets only
+    m("view/notes", "view_notes", None),
 ];
 
 /// The protocol's own methods (no [`HubCmd`]).

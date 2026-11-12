@@ -144,6 +144,7 @@ fn method_of(cmd: HubCmd) -> Option<(&'static str, Value)> {
         HubCmd::ViewContext { agent, call, doc, content, .. } => ("view/context", json!({"agent": some(agent), "call": some(call), "doc": doc, "content": content})),
         HubCmd::PluginViews { plugin, .. } => ("plugin/views", json!({"plugin": plugin})),
         HubCmd::ViewClose { doc, .. } => ("view/close", json!({"doc": doc})),
+        HubCmd::ViewNotes { doc, .. } => ("view/notes", json!({"doc": doc})),
         _ => return None,
     })
 }
@@ -523,8 +524,26 @@ impl Shell {
     fn doc_request(&mut self, method: &str, doc: String, params: Value, done: ViewDone) {
         match method {
             "view/call" => self.doc_call(doc, params, done),
+            "view/notes" => self.doc_notes(doc, done),
             m => done(Err(ViewError::NotSupported.rpc(m))),
         }
+    }
+
+    /// `view/notes {doc}` (A5, architect m_59942): the notes of the
+    /// artifact the session opened, each by the view's own key, the keyless
+    /// ones `detached` (pages/artifact/notes.rs `view_notes`). The session
+    /// decides the artifact, never the view; a file of ~/bise has none.
+    /// The target is copied out of the files table, then the store is read
+    /// off the loop (the lock is never held across I/O).
+    fn doc_notes(&mut self, doc: String, done: ViewDone) {
+        let Some(pages) = self.pg.pages.clone() else { return done(Err(ViewError::Expired.rpc("view/notes"))) };
+        let Some(target) = pages.doc_target(&doc) else { return done(Err(ViewError::Expired.rpc("view/notes"))) };
+        std::thread::spawn(move || {
+            done(Ok(match target {
+                crate::view_files::FileTarget::Artifact { id, .. } => crate::pages::artifact::notes::for_view(&pages, &id),
+                crate::view_files::FileTarget::RootFile { .. } => json!({"notes": [], "detached": []}),
+            }))
+        });
     }
 
     /// A document view's `tools/call` to its opener's server, on the

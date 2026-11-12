@@ -1224,13 +1224,19 @@ pub enum HubCmd {
     /// unloaded or swapped to another app: its session (`doc`) and its
     /// handles end. His only: a client socket's, never an agent's op
     ViewClose { project: Project, doc: String },
+    /// plugin-apps (docs/plugin-apps.md A5): a document view's notes, of
+    /// the artifact its session (`doc`) opened, every version, each by
+    /// the view's own key, and the ones with no key `detached`
+    /// (`{notes, detached}`); a file of ~/bise has none. His only, as
+    /// `view_close`
+    ViewNotes { project: Project, doc: String },
     /// a tag this version doesn't know: answered with `error`
     #[serde(skip)]
     Unknown { tag: String, raw: Value },
 }
 
 impl HubCmd {
-    pub const TAGS: &'static [&'static str] = &["subscribe", "unsubscribe", "page", "find", "send", "answer", "close", "approvals", "remove_rule", "stop", "archive", "unarchive", "artifacts_seen", "tool_out", "log", "completion", "log_body", "queued_take", "queued_steer", "diff", "worktrees", "processes", "proc_out", "proc_follow", "proc_stop", "merged", "features", "prs", "pr_act", "pr_detail", "pr_check_log", "inbox_history", "scheduled", "scheduled_stop", "wake_stop", "models", "new", "rename", "model", "effort", "route_correct", "route_cancel", "follow", "slash", "guide", "branches", "scheduled_run", "artifacts_add", "artifacts_move", "artifacts_folders", "artifacts_library", "focus", "versions", "version_info", "version_switch", "version_rollback", "version_restart", "version_update", "bise_update", "release_plan", "release_run", "stop_hub", "page_voice", "usage", "pause", "resume", "view_resource", "view_call", "view_message", "view_context", "plugin_views", "app_open", "view_close"];
+    pub const TAGS: &'static [&'static str] = &["subscribe", "unsubscribe", "page", "find", "send", "answer", "close", "approvals", "remove_rule", "stop", "archive", "unarchive", "artifacts_seen", "tool_out", "log", "completion", "log_body", "queued_take", "queued_steer", "diff", "worktrees", "processes", "proc_out", "proc_follow", "proc_stop", "merged", "features", "prs", "pr_act", "pr_detail", "pr_check_log", "inbox_history", "scheduled", "scheduled_stop", "wake_stop", "models", "new", "rename", "model", "effort", "route_correct", "route_cancel", "follow", "slash", "guide", "branches", "scheduled_run", "artifacts_add", "artifacts_move", "artifacts_folders", "artifacts_library", "focus", "versions", "version_info", "version_switch", "version_rollback", "version_restart", "version_update", "bise_update", "release_plan", "release_run", "stop_hub", "page_voice", "usage", "pause", "resume", "view_resource", "view_call", "view_message", "view_context", "plugin_views", "app_open", "view_close", "view_notes"];
 
     pub fn decode(line: &str) -> Result<HubCmd, String> {
         Self::from_value(parse(line)?)
@@ -1330,6 +1336,7 @@ impl HubCmd {
             | HubCmd::ViewMessage { project, .. }
             | HubCmd::ViewContext { project, .. }
             | HubCmd::ViewClose { project, .. }
+            | HubCmd::ViewNotes { project, .. }
             | HubCmd::PluginViews { project, .. } => project,
             HubCmd::Completion(c) => &c.project,
             HubCmd::Unknown { .. } => return None,

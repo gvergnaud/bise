@@ -271,6 +271,25 @@ export function layout(notes: readonly Note[], v: number | null, placed: (anchor
   return { marked, detached };
 }
 
+// ---- what changed since he last looked (dev.bise/changed, architect m_60734)
+
+/** The parts a newer version changed, since the version he last saw: the view's own keys. */
+export type Changed = { readonly from: number; readonly to: number; readonly anchors: readonly string[] };
+
+/** The host context's `dev.bise/changed`, checked (none, or a malformed one: null). Keys the
+ * view can't take (empty, over 512 bytes) are left out; at most 512 kept. */
+export function changedOf(ctx: unknown): Changed | null {
+  const c = isObj(ctx) && isObj(ctx["dev.bise/changed"]) ? ctx["dev.bise/changed"] : null;
+  if (!c) return null;
+  const from = num(c["from"]), to = num(c["to"]);
+  if (from == null || to == null || !Array.isArray(c["anchors"])) return null;
+  const anchors = [...new Set(c["anchors"].filter(anchorOk))].slice(0, 512);
+  return anchors.length ? { from, to, anchors } : null;
+}
+
+/** How long a changed part's outline shows, in ms (swap.js's). */
+export const CHANGED_MS = 2000;
+
 // ---- the view's own state (ai.mistral.vibe/viewState)
 
 /** The bytes of a state as JSON, null when it is not JSON (a function, a cycle, a bigint). */

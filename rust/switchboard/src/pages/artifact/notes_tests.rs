@@ -50,6 +50,34 @@ fn cell() -> Value {
     json!({"kind": "cell", "sheet": "Q3", "range": "B4:D9"})
 }
 
+/// plugin-apps A5 (architect m_59942, m_60380): a view gets every note
+/// with its outcome and its anchor as its own key (an older typed anchor
+/// as its canonical JSON); a note with no key is detached with its words
+/// kept; the hub never decides placement.
+#[test]
+fn a_view_gets_every_note_by_its_key_and_the_keyless_detached() {
+    let versions = [(1, 100), (2, 200)];
+    let mut quoted = note("n2", "sent", 50, json!({"kind": "view", "key": "row:7", "quote": "net revenue", "label": "row 7"}));
+    quoted.quote = Some("net revenue".into());
+    let notes = [
+        note("n1", "sent", 150, cell()),
+        quoted,
+        note("n3", "draft", 0, json!({"kind": "voxel", "x": 1})),
+        note("n4", "answered", 0, json!({"kind": "view", "key": "row:9"})),
+        note("n5", "sent", 50, Value::Null),
+    ];
+    let got = view_notes(&notes, &versions);
+    assert_eq!(
+        got["notes"],
+        json!([
+            {"id": "n1", "anchor": r#"{"kind":"cell","range":"B4:D9","sheet":"Q3"}"#, "text": "why?", "status": "done", "version": 1, "done_in": 2},
+            {"id": "n2", "anchor": "row:7", "text": "why?", "quote": "net revenue", "status": "done", "version": 1, "done_in": 1},
+            {"id": "n4", "anchor": "row:9", "text": "why?", "status": "done", "version": 1},
+        ])
+    );
+    assert_eq!(got["detached"], json!([{"id": "n3", "text": "why?", "quote": "", "status": "draft", "version": 1}]));
+}
+
 /// A sent note is done in the first version begun after it (the
 /// answering one, `done_in`); one sent after the newest stays sent; a
 /// draft or an answered note is as kept.

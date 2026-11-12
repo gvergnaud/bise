@@ -589,7 +589,7 @@ impl Shell {
                 _ => self.proto_error(id, &tag, "proc_stop takes a process id or all, one of the two"),
             },
             // mcp-apps (C5): answered by their id (daemon/rpc.rs, views.rs)
-            HubCmd::ViewResource { .. } | HubCmd::ViewCall { .. } | HubCmd::ViewMessage { .. } | HubCmd::ViewContext { .. } | HubCmd::PluginViews { .. } | HubCmd::ViewClose { .. } => {}
+            HubCmd::ViewResource { .. } | HubCmd::ViewCall { .. } | HubCmd::ViewMessage { .. } | HubCmd::ViewContext { .. } | HubCmd::PluginViews { .. } | HubCmd::ViewClose { .. } | HubCmd::ViewNotes { .. } => {}
             HubCmd::Unknown { .. } => {}
         }
     }

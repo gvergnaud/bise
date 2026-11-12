@@ -23,6 +23,18 @@
 }
 .bv-pill:focus-visible { outline: 2px solid var(--color-ring-primary, #1d1d1f); outline-offset: 2px; }
 
+/* what changed since he last looked (kit/view/notes.js, dev.bise/changed; swap.js's in the
+   viewer): a 2 s outline in ink, then a dot on a part he hasn't had in sight yet */
+[data-bise-changed="flash"] { outline: 2px solid var(--color-text-primary, #1d1d1f); outline-offset: 2px; }
+@media (prefers-reduced-motion: no-preference) {
+  [data-bise-changed] { transition: outline-color 300ms ease-out; }
+}
+[data-bise-changed="dot"] { position: relative; }
+[data-bise-changed="dot"]::before {
+  content: ""; position: absolute; top: 4px; left: 4px; width: 6px; height: 6px; pointer-events: none;
+  border-radius: 50%; background: var(--color-text-primary, #1d1d1f);
+}
+
 [data-bise-mark] { box-shadow: inset 3px 0 0 var(--bv-accent); }
 [data-bise-mark="draft"] { box-shadow: inset 3px 0 0 var(--bv-accent-soft); }
 [data-bise-mark="done"] { box-shadow: none; position: relative; }

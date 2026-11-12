@@ -191,6 +191,7 @@ export async function connect(opts) {
                     version: () => doc()?.version ?? null,
                     notes: view.notes,
                     detached: (ids) => bridge.notify(M.detached, { ids }),
+                    changed: () => core.changedOf(ctx),
                 });
             },
         },

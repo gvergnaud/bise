@@ -5,9 +5,13 @@
 // accent, ✓ on the version that answered) and tells the host which notes it could not place
 // (dev.bise/detached: the host lists them, never lost). What a version marks is core.layout's.
 // Drawn again on each new notes list and on `redraw()` (the view drew its parts again).
+// What changed since he last looked (the host context's dev.bise/changed, architect m_60734): the
+// same places, `data-bise-changed` = flash (a 2 s outline the first time a part is placed), then
+// dot while it hasn't been in sight.
 import * as core from "./core.js";
-/** The attribute the kit owns on the view's parts. */
+/** The attributes the kit owns on the view's parts: his notes' marks, and what changed. */
 export const MARK = "data-bise-mark";
+export const CHANGED = "data-bise-changed";
 const RANK = { draft: 1, done: 2, sent: 3 };
 export function mountNotes(o) {
     let marked = [];
@@ -16,7 +20,57 @@ export function mountNotes(o) {
         const at = o.place(anchor);
         return !at ? [] : Array.isArray(at) ? [...at] : [at];
     };
+    // ---- what changed: each changed part outlined for 2 s the first time the view places it, then
+    // a dot while it hasn't been in sight (an IntersectionObserver says when it is), then nothing
+    const shown = new Set();
+    const timers = new Set();
+    const seen = new WeakSet();
+    const IO = globalThis.IntersectionObserver;
+    const sight = IO
+        ? new IO((entries) => {
+            for (const en of entries) {
+                if (!en.isIntersecting)
+                    continue;
+                seen.add(en.target);
+                if (en.target.getAttribute(CHANGED) === "dot") {
+                    en.target.removeAttribute(CHANGED);
+                    sight.unobserve(en.target);
+                }
+            }
+        })
+        : null;
+    function changedParts() {
+        const c = o.changed?.();
+        if (!c)
+            return;
+        for (const a of c.anchors) {
+            if (shown.has(a))
+                continue;
+            const at = els(a);
+            if (!at.length)
+                continue;
+            shown.add(a);
+            for (const e of at) {
+                e.setAttribute(CHANGED, "flash");
+                sight?.observe(e);
+            }
+            const t = setTimeout(() => {
+                timers.delete(t);
+                for (const e of at) {
+                    // no way to tell what he saw (no observer): the outline was all
+                    if (!sight || seen.has(e)) {
+                        e.removeAttribute(CHANGED);
+                        sight?.unobserve(e);
+                    }
+                    else
+                        e.setAttribute(CHANGED, "dot");
+                }
+            }, core.CHANGED_MS);
+            timers.add(t);
+        }
+    }
     function draw() {
+        changedParts();
         for (const e of marked)
             e.removeAttribute(MARK);
         marked = [];
@@ -52,6 +106,10 @@ export function mountNotes(o) {
             for (const e of marked)
                 e.removeAttribute(MARK);
             marked = [];
+            for (const t of timers)
+                clearTimeout(t);
+            timers.clear();
+            sight?.disconnect();
         },
     };
 }

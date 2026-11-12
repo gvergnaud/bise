@@ -198,6 +198,15 @@ typed in `data.reason` (`bise_proto::view_rpc::ViewError`): -32030
 `_meta["dev.bise/server-restarted"]`); -32000 `server-gone` when the view's server can't be
 reached; a server's own error as it gave it.
 
+A document view (docs/plugin-apps.md A4-A5) has no agent call: its
+methods take `{doc}`, the session `view/open` minted. `view/notes {doc}`
+answers `{notes: [{id, anchor, text, quote?, status, version, done_in?}],
+detached: [{id, text, quote, status, version}]}`: every note on the
+artifact the session opened, each `anchor` the view's own key (an older
+note's typed anchor as its canonical JSON: `bise_proto::anchor::as_view_key`),
+`detached` the ones with no key, for the host to list; a file of `~/bise`
+answers both empty, a session gone -32030 `expired`.
+
 ## The wire rule
 
 On the wire an existing field, list or enum value never changes meaning.
