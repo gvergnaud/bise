@@ -230,6 +230,11 @@ impl Shell {
         if row.cmd.starts_with("view_") || row.cmd == "plugin_views" {
             return self.view_rpc(id, rid, cmd);
         }
+        // plugin-apps A6: ~/bise's methods, the window's own, answered by
+        // their id (daemon/files_ids.rs)
+        if matches!(row.cmd, "folder_list" | "file_new" | "files_ids_subscribe" | "files_mint") {
+            return self.files_rpc(id, rid, cmd);
+        }
         let c = self.rpc.conns.entry(id).or_default();
         c.pending.push(Pending { id: rid.clone(), cmd: row.cmd, result: row.result });
         c.hold = Some(Vec::new());
@@ -487,6 +492,7 @@ impl Shell {
     pub(super) fn rpc_gone(&mut self, id: ClientId) {
         self.rpc.conns.remove(&id);
         self.rpc.peers.remove(&id);
+        self.ids_gone(id);
     }
 
     /// Connection `id`'s pid and program, for hub.log.

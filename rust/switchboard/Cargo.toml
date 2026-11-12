@@ -12,6 +12,9 @@ bise-catalog = { path = "../catalog" }
 bend-images = { path = "../images" }
 bise-home = { path = "../home" }
 bise-ids = { path = "../ids" }
+# the home hub's FSEvents watcher on ~/bise for its id table
+# (daemon/files_ids.rs, architect m_60075): pinned, FSEvents only
+notify = { version = "=8.2.0", default-features = false, features = ["macos_fsevent"] }
 # the machine's one usage sender (bise_usage::hourly, telemetry step 5)
 bise-usage = { path = "../usage" }
 # the secrets no agent reads (bise_secrets::held), the sandbox's list

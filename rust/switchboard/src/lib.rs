@@ -70,6 +70,7 @@ pub mod diff;
 pub mod every;
 pub mod every_name;
 pub mod feature;
+pub mod files_ids;
 pub mod first_run;
 pub mod flow;
 pub mod fn_context;

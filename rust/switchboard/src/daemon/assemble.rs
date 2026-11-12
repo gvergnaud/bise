@@ -91,6 +91,7 @@ impl Shell {
             views: views::Views::default(),
             apps: apps::Apps::default(),
             files: view_files::DocFiles::default(),
+            ids: files_ids::Ids::default(),
             lands: crate::land::Queue::default(),
             features: features::Features::load(&paths.state, &|n| paths.feature_diff(n)),
             prs: None,

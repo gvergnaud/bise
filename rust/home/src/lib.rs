@@ -438,6 +438,13 @@ impl Home {
         self.root.join("prefs.json")
     }
 
+    /// `view-ids.json`: the home hub's id table of `~/bise`
+    /// (docs/plugin-apps.md A6 ids; `bise_ids::Snapshot`, one writer: the
+    /// home hub's table thread, tmp file + rename).
+    pub fn files_ids_file(&self) -> PathBuf {
+        self.root.join("view-ids.json")
+    }
+
     /// `checks.json`: each model's last live test, for Settings and the
     /// terminal's /models (bise_catalog::checks).
     pub fn checks_file(&self) -> PathBuf {

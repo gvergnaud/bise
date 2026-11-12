@@ -147,12 +147,15 @@ fn method_of(cmd: HubCmd) -> Option<(&'static str, Value)> {
         HubCmd::ViewNotes { doc, .. } => ("view/notes", json!({"doc": doc})),
         HubCmd::ViewOpen { project, target, opener } => ("view/open", json!({"project": project, "target": target, "opener": opener})),
         HubCmd::ViewCopy { doc, text, blob, .. } => ("view/copy", json!({"doc": doc, "text": text, "blob": blob})),
-        HubCmd::FolderList { folder, hidden, .. } => ("folder/list", json!({"folder": folder, "hidden": hidden})),
-        HubCmd::FileNew { make, library_folder, in_folder, .. } => ("file/new", json!({"make": make, "library_folder": library_folder, "in": in_folder})),
-        HubCmd::FilesIdsSubscribe { .. } => ("files/ids/subscribe", json!({})),
-        HubCmd::FilesMint { path, .. } => ("files/mint", json!({"path": path})),
         _ => return None,
     })
+}
+
+/// The window's own `~/bise` methods (docs/plugin-apps.md A6, A4b): served
+/// on hub.sock only (daemon/files_ids.rs); a view's bridge (`/api/view`)
+/// that asks one is refused, whatever the view (architect m_62668).
+pub(super) fn window_only(method: &str) -> bool {
+    matches!(method, "folder/list" | "file/new" | "files/ids/subscribe" | "files/mint")
 }
 
 /// A key the command left out (`""`) is absent, never an empty name
@@ -284,9 +287,7 @@ impl Shell {
                 let doc = params.get("doc").and_then(Value::as_str).unwrap_or("").to_string();
                 return self.view_copy(doc, params, done);
             }
-            // the wire is in (kb-fileprovider builds on it); the home hub's
-            // table, folder/list and file/new serve them in the next commit
-            "folder/list" | "file/new" | "files/ids/subscribe" | "files/mint" => return done(Err(ViewError::NotSupported.rpc(method))),
+            m if window_only(m) => return done(Err(ViewError::NotSupported.rpc(m))),
             _ => {}
         }
         let p = match view_call::Key::of(&params) {
@@ -706,6 +707,32 @@ mod tests {
         for m in ["dev.bise/resources/copy", "view/copy", "resources/write", "resources/list", ""] {
             assert_eq!(doc_route(m), DocRoute::Unknown, "{m}");
         }
+    }
+
+    /// ~/bise's methods are the window's own: a view's bridge (`/api/view`,
+    /// view_request) asking one is refused, never served (architect
+    /// m_62668); hub.sock serves them (daemon/files_ids.rs).
+    #[test]
+    fn a_views_bridge_asking_the_windows_own_methods_is_refused() {
+        for m in ["folder/list", "file/new", "files/ids/subscribe", "files/mint"] {
+            assert!(window_only(m), "{m}");
+            assert!(method_of_name(m).is_none(), "{m}: never a view's method on hub.sock either");
+        }
+        for m in ["view/call", "view/open", "view/copy", "plugin/views", "resources/read", "files/ids"] {
+            assert!(!window_only(m), "{m}");
+        }
+    }
+
+    /// The C5 method a hub.sock command maps to, by its method name.
+    fn method_of_name(m: &str) -> Option<&'static str> {
+        let p = bise_proto::Project::default();
+        let cmds = [
+            HubCmd::FolderList { project: p.clone(), folder: None, hidden: false },
+            HubCmd::FileNew { project: p.clone(), make: Default::default(), library_folder: None, in_folder: None },
+            HubCmd::FilesIdsSubscribe { project: p.clone() },
+            HubCmd::FilesMint { project: p, path: "a.md".into() },
+        ];
+        cmds.into_iter().filter_map(method_of).map(|(name, _)| name).find(|name| *name == m)
     }
 
     /// C5 on fake-app: an app-only tool runs, a model-visible one asks,
