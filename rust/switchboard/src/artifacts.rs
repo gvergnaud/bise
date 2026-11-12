@@ -185,6 +185,10 @@ impl Meta {
     }
 }
 
+/// The start of a staged copy's name ([`Store::stage_copy`],
+/// [`Store::stage_new`]).
+pub const STAGED_PREFIX: &str = ".staged-";
+
 /// What `sb artifact add` or `/artifacts add` asks.
 #[derive(Clone, Debug, Default)]
 pub struct Add {
@@ -220,6 +224,10 @@ pub struct Add {
     /// instead of copying the file on the loop; the caller already
     /// decided it is a new save.
     pub staged: Option<PathBuf>,
+    /// `target` is absolute and canonical already (file/new's, from the
+    /// id table's canonical root): the add on the loop skips its own
+    /// canonicalize (architect m_63398).
+    pub canonical: bool,
     /// `sb artifact add --for-you`: it is for him (crate::artifacts_marks);
     /// a next version only raises its audience, never lowers it.
     pub for_you: bool,
@@ -692,7 +700,7 @@ impl Store {
             } else {
                 Some(Path::new(&a.cwd).join(raw))
             };
-            p.filter(|p| !is_link(raw) && p.exists()).and_then(|p| p.canonicalize().ok())
+            p.filter(|p| !is_link(raw) && p.exists()).and_then(|p| if a.canonical { Some(p) } else { p.canonicalize().ok() })
         };
         let url = if path.is_some() {
             None
@@ -882,10 +890,12 @@ impl Store {
         self.stage_in(&self.dir(), bytes)
     }
 
+    /// `bytes` as `<dir>/.staged-<pid>-<n>` ([`STAGED_PREFIX`]: a crash's
+    /// leftover is found by its name, `artifacts_retention::sweep_staged`).
     fn stage_in(&self, dir: &Path, bytes: &[u8]) -> std::io::Result<PathBuf> {
         static N: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         std::fs::create_dir_all(dir)?;
-        let p = dir.join(format!(".staged-{}-{}", std::process::id(), N.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
+        let p = dir.join(format!("{STAGED_PREFIX}{}-{}", std::process::id(), N.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
         std::fs::write(&p, bytes)?;
         std::fs::File::open(&p)?.sync_all()?;
         Ok(p)

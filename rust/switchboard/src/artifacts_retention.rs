@@ -124,9 +124,58 @@ pub fn sweep(store: &Store, ended: &BTreeMap<String, u64>, now: u64) -> Result<S
     Ok(out)
 }
 
+/// How old a staged copy must be before [`sweep_staged`] deletes it: no
+/// save or file/new waits that long between its stage and its add.
+pub const STAGED_MAX_MS: u64 = 3_600_000;
+
+/// The staged copies a crash left between their stage and their add
+/// ([`Store::stage_copy`], [`Store::stage_new`]; architect m_63398): each
+/// `.staged-*` file in the store's folder or an artifact's, older than
+/// [`STAGED_MAX_MS`] at `now`, deleted. How many. Its own thread (the
+/// daily sweep), never the loop.
+pub fn sweep_staged(store: &Store, now: u64) -> usize {
+    let top = store.dir();
+    let dirs = std::fs::read_dir(&top).into_iter().flatten().flatten().filter(|e| e.file_type().is_ok_and(|t| t.is_dir())).map(|e| e.path());
+    let mut n = 0;
+    for dir in std::iter::once(top.clone()).chain(dirs) {
+        for e in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
+            if !e.file_name().to_string_lossy().starts_with(crate::artifacts::STAGED_PREFIX) {
+                continue;
+            }
+            let at = e.metadata().ok().and_then(|m| m.modified().ok()).and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_millis() as u64);
+            if at.is_some_and(|at| now.saturating_sub(at) > STAGED_MAX_MS) && std::fs::remove_file(e.path()).is_ok() {
+                n += 1;
+            }
+        }
+    }
+    n
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A staged copy older than an hour goes, a fresh one and any other
+    /// file stay, in the store's folder and an artifact's.
+    #[test]
+    fn a_sweep_deletes_the_staged_copies_older_than_an_hour() {
+        let (s, d) = store("staged");
+        let old = s.stage_new(b"a").unwrap();
+        let old_in_id = s.stage_copy("q3", b"b").unwrap();
+        let fresh = s.stage_new(b"c").unwrap();
+        let other = s.dir().join("q3").join("v1.json");
+        std::fs::write(&other, "{}").unwrap();
+        let now = std::time::SystemTime::now();
+        let ms = |t: std::time::SystemTime| t.duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64;
+        let ago = now - std::time::Duration::from_millis(STAGED_MAX_MS + 60_000);
+        for p in [&old, &old_in_id, &other] {
+            std::fs::File::options().write(true).open(p).unwrap().set_modified(ago).unwrap();
+        }
+        assert_eq!(sweep_staged(&s, ms(now)), 2);
+        assert!(!old.exists() && !old_in_id.exists());
+        assert!(fresh.exists() && other.exists());
+        let _ = std::fs::remove_dir_all(d);
+    }
 
     const DAY: u64 = 86_400_000;
     const ENDED: u64 = 1_000 * DAY;

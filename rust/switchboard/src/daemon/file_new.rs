@@ -121,6 +121,8 @@ impl Shell {
             cwd,
             folder: library_folder.map(Filed::Asked),
             staged: staged.clone(),
+            // under the id table's canonical root, a name it just made
+            canonical: true,
             ..Default::default()
         };
         let added = store.add(&add, now_ms());

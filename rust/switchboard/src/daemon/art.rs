@@ -414,6 +414,7 @@ impl Shell {
                     id: None,
                     for_you,
                     staged: None,
+                    canonical: false,
                 };
                 match store.add(&add, now_ms()) {
                     Ok(a) => {
@@ -541,7 +542,8 @@ impl Shell {
     /// The retention sweep (crate::artifacts_retention, architect
     /// m_62392), at the hub's start and then daily: the archived agents'
     /// names are copied here (no store read on the loop), the rest runs
-    /// on its own thread: ended.json noted, the expired copies deleted,
+    /// on its own thread: a crash's staged copies over an hour old
+    /// deleted, ended.json noted, the expired copies deleted,
     /// one log line when it expired something. Its writes bump store_gen:
     /// the rows rebuild off the loop by themselves.
     pub(super) fn art_retention_sweep(&mut self) {
@@ -561,6 +563,10 @@ impl Shell {
         std::thread::spawn(move || {
             let store = artifacts::Store::new(&state);
             let now = now_ms();
+            let staged = crate::artifacts_retention::sweep_staged(&store, now);
+            if staged > 0 {
+                log_line(&paths, &format!("artifacts: {staged} staged copies left by a crash deleted"));
+            }
             let done = crate::artifacts_retention::note_ended(&store, &archived, now)
                 .and_then(|ended| crate::artifacts_retention::sweep(&store, &ended, now));
             match done {
