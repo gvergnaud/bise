@@ -47,6 +47,32 @@ pub(super) struct ArtView {
     /// The bytes of the agents' files' copies (artifacts_retention): the
     /// From agents place's foot line.
     pub(super) agents_bytes: u64,
+    /// Each artifact's current file, its path as the store keeps it (made
+    /// canonical at its add, `Store::add`) -> its id: a `~/bise` row that
+    /// is an artifact's current target opens as that artifact (A4, one
+    /// document one write path). This hub's store only: on the home hub,
+    /// the home store's artifacts (a project's artifact under `~/bise`
+    /// is not linked, for now). Shared: the files thread reads it
+    /// (architect m_63160: built once per build, no realpath per list).
+    pub(super) links: Links,
+}
+
+/// [`ArtView::links`]: canonical path -> artifact id.
+pub(super) type Links = std::sync::Arc<BTreeMap<PathBuf, String>>;
+
+/// The links of the artifacts `all`: a file or folder (never a link),
+/// at its current version's target.
+pub(super) fn links_of(all: &[Meta]) -> Links {
+    let mut out = BTreeMap::new();
+    for m in all {
+        let Some(v) = m.current() else { continue };
+        let target = if v.target.is_empty() { &m.source } else { &v.target };
+        if target.is_empty() || crate::artifacts::is_link(target) || !std::path::Path::new(target).is_absolute() {
+            continue;
+        }
+        out.insert(PathBuf::from(target.trim_end_matches('/')), m.id.clone());
+    }
+    std::sync::Arc::new(out)
 }
 
 /// An agent as `art_who` reads it, copied for the builder's thread.
@@ -87,6 +113,7 @@ impl ArtJob {
             new: store.new_count_from(&all, self.now),
             seen_ms: store.seen_ms(self.now),
             agents_bytes: crate::artifacts_retention::agents_bytes(&store, &stored, &store.marks()),
+            links: links_of(&all),
             stored: stored.into_iter().map(|m| (m.id.clone(), m)).collect(),
             waiting: self.pages.map(|p| p.list_rows().into_iter().filter(|r| r.waiting > 0 || r.asking).map(|r| r.id).collect()).unwrap_or_default(),
         }

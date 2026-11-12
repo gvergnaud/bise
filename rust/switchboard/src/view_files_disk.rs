@@ -40,16 +40,42 @@ pub fn resolve_artifact(store: &Store, id: &str, version: Option<u64>) -> Result
 }
 
 /// What `view/open` opens, resolved (off the loop): an artifact
-/// ([`resolve_artifact`]); a `folder/list` entry needs the home hub's id
-/// table and is refused until it lands (`bad-handle`); an unknown kind is
-/// a bad request ([`ViewError::BadHandle`] too: nothing names a file but
-/// an id the hub gave).
+/// ([`resolve_artifact`]); a `folder/list` entry is the home hub's id
+/// table's to place first ([`resolve_entry`] with its path), so here it is
+/// refused (`bad-handle`), as an unknown kind is ([`ViewError::BadHandle`]
+/// too: nothing names a file but an id the hub gave).
 pub fn resolve(store: &Store, _root: &Path, target: &bise_proto::files::OpenTarget) -> Result<Resolved, ViewError> {
     use bise_proto::files::OpenTarget;
     match target {
         OpenTarget::Artifact { id, version } => resolve_artifact(store, id, *version),
         OpenTarget::Entry { .. } | OpenTarget::Unknown => Err(ViewError::BadHandle),
     }
+}
+
+/// A `folder/list` entry at `path` (the id table's, absolute) as
+/// `view/open` binds it. The current file of an artifact (`links`: its
+/// canonical path -> its id) opens as that artifact's newest version, the
+/// same target as its card (one document, one write path); any other is
+/// a root file, its realpath under `root`'s (a symlink out:
+/// [`ViewError::BadHandle`]; gone: [`ViewError::Gone`]).
+pub fn resolve_entry(store: &Store, root: &Path, path: &Path, links: &std::collections::BTreeMap<PathBuf, String>) -> Result<Resolved, ViewError> {
+    if let Some(id) = links.get(path) {
+        return resolve_artifact(store, id, None);
+    }
+    let root = root.canonicalize().map_err(|_| ViewError::Gone)?;
+    let real = path.canonicalize().map_err(|_| ViewError::Gone)?;
+    let Ok(under) = real.strip_prefix(&root) else { return Err(ViewError::BadHandle) };
+    let meta = std::fs::metadata(&real).map_err(|_| ViewError::Gone)?;
+    let name = real.file_name().map(|n| n.to_string_lossy().to_string()).ok_or(ViewError::BadHandle)?;
+    let kind = if meta.is_dir() { Kind::Folder { names: crate::artifacts::names_of(&real) } } else { Kind::File };
+    // under a plugin's documents (`Plugins/<plugin>/…`, A1): that plugin's
+    let mut parts = under.components().map(|c| c.as_os_str().to_string_lossy().to_string());
+    let documents_of = match (parts.next().as_deref(), parts.next(), parts.next()) {
+        (Some("Plugins"), Some(p), Some(_)) => Some(p),
+        _ => None,
+    };
+    let size = if meta.is_file() { meta.len() } else { 0 };
+    Ok(Resolved { target: FileTarget::RootFile { path: real }, name, kind, size, documents_of, older: false })
 }
 
 /// Whether the view of `b` may write its file now: its `write` grant

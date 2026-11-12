@@ -218,6 +218,13 @@ impl Shell {
         view
     }
 
+    /// The artifacts' current files of the last build (empty before the
+    /// first): a pointer copy, for the files thread (`folder/list`,
+    /// `view/open {kind: entry}`).
+    pub(super) fn art_links(&self) -> super::art_rows::Links {
+        self.art_view(now_ms()).map(|v| std::sync::Arc::clone(&v.links)).unwrap_or_default()
+    }
+
     /// A build of the rows landed (`Msg::ArtBuilt`): kept, and the list to
     /// the clients when it changed (a key that moved meanwhile starts the
     /// next build there).

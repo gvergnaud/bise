@@ -101,10 +101,30 @@ impl Shell {
         let project = params.get("project").and_then(Value::as_str).unwrap_or("").to_string();
         let (store, root, ws, home) = (self.art_store(), pages.bise_root.clone(), self.opts.paths.workspace.clone(), self.opts.home.clone());
         let live = self.apps.openers.tools().clone();
+        // an entry: its path from the id table's thread (one owner), its
+        // artifact by the last rows' build (no realpath per open)
+        let entry = match &target {
+            OpenTarget::Entry { .. } => match self.ids_ask() {
+                Some(ask) => Some((ask, self.art_links())),
+                None => return done(Err(self.not_home(WHAT))),
+            },
+            _ => None,
+        };
         let step = self.view_step();
         std::thread::spawn(move || {
             let chose = || -> Result<Found, RpcError> {
-                let resolved = crate::view_files_disk::resolve(&store, &root, &target).map_err(|e| e.rpc(WHAT))?;
+                let resolved = match (&target, &entry) {
+                    (OpenTarget::Entry { id }, Some((ask, links))) => {
+                        let path = ask.path(id, super::files_ids::PATH_WAIT).map_err(|e| match e {
+                            super::files_ids::NoPath::Unknown => ViewError::BadHandle.rpc(WHAT),
+                            // never a guess or a stale path (architect m_63160)
+                            super::files_ids::NoPath::Busy => RpcError::refused(format!("{WHAT}: {}", bise_proto::words::views::files_busy), Some("busy")),
+                        })?;
+                        crate::view_files_disk::resolve_entry(&store, &root, &path, links)
+                    }
+                    _ => crate::view_files_disk::resolve(&store, &root, &target),
+                }
+                .map_err(|e| e.rpc(WHAT))?;
                 // A2 made again now, never the row's (architect m_60316 #4)
                 let res = bend_plugins::resolve::resolve(&bend_plugins::resolve::Roots::standard(Some(&ws)));
                 let inherited = bend_plugins::tools_cache::inherited(std::env::vars_os());

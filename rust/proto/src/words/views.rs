@@ -155,4 +155,10 @@ crate::words! { views:
     copy_first = "(copy)";
     /// the next free one when `(copy)` is taken, `q3 (copy 2).xlsx`
     copy_nth(n) = "(copy {n})";
+
+    // ---- ~/bise's folders (docs/plugin-apps.md A4b, A6)
+    /// folder/list with hidden: true, refused until there is a use (architect m_63160)
+    hidden_not_listed = "hidden files are not listed yet";
+    /// view/open of a ~/bise file while the hub reads ~/bise and can't say where it is yet
+    files_busy = "bise is still reading ~/bise: try again in a moment";
 }

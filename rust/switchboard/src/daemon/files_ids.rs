@@ -23,16 +23,18 @@
 //!   root's device, then mints (idempotent);
 //! - a project hub has no table: it refuses both, naming the home hub.
 
+use super::art_rows::Links;
 use super::views::ViewStep;
 use super::{log_line, ClientId, Msg, Shell};
 use crate::files_ids::{self as ids, WALK_MAX};
 use crate::util::now_ms;
+use bend_plugins::opens::{self, Target};
 use bise_ids::{skipped, tracked, Cover, Entry, Kind, Scan, Snapshot};
-use bise_proto::files::{FilesIds, FilesMintResult};
+use bise_proto::files::{Crumb, EntryArtifact, FileKind, FilesIds, FilesMintResult, FolderList, FolderRow, Names};
 use bise_proto::hub::{HubCmd, HubEv};
 use bise_proto::jsonrpc::{Id, RpcError};
 use bise_proto::view_rpc::ViewError;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
@@ -57,6 +59,46 @@ enum Job {
     Fs(notify::Result<notify::Event>),
     Subscribe(ClientId, Id),
     Mint(ClientId, Id, String),
+    /// `folder/list`: the folder's id (none or the root's: the root) and
+    /// the artifacts' current files of the last rows' build.
+    List(ClientId, Id, Option<String>, Links),
+    /// `view/open {kind: entry}`: where an id is now (none: unknown),
+    /// answered to the asker's thread at once, a whole walk or not.
+    Path(String, Sender<Option<PathBuf>>),
+}
+
+/// How long `view/open` waits for an id's path before it answers busy
+/// (architect m_63160: never a guess, never a stale path).
+pub(super) const PATH_WAIT: Duration = Duration::from_secs(2);
+
+/// The root's crumb id in `folder/list`'s answer: the root has no row in
+/// the table; sent back as `folder`, it lists the root (as none does).
+const ROOT_CRUMB: &str = "";
+
+/// Asks the table's thread where an entry is, from any thread
+/// (`view/open`'s, off the loop).
+#[derive(Clone)]
+pub(super) struct IdsAsk(Sender<Job>);
+
+/// Why an entry has no path: unknown (or not this hub's), or the table's
+/// thread did not answer in [`PATH_WAIT`].
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum NoPath {
+    Unknown,
+    Busy,
+}
+
+impl IdsAsk {
+    /// The absolute path of entry `id` now.
+    pub(super) fn path(&self, id: &str, wait: Duration) -> Result<PathBuf, NoPath> {
+        let (tx, rx) = channel();
+        self.0.send(Job::Path(id.to_string(), tx)).map_err(|_| NoPath::Busy)?;
+        match rx.recv_timeout(wait) {
+            Ok(Some(p)) => Ok(p),
+            Ok(None) => Err(NoPath::Unknown),
+            Err(_) => Err(NoPath::Busy),
+        }
+    }
 }
 
 impl Shell {
@@ -81,22 +123,52 @@ impl Shell {
         }
     }
 
-    /// The window's `~/bise` methods (hub.sock): the id table's two here;
-    /// `folder/list` and `file/new` are not served yet.
+    /// The window's `~/bise` methods (hub.sock): the id table's two and
+    /// `folder/list`; `file/new` is not served yet.
     pub(super) fn files_rpc(&mut self, client: ClientId, rid: Id, cmd: HubCmd) {
         let (job, method) = match cmd {
             HubCmd::FilesIdsSubscribe { .. } => (Job::Subscribe(client, rid.clone()), "files/ids/subscribe"),
             HubCmd::FilesMint { path, .. } => (Job::Mint(client, rid.clone(), path), "files/mint"),
-            HubCmd::FolderList { .. } => return self.rpc_answer(client, rid, Err(ViewError::NotSupported.rpc("folder/list"))),
+            // no dotfile rows until there is a use, never a quiet false (architect m_63160)
+            HubCmd::FolderList { hidden: true, .. } => {
+                let why = format!("folder/list: {}", bise_proto::words::views::hidden_not_listed);
+                return self.rpc_answer(client, rid, Err(RpcError::refused(why, Some("bad_request"))));
+            }
+            HubCmd::FolderList { folder, .. } => (Job::List(client, rid.clone(), folder, self.art_links()), "folder/list"),
             HubCmd::FileNew { .. } => return self.rpc_answer(client, rid, Err(ViewError::NotSupported.rpc("file/new"))),
             _ => return,
         };
         let sent = self.ids.jobs.as_ref().is_some_and(|j| j.send(job).is_ok());
         if !sent {
-            let home = bise_home::Home::from_env().bise_root();
-            let why = format!("{method}: the id table of {} is the home hub's, not this project's ({})", home.display(), self.project());
-            self.rpc_answer(client, rid, Err(RpcError::refused(why, Some("not_home"))));
+            self.rpc_answer(client, rid, Err(self.not_home(method)));
         }
+    }
+
+    /// A `~/bise` method asked of a project hub: refused, naming the home.
+    pub(super) fn not_home(&self, method: &str) -> RpcError {
+        let home = bise_home::Home::from_env().bise_root();
+        let why = format!("{method}: the id table of {} is the home hub's, not this project's ({})", home.display(), self.project());
+        RpcError::refused(why, Some("not_home"))
+    }
+
+    /// Where `view/open` asks an entry's path (none: not the home hub).
+    pub(super) fn ids_ask(&self) -> Option<IdsAsk> {
+        self.ids.jobs.clone().map(IdsAsk)
+    }
+
+    /// A folder's rows from the table's thread, each with the app that
+    /// opens it and the others (his picks, from memory), then the answer.
+    fn folder_listed(&mut self, client: ClientId, rid: Id, mut list: FolderList, targets: Vec<Target>) {
+        let project = self.project();
+        for (row, target) in list.rows.iter_mut().zip(&targets) {
+            let o = opens::pick(target, self.apps.openers.openers(), self.apps.openers.picks());
+            row.openers = o.opener.iter().cloned().chain(o.others).collect();
+            row.opener = o.opener;
+            if let Some(a) = &mut row.artifact {
+                a.project = project.clone();
+            }
+        }
+        self.rpc_answer(client, rid, Ok(serde_json::to_value(list).unwrap_or_default()));
     }
 
     /// A connection gone: no more changes for it.
@@ -122,7 +194,6 @@ impl Shell {
 /// The table's thread: the watcher first (so nothing falls between), the
 /// whole walk, then its jobs in batches until the hub ends.
 fn run(mut t: Table, jobs: Receiver<Job>, watch: Sender<Job>, tx: &Sender<Msg>, log: &dyn Fn(&str)) {
-    let step = |s: ViewStep| tx.send(Msg::View(s)).is_ok();
     let _watcher = match watcher(&t.root, watch) {
         Ok(w) => Some(w),
         Err(e) => {
@@ -130,19 +201,28 @@ fn run(mut t: Table, jobs: Receiver<Job>, watch: Sender<Job>, tx: &Sender<Msg>, 
             None
         }
     };
-    let out = |t: &mut Table, changes: Vec<bise_ids::Change>| {
-        if let Some(d) = t.changed(&changes, log) {
-            return step(Box::new(move |sh: &mut Shell| sh.ids_changed(d)));
-        }
-        true
+    let o = Out { tx, log };
+    // jobs a walk held back (between its folders it answers Path and
+    // List only): they go first after it
+    let mut later: VecDeque<Job> = VecDeque::new();
+    let walk = |t: &mut Table, covers: &[Cover], later: &mut VecDeque<Job>| {
+        let changes = t.walk_apply(covers, log, &mut |t: &mut Table| between(t, &jobs, &o, later));
+        o.changes(t, changes)
     };
-    let changes = t.walk_apply(&[Cover::FULL], log);
-    if !out(&mut t, changes) {
+    if !walk(&mut t, &[Cover::FULL], &mut later) {
         return;
     }
-    while let Ok(first) = jobs.recv() {
+    loop {
+        let first = match later.pop_front() {
+            Some(j) => j,
+            None => match jobs.recv() {
+                Ok(j) => j,
+                Err(_) => return,
+            },
+        };
         let mut held = vec![first];
-        if matches!(held[0], Job::Fs(_)) {
+        held.extend(later.drain(..));
+        if held.iter().any(|j| matches!(j, Job::Fs(_))) {
             let start = Instant::now();
             while start.elapsed() < BATCH_MAX {
                 match jobs.recv_timeout(BATCH) {
@@ -161,35 +241,82 @@ fn run(mut t: Table, jobs: Receiver<Job>, watch: Sender<Job>, tx: &Sender<Msg>, 
         }
         if !events.is_empty() {
             let covers = t.covers_of(events, log);
-            if !covers.is_empty() {
-                let changes = t.walk_apply(&covers, log);
-                if !out(&mut t, changes) {
-                    return;
-                }
-            }
-        }
-        for ask in asks {
-            let alive = match ask {
-                Job::Subscribe(client, rid) => {
-                    let full = ids::full(&t.snap, t.seq, &t.root_str());
-                    step(Box::new(move |sh: &mut Shell| sh.ids_subscribed(client, rid, full)))
-                }
-                Job::Mint(client, rid, path) => {
-                    let r = t.mint(&path, log);
-                    let (answer, changes) = match r {
-                        Ok((id, changes)) => (Ok(serde_json::to_value(FilesMintResult { id }).unwrap_or_default()), changes),
-                        Err(e) => (Err(e), Vec::new()),
-                    };
-                    // the change goes out before the answer: a client
-                    // that reads its id already has its row
-                    out(&mut t, changes) && step(Box::new(move |sh: &mut Shell| sh.rpc_answer(client, rid, answer)))
-                }
-                Job::Fs(_) => true,
-            };
-            if !alive {
+            if !covers.is_empty() && !walk(&mut t, &covers, &mut later) {
                 return;
             }
         }
+        for j in asks {
+            if !ask(&mut t, j, &o) {
+                return;
+            }
+        }
+    }
+}
+
+/// Between two folders of a walk: the jobs that can't wait a whole walk
+/// (`Path`, `List`) answered now, the others held in `later` for after
+/// it (architect m_63160: an open during a 20k rescan never times out).
+fn between(t: &mut Table, jobs: &Receiver<Job>, o: &Out, later: &mut VecDeque<Job>) {
+    while let Ok(j) = jobs.try_recv() {
+        match j {
+            j @ (Job::Path(..) | Job::List(..)) => {
+                ask(t, j, o);
+            }
+            j => later.push_back(j),
+        }
+    }
+}
+
+/// The thread's way to the loop: its steps, its log.
+struct Out<'a> {
+    tx: &'a Sender<Msg>,
+    log: &'a dyn Fn(&str),
+}
+
+impl Out<'_> {
+    /// A step for the loop; false: the hub ends.
+    fn step(&self, s: ViewStep) -> bool {
+        self.tx.send(Msg::View(s)).is_ok()
+    }
+
+    /// The table's changes saved and sent (nothing changed: nothing).
+    fn changes(&self, t: &mut Table, changes: Vec<bise_ids::Change>) -> bool {
+        match t.changed(&changes, self.log) {
+            Some(d) => self.step(Box::new(move |sh: &mut Shell| sh.ids_changed(d))),
+            None => true,
+        }
+    }
+}
+
+/// One job that is not the watcher's, answered; false: the hub ends.
+fn ask(t: &mut Table, job: Job, o: &Out) -> bool {
+    match job {
+        Job::Subscribe(client, rid) => {
+            let full = ids::full(&t.snap, t.seq, &t.root_str());
+            o.step(Box::new(move |sh: &mut Shell| sh.ids_subscribed(client, rid, full)))
+        }
+        Job::Mint(client, rid, path) => {
+            let (answer, changes) = match t.mint(&path, o.log) {
+                Ok((id, changes)) => (Ok(serde_json::to_value(FilesMintResult { id }).unwrap_or_default()), changes),
+                Err(e) => (Err(e), Vec::new()),
+            };
+            // the change goes out before the answer: a client that reads
+            // its id already has its row
+            o.changes(t, changes) && o.step(Box::new(move |sh: &mut Shell| sh.rpc_answer(client, rid, answer)))
+        }
+        Job::List(client, rid, folder, links) => {
+            let (listed, changes) = t.list(folder.as_deref(), &links, o.log);
+            o.changes(t, changes)
+                && o.step(Box::new(move |sh: &mut Shell| match listed {
+                    Ok((list, targets)) => sh.folder_listed(client, rid, list, targets),
+                    Err(e) => sh.rpc_answer(client, rid, Err(e)),
+                }))
+        }
+        Job::Path(id, reply) => {
+            let _ = reply.send(t.path(&id));
+            true
+        }
+        Job::Fs(_) => true,
     }
 }
 
@@ -213,6 +340,13 @@ pub(super) struct Table {
     snap: Snapshot,
     /// the last event's number (0: none yet)
     seq: u64,
+    /// The newest listing wins ([`fresher_wins`]): one number per apply,
+    /// and while a walk runs, the folders a walk inside it (a `List`
+    /// between its folders) applied, at that apply's number. Emptied when
+    /// the outer walk ends; `depth`: the walks running.
+    listing: u64,
+    fresh: BTreeMap<String, u64>,
+    depth: u32,
 }
 
 /// A path `files/mint` refuses: its reason and words.
@@ -237,7 +371,7 @@ impl Table {
                 Snapshot::new()
             }
         };
-        (Table { root, dev, file, snap, seq: 0 }, said)
+        (Table { root, dev, file, snap, seq: 0, listing: 0, fresh: BTreeMap::new(), depth: 0 }, said)
     }
 
     fn root_str(&self) -> String {
@@ -270,21 +404,29 @@ impl Table {
 
     /// Reads what `covers` name and takes it in: the changes. A walk that
     /// stops at [`WALK_MAX`] says so in one log line.
-    pub(super) fn walk_apply(&mut self, covers: &[Cover], log: &dyn Fn(&str)) -> Vec<bise_ids::Change> {
-        let mut w = Walk { root: &self.root, dev: self.dev, scan: Scan::new(), n: 0, capped: false };
+    ///
+    /// `between` runs before each folder it reads, with the table as it
+    /// was before this walk: the thread answers the jobs that can't wait
+    /// a whole walk there (architect m_63160: an open during a 20k
+    /// rescan). A `folder/list` answered there applies its own folder at
+    /// once; this walk's apply comes after it, and in each folder the
+    /// newest listing wins ([`fresher_wins`], architect m_63320).
+    pub(super) fn walk_apply(&mut self, covers: &[Cover], log: &dyn Fn(&str), between: &mut dyn FnMut(&mut Table)) -> Vec<bise_ids::Change> {
+        self.depth += 1;
+        let mut w = Walk { root: self.root.clone(), dev: self.dev, read: BTreeMap::new(), n: 0, capped: false };
         let mut listed = Vec::new();
         for c in covers {
             match c {
                 Cover::Dir(d) => {
                     let d = w.existing(d);
                     let mut done = Vec::new();
-                    if w.list(&d, false, &mut done) {
+                    if w.list(&d, false, &mut done, self, between) {
                         listed.push(Cover::Dir(d));
                     }
                 }
                 Cover::Tree(t) if t.is_empty() || w.is_folder(t) => {
                     let mut done = Vec::new();
-                    if w.list(t, true, &mut done) {
+                    if w.list(t, true, &mut done, self, between) {
                         listed.push(Cover::Tree(t.clone()));
                     } else {
                         listed.extend(done.into_iter().map(Cover::Dir));
@@ -294,7 +436,7 @@ impl Table {
                 Cover::Tree(t) => {
                     let d = w.existing(ids::parent(t));
                     let mut done = Vec::new();
-                    if w.list(&d, false, &mut done) {
+                    if w.list(&d, false, &mut done, self, between) {
                         listed.push(Cover::Dir(d));
                     }
                 }
@@ -303,8 +445,19 @@ impl Table {
         if w.capped {
             log(&format!("a walk of {} stopped at {} entries: only the folders it listed whole lose rows", self.root.display(), w.n));
         }
-        let scan = w.scan;
-        self.snap.apply(&scan, &listed)
+        let snap = &self.snap;
+        let (scan, listed, read) = fresher_wins(listed, w.read, &self.fresh, &|d| snap.id_of(d).is_some());
+        let changes = self.snap.apply(&scan, &listed);
+        self.depth -= 1;
+        self.listing += 1;
+        if self.depth == 0 {
+            self.fresh.clear();
+        } else {
+            for d in read {
+                self.fresh.insert(d, self.listing);
+            }
+        }
+        changes
     }
 
     /// The id of `rel` (exact bytes under the root), minted if the table
@@ -319,7 +472,7 @@ impl Table {
         let (id, mut changes) = self.snap.mint(rel, entry).map_err(|e| refused("bad_request", rel, &e.to_string()))?;
         let missing = folders_missing(&self.snap, rel);
         if !missing.is_empty() {
-            changes.extend(self.walk_apply(&missing, log));
+            changes.extend(self.walk_apply(&missing, log, &mut |_| {}));
         }
         Ok((id.to_string(), changes))
     }
@@ -349,6 +502,76 @@ impl Table {
             entry = Some(e);
         }
         entry.ok_or_else(gone)
+    }
+
+    /// Where entry `id` is now (absolute; none: not an id of this table).
+    pub(super) fn path(&self, id: &str) -> Option<PathBuf> {
+        let rel = self.snap.path_of(id.parse().ok()?)?;
+        Some(self.root.join(rel))
+    }
+
+    /// `folder/list`: folder `folder` (an id; none or the root's crumb:
+    /// the root) read again from disk, then its rows from the table, each
+    /// with its matcher's target (the loop adds the apps), and the
+    /// changes that read made (they go out first). `links`: the
+    /// artifacts' current files, a row that is one says so.
+    #[allow(clippy::type_complexity)]
+    pub(super) fn list(&mut self, folder: Option<&str>, links: &Links, log: &dyn Fn(&str)) -> (Result<(FolderList, Vec<Target>), RpcError>, Vec<bise_ids::Change>) {
+        let bad = |f: &str, why: &str| RpcError::refused(format!("folder/list {f:?}: {why}"), Some("bad_request"));
+        let rel = match folder.filter(|f| *f != ROOT_CRUMB) {
+            None => String::new(),
+            Some(f) => {
+                let at = f.parse().ok().and_then(|id| self.snap.path_of(id)).map(str::to_string);
+                match at.as_deref().and_then(|r| self.snap.get(r)) {
+                    Some((_, e)) if e.kind == Kind::Folder => at.unwrap_or_default(),
+                    Some(_) => return (Err(bad(f, "not a folder")), Vec::new()),
+                    None => return (Err(bad(f, "no such folder of ~/bise")), Vec::new()),
+                }
+            }
+        };
+        let changes = self.walk_apply(&[Cover::Dir(rel.clone())], log, &mut |_| {});
+        if !rel.is_empty() && self.snap.id_of(&rel).is_none() {
+            let gone = RpcError::refused(format!("folder/list: {rel:?} is gone from ~/bise"), Some("not_found"));
+            return (Err(gone), changes);
+        }
+        let crumb_of = |r: &str| Crumb { id: self.snap.id_of(r).map(|i| i.to_string()).unwrap_or_default(), name: name_of(r).to_string() };
+        let root = Crumb { id: ROOT_CRUMB.to_string(), name: String::new() };
+        let (folder, crumb) = if rel.is_empty() {
+            (root, Vec::new())
+        } else {
+            let mut up = Vec::new();
+            let mut d = ids::parent(&rel);
+            while !d.is_empty() {
+                up.push(crumb_of(d));
+                d = ids::parent(d);
+            }
+            up.push(root);
+            up.reverse();
+            (crumb_of(&rel), up)
+        };
+        let mut rows: Vec<(FolderRow, Target)> = self.snap.children(&rel).filter(|(p, _, _)| !skipped(name_of(p))).map(|(p, id, e)| self.row(p, id, e, links)).collect();
+        rows.sort_by(|(a, _), (b, _)| (a.kind != FileKind::Folder, a.name.to_lowercase(), &a.name).cmp(&(b.kind != FileKind::Folder, b.name.to_lowercase(), &b.name)));
+        let (rows, targets) = rows.into_iter().unzip();
+        (Ok((FolderList { folder, crumb, rows }, targets)), changes)
+    }
+
+    /// One row of `folder/list` and its matcher's target (A2): a folder
+    /// with its first-level names as the table has them, a file under a
+    /// plugin's documents (`Plugins/<plugin>/…`) with that plugin.
+    fn row(&self, rel: &str, id: bise_ids::Id, e: Entry, links: &Links) -> (FolderRow, Target) {
+        let name = name_of(rel).to_string();
+        let artifact = links.get(&self.root.join(rel)).map(|a| EntryArtifact { project: String::new(), id: a.clone() });
+        let documents = rel.strip_prefix("Plugins/").and_then(|r| r.split_once('/')).map(|(p, under)| (p.to_string(), under.to_string()));
+        let (kind, names, matched) = if e.kind == Kind::Folder {
+            let names = Names::of(self.snap.children(rel).map(|(c, _, _)| name_of(c).to_string()), skipped);
+            let matched = if names.more { opens::Kind::FolderCut(names.names.clone()) } else { opens::Kind::Folder(names.names.clone()) };
+            (FileKind::Folder, names, matched)
+        } else {
+            (FileKind::File, Names::default(), opens::Kind::File)
+        };
+        let size = if kind == FileKind::File { e.size } else { 0 };
+        let row = FolderRow { id: id.to_string(), name: name.clone(), kind, size, mtime: e.mtime_ms, artifact, names, ..Default::default() };
+        (row, Target { name, kind: matched, documents })
     }
 
     /// After an apply or a mint: the table saved and the next event, or
@@ -402,6 +625,11 @@ fn entry_of(m: &std::fs::Metadata) -> Option<Entry> {
     Some(Entry { dev: m.dev(), ino: m.ino(), kind, size, mtime_ms })
 }
 
+/// A table path's last name.
+fn name_of(rel: &str) -> &str {
+    rel.rsplit('/').next().unwrap_or(rel)
+}
+
 /// The folders of `rel` the table lacks, as the covers that read them:
 /// each one's parent listed (so `a/b/c.md` with no `a` reads `""` and
 /// `a`).
@@ -416,17 +644,74 @@ fn folders_missing(snap: &Snapshot, rel: &str) -> Vec<Cover> {
     covers
 }
 
+/// What one walk read: folder -> (the table's listing number when it read
+/// it, the tracked entries it saw in it).
+type Read = BTreeMap<String, (u64, Vec<(String, Entry)>)>;
+
+/// Per folder, the newest listing wins (architect m_63320). A walk's
+/// apply comes after the `List`s answered between its folders: a folder
+/// one of them applied after this walk read it (`fresh` newer than its
+/// listing number) is fresher in the table than in this walk's read, so
+/// its entries and its cover are dropped, else a file made since would
+/// lose its id (removed, then added again) and one deleted since would
+/// come back. A folder under a dropped one that the table no longer has
+/// (`known`: has a row) is dropped too. A `Tree` cover with a dropped
+/// folder under it becomes its folders' `Dir`s. The scan to apply, its
+/// covers, and the folders they list (each one's listing is now this
+/// apply's).
+fn fresher_wins(covers: Vec<Cover>, read: Read, fresh: &BTreeMap<String, u64>, known: &dyn Fn(&str) -> bool) -> (Scan, Vec<Cover>, Vec<String>) {
+    let mut stale = BTreeSet::new();
+    // parents sort before their folders: a folder's parent is decided first
+    for (d, (at, _)) in &read {
+        let newer = fresh.get(d).is_some_and(|f| f > at);
+        let lost = !d.is_empty() && stale.contains(ids::parent(d)) && !known(d);
+        if newer || lost {
+            stale.insert(d.clone());
+        }
+    }
+    let under = |t: &str, d: &str| t.is_empty() || d == t || d.strip_prefix(t).is_some_and(|r| r.starts_with('/'));
+    let mut out = Vec::new();
+    for c in covers {
+        match c {
+            Cover::Dir(d) if stale.contains(&d) => {}
+            Cover::Tree(t) if stale.iter().any(|s| under(&t, s)) => {
+                out.extend(read.keys().filter(|d| under(&t, d) && !stale.contains(*d)).map(|d| Cover::Dir(d.clone())));
+            }
+            c => out.push(c),
+        }
+    }
+    let listed = |d: &str| out.iter().any(|c| matches!(c, Cover::Dir(x) if x == d) || matches!(c, Cover::Tree(t) if under(t, d)));
+    let mut scan = Scan::new();
+    let mut folders = Vec::new();
+    for (d, (_, seen)) in read {
+        if stale.contains(&d) {
+            continue;
+        }
+        if listed(&d) {
+            folders.push(d);
+        }
+        for (rel, e) in seen {
+            // tracked already: the walk checked
+            let _ = scan.insert(&rel, e);
+        }
+    }
+    (scan, out, folders)
+}
+
 /// One walk: what it read, up to [`WALK_MAX`] entries.
-struct Walk<'a> {
-    root: &'a Path,
+struct Walk {
+    /// the table's root (a copy: the walk lends the table to `between`)
+    root: PathBuf,
     dev: u64,
-    scan: Scan,
+    /// each folder read: the table's listing number when it was read and
+    /// the entries seen in it ([`fresher_wins`] makes the scan)
+    read: Read,
     n: usize,
     /// it stopped at [`WALK_MAX`]
     capped: bool,
 }
 
-impl Walk<'_> {
+impl Walk {
     fn abs(&self, rel: &str) -> PathBuf {
         if rel.is_empty() {
             self.root.to_path_buf()
@@ -450,10 +735,14 @@ impl Walk<'_> {
 
     /// Lists folder `dir` (`deep`: and every folder under it) into the
     /// scan; `done` gets each folder listed whole. Whether all of it was.
-    fn list(&mut self, dir: &str, deep: bool, done: &mut Vec<String>) -> bool {
+    /// `between(t)` runs before each folder (see [`Table::walk_apply`]).
+    fn list(&mut self, dir: &str, deep: bool, done: &mut Vec<String>, t: &mut Table, between: &mut dyn FnMut(&mut Table)) -> bool {
+        between(t);
         let Ok(rd) = std::fs::read_dir(self.abs(dir)) else { return false };
         let mut whole = true;
         let mut sub = Vec::new();
+        let (at, seen) = self.read.entry(dir.to_string()).or_default();
+        *at = t.listing;
         for ent in rd {
             if self.n >= WALK_MAX {
                 self.capped = true;
@@ -470,9 +759,10 @@ impl Walk<'_> {
             }
             let rel = if dir.is_empty() { name.to_string() } else { format!("{dir}/{name}") };
             let Some(e) = std::fs::symlink_metadata(ent.path()).ok().as_ref().and_then(entry_of) else { continue };
-            if e.dev != self.dev || self.scan.insert(&rel, e).is_err() {
+            if e.dev != self.dev || !tracked(&rel) {
                 continue;
             }
+            seen.push((rel.clone(), e));
             self.n += 1;
             if deep && e.kind == Kind::Folder {
                 sub.push(rel);
@@ -480,7 +770,7 @@ impl Walk<'_> {
         }
         done.push(dir.to_string());
         for s in sub {
-            whole &= self.list(&s, true, done);
+            whole &= self.list(&s, true, done, t, between);
         }
         whole
     }
