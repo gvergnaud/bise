@@ -64,6 +64,9 @@ export type { StoreOptions } from "./base";
 
 export type { AnswerJump } from "./machine/cards";
 
+/** His last messages a thread's ticks show (msg-dots): `thread/marks`' limit. */
+export const MARKS = 20;
+
 export class Store extends StoreVoice {
   /** the cards slice (machine/cards.ts): his answers and closes in flight, how they settled; his kept lists read back */
   private cardsState: CardsState = cardsInit(this.asideKeep === null ? null : (k) => this.asideKeep?.read(k));
@@ -145,6 +148,7 @@ export class Store extends StoreVoice {
         agent: s.agent,
         ...(s.limit === undefined ? {} : { limit: s.limit }),
       });
+      this.command({ cmd: "marks", project: s.project, agent: s.agent, limit: MARKS });
     }
   }
 
@@ -512,6 +516,7 @@ export class Store extends StoreVoice {
       agent,
       ...(limit === undefined ? {} : { limit }),
     });
+    this.command({ cmd: "marks", project, agent, limit: MARKS });
   }
   unsubscribeThread(project: string, agent: string): void {
     const key = threadKey(project, agent);
@@ -628,6 +633,7 @@ export type {
   QueuedTake,
   TalkShot,
   ThreadHits,
+  ThreadMarks,
   ThreadOrder,
   ToolOut,
   VersionsList,

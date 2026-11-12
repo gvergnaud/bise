@@ -34,12 +34,12 @@ import { AddButton, AddDrop, useAddPlace } from './Drops';
 import { ArtifactGrid } from './Grid';
 import { StackSheet } from './Sheet';
 import { useGridKeys, type View } from './gridKeys';
-import { itemsOf, ownerOf, topOf, whenOf, type Card, type Place, type Stack } from './gallery';
+import { itemsOf, ownerOf, topOf, whenOf, type Card, type HeadOf, type Place, type Stack } from './gallery';
 import { Thumb } from './thumbs';
 import { keyOf, revealPathOf, splitArchived, type Item } from './model';
 import {
   AT_ALL, atOfPath, atPath, chipOf, chipsOf, countsOf, coverOf, crumbOf, folderLine, inFolder, itemsAt, libraryFacts, libraryOf,
-  nameOf, parseQuery, pathOf, prSideItems, projectOfTyped, rememberMove, searchItems, titlePath, type At, type ChipKind, type Library,
+  nameOf, pathOf, prSideItems, projectOfTyped, rememberMove, searchItems, titlePath, type At, type ChipKind, type Library,
   type PrSide,
 } from './folders';
 import { FolderColumn, type Editing } from './Column';
@@ -52,10 +52,15 @@ import { openWithSub } from '@/app/menus/registry';
 import { useRunAct } from '@/app/menus/use';
 import { ProjectScope, scopeRows } from './Scope';
 import { SearchResults } from './Search';
-import { Toolbar } from './Toolbar';
+import { Toolbar, WHEN_WORD } from './Toolbar';
+import { activeRow, completionOf, pickedText, walk, WhoCompletion } from './WhoCompletion';
+import { anySet, applyFilters, cleared, localTz, parseFilters, waysOut, whenFacet, withToken, type When } from './filters';
 import { BigTile, FolderListRow, SmallTile } from './Tiles';
 import { cardDrag, FLASH_MS, TOAST_MS, useBrief, useDrop } from './drag';
 import { folderCmd, moveCmd, type FolderOp } from './ops';
+import { keepCmds } from './opened';
+import { itemsIn, sectionCounts, sectionPath, splitSectionPath, type SectionView } from './sections';
+import { BackRow, QuietRows, sectionHeads } from './SectionRows';
 import { useBannerGutter } from './hero/vignettes';
 import { RecentRow } from './Recent';
 import { LiveVignette } from './hero/Live';
@@ -70,6 +75,20 @@ const readRecent = (): string[] => {
   } catch {
     return [];
   }
+};
+
+// the project scope he picked, kept from visit to visit (his pick 'A + jetons', rule 1): read when
+// the route names no project; '' is all projects
+const SCOPE_KEY = 'bise.artifacts.scope';
+const readScope = (): string => {
+  try {
+    return window.localStorage.getItem(SCOPE_KEY) ?? '';
+  } catch {
+    return '';
+  }
+};
+const keepScope = (p: string) => {
+  try { window.localStorage.setItem(SCOPE_KEY, p); } catch { /* private window */ }
 };
 
 /** What floats over the page: one at a time. */
@@ -103,9 +122,17 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
   useKeptScroll(`artifacts:${project}:${atRoute}`, () => document.querySelector<HTMLElement>('[data-testid="artifacts.scroll"]'));
   const [now] = useState(() => Date.now());
   // the scope and the place are the route's (the title bar's path follows the place)
-  const scope = project;
-  const at = atOfPath(atRoute);
+  // a route with no project opens on the scope he kept (a project still in the sidebar)
+  const [kept] = useState(readScope);
+  const scope = project === '' && projects.some((p) => p.project === kept) ? kept : project;
+  // the section view is the route's too (sections.ts): Done and Between agents are history steps
+  const { view: sect, rest: placePath } = splitSectionPath(atRoute);
+  const at = atOfPath(placePath);
   const [q, setQ] = useState('');
+  // the search field's caret, read at its change (the by:/since: completion opens at it); null: closed
+  const [caret, setCaret] = useState<number | null>(null);
+  // the completion's row he walked to with ↑↓ (the first while he hasn't)
+  const [walked, setWalked] = useState<string | null>(null);
   const [chip, setChip] = useState<ChipKind | null>(null);
   // the Pull requests filter's side: open & draft first, merged & closed one click away
   const [prSide, setPrSide] = useState<PrSide>('open');
@@ -153,18 +180,38 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
     }
     go(scope, a);
   };
-  const setScope = (p: string) => { go(p, at); };
+  const setScope = (p: string) => { keepScope(p); go(p, at); };
+  // For you, Done or Between agents, in the same place (a history step: ⌘← goes back)
+  const setSect = (v: SectionView) => {
+    const path = sectionPath(v, atPath(atNow));
+    router.go(path === '' ? { screen: 'artifacts', project: scope } : { screen: 'artifacts', project: scope, at: path });
+  };
 
 
   const { live, archived } = splitArchived(all);
   const base = archivedOn ? archived : live;
   const lib = libraryOf(folders, all);
-  const parsed = parseQuery(q);
+  // the field's text is the one filter state (filters.ts): in:, since:, by:, the words
+  const parsed = parseFilters(q);
+  const fctx = { now, tz: localTz };
+  const filtered = parsed.keys.size > 0;
   const typedProject = parsed.project === null ? null : projectOfTyped(projects.map((p) => ({ project: p.project, name: p.name })), parsed.project);
   const eff = typedProject ?? scope;
   const projectName = eff === '' ? '' : (projects.find((p) => p.project === eff)?.name || eff);
-  const scoped = eff === '' ? base : base.filter((it) => it.project === eff);
-  const counts = countsOf(lib, base, scoped);
+  const inScope = eff === '' ? base : base.filter((it) => it.project === eff);
+  // the bar's dimensions narrow the place, its sections stay (rule 6): AND across, OR inside
+  const scoped = applyFilters(inScope, parsed, fctx);
+  // the by:/since: completion at the caret (WhoCompletion.tsx), its rows counted in the scope
+  const comp = completionOf(q, caret, inScope, parsed, fctx);
+  const compActive = comp === null ? null : activeRow(comp, walked);
+  const pickCompletion = (id: string) => {
+    if (comp === null) return;
+    setQ(pickedText(q, comp, id));
+    setCaret(null);
+    setWalked(null);
+    searchRef.current?.focus();
+  };
+  const counts = countsOf(lib, base, inScope);
   const searching = parsed.words.length > 0;
   // the title bar's path says the search while there is one ('artifacts › search · dark')
   const searchWords = parsed.words.join(' ');
@@ -176,12 +223,20 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
   const here = searching ? found : itemsAt(lib, scoped, atNow);
   // the PRs read archived ones too: a merged or closed PR is archived by the hub, and the Pull
   // requests filter's second side shows them (pr-integration A)
-  const allScoped = eff === '' ? all : all.filter((it) => it.project === eff);
+  const allScoped = applyFilters(eff === '' ? all : all.filter((it) => it.project === eff), parsed, fctx);
   const hereAll = searching ? searchItems(lib, allScoped, parsed.words) : itemsAt(lib, allScoped, atNow);
-  const anyPr = hereAll.some((it) => chipOf(it) === 'prs');
-  const chips0 = chipsOf(here);
+  // the Pull requests chip with no PR in it shows only under For you and a search (ui-review: never an
+  // empty 'Pull requests 0' over Done or Between agents)
+  const anyPr = (searching || sect === 'you') && hereAll.some((it) => chipOf(it) === 'prs');
+  // the place's items by section (sections.ts: the hub's section, ordered by last touch): For you
+  // is Kept then Open work, Done and Between agents one list each; a search keeps every section
+  const inView = itemsIn(here, searching ? 'all' : sect);
+  const chips0 = chipsOf(inView);
   const chips = anyPr && !chips0.some((c) => c.kind === 'prs') ? [...chips0, { kind: 'prs' as const, n: 0 }] : chips0;
-  const shown = chip === null ? here : chip === 'prs' ? prSideItems(hereAll, prSide) : here.filter((it) => chipOf(it) === chip);
+  const shown = chip === null ? inView : chip === 'prs' ? prSideItems(hereAll, prSide) : inView.filter((it) => chipOf(it) === chip);
+  // what each section holds with the kind chip on: the heads count what is shown, the quiet rows what is one click away
+  const sectN = sectionCounts(chip === null || chip === 'prs' ? here : here.filter((it) => chipOf(it) === chip));
+  const heads = searching || sect === 'you' ? sectionHeads(sectionCounts(shown)) : false;
   const byKey = new Map(base.map((it) => [keyOf(it), it]));
   const place = placeOf(lib, atNow, searching, shown);
   const curId = atNow.at === 'folder' ? atNow.id : null;
@@ -207,7 +262,7 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
   const { sel, setSel, ref, onKeyDown, cards, cols, cardOf } = useGridKeys({
     items: shown,
     view,
-    days: atNow.at !== 'recent',
+    days: heads,
     keepAs: `artifacts.sel:${project}`,
     onOpen: (k) => { openCard(k); },
     onKey: (e, k) => rowKey(e, k === null ? undefined : itemOfKey(k), { onOpen: openIt, onLook: look, onPut: putIt }) || screenKey(e, k),
@@ -338,6 +393,30 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
       e.preventDefault();
       ref.current?.focus({ preventScroll: true });
     };
+    // the completion open: the caret stays in the field, he keeps typing; ↑↓ walk its rows, ⏎ picks
+    // the active one, esc closes it (designer m_61790, ui-review m_62139)
+    if (comp !== null) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        setWalked(walk(comp, compActive, e.key === 'ArrowDown' ? 1 : -1));
+        return;
+      }
+      if (e.key === 'Enter' && compActive !== null) {
+        e.preventDefault();
+        pickCompletion(compActive);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setCaret(null);
+        return;
+      }
+    }
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      const el = e.currentTarget;
+      // the caret moves after the key: read it on the next frame
+      requestAnimationFrame(() => { setCaret(el.selectionStart); });
+    }
     if (e.key === 'Escape') {
       if (q !== '') {
         e.preventDefault();
@@ -376,6 +455,8 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
       case 'look': look(it); return;
       case 'put': for (const x of itemsOfKeys(keys)) putIt(x); return;
       case 'move': setOver({ k: 'move', keys, at: boxOf(key) }); return;
+      case 'keep':
+      case 'let_go': for (const c of keepCmds(itemsOfKeys(keys), act === 'keep')) store.command(c); return;
       case 'with': setOver({ k: 'with', key, at: boxOf(key) }); return;
       default:
         // versions, copy, finder, archive: the card's own keys (List.tsx rowKey)
@@ -407,21 +488,26 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
   useLayoutEffect(() => { published.current = colBits; publishColumn(colBits); });
   useEffect(() => () => { retractColumn(published.current); }, []);
   const column = <FolderColumn {...colBits} testId="artifacts.col" />;
-  const grid = (items: readonly Card[], placeHere: Place, days: boolean, testId: string) => (
+  const grid = (items: readonly Card[], placeHere: Place, days: boolean | HeadOf, testId: string) => (
     <ArtifactGrid cards={items} cols={cols} view={view} now={now} place={placeHere} days={days} cursor={sel} picked={picked}
       onPick={onPick} onOpen={(c) => { openCard(c.key); }}
       onMenu={(key, p) => { setOver({ k: 'card', key, at: p }); }}
       dragOf={(key) => cardDrag(key, picked)}
       scroller={scrollEl} testId={testId} />
   );
-  const pickScope = (p: string) => { setScope(p); if (typedProject !== null) setQ(parsed.words.join(' ')); };
+  const pickScope = (p: string) => { setScope(p); if (typedProject !== null) setQ(withToken(q, 'in', null)); };
+  // the When chip writes its token in the field (one state); Clear takes all but the project
+  const sinceOn = [...(parsed.keys.get('since') ?? [])][0] as When | undefined;
+  const whenProps = { rows: whenFacet(inScope, parsed, fctx), on: sinceOn ?? null, onPick: (w: When | null) => { setQ(withToken(q, 'since', w)); } };
+  const clearAll = () => { setQ(cleared(q)); setChip(null); };
+  const somethingSet = anySet(parsed) || chip !== null;
   const crumb = crumbOf(lib, atNow);
   // under 900 px the column folds into the crumb: the place's title opens it (page v7 'à 800 px')
   const fold = <FoldCrumb label={crumb.length === 0 ? sentenceCase(library.all_artifacts) : crumb.map((c) => c.name).join(' / ')} testId="artifacts.fold">{column}</FoldCrumb>;
   const current = atNow.at === 'folder' ? lib.byId.get(atNow.id) : undefined;
   // the toolbar above the list (his m_44961, designer's spec D): the kinds the place holds (all,
   // then each kind with its count), the project scope; the cards/list switch, the search ('/'), +
-  const kindsTotal = searching ? found.length : here.length;
+  const kindsTotal = inView.length;
   const toolbar = stack === null && (
     <Toolbar testId="artifacts.toolbar" lead={narrow ? fold : null}
       kinds={searching || chips.length > 1 ? [{ id: 'all', word: library.all_kinds, n: kindsTotal }, ...chips.map((c) => ({ id: c.kind, word: chipWord(c.kind), n: c.n }))] : null}
@@ -429,8 +515,10 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
       scope={<ProjectScope all={base} project={eff} projectName={projectName} onPick={pickScope} testId="artifacts.projects" />}
       projects={[{ project: '', name: sentenceCase(library.all_projects), n: base.length }, ...scopeRows(base)]} project={eff} onProject={pickScope}
       view={view} onView={setView}
-      q={q} onQ={(e) => { setQ(e.currentTarget.value); }} onQKey={searchKey}
+      q={q} onQ={(e) => { setQ(e.currentTarget.value); setCaret(e.currentTarget.selectionStart); }} onQKey={searchKey}
       onClear={() => { setQ(''); searchRef.current?.focus(); }} searchRef={searchRef}
+      when={archivedOn ? null : whenProps} onClearAll={somethingSet ? clearAll : null}
+      completion={comp === null ? null : <WhoCompletion c={comp} active={compActive} field={searchRef} onPick={pickCompletion} onClose={() => { setCaret(null); }} />}
       add={<AddButton place={place_} tip={library.add_tip} testId="artifacts.add" />} />
   );
   // the archived ones: a faint row under the list, as the window's panel and the TUI (designer m_45148)
@@ -457,6 +545,28 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
     if (stack !== null) {
       return <StackSheet stack={stack} now={now} onOpen={openIt} onLook={look} onPut={putIt} onBack={() => { setStack(null); }} testId="artifacts.sheet" />;
     }
+    if ((searching || filtered) && shown.length === 0) {
+      // an empty filtered view (designer m_61790): one line, then only the ways out that find something
+      const elsewhere = applyFilters(base, parsed, fctx);
+      const everywhere = eff === '' ? null : (searching ? searchItems(lib, elsewhere, parsed.words) : elsewhere).length;
+      const fromAgents = !searching && sect === 'you' ? itemsIn(here, 'agents').length : 0;
+      const ways = waysOut({ everywhere, fromAgents, filtered: somethingSet });
+      const where = [chip === null ? '' : sentenceCase(chipWord(chip)), projectName].filter((w) => w !== '').join(' · ');
+      const when = sinceOn === undefined ? '' : WHEN_WORD[sinceOn].toLowerCase();
+      const title = searching ? library.nothing_matches({ q: searchWords }) : where === '' ? `${library.nothing_here}${when === '' ? '' : ` ${when}`}` : library.nothing_in({ what: `${where}${when === '' ? '' : ` ${when}`}` });
+      return (
+        <Empty title={title} testId="artifacts.nothing"
+          action={ways.length === 0 ? undefined : (
+            <span className="art-ways">
+              {ways.map((w) => w.kind === 'everywhere'
+                ? <Button key={w.kind} kind="ghost" onClick={() => { setScope(''); setQ(withToken(q, 'in', null)); }} testId="artifacts.nothing.everywhere">{library.search_everywhere({ n: w.n })}</Button>
+                : w.kind === 'agents'
+                  ? <Button key={w.kind} kind="ghost" onClick={() => { setSect('agents'); }} testId="artifacts.nothing.agents">{library.from_agents_show({ n: w.n })}</Button>
+                  : <Button key={w.kind} kind="ghost" onClick={() => { clearAll(); searchRef.current?.focus(); }} testId="artifacts.nothing.clear">{library.clear_filters}</Button>)}
+            </span>
+          )} />
+      );
+    }
     if (searching) {
       if (found.length === 0) {
         return (
@@ -467,7 +577,7 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
       // a filter on the same list (designer m_45293): every match, under the same day heads as All
       return (
         <SearchResults q={searchWords} total={found.length} testId="artifacts.results">
-          {grid(cards, place, true, 'artifacts.grid')}
+          {grid(cards, place, heads, 'artifacts.grid')}
         </SearchResults>
       );
     }
@@ -475,12 +585,11 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
       const themes = lib.themes.filter((t) => eff === '' || (counts.get(t.id)?.n ?? 0) > 0);
       return (
         <>
-          {/* the 20 newest, whatever their folder (page art-recent): the scope and the kind chip apply */}
-          {/* what he pinned (app/pins.ts, his m_49100), above Recent: the scope and the kind chip apply */}
-          <RecentRow kind="pinned" items={pinnedOf(shown)} lib={lib} now={now} list={view === 'list'} onOpen={openIt} testId="artifacts.pinned" />
-          <RecentRow items={shown} lib={lib} now={now} list={view === 'list'} onOpen={openIt}
-            onAll={() => { setAt({ at: 'recent' }); }} testId="artifacts.recent" />
-          {themes.length > 0 && (
+          {/* what he pinned (app/pins.ts, his m_49100): the scope and the kind chip apply. No Recent strip:
+              For you's sections are newest first already and Recent is a place in the column (designer
+              m_61101); Done and Between agents are one flat list, nothing over them (ui-review) */}
+          {sect === 'you' && <RecentRow kind="pinned" items={pinnedOf(shown)} lib={lib} now={now} list={view === 'list'} onOpen={openIt} testId="artifacts.pinned" />}
+          {sect === 'you' && themes.length > 0 && (
             <>
               <GroupLabel tip={library.recent_first} testId="artifacts.sect.folders">{library.folders}</GroupLabel>
               {view === 'list' ? (
@@ -513,8 +622,8 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
               )}
             </>
           )}
-          {/* every one, newest first, under its day's head (designer m_45148: no 'Recent' label) */}
-          {grid(cards, place, true, 'artifacts.grid')}
+          {/* For you: Kept, then Open work, each under its head, newest touch first (sections.ts) */}
+          {grid(cards, place, heads, 'artifacts.grid')}
         </>
       );
     }
@@ -546,10 +655,13 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
             })}
           </div>
         )}
-        {grid(cards, place, atNow.at !== 'recent', 'artifacts.grid')}
+        {grid(cards, place, heads, 'artifacts.grid')}
       </>
     );
   })();
+  // over Done or Between agents: back to For you; under For you: those two, one click away
+  const backRow = stack === null && !searching && <BackRow view={sect} n={inView.length} onBack={() => { setSect('you'); }} testId="artifacts.back" />;
+  const quietRows = stack === null && !searching && sect === 'you' && !archivedOn && <QuietRows n={sectN} onGo={setSect} testId="artifacts.quiet" />;
 
   const head = searching || atNow.at === 'all' || stack !== null ? null : (
     // the place's name is the window's bar's (its crumb: 'artifacts › launch'), never a second time
@@ -586,7 +698,7 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
       <div className="art-scroll" data-testid="artifacts.scroll">
         {/* the lead (designer's rule on #5): no card; the bims still stays beside it as a vignette */}
         {/* the banner (designer m_42762): a full-width page, its title 32 in, the filing desk right */}
-        <PageBanner title={hero.artifacts_title} sentence={library.say} facts={libraryFacts(lib, scoped, projectName)}
+        <PageBanner title={hero.artifacts_title} sentence={library.say} facts={libraryFacts(lib, inScope, projectName)}
           visual={<LiveVignette page="artifacts" />} icon="artifacts" edge="page" gutter={gutter} testId="artifacts.lead" />
         <div className={`art-lib${narrow || sideLib ? ' bare' : ''}`}>
           {!narrow && !sideLib && column}
@@ -602,7 +714,9 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
               </div>
             )}
             {stackHead ?? head}
+            {backRow}
             <AddDrop place={place_} testId="artifacts.drop">{body}</AddDrop>
+            {quietRows}
             {archivedRow}
           </div>
         </div>
@@ -635,6 +749,7 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
       )}
       {over?.k === 'card' && (
         <CardMenu at={over.at} several={picked.has(over.key) ? picked.size : 1} finder={(() => { const it = itemOfKey(over.key); return it !== undefined && revealPathOf(it.a) !== null; })()}
+          kept={itemsOfKeys(picked.has(over.key) ? [...picked] : [over.key]).every((x) => x.a.kept != null)}
           openWith={withGroupsOf(over.key).length > 0}
           onAct={(a) => { doCard(over.key, a); }} onClose={() => { setOver((o) => (o?.k === 'card' ? null : o)); }} testId="artifacts.menu" />
       )}

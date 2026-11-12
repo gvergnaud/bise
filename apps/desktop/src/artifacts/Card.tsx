@@ -13,6 +13,7 @@ import { opensTip } from './apps';
 import { library } from '@/proto/words_library.gen';
 import { panel } from '@/proto/words_panel.gen';
 import { leaves, type Item } from './model';
+import { KeptMark } from './KeptMark';
 
 /** How a click picked: ⌘ adds or takes one, shift picks the run up to it. */
 export interface PickHow {
@@ -114,6 +115,7 @@ export const ArtCard = memo(function ArtCard({ card, line, on, picked, many, vis
       <CardPic card={card} it={it} visible={visible} picked={many && picked}
         onPick={(how) => { onPick(card.key, how); }} {...(menu === undefined ? {} : { onMenu: menu })} testId={testId} />
       <span className="art-card-tt">
+        <KeptMark a={it.a} testId={testId} />
         <span className="art-card-t1" {...tipAttrs(name)}>{name}</span>
         {isNew(card) && <span className="art-new" data-testid={`${testId}.new`} {...tipAttrs(library.tip_new)}>{panel.new_chip}</span>}
       </span>

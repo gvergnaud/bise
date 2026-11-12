@@ -231,7 +231,7 @@ impl Target {
 }
 
 fn read_json<T: serde::de::DeserializeOwned + Default>(p: &Path) -> T {
-    std::fs::read_to_string(p).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
+    crate::store_io::read_to_string(p).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
 }
 
 /// Write then rename: a reader never sees half a file, and the page
@@ -288,7 +288,7 @@ impl Store {
             return None;
         }
         let p = self.page_dir(id).join("meta.json");
-        p.exists().then(|| read_json::<Meta>(&p)).filter(|m| !m.id.is_empty())
+        crate::store_io::exists(&p).then(|| read_json::<Meta>(&p)).filter(|m| !m.id.is_empty())
     }
 
     pub fn save_meta(&self, m: &Meta) -> Result<(), String> {
@@ -362,12 +362,12 @@ impl Store {
         if !valid_id(id) {
             return None;
         }
-        std::fs::read_to_string(self.page_dir(id).join(format!("v{n}.html"))).ok()
+        crate::store_io::read_to_string(&self.page_dir(id).join(format!("v{n}.html"))).ok()
     }
 
     /// Every page, newest first.
     pub fn list(&self) -> Vec<Meta> {
-        let mut out: Vec<Meta> = std::fs::read_dir(&self.dir)
+        let mut out: Vec<Meta> = crate::store_io::read_dir(&self.dir)
             .into_iter()
             .flatten()
             .flatten()

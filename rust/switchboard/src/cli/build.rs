@@ -334,17 +334,25 @@ fn inspect(rest: &[String]) -> Result<Inspect, String> {
     })
 }
 
-/// `sb artifact add|move|folders|list|archive|unarchive`.
+/// `sb artifact add|keep|unkeep|move|folders|list|archive|unarchive`.
 fn artifact(rest: &[String]) -> Result<Artifact, String> {
-    let usage = "usage: sb artifact add <path or link> [--title \"<t>\"] [--kind <k>] [--folder <name|theme/task>] | sb artifact move <id>... <folder> | --unfiled | sb artifact folders | sb artifact list [<words>] [--agent <a>] [--archived] | sb artifact archive|unarchive <id>... | --agent <a> | --before <YYYY-MM-DD[THH:MM]> | --kind <k>";
-    let (pos, o) = parse_args(rest, &["title", "kind", "agent", "before", "folder"], &["archived", "unfiled"])?;
+    let usage = "usage: sb artifact add <path or link> [--title \"<t>\"] [--kind <k>] [--folder <name|theme/task>] [--for-you] | sb artifact keep|unkeep <id>... | sb artifact move <id>... <folder> | --unfiled | sb artifact folders | sb artifact list [<words>] [--agent <a>]... [--since last|today|week|older] [--project <p>] [--archived] | sb artifact archive|unarchive <id>... | --agent <a> | --before <YYYY-MM-DD[THH:MM]> | --kind <k>";
+    let (pos, o) = parse_args(rest, &["title", "kind", "agent", "before", "folder"], &["archived", "unfiled", "for-you"])?;
     let opt = |k: &str| o.contains_key(k).then(|| str_of(&o, k));
     let agent = || opt("agent").map(|a| a.trim_start_matches('@').to_string());
     Ok(match pos.first().map(String::as_str) {
         Some("add") => {
             let [target] = &pos[1..] else { return Err(usage.into()) };
             let cwd = std::env::current_dir().map(|d| d.to_string_lossy().to_string()).unwrap_or_default();
-            Artifact::Add { target: target.clone(), cwd, title: opt("title"), kind: opt("kind"), known_only: false, changed: None, folder: opt("folder") }
+            Artifact::Add { target: target.clone(), cwd, title: opt("title"), kind: opt("kind"), known_only: false, changed: None, folder: opt("folder"), for_you: o.contains_key("for-you") }
+        }
+        Some(d @ ("keep" | "unkeep")) if pos.len() > 1 => {
+            let ids = pos[1..].iter().map(|i| i.trim_start_matches("artifact:").to_string()).collect();
+            if d == "keep" {
+                Artifact::Keep { ids }
+            } else {
+                Artifact::Unkeep { ids }
+            }
         }
         Some("move") => {
             let ids = |p: &[String]| p.iter().map(|i| i.trim_start_matches("artifact:").to_string()).collect::<Vec<_>>();
@@ -355,7 +363,15 @@ fn artifact(rest: &[String]) -> Result<Artifact, String> {
             }
         }
         Some("folders") if pos.len() == 1 => Artifact::Folders,
-        Some("list") => Artifact::List { words: pos[1..].join(" "), agent: agent(), archived: o.contains_key("archived") },
+        Some("list") => {
+            let since = match opt("since") {
+                // a value this sb doesn't know is refused here, never sent as no filter
+                Some(s) => Some(serde_json::from_value::<bise_proto::sb::When>(json!(s)).ok().filter(|w| *w != bise_proto::sb::When::Unknown).ok_or(crate::artifacts_filter::SINCE_WORDS)?),
+                None => None,
+            };
+            let agents = super::list_of(o.get("agent")).into_iter().map(|a| a.trim_start_matches('@').to_string()).collect();
+            Artifact::List { words: pos[1..].join(" "), agent: None, agents, project: opt("project"), since, archived: o.contains_key("archived") }
+        }
         Some(d @ ("archive" | "unarchive")) => {
             if pos.len() == 1 && !["agent", "kind", "before"].iter().any(|k| o.contains_key(*k)) {
                 return Err(usage.into());

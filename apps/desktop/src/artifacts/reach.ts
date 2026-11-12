@@ -2,7 +2,8 @@
 // project's pages server, inside that project's hub: a hub that stopped (idle-exit), is starting or
 // didn't start left the frame on Chromium's refused page, blank in the panel, never retried. So the
 // panel asks main first (bise.probePage, main/probe.ts) and frames the page only once it answers;
-// meanwhile it says why, and asks again every REPROBE_MS: opening the artifact shows its project,
+// meanwhile it shows a loading state (LOAD_GRACE_MS: a server still starting refuses the first
+// asks, never an error for that, artifact-loading), then says why, and asks again every REPROBE_MS: opening the artifact shows its project,
 // which makes the core start that project's hub (architect m_38135), so the page usually comes
 // back by itself. The words: downWords (pure). Owner: page-unreach (the artifact view, Open.tsx).
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -88,15 +89,31 @@ export function downWords(row: HubRow | undefined, src: string, home?: string): 
 }
 
 /**
+ * How long a page that doesn't answer yet stays 'checking' (the panel's loading state) before the
+ * panel says it doesn't answer (artifact-loading, his m_60703): a server that refuses the first
+ * asks, or takes over the probe's 800 ms, is a hub or pages server still starting, not a failure.
+ * The error showed at once and went away with the next ask, a few seconds of a false
+ * 'nothing answers at 127.0.0.1:<port>'.
+ */
+export const LOAD_GRACE_MS = 10_000;
+/** How often a page that doesn't answer yet is asked again inside LOAD_GRACE_MS. */
+export const LOAD_RETRY_MS = 500;
+
+/**
  * The page's reach, for `src`: 'up' at once for anything not on the pages server (or with no
- * bridge: a plain browser, a test without one); else 'checking', then what the probe says, asked
- * again every REPROBE_MS while 'down'. `again()`: ask now (his 'try again').
+ * bridge: a plain browser, a test without one); else 'checking', then what the probe says. A
+ * 'down' inside LOAD_GRACE_MS of the open (or of his 'try again') stays 'checking', asked again
+ * every LOAD_RETRY_MS; past it, 'down', asked again every REPROBE_MS. 'up' and 'gone' are real
+ * answers: at once. `again()`: ask now, loading again for a new LOAD_GRACE_MS (his 'try again').
  */
 export function useReach(src: string | null): { reach: Reach; again: () => void } {
   const probe = (globalThis as { bise?: ProbeBridge }).bise?.probePage;
   const asks = probed(src) && probe !== undefined;
   const [state, setState] = useState<{ src: string | null; reach: Reach }>({ src, reach: asks ? 'checking' : 'up' });
   const [tick, setTick] = useState(0);
+  // each open of `src` and each 'try again' starts a grace; `late`: the one that ran out
+  const [epoch, setEpoch] = useState(0);
+  const [late, setLate] = useState<{ src: string | null; epoch: number } | null>(null);
   const live = useRef(true);
   useEffect(() => {
     live.current = true;
@@ -115,17 +132,29 @@ export function useReach(src: string | null): { reach: Reach; again: () => void 
       gone = true;
     };
   }, [asks, probe, src, tick]);
-  const reach: Reach = !asks ? 'up' : state.src === src ? state.reach : 'checking';
   useEffect(() => {
-    if (reach !== 'down') return;
+    if (!asks) return;
     const t = setTimeout(() => {
-      setTick((n) => n + 1);
-    }, REPROBE_MS);
+      setLate({ src, epoch });
+    }, LOAD_GRACE_MS);
     return () => {
       clearTimeout(t);
     };
-  }, [reach, tick]);
+  }, [asks, src, epoch]);
+  const asked: Reach = state.src === src ? state.reach : 'checking';
+  const loading = late?.src !== src || late.epoch !== epoch;
+  const reach: Reach = !asks ? 'up' : asked === 'down' && loading ? 'checking' : asked;
+  useEffect(() => {
+    if (asked !== 'down') return;
+    const t = setTimeout(() => {
+      setTick((n) => n + 1);
+    }, loading ? LOAD_RETRY_MS : REPROBE_MS);
+    return () => {
+      clearTimeout(t);
+    };
+  }, [asked, loading, tick]);
   const again = useCallback(() => {
+    setEpoch((n) => n + 1);
     setTick((n) => n + 1);
   }, []);
   return { reach, again };

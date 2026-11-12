@@ -21,6 +21,16 @@
 .prt-ahead { display: flex; align-items: center; flex-wrap: wrap; margin: 0 0 var(--s-1); font-size: var(--t-13); color: var(--c-text-3); }
 .prt-out:hover { color: var(--c-text); }
 .prt-line > .b-btn { margin-left: var(--s-2); }
+/* the PR's size at the line's end, as GitHub's: +added in ok, −removed in err, five squares for
+   their shares, the neutral ones a rule (his m_62199); narrow, it wraps under, at the start */
+.prt-stat { display: inline-flex; align-items: center; gap: var(--gap-inline); margin-left: auto; padding-left: var(--s-3);
+  font-variant-numeric: tabular-nums; white-space: nowrap; }
+.prt-add { color: var(--c-ok); }
+.prt-del { color: var(--c-err); }
+.prt-sq { flex: none; }
+.prt-sq-add { fill: var(--c-ok); }
+.prt-sq-del { fill: var(--c-err); }
+.prt-sq-none { fill: var(--c-line-strong); }
 .prt-desc { display: flex; gap: var(--s-2); width: 100%; min-width: 0; padding: var(--s-1) 0; font-size: var(--t-13); color: var(--c-text-2); text-align: left; }
 .prt-desc-k { flex: none; }
 .prt-desc:hover .prt-desc-k { color: var(--c-text); }

@@ -67,6 +67,7 @@
 {"cmd":"artifact","cwd":"/w/shop","do":"add","target":"https://example.com/pr/1"}
 {"archived":false,"cmd":"artifact","do":"list","words":""}
 {"agent":"docs","archived":true,"cmd":"artifact","do":"list","words":"launch"}
+{"agents":["perf","you"],"archived":false,"cmd":"artifact","do":"list","project":"acme","since":"today","words":"plan"}
 {"cmd":"artifact","do":"archive","ids":["a1","a2"]}
 {"cmd":"artifact","do":"unarchive","ids":["a1"]}
 {"agent":"docs","before_ms":1767225600000,"cmd":"artifact","do":"archive","ids":[],"kind":"doc"}

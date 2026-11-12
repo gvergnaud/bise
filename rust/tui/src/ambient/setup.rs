@@ -594,17 +594,17 @@ pub fn live(flow: FlowFn) -> SetupPorts {
         sign_in_cancel: Box::new(move |id| sign_in_cancel(id, &open2)),
         scan: Box::new(move |dir, tx| {
             let h = home();
-            let skip = vec![h.root().to_path_buf(), bise_home::projects::canonical(&home_workspace())];
+            let skip = vec![h.root().to_path_buf(), bise_home::projects::canonical(&home().bise_root())];
             std::thread::spawn(move || {
                 let entries = walk(&dir, DEPTH, &skip);
                 let _ = tx.send(Done::Scanned { dir, entries });
             });
         }),
         home_dir: home().user_home().to_path_buf(),
-        rows: Box::new(move || bise_home::projects::list(&home(), &home_workspace())),
+        rows: Box::new(move || bise_home::projects::list(&home(), &home().bise_root())),
         add: Box::new(move |path| {
             let now = std::time::SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64);
-            bise_home::projects::add_path(&home(), &home_workspace(), path, None, now).map(|_| ())
+            bise_home::projects::add_path(&home(), &home().bise_root(), path, None, now).map(|_| ())
         }),
         registry: Box::new(move |op| {
             use bise_home::projects;
@@ -746,12 +746,6 @@ pub fn live(flow: FlowFn) -> SetupPorts {
             profile: Box::new(crate::computer_use::profile_act),
         },
     }
-}
-
-/// The home workspace (`~/bise`, `$BISE_HOME_WORKSPACE` in the tests):
-/// bise_home's one rule, the hub's too.
-fn home_workspace() -> PathBuf {
-    bise_home::projects::home_workspace()
 }
 
 #[cfg(test)]

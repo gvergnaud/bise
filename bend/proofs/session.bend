@@ -358,3 +358,15 @@ def Laws.resume_appends_the_note():
 
 def Laws.resume_needs_idle():
   {==}
+
+def Laws.hello_refuses_http():
+  {==}
+
+def Laws.hello_is_whole():
+  {==}
+
+def Laws.hello_line_ends_at_newline():
+  {==}
+
+def Laws.refused_note_is_clipped():
+  {==}

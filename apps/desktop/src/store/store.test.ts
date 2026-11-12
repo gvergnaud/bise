@@ -6,6 +6,7 @@ import { allFixtureEvents, replay } from "./replay";
 import { sentWords } from "./types";
 import { OLDER_LIMIT } from "./window";
 import {
+  MARKS,
   Store,
   TAGS,
   threadKey,
@@ -584,8 +585,19 @@ what is in this picture?`,
     expect(sent).toEqual([
       { cmd: "shown", projects: ["home", P] },
       { cmd: "subscribe", project: P, agent: "perf", limit: 60 },
+      { cmd: "marks", project: P, agent: "perf", limit: MARKS },
       { cmd: "subscribe", project: P, agent: "main" },
+      { cmd: "marks", project: P, agent: "main", limit: MARKS },
     ]);
+  });
+
+  it("a thread's subscribe asks his last messages too, and thread_marks is its marks slice (msg-dots)", () => {
+    const { store, sent } = fake();
+    store.subscribeThread(P, "perf");
+    expect(sent.at(-1)).toEqual({ cmd: "marks", project: P, agent: "perf", limit: MARKS });
+    expect(store.threadMarks(threadKey(P, "perf"))).toBeNull();
+    store.apply({ ev: "thread_marks", project: P, agent: "perf", marks: [{ pos: 7, at_ms: 1, text: "go" }], upto: 90 });
+    expect(store.threadMarks(threadKey(P, "perf"))).toEqual({ marks: [{ pos: 7, at_ms: 1, text: "go" }], upto: 90 });
   });
 
   it("olderPage asks for the page before the oldest entry, only when there is more", () => {

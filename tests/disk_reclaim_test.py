@@ -79,7 +79,8 @@ with tempfile.TemporaryDirectory() as home:
     open(freef, "w").write(str(10 * 1048576))
     r = subprocess.run([sys.executable, SCRIPT, "--want", "25"], env=env, capture_output=True, text=True)
     log = open(os.path.join(home, ".bise", "run", "reclaim.log")).read().splitlines()
-    order = [l.split("\t")[1] for l in log[1:]]
+    # the deletions only: each idle target's incremental dirs go first, logged 'low-incremental'
+    order = [l.split("\t")[1] for l in log[1:] if l.split("\t")[-1] == "low"]
     check(order == [mid, young], "10 GB free, 25 wanted: mid then young (LRU): %r" % order)
     check(not gone(fresh) and not gone(used), "the fresh and the locked ones stay")
     check(not [d for d in os.listdir(os.path.dirname(mid)) if d.startswith("target.reclaiming")], "no leftover dir")
@@ -89,5 +90,21 @@ with tempfile.TemporaryDirectory() as home:
     fcntl.flock(lk, fcntl.LOCK_EX)
     r = subprocess.run([sys.executable, SCRIPT, "--want", "99"], env=env, capture_output=True, text=True, timeout=20)
     check("another reclaim runs" in r.stdout, "one reclaim at a time")
+
+# --grown (architect m_60754): what a job wrote into its own targets since its start, the files
+# with an mtime at or after it; an older file (a seed clone's) never counts, nor the tree's others
+with tempfile.TemporaryDirectory() as tree:
+    tg = os.path.join(tree, "rust", "target", "debug")
+    os.makedirs(tg)
+    old_f, new_f, out_f = os.path.join(tg, "old.rlib"), os.path.join(tg, "new.rlib"), os.path.join(tree, "notes.bin")
+    for p in (old_f, new_f, out_f):
+        with open(p, "wb") as fh:
+            fh.write(b"x" * 1048576)
+    t0 = time.time()
+    os.utime(old_f, (t0 - 3600, t0 - 3600))
+    r = subprocess.run([sys.executable, SCRIPT, "--grown", str(int(t0)), tree], capture_output=True, text=True,
+                       env={k: v for k, v in os.environ.items() if k != "CARGO_TARGET_DIR"})
+    kb = int(r.stdout.strip() or -1)
+    check(r.returncode == 0 and 1024 <= kb < 2048, "--grown: the new file in the target only (1 MB), not the old one nor a file outside: %r" % r.stdout)
 
 sys.exit(1 if fails else 0)

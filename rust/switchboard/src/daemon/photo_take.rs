@@ -62,14 +62,36 @@ fn pick(dir: &Path, key: Option<&str>, events: &[Value], migrated: bool) -> (Opt
 /// The boot's rebuild: from the photo when one fits, else every event.
 /// A full replay takes a photo at once (the next boot starts from it).
 /// sb-core dead or late on the replay: the error, the hub does not start.
+/// No photo at all (no key): the loop budget's tests' shell.
+#[cfg(test)]
+pub(super) fn off(dir: PathBuf) -> Photos {
+    Photos { dir, key: None, mark: Mark::of(&[]), last_event: 0, last_photo: 0, last_events: 0, last_took: 0, wait: photo::Wait::default(), quiet: false }
+}
+
 pub(super) fn boot(hub: &mut Hub, paths: &Paths, core_bin: &Path, events: &[Value], migrated: bool, watch: &super::boot::Boot) -> Result<Photos, crate::core::CoreError> {
     let dir = paths.state.join("photo");
     photo::clean(&dir);
     let key = photo::key_of(core_bin);
-    let mut ph = Photos { dir, key, mark: Mark::of(events), last_event: now_ms(), last_photo: 0, last_events: 0, last_took: 0, wait: photo::Wait::default(), quiet: false };
     let t0 = now_ms();
-    let (from, why) = pick(&ph.dir, ph.key.as_deref(), events, migrated);
-    let rebuilt = hub.rebuild(events, from, &mut |done, total| watch.replayed(done, total))?;
+    // each long part says its progress in hub.log (Boot::moving): the
+    // photo read, the journal checked against it in one pass (its mark
+    // and the photo's prefix together), its slices restored, the replay
+    let read = key.as_deref().and_then(|k| photo::read(&dir, k));
+    watch.step(&match &read {
+        Some((h, s)) => format!("photo read ({} slices, {} events)", s.len(), h.mark.events),
+        None => "no photo of this sb-core".to_string(),
+    });
+    let k = read.as_ref().map_or(0, |(h, _)| h.mark.events);
+    let (mark, at) = Mark::of_and_at(events, k, &mut |done, total| watch.moving(&format!("journal checked {done}/{total} events")));
+    let (from, why) = match key.as_deref() {
+        None => (None, Some("sb-core's binary unreadable".to_string())),
+        Some(key) => match photo::usable_at(read.as_ref().map(|(h, _)| h), key, events.len(), &at, migrated) {
+            Use::Photo { k } => (read.map(|(_, st)| (k, st)), None),
+            Use::Full { why } => (None, Some(why)),
+        },
+    };
+    let mut ph = Photos { dir, key, mark, last_event: now_ms(), last_photo: 0, last_events: 0, last_took: 0, wait: photo::Wait::default(), quiet: false };
+    let rebuilt = hub.rebuild(events, from, &mut |done, total| watch.replayed(done, total), &mut |done, total| watch.moving(&format!("photo restore {done}/{total} slices")))?;
     if !rebuilt.skipped.is_empty() {
         let mut kinds: Vec<String> = rebuilt.skipped.iter().map(|e| e["type"].to_string()).collect();
         kinds.dedup();

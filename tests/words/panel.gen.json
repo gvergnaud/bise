@@ -111,6 +111,11 @@
     "one": null,
     "text": "it may be archived"
   },
+  "panel.art_loading": {
+    "args": [],
+    "one": null,
+    "text": "loading the page…"
+  },
   "panel.art_no_copy": {
     "args": [
       "why"

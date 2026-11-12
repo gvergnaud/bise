@@ -241,6 +241,11 @@ fn v_opens_the_versions_under_the_row() {
 #[test]
 fn empty_places_say_what_to_do() {
     let mut sc = Screen { place: Place::All, ..screen() };
+    // hub-loop: before the hub's list came (built off its loop), an empty
+    // list is loading, never "nothing yet"
+    let out = render(&mut sc, &[], 144, 20);
+    assert!(out.contains("loading the list…"), "{out}");
+    crate::artifacts::set_rows(&[], None, "p");
     let out = render(&mut sc, &[], 144, 20);
     assert!(out.contains("nothing yet. when an agent makes a page, a doc or a file for you, it lands here."), "{out}");
     let all: Vec<Artifact> = library().into_iter().filter(|a| a.folder.is_some()).collect();

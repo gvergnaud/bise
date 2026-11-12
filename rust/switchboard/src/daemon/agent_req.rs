@@ -142,17 +142,21 @@ impl Shell {
         let body = match req {
             // another project's thread (S2 C, xread.rs): `<p>/<agent>`
             AgentReq::Inspect(q) if xread::elsewhere(&q.agent) => self.xinspect(&q),
-            AgentReq::Show { msg: Some(n), context, .. } => self.show_msg(n, context),
-            AgentReq::Show { agent, pos, context, .. } if xread::elsewhere(&agent) => self.xshow(&agent, pos, context),
-            AgentReq::History(h) if xread::wanted(&h) => self.xsearch(&h),
+            // sb show and sb history: on the history worker, which
+            // replies (history_work.rs: never on the loop)
+            AgentReq::Show { msg: Some(n), context, .. } => return self.show_msg(stream, &from, n, context),
+            AgentReq::Show { agent, pos, context, .. } if xread::elsewhere(&agent) => return self.xshow(stream, &from, agent, pos, context),
+            AgentReq::History(h) if xread::wanted(&h) => return self.xsearch(stream, &from, h),
+            AgentReq::Show { agent, pos, context, .. } => return self.search(stream, &from, history::Look::show(&agent, pos, context)),
+            AgentReq::History(h) => return self.search(stream, &from, history::Look::history(&h)),
             // S10: bise's `sb follow <p>/<agent>`: on that project's hub
             AgentReq::Follow { agent, on, .. } if self.wants_follow(&agent) => return self.xfollow(stream, &from, &agent, on),
             AgentReq::Inspect(q) => self.inspect(&from, &q),
-            AgentReq::Show { agent, pos, context, .. } => self.search(&history::Look::show(&agent, pos, context)),
-            AgentReq::History(h) => self.search(&history::Look::history(&h)),
             r @ (AgentReq::PagePublish(_) | AgentReq::PageStart { .. } | AgentReq::PageTick { .. } | AgentReq::PageWaiting | AgentReq::PageList | AgentReq::PageNotes { .. }) => self.page_op(&from, r),
             AgentReq::Taste(k) => self.keeps_op("taste", &k),
             AgentReq::People(k) => self.keeps_op("people", &k),
+            // --project: another project's store, read off the loop (art_folders)
+            AgentReq::Artifact(a @ bise_proto::sb::Artifact::List { project: Some(_), .. }) => return self.art_list(stream, &from, a),
             AgentReq::Artifact(a) => self.artifact_cmd(&from, a),
             AgentReq::ProjectList => xhub::list_body(&self.opts.home),
             req => return self.core_files(token, stream, from, req, asker),

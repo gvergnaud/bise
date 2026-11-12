@@ -64,6 +64,7 @@ apps/desktop/src/main/viewrules.ts | 1 | keep | 'video': a media permission (the
 apps/desktop/src/review/parts.ts | 1 | keep | a diff's words-and-docs group (md, mdx, txt) in the review
 rust/switchboard/src/daemon/attach.rs | 1 | keep | an image attached for the model, found beside its path
 rust/switchboard/src/daemon/session_log.rs | 1 | keep | the session log's own .txt files
+rust/switchboard/src/artifacts_marks.rs | 1 | keep | the audience backfill's title words (".pptx", ".xlsx" = a deck or sheet he asked for), never an opener; goes with shim artifacts-backfill (v2027.2.1)
 rust/switchboard/src/diff.rs | 1 | keep | a diff's binary image file
 rust/switchboard/src/pages/lint.rs | 2 | keep | html tag names in the page lint
 rust/tui/src/mdlive.rs | 1 | keep | a code fence's tag

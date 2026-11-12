@@ -138,6 +138,12 @@ def GITHUB() -> String:
 def VIEW() -> String:
   "view"
 
+# the user as an artifact's `by` and the filter's `by: you`
+# (switchboard/src/artifacts_filter.rs): no agent holds it, or his adds
+# and an agent's would read the same (architect m_61901)
+def YOU() -> String:
+  "you"
+
 # a name no agent ever holds, as its name or an old one: the empty name
 # and every reserved name but main's (law no_reserved_names: a
 # task_created's and a rename's name is never name_held). A lookup of one
@@ -145,7 +151,7 @@ def VIEW() -> String:
 # looked up in most steps, and the archived agents are ~900 on his hub
 # (c4b-core-step-flat)
 def never_agent(+n: String) -> Bool:
-  String.is_empty(n) || String.eq(n, USER()) || String.eq(n, HUB()) || String.eq(n, GITHUB()) || String.eq(n, VIEW())
+  String.is_empty(n) || String.eq(n, USER()) || String.eq(n, HUB()) || String.eq(n, GITHUB()) || String.eq(n, VIEW()) || String.eq(n, YOU())
 
 # a name of `ns` is never_agent
 def never_in(ns: List<&2, String>) -> Bool:

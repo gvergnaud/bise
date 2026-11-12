@@ -9,10 +9,11 @@
 //! probation (a death always does).
 
 use super::{
-    adopt, adoptable, busy_at, free_port, hash_keys, kill_pid, log_line, plugins_fingerprint,
+    adopt, left_repl, busy_at, free_port, hash_keys, port_free, kill_pid, log_line, plugins_fingerprint,
     prompt_is_stale, skill_roots, skills_fingerprint, stall_for_tests, supervise, write_logged, Msg, PromptInputs,
     Shell, PROMPT_PLUGINS_FILE,
 };
+use super::repl::Left;
 use crate::repl_start::{admit, Cand, Kind};
 use crate::util::now_ms;
 use std::path::PathBuf;
@@ -217,7 +218,17 @@ impl Shell {
         self.next_gen += 1;
         self.gens.insert(dir.clone(), gen);
         if self.booting && resume {
-            if let Some(r) = adoptable(&adir) {
+            let left = left_repl(&adir);
+            if let Left::TooNew { pid, say } = left {
+                // it would never read a word from this hub: its session
+                // goes on in a fresh REPL of this hub's version
+                log_line(
+                    &self.opts.paths,
+                    &format!("the REPL of {} (pid {}) speaks say-port {}, this hub {}: stopped, a fresh one resumes its session", a.name, pid, say, super::repl::SAY_PROTO),
+                );
+                kill_pid(pid);
+            }
+            if let Left::Adopt(r) = left {
                 log_line(&self.opts.paths, &format!("adopting the REPL of {} (pid {}, port {})", a.name, r.pid, r.port));
                 self.pids.insert(dir.clone(), (gen, r.pid));
                 if !self.reload_id.is_empty() {
@@ -265,7 +276,11 @@ impl Shell {
         write_logged(&self.opts.paths, &adir.join("wire.log"), "");
         write_logged(&self.opts.paths, &adir.join("wire.offset"), "0");
         let _ = std::fs::remove_file(adir.join("repl.json"));
-        let port = match port.map(Ok).unwrap_or_else(free_port) {
+        // a switch's reload keeps its port, while it is free: the old
+        // REPL (adopted, not our child) may hold it a while yet, and a new
+        // one that cannot listen dies at startup (exit 48, EADDRINUSE) and
+        // fails the switch (the 11:01 rollback)
+        let port = match port.filter(|p| port_free(*p)).map(Ok).unwrap_or_else(free_port) {
             Ok(p) => p,
             Err(e) => {
                 let reason = format!("no free port: {}", e);
@@ -274,6 +289,9 @@ impl Shell {
             }
         };
         let (session, cont) = self.prepare_session(&a, &dir, &adir, resume);
+        // its say port opens only with this hello (repl-core's serve_gate,
+        // say-port): a fresh one per process, kept in repl.json for adoption
+        let token = crate::pages::new_token();
         let mut cmd = Command::new(&self.opts.repl_bin);
         cmd.current_dir(&self.opts.app_root);
         // its whole environment: the hub's minus every internal and test
@@ -282,6 +300,7 @@ impl Shell {
             bise_home::env::Child::Repl,
             [
                 ("BEND_REPL_PORT", std::ffi::OsString::from(port.to_string())),
+                ("BISE_REPL_TOKEN", token.clone().into()),
                 // its run dir is the hub's (`Paths::run`): its bridge.json
                 // is where the hub looks for it
                 ("BEND_RUN_DIR", self.opts.paths.run.clone().into()),
@@ -296,10 +315,6 @@ impl Shell {
                 ("SB_SOCKET", self.opts.paths.agent_socket().into()),
                 ("BEND_WIRE_LOG", adir.join("wire.log").into()),
                 ("SB_AGENT", a.name.clone().into()),
-                // the hub's home workspace (taste.md, people.md): an agent's
-                // `~/bise` is its shell's HOME, not this hub's when the home
-                // is elsewhere (a QA hub, amb-tools m_6141)
-                ("BISE_HOME_WORKSPACE", crate::paths::home_workspace().into()),
                 // which model: config.toml `model`, or `agent_model` (BISE-142)
                 ("BISE_ROLE", (if a.is_main { "main" } else { "agent" }).into()),
                 // its own model and effort, over both (BISE-135: /model)
@@ -404,7 +419,7 @@ impl Shell {
             step();
             slow_spawn_for_tests();
             env.apply(&mut cmd);
-            supervise(cmd, dir, gen, adir, port, tx, paths)
+            supervise(cmd, dir, gen, adir, super::repl::SayPort { port, token }, tx, paths)
         });
     }
 }

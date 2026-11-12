@@ -233,7 +233,35 @@ pub struct AgentIn {
     pub dir: String,
     /// its REPLs' session ids (`repl.sids`): the REPL is their leader
     pub sessions: BTreeSet<u32>,
+    /// its live REPL as `repl.json` names it (the one a hub adopts): its
+    /// pid and its say port. An adopted REPL is not the hub's child and
+    /// may be in no session of `repl.sids`: this pid still keeps it and
+    /// what it runs out of the detached rows
+    pub repl: Option<Repl>,
     pub bg: Vec<BgJob>,
+}
+
+/// An agent's REPL process (`repl.json`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Repl {
+    pub pid: u32,
+    /// the say port: the hub's line to its REPL, never asked HTTP
+    pub port: u16,
+}
+
+/// The ports the HTTP probe never connects to: the agents' say ports (a
+/// connection there is the hub's alone; a probe queued behind the hub's
+/// was read as his words, say-port) and `own`, the ports bise itself
+/// serves (its pages server, its plugins bridges).
+pub fn never_probed(agents: &[AgentIn], own: &[u16]) -> BTreeSet<u16> {
+    agents.iter().filter_map(|a| a.repl.map(|r| r.port)).chain(own.iter().copied()).collect()
+}
+
+/// The port of a loopback base (`http://127.0.0.1:<port>/<token>`, a
+/// bridge's `base`).
+pub fn base_port(base: &str) -> Option<u16> {
+    let rest = base.strip_prefix("http://127.0.0.1:")?;
+    rest.split('/').next()?.parse().ok()
 }
 
 /// A running background job of its bash tool (`bg/<n>.slot` with a live
@@ -316,7 +344,8 @@ fn descendants(from: &[u32], kids: &BTreeMap<u32, Vec<u32>>) -> BTreeSet<u32> {
 /// The trees each live agent left running: a bg job is its process group
 /// and what that started; any other process of the agent's
 /// (`procs::select`: its tag, its REPL's session) outside its REPL's
-/// tree (the REPL, the turn's running command, its MCP servers) and
+/// tree (the REPL: its sessions' leaders, the hub's child, repl.json's
+/// pid; the turn's running command, its MCP servers) and
 /// outside bise's own job runner is a detached tree, by root. Never `me`
 /// nor its ancestors.
 pub fn trees(rows: &[Row], hub: &str, agents: &[AgentIn], me: u32) -> Vec<Tree> {
@@ -335,12 +364,13 @@ pub fn trees(rows: &[Row], hub: &str, agents: &[AgentIn], me: u32) -> Vec<Tree> 
         let want = crate::procs::Want::Dirs { dirs: &dirs, before: u64::MAX };
         let mine: BTreeSet<u32> = crate::procs::select(&peer, hub, &want, &a.sessions, me).into_iter().map(|p| p.pid).collect();
         // the REPLs (their sessions' leaders, and the hub's own children:
-        // a REPL just spawned whose session isn't in repl.sids yet) and
-        // what they run now
+        // a REPL just spawned whose session isn't in repl.sids yet, the
+        // adopted one repl.json names) and what they run now
         let repls: Vec<u32> = a
             .sessions
             .iter()
             .copied()
+            .chain(a.repl.map(|r| r.pid))
             .chain(mine.iter().copied().filter(|p| by_pid.get(p).is_some_and(|r| r.ppid == me)))
             .filter(|s| by_pid.get(s).is_some_and(|r| !r.zombie))
             .collect::<BTreeSet<u32>>()

@@ -72,7 +72,7 @@ fn split(args: &[String], flag: &str) -> (Option<String>, Vec<String>) {
 
 pub fn main(args: &[String]) -> i32 {
     let home = Home::from_env();
-    let home_ws = switchboard::paths::home_workspace();
+    let home_ws = bise_home::Home::from_env().bise_root();
     let cmd = args.first().map(String::as_str).unwrap_or("list");
     if args.iter().any(|a| a == "-h" || a == "--help") || cmd == "help" {
         println!("{USAGE}");

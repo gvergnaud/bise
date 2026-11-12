@@ -4,7 +4,9 @@ land check, the rest, --low), then first come first served; a dead waiter's
 ticket blocks nobody; heavy.log gets a start and an end line; --install puts
 the script in ~/.bise/run. Runs in a temp HOME with one slot (HEAVY_SLOTS=1),
 ~15 s."""
+import json
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -373,9 +375,9 @@ with tempfile.TemporaryDirectory() as home:
     d = open(dtsv).read().splitlines()[-1].split("\t")
     check(d[1] == "other" and d[2] == "-", "a reclaim still running at its end: written '-': %r" % d[:3])
 
-    def reserve(kind, rows):
+    def reserve(kind, rows, src="\tsrc=target"):
         with open(dtsv, "w") as fh:
-            fh.writelines("1\t%s\t%s\t0\t0\t0\tx\n" % (kind, kb) for kb in rows)
+            fh.writelines(("1\t%s\t%s\t0\t0\t0\tx" + src + "\n") % (kind, kb) for kb in rows)
         fn = 'eval "$(sed -n -e "/^reserve_gb()/,/^}/p" -e "/^p90_gb()/,/^}/p" "$0")"; reserve_gb "$1"'
         return subprocess.run(["bash", "-c", fn, HEAVY, kind], env=dict(env, HOME=home), capture_output=True, text=True).stdout.strip()
     check(reserve("cargo-cold", [1 * GB] * 4) == "10" and reserve("cargo-cold", []) == "10",
@@ -388,6 +390,118 @@ with tempfile.TemporaryDirectory() as home:
     check(reserve("other", [9 * GB] * 20) == "2" and reserve("cargo-cold", [GB] * 4 + ["bad"] * 3) == "10",
           "other 2; a bad line is skipped (4 left: flat)")
     check(reserve("cargo-cold", [GB] * 4 + ["-"]) == "10", "a '-' line: skipped, 4 left: flat")
+    # a cargo kind's rows count only when they measured its own targets' growth (src=target,
+    # architect m_60754): its old free-drop rows charged every other writer to it, and stay unread
+    check(reserve("cargo-cold", [GB // 2] * 20, src="") == "10", "cargo-cold: 20 free-drop rows (no src=target): unread, flat 10")
+    # a cargo job's end: its row is what disk_reclaim.py --grown says (here a fake: 4096 KB), src=target
+    os.remove(dtsv)
+    fake_grown = os.path.join(home, "fake_grown")
+    with open(fake_grown, "w") as fh:
+        fh.write('#!/bin/sh\n[ "$1" = --grown ] && echo 4096\nexit 0\n')
+    os.chmod(fake_grown, 0o755)
+    r = subprocess.run([HEAVY, "sh", "-c", "true", "cargo"], env=dict(envr, HEAVY_RECLAIM=fake_grown), capture_output=True, timeout=60)
+    rows = lambda: open(dtsv).read().splitlines() if os.path.exists(dtsv) else []  # noqa: E731
+    check(r.returncode == 0 and wait_for(lambda: rows()), "a cargo job ends at once, its row comes after")
+    d = rows()[-1].split("\t") if rows() else []
+    check(len(d) == 8 and d[1].startswith("cargo-") and d[2] == "4096" and d[7] == "src=own",
+          "a cargo job's disk.tsv row: its targets' growth (--grown), src=own: %r" % d)
+    # each kind's dirs from one table (kind_dirs, architect m_60879): --grown gets them
+    kd = lambda k: subprocess.run(["bash", "-c", 'eval "$(sed -n -e "/^kind_dirs()/,/^}/p" "$0")"; kind_dirs "$1"', HEAVY, k],  # noqa: E731
+                                  env=dict(env, CARGO_TARGET_DIR=""), capture_output=True, text=True).stdout.split()
+    check(kd("cargo-warm") == ["rust/target", "target", "../target"] and "apps/desktop/out" in kd("desktop") and kd("other") == [],
+          "kind_dirs: cargo -> its targets, desktop -> its out/ and caches, other -> none (the free-drop row)")
+    # ~/.bise/dev/build's idle piles: disk_reclaim.reclaimable(), pure (architect m_61530)
+    sys.path.insert(0, os.path.join(HERE, "..", "scripts"))
+    import disk_reclaim as dr
+    old = {"exec_known": True, "exec_live": False, "lock_held": False, "newest": False, "nightly_kept": False,
+           "age_h": 30, "keep_h": 24}
+    rows = [(("cand", "a" * 12), old, "delete"),
+            (("cand", "a" * 12), dict(old, newest=True), "keep"),
+            (("cand", "a" * 12), dict(old, nightly_kept=True), "keep"),
+            (("cand", "a" * 12), dict(old, lock_held=True), "keep"),
+            (("cand", "a" * 12), dict(old, exec_live=True), "keep"),
+            (("cand", "a" * 12), dict(old, exec_known=False), "keep"),
+            (("cand", "a" * 12), dict(old, age_h=10), "keep")]
+    cache = {"exec_known": True, "exec_live": False, "lock_held": False, "cargo_held": False,
+             "idle_min": 40, "idle_h": 6, "min_idle_min": 30, "low": False}
+    rows += [(("cache", "target-jsrt"), cache, "keep"),
+             (("cache", "target-jsrt"), dict(cache, low=True), "delete"),
+             (("cache", "target-jsrt"), dict(cache, low=True, lock_held=True), "keep"),
+             (("cache", "target-jsrt"), dict(cache, low=True, cargo_held=True), "keep"),
+             (("cache", "target-jsrt"), dict(cache, idle_min=400), "delete"),
+             (("cache", "target-jsrt"), dict(cache, low=True, idle_min=20), "keep")]
+    rows += [(("other", n), dict(old, exec_known=True), "keep") for n in ("desktop-try", "ambient", "desktop", "cache")]
+    bad = [(e, f, want, dr.reclaimable(e, f)) for e, f, want in rows if dr.reclaimable(e, f)[0] != want]
+    check(not bad, "reclaimable: an old candidate goes; the newest, a nightly-kept one, a held lock, a live process, "
+          "an unread process table, a young one stay; a cache goes idle 6 h or low + 30 min, never locked; "
+          "desktop-try/ambient/desktop/cache always stay: %r" % bad)
+    # 'desktop' (a quick gate whose heavy steps are desktop/office only, architect m_60481): its own
+    # reserve the flat 2; what a RUNNING one may still write, flat 2 under 10 measured runs, then
+    # their p90 (measured_gb), like the other kinds
+    def measured(kind, rows, src="\tsrc=target"):
+        with open(dtsv, "w") as fh:
+            fh.writelines(("1\t%s\t%s\t0\t0\t0\tx" + src + "\n") % (kind, kb) for kb in rows)
+        fn = 'eval "$(sed -n -e "/^measured_gb()/,/^}/p" -e "/^p90_gb()/,/^}/p" "$0")"; measured_gb "$1"'
+        return subprocess.run(["bash", "-c", fn, HEAVY, kind], env=dict(env, HOME=home), capture_output=True, text=True).stdout.strip()
+    check(reserve("desktop", []) == "2" and reserve("desktop", [9 * GB] * 20) == "2", "desktop's own reserve: flat 2, never over")
+    check(measured("desktop", [5 * GB] * 9) == "2", "a running desktop job, 9 measured: the flat 2")
+    check(measured("desktop", [5 * GB] * 10) == "5", "a running desktop job, 10 measured: their p90, 5")
+    check(measured("cargo-warm", [19 * GB] * 20, src="") == "10", "a running cargo-warm job: 20 free-drop rows at 19 GB: unread, flat 10")
+    check(measured("cargo-warm", [GB] * 9) == "10" and measured("cargo-warm", [5 * GB] * 10) == "5",
+          "a running cargo-warm job: 9 own rows, its flat 10 (a guess errs high, architect m_61208); 10 at 5 GB, their p90 5")
+    # the cargo ceiling (architect m_61208): max(1, cpus / 6), HEAVY_CARGO_MAX wins; the cargo
+    # jobs running are the live reserve files of a cargo kind
+    cm = lambda **e: subprocess.run(["bash", "-c", 'eval "$(sed -n -e "/^cargo_max()/p" "$0")"; cargo_max', HEAVY],  # noqa: E731
+                                    env=dict(env, **e), capture_output=True, text=True).stdout.strip()
+    ncpu = int(subprocess.run(["/usr/sbin/sysctl", "-n", "hw.ncpu"], capture_output=True, text=True).stdout)
+    check(cm() == str(max(1, ncpu // 6)) and cm(HEAVY_CARGO_MAX="3") == "3", "cargo_max: max(1, cpus / 6), HEAVY_CARGO_MAX wins")
+    rdir = os.path.join(home, "cr", ".bise", "run", "reserve")
+    os.makedirs(rdir, exist_ok=True)
+    me = os.getpid()
+    for name, kind in (("heavy.lock.%d" % me, "cargo-warm"), ("heavy2.lock.%d" % me, "desktop"),
+                       ("heavy3.lock.%d" % me, "full"), ("heavy4.lock.999999", "cargo-cold")):
+        with open(os.path.join(rdir, name), "w") as fh:
+            fh.write("3\t/x\t0\tcmd\t%s\n" % kind)
+    cr = subprocess.run(["bash", "-c", 'eval "$(sed -n -e "/^cargo_running()/,/^}/p" -e "/^rfield()/p" "$0")"; cargo_running', HEAVY],
+                        env=dict(env, HOME=os.path.join(home, "cr")), capture_output=True, text=True).stdout.strip()
+    check(cr == "2", "cargo_running: the live cargo-warm and full jobs, not the desktop one nor a dead pid's: %r" % cr)
+    check(measured("other", [3 * GB] * 10, src="") == "3", "the other kinds keep their free-drop rows")
+    # any kind: its free-drop rows count until 10 own rows exist (src=own), then only the own ones
+    def mixed(kind, free_rows, own_rows):
+        with open(dtsv, "w") as fh:
+            fh.writelines("1\t%s\t%d\t0\t0\t0\tx\n" % (kind, kb) for kb in free_rows)
+            fh.writelines("1\t%s\t%d\t0\t0\t0\tx\tsrc=own\n" % (kind, kb) for kb in own_rows)
+        fn = 'eval "$(sed -n -e "/^measured_gb()/,/^}/p" -e "/^p90_gb()/,/^}/p" "$0")"; measured_gb "$1"'
+        return subprocess.run(["bash", "-c", fn, HEAVY, kind], env=dict(env, HOME=home), capture_output=True, text=True).stdout.strip()
+    check(mixed("desktop", [21 * GB] * 20, [0] * 9) == "21", "a running desktop job: 9 own rows, its free-drop rows still count (21)")
+    check(mixed("desktop", [21 * GB] * 20, [GB] * 10) == "1", "a running desktop job: 10 own rows at 1 GB: only they count (1)")
+    # its kind from the tree's own plan (tests/gate_plan.py's JSON, as data): a fake tree
+    gk = os.path.join(home, "gk", "tests")
+    os.makedirs(gk, exist_ok=True)
+    open(os.path.join(gk, "gate.sh"), "w").close()
+
+    def kind_of(plan, cmd=None):
+        p = dict({"pkgs": [], "hub_changed": 0, "bend_changed": 0, "core_gen": 0, "desktop": None}, **plan)
+        p["flags"] = dict({"proto_ts": 0, "office": 0, "office_skills": 0, "crossterm_changed": 0}, **plan.get("flags", {}))
+        with open(os.path.join(gk, "gate_plan.py"), "w") as fh:
+            fh.write("print(%r)\n" % json.dumps(p))
+        fn = 'eval "$(sed -n -e "/^gate_kind()/,/^}/p" -e "/^job_kind()/,/^}/p" "$0")"; job_kind "${@:1}"'
+        return subprocess.run(["bash", "-c", fn, HEAVY] + (cmd or ["bash", os.path.join(gk, "gate.sh"), "quick"]),
+                              # no inherited CARGO_TARGET_DIR: a gate's warm one made every cargo kind warm (11.10's tip gate)
+                              cwd=home, env=dict(env, HOME=home, CARGO_TARGET_DIR=""), capture_output=True, text=True).stdout.strip()
+    dsk = {"desktop": {"why": "x"}}
+    check(kind_of(dsk) == "desktop" and kind_of({"flags": {"office": 1}}) == "desktop",
+          "a quick gate with a desktop or office step and no cargo one: kind desktop")
+    check(kind_of(dict(dsk, pkgs=["switchboard"])) == "cargo-cold" and kind_of(dict(dsk, bend_changed=1)) == "cargo-cold"
+          and kind_of(dict(dsk, flags={"proto_ts": 1})) == "cargo-cold", "a rust, PROOF or proto step too: a cargo kind")
+    check(kind_of({}) == "cargo-cold", "no heavy step (a light gate that queued anyway): a cargo kind, as before")
+    check(kind_of(dsk, ["bash", os.path.join(gk, "gate.sh"), "full"]) == "full", "a full gate stays full")
+    with open(os.path.join(gk, "gate_plan.py"), "w") as fh:
+        fh.write("raise SystemExit(1)\n")
+    check(kind_of.__call__ and subprocess.run(["bash", "-c", 'eval "$(sed -n -e "/^gate_kind()/,/^}/p" -e "/^job_kind()/,/^}/p" "$0")"; job_kind bash "$1" quick',
+                                              HEAVY, os.path.join(gk, "gate.sh")], cwd=home, env=dict(env, HOME=home, CARGO_TARGET_DIR=""),
+                                             capture_output=True, text=True).stdout.strip() == "cargo-cold",
+          "a plan that fails: a cargo kind, as before")
     # a job that outgrows its learned reserve (1 GB here) is still stopped by
     # the floor: under HEAVY_DISK_STOP_GB (5) free, rc=28
     reserve("other", [0] * 20)

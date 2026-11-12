@@ -7,7 +7,8 @@ import type { Artifact } from '@/proto';
 import { Store, StoreProvider } from '@/store';
 import { RouterContext, createRouter } from '@/app/router';
 import { ArtifactOpen } from './index';
-import { downWords, probed, REPROBE_MS, type DownWords } from './reach';
+import { panel } from '@/proto/words_panel.gen';
+import { downWords, LOAD_GRACE_MS, probed, REPROBE_MS, type DownWords } from './reach';
 
 const URL_ = 'http://127.0.0.1:47415/p/blokhus-own-deployment';
 const page: Artifact = { id: 'deploy', kind: 'page', title: 'own deployment', agent: 'perf', version: 1, at_ms: 0, url: URL_, new: false };
@@ -67,17 +68,39 @@ describe('the panel (page-unreach)', () => {
     expect(screen.getByTestId('artifact.page').getAttribute('src')).toContain(URL_);
   });
 
-  it("'try again' asks at once; '↗ browser' opens no dead tab", async () => {
+  it('artifact-loading: a page server still starting shows a loading state, never the error, then the page', async () => {
+    // his report (m_60703): 'nothing answers at 127.0.0.1:<port>' flashed for a few seconds on
+    // open, until the page loaded. A first refused probe is a server not ready yet, not a failure.
+    vi.useFakeTimers();
+    let answer: 'up' | 'down' = 'down';
+    g.bise = { probePage: vi.fn(() => Promise.resolve(answer)) };
+    mount(true);
+    await settle();
+    expect(screen.queryByTestId('artifact.down')).toBeNull();
+    expect(screen.getByTestId('artifact.checking').textContent).toBe(panel.art_loading);
+    await act(async () => { vi.advanceTimersByTime(LOAD_GRACE_MS / 2); await Promise.resolve(); await Promise.resolve(); });
+    expect(screen.queryByTestId('artifact.down')).toBeNull();
+    answer = 'up';
+    await act(async () => { vi.advanceTimersByTime(LOAD_GRACE_MS / 2 - 1); await Promise.resolve(); await Promise.resolve(); });
+    expect(screen.queryByTestId('artifact.down')).toBeNull();
+    expect(screen.getByTestId('artifact.page').getAttribute('src')).toContain(URL_);
+  });
+
+  it("'try again' asks at once and loads again; '↗ browser' opens no dead tab", async () => {
+    vi.useFakeTimers();
     const opened: string[] = [];
     const probePage = vi.fn(() => Promise.resolve('down' as const));
     g.bise = { probePage, openExternal: (u) => { opened.push(u); return Promise.resolve(true); } };
     mount(true);
     await settle();
+    // the error only once loading really failed: still nothing after the grace
+    await act(async () => { vi.advanceTimersByTime(LOAD_GRACE_MS); await Promise.resolve(); await Promise.resolve(); });
     expect(screen.getByTestId('artifact.down.title').textContent).toBe("this page doesn't answer");
     const asked = probePage.mock.calls.length;
     fireEvent.click(screen.getByTestId('artifact.down.again'));
     await settle();
     expect(probePage.mock.calls.length).toBeGreaterThan(asked);
+    expect(screen.getByTestId('artifact.checking')).toBeTruthy();
     fireEvent.click(screen.getByTestId('artifact.browser'));
     await settle();
     expect(opened).toEqual([]);

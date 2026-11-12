@@ -452,3 +452,8 @@ end?: RetryEnd | null, };
  * One entry's hits: its pos and how many matches it holds.
  */
 export type FindHit = { pos: number, n: number, };
+
+/**
+ * One message of his: its entry's pos, when he sent it, his words cut short.
+ */
+export type Mark = { pos: number, at_ms: number, text: string, };

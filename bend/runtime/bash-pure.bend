@@ -409,9 +409,11 @@ def with_workdir(+dir: String, +command: String) -> String:
 # wire log and session (once: the scripted plan's "Program complete."
 # and "scripted provider failure" landed in a live agent's transcript).
 # The command runs without them; SB_SOCKET/SB_AGENT stay (the sb CLI
-# needs them), and a harness drops those itself for its child.
+# needs them), and a harness drops those itself for its child. Nor the
+# say port's token (BISE_REPL_TOKEN, repl-core's hello): with it, an
+# agent's own command could speak on its REPL's port as him.
 def bg_unset_private() -> String:
-  "unset BEND_SESSION_FILE BEND_CONTEXT_FILE BEND_WIRE_LOG BEND_REPL_PORT BEND_EXTRA_PROMPT BEND_CONTINUE BEND_CRASH_NOTE BEND_DEBUG_DIR"
+  "unset BEND_SESSION_FILE BEND_CONTEXT_FILE BEND_WIRE_LOG BEND_REPL_PORT BEND_EXTRA_PROMPT BEND_CONTINUE BEND_CRASH_NOTE BEND_DEBUG_DIR BISE_REPL_TOKEN"
 
 # ---- slot allocation never recycles a slot that still holds results ----
 # A background command that ends frees its .slot but KEEPS its .out and

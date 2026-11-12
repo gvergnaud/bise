@@ -1166,6 +1166,7 @@ impl Hub {
             files: a.files.to_vec(),
             others,
             add,
+            decides: a.is_main, // land-decide: main's --add <file> is its word
             since_ms: a.created_ms,
             flow: crate::flow::FlowConfig::default(),
             onto: feature::onto(&a.ws), // a feature's agent lands on the feature (dev-flow §5.1)

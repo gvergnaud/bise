@@ -107,6 +107,33 @@ crate::words! { library:
     archived_n(n) = "{n} archived";
     /// the same toggle's tip, with its key
     archived_tip = "show the archived ones · a";
+
+    // ---- the sections (his pick D+C+A+B on page artifacts-signal v3; designer m_60689)
+    /// what he or an agent kept (◆): it never goes to Done
+    sect_kept = "Kept";
+    /// what is for him and still at work: its task lives or its PR is open
+    sect_open = "Open work";
+    /// what ended with its task or its PR (the quiet row, `Done · 199 ▸`)
+    sect_done = "Done";
+    /// what agents trade (the quiet row, `Between agents · 1 234 ▸`)
+    sect_agents = "Between agents";
+    /// the Done row's tip
+    sect_done_tip = "what ended with its task or its pull request. nothing is deleted";
+    /// the Between agents row's tip
+    sect_agents_tip = "what agents trade: shots, gates, briefs. nothing is deleted";
+    /// the back row over Done or Between agents (⌘← too)
+    back_for_you = "← For you";
+    /// a card an agent kept: its line, `kept by perf`
+    kept_by(agent) = "kept by {agent}";
+    /// the ◆ mark's tip on a card he kept
+    kept_tip_you = "you kept it · Let go";
+    /// the ◆ mark's tip on a card an agent kept, `perf kept it · Let go`
+    kept_tip_agent(agent) = "{agent} kept it · Let go";
+    /// a card's menu: keep it (◆, it never goes to Done)
+    keep = "Keep";
+    /// a card's menu: let a kept one go
+    let_go = "Let go";
+
     /// the kind filter of pull requests (pr-integration A)
     kind_prs = "Pull requests";
     /// inside it, the PRs still at work: open and draft (the default)
@@ -226,6 +253,36 @@ crate::words! { library:
     file_of(ending) = "{ending} file";
     /// a folder no app opens, its type in the tip
     folder_kind = "Folder";
+
+    // ---- the filter bar (his pick 'A + jetons', designer m_61790; apps/desktop/src/artifacts/filters.ts)
+    /// the When chip, nothing picked
+    when = "When";
+    /// the When chip's values: changed since he last looked
+    when_last = "Since you last looked";
+    /// the When chip's values: touched today, his local day
+    when_today = "Today";
+    /// the When chip's values: the 7 days up to today
+    when_week = "This week";
+    /// the When chip's values: before those 7 days
+    when_older = "Older";
+    /// the × on a set chip, for VoiceOver
+    when_clear = "any time";
+    /// the bar's Clear (only when something is set): the When, the tokens and the words, never the project
+    clear = "Clear";
+    /// the by: completion: the user himself
+    by_you = "you";
+    /// the by: completion's head
+    by_head = "by";
+    /// a filtered view that holds nothing: `nothing in Sheets · acme since you last looked`
+    nothing_in(what) = "nothing in {what}";
+    /// a filtered view that holds nothing, with nothing to name
+    nothing_here = "nothing here";
+    /// the empty view's way out: the same filters in every project
+    search_everywhere(n) = "Search all projects · {n}";
+    /// the empty view's way out: the ones that sit in From agents
+    from_agents_show(n) = "{n} from agents · Show";
+    /// the empty view's way out: every filter and word taken out
+    clear_filters = "Clear filters";
 
     // ---- the kind chips (words, never a glyph), with their counts
     /// a kind chip

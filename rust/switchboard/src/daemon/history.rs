@@ -4,14 +4,18 @@
 //! thread pages read through the transcript's offset index (tindex.rs,
 //! `page_lines`): a page costs its own lines, not the file's. `answer`
 //! works over an agents dir and an agent list, no Shell, so a reader of
-//! another hub's threads (stream C) calls it with that hub's.
+//! another hub's threads (stream C) calls it with that hub's. `sb
+//! history` and `sb show` run on the history worker (history_work.rs):
+//! the Shell's part only takes what they need from memory.
 
+use super::history_work::HistoryJob;
 use super::Shell;
 use crate::search;
 use crate::transcript::{self, Anchor};
 use crate::util::now_ms;
 use bise_proto::sb::{History, Inspect};
 use serde_json::{json, Value};
+use std::os::unix::net::UnixStream;
 use std::path::Path;
 
 /// The lines of a transcript at positions [before - count, before)
@@ -111,11 +115,9 @@ impl Shell {
         inspect_page(&name, &path, q, now)
     }
 
-    /// `sb history` and `sb show` (BISE-233): the index reads what the
-    /// transcripts got since the last search, then answers.
-    pub(super) fn search(&mut self, look: &Look) -> Value {
-        let who: Vec<search::Who> = self
-            .hub
+    /// Every agent of this hub as the search names its threads.
+    fn who(&self) -> Vec<search::Who> {
+        self.hub
             .st
             .agents
             .values()
@@ -125,31 +127,46 @@ impl Shell {
                 aliases: a.aliases.clone(),
                 archived: a.status() == crate::model::Status::Archived,
             })
-            .collect();
-        answer(&mut self.search, &self.opts.paths.state.join("agents"), &who, look, now_ms())
+            .collect()
     }
 
-    /// msg-forward: `sb show m_<n>`: the message's entry in its recipient's
-    /// thread (`forward::msg_pos` over the transcript as a stream), then
-    /// `sb show <agent>#<pos>`; not found: one line naming the recipient.
-    pub(super) fn show_msg(&mut self, n: u64, context: Option<u64>) -> Value {
-        // its recipient only: a cold message's row has it
+    /// `sb history` and `sb show <agent>#<pos>` (BISE-233): the history
+    /// worker's job (history_work.rs), its reply written there.
+    pub(super) fn search(&self, stream: UnixStream, from: &str, look: Look) {
+        let job = HistoryJob::Home { agents: self.opts.paths.state.join("agents"), who: self.who(), look };
+        self.history.ask(stream, from, job);
+    }
+
+    /// msg-forward: `sb show m_<n>`: its recipient from memory (a cold
+    /// message's row has it), then the worker finds its entry
+    /// ([`show_msg`]); unknown here: answered now.
+    pub(super) fn show_msg(&self, mut stream: UnixStream, from: &str, n: u64, context: Option<u64>) {
         let Some(m) = self.hub.st.peek(n) else {
-            return json!({"ok": false, "error": format!("m_{n} unknown")});
+            super::write_json(&mut stream, &json!({"ok": false, "error": format!("m_{n} unknown")}));
+            return;
         };
         let to = self.hub.st.resolve(m.to).unwrap_or_else(|| m.to.to_string());
-        let Some(dir) = self.hub.st.agents.get(&to).map(|a| a.dir.clone()) else {
-            return json!({"ok": false, "error": format!("m_{n} went to {to}, which has no thread here")});
-        };
-        let path = self.opts.paths.state.join("agents").join(&dir).join("transcript.log");
-        let pos = std::fs::File::open(&path).ok().and_then(|f| {
-            use std::io::BufRead;
-            crate::forward::msg_pos(std::io::BufReader::new(f).lines().map_while(Result::ok), n)
-        });
-        match pos {
-            Some(pos) => self.search(&Look::show(&to, pos as u64, context)),
-            None => json!({"ok": false, "error": format!("m_{n} is not in {to}'s thread (its transcript was rotated or deleted)")}),
-        }
+        let job = HistoryJob::Msg { agents: self.opts.paths.state.join("agents"), who: self.who(), n, to, context };
+        self.history.ask(stream, from, job);
+    }
+}
+
+/// `sb show m_<n>` on the history worker: the message's entry in the
+/// thread of its recipient `to` (`forward::msg_pos` over the transcript
+/// as a stream), then `sb show <to>#<pos>`; not found: one line naming
+/// the recipient.
+pub(super) fn show_msg(index: &mut search::Index, agents_dir: &Path, who: &[search::Who], n: u64, to: &str, context: Option<u64>) -> Value {
+    let Some(dir) = who.iter().find(|w| w.name == to).map(|w| w.dir.clone()) else {
+        return json!({"ok": false, "error": format!("m_{n} went to {to}, which has no thread here")});
+    };
+    let path = agents_dir.join(&dir).join("transcript.log");
+    let pos = crate::store_io::open(&path).ok().and_then(|f| {
+        use std::io::BufRead;
+        crate::forward::msg_pos(std::io::BufReader::new(f).lines().map_while(Result::ok), n)
+    });
+    match pos {
+        Some(pos) => answer(index, agents_dir, who, &Look::show(to, pos as u64, context), now_ms()),
+        None => json!({"ok": false, "error": format!("m_{n} is not in {to}'s thread (its transcript was rotated or deleted)")}),
     }
 }
 

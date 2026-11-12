@@ -493,7 +493,7 @@ pub fn artifacts(ev: &Value, page_url: impl Fn(&str) -> Option<String>, frame_ba
                 title: s(r, "title"),
                 agent: s(r, "agent"),
                 version: version as u32,
-                new: s(r, "by") != "you" && at_ms > seen,
+                new: crate::artifacts::is_new(&s(r, "by"), at_ms, seen),
                 at_ms,
                 url,
                 kind,
@@ -512,6 +512,14 @@ pub fn artifacts(ev: &Value, page_url: impl Fn(&str) -> Option<String>, frame_ba
                 live: r.get("live").and_then(|l| serde_json::from_value(l.clone()).ok()),
                 folder: Some(s(r, "folder")).filter(|f| !f.is_empty()),
                 turn: r.get("turn").and_then(Value::as_u64),
+                // the store's marks and the hub's section (artifacts_marks, join_sections)
+                audience: r.get("audience").and_then(|x| serde_json::from_value(x.clone()).ok()),
+                kept: r.get("kept").and_then(|x| serde_json::from_value(x.clone()).ok()),
+                done: r.get("done").and_then(Value::as_bool).unwrap_or(false),
+                section: r.get("section").and_then(|x| serde_json::from_value(x.clone()).ok()),
+                opened_ms: r.get("opened_ms").and_then(Value::as_u64),
+                seen_v: r.get("seen_v").and_then(Value::as_u64),
+                touched_ms: r.get("touched_ms").and_then(Value::as_u64),
                 target,
             }
         })

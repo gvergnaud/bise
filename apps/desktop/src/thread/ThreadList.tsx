@@ -50,8 +50,9 @@ export interface ThreadListHandle {
   /** bring a row into view (⌘F's current match, a card's entry) */
   scrollTo(key: string): void;
   /** bring a row into view only when it isn't whole in it already (answered-link: his answer);
-   * `shown` runs once the row is drawn and whole in it (his answer's flash) */
-  reveal(key: string, shown?: () => void): void;
+   * `shown` runs once the row is drawn and whole in it (his answer's flash); `top`: its top goes
+   * that many px under the list's top edge, not the view's centre (a tick of his, msg-dots) */
+  reveal(key: string, shown?: () => void, top?: number): void;
   /** to the newest row */
   scrollToEnd(): void;
   /**
@@ -176,6 +177,15 @@ export function steadyBy(at: { y: number; st: number }, now: { y: number; st: nu
 const HOLD_MS = 1500;
 /** How many frames a reveal nudges its row toward the view's centre at most (~1.5 s at 60 fps). */
 const HOLD_FRAMES = 90;
+
+/**
+ * A row's own block, what a reveal with a `top` puts at that top (designer m_60782, m_60809): its
+ * head line (the day's, or its turn's time line) when it has one, else its entry, else the row (a
+ * row's room above its words not counted).
+ */
+export function blockOf(row: HTMLElement): HTMLElement {
+  return row.querySelector<HTMLElement>('.th-day, .th-turn, [data-testid^="thread.entry."]') ?? row;
+}
 
 /** The part of a row held still: `sel` inside it when given and there, else the row. */
 function partOf(row: HTMLElement, sel: string | undefined): HTMLElement {
@@ -653,8 +663,9 @@ export function ThreadList({ keys, row, more, before, onOlder, head, tail, cue, 
         jumpUntil.current = Date.now() + HOLD_MS;
         virtuoso.current?.scrollToIndex({ index: i, align: 'center' });
       },
-      reveal(key, shown) {
+      reveal(key, shown, top) {
         const i = keys.indexOf(key);
+        const align = top === undefined ? ({ index: i, align: 'center' } as const) : ({ index: i, align: 'start', offset: -top } as const);
         // not a row yet (⌘F's match in a fold that opens for it, find-scroll): revealed when it comes
         waiting.current = i < 0 ? { key, until: Date.now() + HOLD_MS, ...(shown === undefined ? {} : { shown }) } : undefined;
         if (i < 0) return;
@@ -671,7 +682,7 @@ export function ThreadList({ keys, row, more, before, onOlder, head, tail, cue, 
         }
         // he reads up there now: no growth takes the list back to its end
         setStick(false);
-        virtuoso.current?.scrollToIndex({ index: i, align: 'center' });
+        virtuoso.current?.scrollToIndex(align);
         // Virtuoso lands on its estimated sizes (far off in a long thread of unmeasured rows): once
         // the row is drawn, its centre is nudged to the view's over the next frames, until it shows
         // whole, he moves the list, a newer reveal takes over, or HOLD_FRAMES. Frames, not ms: under
@@ -708,23 +719,25 @@ export function ThreadList({ keys, row, more, before, onOlder, head, tail, cue, 
             // Virtuoso's scrollToIndex can stall (find-walk-red: a window replaced, then a new one
             // in front, its sizes by index still the old ones: the list stayed at the latest rows,
             // scrollTop unmoved for all HOLD_FRAMES): then a viewport at a time toward the row
-            const top = box?.scrollTop;
-            if (box !== null && r === null && top === lastTop) {
+            const at0 = box?.scrollTop;
+            if (box !== null && r === null && at0 === lastTop) {
               const at = [...box.querySelectorAll<HTMLElement>('[data-item-index]')].map((x) => Number(x.dataset.itemIndex));
               const step = box.clientHeight * 0.8;
               if (at.length > 0) box.scrollTop += firstIndex.current + i < Math.min(...at) ? -step : step;
-            } else virtuoso.current?.scrollToIndex({ index: i, align: 'center' });
-            lastTop = top;
+            } else virtuoso.current?.scrollToIndex(align);
+            lastTop = at0;
           } else {
-            const b = r.getBoundingClientRect();
+            const b = (top === undefined ? r : blockOf(r)).getBoundingClientRect();
             const v = box.getBoundingClientRect();
-            const d = b.top + b.height / 2 - (v.top + v.height / 2);
-            if (rowWhole(b, v) && Math.abs(d) < 2) {
+            const d = top === undefined ? b.top + b.height / 2 - (v.top + v.height / 2) : b.top - (v.top + top);
+            // at its top place, or whole in the view and centred: a row taller than the view only
+            // ever gets its top there
+            if (Math.abs(d) < 2 && (top !== undefined || rowWhole(b, v))) {
               settling.current = false;
               tell();
               return;
             }
-            box.scrollTop += b.height > v.height ? b.top - v.top : d;
+            box.scrollTop += top === undefined && b.height > v.height ? b.top - v.top : d;
           }
           requestAnimationFrame(settle);
         };

@@ -95,3 +95,28 @@ fn a_start_gives_way_at_once_to_a_hub_that_answers() {
     drop(first);
     let _ = std::fs::remove_dir_all(&t);
 }
+
+/// A switch's reload keeps its port only while it is free: the 11:01
+/// switch respawned changelog on the port its old REPL still held, the
+/// new one died at startup (exit 48, EADDRINUSE) and rolled it back.
+#[test]
+fn a_held_port_is_not_free() {
+    let l = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let port = l.local_addr().unwrap().port();
+    assert!(!port_free(port));
+    drop(l);
+    assert!(port_free(port));
+}
+
+/// A hub never adopts a REPL whose say port opens in a newer way than
+/// its own: 11:02, a pre-hello hub adopted four hello-only REPLs and
+/// their messages sat unread for 2.5 h. Same or older (no `say`: a
+/// REPL from before the field): adopted as before.
+#[test]
+fn a_repl_of_a_newer_say_port_is_too_new() {
+    let say = repl::SAY_PROTO;
+    assert_eq!(repl::too_new(&json!({"pid": 1, "say": say + 1})), Some(say + 1));
+    assert_eq!(repl::too_new(&json!({"pid": 1, "say": say})), None);
+    assert_eq!(repl::too_new(&json!({"pid": 1, "token": "t"})), None);
+    assert_eq!(repl::too_new(&json!({"pid": 1})), None);
+}

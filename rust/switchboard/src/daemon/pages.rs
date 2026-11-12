@@ -145,7 +145,7 @@ impl Shell {
     pub(super) fn start_here(&mut self, paths: &crate::paths::Paths) {
         use crate::first_run;
         let Some(pages) = self.pg.pages.clone() else { return };
-        let Some(html) = first_run::due(&paths.state, &paths.workspace, &crate::paths::home_workspace(), &self.opts.app_root) else {
+        let Some(html) = first_run::due(&paths.state, &paths.workspace, &bise_home::Home::from_env().bise_root(), &self.opts.app_root) else {
             return;
         };
         let p = crate::pages::store::Publish {

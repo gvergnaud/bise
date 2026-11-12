@@ -28,14 +28,6 @@ pub fn workspace_id(workspace: &Path) -> String {
     bise_home::hub_id(workspace)
 }
 
-/// The home workspace (docs/ambient-pages.md §5.1): `~/bise`, a plain
-/// folder without git for non-code work; `$BISE_HOME_WORKSPACE` when set
-/// (the tests: a throwaway folder, never the user's).
-/// bise_home's rule (one owner: the TUI and the ambient core read it too).
-pub fn home_workspace() -> PathBuf {
-    bise_home::projects::home_workspace()
-}
-
 /// `ws` is the home workspace: its hub's main is bise (bise desktop S2,
 /// architect m_8474: the one flag, nothing written, nothing in sb-core).
 pub fn is_home(ws: &Path) -> bool {
@@ -49,9 +41,10 @@ pub fn is_registered(ws: &Path) -> bool {
     bise_home::projects::is_registered(ws)
 }
 
-/// The home workspace, created on first use (never git-initialised).
+/// The home workspace ([`bise_home::Home::bise_root`]), created on first
+/// use (never git-initialised).
 pub fn ensure_home_workspace() -> std::io::Result<PathBuf> {
-    let d = home_workspace();
+    let d = bise_home::Home::from_env().bise_root();
     std::fs::create_dir_all(&d)?;
     Ok(d)
 }
@@ -234,7 +227,7 @@ mod tests {
     /// never another folder.
     #[test]
     fn only_the_home_workspace_is_home() {
-        let home = home_workspace();
+        let home = bise_home::Home::from_env().bise_root();
         assert!(is_home(&home));
         assert!(is_home(&home.join(".")));
         assert!(!is_home(&home.join("projects")) && !is_home(Path::new("/")));

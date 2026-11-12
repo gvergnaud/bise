@@ -7,7 +7,6 @@
 
 # ---- off: workers, starts, stops, test knobs
 core_fresh.rs::tree_key | 1 | off | test-only: the stale sb-core check of Hub::new in tests
-daemon.rs::kill_stale_repls | 1 | off | the hub's start, before the loop
 daemon.rs::wait_previous_hub | 2 | off | the hub's start, before the loop
 daemon.rs::run | 1 | off | the stop, after the loop: the REPLs' reload wait
 daemon.rs::stall_for_tests | 1 | off | a test knob (hub_stall_e2e), never set in his hub

@@ -20,3 +20,13 @@ export function sideShows(route: Route): SideShows {
   if (route.screen === 'settings') return 'settings';
   return libraryPage(route) ? 'library' : 'projects';
 }
+
+/**
+ * Where the library's '← Projects' goes (main m_62356): the projects view the library was entered
+ * from (`entered`, the last route that showed his projects: that project or bise), never another
+ * library page and never by history (his ⌘← keeps the artifacts steps: back from the library can
+ * land on one). Never entered from one (a deep link): bise. Pure.
+ */
+export function projectsBack(entered: Route | null): Route {
+  return entered !== null && sideShows(entered) === 'projects' ? entered : { screen: 'bise' };
+}

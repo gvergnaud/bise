@@ -9,7 +9,9 @@
 //!   its files (the hub's list, RFC 0001 §10.3, and `--add`), the other
 //!   changes since it started named (`land_pick`, issue 12). Another
 //!   agent's half-done files are never in it; a file another agent of
-//!   the place also changed is refused (main decides).
+//!   the place also changed is refused (main decides): main decides by
+//!   naming that exact file with `--add` (land-decide, `Job::decides`);
+//!   its answer names each such file and its agents, who hear it.
 //! - plain, from a worktree: its own files first (with the message), then
 //!   the branch is rebased on main (the worktree must be clean: every
 //!   agent landed its files); if main had moved, the land check
@@ -56,6 +58,10 @@ pub struct Job {
     /// `sb land --add <path>`: new files the agent claims (made by bash:
     /// a generator, a download), a folder for every new file under it.
     pub add: Vec<String>,
+    /// The lander is main (land-decide): a file it names exactly with
+    /// `--add` lands even when other agents changed it too
+    /// ([`crate::land_pick::Claims::decides`]).
+    pub decides: bool,
     /// When the agent was created (ms): a new file older than that is not
     /// its own (the left-out list skips it).
     pub since_ms: u64,
@@ -85,6 +91,9 @@ pub struct Outcome {
     /// New files of the place that no agent claimed, made since the agent
     /// started: not landed, named in the answer ([`left_out_note`]).
     pub left_out: Vec<String>,
+    /// land-decide: the other agents' files main took on its word, each
+    /// with those agents (the answer names them, the agents hear it).
+    pub decided: Vec<(String, Vec<String>)>,
     /// The range the target moved over, full shas (the land record's).
     pub base: String,
     pub tip: String,
@@ -301,7 +310,7 @@ fn own_changes(job: &Job) -> Result<Picked, String> {
         add.push((a.clone(), p));
     }
     let others: Vec<(String, Vec<String>)> = job.others.iter().map(|(n, fs)| (n.clone(), rel(fs))).collect();
-    let claims = Claims { files: &rel(&job.files), add: &add, others: &others };
+    let claims = Claims { files: &rel(&job.files), add: &add, others: &others, decides: job.decides };
     pick(&changes(&job.dir, job.since_ms)?, &claims, job.worktree && job.others.is_empty())
 }
 
@@ -383,7 +392,7 @@ pub fn run_onto(job: &Job, queue: &Queue, joined: &mut dyn FnMut(), onto_now: &m
     if !job.here && job.worktree && job.flow.mode == Some(FlowMode::Pr) {
         return Err("this repo ships through pull requests: commit with `sb land --here`, then open a PR".into());
     }
-    let Picked { mine, left_out } = own_changes(job)?;
+    let Picked { mine, left_out, decided } = own_changes(job)?;
     let texts: Vec<(String, String)> =
         mine.iter().filter_map(|p| std::fs::read_to_string(job.dir.join(p)).ok().map(|t| (p.clone(), t))).collect();
     if let Some(e) = crate::land_pick::conflict_refusal(&texts) {
@@ -393,7 +402,7 @@ pub fn run_onto(job: &Job, queue: &Queue, joined: &mut dyn FnMut(), onto_now: &m
         // a feature's agent lands on the feature (dev-flow §5.1)
         let onto = job.onto.clone().unwrap_or_else(|| main.clone());
         let line = Line { queue, joined, onto_now };
-        return land_branch(job, line, &onto, &main, &mine, left_out);
+        return land_branch(job, line, &onto, &main, &mine, left_out).map(|o| Outcome { decided, ..o });
     }
     if mine.is_empty() {
         let note = left_out_note(&left_out);
@@ -424,7 +433,7 @@ pub fn run_onto(job: &Job, queue: &Queue, joined: &mut dyn FnMut(), onto_now: &m
     let base = git(&job.dir, &["rev-parse", &format!("{}^", new)])?;
     let (pushed, push_error) = pushed(job, &target, &main);
     let sha = shorten(&job.dir, &new);
-    Ok(Outcome { target: short(&target).to_string(), sha, commits: 1, pushed, push_error, left_out, base, tip: new })
+    Ok(Outcome { target: short(&target).to_string(), sha, commits: 1, pushed, push_error, left_out, decided, base, tip: new })
 }
 
 /// [`crate::land_revert::guard`] for `job`'s land onto `target`: a
@@ -551,6 +560,7 @@ fn land_branch(job: &Job, l: Line, main: &str, real_main: &str, mine: &[String],
         pushed,
         push_error,
         left_out,
+        decided: Vec::new(),
         base,
         tip,
     })
@@ -593,6 +603,7 @@ mod tests {
                 .map(|(n, fs)| (n.to_string(), fs.iter().map(|s| s.to_string()).collect()))
                 .collect(),
             add: Vec::new(),
+            decides: false,
             since_ms: 0,
             flow: FlowConfig::default(),
             onto: None,

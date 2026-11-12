@@ -40,12 +40,17 @@ gone = threading.Event()
 
 def drain():
     # the hub's say/steer lines: read and dropped (logged with FLOOD_RECV_LOG);
-    # EOF = the hub is gone
+    # EOF = the hub is gone. Its first line is its hello (BISE_REPL_TOKEN,
+    # repl-core's serve_gate), dropped as repl-live does
+    first = True
     while True:
         got = conn.recv(65536)
         if not got:
             break
-        if recv_log:
+        if first and os.environ.get("BISE_REPL_TOKEN") and got.startswith(b"hello "):
+            got = got.split(b"\n", 1)[1] if b"\n" in got else b""
+        first = False
+        if recv_log and got:
             heard("say", got.decode("utf-8", "replace"))
     gone.set()
 

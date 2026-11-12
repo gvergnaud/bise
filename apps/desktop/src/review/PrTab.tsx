@@ -3,7 +3,8 @@
 // one-line confirm); then, scrolling away over its guided review, one state line from the hub's
 // row (ArtifactPr.status: '#412 · draft · conflicts · checks ✗ 1', pink only what waits on him; a
 // failing piece opens the checks) with Open on GitHub ↗ and Merge (a ghost button, only when the
-// forge says mergeable, at the head he sees: pr/act); its description folded to its first line,
+// forge says mergeable, at the head he sees: pr/act) and, at its end, the PR's size as GitHub's
+// (+438 −151 and five squares, diffstat.ts, once its diff comes); its description folded to its first line,
 // which opens what the Summary was (its branch, the description as untrusted markdown, checks with
 // 'Ask <agent> to fix' that fills the composer and never sends, reviews read-only, its agents);
 // then its diff (the hub's pick of place or forge) as the guided review (DiffFiles: its bar sticky,
@@ -25,6 +26,7 @@ import { putTextInDraft } from '@/artifacts/put';
 import { prLine } from '@/artifacts/pr';
 import { PrWords } from '@/artifacts/PrWords';
 import { DiffFiles } from './DiffFiles';
+import { diffStat, SQUARES } from './diffstat';
 import { useOpenChange } from './openChange';
 import { actLine, askFixText, branchFacts, canClose, canMerge, checkMark, errWords, firstLine, forgeWord, verdictWord } from './prwords';
 import './prtab.css';
@@ -148,6 +150,7 @@ function Lead({ project, url, art, s, tag, forge, out, merge }: {
             {panel.prtab_merge}
           </Button>
         )}
+        <Stat project={project} url={url} />
       </p>
       <PrAhead project={project} url={url} tag={tag} />
       <Press look="prt-desc" aria-expanded={fold !== 'shut'} onClick={() => { setFold((f) => (f === 'shut' ? 'open' : 'shut')); }} data-testid="prtab.desc.fold">
@@ -156,6 +159,33 @@ function Lead({ project, url, art, s, tag, forge, out, merge }: {
       </Press>
       {fold !== 'shut' && <Summary project={project} url={url} s={s} tag={tag} forge={forge} out={out} onChecks={fold === 'checks'} />}
     </div>
+  );
+}
+
+/** a square's side and the gap between two, in the svg's own units (px) */
+const SQ = 8;
+const SQ_GAP = 2;
+
+/**
+ * The PR's size at the line's end, as GitHub shows it (his m_62199): '+438 −151' and five squares
+ * for the added and removed shares (diffstat.ts), over the whole diff the guide reads. Nothing
+ * until that diff comes.
+ */
+function Stat({ project, url }: { project: string; url: string }) {
+  const diff = usePrDiff(project, url);
+  const st = useMemo(() => (diff === null ? null : diffStat(diff.files)), [diff]);
+  if (st === null) return null;
+  const w = SQUARES * SQ + (SQUARES - 1) * SQ_GAP;
+  return (
+    <span className="prt-stat" data-testid="prtab.stat">
+      <span className="prt-add">+{st.add}</span>
+      <span className="prt-del">−{st.del}</span>
+      <svg className="prt-sq" width={w} height={SQ} viewBox={`0 0 ${String(w)} ${String(SQ)}`} aria-hidden data-testid="prtab.stat.squares">
+        {st.squares.map((k, i) => (
+          <rect key={i} className={`prt-sq-${k}`} x={i * (SQ + SQ_GAP)} y={0} width={SQ} height={SQ} rx={2} />
+        ))}
+      </svg>
+    </span>
   );
 }
 

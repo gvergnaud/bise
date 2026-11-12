@@ -4,6 +4,8 @@
 // where it goes and what it draws. The tab menu's acts (nm-menus, Entity { kind: 'tab', id }) come
 // from here too. The rules are model.ts's, the live state state.ts's. Owner: nm-panel.
 import type { Entity } from '@/shared/entity';
+import { getAppStore } from '@/store';
+import { sayOpened } from '@/artifacts/opened';
 import { panel } from '@/terminal/panel';
 import { closeOthersId, closeTabId, openWhat, panelState } from './state';
 
@@ -13,6 +15,8 @@ import { closeOthersId, closeTabId, openWhat, panelState } from './state';
  */
 export function openTab(e: Entity, opts: { readonly quiet?: boolean } = {}): void {
   openWhat({ kind: 'thing', e }, undefined, opts.quiet === true);
+  // his open of an artifact: its hub moves its last touch (artifacts/opened.ts)
+  if (e.kind === 'artifact') sayOpened(getAppStore(), e.project, e.id);
 }
 
 /** A tab's menu: Close. */

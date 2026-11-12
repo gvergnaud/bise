@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { APP_FRAME_NAME } from './frameNote';
 import { useFrameNote } from './useFrameNote';
-import { Button, Empty, IconButton, Kbd, PickerPop, PickerTrigger, Press } from '@/ds';
+import { Button, Empty, IconButton, Kbd, PickerPop, PickerTrigger, Press, Skel } from '@/ds';
 import { frame as frameWords } from '@/proto/words_frame.gen';
 import { library } from '@/proto/words_library.gen';
 import { panel } from '@/proto/words_panel.gen';
@@ -40,6 +40,7 @@ import { useAboutWords } from './maker';
 import { goneLinkOf, goneRoute } from './gone';
 import { takeVersion, useArtifactLinks } from './links';
 import './artifacts.css';
+import './loading.css';
 
 /** What the window's bridge offers here (each one absent in a plain browser or a test: its item hides). */
 export interface ArtBridge {
@@ -295,7 +296,17 @@ export function LiveStrip({ live, gone, onBack }: { live: ArtifactLive | null; g
  * except while its hub starts (it asks again by itself). A log path opens in Finder.
  */
 export function PageDown({ reach, words, onAgain, onReveal }: { reach: 'checking' | 'down'; words: DownWords; onAgain: () => void; onReveal?: (path: string) => void }) {
-  if (reach === 'checking') return <div className="art-down" data-testid="artifact.checking" />;
+  // asked, or not answering yet inside reach.ts's LOAD_GRACE_MS: a loading state, never the error
+  // (artifact-loading, his m_60703); a hub bise is starting says so (its own words, no 'try again').
+  // Its line first, where the title replaces it, the skeleton where the reason comes (designer m_61710)
+  if (reach === 'checking' && !words.starting) {
+    return (
+      <div className="art-down art-loading" data-testid="artifact.checking" role="status" aria-busy="true">
+        <span className="art-loading-line">{panel.art_loading}</span>
+        <Skel />
+      </div>
+    );
+  }
   return (
     <div className="art-down" data-testid="artifact.down" data-starting={words.starting} role="status">
       <div className="art-down-title" data-testid="artifact.down.title">{words.title}</div>

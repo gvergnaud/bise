@@ -1031,7 +1031,38 @@ folder?: string,
  * of its agent: the grid stacks one agent's turn; none for his adds,
  * a page, a row from before it
  */
-turn?: number, };
+turn?: number, 
+/**
+ * who it is for; none: an older hub (read as for him)
+ */
+audience?: ArtifactAudience, 
+/**
+ * who kept it (◆): him, or an agent by its name now
+ */
+kept?: ArtifactKept, 
+/**
+ * its task archived, itself archived, or its PR merged or closed (a
+ * page waiting on him never)
+ */
+done?: boolean, 
+/**
+ * the section it reads in, the hub's one decision (clients never
+ * re-decide it); none: an older hub (read as open work)
+ */
+section?: ArtifactSection, 
+/**
+ * when he last opened it (ms)
+ */
+opened_ms?: number, 
+/**
+ * the version he last saw (plugin-apps' 'changed since he last looked')
+ */
+seen_v?: number, 
+/**
+ * its last touch: its newest version, his last open, a note on it
+ * (ms): a section's order, newest first
+ */
+touched_ms?: number, };
 
 /**
  * An artifact that is a pull request: its repo (`owner/name`) and number.
@@ -1105,6 +1136,26 @@ back?: ArtifactBack, };
  * version it opens.
  */
 export type ArtifactBack = { text: string, v: number, };
+
+/**
+ * Who an artifact is for.
+ */
+export type ArtifactAudience = "you" | "agents" | "unknown";
+
+/**
+ * The section of the library an artifact reads in: Kept ◆, Open work,
+ * Done, Between agents.
+ */
+export type ArtifactSection = "kept" | "open" | "done" | "agents" | "unknown";
+
+/**
+ * Who kept an artifact and when.
+ */
+export type ArtifactKept = { 
+/**
+ * `you`, or the agent's name
+ */
+by: string, at_ms: number, };
 
 /**
  * A folder of the artifacts library (`bise_home::library`, one list for

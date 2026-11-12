@@ -18,6 +18,9 @@
 //! The hash is sha256 of the bytes, 64 lowercase hex: a view's `etag` and
 //! `ifMatch`, the same on both sides. Paths are the bytes on disk, never
 //! Unicode-normalised (architect m_60075).
+//!
+//! One copy on main (architect m_61167): any change to fsx goes to main
+//! first, never to a branch; the branches take it by rebasing.
 
 use sha2::{Digest, Sha256};
 use std::io::{self, Read, Write};

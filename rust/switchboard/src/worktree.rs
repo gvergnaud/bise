@@ -406,7 +406,7 @@ impl Env for GitEnv {
 
     fn project_hub(&self, name: &str) -> Result<String, String> {
         let home = bise_home::Home::from_env();
-        let rows = bise_home::projects::list(&home, &crate::paths::home_workspace());
+        let rows = bise_home::projects::list(&home, &bise_home::Home::from_env().bise_root());
         bise_home::projects::target(&rows, name, &crate::paths::workspace_id(self.ws()))
     }
 

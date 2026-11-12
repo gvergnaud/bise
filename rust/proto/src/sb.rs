@@ -582,7 +582,16 @@ pub enum Artifact {
         /// the agent when the path is not there
         #[serde(default, skip_serializing_if = "Option::is_none")]
         folder: Option<String>,
+        /// `--for-you`: it is for the user (a draft that leaves, a
+        /// deliverable he asked for), not between agents
+        #[serde(default, skip_serializing_if = "crate::is_false")]
+        for_you: bool,
     },
+    /// `sb artifact keep <id>...`: kept, in his Kept section, the card
+    /// saying which agent kept it
+    Keep { ids: Vec<String> },
+    /// `sb artifact unkeep <id>...`: let go (never his own keep)
+    Unkeep { ids: Vec<String> },
     /// `sb artifact move <id>... <folder> | --unfiled`
     Move {
         ids: Vec<String>,
@@ -591,16 +600,45 @@ pub enum Artifact {
     },
     /// `sb artifact folders`: the library's folders, one line each
     Folders,
+    /// `sb artifact list [<words>] [--agent <a>]... [--project <p>] [--since <when>] [--archived]`
     List {
         #[serde(default)]
         words: String,
+        /// TODO(artifacts-list-agent): an older sb's one `--agent`; read
+        /// into `agents` by the hub, never sent by this one
         #[serde(default, skip_serializing_if = "Option::is_none")]
         agent: Option<String>,
+        /// `--agent`, repeatable: any of them (`you`: what he added)
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        agents: Vec<String>,
+        /// `--project`: another registered project's store, by name or id
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        project: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        since: Option<When>,
         #[serde(default)]
         archived: bool,
     },
     Archive(ArtifactPick),
     Unarchive(ArtifactPick),
+}
+
+/// `sb artifact list --since`: when an artifact was last touched, as the
+/// gallery's When chip says it (artifacts-keep piece 2).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum When {
+    /// changed since he last looked (the row's `new`)
+    Last,
+    /// touched today, his local day
+    Today,
+    /// in the 7 days up to today
+    Week,
+    /// before those 7 days
+    Older,
+    /// a value this version doesn't know (a newer sb): refused, never "no filter"
+    #[serde(other)]
+    Unknown,
 }
 
 /// Which artifacts an archive or unarchive takes: its ids, or those of an

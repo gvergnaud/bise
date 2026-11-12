@@ -105,16 +105,17 @@ def protected(path, keep, allow=()):
     return _under(p, keep) and not _under(p, allow)
 
 
-def plan(targets, free_gb, want_gb, now, idle_h, min_idle_min, strays=frozenset()):
+def plan(targets, free_gb, want_gb, now, idle_h, min_idle_min, strays=frozenset(), pinned=frozenset()):
     """The targets to delete, in order, with why.
 
-    targets: [(path, last_used_epoch, busy)]. Returns [(path, reason)]:
+    targets: [(path, last_used_epoch, busy)]; pinned: never deleted whole (a shared tree's
+    targets: the user's clone, a seed reclone is the most it gets). Returns [(path, reason)]:
     first the strays (a rust/target in a task worktree whose task builds in
     <task>/target) unused >= min_idle_min, then every idle one (unused >= idle_h), then, only while free_gb is
     under want_gb, the least recently used of the rest unused >= min_idle_min.
     The caller deletes them in that order and stops the 'low' ones as soon
     as the disk has want_gb free (it re-reads the free space after each)."""
-    free = [(p, t) for p, t, busy in targets if not busy]
+    free = [(p, t) for p, t, busy in targets if not busy and p not in pinned]
     # a second target of a task (strays): unused min_idle_min is enough
     out = [(p, "stray") for t, p in sorted((t, p) for p, t in free if p in strays and now - t >= min_idle_min * 60)]
     idle = sorted([(t, p) for p, t in free if p not in strays and now - t >= idle_h * 3600])
@@ -144,6 +145,13 @@ def trim_candidates(targets, now, min_idle_min):
             if since is not None and not busy and now - used >= min_idle_min * 60]
 
 
+def want_candidates(targets, now, idle_min):
+    """targets: [(path, last_used, busy)]. While a job waits for disk (--want), the own-cap's
+    rule on every root's target, not only the admitted job's (main m_60116, architect m_60481):
+    the ones not busy and unused idle_min minutes, least recently used first."""
+    return [p for p, used, b in sorted(targets, key=lambda x: x[1]) if not b and now - used >= idle_min * 60]
+
+
 def own_due(busy, checked_at, now, gap_min):
     """Whether the own-cap measures a target now: not busy, and not measured
     in the last gap_min minutes (checked_at: its stamp's mtime, None: never)."""
@@ -166,6 +174,17 @@ def _self_test():
     assert all(p != "/d" for p, _ in plan(t, 0, 99, now, 0, 0)), "a busy target is never planned"
     assert plan(t, 50, 25, now, 6, 30, {"/b", "/c", "/d"}) == [("/b", "stray"), ("/a", "idle")], "a stray goes after 30 min"
     assert plan(t, 10, 25, now, 6, 30, {"/b"}) == [("/b", "stray"), ("/a", "idle"), ("/e", "low")], "once"
+    # a shared tree's target (his clone) is never deleted whole: idle, low or stray (main m_61934)
+    for pins in ({"/a"}, {"/a", "/b", "/e"}):
+        got = [p for p, _ in plan(t, 0, 99, now, 0, 0, {"/a", "/b"}, pins)]
+        assert not set(got) & pins and got, (pins, got)
+    # the root finder: a worktree's .git file points into <shared>/.git/worktrees/<x>
+    assert shared_of("gitdir: /u/lab/harness/.git/worktrees/harness6\n") == "/u/lab/harness"
+    assert shared_of("gitdir: /u/lab/harness/.git/worktrees/harness6/") == "/u/lab/harness"
+    assert shared_of("gitdir: ../.git/modules/vendor/x") is None, "a submodule: no shared tree"
+    assert shared_of("gitdir: /.git/worktrees/x") is None and shared_of("") is None and shared_of("ref: x") is None
+    assert exec_holders("/s/rust/target", [(7, "/s/rust/target/debug/bise"), (8, "/s/rust/target2/x"),
+                                           (9, "/usr/bin/cargo")]) == [7], "a process runs from it"
     import tempfile
     with tempfile.TemporaryDirectory() as d:
         build = os.path.join(d, "state", "build")
@@ -237,6 +256,9 @@ def _self_test():
     assert own_due(False, None, now, 10), "never measured: due"
     assert not own_due(True, None, now, 10), "busy: skipped"
     assert not own_due(False, now - 9 * 60, now, 10) and own_due(False, now - 10 * 60, now, 10), "the gap"
+    w = [("/new", now - 5 * 60, False), ("/old", now - 3 * 3600, False), ("/mid", now - 20 * 60, False),
+         ("/busy", now - 5 * 3600, True)]
+    assert want_candidates(w, now, 10) == ["/old", "/mid"], "while a job waits: idle 10 min, not busy, oldest first"
     assert trim_action(3.9, 3, 4) is None
     assert trim_action(9, 6, 4) == "incremental", "dropping incremental/ brings it to 3 GB"
     assert trim_action(9, 2, 4) == "reclone"
@@ -272,10 +294,68 @@ def roots():
     HEAVY_RECLAIM_ROOTS (tests): a ':' list instead."""
     r = os.environ.get("HEAVY_RECLAIM_ROOTS")
     if r:
-        return [p for p in r.split(":") if p]
+        return [p for p in r.split(":") if p] + shared_trees()
     base = os.path.expanduser("~/.bise/worktrees")
     return [os.path.join(base, h, a) for h in _ls(base) for a in _ls(os.path.join(base, h))] \
-        + [os.path.expanduser(p) for p in ("~/.bise/run/tip-check", "~/.bise/run/nightly/tree", "~/.bise/dev/build/desktop-cand")]
+        + [os.path.expanduser(p) for p in ("~/.bise/run/tip-check", "~/.bise/run/nightly/tree", "~/.bise/dev/build/desktop-cand")] \
+        + shared_trees()
+
+
+def shared_of(gitfile):
+    """The shared tree a worktree's .git file points into, pure: 'gitdir: <shared>/.git/worktrees/<x>'
+    gives <shared>; anything else, None."""
+    line = gitfile.strip().splitlines()[0] if gitfile.strip() else ""
+    if not line.startswith("gitdir:"):
+        return None
+    g = line[len("gitdir:"):].strip().rstrip("/")
+    head, sep, _ = g.rpartition("/.git/worktrees/")
+    return head if sep and head else None
+
+
+def shared_trees():
+    """The shared trees (the user's clones the task worktrees come from; main m_61934: harness's
+    rust/target reached 46 GB, seen by no reclaim): found from the worktrees' .git files, each once.
+    Their targets get the trims (own-cap, want, green mark, low-incremental), never a whole delete
+    (plan()'s pinned). HEAVY_RECLAIM_SHARED (tests): a ':' list instead."""
+    s = os.environ.get("HEAVY_RECLAIM_SHARED")
+    if s is not None or os.environ.get("HEAVY_RECLAIM_ROOTS"):  # a test's roots: never his real trees
+        return [p for p in (s or "").split(":") if p]
+    base = os.path.expanduser("~/.bise/worktrees")
+    out = []
+    for h in _ls(base):
+        for a in _ls(os.path.join(base, h)):
+            for w in _ls(os.path.join(base, h, a)):
+                g = os.path.join(base, h, a, w, ".git")
+                try:
+                    if not os.path.isfile(g):
+                        continue
+                    t = shared_of(open(g).read(200))
+                except OSError:
+                    continue
+                t = t and os.path.realpath(t)
+                if t and os.path.isdir(t) and t not in out:
+                    out.append(t)
+    return out
+
+
+def exec_holders(t, procs):
+    """The pids of the processes exec'd from t, pure. procs: [(pid, exe path)]."""
+    pre = t.rstrip("/") + "/"
+    return [p for p, e in procs if e.startswith(pre)]
+
+
+def running_procs():
+    """[(pid, exe path as exec'd)] of the running processes; None when ps fails."""
+    try:
+        out = subprocess.run(["ps", "-Ao", "pid=,comm="], capture_output=True, text=True, timeout=20).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    rows = []
+    for line in out.splitlines():
+        pid, _, exe = line.strip().partition(" ")
+        if pid.isdigit() and exe.strip():
+            rows.append((int(pid), exe.strip()))
+    return rows
 
 
 def stray(t):
@@ -581,12 +661,18 @@ def trim_one(t, trim_gb, log, measured=None, tag="trim", seed=seed_into, wt=None
     finally:
         for f in fds:
             os.close(f)
+    swapped = act == "reclone" and fresh is None
     if fresh:
         shutil.rmtree(fresh, ignore_errors=True)
     for a in away:
         shutil.rmtree(a, ignore_errors=True)
     gb = max(0, free_kb() - before) / (GB / 1024)
     _log(log, t, gb, "%s-%s" % (tag, act))
+    if swapped:
+        # each reclone, its own GB before and why (architect m_61939: count them per day; several
+        # a day on a shared tree's target means the cap is revisited, with these numbers)
+        with open(os.path.join(os.path.dirname(log), "reclones.log"), "a") as fh:
+            fh.write("%d\t%s\t%.1f\t%.1f\t%s%s" % (time.time(), t, own, gb, tag, chr(10)))
     return act, gb
 
 
@@ -712,6 +798,193 @@ def own_cap(cwd):
                       % (t, own, cap, "a fresh clone of the seed" if r[0] == "reclone" else "its incremental dirs dropped", r[1]))
 
 
+CARGO_DIRS = ("rust/target", "target", "../target")
+
+
+def job_dirs(tree, dirs):
+    """The dirs a job in `tree` writes into (heavy-run's kind_dirs: relative to tree, or
+    absolute), each once (by real path), the existing ones."""
+    out = []
+    for d in dirs:
+        p = d if os.path.isabs(d) else os.path.join(tree, d)
+        if d and os.path.isdir(p) and os.path.realpath(p) not in [os.path.realpath(o) for o in out]:
+            out.append(p)
+    return out
+
+
+def grown_kb(tree, t0, dirs=None):
+    """What a job wrote into its own dirs (fast-loop, architect m_60754, m_60879; main m_60751):
+    the blocks of the files under them with an mtime at or after its start t0, through
+    own_bytes, so a seed clone's shared blocks never count. An upper bound of its growth (a
+    rewritten file counts whole, though its old blocks were freed): the safe side for a reserve.
+    Before, a job's measure was the volume's free-space drop over it, which charged every other
+    writer to it (cargo-warm's p90 was 19 GB, and one running warm job held 10 jobs at 31-36 GB
+    free, 11-11). dirs None: a cargo job's (its targets, CARGO_TARGET_DIR)."""
+    if dirs is None:
+        dirs = list(CARGO_DIRS) + [os.environ.get("CARGO_TARGET_DIR") or ""]
+    return int(sum(own_bytes(t, t0 - 1) for t in job_dirs(tree, dirs)) // 1024)
+
+
+def want_trim(ts, root_of, done, now, want, log):
+    """While a job waits for disk (free under want GB): the own-cap on each root's idle target
+    (want_candidates; HEAVY_WANT_IDLE_MIN, 10), under its per-target lock, measured at most every
+    HEAVY_OWN_GAP_MIN (its .own-checked stamp, the same as the job's own-cap: never twice in a
+    row), trimmed over HEAVY_OWN_CAP_GB through trim_one (a reclone built beside, then swapped),
+    logged 'trim-want-<act>' in reclaim.log and a line in own-checks.log. Stops once free >= want.
+    Yields (target, (action, GB freed))."""
+    run = os.path.dirname(log)
+    cap = float(os.environ.get("HEAVY_OWN_CAP_GB", 10))
+    gap = float(os.environ.get("HEAVY_OWN_GAP_MIN", 10))
+    idle = float(os.environ.get("HEAVY_WANT_IDLE_MIN", 10))
+    for t in want_candidates(ts, now, idle):
+        if free_kb() / (GB / 1024) >= want:
+            return
+        if t in done or not os.path.isdir(t):
+            continue
+        with target_lock(t) as mine:
+            if not mine:
+                continue
+            stamp = t.rstrip("/") + ".own-checked"
+            is_busy = lambda: busy(t, running_exes(), root_of[t], job_cwds())  # noqa: E731
+            if not own_due(is_busy(), mtime(stamp), time.time(), gap):
+                continue
+            s = time.time()
+            own, inc = measure(t)
+            secs = time.time() - s
+            open(stamp, "w").close()
+            r = trim_one(t, cap, log, measured=(own, inc), tag="trim-want", is_busy=is_busy) if own > cap else None
+            with open(os.path.join(run, "own-checks.log"), "a") as fh:
+                fh.write("%d\t%s\t%.1f\t%.2f\t%s%s" % (time.time(), t, own, secs, ("want-" + r[0]) if r else "want-", chr(10)))
+        if r:
+            yield t, r
+
+
+# ~/.bise/dev/build's idle piles (main m_61527, architect m_61530): the desktop candidates
+# (desktop-cand/<sha12>: a try's .app built for one sha) and versions.sh's caches (target-jsrt,
+# target-commits). Everything else there stays: desktop-try (the try's live bise runs from its
+# prev/), ambient, desktop, cache, target, and desktop-cand/work (its target is a reclaim root).
+DEV_CACHES = ("target-jsrt", "target-commits")
+SHA12 = __import__("re").compile(r"^[0-9a-f]{12}$")
+
+
+def reclaimable(entry, facts):
+    """Whether an entry of ~/.bise/dev/build goes, pure (architect m_61530). entry: (kind, name),
+    kind 'cand' (desktop-cand/<sha12>), 'cache' (DEV_CACHES) or 'other'. facts: exec_known (the
+    process table was read), exec_live (a live process runs from it), lock_held (desktop-cand's
+    work.lock, or target-jsrt.lock), cargo_held (one of its cargo locks), and for a cand: newest,
+    nightly_kept, age_h, keep_h; for a cache: idle_min, idle_h, min_idle_min, low. Returns
+    ('keep', why) or ('delete', rule)."""
+    kind, name = entry
+    if kind not in ("cand", "cache"):
+        return ("keep", "protected: %s" % name)
+    if not facts.get("exec_known"):
+        return ("keep", "the process table could not be read")
+    if facts.get("exec_live"):
+        return ("keep", "a live process runs from it")
+    if facts.get("lock_held"):
+        return ("keep", "its build lock is held")
+    if kind == "cand":
+        if facts.get("newest"):
+            return ("keep", "the newest candidate")
+        if facts.get("nightly_kept"):
+            return ("keep", "a nightly kept it (kept_candidate=)")
+        if facts.get("age_h", 0) < facts.get("keep_h", 24):
+            return ("keep", "younger than HEAVY_CAND_KEEP_H")
+        return ("delete", "cand-old")
+    if facts.get("cargo_held"):
+        return ("keep", "cargo runs there")
+    if facts.get("idle_min", 0) >= facts.get("idle_h", 6) * 60:
+        return ("delete", "dev-idle")
+    if facts.get("low") and facts.get("idle_min", 0) >= facts.get("min_idle_min", 30):
+        return ("delete", "dev-low")
+    return ("keep", "used recently")
+
+
+def nightly_kept(run, now, window_h=48):
+    """The sha12s the nightlies of the last window_h hours kept: their summary.txt's
+    'kept_candidate=<sha12>' line (a typed field, never the prose)."""
+    out = set()
+    for s in __import__("glob").glob(os.path.join(run, "nightly", "*", "summary.txt")):
+        try:
+            if now - os.stat(s).st_mtime > window_h * 3600:
+                continue
+            for line in open(s):
+                if line.startswith("kept_candidate="):
+                    out.add(line.split("=", 1)[1].strip())
+        except OSError:
+            pass
+    return out
+
+
+def _flock_held(path):
+    try:
+        fd = os.open(path, os.O_RDWR)
+    except OSError:
+        return False
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return False
+    except OSError:
+        return True
+    finally:
+        os.close(fd)
+
+
+def dev_build_facts(dev, run, now, free_gb, want_gb, min_idle_min):
+    """[(path, entry, facts)] for ~/.bise/dev/build's candidates and caches: the I/O, gathered
+    once, for reclaimable()."""
+    exes = running_exes()
+    live = lambda p: exes is not None and any(e.startswith(p.rstrip("/") + "/") for e in exes)  # noqa: E731
+    out = []
+    cand = os.path.join(dev, "desktop-cand")
+    cands = [os.path.join(cand, n) for n in (os.listdir(cand) if os.path.isdir(cand) else []) if SHA12.match(n)]
+    newest = max(cands, key=mtime) if cands else None
+    kept_ = nightly_kept(run, now)
+    work_held = _flock_held(os.path.join(cand, "work.lock"))
+    keep_h = float(os.environ.get("HEAVY_CAND_KEEP_H", 24))
+    for p in cands:
+        out.append((p, ("cand", os.path.basename(p)),
+                    {"exec_known": exes is not None, "exec_live": live(p), "lock_held": work_held,
+                     "newest": p == newest, "nightly_kept": os.path.basename(p) in kept_,
+                     "age_h": (now - (mtime(p) or now)) / 3600, "keep_h": keep_h}))
+    for n in DEV_CACHES:
+        p = os.path.join(dev, n)
+        if not os.path.isdir(p):
+            continue
+        fds = lock_all(p)
+        if fds is not None:
+            for f in fds:
+                os.close(f)
+        out.append((p, ("cache", n),
+                    {"exec_known": exes is not None, "exec_live": live(p),
+                     "lock_held": _flock_held(p + ".lock"), "cargo_held": fds is None,
+                     "idle_min": (now - last_used(p)) / 60, "idle_h": float(os.environ.get("HEAVY_IDLE_TARGET_H", 6)),
+                     "min_idle_min": min_idle_min, "low": free_gb < want_gb}))
+    return out
+
+
+def dev_build_pass(dev, run, now, want_gb, min_idle_min, log, dry_run=False):
+    """Delete what reclaimable() says of ~/.bise/dev/build; one reclaim.log line per delete
+    (path, rule, GB). Yields (path, rule, GB)."""
+    for p, entry, facts in dev_build_facts(dev, run, now, free_kb() / (GB / 1024), want_gb, min_idle_min):
+        act, why = reclaimable(entry, facts)
+        if act != "delete":
+            continue
+        if dry_run:
+            print("would delete %s (%s)" % (p, why))
+            continue
+        before = free_kb()
+        away = gone_dir(p)
+        try:
+            os.rename(p, away)
+        except OSError:
+            continue
+        shutil.rmtree(away, ignore_errors=True)
+        gb = max(0, free_kb() - before) / (GB / 1024)
+        _log(log, p, gb, why)
+        yield p, why, gb
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--want", type=float, default=0, help="GB free to reach (0: idle ones only)")
@@ -720,9 +993,18 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--self-test", action="store_true")
     ap.add_argument("--own", metavar="CWD", help="the own-cap of the job that starts in CWD (heavy-run)")
+    ap.add_argument("--grown", nargs="+", metavar="T0 TREE [DIR]",
+                    help="KB a job grew its dirs (relative to TREE; none: its cargo targets) since T0 (heavy-run)")
     a = ap.parse_args()
     if a.self_test:
         _self_test()
+        return 0
+    if a.grown:
+        try:
+            print(grown_kb(a.grown[1], float(a.grown[0]), a.grown[2:] or None))
+        except Exception as e:  # never a failed job: no number, heavy-run writes no row
+            print("disk_reclaim --grown: %s: %s" % (type(e).__name__, e), file=sys.stderr)
+            return 1
         return 0
     if a.own:
         try:
@@ -738,8 +1020,20 @@ def main():
     except OSError:
         print("disk_reclaim: another reclaim runs")
         return 0
-    # leftovers of a reclaim that died mid-rm
+    shared = shared_trees()
+    log = os.path.join(run, "reclaim.log")
+    if shared:  # once per run: which shared trees it watches (architect m_61939)
+        _log(log, ":".join(shared), 0, "shared-trees")
+    # leftovers of a reclaim that died mid-rm; in a shared tree (his clone, never walked), only
+    # beside its targets
     for r in roots():
+        if r in shared:
+            for t in find_targets(r):
+                p = os.path.dirname(t)
+                for d in _ls(p):
+                    if d.startswith("target.reclaiming-"):
+                        shutil.rmtree(os.path.join(p, d), ignore_errors=True)
+            continue
         for dirpath, dirs, _ in os.walk(r):
             for d in list(dirs):
                 if d.startswith("target.reclaiming-"):
@@ -757,7 +1051,12 @@ def main():
     root_of = {t: r for r in roots() for t in find_targets(r) if not protected(t, keep, allow)}
     ts = [(t, last_used(t), busy(t, exes, r, cwds)) for t, r in root_of.items()]
     used = {t: u for t, u, _ in ts}
-    log = os.path.join(run, "reclaim.log")
+    pinned = {t for t, r in root_of.items() if r in shared}
+    procs = running_procs() if pinned else None
+    for t in sorted(pinned):  # a shared target a process runs from stays: say why, once per run
+        for pid in exec_holders(t, procs or []):
+            _log(log, t, 0, "kept: %d runs from it" % pid)
+            break
     freed, n, trimmed = 0.0, 0, set()
     # the trim: a target a green gate marked, idle since, over HEAVY_TRIM_GB of its own
     marked = [(t, u, b, mtime(os.path.join(t, ".idle-since"))) for t, u, b in ts]
@@ -773,6 +1072,13 @@ def main():
             freed += r[1]
             n += 1
             print("disk_reclaim: trimmed %s (%s, %.1f GB)" % (t, r[0], r[1]))
+    # a job waits for disk: every idle target over the own-cap is trimmed, least recently used first
+    if free_kb() / (GB / 1024) < a.want and not a.dry_run:
+        for t, r in want_trim(ts, root_of, trimmed, now, a.want, log):
+            trimmed.add(t)
+            freed += r[1]
+            n += 1
+            print("disk_reclaim: trimmed %s (over the own-cap while a job waits: %s, %.1f GB)" % (t, r[0], r[1]))
     # the disk is low: first the incremental dirs of the idle targets, then whole targets
     if free_kb() / (GB / 1024) < a.want:
         for t, u, b in sorted(ts, key=lambda x: x[1]):
@@ -787,7 +1093,14 @@ def main():
                 print("disk_reclaim: dropped %s's incremental dirs (%.1f GB)" % (t, gb))
     if not a.dry_run:
         log_tmps(run, now)
-    todo = plan(ts, free_kb() / (GB / 1024), a.want, now, a.idle_h, a.min_idle_min, {t for t, _, _ in ts if stray(t)})
+    # ~/.bise/dev/build's old candidates and idle caches (reclaimable(), architect m_61530)
+    dev = os.environ.get("HEAVY_DEV_BUILD", os.path.expanduser("~/.bise/dev/build"))
+    for p, why, gb in dev_build_pass(dev, run, now, a.want, a.min_idle_min, log, a.dry_run):
+        freed += gb
+        n += 1
+        print("disk_reclaim: deleted %s (%s, %.1f GB)" % (p, why, gb))
+    todo = plan(ts, free_kb() / (GB / 1024), a.want, now, a.idle_h, a.min_idle_min, {t for t, _, _ in ts if stray(t)},
+                pinned)
     for t, reason in todo:
         if t in trimmed or not os.path.isdir(t):
             continue  # trimmed in this pass: its use dates are stale

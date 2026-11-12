@@ -169,6 +169,7 @@ mod tests {
             files: Vec::new(),
             others: Vec::new(),
             add: Vec::new(),
+            decides: false,
             since_ms: 0,
             flow: crate::flow::FlowConfig::default(),
             onto: None,

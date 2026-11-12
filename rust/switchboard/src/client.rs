@@ -1,5 +1,6 @@
 //! How a client reaches the hub of a workspace: connect to `hub.sock`,
-//! starting the hub first when none runs. The hub's own side of a start
+//! starting the hub first when none runs (from the workspace's dev `good`
+//! version over the client's own root: `switch::start_root`). The hub's own side of a start
 //! too ([`run_from`]: its `hub.root`, and the lease on its app root).
 
 use crate::paths::Paths;
@@ -39,6 +40,14 @@ pub fn start_hub(paths: &Paths, exe: &Path, app_root: &Path) -> std::io::Result<
         .map_err(|e| std::io::Error::other(format!("can't run {}: {}", exe.display(), e)))?;
     reap(child);
     Ok(())
+}
+
+/// One line in hub.err, with its time (a start's decision, before the
+/// hub writes there).
+fn err_line(err_file: &Path, line: &str) {
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(err_file) {
+        let _ = writeln!(f, "{} {}", crate::util::now_ms(), line);
+    }
 }
 
 /// A hub's start, its own side: `hub.root` says where it runs from (the
@@ -153,7 +162,30 @@ pub fn open(paths: &Paths, exe: &Path, app_root: &Path) -> std::io::Result<UnixS
             }
             let err_file = paths.state.join("hub.err");
             let err0 = std::fs::metadata(&err_file).map_or(0, |m| m.len());
-            start_hub(paths, exe, app_root)?;
+            // the workspace's dev `good` version over this client's own
+            // root (switch::start_root, the one rule for every client)
+            let good = match crate::switch::start_root(paths, app_root) {
+                crate::switch::StartRoot::Client => None,
+                crate::switch::StartRoot::Good(g) => crate::switch::exe_of(&g).map(|e| (e, g)),
+                crate::switch::StartRoot::Broken(why) => {
+                    err_line(&err_file, &format!("hub start refused: {why}"));
+                    return Err(std::io::Error::other(why));
+                }
+            };
+            match &good {
+                Some((e, g)) => {
+                    err_line(
+                        &err_file,
+                        &format!(
+                            "hub start: on the workspace's last good version {} (a dev build), not this client's {}",
+                            crate::switch::id_of(g),
+                            crate::switch::id_of(app_root)
+                        ),
+                    );
+                    start_hub(paths, e, g)?;
+                }
+                None => start_hub(paths, exe, app_root)?,
+            }
             let t0 = Instant::now();
             loop {
                 if let Ok(s) = UnixStream::connect(paths.socket()) {

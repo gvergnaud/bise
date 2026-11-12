@@ -12,6 +12,7 @@ import { routeOfOpen, type Route } from '@/app/route';
 import { useRouter } from '@/app/router';
 import { useStore } from '@/store';
 import { leaves, type Leaving } from './model';
+import { sayOpened } from './opened';
 import { artifactGesture, countGesture } from '@/app/usage';
 
 export { inApp, leaves, LEAVES, type Leaving } from './model';
@@ -44,6 +45,8 @@ export function useGoArtifact(): (project: string, id: string, known?: Leaving) 
       const go = openExternal();
       if (plan.browser !== undefined && go !== undefined) {
         countGesture(artifactGesture(a?.kind ?? ''));
+        // his open in his browser: its hub moves its last touch (opened.ts; a tab's is openTab's)
+        sayOpened(store, project, id);
         void go(plan.browser);
         return;
       }

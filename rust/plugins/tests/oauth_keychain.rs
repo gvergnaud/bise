@@ -40,6 +40,9 @@ impl Drop for Fake {
     }
 }
 
+mod common;
+use common::python3;
+
 fn fake(tag: &str, args: &[&str]) -> Fake {
     static N: AtomicUsize = AtomicUsize::new(0);
     let dir = std::env::temp_dir().join(format!("bp-oauth-{}-{}-{}", tag, std::process::id(), N.fetch_add(1, Ordering::SeqCst)));
@@ -47,7 +50,7 @@ fn fake(tag: &str, args: &[&str]) -> Fake {
     std::fs::create_dir_all(&dir).unwrap();
     let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fake_mcp_http.py");
     let port_file = dir.join("port");
-    let child = Command::new("python3").arg(&script).arg("--port-file").arg(&port_file).args(args).spawn().unwrap();
+    let child = Command::new(python3()).arg(&script).arg("--port-file").arg(&port_file).args(args).spawn().unwrap();
     let t0 = Instant::now();
     let port = loop {
         if let Some(p) = std::fs::read_to_string(&port_file).ok().and_then(|s| s.trim().parse().ok()) {

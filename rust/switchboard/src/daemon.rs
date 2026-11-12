@@ -11,7 +11,8 @@
 //!   `SB_SOCKET` (`daemon/accept`, `crate::peer`, docs/issues/16);
 //! - `journal.jsonl`: the durable state; `agents/<dir>/transcript.log`:
 //!   every line of each feed, for the views, `sb inspect` and
-//!   `sb history`.
+//!   `sb history` (searched by the history worker, off the loop:
+//!   `daemon/history_work`).
 //!
 //! The loop (`run`): every thread sends a `Msg` on one channel; the
 //! loop reads it through `daemon/inbox` (the clients' messages ahead of
@@ -24,6 +25,8 @@ mod answers;
 mod apps;
 mod art;
 mod art_folders;
+mod art_rows;
+mod assemble;
 mod attach;
 mod boot;
 mod capsule;
@@ -33,6 +36,7 @@ mod fn_context;
 pub(crate) mod gate;
 mod guide;
 mod history;
+mod history_work;
 mod lines;
 mod names;
 mod page_cards;
@@ -87,7 +91,7 @@ mod xread;
 
 use history::transcript_page;
 use lines::transcript_len;
-use repl::{adopt, adoptable, busy_at, kill_pid, supervise};
+use repl::{adopt, busy_at, kill_pid, left_repl, supervise};
 use skills::{skill_roots, skills_fingerprint};
 use versions::version_allowed;
 use crate::core::{AgentReq, ClientId, Effect, Hub, Input, Token};
@@ -97,7 +101,6 @@ use crate::devflow;
 use crate::model::{Agent, Lifecycle, MAIN};
 use crate::paths::Paths;
 use crate::prompts;
-use crate::search;
 use crate::transcript;
 use crate::util::{now_ms, wire_escape};
 use crate::worktree::GitEnv;
@@ -242,6 +245,8 @@ enum Msg {
     /// The repo's commit style, read off the loop (`git log`, at the start
     /// and after each land: Shell::ask_commit_style).
     CommitStyle(Option<String>),
+    /// The artifact rows built off the loop (daemon/art_rows.rs).
+    ArtBuilt(Box<(art_rows::ArtKey, art_rows::ArtView)>),
     /// A diff read for its guide (daemon/guide.rs): the loop decides.
     GuideSeen(Box<guide::Seen>),
     /// A guide's call is over (daemon/guide.rs): kept, or why not.
@@ -349,11 +354,10 @@ struct Shell {
     buffers: BTreeMap<String, VecDeque<(usize, u64, String)>>,
     /// The position of the last line of each feed's transcript.
     positions: BTreeMap<String, usize>,
-    /// Every thread, indexed for `sb history` (built at the first search).
-    search: search::Index,
-    /// The other projects' threads (and bise's under `bise/`), for `sb
-    /// history --project|--all` (xread.rs; refreshed only by a query).
-    xsearch: search::Index,
+    /// `sb history` and `sb show`'s worker: it owns the search indexes
+    /// (this hub's threads, the other projects'), off the loop
+    /// (daemon/history_work.rs).
+    history: history_work::HistoryWork,
     /// Wire-log offsets processed since the last flush to `wire.offset`.
     offsets: BTreeMap<String, u64>,
     /// True while `Input::Boot` runs: its spawns may adopt a REPL.
@@ -375,11 +379,11 @@ struct Shell {
     /// Each agent's answer as it streams in (its `partial` lines, by
     /// name): memory only, never journaled (daemon/lines.rs).
     partials: BTreeMap<String, bise_proto::thread::lines::Partial>,
-    /// Each transcript's offset index (thread pages and `thread/find`,
-    /// daemon/tindex.rs): built by a worker the first time it is paged.
+    /// Each transcript's offset index (thread pages, `thread/find` and
+    /// `thread/marks`, daemon/tindex.rs): built by a worker the first time it is paged.
     tix: tindex::Indexes,
     /// Each connection's newest `thread/find` per agent: an older search
-    /// still running stops when it sees it moved (daemon/proto/find.rs).
+    /// still running stops when it sees it moved (daemon/proto/walk.rs).
     finds: BTreeMap<(ClientId, String), std::sync::Arc<std::sync::atomic::AtomicU64>>,
     /// Versions being built (`/version <commit>`), by revision.
     building: BTreeSet<String>,
@@ -593,6 +597,11 @@ fn free_port() -> std::io::Result<u16> {
     Ok(l.local_addr()?.port())
 }
 
+/// No process listens on `port` now: a REPL can take it.
+fn port_free(port: u16) -> bool {
+    TcpListener::bind(("127.0.0.1", port)).is_ok()
+}
+
 impl Shell {
     /// Save how far each wire log was processed: the next hub adopts
     /// the REPLs from there.
@@ -783,7 +792,10 @@ impl Shell {
             .zip(choices)
             .map(|((name, _, main, _), c)| (name.clone(), setup.in_use(if *main { "main" } else { "agent" }, &c), c))
             .collect();
-        let others: Vec<&str> = used.iter().map(|(_, u, _)| u.model.name.as_str()).collect();
+        // each model name once: tag() asks whether any other one clashes,
+        // so the distinct names answer the same (hub-loop: 1350 agents made
+        // it 1350 x 1350 comparisons at each state push)
+        let others: Vec<&str> = used.iter().map(|(_, u, _)| u.model.name.as_str()).collect::<BTreeSet<&str>>().into_iter().collect();
         let models: crate::board::Models = used
             .iter()
             .map(|(n, u, c)| {
@@ -1625,33 +1637,24 @@ fn write_role(paths: &Paths, adir: &Path, line: &str, key: &str) {
     }
 }
 
-fn kill_stale_repls(sh: &Shell) {
+/// The REPLs an earlier hub left that this one did not adopt
+/// (`procs::stray_repls`: by their tag, not by a `repl.pid` a cut start
+/// never wrote) are killed off the loop: one session, one REPL. `boot_ms`:
+/// before this hub spawned any.
+fn kill_stale_repls(sh: &Shell, boot_ms: u64) {
     for a in sh.hub.st.agents.values() {
-        if sh.pids.contains_key(&a.dir) {
-            // adopted at boot, or just spawned
-            continue;
+        if !sh.pids.contains_key(&a.dir) {
+            let _ = std::fs::remove_file(sh.opts.paths.agent_dir(&a.dir).join("repl.pid"));
         }
-        let f = sh.opts.paths.agent_dir(&a.dir).join("repl.pid");
-        let Ok(pid) = std::fs::read_to_string(&f) else {
-            continue;
-        };
-        let pid = pid.trim().to_string();
-        let cmdline = Command::new("ps")
-            .args(["-p", &pid, "-o", "command="])
-            .output()
-            .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
-            .unwrap_or_default();
-        if cmdline.contains("repl-live") {
-            log_line(
-                &sh.opts.paths,
-                &format!("killing a stale REPL of {} (pid {})", a.name, pid),
-            );
-            if let Ok(pid) = pid.parse() {
-                crate::procs::terminate(pid);
-            }
-        }
-        let _ = std::fs::remove_file(&f);
     }
+    let adopted: BTreeSet<u32> = sh.pids.values().map(|(_, p)| *p).collect();
+    let (hub, paths) = (sh.proc_hub.clone(), sh.opts.paths.clone());
+    std::thread::spawn(move || {
+        let hit = crate::procs::reap_strays(&hub, &adopted, boot_ms, crate::procs::STOP_GRACE);
+        if !hit.is_empty() {
+            log_line(&paths, &format!("stale REPLs of earlier hubs killed: {}", crate::procs::describe(&hit)));
+        }
+    });
 }
 
 pub fn run(opts: Opts) -> std::io::Result<()> {
@@ -1745,104 +1748,10 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
     let journal = journal_file::Out::new(std::fs::OpenOptions::new().create(true).append(true).open(paths.journal())?);
 
     let (tx, rx): (Sender<Msg>, Receiver<Msg>) = channel();
-    let (log_paths, trash_paths) = (paths.clone(), paths.clone());
-    // a drop's folder rm on the trash's worker, off this loop (trash.rs)
-    let trash = crate::trash::Trash::worker(Box::new(move |s| log_line(&trash_paths, s)));
-    let env = GitEnv::new(&paths, Box::new(move |s| log_line(&log_paths, s)), trash);
-    // the checker (approvals-design.md §4): a chat model in the role runs
-    // through repl-live's one-shot, like the role lines
     let home = opts.home.clone();
-    let user_config = std::fs::read_to_string(home.config_file()).unwrap_or_default();
-    let runner = crate::approvals::check::Runner::new(&home)
-        .with_oneshot(opts.repl_bin.clone(), opts.app_root.clone(), opts.spawn_env);
-    let spool = usage_spool::UsageSpool::new(&opts, &paths.workspace, now_ms());
-    let mut sh = Shell {
-        opts,
-        // before `hub` moves: its split of each message (crate::spent)
-        loop_watch: loop_watch::LoopWatch::start(&paths, hub.spent.clone()),
-        hub,
-        env,
-        tx: tx.clone(),
-        journal,
-        repls: BTreeMap::new(),
-        gens: BTreeMap::new(),
-        next_gen: 1,
-        pids: BTreeMap::new(),
-        starts: repl_starts::new_starts(),
-        start_queue: BTreeMap::new(),
-        clients: BTreeMap::new(),
-        replies: BTreeMap::new(),
-        buffers: BTreeMap::new(),
-        positions: BTreeMap::new(),
-        proto: proto::Proto::default(),
-        answers: answers::Answers::new(crate::paths::workspace_id(&paths.workspace)),
-        rpc: rpc::Rpcs::default(),
-        projects: projects::Projects::boot(&home, &paths),
-        state_gate: state_gate::StateGate::default(),
-        context_gate: state_gate::StateGate::every(crate::contexts::CONTEXT_MS),
-        search: search::Index::default(),
-        xsearch: search::Index::default(),
-        offsets: BTreeMap::new(),
-        booting: false,
-        bins: BTreeMap::new(),
-        ports: BTreeMap::new(),
-        switching: BTreeMap::new(),
-        switch_spawned: BTreeSet::new(),
-        restored: BTreeSet::new(),
-        partials: BTreeMap::new(),
-        tix: tindex::Indexes::default(),
-        finds: BTreeMap::new(),
-        building: BTreeSet::new(),
-        updating: None,
-        release: None,
-        update_told: None,
-        release_switched: None,
-        resume_turn: BTreeSet::new(),
-        recorders: BTreeMap::new(),
-        reload_id: String::new(),
-        reload_repls: BTreeSet::new(),
-        spawn_keys: BTreeMap::new(),
-        spawn_plugins: BTreeMap::new(),
-        tick: tick::Clock::new(now_ms()),
-        recycle: recycling::Recycle::from_env(),
-        usage: Default::default(),
-        usage_spool: spool,
-        pulse: Default::default(),
-        small_broken: Default::default(),
-        config: config_watch::ConfigWatch::new(&home, &paths),
-        archived: BTreeSet::new(),
-        proc_hub: proc_hub.clone(),
-        down: BTreeSet::new(),
-        gates: gate::Gates::new(
-            &user_config,
-            std::env::var(crate::approvals::mode::ENV).ok().as_deref(),
-            runner,
-        ),
-        views: views::Views::default(),
-        apps: apps::Apps::default(),
-        files: view_files::DocFiles::default(),
-        lands: crate::land::Queue::default(),
-        features: features::Features::load(&paths.state, &|n| paths.feature_diff(n)),
-        prs: None,
-        commit_style: None,
-        cu: crate::computer_use::Watch::new(&proc_hub),
-        disk: disk_watch::DiskWatch::from_env(),
-        pg: pages::PageState::load(&paths.state),
-        fn_ctx: None,
-        idle: crate::idle::Watch::new(
-            crate::idle::grace(std::env::var(crate::idle::ENV).ok().as_deref(), &user_config),
-            crate::idle::waits(&user_config),
-            std::time::Instant::now(),
-        ),
-        holds: crate::idle::Holds::default(),
-        art: art::Art::default(),
-        guides: guide::Guides::default(),
-        revive: revive::Revive::default(),
-        wake_look: wake_look::WakeLook::start(tx.clone()),
-        place_work: place_work::PlaceWork::start(&paths, tx.clone()),
-        procs: processes::Worker::start(paths.clone(), proc_hub.clone(), crate::paths::workspace_id(&paths.workspace), tx.clone()),
-        photos,
-    };
+    // the shell from its parts (daemon/assemble.rs: the loop budget's
+    // tests build the same one)
+    let mut sh = Shell::assemble(assemble::Parts { opts, hub, tx: tx.clone(), journal, photos, proc_hub });
     sh.answers_replayed(&events);
     sh.start_pages(&paths, &tx);
     sh.start_here(&paths);
@@ -1926,6 +1835,9 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
     sh.detect_flow();
     sh.ask_commit_style();
     sh.booting = true;
+    // before any REPL of this hub: what started earlier and is not
+    // adopted below is a stray (kill_stale_repls)
+    let boot_ms = now_ms();
     sh.step(Input::Boot);
     sh.booting = false;
     // mcp-apps: a views bridge an older hub left (its view cards closed
@@ -1937,7 +1849,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
         let (tx, (dir, claims)) = (sh.tx.clone(), sh.hub.shared_claims());
         std::thread::spawn(move || land::claims_clean(&tx, &dir, &claims));
     }
-    kill_stale_repls(&sh);
+    kill_stale_repls(&sh, boot_ms);
     sh.migrate_the_rest();
     sh.archived = sh.archived_dirs();
     sh.sweep_worktrees(None);
@@ -2115,3 +2027,8 @@ fn claim(paths: &Paths, app_root: &Path) -> std::io::Result<Option<Claimed>> {
 #[cfg(test)]
 #[path = "daemon_tests.rs"]
 mod tests;
+// at the end: the source scans read daemon.rs up to its first cfg(test)
+#[cfg(test)]
+mod boot_bench_tests;
+#[cfg(test)]
+mod loop_budget_tests;

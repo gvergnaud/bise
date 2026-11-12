@@ -47,8 +47,8 @@ impl Shell {
             self.proto.growth.arts = arts;
         }
         if self.proto.growth.arts.is_none() {
-            let n = self.artifact_rows(&self.artifacts_ev()).len() as u32;
-            self.proto.growth.arts = Some(n);
+            // none before the artifact rows' first build (daemon/art_rows.rs)
+            self.proto.growth.arts = self.artifact_rows_now().map(|r| r.len() as u32);
         }
         self.proto.growth.value()
     }

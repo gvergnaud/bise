@@ -5,7 +5,7 @@
 // place of useListKeys and hands its cards and cols to <ArtifactGrid>. Owner: art-grid.
 import { useMemo, useSyncExternalStore, type KeyboardEvent } from 'react';
 import { useListKeys, type ListKeys } from '@/app/listkeys';
-import { cardsOf, colsFor, dirOf, gridStep, oneOf, rowsOf, type Card } from './gallery';
+import { cardsOf, colsFor, dirOf, gridStep, oneOf, rowsOf, type Card, type HeadOf } from './gallery';
 import type { Item } from './model';
 
 export type View = 'grid' | 'list';
@@ -28,7 +28,7 @@ export interface GridKeysOpts {
   readonly items: readonly Item[];
   readonly view: View;
   /** the day groups (the grid's rows break at each day) */
-  readonly days?: boolean;
+  readonly days?: boolean | HeadOf;
   /** ⏎ on the selected card */
   readonly onOpen?: (key: string) => void;
   /** the screen's other keys, with the selected card's key */

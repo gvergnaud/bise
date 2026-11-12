@@ -202,7 +202,8 @@ async function start(args: string[], env: Record<string, string>, o: LaunchOptio
     const folders = await app.evaluate(({ app: a }, names) => Object.fromEntries(names.map((n) => [n, a.getPath(n as Parameters<typeof a.getPath>[0])])), ELECTRON_PATHS);
     // compared as realpaths: Electron gives userData and temp back as set (/tmp/bh-*, not
     // /private/tmp/bh-*); unresolved, every launch was refused (f69eeae98's test:land)
-    const outside = pathsOutside(realFolders(folders), [realpathSync(h.home), realpathSync(h.root)]);
+    // a shared userData (keep-all, move-apps: testUserData(), only a /tmp/bh-*/userdata) is the run's own too
+    const outside = pathsOutside(realFolders(folders), [realpathSync(h.home), realpathSync(h.root), realpathSync(userData)]);
     if (outside.length) throw new Error(`harness: refused launch: Electron folders outside the test home: ${outside.join(', ')}`);
     await installGuards(app);
     const page = await mainWindow(app);

@@ -7,7 +7,7 @@
 import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { CoreCmd } from '@/shared/api';
-import type { Pr } from '@/proto';
+import type { DiffFile, Pr } from '@/proto';
 import { Store, StoreProvider } from '@/store';
 import { createRouter, RouterContext } from '@/app/router';
 import { panel } from '@/proto/words_panel.gen';
@@ -125,6 +125,21 @@ describe('a PR tab', () => {
       store.apply({ ev: 'pr_acted', project: P, req: cmd?.req ?? 0, url: URL, act: 'merge', err: 'moved' });
     });
     expect(v.getByTestId('prtab.acted').textContent).toBe(panel.prtab_err_moved);
+  });
+
+  it('the PR’s size at the line’s end, GitHub’s: the + and − over every file and five squares, once its diff comes', () => {
+    const { v, store, last } = shell(status());
+    expect(v.queryByTestId('prtab.stat')).toBeNull();
+    const f = (path: string, add: number, del: number): DiffFile => ({ path, status: 'modified', add, del, hunks: [] });
+    act(() => {
+      store.apply({ ev: 'diff', project: P, req: last('diff')?.req ?? 0, agent: 'perf', base: 'main',
+        files: [f('src/a.ts', 400, 100), { ...f('src/big.ts', 38, 51), truncated: true }] });
+    });
+    const stat = v.getByTestId('prtab.stat');
+    expect(v.getByTestId('prtab.line').contains(stat)).toBe(true);
+    expect([stat.querySelector('.prt-add')?.textContent, stat.querySelector('.prt-del')?.textContent]).toEqual(['+438', '−151']);
+    const squares = [...v.getByTestId('prtab.stat.squares').querySelectorAll('rect')].map((r) => r.getAttribute('class'));
+    expect(squares).toEqual(['prt-sq-add', 'prt-sq-add', 'prt-sq-add', 'prt-sq-del', 'prt-sq-none']);
   });
 
   it('Close is in its title’s ▾ only, and asks first', async () => {

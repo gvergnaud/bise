@@ -243,7 +243,7 @@ impl Pages {
         let left: Vec<String> = b.difference(&now).cloned().collect();
         *b = now;
         // a page row's waiting count reads it (`held`): built again
-        crate::store_gen::bump();
+        crate::store_gen::bump_mem();
         Some(left)
     }
 
@@ -252,7 +252,7 @@ impl Pages {
     /// one written after the fix; ambient-lead m_6187).
     pub fn mark_done(&self, id: &str, name: &str, version: u64) {
         self.done_at.lock().unwrap_or_else(|e| e.into_inner()).insert((id.to_string(), name.to_string()), version);
-        crate::store_gen::bump();
+        crate::store_gen::bump_mem();
     }
 
     /// The replies of agent `name`'s items on page `id` (at `version`)
@@ -349,7 +349,7 @@ impl Pages {
     fn rows_now(&self) -> (Vec<bise_proto::rows::Page>, usize) {
         let today = crate::every::local_day(crate::util::now_ms()).unwrap_or(i64::MAX);
         // a page written by another process moves the stamp (store_gen)
-        let key = (crate::store_gen::now(), today, crate::store_gen::dir_stamp(&self.store.dir));
+        let key = (crate::store_gen::now(), today, crate::store_gen::stamp(&self.store.dir));
         let mut memo = self.rows_memo.lock().unwrap_or_else(|e| e.into_inner());
         memo.get(key, || (self.fresh_rows(), self.fresh_overdue()))
     }

@@ -48,8 +48,11 @@
 .art-gone-link { padding: 0; border: 0; background: none; font: inherit; color: inherit; }
 .art-gone-link:hover { color: var(--c-text-2); text-decoration: underline; text-underline-offset: 3px; }
 .art-gone-link:focus-visible { outline: 2px solid var(--c-text); outline-offset: 2px; border-radius: 3px; }
-/* the page doesn't answer (page-unreach): why, in place of the frame, on the same paper; never blank */
-.art-down { width: 100%; height: 100%; box-sizing: border-box; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: var(--s-2); padding: var(--s-8); border-radius: var(--r-3); background: var(--c-solid); box-shadow: var(--e-1); }
+/* the page doesn't answer (page-unreach): why, in place of the frame, on the same paper; never blank.
+   Its first line at a third of the paper's height, the optical centre, whatever follows it: the
+   loading line (artifact-loading) stands where the title replaces it, nothing jumps at 10 s (designer m_61710) */
+.art-down { width: 100%; height: 100%; box-sizing: border-box; display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: var(--s-2); padding: var(--s-8); border-radius: var(--r-3); background: var(--c-solid); box-shadow: var(--e-1); }
+.art-down::before { content: ''; flex: 0 1 calc(100% / 3); }
 .art-down-title { font: 600 var(--t-15) var(--font-ui); color: var(--c-text); }
 .art-down-line { max-width: 52ch; font: var(--t-14) var(--font-read); color: var(--c-text-2); }
 .art-down-mono { font: var(--t-13) var(--font-mono); color: var(--c-text-2); }
@@ -172,3 +175,13 @@
    under the line (designer m_52811) */
 .art-file-gone .b-empty { align-items: center; text-align: center; }
 .art-file-gone .b-empty .act { margin-top: var(--s-3); }
+
+/* the sections (SectionRows.tsx; designer m_60689): the quiet rows under For you, the back row over a list */
+.art-quiet { display: flex; gap: var(--s-4); padding: var(--s-4) 0 var(--s-2); }
+.art-quiet-row { flex: none; padding: var(--s-1) 0; border: 0; background: none; font: var(--t-12) var(--font-ui); color: var(--c-text-3); }
+.art-quiet-row:hover { color: var(--c-text-2); text-decoration: underline; text-underline-offset: 3px; }
+.art-quiet-row:focus-visible, .art-back-row:focus-visible { outline: 2px solid var(--c-text); outline-offset: 2px; border-radius: 3px; }
+.art-back { display: flex; align-items: baseline; gap: var(--s-3); padding: var(--s-2) 0 var(--s-3); }
+.art-back-row { flex: none; padding: 0; border: 0; background: none; font: var(--t-12) var(--font-ui); color: var(--c-text-2); }
+.art-back-row:hover { color: var(--c-text); }
+.art-back-n { font: var(--t-12) var(--font-ui); color: var(--c-text-3); }

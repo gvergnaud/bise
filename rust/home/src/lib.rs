@@ -10,6 +10,8 @@
 //! `.env`, `prefs.json`, `sessions/`, `hubs/<name>-<hash>/`, `images/`,
 //! `crashes/`, `plugins.json`, `plugin-data/`, `cache/` (indexes),
 //! `run/` (0700), `drafts/`, `usage/` (the usage counts), `dev/{versions,build}`.
+//! His visible folder, the home workspace: `~/bise`, `<root>/bise` under an
+//! explicit `$BISE_HOME` ([`Home::bise_root`]).
 //!
 //! Each path keeps its env override (`BEND_CONFIG`, `BEND_SESSIONS_DIR`,
 //! ...). The harness exports them all at its start ([`Home::exports`]),
@@ -76,7 +78,7 @@ pub const DICTATION_DIR: &str = "dictation";
 pub const EXPORTS_FOR: &str = "BISE_EXPORTS_FOR";
 
 /// The env overrides of single paths, in the order they are exported.
-pub const PATH_VARS: [&str; 8] = [
+pub const PATH_VARS: [&str; 9] = [
     "BEND_CONFIG",
     "BEND_SESSIONS_DIR",
     "BEND_IMAGE_DIR",
@@ -85,6 +87,7 @@ pub const PATH_VARS: [&str; 8] = [
     "BEND_RUN_DIR",
     "SB_VERSIONS_DIR",
     "SB_BUILD_DIR",
+    "BISE_HOME_WORKSPACE",
 ];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -137,11 +140,15 @@ impl Home {
             return;
         }
         let user = self.user.to_string_lossy().into_owned();
+        // with $BISE_HOME at another root, the user's own ~/.bise defaults
+        // are foreign too: a throwaway home's plugin services ran on his
+        // real plugin data (kb-fileprovider m_59512)
+        let explicit = self.explicit();
         self.over.retain(|k, v| {
             let v = v.to_string_lossy();
             !default_suffixes(k)
                 .iter()
-                .any(|suffix| v.strip_suffix(suffix.as_str()).is_some_and(|home| !home.is_empty() && home != user))
+                .any(|suffix| v.strip_suffix(suffix.as_str()).is_some_and(|home| !home.is_empty() && (home != user || explicit)))
         });
     }
 
@@ -160,6 +167,18 @@ impl Home {
         self.root != self.user.join(".bise")
     }
 
+    /// His visible bise folder: ~/bise (docs/plugin-apps.md A6), the home
+    /// workspace where agents write (docs/ambient-pages.md §5.1, a plain
+    /// folder without git), plugins' documents, taste.md and people.md;
+    /// shared-kb's Finder domain shows its entries. `$BISE_HOME_WORKSPACE`
+    /// when set (the tests; a path var, exported with its stamp), else
+    /// `<root>/bise` under an explicit root (a throwaway `$BISE_HOME` never
+    /// reaches his real ~/bise), else `$HOME/bise`.
+    pub fn bise_root(&self) -> PathBuf {
+        let default = if self.explicit() { self.root.join("bise") } else { self.user.join("bise") };
+        self.or("BISE_HOME_WORKSPACE", default)
+    }
+
     /// `$HOME` (else `/tmp`): the user's own dirs (`~/.agents`, `~/.vibe`).
     pub fn user_home(&self) -> &Path {
         &self.user
@@ -168,18 +187,6 @@ impl Home {
     /// bise's own folder: `~/.bise` (`$BISE_HOME`).
     pub fn root(&self) -> &Path {
         &self.root
-    }
-
-    /// His visible bise folder: `~/bise` (docs/plugin-apps.md A6), the
-    /// home workspace where agents write, plugins' documents
-    /// ([`Home::plugin_documents_root`]), `taste.md` and `people.md`; shared-kb's
-    /// Finder domain shows its entries. `$BISE_HOME_WORKSPACE` in the tests
-    /// (a throwaway folder, never his).
-    pub fn bise_root(&self) -> PathBuf {
-        match crate::env::test_setting("BISE_HOME_WORKSPACE") {
-            Some(d) => PathBuf::from(d),
-            None => self.user.join("bise"),
-        }
     }
 
     /// His taste rules, `<bise root>/taste.md` (`sb taste`).
@@ -472,6 +479,7 @@ impl Home {
             ("BEND_RUN_DIR", s(self.run_dir())),
             ("SB_VERSIONS_DIR", s(self.versions_dir())),
             ("SB_BUILD_DIR", s(self.build_dir())),
+            ("BISE_HOME_WORKSPACE", s(self.bise_root())),
         ];
         // an explicit home only: ~/.bise is the default
         let bise = self.explicit().then(|| s(self.root.clone()));

@@ -307,14 +307,17 @@ impl Shell {
         self.proto.forget_archived(id);
         let agents = self.agents_for(id, &snap, &agents);
         let jobs = HubEv::Jobs { project: self.project(), items: crate::proto_view::jobs(&snap) };
-        let arts = self.artifacts_ev();
-        let arts = self.proto_artifacts(&arts);
+        // none before the rows' first build lands (daemon/art_rows.rs):
+        // the event follows then
+        let arts = self.artifacts_ev().map(|ev| self.proto_artifacts(&ev));
         let appr = self.approvals_ev(false);
         let appr = self.proto_approvals(&appr);
         let pages = self.pages_ev(&snap);
         let growth = self.growth_ev(&snap);
         let pulse = self.pulse_ev();
-        let mut evs = vec![agents, cards, jobs, arts, self.features_ev(), self.prs_ev(), self.scheduled_ev(), self.models_ev(), appr, self.flow_ev(), self.paused_ev(), self.switch_ev(), pages, growth, pulse, self.bise_update_ev()];
+        let mut evs = vec![agents, cards, jobs];
+        evs.extend(arts);
+        evs.extend([self.features_ev(), self.prs_ev(), self.scheduled_ev(), self.models_ev(), appr, self.flow_ev(), self.paused_ev(), self.switch_ev(), pages, growth, pulse, self.bise_update_ev()]);
         // the versions (`dev`: the terminal's /release-bise, the /version
         // picker), as the older hello's burst carried them
         if let Some(v) = self.typed_of(&self.version_items()) {

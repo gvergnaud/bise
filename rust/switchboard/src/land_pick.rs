@@ -44,11 +44,14 @@ impl Change {
 }
 
 /// What a land takes, and what it names: changes nobody claimed, nested
-/// repos (`x/`).
+/// repos (`x/`), and the other agents' files main took on its word.
 #[derive(Debug, Default, PartialEq)]
 pub(crate) struct Picked {
     pub mine: Vec<String>,
     pub left_out: Vec<String>,
+    /// land-decide: the files of `mine` other agents also changed, that
+    /// main named exactly with `--add`, and those agents.
+    pub decided: Vec<(String, Vec<String>)>,
 }
 
 /// What the agent claims, relative to the place's folder.
@@ -60,13 +63,25 @@ pub(crate) struct Claims<'a> {
     pub add: &'a [(String, String)],
     /// The other agents of the place and their files.
     pub others: &'a [(String, Vec<String>)],
+    /// The lander is main (the land job's fact, never the message's):
+    /// a file it names exactly with `--add` lands even when other agents
+    /// changed it too. Its file tools' claims and a folder `--add` decide
+    /// nothing: a contested file there is still refused.
+    pub decides: bool,
 }
 
 /// The files to commit and the ones to name. `alone`: a worktree no
 /// other agent of the place shares.
 pub(crate) fn pick(changes: &[Change], claims: &Claims, alone: bool) -> Result<Picked, String> {
     let theirs = |p: &String| claims.others.iter().any(|(_, fs)| fs.contains(p));
+    let who = |f: &String| -> Vec<String> { claims.others.iter().filter(|(_, fs)| fs.contains(f)).map(|(n, _)| n.clone()).collect() };
+    let refusal = |f: &String| {
+        let hint = if claims.decides { "; to land it on your word, name that file with --add <file>" } else { "" };
+        format!("{} is also changed by @{}: not landed, main decides who lands it{}", f, who(f).join(", @"), hint)
+    };
     let mut claimed: Vec<bool> = changes.iter().map(|c| c.paths().any(|p| claims.files.contains(p))).collect();
+    // main's word: the files it named exactly (both sides of a rename)
+    let mut named: Vec<&String> = Vec::new();
     for (arg, p) in claims.add {
         let p = p.trim_end_matches('/');
         let mut any = false;
@@ -77,9 +92,17 @@ pub(crate) fn pick(changes: &[Change], claims: &Claims, alone: bool) -> Result<P
                 claimed[i] = true;
                 any = true;
             }
+            if exact && claims.decides {
+                named.extend(c.paths());
+            }
         }
         if !any {
-            return Err(format!("--add {}: no new or changed file there", arg));
+            // only other agents' changes there: refused, one of them named
+            let contested = changes.iter().find(|c| !c.repo() && c.paths().any(|x| x.starts_with(&format!("{}/", p))));
+            return Err(match contested {
+                Some(c) => refusal(&c.path),
+                None => format!("--add {}: no new or changed file there", arg),
+            });
         }
     }
     let mut mine: Vec<String> = Vec::new();
@@ -113,13 +136,50 @@ pub(crate) fn pick(changes: &[Change], claims: &Claims, alone: bool) -> Result<P
     left_out.extend(repos);
     let mut seen = std::collections::BTreeSet::new();
     mine.retain(|f| seen.insert(f.clone()));
+    let mut decided: Vec<(String, Vec<String>)> = Vec::new();
     for f in &mine {
-        let who: Vec<&str> = claims.others.iter().filter(|(_, fs)| fs.contains(f)).map(|(n, _)| n.as_str()).collect();
-        if !who.is_empty() {
-            return Err(format!("{} is also changed by @{}: not landed, main decides who lands it", f, who.join(", @")));
+        let who = who(f);
+        if who.is_empty() {
+            continue;
         }
+        if !named.contains(&f) {
+            return Err(refusal(f));
+        }
+        decided.push((f.clone(), who));
     }
-    Ok(Picked { mine, left_out })
+    Ok(Picked { mine, left_out, decided })
+}
+
+/// land-decide: main's answer for the other agents' files it took, each
+/// with its agents, so it sees it took what it meant to. "" when none.
+pub fn decided_note(decided: &[(String, Vec<String>)]) -> String {
+    if decided.is_empty() {
+        return String::new();
+    }
+    let each: Vec<String> = decided.iter().map(|(f, who)| format!("{} (@{})", f, who.join(", @"))).collect();
+    format!("on your word, took {} file{} other agents also changed: {}", each.len(), if each.len() == 1 { "" } else { "s" }, each.join(", "))
+}
+
+/// land-decide: what each agent whose files main took hears, one entry
+/// in its thread (not a message to answer): (the agent, the words).
+pub fn decided_tells(decided: &[(String, Vec<String>)], target: &str, sha: &str) -> Vec<(String, String)> {
+    let mut agents: Vec<&String> = decided.iter().flat_map(|(_, who)| who).collect();
+    agents.sort();
+    agents.dedup();
+    agents
+        .into_iter()
+        .map(|a| {
+            let files: Vec<&str> = decided.iter().filter(|(_, who)| who.contains(a)).map(|(f, _)| f.as_str()).collect();
+            let text = format!(
+                "main landed {} on {} in {} (it held your changes too): they are on {} now, don't redo or revert them",
+                files.join(", "),
+                target,
+                sha,
+                target
+            );
+            (a.clone(), text)
+        })
+        .collect()
 }
 
 /// The claims that are over (land-claims): of `claims` (the strings as
@@ -255,10 +315,52 @@ mod tests {
     }
 
     fn pick_of(changes: &[Change], files: &[&str], add: &[&str], others: &[(&str, &[&str])], alone: bool) -> Result<Picked, String> {
+        pick_by(changes, files, add, others, alone, false)
+    }
+
+    /// [`pick_of`], `decides`: the lander is main.
+    fn pick_by(changes: &[Change], files: &[&str], add: &[&str], others: &[(&str, &[&str])], alone: bool, decides: bool) -> Result<Picked, String> {
         let files = s(files);
         let add: Vec<(String, String)> = add.iter().map(|a| (a.to_string(), a.to_string())).collect();
         let others: Vec<(String, Vec<String>)> = others.iter().map(|(n, fs)| (n.to_string(), s(fs))).collect();
-        pick(changes, &Claims { files: &files, add: &add, others: &others }, alone)
+        pick(changes, &Claims { files: &files, add: &add, others: &others, decides }, alone)
+    }
+
+    /// land-decide: main names a file two agents changed with --add: it
+    /// lands, named with its agents; its file tools' claim on it or a
+    /// folder --add over it still refuse it, and another agent's exact
+    /// --add too (the case that deadlocked msg-dots + artifacts-keep).
+    #[test]
+    fn main_takes_a_contested_file_only_when_it_names_it() {
+        let cs = [ch("p/a.rs", true), ch("p/b.rs", true), ch("c", true)];
+        let both: &[(&str, &[&str])] = &[("msg-dots", &["p/a.rs", "p/b.rs"]), ("artifacts-keep", &["p/a.rs"])];
+        let p = pick_by(&cs, &[], &["p/a.rs", "p/b.rs"], both, false, true).unwrap();
+        assert_eq!(p.mine, s(&["p/a.rs", "p/b.rs"]));
+        assert_eq!(p.left_out, s(&["c"]));
+        assert_eq!(p.decided, vec![("p/a.rs".into(), s(&["msg-dots", "artifacts-keep"])), ("p/b.rs".into(), s(&["msg-dots"]))]);
+        // a folder decides nothing: refused, and main is told how
+        let e = pick_by(&cs, &[], &["p"], both, false, true).unwrap_err();
+        assert!(e.starts_with("p/a.rs is also changed by @msg-dots, @artifacts-keep: not landed, main decides") && e.ends_with("name that file with --add <file>"), "{e}");
+        // nor its file tools' claim
+        assert!(pick_by(&cs, &["p/a.rs"], &[], both, false, true).is_err());
+        // another agent naming it: refused as before
+        let e = pick_by(&cs, &[], &["p/a.rs"], both, false, false).unwrap_err();
+        assert_eq!(e, "p/a.rs is also changed by @msg-dots, @artifacts-keep: not landed, main decides who lands it");
+        // a staged rename named by one side goes whole, decided
+        let p = pick_by(&[mv("n.rs", "o.rs")], &[], &["o.rs"], &[("y", &["n.rs"])], false, true).unwrap();
+        assert_eq!((p.mine, p.decided), (s(&["n.rs", "o.rs"]), vec![("n.rs".into(), s(&["y"]))]));
+    }
+
+    #[test]
+    fn decided_words_name_each_file_and_tell_each_agent_once() {
+        assert_eq!(decided_note(&[]), "");
+        assert!(decided_tells(&[], "main", "abc").is_empty());
+        let d = vec![("p/a.rs".to_string(), s(&["y", "z"])), ("p/b.rs".to_string(), s(&["y"]))];
+        assert_eq!(decided_note(&d), "on your word, took 2 files other agents also changed: p/a.rs (@y, @z), p/b.rs (@y)");
+        let t = decided_tells(&d, "main", "abc1234");
+        assert_eq!(t.iter().map(|(a, _)| a.as_str()).collect::<Vec<_>>(), ["y", "z"]);
+        assert!(t[0].1.starts_with("main landed p/a.rs, p/b.rs on main in abc1234 (it held your changes too)"), "{}", t[0].1);
+        assert!(t[1].1.starts_with("main landed p/a.rs on main in abc1234"), "{}", t[1].1);
     }
 
     /// land-claims: a claim on a file with no change left is over; the
@@ -282,7 +384,7 @@ mod tests {
         let marketing: Vec<String> = s(&["tests/k.txt"]).into_iter().filter(|c| !clean_claims(&landed, &claims, rel).contains(c)).collect();
         let others = [("marketing".to_string(), marketing)];
         let files = s(&["tests/k.txt"]);
-        let p = pick(&cs, &Claims { files: &files, add: &[], others: &others }, false).unwrap();
+        let p = pick(&cs, &Claims { files: &files, add: &[], others: &others, decides: false }, false).unwrap();
         assert_eq!(p.mine, s(&["tests/k.txt"]));
     }
 
@@ -427,19 +529,40 @@ mod tests {
             (vec![ch("d/a", true), ch("d/b", false), ch("dd/c", true)], &[], &["d"], &[], false),
             (vec![ch("d/a", true), mv("e/b", "d/b")], &[], &["d/"], &[("y", &["e/b"])], false),
         ];
+        // land-decide, after the rows above (theirs keep their bytes: no
+        // `decides` in, no `decided` out): main exact, main folder, main's
+        // file tools, another agent's exact --add
+        let ab: &[(&str, &[&str])] = &[("y", &["p/a.rs"]), ("z", &["p/a.rs", "p/b.rs"])];
+        let pab = || vec![ch("p/a.rs", true), ch("p/b.rs", true), ch("c", true)];
+        let decided: Vec<Case> = vec![
+            (pab(), &[], &["p/a.rs", "p/b.rs"], ab, false),
+            (pab(), &[], &["p"], ab, false),
+            (pab(), &["p/a.rs"], &[], ab, false),
+            (pab(), &[], &["p/b.rs", "c"], ab, false),
+            (vec![mv("n.rs", "o.rs")], &[], &["o.rs"], &[("y", &["n.rs"])], false),
+        ];
+        let rows = cases.iter().map(|c| (c, false)).chain(decided.iter().map(|c| (c, true))).chain([(&decided[0], false)]);
         let strs = |xs: &[String]| json!(xs);
-        let lines: Vec<String> = cases
-            .iter()
-            .map(|(cs, files, add, others, alone)| {
-                let input = json!({
+        let lines: Vec<String> = rows
+            .map(|((cs, files, add, others, alone), decides)| {
+                let mut input = json!({
                     "changes": cs.iter().map(|c| json!({"path": c.path, "from": c.from.clone().unwrap_or_default(), "recent": c.recent})).collect::<Vec<_>>(),
                     "files": files,
                     "add": add.iter().map(|a| json!([a, a])).collect::<Vec<_>>(),
                     "others": others.iter().map(|(n, fs)| json!([n, fs])).collect::<Vec<_>>(),
                     "alone": alone,
                 });
-                let out = match pick_of(cs, files, add, others, *alone) {
-                    Ok(p) => json!({"ok": true, "mine": strs(&p.mine), "left_out": strs(&p.left_out), "why": ""}),
+                if decides {
+                    input["decides"] = json!(true);
+                }
+                let out = match pick_by(cs, files, add, others, *alone, decides) {
+                    Ok(p) => {
+                        let mut o = json!({"ok": true, "mine": strs(&p.mine), "left_out": strs(&p.left_out), "why": ""});
+                        if !p.decided.is_empty() {
+                            o["decided"] = json!(p.decided);
+                        }
+                        o
+                    }
                     Err(e) => json!({"ok": false, "mine": [], "left_out": [], "why": e}),
                 };
                 json!({"in": input, "out": out}).to_string()

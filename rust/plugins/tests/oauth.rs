@@ -38,20 +38,8 @@ impl Drop for Fake {
     }
 }
 
-/// The first python3 on PATH that is no version manager's shim (pyenv,
-/// asdf: `.../shims/python3`): under the full suite a pyenv shim took
-/// ~20 s to start the interpreter, past T, and every test here saw "the
-/// fake server never started" (loop audit, 2026-10-14). No other one:
-/// `python3` as found.
-fn python3() -> PathBuf {
-    std::env::var_os("PATH")
-        .iter()
-        .flat_map(std::env::split_paths)
-        .filter(|d| d.file_name().is_none_or(|n| n != "shims"))
-        .map(|d| d.join("python3"))
-        .find(|p| p.is_file())
-        .unwrap_or_else(|| PathBuf::from("python3"))
-}
+mod common;
+use common::python3;
 
 fn fake(tag: &str, args: &[&str]) -> Fake {
     static N: AtomicUsize = AtomicUsize::new(0);

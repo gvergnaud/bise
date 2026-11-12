@@ -468,7 +468,10 @@ fn list_lines(sc: &mut Screen, v: &View, folders: &[Folder], put_away: usize, wi
     let list = &v.list;
     let txt = |s: String| (vec![Span::styled(s, Style::default().fg(text()))], None);
     if list.is_empty() {
-        let words = if sc.archived {
+        let words = if v.every.is_empty() && !crate::artifacts::came() {
+            // the hub builds its list off its loop after a start
+            "loading the list…".to_string()
+        } else if sc.archived {
             words::none_archived.to_string()
         } else if v.every.is_empty() {
             "nothing yet. when an agent makes a page, a doc or a file for you, it lands here.".to_string()

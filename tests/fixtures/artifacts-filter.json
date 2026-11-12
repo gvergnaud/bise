@@ -1,0 +1,707 @@
+{
+ "about": "one table both artifact filters test against (rust/switchboard/src/artifacts_filter.rs, apps/desktop/src/artifacts/filters.ts; architect m_61786): rows + the typed filter + now + the time-zone offset in minutes east of UTC -> the ids kept, in row order",
+ "cases": [
+  {
+   "name": "no filter: every row",
+   "now": 1794405600000,
+   "offset_min": 60,
+   "rows": [
+    {
+     "id": "late-yesterday",
+     "title": "plan late",
+     "agent": "perf",
+     "kind": "doc",
+     "by": "perf",
+     "new": false,
+     "touched_ms": 1794349800000
+    },
+    {
+     "id": "early-today",
+     "title": "plan early",
+     "agent": "perf",
+     "kind": "doc",
+     "by": "perf",
+     "new": true,
+     "touched_ms": 1794353400000
+    },
+    {
+     "id": "six-days",
+     "title": "deck six days",
+     "agent": "designer",
+     "kind": "slides",
+     "by": "designer",
+     "new": false,
+     "touched_ms": 1793833200000
+    },
+    {
+     "id": "seven-days",
+     "title": "deck seven days",
+     "agent": "designer",
+     "kind": "slides",
+     "by": "designer",
+     "new": false,
+     "touched_ms": 1793833140000
+    },
+    {
+     "id": "his-note",
+     "title": "note for Benjamin",
+     "agent": "main",
+     "kind": "doc",
+     "by": "you",
+     "new": false,
+     "touched_ms": 1794384000000
+    }
+   ],
+   "filter": {},
+   "want": [
+    "late-yesterday",
+    "early-today",
+    "six-days",
+    "seven-days",
+    "his-note"
+   ]
+  },
+  {
+   "name": "since today: 00:30 is today, 23:30 the day before is not",
+   "now": 1794405600000,
+   "offset_min": 60,
+   "rows": [
+    {
+     "id": "late-yesterday",
+     "title": "plan late",
+     "agent": "perf",
+     "kind": "doc",
+     "by": "perf",
+     "new": false,
+     "touched_ms": 1794349800000
+    },
+    {
+     "id": "early-today",
+     "title": "plan early",
+     "agent": "perf",
+     "kind": "doc",
+     "by": "perf",
+     "new": true,
+     "touched_ms": 1794353400000
+    },
+    {
+     "id": "six-days",
+     "title": "deck six days",
+     "agent": "designer",
+     "kind": "slides",
+     "by": "designer",
+     "new": false,
+     "touched_ms": 1793833200000
+    },
+    {
+     "id": "seven-days",
+     "title": "deck seven days",
+     "agent": "designer",
+     "kind": "slides",
+     "by": "designer",
+     "new": false,
+     "touched_ms": 1793833140000
+    },
+    {
+     "id": "his-note",
+     "title": "note for Benjamin",
+     "agent": "main",
+     "kind": "doc",
+     "by": "you",
+     "new": false,
+     "touched_ms": 1794384000000
+    }
+   ],
+   "filter": {
+    "since": "today"
+   },
+   "want": [
+    "early-today",
+    "his-note"
+   ]
+  },
+  {
+   "name": "since week: 6 days back at 00:00 is in, 7 days back at 23:59 is out",
+   "now": 1794405600000,
+   "offset_min": 60,
+   "rows": [
+    {
+     "id": "late-yesterday",
+     "title": "plan late",
+     "agent": "perf",
+     "kind": "doc",
+     "by": "perf",
+     "new": false,
+     "touched_ms": 1794349800000
+    },
+    {
+     "id": "early-today",
+     "title": "plan early",
+     "agent": "perf",
+     "kind": "doc",
+     "by": "perf",
+     "new": true,
+     "touched_ms": 1794353400000
+    },
+    {
+     "id": "six-days",
+     "title": "deck six days",
+     "agent": "designer",
+     "kind": "slides",
+     "by": "designer",
+     "new": false,
+     "touched_ms": 1793833200000
+    },
+    {
+     "id": "seven-days",
+     "title": "deck seven days",
+     "agent": "designer",
+     "kind": "slides",
+     "by": "designer",
+     "new": false,
+     "touched_ms": 1793833140000
+    },
+    {
+     "id": "his-note",
+     "title": "note for Benjamin",
+     "agent": "main",
+     "kind": "doc",
+     "by": "you",
+     "new": false,
+     "touched_ms": 1794384000000
+    }
+   ],
+   "filter": {
+    "since": "week"
+   },
+   "want": [
+    "late-yesterday",
+    "early-today",
+    "six-days",
+    "his-note"
+   ]
+  },
+  {
+   "name": "since older: before the week",
+   "now": 1794405600000,
+   "offset_min": 60,
+   "rows": [
+    {
+     "id": "late-yesterday",
+     "title": "plan late",
+     "agent": "perf",
+     "kind": "doc",
+     "by": "perf",
+     "new": false,
+     "touched_ms": 1794349800000
+    },
+    {
+     "id": "early-today",
+     "title": "plan early",
+     "agent": "perf",
+     "kind": "doc",
+     "by": "perf",
+     "new": true,
+     "touched_ms": 1794353400000
+    },
+    {
+     "id": "six-days",
+     "title": "deck six days",
+     "agent": "designer",
+     "kind": "slides",
+     "by": "designer",
+     "new": false,
+     "touched_ms": 1793833200000
+    },
+    {
+     "id": "seven-days",
+     "title": "deck seven days",
+     "agent": "designer",
+     "kind": "slides",
+     "by": "designer",
+     "new": false,
+     "touched_ms": 1793833140000
+    },
+    {
+     "id": "his-note",
+     "title": "note for Benjamin",
+     "agent": "main",
+     "kind": "doc",
+     "by": "you",
+     "new": false,
+     "touched_ms": 1794384000000
+    }
+   ],
+   "filter": {
+    "since": "older"
+   },
+   "want": [
+    "seven-days"
+   ]
+  },
+  {
+   "name": "since last: the row's new, the hub's one rule",
+   "now": 1794405600000,
+   "offset_min": 60,
+   "rows": [
+    {
+     "id": "late-yesterday",
+     "title": "plan late",
+     "agent": "perf",
+     "kind": "doc",
+     "by": "perf",
+     "new": false,
+     "touched_ms": 1794349800000
+    },
+    {
+     "id": "early-today",
+     "title": "plan early",
+     "agent": "perf",
+     "kind": "doc",
+     "by": "perf",
+     "new": true,
+     "touched_ms": 1794353400000
+    },
+    {
+     "id": "six-days",
+     "title": "deck six days",
+     "agent": "designer",
+     "kind": "slides",
+     "by": "designer",
+     "new": false,
+     "touched_ms": 1793833200000
+    },
+    {
+     "id": "seven-days",
+     "title": "deck seven days",
+     "agent": "designer",
+     "kind": "slides",
+     "by": "designer",
+     "new": false,
+     "touched_ms": 1793833140000
+    },
+    {
+     "id": "his-note",
+     "title": "note for Benjamin",
+     "agent": "main",
+     "kind": "doc",
+     "by": "you",
+     "new": false,
+     "touched_ms": 1794384000000
+    }
+   ],
+   "filter": {
+    "since": "last"
+   },
+   "want": [
+    "early-today"
+   ]
+  },
+  {
+   "name": "by: OR inside the dimension",
+   "now": 1794405600000,
+   "offset_min": 60,
+   "rows": [
+    {
+     "id": "late-yesterday",
+     "title": "plan late",
+     "agent": "perf",
+     "kind": "doc",
+     "by": "perf",
+     "new": false,
+     "touched_ms": 1794349800000
+    },
+    {
+     "id": "early-today",
+     "title": "plan early",
+     "agent": "perf",
+     "kind": "doc",
+     "by": "perf",
+     "new": true,
+     "touched_ms": 1794353400000
+    },
+    {
+     "id": "six-days",
+     "title": "deck six days",
+     "agent": "designer",
+     "kind": "slides",
+     "by": "designer",
+     "new": false,
+     "touched_ms": 1793833200000
+    },
+    {
+     "id": "seven-days",
+     "title": "deck seven days",
+     "agent": "designer",
+     "kind": "slides",
+     "by": "designer",
+     "new": false,
+     "touched_ms": 1793833140000
+    },
+    {
+     "id": "his-note",
+     "title": "note for Benjamin",
+     "agent": "main",
+     "kind": "doc",
+     "by": "you",
+     "new": false,
+     "touched_ms": 1794384000000
+    }
+   ],
+   "filter": {
+    "by": [
+     "perf",
+     "designer"
+    ]
+   },
+   "want": [
+    "late-yesterday",
+    "early-today",
+    "six-days",
+    "seven-days"
+   ]
+  },
+  {
+   "name": "by you: what he added himself",
+   "now": 1794405600000,
+   "offset_min": 60,
+   "rows": [
+    {
+     "id": "late-yesterday",
+     "title": "plan late",
+     "agent": "perf",
+     "kind": "doc",
+     "by": "perf",
+     "new": false,
+     "touched_ms": 1794349800000
+    },
+    {
+     "id": "early-today",
+     "title": "plan early",
+     "agent": "perf",
+     "kind": "doc",
+     "by": "perf",
+     "new": true,
+     "touched_ms": 1794353400000
+    },
+    {
+     "id": "six-days",
+     "title": "deck six days",
+     "agent": "designer",
+     "kind": "slides",
+     "by": "designer",
+     "new": false,
+     "touched_ms": 1793833200000
+    },
+    {
+     "id": "seven-days",
+     "title": "deck seven days",
+     "agent": "designer",
+     "kind": "slides",
+     "by": "designer",
+     "new": false,
+     "touched_ms": 1793833140000
+    },
+    {
+     "id": "his-note",
+     "title": "note for Benjamin",
+     "agent": "main",
+     "kind": "doc",
+     "by": "you",
+     "new": false,
+     "touched_ms": 1794384000000
+    }
+   ],
+   "filter": {
+    "by": [
+     "you"
+    ]
+   },
+   "want": [
+    "his-note"
+   ]
+  },
+  {
+   "name": "AND across dimensions",
+   "now": 1794405600000,
+   "offset_min": 60,
+   "rows": [
+    {
+     "id": "late-yesterday",
+     "title": "plan late",
+     "agent": "perf",
+     "kind": "doc",
+     "by": "perf",
+     "new": false,
+     "touched_ms": 1794349800000
+    },
+    {
+     "id": "early-today",
+     "title": "plan early",
+     "agent": "perf",
+     "kind": "doc",
+     "by": "perf",
+     "new": true,
+     "touched_ms": 1794353400000
+    },
+    {
+     "id": "six-days",
+     "title": "deck six days",
+     "agent": "designer",
+     "kind": "slides",
+     "by": "designer",
+     "new": false,
+     "touched_ms": 1793833200000
+    },
+    {
+     "id": "seven-days",
+     "title": "deck seven days",
+     "agent": "designer",
+     "kind": "slides",
+     "by": "designer",
+     "new": false,
+     "touched_ms": 1793833140000
+    },
+    {
+     "id": "his-note",
+     "title": "note for Benjamin",
+     "agent": "main",
+     "kind": "doc",
+     "by": "you",
+     "new": false,
+     "touched_ms": 1794384000000
+    }
+   ],
+   "filter": {
+    "by": [
+     "perf"
+    ],
+    "since": "today"
+   },
+   "want": [
+    "early-today"
+   ]
+  },
+  {
+   "name": "words: every word, in title agent kind id",
+   "now": 1794405600000,
+   "offset_min": 60,
+   "rows": [
+    {
+     "id": "late-yesterday",
+     "title": "plan late",
+     "agent": "perf",
+     "kind": "doc",
+     "by": "perf",
+     "new": false,
+     "touched_ms": 1794349800000
+    },
+    {
+     "id": "early-today",
+     "title": "plan early",
+     "agent": "perf",
+     "kind": "doc",
+     "by": "perf",
+     "new": true,
+     "touched_ms": 1794353400000
+    },
+    {
+     "id": "six-days",
+     "title": "deck six days",
+     "agent": "designer",
+     "kind": "slides",
+     "by": "designer",
+     "new": false,
+     "touched_ms": 1793833200000
+    },
+    {
+     "id": "seven-days",
+     "title": "deck seven days",
+     "agent": "designer",
+     "kind": "slides",
+     "by": "designer",
+     "new": false,
+     "touched_ms": 1793833140000
+    },
+    {
+     "id": "his-note",
+     "title": "note for Benjamin",
+     "agent": "main",
+     "kind": "doc",
+     "by": "you",
+     "new": false,
+     "touched_ms": 1794384000000
+    }
+   ],
+   "filter": {
+    "words": [
+     "deck",
+     "seven"
+    ]
+   },
+   "want": [
+    "seven-days"
+   ]
+  },
+  {
+   "name": "words and by",
+   "now": 1794405600000,
+   "offset_min": 60,
+   "rows": [
+    {
+     "id": "late-yesterday",
+     "title": "plan late",
+     "agent": "perf",
+     "kind": "doc",
+     "by": "perf",
+     "new": false,
+     "touched_ms": 1794349800000
+    },
+    {
+     "id": "early-today",
+     "title": "plan early",
+     "agent": "perf",
+     "kind": "doc",
+     "by": "perf",
+     "new": true,
+     "touched_ms": 1794353400000
+    },
+    {
+     "id": "six-days",
+     "title": "deck six days",
+     "agent": "designer",
+     "kind": "slides",
+     "by": "designer",
+     "new": false,
+     "touched_ms": 1793833200000
+    },
+    {
+     "id": "seven-days",
+     "title": "deck seven days",
+     "agent": "designer",
+     "kind": "slides",
+     "by": "designer",
+     "new": false,
+     "touched_ms": 1793833140000
+    },
+    {
+     "id": "his-note",
+     "title": "note for Benjamin",
+     "agent": "main",
+     "kind": "doc",
+     "by": "you",
+     "new": false,
+     "touched_ms": 1794384000000
+    }
+   ],
+   "filter": {
+    "words": [
+     "plan"
+    ],
+    "by": [
+     "designer"
+    ]
+   },
+   "want": []
+  },
+  {
+   "name": "an explicit offset, never the machine's: at UTC the day edges move",
+   "now": 1794405600000,
+   "offset_min": 0,
+   "rows": [
+    {
+     "id": "late-yesterday",
+     "title": "plan late",
+     "agent": "perf",
+     "kind": "doc",
+     "by": "perf",
+     "new": false,
+     "touched_ms": 1794349800000
+    },
+    {
+     "id": "early-today",
+     "title": "plan early",
+     "agent": "perf",
+     "kind": "doc",
+     "by": "perf",
+     "new": true,
+     "touched_ms": 1794353400000
+    },
+    {
+     "id": "six-days",
+     "title": "deck six days",
+     "agent": "designer",
+     "kind": "slides",
+     "by": "designer",
+     "new": false,
+     "touched_ms": 1793833200000
+    },
+    {
+     "id": "seven-days",
+     "title": "deck seven days",
+     "agent": "designer",
+     "kind": "slides",
+     "by": "designer",
+     "new": false,
+     "touched_ms": 1793833140000
+    },
+    {
+     "id": "his-note",
+     "title": "note for Benjamin",
+     "agent": "main",
+     "kind": "doc",
+     "by": "you",
+     "new": false,
+     "touched_ms": 1794384000000
+    }
+   ],
+   "filter": {
+    "since": "today"
+   },
+   "want": [
+    "his-note"
+   ]
+  },
+  {
+   "name": "a DST day: each time's own offset (+60 before 01:00 UTC on 2026-03-29, +120 after): 23:30 the night before is yesterday, 00:30 today",
+   "now": 1774789200000,
+   "offset_min": 120,
+   "tz": [
+    [
+     0,
+     60
+    ],
+    [
+     1774746000000,
+     120
+    ]
+   ],
+   "rows": [
+    {
+     "id": "before-midnight",
+     "title": "a",
+     "agent": "perf",
+     "kind": "doc",
+     "by": "perf",
+     "new": false,
+     "touched_ms": 1774737000000
+    },
+    {
+     "id": "after-midnight",
+     "title": "b",
+     "agent": "perf",
+     "kind": "doc",
+     "by": "perf",
+     "new": false,
+     "touched_ms": 1774740600000
+    }
+   ],
+   "filter": {
+    "since": "today"
+   },
+   "want": [
+    "after-midnight"
+   ]
+  }
+ ]
+}

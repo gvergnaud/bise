@@ -53,7 +53,7 @@ impl Shell {
         if to == "bise" {
             return Ok(None);
         }
-        let rows = bise_home::projects::list(&self.opts.home, &crate::paths::home_workspace());
+        let rows = bise_home::projects::list(&self.opts.home, &bise_home::Home::from_env().bise_root());
         let hub = bise_home::projects::target(&rows, to, &self.project())?;
         let name = rows.iter().find(|r| r.id == hub).map_or_else(|| hub.clone(), |r| r.name.clone());
         Ok(Some((hub, name)))
@@ -109,6 +109,7 @@ impl Shell {
                 self.proto_send(id, &HubEv::Thread { project, agent, entries, before, more, cached: false });
             }
             HubCmd::Find { agent, needle, rid, .. } => self.proto_find(id, &tag, project, agent, needle, rid),
+            HubCmd::Marks { agent, limit, .. } => self.proto_marks(id, &tag, project, agent, limit as usize),
             HubCmd::Send { agent, text, opts, cid, parts, .. } if parts.is_empty() => self.proto_input(id, &tag, agent, text, opts, cid, String::new()),
             // msg-parts: the model's text from his parts, the parts kept
             // on his message (a part this hub doesn't know: refused)
@@ -455,6 +456,13 @@ impl Shell {
             // artifacts in folders (daemon/art_folders.rs)
             HubCmd::ArtifactsMove { ids, folder, to, keep_undo, .. } => self.art_move_typed(id, &tag, ids, folder, to, !keep_undo),
             HubCmd::ArtifactsFolders { op, .. } => self.art_folders_typed(id, &tag, op),
+            // his keep and his opens (daemon/art.rs, artifacts_marks)
+            HubCmd::ArtifactsKeep { ids, keep, .. } => {
+                if let Err(e) = self.artifacts_keep_his(&ids, keep) {
+                    self.proto_error(id, &tag, &e);
+                }
+            }
+            HubCmd::ArtifactsOpened { id: art, v, .. } => self.artifacts_opened(&art, v),
             HubCmd::ArtifactsLibrary { .. } => self.art_library_typed(id),
             // `bise stop` (client::stop): the `stop_hub` op's path; its
             // `{}` goes out before the loop ends
@@ -717,9 +725,11 @@ impl Shell {
                 }
             }
             Slash::Artifacts(None) => {
-                let ev = self.artifacts_ev();
-                let arts = self.proto_artifacts(&ev);
-                self.proto_send(id, &arts);
+                // none before the rows' first build: it goes to all then
+                if let Some(ev) = self.artifacts_ev() {
+                    let arts = self.proto_artifacts(&ev);
+                    self.proto_send(id, &arts);
+                }
             }
             // the TUI's `artifacts` op's add (art_add), in this agent's view
             Slash::Artifacts(Some(target)) => {

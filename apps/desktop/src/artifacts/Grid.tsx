@@ -9,7 +9,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { ArtCard, type PickHow } from './Card';
 import { ListHead, ListRow } from './List';
 import { usePrefetch } from './thumbs';
-import { GAP_Y, itemsOf, lineOf, rowHeight, rowIndexOf, rowsOf, type Card, type Place, type Row } from './gallery';
+import { GAP_Y, itemsOf, lineOf, rowHeight, rowIndexOf, rowsOf, type Card, type HeadOf, type Place, type Row } from './gallery';
 import type { View } from './gridKeys';
 import { PrWords } from './PrWords';
 import './cards.css';
@@ -25,7 +25,7 @@ export interface GridProps {
   /** where they show: what the line leaves out (grid.ts Place) */
   readonly place: Place;
   /** the day groups (none: one run, as 'recent' on all artifacts) */
-  readonly days?: boolean;
+  readonly days?: boolean | HeadOf;
   /** the keyboard's selection: its ring */
   readonly cursor: string | null;
   /** his multi-pick (⌘ / shift click, the circle) */

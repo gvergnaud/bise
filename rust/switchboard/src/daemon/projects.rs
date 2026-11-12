@@ -39,7 +39,7 @@ impl Projects {
     /// `daemon::run`, so the registration costs run no line of its own.
     pub(super) fn boot(home: &bise_home::Home, paths: &Paths) -> Projects {
         if bise_home::env::test_setting("SB_STATE_DIR").is_none() {
-            let home_ws = crate::paths::home_workspace();
+            let home_ws = bise_home::Home::from_env().bise_root();
             if bise_home::projects::canonical(&paths.workspace) != bise_home::projects::canonical(&home_ws) {
                 match bise_home::projects::add_path(home, &home_ws, &paths.workspace, None, now_ms()) {
                     Ok(bise_home::projects::Added::New(p)) => log_line(paths, &format!("projects: added as {}", p.name)),
@@ -88,9 +88,12 @@ impl Shell {
         let now = now_ms();
         let project = crate::paths::workspace_id(&self.opts.paths.workspace);
         // ⌘K's index: the same rows as the typed artifacts event
-        let arts = self.artifact_rows(&self.artifacts_ev());
+        // (none before the rows' first build lands: written again then;
+        // the typed rows' memo, daemon/art.rs artifact_rows_now)
+        let rows = self.artifact_rows_now();
         // les bims: the same cached growth as the typed event
-        let growth = self.growth_of(Some(snap), Some(arts.len() as u32));
+        let growth = self.growth_of(Some(snap), rows.as_ref().map(|a| a.len() as u32));
+        let arts: &[bise_proto::rows::Artifact] = rows.as_deref().map_or(&[], |r| r.as_slice());
         // and the same rows as the typed scheduled event
         let sched = crate::proto_view::scheduled(self.hub.timers());
         // the H1 sidebar: the pulse the typed event has (fresh at a stop)

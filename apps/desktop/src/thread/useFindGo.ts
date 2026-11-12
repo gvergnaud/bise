@@ -13,8 +13,16 @@ import type { ThreadListHandle } from './ThreadList';
 /** A page asked and not in after this long: the next jump goes anyway. */
 const ASK_MS = 3000;
 
-/** The function FindBar's onGo calls with the current match's pos. */
-export function useFindGo(store: Store, project: string, agent: string, list: RefObject<ThreadListHandle | null>): (pos: number) => void {
+/** How the entry shows once held: its top `top` px under the list's top, not centred; `shown` once it is in view (msg-dots' ticks). */
+export interface GoHow {
+  readonly top?: number;
+  readonly shown?: (pos: number) => void;
+}
+
+/** The function FindBar's onGo calls with the current match's pos (and a tick of his, msg-dots, with `how`). */
+export function useFindGo(store: Store, project: string, agent: string, list: RefObject<ThreadListHandle | null>, how?: GoHow): (pos: number) => void {
+  const top = how?.top;
+  const shown = how?.shown;
   const view = useThreadOrder(threadKey(project, agent));
   // the match to show, and when its page was asked (0: none on its way)
   const want = useRef<number | undefined>(undefined);
@@ -27,9 +35,10 @@ export function useFindGo(store: Store, project: string, agent: string, list: Re
     if (at.kind === 'held') {
       want.current = undefined;
       asked.current = 0;
-      list.current?.reveal(entryKey(at.pos));
+      const p = at.pos;
+      list.current?.reveal(entryKey(p), shown === undefined ? undefined : () => { shown(p); }, top);
     } else asked.current = at.kind === 'asked' ? Date.now() : 0;
-  }, [store, project, agent, list]);
+  }, [store, project, agent, list, top, shown]);
   // a page came (its answer, or another): the newest match he went to, now
   useEffect(() => {
     asked.current = 0;

@@ -14,7 +14,7 @@ import type { Acted } from './acted';
 import type { Refused } from './refused';
 import type { InboxItem } from '@/inbox/listed';
 import { guideForKey, guideKey, prActKey, prDetailKey, prDiffKey, prLogKey, rangeDiffKey, type GuideEv, type PrActState } from './types';
-import { artDiffKey, branchDiffKey, diffErrKey, diffKey, toolOutKey, Store, type ToolOut, type Away, type Dictation, type HubLine, type Diff, type FilesAnswer, type Ev, type EvOf, type Pending, type PrsList, type BranchesList, type VersionsList, type PagesList, type ThreadHits, type ThreadOrder, type VoiceModeState, type TalkShot } from './store';
+import { artDiffKey, branchDiffKey, diffErrKey, diffKey, toolOutKey, Store, type ToolOut, type Away, type Dictation, type HubLine, type Diff, type FilesAnswer, type Ev, type EvOf, type Pending, type PrsList, type BranchesList, type VersionsList, type PagesList, type ThreadHits, type ThreadMarks, type ThreadOrder, type VoiceModeState, type TalkShot } from './store';
 
 /**
  * Feeds a store from a core port: its live events, then the state events
@@ -257,6 +257,8 @@ export const useThreadSyncing = (key: string): boolean => useSlice(`sync:${key}`
 export const useThreadCopy = (key: string): boolean => useSlice(`sync:${key}`, (s) => s.threadCopy(key));
 /** The hub's newest answer to ⌘F in a thread (store.findInThread); null before one. */
 export const useThreadHits = (key: string): ThreadHits | null => useSlice(`hits:${key}`, (s) => s.threadHits(key));
+/** The hub's answer to `thread/marks` in a thread (his last messages, msg-dots); null before one. */
+export const useThreadMarks = (key: string): ThreadMarks | null => useSlice(`marks:${key}`, (s) => s.threadMarks(key));
 /** One entry: re-renders only when that entry is replaced. */
 export const useEntry = (key: string, pos: number): Entry | undefined => useSlice(`entry:${key}:${String(pos)}`, (s) => s.entry(key, pos));
 export const useTyping = (key: string): string => useSlice(`typing:${key}`, (s) => s.typing(key));

@@ -89,6 +89,16 @@ function answer(cmd: Cmd): Ev[] {
   switch (cmd.cmd) {
     case 'subscribe': return of(['thread', 'entry', 'typing'], (ev) => ev.ev !== 'thread' || ev.before === null || ev.before === undefined);
     case 'page': return of(['thread'], (ev) => ev.before !== null && ev.before !== undefined);
+    // his last messages (thread/marks, msg-dots): his entries of the world's transcript, else of
+    // its thread and entry lines, the newest `limit`, oldest first
+    case 'marks': {
+      const t = transcripts.find((ev) => same(ev, cmd));
+      type His = { pos: number; kind?: string; text?: string; at_ms?: number };
+      const from = (t?.entries ?? of(['thread', 'entry']).flatMap((ev) => ev.entries ?? (ev.entry === undefined ? [] : [ev.entry]))) as His[];
+      const his = [...new Map(from.filter((e) => e.kind === 'you').map((e) => [e.pos, e])).values()].sort((a, b) => a.pos - b.pos);
+      const marks = his.slice(-(cmd.limit ?? 20)).map((e) => ({ pos: e.pos, at_ms: e.at_ms ?? 0, text: (e.text ?? '').split(/\s+/).filter(Boolean).join(' ').slice(0, 200) }));
+      return [{ ev: 'thread_marks', project: cmd.project, agent: cmd.agent, marks, upto: Math.max(0, ...from.map((e) => e.pos)) }];
+    }
     // a PR tab's Changes (pr-artifacts): the world's agent diff, answered by its req (the hub's
     // pick of place or forge is the hub's; the window knows the answer by its req alone)
     case 'diff':

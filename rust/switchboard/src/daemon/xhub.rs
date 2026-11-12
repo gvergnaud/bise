@@ -139,7 +139,7 @@ impl Shell {
         };
         let own = crate::paths::workspace_id(&self.opts.paths.workspace);
         let home = self.opts.home.clone();
-        let rows = bise_home::projects::list(&home, &crate::paths::home_workspace());
+        let rows = bise_home::projects::list(&home, &bise_home::Home::from_env().bise_root());
         let id = match bise_home::projects::target(&rows, &p, &own) {
             Ok(id) => id,
             Err(e) => {
@@ -182,7 +182,7 @@ impl Shell {
 /// `sb project list`: the registry's rows, one line each (the name `sb
 /// project send|ask` takes, the folder).
 pub(super) fn list_body(home: &bise_home::Home) -> Value {
-    let rows = bise_home::projects::list(home, &crate::paths::home_workspace());
+    let rows = bise_home::projects::list(home, &bise_home::Home::from_env().bise_root());
     let lines: Vec<String> = rows
         .iter()
         .map(|r| format!("{}{} · {}", r.name, if r.home { " (you: bise's home)" } else { "" }, r.path.display()))
@@ -192,7 +192,7 @@ pub(super) fn list_body(home: &bise_home::Home) -> Value {
 
 /// This hub is bise's home hub: its main reads the user's message ids.
 pub(super) fn is_home(ws: &Path) -> bool {
-    bise_home::projects::canonical(ws) == bise_home::projects::canonical(&crate::paths::home_workspace())
+    bise_home::projects::canonical(ws) == bise_home::projects::canonical(&bise_home::Home::from_env().bise_root())
 }
 
 /// One request to the registered hub `id` (started when none runs).
@@ -202,7 +202,7 @@ pub(super) fn call_hub(home: &bise_home::Home, id: &str, exe: &Path, root: &Path
 
 /// The paths of the registered hub `id` (its workspace from the registry).
 fn hub_paths(home: &bise_home::Home, id: &str) -> Result<Paths, String> {
-    let rows = bise_home::projects::list(home, &crate::paths::home_workspace());
+    let rows = bise_home::projects::list(home, &bise_home::Home::from_env().bise_root());
     let row = rows.iter().find(|r| r.id == id).ok_or_else(|| format!("{id} is not a registered project"))?;
     if !row.path.is_dir() {
         return Err(format!("{} is gone", row.path.display()));
@@ -213,7 +213,7 @@ fn hub_paths(home: &bise_home::Home, id: &str) -> Result<Paths, String> {
 /// This workspace's name in the registry (its folder's when absent).
 pub(super) fn own_name(home: &bise_home::Home, ws: &Path) -> String {
     let id = crate::paths::workspace_id(ws);
-    bise_home::projects::list(home, &crate::paths::home_workspace())
+    bise_home::projects::list(home, &bise_home::Home::from_env().bise_root())
         .into_iter()
         .find(|r| r.id == id)
         .map(|r| r.name)

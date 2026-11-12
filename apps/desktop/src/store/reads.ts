@@ -64,6 +64,7 @@ import {
   takeKey,
   EMPTY_ORDER,
   type ThreadHits,
+  type ThreadMarks,
   type ThreadOrder,
   type ToolOut,
   toolOutKey,
@@ -435,6 +436,10 @@ export class StoreReads extends StoreBase {
   /** The hub's newest answer to ⌘F in thread `key` (findInThread); hits null: the hub can't search (older hub). */
   threadHits(key: string): ThreadHits | null {
     return this.slice<ThreadHits | null>(`hits:${key}`, null);
+  }
+  /** The hub's answer to `thread/marks` in thread `key` (his last messages, msg-dots); null before one. */
+  threadMarks(key: string): ThreadMarks | null {
+    return this.slice<ThreadMarks | null>(`marks:${key}`, null);
   }
   entry(key: string, pos: number): Entry | undefined {
     return this.threads.get(key)?.byPos.get(pos);

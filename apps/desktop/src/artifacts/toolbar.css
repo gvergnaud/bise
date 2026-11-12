@@ -12,3 +12,11 @@
 .art-archived-row{display:flex;margin:var(--s-4) 0 0}
 /* the Pull requests filter's two sides, under the kinds (pr-integration A) */
 .art-prside{display:flex;margin:var(--s-2) 0 0}
+/* the When chip (designer m_61790): quiet unset; set, its value in ink with its × right beside */
+.art-when{display:inline-flex;align-items:center;gap:var(--s-1)}
+/* set: ink words and a 1 px ink ring, so a filter on reads at a glance (designer m_62064) */
+.art-when.on .b-ptrig{color:var(--c-ink);box-shadow:inset 0 0 0 1px var(--c-ink)}
+.art-when-x{display:inline-flex;align-items:center;color:var(--c-ink)}
+.art-when-x:hover{color:var(--c-text)}
+/* an empty filtered view's ways out, one line (designer m_61790) */
+.art-ways{display:flex;flex-wrap:wrap;gap:var(--s-2)}

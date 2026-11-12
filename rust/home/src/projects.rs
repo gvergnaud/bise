@@ -68,16 +68,10 @@ pub fn canonical(p: &Path) -> PathBuf {
     std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf())
 }
 
-/// The home workspace (docs/ambient-pages.md §5.1): `~/bise`, a plain
-/// folder without git for non-code work. A shortcut, no logic of its own:
-/// [`Home::bise_root`] of this process's environment holds the rule.
-pub fn home_workspace() -> PathBuf {
-    Home::from_env().bise_root()
-}
-
-/// `ws` is the home workspace: its hub's main is bise (bise desktop S2).
+/// `ws` is the home workspace ([`Home::bise_root`]): its hub's main is
+/// bise (bise desktop S2).
 pub fn is_home(ws: &Path) -> bool {
-    canonical(ws) == canonical(&home_workspace())
+    canonical(ws) == canonical(&Home::from_env().bise_root())
 }
 
 /// Whether `ws` is in the projects registry (the desktop app writes it

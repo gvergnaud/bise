@@ -18,8 +18,13 @@
 #   HEAVY_TRIM_GB (4) a green-marked target's own bytes past which it is
 #   trimmed; HEAVY_OWN_CAP_GB (10) a job's own targets' own bytes past which they
 #   are trimmed at its admission, measured at most every HEAVY_OWN_GAP_MIN (10);
-#   HEAVY_TMP_CAP_GB (2) an agent tmp's size printed once; tests:
-#   HEAVY_RECLAIM_ROOTS, HEAVY_RECLAIM_KEEP, HEAVY_TMP_ROOTS,
+#   HEAVY_CAND_KEEP_H (24) the age past which a desktop candidate in ~/.bise/dev/build/
+#   desktop-cand goes (never the newest, one a nightly kept, one in use: disk_reclaim.py's
+#   reclaimable()); HEAVY_TMP_CAP_GB (2) an agent tmp's size printed once. A job gets, beside
+#   HEAVY_SLOT, HEAVY_CPUS: the cpus over the heavy jobs running at its start,
+#   itself included (vitest's workers, apps/desktop/src/test-workers.ts); tests:
+#   HEAVY_RECLAIM_ROOTS, HEAVY_RECLAIM_SHARED (the shared trees, found from the
+#   worktrees' .git files otherwise), HEAVY_RECLAIM_KEEP, HEAVY_TMP_ROOTS,
 #   HEAVY_FREE_KB_FILE, HEAVY_DISK_VOLUME, HEAVY_RECLAIM, HEAVY_RECLAIM_GAP.
 #   slot 1 = ~/.bise/run/heavy.lock (the old single lock: old callers still count)
 #   slot 2 = ~/.bise/run/heavy2.lock
@@ -195,6 +200,34 @@ disk_watch() {
     sleep "${HEAVY_DISK_POLL:-10}"
   done
 }
+# a quick gate's kind from its own plan (fast-loop, architect m_60481; main m_60116: a quick
+# gate with no Rust change was a cargo job, 10 GB for itself and up to 20 for every waiter,
+# while it wrote ~0, and 6 agents waited at 32 GB free behind 2 jobs): the tree's own
+# tests/gate_plan.py JSON for the paths gate.sh light plans from, read as data (every tree has
+# these fields, so it works before a rebase). 'desktop' when it has a desktop or office step and
+# no cargo one (pkgs, sb-core, PROOF, core_gen, proto_ts, crossterm), else nothing (the cargo
+# kinds below; a plan that fails too).
+gate_kind() {
+  local w gs="" prev=""
+  for w in "$@"; do
+    [ "$w" = quick ] && case "$prev" in *gate.sh) gs=$prev ;; esac
+    prev=$w
+  done
+  [ -n "$gs" ] && [ -f "$gs" ] || return 0
+  local r; r=$(cd "$(dirname "$gs")/.." 2>/dev/null && pwd) || return 0
+  [ -f "$r/tests/gate_plan.py" ] || return 0
+  # the paths gate.sh light plans from (its diff from GATE_BASE or HEAD, and the new files)
+  ( cd "$r" || exit 0; IFS=$'\n'; set -f
+    ch=$( { git diff --name-only "${GATE_BASE:-HEAD}"; git ls-files --others --exclude-standard; } 2>/dev/null | sort -u )
+    # shellcheck disable=SC2086  # one path a word (IFS: newline)
+    python3 -B tests/gate_plan.py -- $ch ) 2>/dev/null | python3 -c '
+import json, sys
+p = json.load(sys.stdin); f = p.get("flags") or {}
+cargo = p.get("pkgs") or p.get("hub_changed") or p.get("bend_changed") or p.get("core_gen") \
+    or f.get("proto_ts") or f.get("crossterm_changed")
+print("desktop" if not cargo and (p.get("desktop") or f.get("office") or f.get("office_skills")) else "")' 2>/dev/null
+  return 0
+}
 # a job's kind, for its disk reserve: full (a full gate, the nightly,
 # --alone), cargo-warm or cargo-cold (a cargo build or test, a gate, a
 # bins/versions build, run_all: warm when a target cargo will use exists,
@@ -203,6 +236,7 @@ disk_watch() {
 job_kind() {
   case " $* " in
     *"gate.sh full"*|*nightly_gate.sh*|*" --alone "*) echo full; return ;;
+    *"gate.sh quick"*) [ "$(gate_kind "$@")" = desktop ] && { echo desktop; return; } ;;
     *cargo*|*gate.sh*|*bins.sh*|*"versions.sh build"*|*run_all.sh*) ;;
     *) echo other; return ;;
   esac
@@ -211,6 +245,15 @@ job_kind() {
     [ -e "$t/CACHEDIR.TAG" ] && { echo cargo-warm; return; }
   done
   echo cargo-cold
+}
+# the dirs a job of kind $1 writes into, relative to its tree (CARGO_TARGET_DIR as set): what it
+# grew them by is its disk.tsv row (src=own; disk_reclaim.py --grown, architect m_60879). One row
+# a kind: a new kind adds a row here, not a branch. No dirs (other): the volume's free-drop row.
+kind_dirs() {
+  case "$1" in
+    full|cargo-warm|cargo-cold) echo "rust/target target ../target ${CARGO_TARGET_DIR:-}" ;;
+    desktop) echo "apps/desktop/out apps/desktop/node_modules/.vite apps/desktop/.harness-cache" ;;
+  esac
 }
 # the GB a job of kind $1 may still write (its reserve), from what jobs of
 # that kind really wrote (fast-loop, main m_37136: 5 agents waited at 42 GB
@@ -227,11 +270,16 @@ reserve_gb() {
   p90_gb "$1" 5 "$flat" 1 "$flat"
 }
 # p90_gb <kind> <min runs> <under that: this> <at least> <at most>: the p90 GB
-# (rounded up) of the last 20 measured runs of that kind in disk.tsv
+# (rounded up) of the last 20 measured runs of that kind in disk.tsv. Only the rows of
+# what its jobs grew their own dirs by (src=own, or src=target before 11-11; architect
+# m_60754, m_60879) for the cargo kinds and full always, and for any kind once 10 exist:
+# a free-drop row charged every other writer to the job. The old rows stay as history.
 p90_gb() {
   awk -F'\t' -v k="$1" -v min="$2" -v dflt="$3" -v lo="$4" -v hi="$5" '
-    $2 == k && $3 ~ /^[0-9]+$/ { w[n++ % 20] = $3 }
-    END { m = n < 20 ? n : 20
+    $2 == k && $3 ~ /^[0-9]+$/ { a[na++ % 20] = $3; if ($8 == "src=own" || $8 == "src=target") o[no++ % 20] = $3 }
+    END { own = k ~ /^(full|cargo-warm|cargo-cold)$/ || no >= 10
+          n = own ? no : na; for (i = 0; i < 20; i++) w[i] = own ? o[i] : a[i]
+          m = n < 20 ? n : 20
           if (m < min || m == 0) { print dflt; exit }
           for (i = 0; i < m; i++) v[i] = w[i]
           for (i = 1; i < m; i++) { x = v[i]; for (j = i - 1; j >= 0 && v[j] > x; j--) v[j + 1] = v[j]; v[j + 1] = x }
@@ -250,8 +298,24 @@ p90_gb() {
 # small cargo tests; a running gate quick writes 3-4). The 5 GB stop guards
 # a guess that comes out low: one job killed with rc 28, never the disk.
 measured_gb() {
-  local flat; case "$1" in full|cargo-cold) flat=10 ;; cargo-warm) flat=3 ;; *) flat=2 ;; esac
+  # a running warm job counts 10 too until 10 own rows exist (architect m_61208: at its flat 3, 4
+  # cargo jobs got in at once on 11-11 and the disk fell to 11 GB free; a guess must err high)
+  local flat; case "$1" in full|cargo-cold|cargo-warm) flat=10 ;; *) flat=2 ;; esac
   p90_gb "$1" 10 "$flat" 0 ""
+}
+# the cargo ceiling (architect m_61208): at most HEAVY_CARGO_MAX cargo jobs (full, cargo-warm,
+# cargo-cold) run at once, max(1, cpus / 6) (2 on a 12-core Mac), whatever the load wait says:
+# on 11-11 the 600 s load wait ran out and let 4 in at load 85. Desktop and other jobs are
+# outside it; --prio (his release) and --alone too.
+cargo_max() { local c; c=$(( $(/usr/sbin/sysctl -n hw.ncpu 2>/dev/null || echo 8) / 6 )); echo "${HEAVY_CARGO_MAX:-$(( c < 1 ? 1 : c ))}"; }
+# the cargo jobs running now: the live reserve files of a cargo kind
+cargo_running() {
+  local f n=0
+  for f in "$HOME/.bise/run/reserve/"*; do
+    [ -e "$f" ] && kill -0 "${f##*.}" 2>/dev/null || continue
+    case "$(rfield "$f" 5)" in full|cargo-warm|cargo-cold) n=$((n + 1)) ;; esac
+  done
+  echo "$n"
 }
 # the running jobs, for the queue's waiting line (main m_36953: 7 waiters
 # waited 3-5 h behind a hung --alone job no line named): "<slot> <agent or
@@ -290,7 +354,7 @@ reserved_gb() {
     # its kind's measured share (field 5); a job that named its own
     # (HEAVY_RESERVE_GB: '-') or an older heavy-run's file: its reserve
     k=$(rfield "$f" 5)
-    case "$k" in full|cargo-warm|cargo-cold|other) n=$(( n + $(measured_gb "$k") )) ;;
+    case "$k" in full|cargo-warm|cargo-cold|desktop|other) n=$(( n + $(measured_gb "$k") )) ;;
       *) n=$(( n + $(num "$(rfield "$f" 1)") )) ;; esac
     k=$(num "$(rfield "$f" 3)"); [ "$k" -gt "$top" ] && top=$k
   done
@@ -345,7 +409,7 @@ shares() {
   local f kd g out=""
   for f in "$HOME/.bise/run/reserve/"*; do
     [ -e "$f" ] || continue; kill -0 "${f##*.}" 2>/dev/null || continue
-    kd=$(rfield "$f" 5); case "$kd" in full|cargo-warm|cargo-cold|other) g=$(measured_gb "$kd") ;; *) g=$(num "$(rfield "$f" 1)") ;; esac
+    kd=$(rfield "$f" 5); case "$kd" in full|cargo-warm|cargo-cold|desktop|other) g=$(measured_gb "$kd") ;; *) g=$(num "$(rfield "$f" 1)") ;; esac
     out="$out${out:+; }${f##*/} ${kd:--} $g"
   done
   echo "$out"
@@ -356,7 +420,7 @@ reclaimed_kb() {
   awk -F'\t' -v t0="$1" -v t1="$2" '$1 >= t0 && $1 <= t1 && $4 ~ /^[0-9.]+$/ { s += $4 } END { printf "%d\n", s * 1048576 }' \
     "$HOME/.bise/run/reclaim.log" 2>/dev/null || echo 0
 }
-export -f free_kb disk_under free_gb tell_hub tree reclaim cpu_cs disk_watch lane_during p90_gb measured_gb reclaimed_kb shares rfield num
+export -f gate_kind kind_dirs free_kb disk_under free_gb tell_hub tree reclaim cpu_cs disk_watch lane_during p90_gb measured_gb reclaimed_kb shares rfield num
 
 # HEAVY_SLOTS (tests): use only the first n slots, whatever the power.
 # HEAVY_ON_BATTERY=0|1 (tests): the power as given, not pmset's
@@ -489,6 +553,7 @@ printf "%s\t%s\t-\t%s\t%s\t%s\twaited=%s\n" "$HEAVY_SUBMIT" "$t0" "${2##*/}" "$P
 touch "$HOME/.bise/run/last-start"
 rv="$HOME/.bise/run/reserve/${2##*/}.$$"; mkdir -p "${rv%/*}"; k0=$(free_kb)
 others=$(ls "${rv%/*}" 2>/dev/null | grep -vc "^${rv##*/}\$")
+export HEAVY_CPUS=$(( $(/usr/sbin/sysctl -n hw.ncpu 2>/dev/null || echo 8) / (others + 1) ))
 printf "%s\t%s\t%s\t%s\t%s\n" "$HEAVY_RESERVE" "$PWD" "$k0" "$c" "$([ -n "${HEAVY_RESERVE_GB:-}" ] && echo - || echo "$HEAVY_KIND")" >"$rv"
 mnf="$HOME/.bise/run/disk-min.$$"; echo "$k0" >"$mnf"
 r=$(git rev-parse --show-toplevel 2>/dev/null) || r=$PWD
@@ -518,6 +583,18 @@ if [ -n "$k0" ] && [ -n "$mn" ]; then
   fr=$(reclaimed_kb "$t0" "$(date +%s)")
   wr=$(( k0 - mn )); w2=$(( k0 - ${k1:-$k0} + ${fr:-0} )); [ "$w2" -gt "$wr" ] && wr=$w2; [ "$wr" -lt 0 ] && wr=0
   [ -e "$HOME/.bise/run/reclaim.running" ] && wr=-
+  # a kind with its own dirs (kind_dirs): what the job grew them by (disk_reclaim.py --grown,
+  # architect m_60754, m_60879), walked once its rc is known, in the background with fds closed
+  # (never on the slot or on the exit of the job), its row src=own; the free-drop row below for
+  # a kind with none
+  kd=$(kind_dirs "$HEAVY_KIND")
+  if [ -n "$kd" ]; then
+    # shellcheck disable=SC2086  # the dirs, one word each
+    ( g=$(${HEAVY_RECLAIM:-/usr/bin/python3 $HOME/.bise/run/disk_reclaim.py} --grown "$t0" "$PWD" $kd 2>/dev/null) && [ -n "$g" ] &&
+      printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\tsrc=own
+" "$(date +%s)" "$HEAVY_KIND" "$g" "$k0" "$mn" "$others" "$c" >>"$HOME/.bise/run/disk.tsv" ) </dev/null >/dev/null 2>&1 3>&- 4>&- 5>&- 6>&- 7>&- 8>&- 9>&- &
+  fi
+  [ -n "$kd" ] ||
   printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\n" "$(date +%s)" "$HEAVY_KIND" "$wr" "$k0" "$mn" "$others" "$c" >>"$HOME/.bise/run/disk.tsv" 2>/dev/null
 fi
 if [ -e "$stop" ]; then
@@ -673,6 +750,12 @@ while :; do
     # 'already locked' on every try, which buried a job's real last lines.
     free=""
     for s in $slots; do /usr/bin/lockf -k -t 0 "$s" /usr/bin/true 2>/dev/null && free="$free $s"; done
+    # the cargo ceiling (cargo_max): a cargo job waits while that many run, the load wait or not
+    if [ -n "$free" ] && [ "$PRIO" = 0 ] && case "$HEAVY_KIND" in full|cargo-warm|cargo-cold) true ;; *) false ;; esac \
+       && [ "$(cargo_running)" -ge "$(cargo_max)" ]; then
+      held=1; free=""
+      [ -n "${cargowait:-}" ] || { echo "heavy-run: a slot is free but $(cargo_max) cargo jobs run already (HEAVY_CARGO_MAX), waiting" >&2; cargowait=1; }
+    fi
     # the load (mac-budget): while a heavy job runs, another one starts only
     # under HEAVY_LOAD_MAX (2 x the cores) and HEAVY_START_GAP (20) s after
     # the last start, so the 1-min load has seen it (at 10:20 on 2026-10-21

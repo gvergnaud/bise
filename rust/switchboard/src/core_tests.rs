@@ -931,6 +931,16 @@ fn clean_claims_end_and_a_new_edit_claims_again() {
     assert_eq!(of(&others(&t, "a"), "b"), vec!["tests/k.txt".to_string()]);
 }
 
+/// land-decide: only main's land job decides (its --add <file> takes a
+/// file other agents changed too); a task's never does.
+#[test]
+fn only_mains_land_job_decides() {
+    let mut t = T::new();
+    t.spawn_task("a");
+    assert!(t.hub.land_job(MAIN, true, "m", vec![]).unwrap().decides);
+    assert!(!t.hub.land_job("a", true, "m", vec![]).unwrap().decides);
+}
+
 /// disk-hygiene (hub/disk.bend): main hears once when the disk goes under
 /// 40 GB, not while it hovers under 45, and again after it climbed back.
 #[test]
@@ -3801,23 +3811,26 @@ mod prs {
     }
 
     #[test]
-    fn github_is_not_an_agent_name() {
-        let mut t = T::new();
-        let (_, fx) = t.req(
-            MAIN,
-            AgentReq::Spawn {
-                name: "github".into(),
-                brief: Brief { objective: "x".into(), ..Brief::default() },
-                worktree: false,
-                with_changes: false,
-                place: String::new(),
-                feature: String::new(),
-                ask: Default::default(), parts: String::new(),
-                attach: Vec::new(),
-                fwd: None,
-            },
-        );
-        assert!(!fx.iter().any(|e| matches!(e, Effect::Spawn { agent, .. } if agent == "github")), "{:?}", fx);
+    fn github_and_you_are_not_agent_names() {
+        // `you` is the user as an artifact's `by` and the filter's `by: you` (architect m_61901)
+        for name in ["github", "you"] {
+            let mut t = T::new();
+            let (_, fx) = t.req(
+                MAIN,
+                AgentReq::Spawn {
+                    name: name.into(),
+                    brief: Brief { objective: "x".into(), ..Brief::default() },
+                    worktree: false,
+                    with_changes: false,
+                    place: String::new(),
+                    feature: String::new(),
+                    ask: Default::default(), parts: String::new(),
+                    attach: Vec::new(),
+                    fwd: None,
+                },
+            );
+            assert!(!fx.iter().any(|e| matches!(e, Effect::Spawn { agent, .. } if agent == name)), "{name}: {fx:?}");
+        }
     }
 
     fn signin_cards(t: &T) -> Vec<Card> {

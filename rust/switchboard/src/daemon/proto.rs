@@ -25,8 +25,8 @@
 
 mod cmds;
 mod emit;
-mod find;
 mod growth;
+mod walk;
 mod tool_out;
 mod log;
 mod completion;

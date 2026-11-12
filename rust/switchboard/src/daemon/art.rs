@@ -45,30 +45,25 @@ pub(super) struct Art {
     /// hub started (events::seed).
     seeded: bool,
     /// The store's rows, its metas (for `live`), new and seen_ms, built
-    /// again only when a store write, the agents' names or the 10 s
-    /// backstop move them (crate::store_gen, send-fast): the state push
-    /// and the view ask for them up to 10 times a second.
-    memo: std::cell::RefCell<crate::store_gen::Memo<(u64, u64, u64, u64), ArtView>>,
+    /// off the loop when their key moves (daemon/art_rows.rs, hub-loop):
+    /// the state push and the view ask for them up to 10 times a second.
+    pub(super) rows: std::cell::RefCell<super::art_rows::ArtRows>,
+    /// The typed rows of the last view and send-time key (artifact_rows_now).
+    #[allow(clippy::type_complexity)]
+    typed: std::cell::RefCell<Option<((u64, Option<std::time::SystemTime>, u64, bool), std::rc::Rc<super::art_rows::ArtView>, std::rc::Rc<Vec<bise_proto::rows::Artifact>>)>>,
     /// The library's folders, read by its mtime (daemon/art_folders.rs).
     pub(super) lib: super::art_folders::LibCache,
     /// The open PR artifacts' links, newest first, by the store's
     /// generation (daemon/pr_arts.rs: the PRs the poller follows).
     pub(super) prs: std::cell::RefCell<Option<(u64, Vec<String>)>>,
+    /// His opens not written yet (id, at, version seen): marks.json is
+    /// written at most once a second ([`Daemon::art_opens_flush`]).
+    opens: Vec<(String, u64, Option<u64>)>,
+    opens_written_ms: u64,
+    /// The store's backfill was tried since the hub started
+    /// ([`Daemon::art_backfill_once`]).
+    backfill_tried: bool,
 }
-
-/// What the artifacts event is built from (the memo's value).
-#[derive(Clone, Debug, Default)]
-struct ArtView {
-    rows: Vec<Value>,
-    stored: BTreeMap<String, artifacts::Meta>,
-    new: usize,
-    seen_ms: u64,
-}
-
-/// The backstop of the artifacts memo: a row reads what changes outside
-/// the hub (its target's file there or `gone`), so the rows are built
-/// again at least this often.
-const ART_BACKSTOP_MS: u64 = 10_000;
 
 /// Where an agent works and what its changes are measured against.
 #[derive(Clone, Debug)]
@@ -176,33 +171,118 @@ impl Shell {
         self.artifacts_refresh(false);
     }
 
-    /// `{"ev":"artifacts","rows":[…],"new":N,"seen_ms":T}`.
-    pub(super) fn artifacts_ev(&self) -> Value {
-        let now = now_ms();
-        // the folders' stamps: a page or an artifact written by another process
+    /// What the artifact rows read, as one key (daemon/art_rows.rs): the
+    /// stores' disk generation, the agents' names, the backstop's bucket
+    /// and the folders' stamps (a page or an artifact written by another
+    /// process).
+    fn art_key(&self, now: u64) -> super::art_rows::ArtKey {
         let st = &self.opts.paths.state;
-        let disk = crate::store_gen::dir_stamp(&st.join("pages")) ^ crate::store_gen::dir_stamp(&st.join("artifacts")).rotate_left(1);
-        let key = (crate::store_gen::now(), self.art_who_key(), now / ART_BACKSTOP_MS, disk);
-        let mut view = self.art.memo.borrow_mut().get(key, || {
-            let store = self.art_store();
-            let who = self.art_who();
-            ArtView {
-                rows: store.rows(&who, &self.hub.workspace),
-                stored: store.stored().into_iter().map(|m| (m.id.clone(), m)).collect(),
-                new: store.new_count(now),
-                seen_ms: store.seen_ms(now),
+        let disk = crate::store_gen::stamp(&st.join("pages")) ^ crate::store_gen::stamp(&st.join("artifacts")).rotate_left(1);
+        (crate::store_gen::disk_now(), self.art_who_key(), now / super::art_rows::BACKSTOP_MS, disk)
+    }
+
+    /// The last rows built, and a build for `key` started off the loop
+    /// when it moved (one at a time; its view comes back as
+    /// `Msg::ArtBuilt`). None before the first build lands.
+    fn art_view(&self, now: u64) -> Option<std::rc::Rc<super::art_rows::ArtView>> {
+        let key = self.art_key(now);
+        let (view, start) = self.art.rows.borrow_mut().ask(key);
+        if start {
+            let job = super::art_rows::ArtJob {
+                state: self.opts.paths.state.clone(),
+                workspace: self.hub.workspace.clone(),
+                who: self
+                    .hub
+                    .st
+                    .agents
+                    .values()
+                    .map(|a| super::art_rows::WhoRow { name: a.name.clone(), dir: a.dir.clone(), aliases: a.aliases.clone(), archived: a.status() == crate::model::Status::Archived })
+                    .collect(),
+                now,
+                // the pages waiting on him are read by the build, off the loop (hub-loop m_61273)
+                pages: self.pg.pages.clone(),
+            };
+            let tx = self.tx.clone();
+            let spawned = std::thread::Builder::new().name("art-rows".into()).spawn(move || {
+                let view = job.build();
+                let _ = tx.send(Msg::ArtBuilt(Box::new((key, view))));
+            });
+            if let Err(e) = spawned {
+                self.art.rows.borrow_mut().failed();
+                log_line(&self.opts.paths, &format!("artifacts: the rows' build did not start: {e}"));
             }
-        });
-        self.art_live_rows(&view.stored, &mut view.rows);
+        }
+        view
+    }
+
+    /// A build of the rows landed (`Msg::ArtBuilt`): kept, and the list to
+    /// the clients when it changed (a key that moved meanwhile starts the
+    /// next build there).
+    pub(super) fn art_built(&mut self, key: super::art_rows::ArtKey, view: super::art_rows::ArtView) {
+        if self.art.rows.borrow_mut().built(key, view) {
+            log_line(&self.opts.paths, "artifacts: the 5 min backstop found a change no stamp saw");
+        }
+        self.state_gate.changed();
+        self.artifacts_refresh(false);
+    }
+
+    /// `{"ev":"artifacts","rows":[…],"new":N,"seen_ms":T}`; None until
+    /// the first build of the rows lands (no event yet: the clients keep
+    /// their loading state).
+    pub(super) fn artifacts_ev(&self) -> Option<Value> {
+        let view = self.art_view(now_ms())?;
+        Some(self.artifacts_ev_of(&view))
+    }
+
+    /// The typed rows now (⌘K's index in view.json, the pulse, the
+    /// growth count): built again only when the view or what is joined
+    /// to it at send time moved (hub-loop: their conversion and copy of
+    /// 1550 rows held the loop 1-3 s at each state push at load 30).
+    /// None before the rows' first build lands.
+    pub(super) fn artifact_rows_now(&self) -> Option<std::rc::Rc<Vec<bise_proto::rows::Artifact>>> {
+        let view = self.art_view(now_ms())?;
+        let key = self.art_typed_key();
+        if let Some((k, v, rows)) = self.art.typed.borrow().as_ref() {
+            if *k == key && std::rc::Rc::ptr_eq(v, &view) {
+                return Some(rows.clone());
+            }
+        }
+        let rows = std::rc::Rc::new(self.artifact_rows(&self.artifacts_ev_of(&view)));
+        *self.art.typed.borrow_mut() = Some((key, view, rows.clone()));
+        Some(rows)
+    }
+
+    /// What the event joins to the built view at send time, as one key:
+    /// the makers' turns (`live`), the library's stamp (folders), the
+    /// PRs' rows (their status) and whether a page server runs (links).
+    fn art_typed_key(&self) -> (u64, Option<std::time::SystemTime>, u64, bool) {
+        use std::hash::{Hash, Hasher};
+        let mut live = std::collections::hash_map::DefaultHasher::new();
+        for a in self.hub.st.agents.values().filter(|a| a.turn_ms.is_some()) {
+            (&a.name, a.turn_ms).hash(&mut live);
+        }
+        let mut pr = std::collections::hash_map::DefaultHasher::new();
+        serde_json::to_string(&self.hub.pr_rows_by_url(now_ms())).unwrap_or_default().hash(&mut pr);
+        (live.finish(), super::art_folders::library_stamp(&self.opts.home), pr.finish(), self.pg.pages.is_some())
+    }
+
+    /// The event of a built view: its rows joined with what changes
+    /// without a store write (live turns, folders, PR status).
+    fn artifacts_ev_of(&self, view: &super::art_rows::ArtView) -> Value {
+        let mut rows = view.rows.clone();
+        self.art_live_rows(&view.stored, &mut rows);
         // the library joined at send time (his rename in the desktop core
         // moves no store stamp): each row's folder resolved, the folders
         let lib = self.art_library();
-        artifacts::resolve_folders(&mut view.rows, &lib);
+        artifacts::resolve_folders(&mut rows, &lib);
         // each PR's status, the hub's row of it (a change re-sends the event)
-        artifacts::join_pr_status(&mut view.rows, &self.hub.pr_rows_by_url(now));
+        artifacts::join_pr_status(&mut rows, &self.hub.pr_rows_by_url(now_ms()));
+        // each row's done and section (artifacts_marks), once its PR's state is in;
+        // a page with something waiting on him stays open work (the set the build read off the loop)
+        artifacts::join_sections(&mut rows, &view.waiting);
         json!({
             "ev": "artifacts",
-            "rows": view.rows,
+            "rows": rows,
             "new": view.new,
             "seen_ms": view.seen_ms,
             "folders": super::art_folders::folder_rows(&lib),
@@ -223,7 +303,7 @@ impl Shell {
     /// Send the list when it changed since the last one sent (`force`:
     /// always).
     pub(super) fn artifacts_refresh(&mut self, force: bool) {
-        let ev = self.artifacts_ev();
+        let Some(ev) = self.artifacts_ev() else { return };
         let s = ev.to_string();
         if force || s != self.art.last {
             self.art.last = s;
@@ -299,7 +379,7 @@ impl Shell {
         use bise_proto::sb::Artifact;
         let store = self.art_store();
         match r {
-            Artifact::Add { target, cwd, title, kind, known_only, changed, folder } => {
+            Artifact::Add { target, cwd, title, kind, known_only, changed, folder, for_you } => {
                 let folder = match self.art_folder(from, folder.as_deref()) {
                     Ok(f) => f,
                     Err(e) => return json!({"ok": false, "error": e}),
@@ -318,6 +398,7 @@ impl Shell {
                     changed: changed.as_ref().and_then(bise_proto::office::Changed::of_value).map(|c| c.0),
                     folder,
                     id: None,
+                    for_you,
                     staged: None,
                 };
                 match store.add(&add, now_ms()) {
@@ -340,10 +421,16 @@ impl Shell {
                     Err(e) => json!({"ok": false, "error": e}),
                 }
             }
-            Artifact::List { words, agent, archived } => {
-                let agent = agent.filter(|a| !a.is_empty());
-                json!({"ok": true, "text": store.list_text(&words, agent.as_deref(), archived, now_ms())})
+            Artifact::List { words, agent, mut agents, project: _, since, archived } => {
+                // TODO(artifacts-list-agent): an older sb's one --agent, goes in a later release
+                agents.extend(agent);
+                match crate::artifacts_filter::of_list(&words, agents, since) {
+                    Ok(f) => json!({"ok": true, "text": store.list_text(&f, archived, now_ms(), &crate::artifacts_filter::local_offset_min)}),
+                    Err(e) => json!({"ok": false, "error": e}),
+                }
             }
+            Artifact::Keep { ids } => self.artifact_keep(from, &ids, true),
+            Artifact::Unkeep { ids } => self.artifact_keep(from, &ids, false),
             Artifact::Archive(p) => self.artifact_pick(true, p),
             Artifact::Unarchive(p) => self.artifact_pick(false, p),
             Artifact::Move { ids, folder } => self.artifact_move_cmd(from, &ids, folder.as_deref()),
@@ -352,6 +439,89 @@ impl Shell {
                 json!({"ok": true, "text": super::art_folders::folders_text(&lib, &store.all())})
             }
         }
+    }
+
+    /// `sb artifact keep|unkeep` (an agent's): kept in his Kept section
+    /// under its name, or let go; his own keep stands
+    /// (crate::artifacts_marks). One line per artifact.
+    fn artifact_keep(&mut self, from: &str, ids: &[String], keep: bool) -> Value {
+        let store = self.art_store();
+        let title = self.art_titles();
+        match store.keep(ids, &|id: &str| title.get(id).cloned(), crate::artifacts_marks::Who::Agent(from), keep, now_ms()) {
+            Ok(done) => {
+                let marks = store.marks();
+                let text = done
+                    .iter()
+                    .map(|(id, t, o)| crate::artifacts_marks::keep_text(t, from, keep, o, marks.kept(id).map(|k| k.by.as_str())))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                self.artifacts_refresh(false);
+                json!({"ok": true, "text": text})
+            }
+            Err(e) => json!({"ok": false, "error": e}),
+        }
+    }
+
+    /// `artifacts_keep` (his, from a window): kept or let go, whoever kept
+    /// it before; the list to every client.
+    pub(super) fn artifacts_keep_his(&mut self, ids: &[String], keep: bool) -> Result<(), String> {
+        let title = self.art_titles();
+        self.art_store().keep(ids, &|id: &str| title.get(id).cloned(), crate::artifacts_marks::Who::You, keep, now_ms())?;
+        self.artifacts_refresh(false);
+        Ok(())
+    }
+
+    /// Each artifact's title by id, from the last rows built (hub-loop's
+    /// rule: no store read on the loop); before the first build lands,
+    /// the store's own list (once, at a hub's start).
+    fn art_titles(&self) -> BTreeMap<String, String> {
+        match self.art_view(now_ms()) {
+            Some(v) => v.rows.iter().filter_map(|r| Some((r["id"].as_str()?.to_string(), r["title"].as_str().unwrap_or_default().to_string()))).collect(),
+            None => self.art_store().all().into_iter().map(|m| (m.id, m.title)).collect(),
+        }
+    }
+
+    /// `artifacts_opened` (his, from a window): its `opened_ms` and the
+    /// version he saw, gathered and written at most once a second
+    /// ([`Self::art_opens_flush`], also on the tick): never a write per
+    /// click on the loop (architect m_60685).
+    pub(super) fn artifacts_opened(&mut self, id: &str, v: Option<u64>) {
+        self.art.opens.push((id.to_string(), now_ms(), v));
+        self.art_opens_flush(false);
+    }
+
+    /// Write the opens gathered, when the last write is a second old (or
+    /// `force`); the list again when one moved.
+    pub(super) fn art_opens_flush(&mut self, force: bool) {
+        let now = now_ms();
+        if self.art.opens.is_empty() || (!force && now < self.art.opens_written_ms + 1000) {
+            return;
+        }
+        let opens = std::mem::take(&mut self.art.opens);
+        self.art.opens_written_ms = now;
+        match self.art_store().opened(&opens) {
+            Ok(true) => self.artifacts_refresh(false),
+            Ok(false) => {}
+            Err(e) => log_line(&self.opts.paths, &format!("artifacts: his opens not kept: {e}")),
+        }
+    }
+
+    /// The store's one-shot backfill (TODO(artifacts-backfill): goes in a
+    /// later release, tests/shims.txt), started once per hub start on its
+    /// own thread, off the loop (hub-loop m_61273); it runs once per store
+    /// (artifacts_keep.rs, each write guarded against the loop's). Its
+    /// writes bump store_gen: the rows rebuild off the loop by themselves.
+    /// One log line with its counts.
+    pub(super) fn art_backfill_once(&mut self) {
+        if std::mem::replace(&mut self.art.backfill_tried, true) {
+            return;
+        }
+        let (state, paths) = (self.opts.paths.state.clone(), self.opts.paths.clone());
+        std::thread::spawn(move || match artifacts::Store::new(&state).backfill() {
+            Ok(Some(n)) => log_line(&paths, &format!("artifacts: backfilled · {} for you · {} between agents · {} kept", n.you, n.agents, n.kept)),
+            Ok(None) => {}
+            Err(e) => log_line(&paths, &format!("artifacts: backfill not done: {e}")),
+        });
     }
 
     /// `sb artifact archive|unarchive`: those picked out of the list, or

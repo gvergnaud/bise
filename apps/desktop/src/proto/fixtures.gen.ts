@@ -138,6 +138,7 @@ export const hub_ev: readonly HubEv[] = [
   {"ev":"guide","guide":{"overview":"the slow path caches its plan now; the hot loop reads the cache","parts":[{"area":"Planner","hunks":["3fa9c0d2e1"],"summary":"slow() keeps its plan in a cache keyed by the query","title":"Cache the plan once","weight":"critical"}],"rest":[]},"hash":"9f2c41d07a3be815","project":"acme-1a2b3c4d","state":"ready","target":{"kind":"pr","url":"https://github.com/acme/web/pull/412"}},
   {"ev":"artifacts","items":[{"agent":"perf","at_ms":1791100020000,"id":"budget","kind":"file","new":false,"opener":{"app":"Sheets","builtin":true,"plugin":"sheets","tool":"open_sheet","type":"*.xlsx","type_title":"Excel workbook"},"title":"budget.xlsx","url":"/Users/me/w/budget.xlsx","version":3,"versions":[{"at_ms":1791100010000,"v":1},{"at_ms":1791100015000,"by":{"kind":"agent","name":"perf"},"v":2},{"at_ms":1791100020000,"by":{"kind":"you"},"v":3}]}],"project":"acme-1a2b3c4d"},
   {"ev":"artifacts","items":[{"agent":"perf","at_ms":1791100030000,"id":"q3-budget","kind":"file","new":false,"opener":{"app":"Sheets","plugin":"sheets","tool":"open_sheet","type":"*.xlsx","type_title":"Excel workbook"},"openers":[{"app":"Tables","icon":"table","plugin":"tables","tool":"open_table","type":"*.xlsx","type_title":"Excel workbook"},{"app":"Writer","builtin":true,"plugin":"docs","tool":"open_doc","type":"*.xlsx","type_title":"Excel workbook"}],"title":"q3.xlsx","url":"/Users/me/w/q3.xlsx","version":1}],"project":"acme-1a2b3c4d"},
+  {"agent":"perf","ev":"thread_marks","marks":[{"at_ms":1700000000000,"pos":3,"text":"make the bench faster"},{"at_ms":1700000600000,"pos":40,"text":"and the cold one too"}],"project":"acme-1a2b3c4d","upto":41},
 ];
 
 /** rust/proto/fixtures/hub_cmd.jsonl */
@@ -240,6 +241,8 @@ export const hub_cmd: readonly HubCmd[] = [
   {"agent":"perf","cmd":"log_body","of":{"block":1,"of":"block","provider":"openai/gpt-5","raw":true,"req":41,"row":4,"slot":3},"project":"acme-1a2b3c4d"},
   {"cmd":"artifacts_move","folder":"f-abcdefghij","ids":["perf-notes","report-html"],"keep_undo":true,"project":"acme-1a2b3c4d","to":"site"},
   {"cmd":"artifacts_folders","op":{"make":{"name":"pricing","parent":"f-abcdefghij"}},"project":"acme-1a2b3c4d"},
+  {"cmd":"artifacts_keep","ids":["pricing-page"],"keep":true,"project":"acme-1a2b3c4d"},
+  {"cmd":"artifacts_opened","id":"pricing-page","project":"acme-1a2b3c4d","v":3},
   {"cmd":"artifacts_library","project":"acme-1a2b3c4d"},
   {"agent":"perf","call":"1730000000000-1","cmd":"view_resource","project":"acme-1a2b3c4d"},
   {"agent":"perf","call":"1730000000000-1","cmd":"view_call","method":"tools/call","params":{"arguments":{"by":1},"name":"bump"},"project":"acme-1a2b3c4d"},
@@ -255,6 +258,7 @@ export const hub_cmd: readonly HubCmd[] = [
   {"cmd":"view_open","opener":{"plugin":"sheets","tool":"open_sheet"},"project":"acme-1a2b3c4d","target":{"id":"q3-budget","kind":"artifact","version":2}},
   {"cmd":"view_open","project":"acme-1a2b3c4d","target":{"id":"e:42","kind":"entry"}},
   {"cmd":"view_copy","doc":"0123456789abcdef0123456789abcdef","project":"acme-1a2b3c4d","text":"a,b\n1,2\n"},
+  {"agent":"perf","cmd":"marks","limit":20,"project":"acme-1a2b3c4d"},
 ];
 
 /** rust/proto/fixtures/core_ev.jsonl */
