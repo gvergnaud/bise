@@ -2,7 +2,8 @@
 // The window's views against a fake hub and a fake view posting real window messages: a message
 // counts only from that view's proxy window at that view's origin; the resource's states; the
 // layer's model in the DOM (the frame over its card, hidden when the card unmounts, the same
-// frame in the panel tab when fullscreen, past MAX_LIVE the oldest torn down).
+// frame in the panel tab when fullscreen, past MAX_LIVE the oldest torn down); a document's view
+// (its open, its save, its state, Open with, its tab closed).
 import { act, cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { step, ViewsLayer } from './Layer';
@@ -10,8 +11,10 @@ import { ViewCard } from './Card';
 import { ViewTab } from './Tab';
 import { MAX_LIVE, type Place } from './place';
 import { UI, type Json, type JsonObject } from './protocol';
-import { viewKey, type ViewAnswer, type ViewCmd, type ViewRef } from './port';
-import { resourceOf, ViewsStore, type ViewsEnv } from './store';
+import { refKey, viewKey, type DocRef, type ViewAnswer, type ViewCmd, type ViewRef } from './port';
+import { opened } from './doc.test';
+import { resourceOf } from './resource';
+import { ViewsStore, type ViewsEnv } from './store';
 
 const ORIGIN = 'http://v-0123456789abcdef.localhost:47123';
 
@@ -36,10 +39,12 @@ function rig(answer: (c: ViewCmd) => ViewAnswer = () => ({ result: resource() })
     download: () => undefined,
     gesture: () => Promise.resolve(false),
     panel: {
-      has: (r) => tabs.has(viewKey(r)),
+      has: (r) => tabs.has(refKey(r)),
       open: (r) => tabs.add(viewKey(r)),
       close: (r) => tabs.delete(viewKey(r)),
     },
+    onSelection: () => undefined,
+    onCopied: () => undefined,
     watch: () => () => undefined,
     now: () => (now += 1),
     later: (_ms, f) => timers.push(f),
@@ -208,7 +213,7 @@ describe('the layer', () => {
     expect(frame.style.visibility).toBe('visible');
     expect([frame.style.left, frame.style.top, frame.style.width, frame.style.height, frame.style.zIndex]).toEqual(['300px', '700px', '560px', '160px', '2']);
     expect(frame.style.clipPath).toBe('inset(0px 0px 92px 0px round var(--r-2))');
-    expect(frames).toEqual([{ project: 'p', agent: 'a', call: REF.call, origin: ORIGIN, rect: { x: 300, y: 700, w: 560, h: 68 }, perms: ['midi'], covers: [] }]);
+    expect(frames).toEqual([{ key: viewKey(REF), origin: ORIGIN, rect: { x: 300, y: 700, w: 560, h: 68 }, perms: ['midi'], covers: [] }]);
     // fullscreen: its tab opens, the card says so, the same frame goes over the tab at z 4
     act(() => {
       store.fullscreen(REF);
@@ -277,7 +282,7 @@ describe('the layer', () => {
     expect(store.state(refs[0] as ViewRef)).toEqual({ kind: 'none' });
     store.ensure(refs[0] as ViewRef);
     await flush();
-    expect(asked.filter((c) => c.call === '1-0')).toHaveLength(2);
+    expect(asked.filter((c) => 'call' in c && c.call === '1-0')).toHaveLength(2);
     expect(store.state(refs[0] as ViewRef).kind).toBe('live');
   });
 
@@ -308,5 +313,137 @@ describe('the layer', () => {
     expect(store.live(), 'the oldest hidden one went').not.toContain(viewKey({ ...REF, call: '2-0' }));
     anchor.remove();
     root.remove();
+  });
+});
+
+describe("a document's view (docs/plugin-apps.md A4, A5)", () => {
+  const DOC_REF: DocRef = { project: 'p', target: { kind: 'artifact', id: 'art1' } };
+  const SID = 'a'.repeat(32);
+  const OTHER_SID = 'c'.repeat(32);
+
+  function docRig(over: (c: ViewCmd) => ViewAnswer | undefined = () => undefined) {
+    let opens = 0;
+    const copied: string[] = [];
+    const r = rig((c): ViewAnswer => {
+      const o = over(c);
+      if (o !== undefined) return o;
+      if (c.cmd === 'view_open') {
+        opens += 1;
+        return { result: opened({ doc: opens === 1 ? SID : OTHER_SID, proxy: `${ORIGIN}/mcp-app?s=${opens === 1 ? SID : OTHER_SID}` }) };
+      }
+      if (c.cmd === 'view_notes') return { result: { notes: [{ id: 'n1', anchor: { kind: 'view', key: 'r:1' }, text: 'why?', status: 'sent', version: 3 }] } };
+      if (c.cmd === 'view_copy') return { result: { artifact: 'art2' } };
+      return { result: {} };
+    });
+    r.tabs.add(refKey(DOC_REF));
+    return { ...r, copied };
+  }
+
+  async function live(store: ViewsStore) {
+    const stop = store.listen(window);
+    store.ensure(DOC_REF);
+    await flush();
+    const proxy = fakeProxy();
+    store.frame(refKey(DOC_REF), { contentWindow: proxy.win } as HTMLIFrameElement);
+    proxy.send({ jsonrpc: '2.0', method: UI.proxyReady });
+    proxy.send({ jsonrpc: '2.0', id: 1, method: UI.initialize, params: {} });
+    await flush();
+    proxy.send({ jsonrpc: '2.0', method: UI.initialized });
+    return { proxy, stop };
+  }
+
+  it('opens by view/open, lives in its tab, gets its document, no ui/message, then its notes', async () => {
+    const { store, asked } = docRig();
+    const { proxy, stop } = await live(store);
+    expect(asked[0]).toEqual({ cmd: 'view_open', project: 'p', target: { kind: 'artifact', id: 'art1' } });
+    expect(store.state(DOC_REF)).toMatchObject({ kind: 'live', mode: 'fullscreen', doc: { opener: { app: 'Fake' }, document: { version: 3 } } });
+    const init = proxy.got.find((m) => m['id'] === 1)?.['result'] as JsonObject;
+    expect((init['hostContext'] as JsonObject)['document']).toEqual({ name: 'q3.fake', type: 'Fake document', version: 3, size: 12, writable: true });
+    expect(init['hostCapabilities'] as JsonObject).not.toHaveProperty('message');
+    await flush();
+    expect(asked.some((c) => c.cmd === 'view_notes' && 'doc' in c && c.doc === SID)).toBe(true);
+    expect(proxy.got.map((m) => m['method']).filter(Boolean)).toEqual([UI.resourceReady, UI.toolInput, UI.toolResult, 'dev.bise/notes']);
+    expect((proxy.got.at(-1)?.['params'] as JsonObject)['notes']).toEqual([{ id: 'n1', anchor: 'r:1', text: 'why?', status: 'sent', version: 3 }]);
+    proxy.send({ jsonrpc: '2.0', id: 2, method: UI.message, params: { content: [{ type: 'text', text: 'hi' }] } });
+    await flush();
+    expect(proxy.got.at(-1)).toMatchObject({ id: 2, error: { code: -32601 } });
+    expect(asked.some((c) => c.cmd === 'view_message')).toBe(false);
+    stop();
+  });
+
+  it("a save passes through with its session as it is: saving…, then saved; a conflict's body becomes a copy", async () => {
+    let outcome = 'saved';
+    const { store, asked } = docRig((c) => (c.cmd === 'view_call' && c.method === 'ai.mistral.vibe/resources/write' ? { result: { outcome, etag: 'e2' } } : undefined));
+    const opened2: string[] = [];
+    (store as unknown as { env: { onCopied: (p: string, id: string) => void } }).env.onCopied = (_p, id) => opened2.push(id);
+    const { proxy, stop } = await live(store);
+    const write = { uri: `view-file://${'b'.repeat(32)}`, ifMatch: 'e1', seq: 1, text: 'mine' };
+    proxy.send({ jsonrpc: '2.0', id: 5, method: 'ai.mistral.vibe/resources/write', params: write });
+    expect(store.state(DOC_REF)).toMatchObject({ doc: { save: { kind: 'saving' } } });
+    await flush();
+    expect(asked.find((c) => c.cmd === 'view_call' && c.method === 'ai.mistral.vibe/resources/write')).toEqual({ cmd: 'view_call', project: 'p', doc: SID, method: 'ai.mistral.vibe/resources/write', params: write });
+    expect(store.state(DOC_REF)).toMatchObject({ doc: { save: { kind: 'saved' } } });
+    expect(await store.keepCopy(DOC_REF), 'no conflict: nothing to copy').toBe(false);
+    outcome = 'conflict';
+    proxy.send({ jsonrpc: '2.0', id: 6, method: 'ai.mistral.vibe/resources/write', params: { ...write, seq: 2 } });
+    await flush();
+    expect(store.state(DOC_REF)).toMatchObject({ doc: { save: { kind: 'conflict' } } });
+    expect(await store.keepCopy(DOC_REF)).toBe(true);
+    expect(asked.at(-1)).toEqual({ cmd: 'view_copy', project: 'p', doc: SID, text: 'mine' });
+    expect(opened2).toEqual(['art2']);
+    stop();
+  });
+
+  it('its state comes back at its next open; Open with closes the session, opens with the pick and forgets the state', async () => {
+    const { store, asked, timers } = docRig();
+    const { proxy, stop } = await live(store);
+    proxy.send({ jsonrpc: '2.0', id: 7, method: 'ai.mistral.vibe/viewState', params: { op: 'set', state: { scroll: 40 } } });
+    await flush();
+    expect(proxy.got.at(-1)).toMatchObject({ id: 7, result: {} });
+    // the version: 'Open v5' style reopen keeps the state
+    const again = store.reopen(DOC_REF, { version: null });
+    for (const t of timers) t();
+    await again;
+    await flush();
+    expect(asked.filter((c) => c.cmd === 'view_close')).toEqual([{ cmd: 'view_close', project: 'p', doc: SID }]);
+    const p2 = fakeProxy();
+    store.frame(refKey(DOC_REF), { contentWindow: p2.win } as HTMLIFrameElement);
+    p2.send({ jsonrpc: '2.0', method: UI.proxyReady });
+    p2.send({ jsonrpc: '2.0', id: 1, method: UI.initialize, params: {} });
+    await flush();
+    const ctx = (p2.got.find((m) => m['id'] === 1)?.['result'] as JsonObject)['hostContext'] as JsonObject;
+    expect(ctx['ai.mistral.vibe/viewState']).toEqual({ scroll: 40 });
+    // Open with: another app, the same tab
+    const swap = store.reopen(DOC_REF, { pick: { plugin: 'fake-claim', tool: 'open_fake' } });
+    for (const t of timers) t();
+    await swap;
+    await flush();
+    expect(asked.filter((c) => c.cmd === 'view_open').at(-1)).toEqual({ cmd: 'view_open', project: 'p', target: { kind: 'artifact', id: 'art1' }, opener: { plugin: 'fake-claim', tool: 'open_fake' } });
+    const p3 = fakeProxy();
+    store.frame(refKey(DOC_REF), { contentWindow: p3.win } as HTMLIFrameElement);
+    p3.send({ jsonrpc: '2.0', method: UI.proxyReady });
+    p3.send({ jsonrpc: '2.0', id: 1, method: UI.initialize, params: {} });
+    await flush();
+    expect((p3.got.find((m) => m['id'] === 1)?.['result'] as JsonObject)['hostContext']).not.toHaveProperty(['ai.mistral.vibe/viewState']);
+    stop();
+  });
+
+  it('its tab closed: the session ends at the hub', async () => {
+    const { store, asked, tabs, timers } = docRig();
+    const { stop } = await live(store);
+    tabs.delete(refKey(DOC_REF));
+    store.changed();
+    for (const t of timers) t();
+    await flush();
+    expect(asked.filter((c) => c.cmd === 'view_close')).toEqual([{ cmd: 'view_close', project: 'p', doc: SID }]);
+    expect(store.live()).toEqual([]);
+    stop();
+  });
+
+  it("a failed open keeps the hub's code for the head (the app off, the file gone)", async () => {
+    const { store } = docRig((c) => (c.cmd === 'view_open' ? { error: { code: -32032, message: 'off', data: { reason: 'plugin-off' } } } : undefined));
+    store.ensure(DOC_REF);
+    await flush();
+    expect(store.state(DOC_REF)).toEqual({ kind: 'failed', message: 'off', code: -32032, reason: 'plugin-off' });
   });
 });

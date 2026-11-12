@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import ORIGINS from '../../../../tests/fixtures/mcp-apps/origins.json';
-import { freshGesture, GESTURE_MS, frameAt, pointInWindow, isViewOrigin, isViewProxy, originOf, stampGesture, viewKey, viewNavigation, viewPermission, type ViewFrame, type ViewPerm } from './viewrules';
+import { callViewKey } from '../shared/viewkey';
+import { freshGesture, GESTURE_MS, frameAt, pointInWindow, isViewOrigin, isViewProxy, originOf, stampGesture, viewNavigation, viewPermission, type ViewFrame, type ViewPerm } from './viewrules';
 
 const A = 'http://v-0123456789abcdef.localhost:47123';
 const B = 'http://v-fedcba9876543210.localhost:47123';
-const frame = (origin: string, perms: ViewPerm[], rect = { x: 0, y: 0, w: 100, h: 100 }, call = '1-2'): ViewFrame => ({ project: 'p', origin, agent: 't1', call, rect, perms, covers: [] });
+const frame = (origin: string, perms: ViewPerm[], rect = { x: 0, y: 0, w: 100, h: 100 }, call = '1-2'): ViewFrame => ({ key: callViewKey('p', 't1', call), origin, rect, perms, covers: [] });
 
 describe('view origins', () => {
   it('are what the shared origins say (tests/fixtures/mcp-apps/origins.json, the hub reads them too)', () => {
@@ -99,8 +100,8 @@ describe('the gesture', () => {
   const frames = [frame(A, [], { x: 10, y: 10, w: 100, h: 50 }, '1-1'), frame(B, [], { x: 50, y: 40, w: 100, h: 100 }, '1-2')];
 
   it("a pointer-down falls in the topmost frame's visible rect", () => {
-    expect(frameAt(frames, 20, 20)?.call).toBe('1-1');
-    expect(frameAt(frames, 60, 45)?.call, 'overlap: the later one is on top').toBe('1-2');
+    expect(frameAt(frames, 20, 20)?.key).toBe(callViewKey('p', 't1', '1-1'));
+    expect(frameAt(frames, 60, 45)?.key, 'overlap: the later one is on top').toBe(callViewKey('p', 't1', '1-2'));
     expect(frameAt(frames, 5, 5)).toBe(null);
     expect(frameAt(frames, 110, 30), 'the right edge is out').toBe(null);
   });
@@ -109,7 +110,7 @@ describe('the gesture', () => {
     // a menu at (40, 20, 60 × 30) over A's frame (10, 10, 100 × 50): the window's layer tells it
     const covered = [{ ...frames[0], covers: [{ x: 40, y: 20, w: 60, h: 30 }] } as ViewFrame, frames[1] as ViewFrame];
     expect(frameAt(covered, 50, 30), 'on the menu').toBe(null);
-    expect(frameAt(covered, 20, 20)?.call, "beside it, the view's own").toBe('1-1');
+    expect(frameAt(covered, 20, 20)?.key, "beside it, the view's own").toBe(callViewKey('p', 't1', '1-1'));
     expect(frameAt(covered, 60, 45), 'on B, on top, its own covers none').toBe(frames[1]);
     expect(frameAt([{ ...(frames[1] as ViewFrame), covers: [{ x: 0, y: 0, w: 1000, h: 1000 }] }], 60, 45), 'a scrim over all').toBe(null);
   });
@@ -122,7 +123,7 @@ describe('the gesture', () => {
     const click = { x: 2, y: 3, globalX: 100 + 602, globalY: 80 + 403 };
     const p = pointInWindow(click, content, 1);
     expect(p).toEqual({ x: 602, y: 403 });
-    expect(frameAt(cards, p?.x ?? -1, p?.y ?? -1)?.call, "the card's corner is the card").toBe('card');
+    expect(frameAt(cards, p?.x ?? -1, p?.y ?? -1)?.key, "the card's corner is the card").toBe(callViewKey('p', 't1', 'card'));
     // zoomed 125 %: DIP over the zoom is CSS px
     expect(pointInWindow({ globalX: 100 + 750, globalY: 80 + 500 }, content, 1.25)).toEqual({ x: 600, y: 400 });
     expect(pointInWindow({}, content, 1), 'no screen point: no gesture').toBe(null);
@@ -141,7 +142,7 @@ describe('the gesture', () => {
   });
 
     it("view_message carries main's time, never the window's", () => {
-    const downs = new Map([[viewKey('p', 't1', '1-1'), 1000]]);
+    const downs = new Map([[callViewKey('p', 't1', '1-1'), 1000]]);
     const cmd = { cmd: 'view_message', project: 'p', agent: 't1', call: '1-1', content: [{ type: 'text', text: 'hi' }], gesture_ms: 99_999 };
     expect(stampGesture(cmd, downs)).toEqual({ ...cmd, gesture_ms: 1000 });
     expect(stampGesture({ ...cmd, call: '1-2' }, downs), 'no pointer-down in that view: none').not.toHaveProperty('gesture_ms');

@@ -77,7 +77,7 @@ export interface BiseApi {
      * takes his last pointer-down main saw in that view's frame, when fresh (GESTURE_MS) and not
      * taken yet: a view's link or download needs one (main/viewframes.ts)
      */
-    readonly gesture: (ref: { readonly project: string; readonly agent: string; readonly call: string }) => Promise<boolean>;
+    readonly gesture: (key: string) => Promise<boolean>;
   };
   /**
    * Opens a file or folder named in an answer (an absolute path) in his
@@ -508,11 +508,12 @@ export interface ViewSides {
 /** A view command's answer as the hub gave it (window.bise.views.call). */
 export type ViewAnswerWire = { readonly result: unknown } | { readonly error: { readonly code: number; readonly message: string; readonly data?: unknown } };
 
-/** A view frame that shows (window.bise.views.frames): its view, its origin, what shows of it in window css px, its granted permissions. */
+/**
+ * A view frame that shows (window.bise.views.frames): its view (its key, shared/viewkey.ts: a tool
+ * call's or a document's), its origin, what shows of it in window css px, its granted permissions.
+ */
 export interface ViewFrame {
-  readonly project: string;
-  readonly agent: string;
-  readonly call: string;
+  readonly key: string;
   readonly origin: string;
   readonly rect: { readonly x: number; readonly y: number; readonly w: number; readonly h: number };
   readonly perms: readonly ViewPerm[];

@@ -7,8 +7,11 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const WEB_JS = join(__dirname, '../../../../kit/views/web.js');
-/** web.js's budget in bytes: ~17 KB without React (it was 46 KB with it). */
-const BUDGET = 24 * 1024;
+/**
+ * web.js's budget in bytes: ~27 KB without React since it hosts a document's view too
+ * (docs/plugin-apps.md A7: view/open, saves, notes, its state; 19 KB before), 46 KB with React.
+ */
+const BUDGET = 32 * 1024;
 
 afterEach(() => {
   vi.unstubAllGlobals();

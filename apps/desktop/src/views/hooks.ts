@@ -2,11 +2,11 @@
 // out of store.ts so the web host (web.ts, no React) never bundles React. Owner: mcp-apps-host.
 import { useCallback, useSyncExternalStore } from 'react';
 import { useCoreEvent, type Ev } from '@/store';
-import type { ViewRef } from './port';
+import type { AnyRef, ViewRef } from './port';
 import type { ViewState, ViewsStore } from './store';
 
 /** A view's state, live. */
-export function useViewState(store: ViewsStore, ref: ViewRef): ViewState {
+export function useViewState(store: ViewsStore, ref: AnyRef): ViewState {
   useSyncExternalStore(store.subscribe, store.getVersion);
   return store.state(ref);
 }

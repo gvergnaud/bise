@@ -2,13 +2,21 @@
 // window ids), the page's answer read as the store's, its quiet words.
 import { describe, expect, it } from 'vitest';
 import { views } from '@/proto/words_views.gen';
-import { answerOf, bodyOf, wordsOf } from './web';
+import { answerOf, bodyOf, refOf, wordsOf } from './web';
 
 describe('the web host', () => {
   it("a command is C5's method and params, without the window's project", () => {
     expect(bodyOf({ cmd: 'view_resource', project: '', agent: 'a', call: '1-1' })).toEqual({ method: 'view/resource', params: { agent: 'a', call: '1-1' } });
     expect(bodyOf({ cmd: 'view_call', project: '', agent: 'a', call: '1-1', method: 'tools/call', params: { name: 'bump' } })).toEqual({ method: 'view/call', params: { agent: 'a', call: '1-1', method: 'tools/call', params: { name: 'bump' } } });
     expect(bodyOf({ cmd: 'view_message', project: '', agent: 'a', call: '1-1', content: [{ type: 'text', text: 'hi' }] })).toEqual({ method: 'view/message', params: { agent: 'a', call: '1-1', content: [{ type: 'text', text: 'hi' }] } });
+  });
+
+  it("a document's page opens its artifact (a version when given); else the tool call's view", () => {
+    expect(refOf({ artifact: 'art1' })).toEqual({ project: '', target: { kind: 'artifact', id: 'art1' } });
+    expect(refOf({ artifact: 'art1', version: '3' })).toEqual({ project: '', target: { kind: 'artifact', id: 'art1', version: 3 } });
+    expect(refOf({ artifact: 'art1', version: 'x' })).toEqual({ project: '', target: { kind: 'artifact', id: 'art1' } });
+    expect(refOf({ agent: 'a', call: '1-1' })).toEqual({ project: '', agent: 'a', call: '1-1' });
+    expect(bodyOf({ cmd: 'view_open', project: '', target: { kind: 'artifact', id: 'art1' } })).toEqual({ method: 'view/open', params: { target: { kind: 'artifact', id: 'art1' } } });
   });
 
   it('reads the answer: a result, an error as given, anything else an error', () => {

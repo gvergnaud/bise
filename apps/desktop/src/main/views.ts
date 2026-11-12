@@ -9,8 +9,22 @@ import { ipcMain } from 'electron';
 import { VIEW_CALL_MAX_MS } from '../proto/view_rules.gen';
 import { IPC, type ViewAnswerWire } from '../shared/api';
 
-/** The view commands, by their cmd tag; plugin_views: a plugin's views once it runs (the add's step 2, C8). */
-export const VIEW_CMDS: readonly string[] = ['view_resource', 'view_call', 'view_message', 'view_context', 'plugin_views'];
+/**
+ * The view commands, by their cmd tag; plugin_views: a plugin's views once it runs (the add's step
+ * 2, C8); view_open, view_close, view_copy, view_notes: a document's view (docs/plugin-apps.md A4, A5).
+ */
+export const VIEW_CMDS: readonly string[] = ['view_resource', 'view_call', 'view_message', 'view_context', 'plugin_views', 'view_open', 'view_close', 'view_copy', 'view_notes'];
+
+/**
+ * The string ids a command must carry, none empty: a plugin's; a document's open (its target is an
+ * object the hub reads); a document session's (`doc`, view/open's); else a tool call's view. Pure.
+ */
+function idsOf(c: Record<string, unknown>): readonly string[] {
+  if (c['cmd'] === 'plugin_views') return ['project', 'plugin'];
+  if (c['cmd'] === 'view_open') return ['project'];
+  if (c['cmd'] === 'view_close' || c['cmd'] === 'view_copy' || c['cmd'] === 'view_notes' || 'doc' in c) return ['project', 'doc'];
+  return ['project', 'agent', 'call'];
+}
 
 /** Is it a view command (refused on the window's plain core channel)? */
 export function isViewCmd(cmd: unknown): boolean {
@@ -22,8 +36,8 @@ export function isViewCmd(cmd: unknown): boolean {
 export function viewCmdOf(raw: unknown): Record<string, unknown> | null {
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw) || !isViewCmd(raw)) return null;
   const c = raw as Record<string, unknown>;
-  const ids = c['cmd'] === 'plugin_views' ? ['project', 'plugin'] : ['project', 'agent', 'call'];
-  for (const k of ids) if (typeof c[k] !== 'string' || c[k] === '') return null;
+  for (const k of idsOf(c)) if (typeof c[k] !== 'string' || c[k] === '') return null;
+  if (c['cmd'] === 'view_open' && (c['target'] === null || typeof c['target'] !== 'object')) return null;
   return { ...c };
 }
 
