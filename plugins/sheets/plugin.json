@@ -6,6 +6,7 @@
   "homepage": "https://bise.dev",
   "license": "Apache-2.0",
   "extensions": {
+    "ai.mistral.vibe": { "schemaVersion": 1 },
     "dev.bise": {
       "tagline": "Excel workbooks: make, read, edit",
       "prompts": ["make a budget sheet for this month with formulas", "read this xlsx and tell me which rows look wrong", "turn this table into an Excel workbook with a total row"]

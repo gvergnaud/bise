@@ -32,13 +32,7 @@ fn manifest(name: &str) -> String {
 }
 
 fn roots(t: &Tmp) -> Roots {
-    Roots {
-        builtin: Some(t.0.join("builtin")),
-        user: Some(t.0.join("user")),
-        workspace: Some(t.0.join("ws")),
-        data: t.0.join("data"),
-        state: StateV2::default(),
-    }
+    Roots { builtin: Some(t.0.join("builtin")), user: Some(t.0.join("user")), workspace: Some(t.0.join("ws")), ..Roots::for_test(&t.0) }
 }
 
 /// A state with these plugins off and opt-ins on, and these parts off.
@@ -356,7 +350,7 @@ fn built_in_root_loads_shadows_and_disables() {
 #[test]
 fn the_repo_ships_the_computer_plugin() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins");
-    let r = Roots { builtin: Some(root), user: None, workspace: None, data: std::env::temp_dir(), state: st(&[], &["computer"], &[]) };
+    let r = Roots { builtin: Some(root), data: std::env::temp_dir(), state: st(&[], &["computer"], &[]), ..Roots::for_test(&std::env::temp_dir()) };
     let res = resolve(&r);
     assert!(res.diagnostics.is_empty(), "{:?}", res.diagnostics);
     let p = res.plugins.iter().find(|p| p.name == "computer").expect("plugins/computer");
@@ -369,10 +363,11 @@ fn the_repo_ships_the_computer_plugin() {
     let p = res.plugins.iter().find(|p| p.name == "computer").unwrap();
     assert_eq!(p.state, State::Disabled);
     assert!(p.servers.is_empty() && p.skills.is_empty());
-    // the office plugins (sheets, slides, docs) are on by default: only they load
+    // the apps that open bise's own files (sheets, slides, docs, media's Preview) are on by
+    // default: only they load
     let mut loaded: Vec<&str> = res.loaded().map(|p| p.name.as_str()).collect();
     loaded.sort();
-    assert_eq!(loaded, ["docs", "sheets", "slides"]);
+    assert_eq!(loaded, ["docs", "media", "sheets", "slides"]);
 }
 
 #[test]
@@ -542,7 +537,8 @@ fn bise_node_is_the_node_found_or_says_it_needs_one() {
     assert_eq!(node_major("20.1"), None);
     let t = tmp("node");
     let spec: Map<String, Value> = serde_json::from_str(r#"{"command":"${BISE_NODE}","args":["${PLUGIN_ROOT}/server.mjs"]}"#).unwrap();
-    match (parse_stdio("maps", &spec, &t.0, &t.0.join("data")), node_exe()) {
+    let (data, docs) = (t.0.join("data"), t.0.join("docs"));
+    match (parse_stdio("maps", &spec, Places { root: &t.0, data: &data, docs: &docs }), node_exe()) {
         (Ok(s), Some(n)) => {
             assert_eq!(s.command, n.to_string_lossy());
             assert_eq!(s.args, [format!("{}/server.mjs", t.0.display())]);

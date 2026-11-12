@@ -5,11 +5,6 @@
 //
 // - anchor: a selection, frame -> window (select.js message(); frameNote.ts readFrameNote)
 // - esc: an esc the page didn't use, frame -> window (the desktop's injected guard.ts ESC_FORWARD)
-// - zoom: {fit}, an image's zoom left or reached fit, frame -> window (image.js; the window claims
-//   esc and ⌘0 while fit is false)
-// - fit: back to fit, window -> frame (image.js takes it only from window.parent)
-// - size: {h}, the height that holds the viewer's content, frame -> window (video.js: the screen
-//   at the clip's ratio and its bar; the window's card hugs it, designer m_32762)
 // - pinch: {dy, x, y, w}, a trackpad pinch the page didn't use, frame -> window (the desktop's
 //   injected main/pinch.ts PINCH_FORWARD; the window zooms the frame itself, useFrameNote.ts)
 // - pan: {dx, dy, w}, two fingers while the page is zoomed with room that way, frame -> window
@@ -23,4 +18,4 @@
 //   -> its own frames (the desktop's injected main/findagent.ts FIND_AGENT; artifact-find)
 // - found: {seq, n}, how many matches a frame and its own frames hold, frame -> parent (FIND_AGENT)
 
-export const FRAME = Object.freeze({ anchor: "anchor", esc: "esc", zoom: "zoom", fit: "fit", size: "size", pinch: "pinch", pan: "pan", room: "room", storage: "site-storage", find: "find", found: "found" });
+export const FRAME = Object.freeze({ anchor: "anchor", esc: "esc", pinch: "pinch", pan: "pan", room: "room", storage: "site-storage", find: "find", found: "found" });

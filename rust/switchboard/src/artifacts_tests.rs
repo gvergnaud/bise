@@ -142,6 +142,27 @@ fn a_folder_with_an_index_is_a_site_and_is_copied_whole() {
     assert_eq!(a.meta.kind, "site");
     let copy = state.join("artifacts").join(&a.meta.id).join(a.meta.versions[0].copy.as_ref().unwrap());
     assert!(copy.join("js/a.js").is_file());
+    // its first-level names, what A2 matches a folder rule on (architect m_62393), on the row too
+    assert_eq!((a.meta.versions[0].names.names.clone(), a.meta.versions[0].names.more), (vec!["index.html".to_string(), "js".into()], false));
+    let rows = s.rows(&nobody, "/");
+    assert_eq!(rows[0]["names"], json!(["index.html", "js"]));
+    // a version from before names (TODO(art-names-read)): its row reads them from the folder
+    let mut m = s.get(&a.meta.id).unwrap();
+    m.versions[0].names = Default::default();
+    s.save(&m).unwrap();
+    assert_eq!(s.rows(&nobody, "/")[0]["names"], json!(["index.html", "js"]));
+}
+
+#[test]
+fn a_folder_keeps_its_first_names_sorted_and_says_when_cut() {
+    use bise_proto::files::Names;
+    let names = |v: &[&str]| folder_names(v.iter().map(|s| s.to_string()));
+    assert_eq!(names(&["js", ".git", "index.html", "", ".DS_Store", "js", "a.md~"]), Names { names: vec!["index.html".to_string(), "js".into()], more: false });
+    let many: Vec<String> = (0..Names::MAX + 3).map(|i| format!("f{i:03}")).collect();
+    let Names { names: kept, more } = folder_names(many.iter().rev().cloned());
+    assert_eq!((kept.len(), more, kept[0].as_str(), kept[Names::MAX - 1].clone()), (Names::MAX, true, "f000", many[Names::MAX - 1].clone()));
+    assert!(!folder_names((0..Names::MAX).map(|i| format!("f{i}"))).more, "exactly the cap: whole");
+    assert_eq!(names_of(Path::new("/no/such/folder")), Names::default());
 }
 
 #[test]
@@ -380,7 +401,7 @@ fn the_typed_artifacts_carry_everything_the_older_rows_did() {
     add(&s, &root, "bise.dev/m/artifacts", Some("the artifacts mock"), 50).unwrap();
     let rows = s.rows(&|a: &str| Some((a.to_string(), a == "pricing-page")), work.to_str().unwrap());
     let ev = json!({"ev": "artifacts", "rows": rows, "new": s.new_count(25), "seen_ms": 25});
-    let items = crate::proto_view::artifacts(&ev, |_| None, None);
+    let items = crate::proto_view::artifacts(&ev, |_| None, None, |_| Default::default());
     assert_eq!(items.len(), rows.len());
     // absent, null, "", false and [] are the same: nothing to say
     let some = |v: Option<&Value>| v.filter(|v| !(v.is_null() || *v == "" || *v == false || v.as_array().is_some_and(Vec::is_empty))).cloned();
@@ -433,7 +454,7 @@ fn a_copied_file_is_framed_by_the_page_server_and_a_link_is_not() {
     page(&state, "gate-index", "gate index", &[(1, 40)], json!([]));
     let rows = s.rows(&|a: &str| Some((a.to_string(), false)), work.to_str().unwrap());
     let ev = json!({"ev": "artifacts", "rows": rows, "seen_ms": 0});
-    let items = crate::proto_view::artifacts(&ev, |_| None, Some("http://127.0.0.1:47123"));
+    let items = crate::proto_view::artifacts(&ev, |_| None, Some("http://127.0.0.1:47123"), |_| Default::default());
     let by_id = |id: &str| items.iter().find(|a| a.id == id).unwrap_or_else(|| panic!("{id} in {items:?}"));
     let file = by_id("the-report");
     assert_eq!(file.frame_url.as_deref(), Some("http://127.0.0.1:47123/a/the-report/view"), "a site: bise's viewer, the newest version");
@@ -443,7 +464,7 @@ fn a_copied_file_is_framed_by_the_page_server_and_a_link_is_not() {
     for a in items.iter().filter(|a| a.id != "the-report" && a.id != "the-notes") {
         assert_eq!(a.frame_url, None, "{} ({}) has no frame_url", a.id, a.by);
     }
-    let bare = crate::proto_view::artifacts(&ev, |_| None, None);
+    let bare = crate::proto_view::artifacts(&ev, |_| None, None, |_| Default::default());
     assert!(bare.iter().all(|a| a.frame_url.is_none()), "no page server, no frame_url");
 }
 
@@ -626,22 +647,6 @@ fn his_saves_in_one_sitting_make_one_version() {
     assert_eq!(his(b"PK s1 after the agent", "s1", 4, 70).meta.current().unwrap().v, 6, "the newest by the agent: v+1 even with his sitting");
 }
 
-/// write_source: over the file through a temp file; a gone folder says so.
-#[test]
-fn his_save_writes_the_file_and_refuses_a_gone_folder() {
-    let root = tmp("write-source");
-    let (state, work) = (root.join("state"), root.join("work"));
-    std::fs::create_dir_all(&work).unwrap();
-    std::fs::write(work.join("q3.xlsx"), b"PK one").unwrap();
-    let s = Store::new(&state);
-    let m = add(&s, &work, "q3.xlsx", None, 10).unwrap().meta;
-    s.write_source(&m, b"PK two").unwrap();
-    assert_eq!(std::fs::read(work.join("q3.xlsx")).unwrap(), b"PK two");
-    assert_eq!(std::fs::read_dir(&work).unwrap().count(), 1, "no temp file left");
-    std::fs::remove_dir_all(&work).unwrap();
-    assert!(s.write_source(&m, b"PK three").unwrap_err().contains("is gone"));
-}
-
 fn filed(store: &Store, cwd: &Path, target: &str, folder: Option<Filed>, now: u64) -> Added {
     let a = Add { target: target.into(), agent: "s1".into(), by: "s1".into(), cwd: cwd.to_string_lossy().to_string(), folder, ..Default::default() };
     store.add(&a, now).unwrap()
@@ -722,6 +727,17 @@ fn law_rows_read_the_folder_through_the_library() {
     assert_eq!((folder_of(&lib, "a.md"), folder_of(&lib, "b.md")), (None, None));
     assert_eq!(rows_of(&state, "", &lib).len(), 2, "delete never deletes an artifact");
     assert_eq!(std::fs::read_to_string(state.join("artifacts/a-md/meta.json")).unwrap(), before);
+}
+
+/// Who saved a version (docs/plugin-apps.md A6b's save line): his sitting
+/// says `you`, else its turn's agent; a version from before both: none.
+#[test]
+fn a_version_says_who_saved_it() {
+    let turn = Some(crate::artifacts_turns::Turn { agent: "perf".into(), started_ms: 1 });
+    let sitting = Some(crate::artifacts_turns::Sitting { by: "you".into(), session: "s".into(), seq: 1 });
+    assert_eq!(Version { turn: turn.clone(), ..Default::default() }.saved_by(), Some(SavedBy::Agent { name: "perf".into() }));
+    assert_eq!(Version { sitting, turn, ..Default::default() }.saved_by(), Some(SavedBy::You));
+    assert_eq!(Version::default().saved_by(), None);
 }
 
 // his pick on page artifacts-signal (artifacts_marks): audience, kept, opens, sections

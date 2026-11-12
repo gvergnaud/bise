@@ -322,6 +322,28 @@ fn env_key(p: &Plugin, spec: &Spec, env_dir: Option<&Path>, salt: &[u8], inherit
     }
 }
 
+/// Each stdio server's tools as the tools cache last kept them (a cold
+/// list some bridge took), keyed as [`crate::opens::ServerTools`]: the
+/// hub's cold start for its apps (docs/plugin-apps.md A3, architect
+/// m_61469), before any live `tools/list` replaces an entry. `inherited`:
+/// the env a bridge started now would see ([`tools_cache::inherited`]);
+/// a server whose key differs (another env) is simply not there. Reads
+/// files: call it off the hub's loop.
+pub fn cold_tools(res: &Resolution, place: &tools_cache::Place, env_dir: Option<&Path>, inherited: &[(String, String)], now: SystemTime) -> crate::opens::ServerTools {
+    let mut out = crate::opens::ServerTools::new();
+    let Some(salt) = tools_cache::salt(&place.salt) else { return out };
+    let cache = Cache::new(place.dir.clone());
+    for p in res.loaded() {
+        for s in &p.servers {
+            let Some(key) = env_key(p, &Spec::Stdio(s.clone()), env_dir, &salt, inherited) else { continue };
+            if let Some(listed) = cache.read(&key, now) {
+                out.insert((p.name.clone(), s.id.clone()), listed.tools);
+            }
+        }
+    }
+    out
+}
+
 /// The stamp of the saved settings of `res`'s plugins that declare some
 /// (`dev.bise.settings`): each one's secrets file's mtime (the keychain's
 /// stub too, rewritten at each write), so a setting he gives on the
@@ -350,6 +372,10 @@ struct Entry {
     spec: Spec,
     plugin_root: PathBuf,
     data_root: PathBuf,
+    /// `PLUGIN_DOCUMENTS` (docs/plugin-apps.md A6), made at start only
+    /// when `make_documents` (`resolve::Plugin::uses_documents`)
+    documents_root: PathBuf,
+    make_documents: bool,
     log: PathBuf,
     on_change: OnChange,
     secrets: Option<PathBuf>,
@@ -410,6 +436,8 @@ impl Entry {
             spec,
             plugin_root: p.root.clone(),
             data_root: p.data_root.clone(),
+            documents_root: p.documents_root.clone(),
+            make_documents: p.uses_documents(),
             on_change,
             secrets,
             env_dir,
@@ -482,9 +510,10 @@ impl Entry {
     fn start(&self) -> Result<Conn, Fail> {
         let env = env_lookup(&self.plugin_name, self.env_dir.as_deref());
         match &self.spec {
-            Spec::Stdio(s) => Client::start(s, &self.plugin_root, &self.data_root, &self.log, self.spec.startup_timeout(), Some(self.on_change.clone()), &env)
-                .map(Conn::Stdio)
-                .map_err(Fail::Other),
+            Spec::Stdio(s) => {
+                let dirs = crate::stdio::Dirs { root: &self.plugin_root, data: &self.data_root, documents: &self.documents_root, make_documents: self.make_documents };
+                Client::start(s, &dirs, &self.log, self.spec.startup_timeout(), Some(self.on_change.clone()), &env).map(Conn::Stdio).map_err(Fail::Other)
+            }
             Spec::Http(s) => Remote::start_with(s, &env, self.secrets.as_deref(), self.on_change.clone(), self.spec.startup_timeout()).map(Conn::Remote),
         }
     }

@@ -107,4 +107,15 @@
 {"cmd":"diff","project":"acme-1a2b3c4d","artifact":"cu-upload-diff","version":2,"req":7}
 {"cmd":"guide","project":"acme-1a2b3c4d","target":{"kind":"agent","name":"perf"}}
 {"cmd":"guide","project":"acme-1a2b3c4d","target":{"kind":"pr","url":"https://github.com/acme/app/pull/412"},"run":true}
+{"cmd":"view_call","project":"acme-1a2b3c4d","doc":"0123456789abcdef0123456789abcdef","method":"resources/read","params":{"uri":"view-file://00112233445566778899aabbccddeeff"}}
+{"cmd":"view_close","project":"acme-1a2b3c4d","doc":"0123456789abcdef0123456789abcdef"}
+{"cmd":"view_notes","project":"acme-1a2b3c4d","doc":"0123456789abcdef0123456789abcdef"}
+{"cmd":"folder_list","project":"acme-1a2b3c4d"}
+{"cmd":"folder_list","project":"acme-1a2b3c4d","folder":"e:12","hidden":true}
+{"cmd":"file_new","project":"acme-1a2b3c4d","make":{"plugin":"sheets","ending":".xlsx"},"library_folder":"f-abcdefghij","in":"e:12"}
+{"cmd":"files_ids_subscribe","project":"acme-1a2b3c4d"}
+{"cmd":"files_mint","project":"acme-1a2b3c4d","path":"Boards/été.board.json"}
+{"cmd":"view_open","project":"acme-1a2b3c4d","target":{"kind":"artifact","id":"q3-budget","version":2},"opener":{"plugin":"sheets","tool":"open_sheet"}}
+{"cmd":"view_open","project":"acme-1a2b3c4d","target":{"kind":"entry","id":"e:42"}}
+{"cmd":"view_copy","project":"acme-1a2b3c4d","doc":"0123456789abcdef0123456789abcdef","text":"a,b\n1,2\n"}
 {"cmd":"marks","project":"acme-1a2b3c4d","agent":"perf","limit":20}

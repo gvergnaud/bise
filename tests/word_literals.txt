@@ -4,5 +4,6 @@
 # lowers it in the same commit, at 0 its line goes. Only a change that adds keys may raise a count, by
 # literals the file already had. 'lint shape': the literal has a word's shape but is not that word
 # (a description, fixture data, a hub label); the others name the area that moves it. tests/word_lint.py.
+1 apps/desktop/tests/checks/composer/dictation-real.spec.ts  # lint shape: the mic's log line ('released: the mic is off'), not views.doc_app_off
 1 tests/tui_mcp_login_tmux.py  # plug-catalog: the fake bridge's status file error ('needs a login'), data the bridge writes, not the shown word
 1 tests/tui_voice_tmux.py  # lint shape: the voice line, not thread.wake_ended

@@ -293,7 +293,7 @@ fn server(v: &Value, home: Home) -> Result<(Value, Vec<String>, Vec<String>), St
         let mut e = Map::new();
         for (k, v) in env {
             match v {
-                Value::String(_) if k != "PLUGIN_ROOT" && k != "PLUGIN_DATA" => {
+                Value::String(_) if !crate::resolve::RESERVED_ENV.contains(&k.as_str()) => {
                     e.insert(k.clone(), v.clone());
                 }
                 Value::Number(_) | Value::Bool(_) => {
@@ -524,7 +524,7 @@ mod tests {
         let dir = write(&root, "from-claude-code", &p, MARK).unwrap();
         use std::os::unix::fs::PermissionsExt;
         assert_eq!(std::fs::metadata(dir.join("mcp.json")).unwrap().permissions().mode() & 0o777, 0o600);
-        let roots = Roots { builtin: None, user: Some(root.clone()), workspace: None, data: d.join("data"), state: Default::default() };
+        let roots = Roots { user: Some(root.clone()), ..Roots::for_test(&d) };
         let r = resolve(&roots);
         assert_eq!(r.plugins.len(), 1, "{:?}", r.diagnostics);
         let ids: Vec<&str> = r.plugins[0].servers.iter().map(|s| s.id.as_str()).collect();

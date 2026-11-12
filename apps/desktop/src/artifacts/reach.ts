@@ -88,16 +88,9 @@ export function downWords(row: HubRow | undefined, src: string, home?: string): 
   };
 }
 
-/**
- * How long a page that doesn't answer yet stays 'checking' (the panel's loading state) before the
- * panel says it doesn't answer (artifact-loading, his m_60703): a server that refuses the first
- * asks, or takes over the probe's 800 ms, is a hub or pages server still starting, not a failure.
- * The error showed at once and went away with the next ask, a few seconds of a false
- * 'nothing answers at 127.0.0.1:<port>'.
- */
-export const LOAD_GRACE_MS = 10_000;
-/** How often a page that doesn't answer yet is asked again inside LOAD_GRACE_MS. */
-export const LOAD_RETRY_MS = 500;
+// the loading grace's numbers (grace.ts: the views store reads them too, with no React)
+import { LOAD_GRACE_MS, LOAD_RETRY_MS } from './grace';
+export { LOAD_GRACE_MS, LOAD_RETRY_MS };
 
 /**
  * The page's reach, for `src`: 'up' at once for anything not on the pages server (or with no

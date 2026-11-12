@@ -38,16 +38,18 @@ import { itemsOf, ownerOf, topOf, whenOf, type Card, type HeadOf, type Place, ty
 import { Thumb } from './thumbs';
 import { keyOf, revealPathOf, splitArchived, type Item } from './model';
 import {
-  AT_ALL, atOfPath, atPath, chipOf, chipsOf, countsOf, coverOf, crumbOf, folderLine, inFolder, itemsAt, libraryFacts, libraryOf,
-  nameOf, pathOf, prSideItems, projectOfTyped, rememberMove, searchItems, titlePath, type At, type ChipKind, type Library,
+  AT_ALL, atOfPath, atPath, countsOf, coverOf, crumbOf, folderLine, inFolder, itemsAt, libraryFacts, libraryOf,
+  nameOf, pathOf, prSideItems, projectOfTyped, rememberMove, searchItems, titlePath, type At, type Library,
   type PrSide,
 } from './folders';
 import { FolderColumn, type Editing } from './Column';
-import { chipWord } from './folders';
+import { appTabsOf, keyOfTag, PRS } from './apps';
 import { FoldCrumb, useNarrow } from './Fold';
 import { sayCrumbSearch } from './crumb';
 import { MovePicker } from './MovePicker';
-import { atOf, CardMenu, FolderMenu, MergePicker, type CardAct, type FolderAct, type MenuAt } from './Menus';
+import { atOf, CardMenu, FolderMenu, MergePicker, OpenWithPicker, openWithGroups, type CardAct, type FolderAct, type MenuAt } from './Menus';
+import { openWithSub } from '@/app/menus/registry';
+import { useRunAct } from '@/app/menus/use';
 import { ProjectScope, scopeRows } from './Scope';
 import { SearchResults } from './Search';
 import { Toolbar, WHEN_WORD } from './Toolbar';
@@ -93,6 +95,8 @@ const keepScope = (p: string) => {
 type Over =
   | { readonly k: 'move'; readonly keys: readonly string[]; readonly at: MenuAt }
   | { readonly k: 'card'; readonly key: string; readonly at: MenuAt }
+  /** Open with, from a card's ⋯ (docs/plugin-apps.md A6b) */
+  | { readonly k: 'with'; readonly key: string; readonly at: MenuAt }
   | { readonly k: 'folder'; readonly id: string; readonly at: MenuAt }
   | { readonly k: 'merge'; readonly id: string; readonly at: MenuAt }
   | { readonly k: 'delete'; readonly id: string }
@@ -129,7 +133,6 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
   const [caret, setCaret] = useState<number | null>(null);
   // the completion's row he walked to with ↑↓ (the first while he hasn't)
   const [walked, setWalked] = useState<string | null>(null);
-  const [chip, setChip] = useState<ChipKind | null>(null);
   // the Pull requests filter's side: open & draft first, merged & closed one click away
   const [prSide, setPrSide] = useState<PrSide>('open');
   const [view, setViewRaw] = useState<View>(mem.view);
@@ -223,15 +226,21 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
   const hereAll = searching ? searchItems(lib, allScoped, parsed.words) : itemsAt(lib, allScoped, atNow);
   // the Pull requests chip with no PR in it shows only under For you and a search (ui-review: never an
   // empty 'Pull requests 0' over Done or Between agents)
-  const anyPr = (searching || sect === 'you') && hereAll.some((it) => chipOf(it) === 'prs');
+  const anyPr = (searching || sect === 'you') && hereAll.some((it) => it.a.pr != null);
   // the place's items by section (sections.ts: the hub's section, ordered by last touch): For you
   // is Kept then Open work, Done and Between agents one list each; a search keeps every section
   const inView = itemsIn(here, searching ? 'all' : sect);
-  const chips0 = chipsOf(inView);
-  const chips = anyPr && !chips0.some((c) => c.kind === 'prs') ? [...chips0, { kind: 'prs' as const, n: 0 }] : chips0;
-  const shown = chip === null ? inView : chip === 'prs' ? prSideItems(hereAll, prSide) : inView.filter((it) => chipOf(it) === chip);
-  // what each section holds with the kind chip on: the heads count what is shown, the quiet rows what is one click away
-  const sectN = sectionCounts(chip === null || chip === 'prs' ? here : here.filter((it) => chipOf(it) === chip));
+  // the app tabs (apps.ts, docs/plugin-apps.md A6b, his pick A): the `app:` token's keys, OR inside;
+  // their counts faceted (every other filter applied, the app one left out)
+  const appsPicked = [...(parsed.keys.get('app') ?? [])];
+  const scopedNoApp = applyFilters(inScope, parsed, fctx, 'app');
+  const inViewNoApp = itemsIn(searching ? searchItems(lib, scopedNoApp, parsed.words) : itemsAt(lib, scopedNoApp, atNow), searching ? 'all' : sect);
+  const appTabs = appTabsOf(inViewNoApp.map((it) => it.a), new Set(appsPicked), anyPr);
+  // Pull requests alone: its second side (open & draft, merged & closed one click away)
+  const prsOnly = appsPicked.length === 1 && appsPicked[0] === keyOfTag(PRS);
+  const shown = prsOnly ? prSideItems(hereAll, prSide) : inView;
+  // what each section holds with the app filter on: the heads count what is shown, the quiet rows what is one click away
+  const sectN = sectionCounts(here);
   const heads = searching || sect === 'you' ? sectionHeads(sectionCounts(shown)) : false;
   const byKey = new Map(base.map((it) => [keyOf(it), it]));
   const place = placeOf(lib, atNow, searching, shown);
@@ -436,6 +445,12 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
     } else if (act === 'merge') setOver({ k: 'merge', id, at: at_ });
     else setOver({ k: 'delete', id });
   };
+  // Open with: the artifact menu's own list and its acts (app/menus: one owner), drawn as the gallery's picker
+  const runAct = useRunAct();
+  const withGroupsOf = (key: string) => {
+    const it = itemOfKey(key);
+    return it === undefined ? [] : openWithGroups(openWithSub(it.a));
+  };
   const doCard = (key: string, act: CardAct) => {
     const it = itemOfKey(key);
     if (it === undefined) return;
@@ -447,6 +462,7 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
       case 'move': setOver({ k: 'move', keys, at: boxOf(key) }); return;
       case 'keep':
       case 'let_go': for (const c of keepCmds(itemsOfKeys(keys), act === 'keep')) store.command(c); return;
+      case 'with': setOver({ k: 'with', key, at: boxOf(key) }); return;
       default:
         // versions, copy, finder, archive: the card's own keys (List.tsx rowKey)
         setSel(key);
@@ -488,8 +504,14 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
   // the When chip writes its token in the field (one state); Clear takes all but the project
   const sinceOn = [...(parsed.keys.get('since') ?? [])][0] as When | undefined;
   const whenProps = { rows: whenFacet(inScope, parsed, fctx), on: sinceOn ?? null, onPick: (w: When | null) => { setQ(withToken(q, 'since', w)); } };
-  const clearAll = () => { setQ(cleared(q)); setChip(null); };
-  const somethingSet = anySet(parsed) || chip !== null;
+  const clearAll = () => { setQ(cleared(q)); };
+  const somethingSet = anySet(parsed);
+  // a tab: alone (a click; on it alone again: All), ⌘-click adds it or takes it off; All clears
+  const pickAppTab = (id: string, add: boolean) => {
+    if (id === 'all') setQ(withToken(q, 'app', null));
+    else if (add) setQ(withToken(q, 'app', id, 'toggle'));
+    else setQ(withToken(q, 'app', appsPicked.length === 1 && appsPicked[0] === id ? null : id));
+  };
   const crumb = crumbOf(lib, atNow);
   // under 900 px the column folds into the crumb: the place's title opens it (page v7 'à 800 px')
   const fold = <FoldCrumb label={crumb.length === 0 ? sentenceCase(library.all_artifacts) : crumb.map((c) => c.name).join(' / ')} testId="artifacts.fold">{column}</FoldCrumb>;
@@ -499,8 +521,8 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
   const kindsTotal = inView.length;
   const toolbar = stack === null && (
     <Toolbar testId="artifacts.toolbar" lead={narrow ? fold : null}
-      kinds={searching || chips.length > 1 ? [{ id: 'all', word: library.all_kinds, n: kindsTotal }, ...chips.map((c) => ({ id: c.kind, word: chipWord(c.kind), n: c.n }))] : null}
-      kind={chip ?? 'all'} onKind={(id) => { setChip(id === 'all' ? null : (id as ChipKind)); }}
+      apps={searching || appsPicked.length > 0 || appTabs.tabs.length + appTabs.more.length > 1 ? { total: kindsTotal, ...appTabs } : null}
+      appsOn={appsPicked} onApp={pickAppTab}
       scope={<ProjectScope all={base} project={eff} projectName={projectName} onPick={pickScope} testId="artifacts.projects" />}
       projects={[{ project: '', name: sentenceCase(library.all_projects), n: base.length }, ...scopeRows(base)]} project={eff} onProject={pickScope}
       view={view} onView={setView}
@@ -540,7 +562,8 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
       const everywhere = eff === '' ? null : (searching ? searchItems(lib, elsewhere, parsed.words) : elsewhere).length;
       const fromAgents = !searching && sect === 'you' ? itemsIn(here, 'agents').length : 0;
       const ways = waysOut({ everywhere, fromAgents, filtered: somethingSet });
-      const where = [chip === null ? '' : sentenceCase(chipWord(chip)), projectName].filter((w) => w !== '').join(' · ');
+      const appWords = [...appTabs.tabs, ...appTabs.more].filter((t) => appsPicked.includes(t.id)).map((t) => t.word);
+      const where = [appWords.join(' + '), projectName].filter((w) => w !== '').join(' · ');
       const when = sinceOn === undefined ? '' : WHEN_WORD[sinceOn].toLowerCase();
       const title = searching ? library.nothing_matches({ q: searchWords }) : where === '' ? `${library.nothing_here}${when === '' ? '' : ` ${when}`}` : library.nothing_in({ what: `${where}${when === '' ? '' : ` ${when}`}` });
       return (
@@ -574,7 +597,7 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
       const themes = lib.themes.filter((t) => eff === '' || (counts.get(t.id)?.n ?? 0) > 0);
       return (
         <>
-          {/* what he pinned (app/pins.ts, his m_49100): the scope and the kind chip apply. No Recent strip:
+          {/* what he pinned (app/pins.ts, his m_49100): the scope and the app tabs apply. No Recent strip:
               For you's sections are newest first already and Recent is a place in the column (designer
               m_61101); Done and Between agents are one flat list, nothing over them (ui-review) */}
           {sect === 'you' && <RecentRow kind="pinned" items={pinnedOf(shown)} lib={lib} now={now} list={view === 'list'} onOpen={openIt} testId="artifacts.pinned" />}
@@ -699,7 +722,7 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
           {!narrow && !sideLib && column}
           <div className="art-main">
             {toolbar}
-            {stack === null && chip === 'prs' && (
+            {stack === null && prsOnly && (
               <div className="art-prside">
                 <Filters testId="artifacts.prside" label={library.kind_prs} on={prSide} onPick={(id) => { setPrSide(id as PrSide); }}
                   items={[
@@ -746,7 +769,13 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
       {over?.k === 'card' && (
         <CardMenu at={over.at} several={picked.has(over.key) ? picked.size : 1} finder={(() => { const it = itemOfKey(over.key); return it !== undefined && revealPathOf(it.a) !== null; })()}
           kept={itemsOfKeys(picked.has(over.key) ? [...picked] : [over.key]).every((x) => x.a.kept != null)}
+          openWith={withGroupsOf(over.key).length > 0}
           onAct={(a) => { doCard(over.key, a); }} onClose={() => { setOver((o) => (o?.k === 'card' ? null : o)); }} testId="artifacts.menu" />
+      )}
+      {over?.k === 'with' && (
+        <OpenWithPicker at={over.at} groups={withGroupsOf(over.key)}
+          onPick={(act) => { const it = itemOfKey(over.key); if (it !== undefined) runAct({ kind: 'artifact', project: it.project, id: it.a.id }, act as never); }}
+          onClose={() => { setOver((o) => (o?.k === 'with' ? null : o)); }} testId="artifacts.with" />
       )}
       {over?.k === 'folder' && (
         <FolderMenu at={over.at} isTheme={(lib.byId.get(over.id)?.parent ?? null) === null}

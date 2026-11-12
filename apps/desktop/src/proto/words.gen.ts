@@ -22,3 +22,4 @@ export { settings } from './words_settings.gen';
 export { side } from './words_side.gen';
 export { thread } from './words_thread.gen';
 export { views } from './words_views.gen';
+export { viewkit } from './words_viewkit.gen';

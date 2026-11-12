@@ -5,11 +5,16 @@
 // the window; ui/resource-teardown before it goes. It never sees a window or a frame: the store
 // hands it the messages whose source and origin it already checked, and it posts through `env`.
 // No rule is enforced here that the hub doesn't enforce too (the proxy and the view share an
-// origin; risk 1): this only keeps the order and the shapes. Owner: mcp-apps-host.
+// origin; risk 1): this only keeps the order and the shapes. A document's view (docs/plugin-apps.md
+// A4, A5; `env.doc`) asks with its session `doc` instead of a tool call, is never offered
+// ui/message (no agent), may save (ai.mistral.vibe/resources/write, its answer the head's save
+// line), keeps its state with the host (ai.mistral.vibe/viewState), tells his selection
+// (dev.bise/selection) and gets the document's notes (dev.bise/notes) once live. Owner: apps-host.
 import type { ViewPerm } from '@/shared/viewperms';
 import { contextChange, hostContext, type ContextIn } from './context';
+import { detachedOf, DOC, keptState, selectionOf, type ViewNote, type Selection } from './doc';
 import { downloadsOf, error, hostCapabilities, linkOf, notification, PROTOCOL_VERSION, readMsg, request, result, RPC, textBlocks, UI, type DisplayMode, type Download, type Id, type Json, type JsonObject, type RpcError } from './protocol';
-import { VIEW_ERR, type ViewAsk, type ViewRef } from './port';
+import { VIEW_ERR, type ViewAnswer, type ViewAsk, type Wire } from './port';
 
 /** What view/resource gives (C5). */
 export interface ViewResource {
@@ -54,6 +59,22 @@ export interface SessionEnv {
   readonly onNote: (n: Note) => void;
   /** a ui/message went in (the card's footnote) */
   readonly onMessage: () => void;
+  /** a document's view (A5): absent for a tool call's */
+  readonly doc?: DocSide;
+}
+
+/** The window's side of a document's view (A5). */
+export interface DocSide {
+  /** its state, kept per tab by the host (ai.mistral.vibe/viewState): given back at ui/initialize */
+  readonly state: () => Json | null;
+  readonly setState: (s: Json) => void;
+  readonly onSelection: (s: Selection) => void;
+  /** the notes it could not place (dev.bise/detached), their ids */
+  readonly onDetached: (ids: readonly string[]) => void;
+  /** a write went to the hub */
+  readonly onSaving: () => void;
+  /** its answer, as the hub gave it, with the write's params (a conflict keeps them for 'keep mine as a copy') */
+  readonly onSaved: (a: ViewAnswer, params: JsonObject) => void;
 }
 
 /** The refusal of a link or a download without his click: the hub's no-gesture (view_rpc.rs ViewError::NoGesture). */
@@ -66,17 +87,23 @@ export function truncated(r: JsonObject | null): boolean {
   return r !== null && r['truncated'] === true && r['content'] === undefined;
 }
 
+/** A ui/message from a document's view: it has no agent to go to (A4). */
+const NO_AGENT: RpcError = { code: RPC.notFound, message: 'a document view has no agent to message: dev.bise/selection asks about it' };
+
 export class ViewSession {
-  readonly ref: ViewRef;
+  /** what it asks the hub with: its tool call, or its document's session */
+  readonly wire: Wire;
   readonly res: ViewResource;
   private readonly env: SessionEnv;
   private phaseNow: Phase = 'proxy';
   private ctx: JsonObject | null = null;
   private nextId = 1;
   private readonly waiting = new Map<Id, (r: { result?: Json; error?: RpcError }) => void>();
+  /** the document's notes, sent once live and on each change (A5) */
+  private notesNow: readonly ViewNote[] | null = null;
 
-  constructor(ref: ViewRef, res: ViewResource, env: SessionEnv) {
-    this.ref = ref;
+  constructor(wire: Wire, res: ViewResource, env: SessionEnv) {
+    this.wire = wire;
     this.res = res;
     this.env = env;
   }
@@ -127,6 +154,7 @@ export class ViewSession {
         if (this.phaseNow !== 'ready') return;
         this.setPhase('live');
         this.sendTool();
+        this.sendNotes();
         return;
       case UI.sizeChanged: {
         const w = params['width'];
@@ -134,6 +162,14 @@ export class ViewSession {
         if (typeof w === 'number' && typeof h === 'number' && Number.isFinite(w) && Number.isFinite(h)) this.env.onSize(w, h);
         return;
       }
+      case DOC.selection: {
+        const sel = this.env.doc === undefined || this.phaseNow !== 'live' ? null : selectionOf(params);
+        if (sel !== null) this.env.doc?.onSelection(sel);
+        return;
+      }
+      case DOC.detached:
+        if (this.env.doc !== undefined && this.phaseNow === 'live') this.env.doc.onDetached(detachedOf(params, this.notesNow ?? []));
+        return;
       default:
         // notifications/message (logging) and anything else: nothing to do
         return;
@@ -165,7 +201,7 @@ export class ViewSession {
       return result(id, {
         protocolVersion: PROTOCOL_VERSION,
         hostInfo: { name: 'bise', version: '1' },
-        hostCapabilities: hostCapabilities({ perms: this.res.permissions, csp: this.res.csp }),
+        hostCapabilities: hostCapabilities({ perms: this.res.permissions, csp: this.res.csp }, this.env.doc === undefined),
         hostContext: ctx,
       });
     }
@@ -173,23 +209,44 @@ export class ViewSession {
     switch (method) {
       case UI.toolsCall:
       case UI.resourcesRead: {
-        const a = await this.env.ask({ cmd: 'view_call', ...this.ref, method, params });
+        const a = await this.env.ask({ cmd: 'view_call', ...this.wire, method, params });
         if ('error' in a) {
           if (a.error.code === VIEW_ERR.pluginOff) this.env.onNote('gone');
           return error(id, a.error);
         }
         return result(id, a.result);
       }
+      // a document's save: the view's params as they are (its handle, ifMatch, seq), the hub checks them
+      case DOC.write: {
+        const doc = this.env.doc;
+        if (doc === undefined) return error(id, { code: RPC.notFound, message: `${method} is not supported` });
+        doc.onSaving();
+        const a = await this.env.ask({ cmd: 'view_call', ...this.wire, method, params });
+        doc.onSaved(a, params);
+        return 'error' in a ? error(id, a.error) : result(id, a.result);
+      }
+      case DOC.viewState: {
+        const doc = this.env.doc;
+        if (doc === undefined) return error(id, { code: RPC.notFound, message: `${method} is not supported` });
+        if (params['op'] === 'get') return result(id, { state: doc.state() });
+        if (params['op'] !== 'set') return error(id, { code: RPC.invalid, message: "op is 'get' or 'set'" });
+        const kept = keptState(params['state']);
+        if (kept === null) return error(id, { code: VIEW_ERR.tooLarge, message: 'a view state is 64 KiB of JSON at most', data: { reason: 'too-large' } });
+        doc.setState(kept);
+        return result(id, {});
+      }
       case UI.message: {
+        if (this.env.doc !== undefined) return error(id, NO_AGENT);
         const content = textBlocks(params['content']);
         if (content.length === 0) return error(id, { code: RPC.invalid, message: 'a message needs text' });
-        const a = await this.env.ask({ cmd: 'view_message', ...this.ref, content });
+        if ('doc' in this.wire) return error(id, NO_AGENT);
+        const a = await this.env.ask({ cmd: 'view_message', ...this.wire, content });
         if ('error' in a) return error(id, a.error);
         this.env.onMessage();
         return result(id, {});
       }
       case UI.updateContext: {
-        const a = await this.env.ask({ cmd: 'view_context', ...this.ref, content: textBlocks(params['content']) });
+        const a = await this.env.ask({ cmd: 'view_context', ...this.wire, content: textBlocks(params['content']) });
         return 'error' in a ? error(id, a.error) : result(id, {});
       }
       // his browser or a save, never in a loop: each takes one fresh click of his in the view
@@ -215,6 +272,17 @@ export class ViewSession {
       default:
         return error(id, { code: RPC.notFound, message: `${method} is not supported` });
     }
+  }
+
+  /** The document's notes (A5), the whole list: sent now when the view is live, else once it is. */
+  notes(list: readonly ViewNote[]): void {
+    this.notesNow = list;
+    this.sendNotes();
+  }
+
+  private sendNotes(): void {
+    if (this.phaseNow !== 'live' || this.notesNow === null || this.env.doc === undefined) return;
+    this.env.post(notification(DOC.notes, { notes: this.notesNow.map((n) => ({ ...n })) }));
   }
 
   /** The context changed (theme, size, mode): the live view hears what did. */

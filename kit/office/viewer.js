@@ -2,9 +2,9 @@
 // bise kit · the office viewer (office-artifacts plan §4): the shell the page server sends at
 // /a/<id>/view and /a/<id>/<v>/view (rust/switchboard/src/pages/artifact/view.rs) carries the
 // file's facts on main#bise-office; this fetches the copy's bytes and draws them with the
-// renderer of its kind (sheet.js, slides.js, docx.js; image.js for a picture, site.js for a site, art-notes; pdf.js for a pdf, pdf-notes;
-// video.js for a video, which plays the copy's url by its ranges: no fetch, video-view; markdown.js
-// for a .md file, drawn as a document with its source a toggle away, md-artifact), on the office SDK's bundle
+// renderer of its kind (site.js for a site, art-notes; a picture, a pdf or a video opens
+// in Preview, plugins/media; a .md file or a docx in Writer, plugins/docs; a pptx in Slides,
+// plugins/slides; an xlsx or a csv in Sheets, plugins/sheets), on the office SDK's bundle
 // (/kit/office/office.js, office/dist in the app root). No inline script: the viewer's CSP
 // refuses one (architect m_23781).
 //
@@ -15,7 +15,7 @@
 //
 // window.biseOffice: { info, view, show(bytes) } for the swap in place (art-live's swap.js)
 // and the notes layer (art-notes): show() draws new bytes and keeps the user's place.
-const RENDERERS = { xlsx: "./sheet.js", pptx: "./slides.js", docx: "./docx.js", image: "./image.js", site: "./site.js", pdf: "./pdf.js", video: "./video.js", markdown: "./markdown.js" };
+const RENDERERS = { site: "./site.js" };
 // (the shell always has it and writes each of these: pages/artifact/view.rs)
 const main = document.getElementById("bise-office");
 const info = {
@@ -24,9 +24,6 @@ const info = {
     version: Number(main.dataset.version),
     latest: Number(main.dataset.latest),
     follows: main.hasAttribute("data-follows"),
-    // a streamed kind (site::STREAMED_KINDS: a video): its renderer plays info.file by its byte
-    // ranges, never handed the bytes whole (draw gets null)
-    stream: main.hasAttribute("data-stream"),
     file: main.dataset.file,
     name: main.dataset.name,
     agent: main.dataset.agent,
@@ -103,10 +100,7 @@ async function show(bytes) {
 }
 window.biseOffice = { info, view: null, show };
 if (main && RENDERERS[info.kind]) {
-    if (info.stream)
-        show(null);
-    else
-        fetchBytes(info.file).then(show, (e) => say("failed", words(e, info.kind, info.name)));
+    fetchBytes(info.file).then(show, (e) => say("failed", words(e, info.kind, info.name)));
 }
 else if (main) {
     say("failed", `bise has no viewer for ${info.kind || "this"} files.`);

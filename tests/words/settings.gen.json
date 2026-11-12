@@ -896,6 +896,36 @@
     "one": null,
     "text": "Voice mode"
   },
+  "settings.file_type_default": {
+    "args": [],
+    "one": null,
+    "text": "default"
+  },
+  "settings.file_type_his": {
+    "args": [],
+    "one": null,
+    "text": "your pick"
+  },
+  "settings.file_type_none": {
+    "args": [],
+    "one": null,
+    "text": "no app"
+  },
+  "settings.file_type_reset": {
+    "args": [],
+    "one": null,
+    "text": "Reset"
+  },
+  "settings.file_types_empty": {
+    "args": [],
+    "one": null,
+    "text": "no app you added opens files yet"
+  },
+  "settings.file_types_head": {
+    "args": [],
+    "one": null,
+    "text": "which app opens what"
+  },
   "settings.first_add_credit": {
     "args": [],
     "one": null,
@@ -3475,6 +3505,35 @@
     "one": null,
     "text": "a {kind} of {owner} · {state}"
   },
+  "settings.plugins_claim_keep": {
+    "args": [
+      "app"
+    ],
+    "one": null,
+    "text": "Keep {app}"
+  },
+  "settings.plugins_claim_now": {
+    "args": [
+      "ending",
+      "app"
+    ],
+    "one": null,
+    "text": "{ending} opens in {app} now"
+  },
+  "settings.plugins_claim_use": {
+    "args": [
+      "app"
+    ],
+    "one": null,
+    "text": "Use {app}"
+  },
+  "settings.plugins_claim_wide": {
+    "args": [
+      "ending"
+    ],
+    "one": null,
+    "text": "every {ending} file"
+  },
   "settings.plugins_comes_from": {
     "args": [],
     "one": null,
@@ -3967,6 +4026,11 @@
     "one": null,
     "text": "browser open"
   },
+  "settings.plugins_makes": {
+    "args": [],
+    "one": null,
+    "text": "makes"
+  },
   "settings.plugins_mark_off": {
     "args": [],
     "one": null,
@@ -4105,6 +4169,27 @@
     ],
     "one": null,
     "text": "{on} of {n} tools"
+  },
+  "settings.plugins_opens": {
+    "args": [],
+    "one": null,
+    "text": "opens"
+  },
+  "settings.plugins_opens_elsewhere": {
+    "args": [
+      "name",
+      "app"
+    ],
+    "one": null,
+    "text": "{name} opens in {app}"
+  },
+  "settings.plugins_opens_type": {
+    "args": [
+      "title",
+      "ending"
+    ],
+    "one": null,
+    "text": "{title} ({ending})"
   },
   "settings.plugins_part_needs_login": {
     "args": [],
@@ -4496,6 +4581,11 @@
     "args": [],
     "one": null,
     "text": "browse"
+  },
+  "settings.plugins_tab_file_types": {
+    "args": [],
+    "one": null,
+    "text": "File types"
   },
   "settings.plugins_tab_installed": {
     "args": [],

@@ -27,6 +27,7 @@ let want: [HelperCmd] = [
     .shot(id: "s1", dir: "/Users/u/.bise/run/shots"), .quit,
     .config(exclude: ["com.agilebits.onepassword7"], rightOption: true, quote: true),
     .config(exclude: [], rightOption: false, quote: true),
+    .thumb(id: "t1", path: "/Users/u/.bise/artifacts/p/a1/v2/plan.xlsx", out: "/Users/u/.bise/cache/thumbs/.ql-t1.png", px: 480),
 ]
 // quote said false (Electron's JSON.stringify writes it; Rust leaves it out): off; a non-bool: refused
 law("cmd: config quote false is off",
@@ -66,6 +67,7 @@ let built: [[String: Any]] = [
     Lines.shot(id: "s3", path: nil, app: nil, title: nil, skipped: false),
     Lines.error("shot: no dir", id: "s4"),
     Lines.error("not JSON: expected value at line 1 column 1"),
+    Lines.thumb(id: "t1", ok: true, ms: nil), Lines.thumb(id: "t2", ok: true, ms: 61500), Lines.thumb(id: "t3", ok: false, ms: nil),
 ]
 let evs = lines("helper_ev.jsonl")
 law("ev: one encoder call per fixture line", evs.count == built.count)
@@ -83,6 +85,8 @@ law("bad: not JSON", (try? Lines.decode("hello").get()) == nil)
 law("bad: no cmd", (try? Lines.decode(#"{"ev":"fn"}"#).get()) == nil)
 law("bad: a perm we don't know", (try? Lines.decode(#"{"cmd":"perm","perm":"contacts","action":"ask"}"#).get()) == nil)
 law("bad: open must be a bool", (try? Lines.decode(#"{"cmd":"route","open":1}"#).get()) == nil)
+law("bad: a thumb of a relative path", (try? Lines.decode(#"{"cmd":"thumb","id":"t","path":"a.pdf","out":"/o.png","px":480}"#).get()) == nil)
+law("bad: a thumb without px", (try? Lines.decode(#"{"cmd":"thumb","id":"t","path":"/a.pdf","out":"/o.png"}"#).get()) == nil)
 law("bad: a shot without a dir", (try? Lines.decode(#"{"cmd":"shot","id":"s"}"#).get()) == nil)
 law("newer: an unknown cmd decodes as unknown", (try? Lines.decode(#"{"cmd":"vibrate","ms":3}"#).get()) == .unknown("vibrate"))
 law("newer: unknown fields are ignored", (try? Lines.decode(#"{"cmd":"route","open":true,"later":1}"#).get()) == .route(open: true))

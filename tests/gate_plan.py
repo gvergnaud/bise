@@ -74,6 +74,9 @@ FLAGS = [
 FLAG_NAMES = ["proto_ts", "office", "office_skills", "crossterm_changed", "kit", "mcpapps", "gallery", "cu", "aqa",
               "words", "bendw"]
 GALLERY = re.compile(r"^plugins/(\.view-kit/|[^/]+/(views/|server\.mjs$|lib/|test/|mcp\.json$|vendor/))")
+# a first-party plugin's static views and their types (Writer, ...; docs/plugin-apps.md A5): the
+# kit step typechecks them and checks their emitted .js
+PLUGIN_VIEWS = re.compile(r"^plugins/[^/]+/(tsconfig\.json$|ai\.mistral\.vibe/views/)")
 CU = ("computer-use/extension/", "computer-use/bench/", "computer-use/tsconfig.node.json")
 AQA = re.compile(r"^dev/plugins/ambient-qa/([^/]+\.ts|as-he-does/[^/]+\.ts|tsconfig\.json)$")
 WORDS = re.compile(r"^(tests/[^/]+_tmux\.py|apps/desktop/tests/|apps/desktop/src/|tests/words/|rust/proto/src/words/"
@@ -81,7 +84,7 @@ WORDS = re.compile(r"^(tests/[^/]+_tmux\.py|apps/desktop/tests/|apps/desktop/src
 # The gate's own tests, by the paths they test (c3-quick-90s b: ~27 s of them ran in every quick).
 # quick runs one when a changed path matches one of its globs (fnmatch: * crosses /); the full
 # gate (the tip, the nightly, a release) runs every one. The real ratchets on the tree (no blind
-# sleep, no conflict marker, shims, state_guard, js_guard, pick_gate, word_lint) are no self-test:
+# sleep, no conflict marker, shims, state_guard, js_guard, apps_purity, pick_gate, word_lint) are no self-test:
 # quick runs them always (gate.sh). A test whose sources are not listed here never runs in quick.
 GATE = ("tests/gate.sh", "tests/gate_plan.py")
 SELFTESTS = [
@@ -115,6 +118,7 @@ SELFTESTS = [
     ("shims_check_self", "python3 tests/shims_check.py --self-test", ("tests/shims_check.py",)),
     ("state_guard_self", "python3 tests/state_guard.py --self-test", ("tests/state_guard.py",)),
     ("js_guard_self", "python3 tests/js_guard.py --self-test", ("tests/js_guard.py",)),
+    ("apps_purity_self", "python3 tests/apps_purity_check.py --self-test", ("tests/apps_purity_check.py",)),
     ("pick_gate_self", "python3 tests/pick_gate.py --self-test", ("tests/pick_gate.py",)),
     # the full gate's test map knows every test, every top-level path, every generated file's seam
     ("test_map_self", "python3 tests/test_map.py --self-test",
@@ -136,7 +140,9 @@ SELFTESTS = [
     # read, a .rs, a desktop .ts/.tsx or a words .gen.json (4ff9ec771: two reads dropped in desktop TS
     # only, the Rust test that held the rule never ran in that quick; architect m_58405)
     ("words_read_check", "python3 -B tests/words_read_check.py",
-     ("*.rs", "apps/desktop/src/*.ts", "apps/desktop/src/*.tsx", "tests/words/*.gen.json", "tests/words_read_check.py")),
+     ("*.rs", "apps/desktop/src/*.ts", "apps/desktop/src/*.tsx", "tests/words/*.gen.json", "tests/words_read_check.py",
+      # the kit and the plugins' views read words too (architect m_61995)
+      "kit/*.ts", "kit/*.js", "plugins/*.ts", "plugins/*.js", "plugins/*.mjs")),
     # every tracked .py compiles (~1 s, in memory; its SKIP says what not): an e2e file runs only
     # after the land, so a SyntaxError in one reached main's tip unseen (22cbd23c2; main m_59170)
     ("py_compile_check", "python3 -B tests/py_compile_check.py", ("*.py",)),
@@ -249,6 +255,8 @@ def _flags(p):
         out.add("mcpapps")
     if GALLERY.match(p):
         out |= {"mcpapps", "gallery"}
+    if PLUGIN_VIEWS.match(p):
+        out |= {"kit", "gallery"}
     if p.startswith(CU):
         out.add("cu")
     if AQA.match(p):

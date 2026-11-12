@@ -69,6 +69,45 @@ pub fn outcomes(notes: &[Note], versions: &[(u64, u64)]) -> Vec<Note> {
         .collect()
 }
 
+/// An artifact's notes as a plugin's view gets them (plugin-apps A5,
+/// `view/notes`; architect m_59942, m_60380): each note with its outcome
+/// ([`outcomes`]) and its anchor as the view's own key
+/// ([`bise_proto::anchor::as_view_key`]: a typed anchor of an older note
+/// becomes its canonical JSON); a note with no key (an unknown kind, a key
+/// too long) goes in `detached` with its words kept, for the host to list.
+/// Never decides whether the view can place a key: the view says that
+/// (`dev.bise/detached`). Statuses: draft, sent, done (`answered` reads as
+/// done, with no `done_in`: no mark); a note with no anchor at all is left
+/// out (a page's kind of note, never on a view).
+pub fn view_notes(notes: &[Note], versions: &[(u64, u64)]) -> Value {
+    let (mut on, mut off) = (Vec::new(), Vec::new());
+    for n in outcomes(notes, versions) {
+        let status = match n.status.as_str() {
+            "draft" | "sent" | "done" => n.status.as_str(),
+            "answered" => "done",
+            _ => continue,
+        };
+        // an anchor is an object; none (a page's kind of note) never reaches a view
+        let Some(at) = anchored(&n).filter(|_| n.extra.get("at").is_some_and(Value::is_object)) else { continue };
+        let text = n.text.as_deref().unwrap_or("").trim();
+        match bise_proto::anchor::as_view_key(&at) {
+            Some(k) => {
+                let quote = if k.quote.is_empty() { n.quote.clone().unwrap_or_default() } else { k.quote };
+                let mut v = json!({"id": n.id, "anchor": k.key, "text": text, "status": status, "version": n.version});
+                if !quote.trim().is_empty() {
+                    v["quote"] = json!(quote.trim());
+                }
+                if let Some(d) = n.extra.get("done_in").filter(|d| d.is_u64()) {
+                    v["done_in"] = d.clone();
+                }
+                on.push(v);
+            }
+            None => off.push(json!({"id": n.id, "text": text, "quote": n.quote.as_deref().unwrap_or("").trim(), "status": status, "version": n.version})),
+        }
+    }
+    json!({"notes": on, "detached": off})
+}
+
 /// Each version of artifact `id` and when it began ([`began`]), from the
 /// artifact store's typed versions.
 fn versions_began(pages: &Pages, id: &str) -> Vec<(u64, u64)> {
@@ -158,6 +197,13 @@ pub fn push(pages: &Pages, id: &str) {
     pages.push(&stream_key(id), "notes", &served(pages, id));
 }
 
+/// Artifact `id`'s notes as its document view gets them ([`view_notes`]),
+/// from the store (`view/notes {doc}`, daemon/views.rs); none for an
+/// artifact gone.
+pub fn for_view(pages: &Pages, id: &str) -> Value {
+    view_notes(&pages.store.notes_of(&Target::Artifact(id.to_string())), &versions_began(pages, id))
+}
+
 /// `GET /a/<id>/notes`: its notes and their outcomes.
 pub fn get(pages: &Pages, id: &str) -> Response {
     match arts(pages).get(id) {
@@ -235,7 +281,8 @@ pub fn record_said(pages: &Pages, said: &[Part], now: u64) -> Vec<String> {
             let before: Vec<String> = drafts.iter().filter_map(|d| d["id"].as_str().map(str::to_string)).collect();
             let mut all = drafts;
             all.push(note);
-            let after = s.set_drafts(&t, &all, *version, now)?;
+            // merged, then sent, then written once (one ArtifactNotes)
+            let after = s.drafts_merged(&t, &all, *version, now)?;
             let mut notes = after;
             for n in notes.iter_mut().filter(|n| n.status == "draft" && !before.contains(&n.id)) {
                 n.status = "sent".into();

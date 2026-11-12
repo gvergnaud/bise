@@ -93,6 +93,12 @@ export function readAnchor(v: unknown): Anchor | null {
       const rect = readRect(v.rect);
       return rect === null ? null : { kind, t: v.t, rect };
     }
+    case 'view': {
+      // a plugin's view's own place: its key 1..=512 bytes (bise_proto::anchor's `view_key`)
+      const q = optStr(v, 'quote');
+      const label = v.label === undefined ? {} : str(v.label) ? { label: v.label } : null;
+      return str(v.key) && v.key !== '' && new TextEncoder().encode(v.key).length <= 512 && q !== null && label !== null ? { kind, key: v.key, ...q, ...label } : null;
+    }
   }
 }
 
@@ -121,17 +127,12 @@ function fromFrame(from: FrameFrom, frame: FrameOf): boolean {
   return from.source === frame.window && from.origin.toLowerCase() === frame.origin;
 }
 
-/** What the frame said: a selection, an image's zoom (fit or not; image-pinch, architect m_30628),
- * or the height that holds a video's player (its card hugs it; video-view, designer m_32762). */
+/** What the frame said: a selection, or a web page's pinch or pan (web-pinch). */
 export type FrameMsg =
   | { readonly kind: 'anchor'; readonly note: FrameNote }
-  | { readonly kind: 'zoom'; readonly fit: boolean }
-  | { readonly kind: 'size'; readonly h: number }
   | { readonly kind: 'pinch'; readonly dy: number; readonly x: number; readonly y: number; readonly w: number }
   | { readonly kind: 'pan'; readonly dx: number; readonly dy: number; readonly w: number };
 
-/** The tallest height a frame may ask for, in CSS px. */
-const MAX_FRAME_H = 20_000;
 /** The most one wheel may say, in CSS px (a pinch's delta, a pan's, a point, a width). */
 const MAX_WHEEL = 100_000;
 const num = (v: unknown): v is number => pct(v) && Math.abs(v) <= MAX_WHEEL;
@@ -147,20 +148,15 @@ function readWheel(data: Obj): FrameMsg | null {
 
 /**
  * A message from the frame, read once for every kind it may send the window (kit/office/frame.js):
- * a selection (readFrameNote), {bise: zoom, fit: boolean} or {bise: size, h}; null for anything else, or not from
+ * a selection (readFrameNote), a web page's {bise: pinch} or {bise: pan}; null for anything else, or not from
  * that frame on the pages server. Pure.
  */
 export function readFrame(data: unknown, from: FrameFrom, frame: FrameOf): FrameMsg | null {
   if (!fromFrame(from, frame) || !isObj(data)) return null;
-  if (data.bise === FRAME_KINDS.zoom) return typeof data.fit === 'boolean' ? { kind: 'zoom', fit: data.fit } : null;
-  if (data.bise === FRAME_KINDS.size) return pct(data.h) && data.h > 0 && data.h <= MAX_FRAME_H ? { kind: 'size', h: Math.round(data.h) } : null;
   if (data.bise === FRAME_KINDS.pinch || data.bise === FRAME_KINDS.pan) return readWheel(data);
   const note = readFrameNote(data, from, frame);
   return note === null ? null : { kind: 'anchor', note };
 }
-
-/** The message that takes the frame's zoomed image back to fit (kit/office/image.js). */
-export const FIT_MESSAGE = { bise: FRAME_KINDS.fit } as const;
 
 /**
  * The selection a message from the frame carries, or null: not from that frame (source), not from

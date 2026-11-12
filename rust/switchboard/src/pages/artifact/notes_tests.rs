@@ -50,6 +50,34 @@ fn cell() -> Value {
     json!({"kind": "cell", "sheet": "Q3", "range": "B4:D9"})
 }
 
+/// plugin-apps A5 (architect m_59942, m_60380): a view gets every note
+/// with its outcome and its anchor as its own key (an older typed anchor
+/// as its canonical JSON); a note with no key is detached with its words
+/// kept; the hub never decides placement.
+#[test]
+fn a_view_gets_every_note_by_its_key_and_the_keyless_detached() {
+    let versions = [(1, 100), (2, 200)];
+    let mut quoted = note("n2", "sent", 50, json!({"kind": "view", "key": "row:7", "quote": "net revenue", "label": "row 7"}));
+    quoted.quote = Some("net revenue".into());
+    let notes = [
+        note("n1", "sent", 150, cell()),
+        quoted,
+        note("n3", "draft", 0, json!({"kind": "voxel", "x": 1})),
+        note("n4", "answered", 0, json!({"kind": "view", "key": "row:9"})),
+        note("n5", "sent", 50, Value::Null),
+    ];
+    let got = view_notes(&notes, &versions);
+    assert_eq!(
+        got["notes"],
+        json!([
+            {"id": "n1", "anchor": r#"{"kind":"cell","range":"B4:D9","sheet":"Q3"}"#, "text": "why?", "status": "done", "version": 1, "done_in": 2},
+            {"id": "n2", "anchor": "row:7", "text": "why?", "quote": "net revenue", "status": "done", "version": 1, "done_in": 1},
+            {"id": "n4", "anchor": "row:9", "text": "why?", "status": "done", "version": 1},
+        ])
+    );
+    assert_eq!(got["detached"], json!([{"id": "n3", "text": "why?", "quote": "", "status": "draft", "version": 1}]));
+}
+
 /// A sent note is done in the first version begun after it (the
 /// answering one, `done_in`); one sent after the newest stays sent; a
 /// draft or an answered note is as kept.
@@ -142,7 +170,8 @@ fn the_browser_door_drafts_sends_and_reads_back() {
     assert!(d.join("artifacts").join(&id).join("notes.json").exists(), "the artifact's own notes.json");
     let r = req(&p, "POST", &format!("/api/a/{id}/send"), json!({}));
     assert_eq!(body(&r)["sent"], 1);
-    match rx.try_recv().unwrap() {
+    // (each write also tells the hub ArtifactNotes: the send's message is the one after)
+    match rx.try_iter().find(|m| !matches!(m, PageMsg::ArtifactNotes { .. })).unwrap() {
         PageMsg::Sent { target, agent, text, notes } => {
             assert_eq!((target, agent.as_str(), notes.len()), (Target::Artifact(id.clone()), "t1", 1));
             assert!(text.contains("{\"kind\":\"cell\",\"sheet\":\"Q3\",\"range\":\"B4:D9\"}\n1200 1350\n</artifact-selection> these look low"), "{text}");
@@ -161,6 +190,33 @@ fn the_browser_door_drafts_sends_and_reads_back() {
     assert_eq!(req(&p, "GET", "/a/nope/notes", json!(null)).status, 404);
     let no_token = route(&p, &Request { method: "POST".into(), path: format!("/api/a/{id}/send"), query: String::new(), headers: vec![("Host".into(), "127.0.0.1:47123".into())], body: vec![] });
     assert_eq!(no_token.status, 403);
+}
+
+/// architect m_61664: the one writer of an artifact's notes tells the hub,
+/// so each door (his send in the app, the browser's drafts, the browser's
+/// send) gives exactly one ArtifactNotes for that artifact, and none for
+/// another; a page's notes give none.
+#[test]
+fn each_door_tells_the_hub_once_its_artifacts_notes_changed() {
+    let d = temp("notes-event");
+    let id = artifact(&d, 1);
+    let p = Pages::new(&d, 47123, &d);
+    let (tx, rx) = std::sync::mpsc::channel();
+    let tx = std::sync::Mutex::new(tx);
+    p.connect_hub(Box::new(move |m| drop(tx.lock().unwrap().send(m))));
+    let heard = || rx.try_iter().filter_map(|m| if let PageMsg::ArtifactNotes { id } = m { Some(id) } else { None }).collect::<Vec<_>>();
+    // the browser's drafts, then its send
+    req(&p, "POST", &format!("/api/a/{id}/notes"), json!({"notes": [{"kind": "note", "at": cell(), "text": "low?"}]}));
+    assert_eq!(heard(), vec![id.clone()]);
+    req(&p, "POST", &format!("/api/a/{id}/send"), json!({}));
+    assert_eq!(heard(), vec![id.clone()]);
+    // his send in the app (the desktop door)
+    let said = [Part::Anchor { artifact: id.clone(), version: 1, rev: 1, anchor: serde_json::from_value(cell()).unwrap(), quote: String::new(), n: Some(1) }, Part::Text { text: " why?".into() }];
+    record_said(&p, &said, crate::util::now_ms());
+    assert_eq!(heard(), vec![id.clone()]);
+    // a page's notes: none
+    p.store.save_notes("w", &[]).unwrap();
+    assert_eq!(heard(), Vec::<String>::new());
 }
 
 /// The desktop door: an anchor part his message carried is a sent note

@@ -32,7 +32,7 @@ fn fake_roots(tmp: &Path, st: StateV2) -> bend_plugins::resolve::Roots {
     plugin(&user, "dataviz", "Charts in the thread.", true, true, true);
     plugin(&user, "docs", "Word documents.", true, false, false);
     plugin(&user, "empty", "Nothing.", false, false, false);
-    bend_plugins::resolve::Roots { builtin: None, user: Some(user), workspace: None, data: tmp.join("data"), state: st }
+    bend_plugins::resolve::Roots { user: Some(user), state: st, ..bend_plugins::resolve::Roots::for_test(tmp) }
 }
 
 fn tmp(name: &str) -> std::path::PathBuf {

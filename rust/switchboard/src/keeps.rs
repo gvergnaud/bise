@@ -1,6 +1,7 @@
 //! What bise keeps about the user (docs/ambient-roadmap.md §4 "it
-//! remembers"): two files of the home workspace, `~/bise/taste.md` (taste
-//! rules) and `~/bise/people.md` (who is who), one `- ` line each, edited
+//! remembers"): two files of his bise root, `~/bise/taste.md` (taste
+//! rules) and `~/bise/people.md` (who is who), their paths from
+//! `bise_home::Home` ([`Kept::path`]), one `- ` line each, edited
 //! only through `sb taste` and `sb people` (ambient-lead m_5630): a
 //! one-line header on first use, the previous file kept as `<file>.bak`,
 //! never another path. The `about-you` page is drawn from them
@@ -8,20 +9,36 @@
 
 use std::path::{Path, PathBuf};
 
-pub const TASTE: &str = "taste.md";
-pub const PEOPLE: &str = "people.md";
+use bise_home::Home;
+
+/// The two files bise keeps about him.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Kept {
+    /// `taste.md`, `sb taste`
+    Taste,
+    /// `people.md`, `sb people`
+    People,
+}
+
+impl Kept {
+    /// Its path under `home`'s bise root.
+    pub fn path(self, home: &Home) -> PathBuf {
+        match self {
+            Kept::Taste => home.taste_file(),
+            Kept::People => home.people_file(),
+        }
+    }
+}
+
 const TASTE_HEAD: &str = "# your taste: what bise follows when it writes for you (one rule per line, `sb taste`)";
 const PEOPLE_HEAD: &str = "# who is who: the people bise knows about (one per line, `sb people`)";
 /// The longest line kept.
 const MAX: usize = 300;
 
-/// The file `name` of the home workspace; refused when it is not a plain
-/// file there (a symlink could point anywhere).
-pub fn file(name: &str) -> Result<PathBuf, String> {
-    if name != TASTE && name != PEOPLE {
-        return Err(format!("{name}: bise keeps only {TASTE} and {PEOPLE}"));
-    }
-    let p = bise_home::Home::from_env().bise_root().join(name);
+/// `kept`'s file; refused when it is not a plain file there (a symlink
+/// could point anywhere).
+pub fn file(kept: Kept, home: &Home) -> Result<PathBuf, String> {
+    let p = kept.path(home);
     match std::fs::symlink_metadata(&p) {
         Ok(m) if !m.file_type().is_file() => Err(format!("{} is not a plain file: not touched", p.display())),
         _ => Ok(p),
@@ -278,8 +295,11 @@ mod tests {
     }
 
     #[test]
-    fn only_the_two_files_of_the_home() {
-        assert!(file("notes.md").is_err() && file("../taste.md").is_err());
-        assert!(file(TASTE).unwrap().ends_with("taste.md"));
+    fn the_two_files_hang_off_the_bise_root() {
+        let dir = std::env::temp_dir().join(format!("keeps-root-{}", std::process::id()));
+        let home = Home::at(&dir);
+        assert_eq!(Kept::Taste.path(&home), home.bise_root().join("taste.md"));
+        assert_eq!(Kept::People.path(&home), home.bise_root().join("people.md"));
+        assert!(file(Kept::Taste, &home).unwrap().ends_with("taste.md"));
     }
 }

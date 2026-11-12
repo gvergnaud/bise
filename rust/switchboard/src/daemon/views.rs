@@ -38,6 +38,7 @@
 use super::{log_line, ClientId, Msg, Shell};
 use crate::core::Input;
 use crate::util::now_ms;
+use crate::pages::view_folder::ViewFolder;
 use crate::view_call::{self, ViewFile, ViewParams};
 use crate::view_limits::{Limits, Servers, ViewKey};
 use bend_plugins::visibility::{self, Ask, Verdict, ViewOf};
@@ -138,16 +139,33 @@ fn context_said(fx: &[crate::core::Effect], key: &ViewKey) -> Option<Result<(), 
 fn method_of(cmd: HubCmd) -> Option<(&'static str, Value)> {
     Some(match cmd {
         HubCmd::ViewResource { agent, call, .. } => ("view/resource", json!({"agent": agent, "call": call})),
-        HubCmd::ViewCall { agent, call, method, params, .. } => ("view/call", json!({"agent": agent, "call": call, "method": method, "params": params})),
+        HubCmd::ViewCall { agent, call, doc, method, params, .. } => ("view/call", json!({"agent": some(agent), "call": some(call), "doc": doc, "method": method, "params": params})),
         HubCmd::ViewMessage { agent, call, content, gesture_ms, .. } => ("view/message", json!({"agent": agent, "call": call, "content": content, "gesture_ms": gesture_ms})),
-        HubCmd::ViewContext { agent, call, content, .. } => ("view/context", json!({"agent": agent, "call": call, "content": content})),
+        HubCmd::ViewContext { agent, call, doc, content, .. } => ("view/context", json!({"agent": some(agent), "call": some(call), "doc": doc, "content": content})),
         HubCmd::PluginViews { plugin, .. } => ("plugin/views", json!({"plugin": plugin})),
+        HubCmd::ViewClose { doc, .. } => ("view/close", json!({"doc": doc})),
+        HubCmd::ViewNotes { doc, .. } => ("view/notes", json!({"doc": doc})),
+        HubCmd::ViewOpen { project, target, opener } => ("view/open", json!({"project": project, "target": target, "opener": opener})),
+        HubCmd::ViewCopy { doc, text, blob, .. } => ("view/copy", json!({"doc": doc, "text": text, "blob": blob})),
         _ => return None,
     })
 }
 
+/// The window's own `~/bise` methods (docs/plugin-apps.md A6, A4b): served
+/// on hub.sock only (daemon/files_ids.rs); a view's bridge (`/api/view`)
+/// that asks one is refused, whatever the view (architect m_62668).
+pub(super) fn window_only(method: &str) -> bool {
+    matches!(method, "folder/list" | "file/new" | "files/ids/subscribe" | "files/mint")
+}
+
+/// A key the command left out (`""`) is absent, never an empty name
+/// ([`view_call::Key::of`] refuses a request with both or neither).
+fn some(s: String) -> Option<String> {
+    Some(s).filter(|s| !s.is_empty())
+}
+
 /// A server's JSON-RPC error, as the view gets it.
-fn server_error(e: &Value) -> RpcError {
+pub(super) fn server_error(e: &Value) -> RpcError {
     RpcError {
         code: e.get("code").and_then(Value::as_i64).unwrap_or(-32603),
         message: e.get("message").and_then(Value::as_str).unwrap_or("the server failed").to_string(),
@@ -160,8 +178,36 @@ fn is_gone(e: &RpcError) -> bool {
     e.data.as_ref().and_then(|d| d.reason.as_deref()) == Some(REASON_SERVER_GONE)
 }
 
-fn gone(why: &str) -> RpcError {
+pub(super) fn gone(why: &str) -> RpcError {
     RpcError { code: -32000, message: format!("the view's server is not reachable: {why}"), data: Some(ErrorData { reason: Some(REASON_SERVER_GONE.into()), ..Default::default() }) }
+}
+
+/// The folder a static view (`~views`) may serve its own files from
+/// (docs/plugin-apps.md A5): its `index.html`'s, in its plugin as the
+/// resolver finds it now, tagged with that plugin's version. A server's
+/// view: none (its `ui://` resource stays inline). Off the loop: it reads
+/// the plugins.
+pub(super) fn static_folder(f: &ViewFile, ws: &Path) -> Option<ViewFolder> {
+    if f.server != bend_plugins::views::SERVER {
+        return None;
+    }
+    let res = bend_plugins::resolve::resolve(&bend_plugins::resolve::Roots::standard(Some(ws)));
+    let p = res.loaded().find(|p| p.name == f.plugin)?;
+    let v = p.views.iter().find(|v| v.uri == f.uri)?;
+    Some(ViewFolder { dir: v.html.parent()?.to_path_buf(), tag: crate::pages::view_folder::tag(&p.root, p.version.as_deref()) })
+}
+
+/// A view's resource read on its server at `url` (the one read path of
+/// `view/resource` and `view/open`, architect m_60316 #5): its HTML and
+/// sandbox, its server's `tools/list` answer (none: `{}`), and what he
+/// granted the view (C8; never asked: nothing). Off the loop.
+pub(super) fn read_view(url: &str, plugin: &str, uri: &str) -> Result<(view_call::ResourceRead, Value, Vec<String>), RpcError> {
+    let got = request(url, Some(&view_call::request("resources/read", &json!({"uri": uri}))), CALL_TIMEOUT).map_err(|e| gone(&e))?;
+    let res = view_call::answer(&got).map_err(|e| server_error(&e))?;
+    let r = view_call::resource_read(&res).ok_or_else(|| ViewError::Expired.rpc(uri))?;
+    let list = request(url, Some(&view_call::request("tools/list", &json!({}))), CALL_TIMEOUT).ok().and_then(|v| view_call::answer(&v).ok()).unwrap_or_default();
+    let grant = bend_plugins::state::view_grant(&bend_plugins::state::grants(&bend_plugins::state::state_path()), plugin, uri).unwrap_or_default();
+    Ok((r, list, grant))
 }
 
 /// A view's call judged off the loop: its views file (`file`), its
@@ -172,6 +218,12 @@ fn judge_call(file: &Path, bridge: Result<(PathBuf, bool), String>, method: &str
     let what = Ask::of(method, inner).what().to_string();
     let text = std::fs::read_to_string(file).map_err(|_| ViewError::Expired.rpc(&what))?;
     let f = ViewFile::parse(&text).map_err(|e| e.rpc(&what))?;
+    judge_on(f, bridge, method, inner, state)
+}
+
+/// A call of view `f` (an agent's call's views file, or a document's
+/// opener) judged on its server's tools through `bridge`.
+fn judge_on(f: ViewFile, bridge: Result<(PathBuf, bool), String>, method: &str, inner: &Value, state: &bend_plugins::model::StateV2) -> Result<(ViewFile, Route, Verdict), RpcError> {
     let (json_path, hubs) = bridge.map_err(|e| gone(&e))?;
     let base = wait_base(&json_path).ok_or_else(|| gone("no bridge"))?;
     let url = view_call::route_url(&base, &f.plugin, &f.server);
@@ -227,11 +279,20 @@ impl Shell {
 
     /// One view request (C5's methods), from hub.sock or `/api/view`.
     pub(crate) fn view_request(&mut self, method: &str, params: Value, done: ViewDone) {
-        if method == "plugin/views" {
-            return self.plugin_views(params, done);
+        match method {
+            "plugin/views" => return self.plugin_views(params, done),
+            "view/close" => return self.view_close(params, done),
+            "view/open" => return self.view_open(params, done),
+            "view/copy" => {
+                let doc = params.get("doc").and_then(Value::as_str).unwrap_or("").to_string();
+                return self.view_copy(doc, params, done);
+            }
+            m if window_only(m) => return done(Err(ViewError::NotSupported.rpc(m))),
+            _ => {}
         }
-        let p = match ViewParams::of(&params) {
-            Ok(p) => p,
+        let p = match view_call::Key::of(&params) {
+            Ok(view_call::Key::Call(p)) => p,
+            Ok(view_call::Key::Doc(doc)) => return self.doc_request(method, doc, params, done),
             Err(e) => return done(Err(e.rpc(method))),
         };
         let Some(dir) = self.dir_of(&p.agent) else { return done(Err(ViewError::Expired.rpc(method))) };
@@ -245,7 +306,7 @@ impl Shell {
     }
 
     /// Hands a thread's next step to the loop.
-    fn view_step(&self) -> impl Fn(ViewStep) + Send + 'static {
+    pub(super) fn view_step(&self) -> impl Fn(ViewStep) + Send + 'static {
         let tx = self.tx.clone();
         move |s: ViewStep| {
             let _ = tx.send(Msg::View(s));
@@ -280,6 +341,14 @@ impl Shell {
         }
         let (exe, d, json, ws) = (self.opts.exe.clone(), self.opts.paths.views_bridge_dir(), self.opts.paths.views_bridge_json(), self.opts.paths.workspace.clone());
         self.views.bridge.ensure(&exe, &d, &json, &ws, now_ms()).map(|p| (p, true))
+    }
+
+    /// The hub's views bridge, started when it is not running: its
+    /// `bridge.json` (a document's opener and its calls go there, never
+    /// to an agent's bridge).
+    pub(super) fn views_bridge(&mut self) -> Result<PathBuf, String> {
+        let (exe, d, json, ws) = (self.opts.exe.clone(), self.opts.paths.views_bridge_dir(), self.opts.paths.views_bridge_json(), self.opts.paths.workspace.clone());
+        self.views.bridge.ensure(&exe, &d, &json, &ws, now_ms())
     }
 
     // ---- plugin/views (C8) ----
@@ -319,39 +388,43 @@ impl Shell {
         let bridge = self.bridge_json(&dir, &ViewKey::new(&p.agent, &p.call), own);
         let via_own = matches!(bridge, Ok((_, false)));
         let step = self.view_step();
+        let ws = self.opts.paths.workspace.clone();
         std::thread::spawn(move || {
-            let read = || -> Result<(ViewFile, view_call::ResourceRead, Value, Vec<String>), RpcError> {
+            let read = || -> Result<(ViewFile, view_call::ResourceRead, Value, Vec<String>, Value), RpcError> {
                 let text = std::fs::read_to_string(&file).map_err(|_| ViewError::Expired.rpc("view/resource"))?;
                 let f = ViewFile::parse(&text).map_err(|e| e.rpc("view/resource"))?;
                 let (json_path, _) = bridge.map_err(|e| gone(&e))?;
                 let base = wait_base(&json_path).ok_or_else(|| gone("no bridge"))?;
                 let url = view_call::route_url(&base, &f.plugin, &f.server);
-                let got = request(&url, Some(&view_call::request("resources/read", &json!({"uri": f.uri}))), CALL_TIMEOUT).map_err(|e| gone(&e))?;
-                let res = view_call::answer(&got).map_err(|e| server_error(&e))?;
-                let r = view_call::resource_read(&res).ok_or_else(|| ViewError::Expired.rpc(&f.uri))?;
-                let list = request(&url, Some(&view_call::request("tools/list", &json!({}))), CALL_TIMEOUT).ok().and_then(|v| view_call::answer(&v).ok()).unwrap_or_default();
+                let (r, list, grant) = read_view(&url, &f.plugin, &f.uri)?;
                 let tool = view_call::tool_of(&list, &f.tool);
-                // C8: what he granted this view (never asked: nothing)
-                let grant = bend_plugins::state::view_grant(&bend_plugins::state::grants(&bend_plugins::state::state_path()), &f.plugin, &f.uri).unwrap_or_default();
-                Ok((f, r, tool, grant))
+                Ok((f, r, tool, grant, list))
             };
             match read() {
                 Err(e) if via_own && is_gone(&e) => step(Box::new(move |sh: &mut Shell| sh.view_resource(p, dir, done, false))),
                 Err(e) => done(Err(e)),
-                Ok((f, r, tool, grant)) => step(Box::new(move |sh: &mut Shell| sh.view_resource_read(f, r, tool, grant, done))),
+                Ok((f, r, tool, grant, list)) => {
+                    let folder = static_folder(&f, &ws);
+                    step(Box::new(move |sh: &mut Shell| {
+                        // its server's live tools: the rows' apps (A3)
+                        sh.apps_seen(&f.plugin, &f.server, &list);
+                        sh.view_resource_read(f, r, tool, grant, folder, done)
+                    }))
+                }
             }
         });
     }
 
     /// The resource is read: its sandbox registered on the pages server,
     /// then its answer.
-    fn view_resource_read(&mut self, f: ViewFile, r: view_call::ResourceRead, tool: Value, grant: Vec<String>, done: ViewDone) {
+    #[allow(clippy::too_many_arguments)]
+    fn view_resource_read(&mut self, f: ViewFile, r: view_call::ResourceRead, tool: Value, grant: Vec<String>, folder: Option<ViewFolder>, done: ViewDone) {
         let Some(pages) = self.pg.pages.clone() else {
             return done(Err(RpcError::refused("this hub serves no pages: views need its pages server", None)));
         };
         let permissions = view_call::granted(&r.declared, &grant);
         let hash = crate::pages::views::hash(&f.plugin, &f.server, &f.uri);
-        let session = pages.view_sandbox(&hash, crate::pages::views::ViewSandbox { csp: r.csp.clone(), perms: permissions.clone() });
+        let session = pages.view_sandbox(&hash, crate::pages::views::ViewSandbox { csp: r.csp.clone(), perms: permissions.clone(), folder });
         let origin = crate::pages::views::origin(&f.plugin, &f.server, &f.uri, pages.port);
         let res = ViewResource {
             proxy: Some(crate::pages::views::proxy_url(&origin, &session)),
@@ -475,6 +548,85 @@ impl Shell {
         });
     }
 
+    // ---- document views (docs/plugin-apps.md A4) ----
+
+    /// A request of a document view (`{doc}`): its calls to its opener's
+    /// server; it has no agent, so no message nor context.
+    fn doc_request(&mut self, method: &str, doc: String, params: Value, done: ViewDone) {
+        match method {
+            "view/call" => self.doc_call(doc, params, done),
+            "view/notes" => self.doc_notes(doc, done),
+            m => done(Err(ViewError::NotSupported.rpc(m))),
+        }
+    }
+
+    /// `view/notes {doc}` (A5, architect m_59942): the notes of the
+    /// artifact the session opened, each by the view's own key, the keyless
+    /// ones `detached` (pages/artifact/notes.rs `view_notes`). The session
+    /// decides the artifact, never the view; a file of ~/bise has none.
+    /// The target is copied out of the files table, then the store is read
+    /// off the loop (the lock is never held across I/O).
+    fn doc_notes(&mut self, doc: String, done: ViewDone) {
+        let Some(pages) = self.pg.pages.clone() else { return done(Err(ViewError::Expired.rpc("view/notes"))) };
+        let Some(target) = pages.doc_target(&doc) else { return done(Err(ViewError::Expired.rpc("view/notes"))) };
+        std::thread::spawn(move || {
+            done(Ok(match target {
+                crate::view_files::FileTarget::Artifact { id, .. } => crate::pages::artifact::notes::for_view(&pages, &id),
+                crate::view_files::FileTarget::RootFile { .. } => json!({"notes": [], "detached": []}),
+            }))
+        });
+    }
+
+    /// A document view's `tools/call` to its opener's server, on the
+    /// views bridge (never an agent's), judged as C5's: an app-only tool
+    /// runs; one the model sees too would need an agent's card, which a
+    /// document view has none of: refused.
+    fn doc_call(&mut self, doc: String, params: Value, done: ViewDone) {
+        let method = params.get("method").and_then(Value::as_str).unwrap_or("").to_string();
+        let inner = params.get("params").cloned().filter(Value::is_object).unwrap_or_else(|| json!({}));
+        let what = Ask::of(&method, &inner).what().to_string();
+        // the session's opener, copied out of the pages' table (its end is
+        // the pages server's, with the session)
+        let Some(d) = self.pg.pages.as_ref().and_then(|p| p.doc_opener(&doc)) else { return done(Err(ViewError::Expired.rpc(&what))) };
+        // its file: the hub's own, never its server's (daemon/view_files.rs)
+        match super::view_files::doc_route(&method) {
+            super::view_files::DocRoute::File => return self.doc_file(doc, &method, inner, done),
+            super::view_files::DocRoute::Unknown => return done(Err(ViewError::NotSupported.rpc(&what))),
+            super::view_files::DocRoute::Tool => {}
+        }
+        let key = ViewKey::new("", &doc);
+        if !self.views.limits.call(&key, now_ms()) {
+            return done(Err(ViewError::RateLimited.rpc(&what)));
+        }
+        let f = ViewFile { plugin: d.plugin, server: d.server, uri: d.uri, ..Default::default() };
+        let bridge = self.views_bridge().map(|p| (p, true));
+        let state_path = bend_plugins::state::state_path();
+        let step = self.view_step();
+        std::thread::spawn(move || {
+            let state = bend_plugins::state::read(&state_path);
+            match judge_on(f, bridge, &method, &inner, &state) {
+                Err(e) => done(Err(e)),
+                Ok((_, _, Verdict::Refused(e))) => done(Err(e.rpc(&what))),
+                Ok((_, _, Verdict::Ask)) => done(Err(ViewError::NotVisible.rpc(&what))),
+                Ok((_, route, Verdict::Free)) => step(Box::new(move |sh: &mut Shell| sh.view_forward(key, route, method, inner, done))),
+            }
+        });
+    }
+
+    /// `view/close {doc}`: his tab closed, unloaded or swapped app: the
+    /// session and its handles end, in the pages server's one place.
+    fn view_close(&mut self, params: Value, done: ViewDone) {
+        match view_call::Key::of(&params) {
+            Ok(view_call::Key::Doc(doc)) => {
+                if let Some(pages) = self.pg.pages.clone() {
+                    pages.view_session_end(&doc);
+                }
+                done(Ok(json!({})))
+            }
+            _ => done(Err(ViewError::Expired.rpc("view/close"))),
+        }
+    }
+
     // ---- view/message, view/context ----
 
     /// The views file of a call, read now (a message and a context need
@@ -541,6 +693,47 @@ impl Shell {
 mod tests {
     use super::*;
     use crate::view_bridge::tests::{fake_bridge, tmp};
+
+    /// A document view's methods: its file's three go to the hub, a tool
+    /// call to its opener; the host's own copy (A6b) and anything else is
+    /// unknown (architect m_60137).
+    #[test]
+    fn a_doc_views_methods_route_and_the_hosts_copy_is_unknown() {
+        use super::super::view_files::{doc_route, DocRoute};
+        for m in ["resources/read", "resources/url", "ai.mistral.vibe/resources/write"] {
+            assert_eq!(doc_route(m), DocRoute::File, "{m}");
+        }
+        assert_eq!(doc_route("tools/call"), DocRoute::Tool);
+        for m in ["dev.bise/resources/copy", "view/copy", "resources/write", "resources/list", ""] {
+            assert_eq!(doc_route(m), DocRoute::Unknown, "{m}");
+        }
+    }
+
+    /// ~/bise's methods are the window's own: a view's bridge (`/api/view`,
+    /// view_request) asking one is refused, never served (architect
+    /// m_62668); hub.sock serves them (daemon/files_ids.rs).
+    #[test]
+    fn a_views_bridge_asking_the_windows_own_methods_is_refused() {
+        for m in ["folder/list", "file/new", "files/ids/subscribe", "files/mint"] {
+            assert!(window_only(m), "{m}");
+            assert!(method_of_name(m).is_none(), "{m}: never a view's method on hub.sock either");
+        }
+        for m in ["view/call", "view/open", "view/copy", "plugin/views", "resources/read", "files/ids"] {
+            assert!(!window_only(m), "{m}");
+        }
+    }
+
+    /// The C5 method a hub.sock command maps to, by its method name.
+    fn method_of_name(m: &str) -> Option<&'static str> {
+        let p = bise_proto::Project::default();
+        let cmds = [
+            HubCmd::FolderList { project: p.clone(), folder: None, hidden: false },
+            HubCmd::FileNew { project: p.clone(), make: Default::default(), library_folder: None, in_folder: None },
+            HubCmd::FilesIdsSubscribe { project: p.clone() },
+            HubCmd::FilesMint { project: p, path: "a.md".into() },
+        ];
+        cmds.into_iter().filter_map(method_of).map(|(name, _)| name).find(|name| *name == m)
+    }
 
     /// C5 on fake-app: an app-only tool runs, a model-visible one asks,
     /// a model-only one or another server's is refused, the plugin off

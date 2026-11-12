@@ -60,11 +60,14 @@ export function row(over: Partial<ProjectRow> & Pick<ProjectRow, 'project' | 'na
 /** The core's `projects` event with these rows. */
 export const projects = (...rows: ProjectRow[]): EvOf<'projects'> => ev('projects', { projects: rows });
 
-/** The first artifact of the fixtures' `artifacts` event. */
+/** The first artifact of the fixtures' `artifacts` event, without its app (a test that wants one names it). */
 const ARTIFACT: Artifact = (() => {
   const a = fixtureOf('artifacts')?.items[0];
   if (a === undefined) throw new Error('rust/proto/fixtures has no artifacts event with an item');
-  return a;
+  const rest: Artifact = { ...a };
+  delete rest.opener;
+  delete rest.openers;
+  return rest;
 })();
 
 /** An artifact: the fixtures' first, then `over` (give `id`); one version, no history, not new. */

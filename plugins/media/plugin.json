@@ -1,0 +1,14 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "media",
+  "version": "0.1.0",
+  "description": "Preview: open images, pdfs and videos in bise, zoom an image, read a pdf, play a video by its ranges, and note on a box, a passage or a moment.",
+  "homepage": "https://bise.dev",
+  "license": "Apache-2.0",
+  "extensions": {
+    "ai.mistral.vibe": { "schemaVersion": 1 },
+    "dev.bise": {
+      "tagline": "images, pdfs and videos, with your notes on them"
+    }
+  }
+}

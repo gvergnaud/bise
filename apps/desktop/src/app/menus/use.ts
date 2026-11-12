@@ -23,6 +23,7 @@ import { keepSheet } from '@/agents/sheet';
 import { openChange } from '@/review/openChange';
 import { menuOf, type Act, type MenuFacts } from './registry';
 import { runAct, type MenuFx } from './run';
+import { viewsStore } from '@/views/window';
 
 /** What the facts are read from: the store's rows, and the app's own view state. */
 export interface FactReads {
@@ -62,6 +63,7 @@ export function factsOf(e: Entity, r: FactReads): MenuFacts {
     }
     case 'skill':
     case 'view':
+    case 'file':
       return { e };
     default:
       return { e };
@@ -128,6 +130,14 @@ function fxOf(store: Store, router: Router | null): MenuFx {
       router?.go({ screen: 'agents', project: e.project });
     },
     openTab,
+    // Open with: the document's tab (opened, or brought to the front) swaps its app (views store)
+    setOpener: (project, type, pick) => {
+      store.command({ cmd: 'opener_set', project, type, ...pick });
+    },
+    openWith: (project, id, pick) => {
+      openTab({ kind: 'artifact', project, id });
+      void viewsStore.reopen({ project, target: { kind: 'artifact', id } }, { pick });
+    },
     openChange: (project, agent) => {
       openChange(store, router, project, { agent });
     },
@@ -162,6 +172,17 @@ async function show(e: Entity, store: Store, router: Router | null, at: PopupAt 
   if (items.length === 0) return;
   const id = await popup(items, at);
   if (id !== null) runAct(id as Act, factsOf(e, readsOf(store)), fxOf(store, router));
+}
+
+/**
+ * Runs one of the registry's acts on `e` with the same effects as its native menu: a screen that
+ * draws its own menu (the gallery's ⋯, with its keys) and lists some of the registry's items (Open
+ * with) runs his pick here, never a second copy of what it does.
+ */
+export function useRunAct(): (e: Entity, act: Act) => void {
+  const store = useStore();
+  const router = useContext(RouterContext);
+  return useMemo(() => (e: Entity, act: Act) => { runAct(act, factsOf(e, readsOf(store)), fxOf(store, router)); }, [store, router]);
 }
 
 /** `e`'s menu: onContextMenu for a right click on its row or tab, open() for its '…'. */

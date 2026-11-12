@@ -48,6 +48,11 @@ export type Entity =
   | { readonly kind: 'skill'; readonly plugin: string; readonly name: string }
   /** a scheduled task by its hub's id (rows::ScheduledTask.id: ids are per hub, nm-menus m_42167) */
   | { readonly kind: 'scheduled'; readonly project: string; readonly id: number }
+  /**
+   * a file of ~/bise that is no artifact, by the id folder/list gave its row (docs/plugin-apps.md
+   * A6; never a path), opened in its document tab by its app (src/views)
+   */
+  | { readonly kind: 'file'; readonly project: string; readonly entry: string; readonly name?: string }
   /** an MCP App's view: the agent's tool call that showed it (its C2 call id), in its panel tab (src/views) */
   | { readonly kind: 'view'; readonly project: string; readonly agent: string; readonly call: string }
   /** a tab of the panel itself (its own menu: close, close others, move...) */
@@ -87,6 +92,8 @@ export function entityKey(e: Entity): string {
       return `skill:${e.plugin}/${e.name}`;
     case 'scheduled':
       return `scheduled:${e.project}/${String(e.id)}`;
+    case 'file':
+      return `file:${e.project}/${e.entry}`;
     case 'view':
       return `view:${e.project}/${e.agent}/${e.call}`;
     case 'tab':

@@ -180,6 +180,21 @@ pub enum AppCmd {
         #[serde(default)]
         perms: Vec<String>,
     },
+    /// his pick of the app that opens a type (docs/plugin-apps.md A2, A3:
+    /// Open with's `Always open .xlsx with`, Settings › Plugins › File
+    /// types): `plugins.json`'s `openers` through bend_plugins' one
+    /// writer, then `plugins` again. `type`: the canonical type key
+    /// (`*.xlsx`); `plugin` and `tool` none: back to A2's order
+    OpenerSet {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        project: Option<Project>,
+        #[serde(rename = "type")]
+        type_key: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        plugin: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        tool: Option<String>,
+    },
     /// give or forget one of a plugin's settings (its `dev.bise.settings`,
     /// the plugins page's field): `value` none or empty forgets it. Kept
     /// in his MCP secrets by bend_plugins' one writer (the add menu's);
@@ -699,6 +714,7 @@ impl AppCmd {
         "plugins",
         "plugin_set",
         "plugin_grant",
+        "opener_set",
         "plugin_setting",
         "plugin_connect",
         "plugin_account_connect",

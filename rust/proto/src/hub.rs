@@ -155,6 +155,21 @@ pub enum HubEv {
     /// the answer to `artifacts_move`: each artifact moved and its folder
     /// before (his undo)
     ArtifactsMoved { project: Project, moved: Vec<ArtifactMoved> },
+    /// plugin-apps (A5, architect m_61664): artifact `artifact`'s notes
+    /// changed (his send, the browser's drafts or send, a version that
+    /// answers one): a client with a document view open on it asks
+    /// `view/notes` again. Ids only, never a note's words; client sockets
+    /// only
+    ArtifactNotes { project: Project, artifact: String },
+    /// plugin-apps A6 ids: a change of the home hub's id table, to the
+    /// connections that sent `files_ids_subscribe` (never `full`: that is
+    /// the subscribe's answer). `seq` one more than the last: a gap means
+    /// subscribe again
+    FilesIds {
+        project: Project,
+        #[serde(flatten)]
+        ids: crate::files::FilesIds,
+    },
     /// the answer to `artifacts_folders`: the folders after his change;
     /// `made` the folder a make made (or found)
     Folders {
@@ -625,7 +640,7 @@ pub enum HubEv {
 }
 
 impl HubEv {
-    pub const TAGS: &'static [&'static str] = &["welcome", "agents", "cards", "thread", "thread_hits", "thread_marks", "entry", "typing", "partial", "artifacts", "artifacts_moved", "folders", "library", "scheduled", "worktrees", "processes", "proc_out", "merged", "features", "prs", "pr_acted", "pr_detail", "pr_check_log", "models", "tool_out", "queued_taken", "log", "completion", "log_body", "diff", "guide", "branches", "versions", "release", "update", "route", "route_done", "jobs", "job_end", "followed_end", "activity", "flow", "paused", "switch", "growth", "pulse", "bise_update", "usage", "pages", "page_changed", "card_open", "app_open", "inbox_history", "inbox_recorded", "focused", "approvals", "notice", "refused", "error"];
+    pub const TAGS: &'static [&'static str] = &["welcome", "agents", "cards", "thread", "thread_hits", "thread_marks", "entry", "typing", "partial", "artifacts", "artifacts_moved", "artifact_notes", "files_ids", "folders", "library", "scheduled", "worktrees", "processes", "proc_out", "merged", "features", "prs", "pr_acted", "pr_detail", "pr_check_log", "models", "tool_out", "queued_taken", "log", "completion", "log_body", "diff", "guide", "branches", "versions", "release", "update", "route", "route_done", "jobs", "job_end", "followed_end", "activity", "flow", "paused", "switch", "growth", "pulse", "bise_update", "usage", "pages", "page_changed", "card_open", "app_open", "inbox_history", "inbox_recorded", "focused", "approvals", "notice", "refused", "error"];
 
     pub fn decode(line: &str) -> Result<HubEv, String> {
         Self::from_value(parse(line)?)
@@ -1195,11 +1210,18 @@ pub enum HubCmd {
     ViewResource { project: Project, agent: String, call: String },
     /// a view's request to its own server (`view/call`): `method`
     /// `tools/call` or `resources/read`, `params` as the view sent them;
-    /// its answer is the server's result, or a view error
+    /// its answer is the server's result, or a view error. The view is an
+    /// agent's call's (`agent`, `call`) or a document's (`doc`, the session
+    /// `view/open` minted, docs/plugin-apps.md A4): one of the two, both or
+    /// neither refused (architect m_60316)
     ViewCall {
         project: Project,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
         agent: String,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
         call: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        doc: Option<String>,
         method: String,
         #[serde(default)]
         #[cfg_attr(feature = "ts", ts(type = "Record<string, unknown>"))]
@@ -1221,11 +1243,16 @@ pub enum HubCmd {
     },
     /// a view's `ui/update-model-context` (`view/context`): its content
     /// replaces this view's context, which joins his next send to the
-    /// agent once
+    /// agent once; a document's (`doc`): refused not-supported until a
+    /// document view has an agent to join (view/call's key rule)
     ViewContext {
         project: Project,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
         agent: String,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
         call: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        doc: Option<String>,
         #[serde(default)]
         #[cfg_attr(feature = "ts", ts(type = "Array<Record<string, unknown>>"))]
         content: Value,
@@ -1235,13 +1262,82 @@ pub enum HubCmd {
     /// (`<base>/<plugin>/~ui`); its answer is the bridge's
     /// `{views: [...]}` as is ([`crate::view_rpc::PluginViewsResult`])
     PluginViews { project: Project, plugin: String },
+    /// plugin-apps (docs/plugin-apps.md A4): a document view's tab closed,
+    /// unloaded or swapped to another app: its session (`doc`) and its
+    /// handles end. His only: a client socket's, never an agent's op
+    ViewClose { project: Project, doc: String },
+    /// plugin-apps (docs/plugin-apps.md A5): a document view's notes, of
+    /// the artifact its session (`doc`) opened, every version, each by
+    /// the view's own key, and the ones with no key `detached`
+    /// (`{notes, detached}`); a file of ~/bise has none. His only, as
+    /// `view_close`
+    ViewNotes { project: Project, doc: String },
+    /// plugin-apps (docs/plugin-apps.md A4): his click opens `target` in
+    /// its app (A2's pick, made again now; `opener`: Open with's pick, a
+    /// candidate or refused), its opener tool called as his act; its
+    /// answer is a [`crate::view_rpc::ViewOpened`]. His only: a client
+    /// socket's, never an agent's op
+    ViewOpen {
+        project: Project,
+        target: crate::files::OpenTarget,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        opener: Option<crate::view_rpc::OpenWith>,
+    },
+    /// plugin-apps A6b, Keep mine as a copy (architect m_60222): the host's
+    /// own method, never relayed from a view: `text` or `blob` (base64)
+    /// written beside the doc's file as `<name> (copy).<ext>` and added as
+    /// his artifact; answers [`crate::files::ViewCopyResult`]
+    ViewCopy {
+        project: Project,
+        doc: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        text: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        blob: Option<String>,
+    },
+    /// plugin-apps A6: a folder of `~/bise` (`folder`: a row id
+    /// `folder/list` gave; none: the root), dotfiles only with `hidden`;
+    /// answers [`crate::files::FolderList`]. The window's own, never a
+    /// view's
+    FolderList {
+        project: Project,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        folder: Option<String>,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        hidden: bool,
+    },
+    /// plugin-apps A4b: New ›, a document from plugin `make.plugin`'s
+    /// make of that ending, in the `~/bise` folder `in` (a row id; none:
+    /// the root), added as his artifact in library folder
+    /// `library_folder` (none: Unfiled); answers
+    /// [`crate::files::FileNewResult`]
+    FileNew {
+        project: Project,
+        make: crate::files::Make,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        library_folder: Option<String>,
+        #[serde(default, rename = "in", skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "ts", ts(rename = "in"))]
+        in_folder: Option<String>,
+    },
+    /// plugin-apps A6 ids (architect m_60046, m_60075): the home hub's id
+    /// table, whole in the answer ([`crate::files::FilesIds`], `full`),
+    /// then its changes as `files_ids` events on this connection. A
+    /// project hub refuses it, naming the home hub
+    FilesIdsSubscribe { project: Project },
+    /// the id of `path` (exact bytes under `Home::bise_root()`, relative,
+    /// `/`-joined): the one it has, else a new one, its delta sent to
+    /// every subscriber; answers [`crate::files::FilesMintResult`].
+    /// Idempotent; an untracked or missing path is refused. For a client
+    /// that saw a file before the watcher did (the Finder edge)
+    FilesMint { project: Project, path: String },
     /// a tag this version doesn't know: answered with `error`
     #[serde(skip)]
     Unknown { tag: String, raw: Value },
 }
 
 impl HubCmd {
-    pub const TAGS: &'static [&'static str] = &["subscribe", "unsubscribe", "page", "find", "marks", "send", "answer", "close", "approvals", "remove_rule", "stop", "archive", "unarchive", "artifacts_seen", "tool_out", "log", "completion", "log_body", "queued_take", "queued_steer", "diff", "worktrees", "processes", "proc_out", "proc_follow", "proc_stop", "merged", "features", "prs", "pr_act", "pr_detail", "pr_check_log", "inbox_history", "scheduled", "scheduled_stop", "wake_stop", "models", "new", "rename", "model", "effort", "route_correct", "route_cancel", "follow", "slash", "guide", "branches", "scheduled_run", "artifacts_add", "artifacts_move", "artifacts_folders", "artifacts_keep", "artifacts_opened", "artifacts_library", "focus", "versions", "version_info", "version_switch", "version_rollback", "version_restart", "version_update", "bise_update", "release_plan", "release_run", "stop_hub", "page_voice", "usage", "pause", "resume", "view_resource", "view_call", "view_message", "view_context", "plugin_views", "app_open"];
+    pub const TAGS: &'static [&'static str] = &["subscribe", "unsubscribe", "page", "find", "marks", "send", "answer", "close", "approvals", "remove_rule", "stop", "archive", "unarchive", "artifacts_seen", "tool_out", "log", "completion", "log_body", "queued_take", "queued_steer", "diff", "worktrees", "processes", "proc_out", "proc_follow", "proc_stop", "merged", "features", "prs", "pr_act", "pr_detail", "pr_check_log", "inbox_history", "scheduled", "scheduled_stop", "wake_stop", "models", "new", "rename", "model", "effort", "route_correct", "route_cancel", "follow", "slash", "guide", "branches", "scheduled_run", "artifacts_add", "artifacts_move", "artifacts_folders", "artifacts_keep", "artifacts_opened", "artifacts_library", "focus", "versions", "version_info", "version_switch", "version_rollback", "version_restart", "version_update", "bise_update", "release_plan", "release_run", "stop_hub", "page_voice", "usage", "pause", "resume", "view_resource", "view_call", "view_message", "view_context", "plugin_views", "app_open", "view_close", "view_notes", "view_open", "view_copy", "folder_list", "file_new", "files_ids_subscribe", "files_mint"];
 
     pub fn decode(line: &str) -> Result<HubCmd, String> {
         Self::from_value(parse(line)?)
@@ -1343,6 +1439,14 @@ impl HubCmd {
             | HubCmd::ViewCall { project, .. }
             | HubCmd::ViewMessage { project, .. }
             | HubCmd::ViewContext { project, .. }
+            | HubCmd::ViewClose { project, .. }
+            | HubCmd::ViewNotes { project, .. }
+            | HubCmd::ViewOpen { project, .. }
+            | HubCmd::ViewCopy { project, .. }
+            | HubCmd::FolderList { project, .. }
+            | HubCmd::FileNew { project, .. }
+            | HubCmd::FilesIdsSubscribe { project }
+            | HubCmd::FilesMint { project, .. }
             | HubCmd::PluginViews { project, .. } => project,
             HubCmd::Completion(c) => &c.project,
             HubCmd::Unknown { .. } => return None,

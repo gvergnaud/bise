@@ -101,17 +101,17 @@ MANUAL = [
         dict(name="xmlchars 2.2.0 (XML character classes, used by saxes)", license="MIT", url="https://github.com/lddubeau/xmlchars",
              files=["xmlchars.LICENSE"]),
     ]),
-    ("office/dist/office-view.js: the office viewer's docx renderer (office/sdk/src/view, docs/office.md)", [
+    ("plugins/docs/ai.mistral.vibe/views/writer/office-view.js: Writer's docx renderer (plugins/docs/src/docx.ts, docs/office.md)", [
         dict(name="docx-preview 0.4.1 (docx to HTML)", license="Apache-2.0", url="https://github.com/VolodymyrBaydalka/docxjs",
              files=["docx-preview.LICENSE"]),
         dict(name="jszip 3.10.2 (zip; dual MIT or GPL-3.0, taken under MIT)", license="MIT", url="https://github.com/Stuk/jszip",
              files=["jszip.LICENSE"]),
     ]),
-    ("office/dist/office-pdf.js and pdf.worker.js: the office viewer's pdf renderer and its worker (office/sdk/src/view, pdf-notes)", [
+    ("plugins/media/ai.mistral.vibe/views/preview/pdfjs.js and pdf.worker.js: Preview's pdf renderer and its worker (plugins/media/src, pdf-notes)", [
         dict(name="pdfjs-dist 6.4.299 (pdf.js: pdf to canvas and text)", license="Apache-2.0", url="https://github.com/mozilla/pdf.js",
              files=["pdfjs-dist.LICENSE"]),
     ]),
-    ("office/dist/office-md.js: the office viewer's markdown renderer, micromark and GFM (office/sdk/src/view/markdown.ts, md-artifact)", [
+    ("plugins/docs/ai.mistral.vibe/views/writer/office-md.js: Writer's markdown renderer, micromark and GFM (plugins/docs/src/markdown.ts, md-artifact)", [
         dict(name="character-entities 2.0.2", license="MIT", url="https://github.com/wooorm/character-entities",
              files=['office-md/character-entities.LICENSE']),
         dict(name="decode-named-character-reference 1.3.0", license="MIT", url="https://github.com/wooorm/decode-named-character-reference",
@@ -169,7 +169,7 @@ MANUAL = [
         dict(name="micromark-util-subtokenize 2.1.0", license="MIT", url="https://github.com/micromark/micromark",
              files=['office-md/micromark-util-subtokenize.LICENSE']),
     ]),
-    ("office/dist/office-sheet.js: the office viewer's xlsx grid, Univer and what it bundles (office/sdk/src/view/sheet.ts, xlsx-univer; built, never committed)", [
+    ("plugins/sheets/ai.mistral.vibe/views/grid/office-sheet.js: Sheets' xlsx grid, Univer and what it bundles (plugins/sheets/src/sheet.ts, xlsx-univer; built, never committed)", [
         dict(name="@flatten-js/interval-tree 1.1.3", license="MIT", url="https://github.com/alexbol99/flatten-interval-tree",
              files=['office-sheet/flatten-js__interval-tree.LICENSE']),
         dict(name="@floating-ui/core 1.8.0", license="MIT", url="https://github.com/floating-ui/floating-ui",

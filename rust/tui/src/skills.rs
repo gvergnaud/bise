@@ -234,11 +234,10 @@ mcp-builder\tGuide for MCP servers\t/a/m/SKILL.md
         let places = Places {
             roots: skills::roots(Some(&home), &ws, None, skills::BiseSkills::None),
             plugins: bend_plugins::resolve::Roots {
-                builtin: None,
                 user: Some(home.join(".agents/plugins")),
                 workspace: Some(ws.join(".agents/plugins")),
                 data: root.join("plugin-data"),
-                state: Default::default(),
+                ..bend_plugins::resolve::Roots::for_test(&root)
             },
         };
         let on = StateV2::default();

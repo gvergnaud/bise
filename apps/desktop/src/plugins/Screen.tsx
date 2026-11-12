@@ -3,7 +3,7 @@
 // once it shows (the sidebar's dot goes). bise's home's list: the place is every project's.
 // Owner: plug-desktop.
 import { useEffect, useState } from 'react';
-import { useBrowse, useBrowseSources, usePlugins, usePluginsSummary, usePluginPreview, useProjects, useStore } from '@/store';
+import { useBrowse, useBrowseSources, useFileTypes, usePlugins, usePluginsSummary, usePluginPreview, useProjects, useStore } from '@/store';
 import { useRouter } from '@/app/router';
 import { MAIN } from '@/app/route';
 import type { Plugin } from '@/proto';
@@ -19,6 +19,7 @@ export function PluginsScreen({ kind, id }: { kind?: 'skills'; id?: string }) {
   const router = useRouter();
   const rows = usePlugins();
   const summary = usePluginsSummary();
+  const fileTypes = useFileTypes();
   const mistral = useBrowse('mistral');
   const sources = useBrowseSources();
   const preview = usePluginPreview();
@@ -42,7 +43,7 @@ export function PluginsScreen({ kind, id }: { kind?: 'skills'; id?: string }) {
     const p: Plugin | undefined = (rows ?? []).find((r) => (r.id === '' ? r.name : r.id) === id) ?? browse.flatMap((b) => b.items).find((r) => r.id === id);
     if (p === undefined) return <PlaceView rows={rows} summary={summary} browse={browse} ports={{ send, open: (x) => { router.go({ screen: 'plugins', id: x }); }, setUpComputer, add: () => {} }} />;
     return (
-      <PluginPage p={p} ports={{
+      <PluginPage p={p} types={fileTypes} ports={{
         send,
         back: () => { router.back(); },
         setUpComputer,
@@ -61,7 +62,7 @@ export function PluginsScreen({ kind, id }: { kind?: 'skills'; id?: string }) {
   }
   return (
     <>
-      <PlaceView key={kind ?? 'all'} rows={rows} summary={summary} browse={browse} {...(kind === undefined ? {} : { kind })}
+      <PlaceView key={kind ?? 'all'} rows={rows} summary={summary} browse={browse} fileTypes={fileTypes} {...(kind === undefined ? {} : { kind })}
         ports={{ send, open: (x) => { router.go({ screen: 'plugins', id: x }); }, setUpComputer, add: (item) => { if (item !== 'browse') setSheet(item); } }} />
       <AddSheet item={sheet} project={undefined} summary={summary} preview={preview} ports={{ send }} onClose={() => { setSheet(null); store.put('plugin_preview', null); }} />
     </>

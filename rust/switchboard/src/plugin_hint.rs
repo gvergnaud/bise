@@ -118,7 +118,7 @@ mod tests {
             let mcp = r#"{"$schema":"https://agent-plugins.org/schemas/1.0.0/mcp.schema.json","mcpServers":{"srv":{"type":"stdio","command":"echo"}}}"#;
             std::fs::write(dir.join("mcp.json"), mcp).unwrap();
         }
-        let roots = bend_plugins::resolve::Roots { builtin: None, user: Some(t.join("plugins")), workspace: None, data: t.join("data"), state: Default::default() };
+        let roots = bend_plugins::resolve::Roots { user: Some(t.join("plugins")), ..bend_plugins::resolve::Roots::for_test(&t) };
         let known = known_of(&bend_plugins::resolve::resolve(&roots));
         let pl = |s: &str| Part::Plugin { name: s.into() };
         assert_eq!(

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Artifact } from '@/proto';
 import { cardsOf, chipsOf, colsFor, gridStep, lineOf, lineTip, listKind, listName, ownerOf, rowsOf, sheetItems, sheetLine, splitTitle, whenOf, type Card, type Stack } from './gallery';
 import type { Item } from './model';
+import { library } from '@/proto/words_library.gen';
 
 const NOW = new Date(2026, 9, 22, 19, 0).getTime();
 const at = (daysAgo: number, h: number, m: number) => new Date(2026, 9, 22 - daysAgo, h, m).getTime();
@@ -53,24 +54,43 @@ describe('the cards: one agent, one turn, one title prefix make one stack', () =
   });
 });
 
-describe('the line under a card says only what the place does not (density rule 1)', () => {
-  const mine = item(art('step', { at_ms: at(0, 14, 2) }));
-  const theirs = item(art('target', { agent: 'agent-target', at_ms: at(0, 9, 12) }));
-  const old = item(art('folds', { agent: 'amb-win', at_ms: at(9, 11, 0) }));
-  const his = item(art('offre', { by: 'you', agent: 'main', at_ms: at(0, 10, 0) }), 'ai-docs-2', 'ai-docs');
+describe("the line under a card: its app, who made it, when; a PR's or a link's says only what the place does not (density rule 1)", () => {
+  // the hub's opener for a png (bise's own type until its step lands: docs/plugin-apps.md A3)
+  const opener = { plugin: 'media', tool: 'open_media', app: 'Preview', type: '*.png', type_title: 'PNG image', builtin: true };
+  const mine = item(art('step', { at_ms: at(0, 14, 2), path: '/x/step.png', opener }));
+  const theirs = item(art('target', { agent: 'agent-target', at_ms: at(0, 9, 12), path: '/x/t.png', opener }));
+  const his = item(art('offre', { by: 'you', agent: 'main', at_ms: at(0, 10, 0), path: '/x/offre.png', opener }), 'ai-docs-2', 'ai-docs');
+  // a link: no file, no app (its ↗ says where it opens)
+  const link = (id: string, extra: Partial<A>) => item(art(id, { kind: 'link', url: `https://example.com/${id}`, ...extra }));
+  const mineL = link('step', { at_ms: at(0, 14, 2) });
+  const theirsL = link('target', { agent: 'agent-target', at_ms: at(0, 9, 12) });
+  const oldL = link('folds', { agent: 'amb-win', at_ms: at(9, 11, 0) });
+  const hisL = item(art('offre', { kind: 'link', url: 'https://example.com/offre', by: 'you', agent: 'main', at_ms: at(0, 10, 0) }), 'ai-docs-2', 'ai-docs');
   const one = (it: Item): Card => ({ kind: 'one', key: it.a.id, it });
   const folderOf = (it: Item) => (it.a.id === 'step' ? 'desktop app / agent view' : '');
 
-  it("in a task's folder: the time alone, another agent's name first, a date for an older day", () => {
-    const place = { kind: 'folder' as const, owner: 'amb-home' };
-    expect(lineOf(one(mine), place, NOW)).toBe('14:02');
-    expect(lineOf(one(theirs), place, NOW)).toBe('agent-target · 09:12');
-    expect(lineOf(one(old), place, NOW)).toBe('amb-win · oct 13');
+  it("a file, in every place: 'Preview · amb-home · 14:02', 'you' for his own (designer m_61626)", () => {
+    const folder = { kind: 'folder' as const, owner: 'amb-home' };
+    expect(lineOf(one(mine), folder, NOW)).toBe('Preview · amb-home · 14:02');
+    expect(lineOf(one(theirs), { kind: 'recent', folderOf }, NOW)).toBe('Preview · agent-target · 09:12');
+    expect(lineOf(one(his), { kind: 'unfiled' }, NOW)).toBe('Preview · you · 10:00');
   });
 
-  it('in recent: the folder and the time; unfiled: who and the time; the project only in its tip', () => {
-    expect(lineOf(one(mine), { kind: 'recent', folderOf }, NOW)).toBe('desktop app / agent view · 14:02');
-    expect(lineOf(one(his), { kind: 'unfiled' }, NOW)).toBe('you · 10:00');
+  it("no app opens it, path or not: 'opens on your Mac · 14:02', without who (designer m_61626)", () => {
+    expect(lineOf(one(item(art('zip', { path: '/x/logs.zip' }))), { kind: 'unfiled' }, NOW)).toBe(`${library.opens_mac} · 14:02`);
+    expect(lineOf(one(item(art('zip2', { url: '/Users/me/w/logs.zip' }))), { kind: 'unfiled' }, NOW)).toBe(`${library.opens_mac} · 14:02`);
+  });
+
+  it("a link in a task's folder: the time alone, another agent's name first, a date for an older day", () => {
+    const place = { kind: 'folder' as const, owner: 'amb-home' };
+    expect(lineOf(one(mineL), place, NOW)).toBe('14:02');
+    expect(lineOf(one(theirsL), place, NOW)).toBe('agent-target · 09:12');
+    expect(lineOf(one(oldL), place, NOW)).toBe('amb-win · oct 13');
+  });
+
+  it('a link in recent: the folder and the time; unfiled: who and the time; the project only in its tip', () => {
+    expect(lineOf(one(mineL), { kind: 'recent', folderOf }, NOW)).toBe('desktop app / agent view · 14:02');
+    expect(lineOf(one(hisL), { kind: 'unfiled' }, NOW)).toBe('you · 10:00');
     expect(lineTip(one(his))).toBe('added by you in ai-docs');
     expect(lineTip(one(theirs))).toBe('made by agent-target in harness');
     expect(whenOf(at(1, 23, 59), NOW)).toBe('oct 21');

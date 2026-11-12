@@ -4,7 +4,7 @@
 // The store comes from StoreContext: the app's one store (bound to
 // window.bise.core) by default, a test's own store through the provider.
 import { createContext, createElement, useContext, useEffect, useSyncExternalStore, type ReactNode } from 'react';
-import type { Account, Agent, FlowMode, Growth, ReleaseEv, SwitchRow, UpdateEv, Artifact, ComputerAgent, Card, Entry, Feature, Found, IndexRow, Job, JsonValue, Merged, Model, PickCommand, Place, PickSkill, Plugin, PluginPreview, PluginsSummary, ProjectRow, RoleRow, ScheduledTask, SetupGauge, Worktree, Folder } from '@/proto';
+import type { Account, Agent, FlowMode, Growth, ReleaseEv, SwitchRow, UpdateEv, Artifact, ComputerAgent, Card, Entry, Feature, FileType, Found, IndexRow, Job, JsonValue, Merged, Model, PickCommand, Place, PickSkill, Plugin, PluginPreview, PluginsSummary, ProjectRow, RoleRow, ScheduledTask, SetupGauge, Worktree, Folder } from '@/proto';
 import type { CorePort, CoreState } from '@/shared/api';
 import type { BiseUpdate, GuideTarget, Proc } from '@/proto';
 import { keep } from '@/app/keep';
@@ -103,6 +103,8 @@ export const useProviderCheck = (): EvOf<'provider_check'> | null => useSlice('p
 export const useFound = (): readonly Found[] => useSlice('found', (s) => s.found());
 export const useComputerUse = (): EvOf<'computer_use'> | null => useSlice('computer_use', (s) => s.computerUse());
 export const usePlugins = (project?: string): readonly Plugin[] | null => useSlice(`plugins:${project ?? ''}`, (s) => s.plugins(project));
+/** which app opens what (File types); none until the core sent them */
+export const useFileTypes = (project?: string): readonly FileType[] => useSlice(`file_types:${project ?? ''}`, (s) => s.fileTypes(project));
 /** the plugins in numbers (the sidebar's row, the place's band); null until the core sent them */
 export const usePluginsSummary = (project?: string): PluginsSummary | null => useSlice(`plugins_summary:${project ?? ''}`, (s) => s.pluginsSummary(project));
 /** what a source offers to add (`mistral`, a marketplace); null until it was read */

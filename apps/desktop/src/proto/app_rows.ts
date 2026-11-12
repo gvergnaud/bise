@@ -3,7 +3,7 @@
 // ids, positions and *_ms are numbers (u64 in Rust, safe below 2^53).
 
 import type { Grant, Perm } from './helper';
-import type { Agent, ArtLink, Artifact, Card, CardBatch, CardPage, Growth, Opt, Pulse, ReportKind, ScheduledTask } from './rows';
+import type { Agent, ArtLink, Artifact, Card, CardBatch, CardPage, Growth, OpenClaim, Opt, PluginMake, PluginOpens, Pulse, ReportKind, ScheduledTask } from './rows';
 
 /**
  * One project in the window's sidebar.
@@ -236,7 +236,16 @@ needs_node?: boolean,
  * that log in: kept on the wire for the released law, always empty
  * now; a server's login is its `mcp` part's `login`
  */
-logins?: Array<PluginLogin>, };
+logins?: Array<PluginLogin>, 
+/**
+ * the types its apps open (docs/plugin-apps.md A3), from its
+ * openers' entries
+ */
+opens?: Array<PluginOpens>, 
+/**
+ * what its apps make (A1's `makes`: the launcher's New ›)
+ */
+makes?: Array<PluginMake>, };
 
 /**
  * One of a plugin's settings (`bend_plugins::resolve::Setting`): a field
@@ -426,7 +435,13 @@ replaces?: string | null,
  * its domains and the permissions it asks, ticked on the add screen
  * (docs/mcp-apps.md C8); a server's views come once it runs
  */
-views?: Array<PluginPart>, };
+views?: Array<PluginPart>, 
+/**
+ * what its apps would open (docs/plugin-apps.md A3): one line per
+ * type another app opens now, or a wide claim; known before it runs
+ * for its static views, a server's once it runs
+ */
+claims?: Array<OpenClaim>, };
 
 /**
  * One MCP server of a [`PluginPreview`].

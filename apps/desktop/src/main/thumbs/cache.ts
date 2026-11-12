@@ -13,8 +13,6 @@ export const THUMB_W = 480;
 export const CAPTURE = { width: 1120, height: 700 } as const;
 /** Over this, a file shows its no-preview tile (the store's MAX_COPY: bise kept no copy). */
 export const MAX_LOOK_BYTES = 50 * 1024 * 1024;
-/** A text file's bytes read for its card. */
-export const TEXT_BYTES = 4096;
 
 /** The core's initialize result's `thumbs_dir` (bise_home's Home::thumbs_cache), '' when none or not absolute. Pure. */
 export function thumbsDirOf(result: unknown): string {
@@ -56,8 +54,24 @@ export const projectDir = (root: string, r: ThumbReq): string => join(root, r.pr
 /** The stem every sig of this version shares: `<id>-v<n>.` (an older sig is replaced). Pure. */
 export const stemOf = (r: ThumbReq): string => `${r.id}-v${String(r.v)}.`;
 
-/** The picture's file for this version and sig. Pure. */
-export const fileFor = (root: string, r: ThumbReq): string => join(projectDir(root, r), `${stemOf(r)}${r.sig}.png`);
+/** The picture's file for this version and sig, its length (ms) in the name when it has one. Pure. */
+export const fileFor = (root: string, r: ThumbReq, ms?: number): string =>
+  join(projectDir(root, r), `${stemOf(r)}${r.sig}${ms === undefined ? '' : `.${String(ms)}ms`}.png`);
+
+/**
+ * This version's picture among a project folder's names: its name and the length it keeps (the
+ * helper's, `<stem><sig>.<ms>ms.png`), or null. Pure.
+ */
+export function cachedOf(names: readonly string[], r: ThumbReq): { readonly name: string; readonly ms?: number } | null {
+  const head = `${stemOf(r)}${r.sig}.`;
+  for (const n of names) {
+    if (!n.startsWith(head)) continue;
+    const m = /^(?:(\d{1,10})ms\.)?png$/u.exec(n.slice(head.length));
+    if (m === null) continue;
+    return m[1] === undefined ? { name: n } : { name: n, ms: Number(m[1]) };
+  }
+  return null;
+}
 
 /** The size a picture of `w`×`h` is cut to, at most 480 wide, its ratio kept. Pure. */
 export function fitWidth(w: number, h: number): { width: number; height: number } {

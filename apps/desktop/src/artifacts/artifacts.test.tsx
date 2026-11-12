@@ -85,11 +85,11 @@ function mount(node: React.ReactNode, start: Route = { screen: 'artifacts', proj
 }
 
 describe('the page in bise fait mac (mockup 7, decision d2)', () => {
-  it("the kinds and the search in the toolbar above the list, the bar left alone (his m_44961); the lead with its vignette, no hero card", () => {
+  it("the app tabs and the search in the toolbar above the list, the bar left alone (his m_44961); the lead with its vignette, no hero card", () => {
     mount(<ArtifactsScreen />);
     expect(screen.getByTestId('app.bar.slot').childElementCount).toBe(0);
     const bar = screen.getByTestId('artifacts.toolbar');
-    expect(bar.querySelector('[data-testid="artifacts.kinds"]')).not.toBeNull();
+    expect(bar.querySelector('[data-testid="artifacts.apps"]')).not.toBeNull();
     expect(bar.querySelector('[data-testid="artifacts.projects"]')).not.toBeNull();
     expect(bar.querySelector('[data-testid="artifacts.search"]')).not.toBeNull();
     // the toolbar sits over the list, under the banner
@@ -113,7 +113,7 @@ describe('the page in bise fait mac (mockup 7, decision d2)', () => {
     expect(document.activeElement).toBe(field);
     fireEvent.keyDown(field, { key: 'Escape' });
     expect(document.activeElement).toBe(screen.getByTestId('artifacts.screen'));
-    expect(screen.getByTestId('artifacts.kinds.all').getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByTestId('artifacts.apps.all').getAttribute('aria-selected')).toBe('true');
     expect(screen.queryByTestId('artifacts.hero')).toBeNull();
     expect(screen.getByTestId('artifacts.lead').textContent).toContain(library.say);
     // the banner: its title, and the filing desk as its vignette (light and dark), no icon fallback
@@ -172,13 +172,15 @@ describe("'All' reaches every artifact (his m_44961: 'All 866' drew the newest 4
     // oldest a PR (it opens as a route, the others in the panel)
     const many = (from: number) => Array.from({ length: N / 2 }, (_, i) => {
       const k = from + i;
-      return art(`a${String(k)}`, k === N - 1 ? 'pr' : k % 3 === 0 ? 'file' : 'page', { title: `piece ${String(k)}`, at_ms: NOW - k * 3_600_000 });
+      // the files open in Sheets, the rest on his Mac: two apps, so the app tabs show
+      const opener = k % 3 === 0 && k !== N - 1 ? { opener: { plugin: 'sheets', tool: 'open_sheet', app: 'Sheets', type: '*.xlsx', type_title: 'Excel workbook' } } : {};
+      return art(`a${String(k)}`, k === N - 1 ? 'pr' : k % 3 === 0 ? 'file' : 'page', { title: `piece ${String(k)}`, at_ms: NOW - k * 3_600_000, ...opener });
     });
     store.apply({ ev: 'artifacts', project: 'shop-1', items: many(0) });
     store.apply({ ev: 'artifacts', project: 'acme-2', items: many(N / 2) });
     const router = createRouter({ screen: 'artifacts', project: '' });
     render(<StoreProvider store={store}><RouterContext.Provider value={router}><ArtifactsScreen /></RouterContext.Provider></StoreProvider>);
-    const all = screen.getByTestId('artifacts.kinds.all');
+    const all = screen.getByTestId('artifacts.apps.all');
     expect(all.textContent).toBe(`${library.all_kinds}${String(N)}`);
     // what the list can show (virtualized: its rows drawn in view) is every one the tab counts
     expect(screen.getByTestId('artifacts.grid').getAttribute('data-n')).toBe(String(N));

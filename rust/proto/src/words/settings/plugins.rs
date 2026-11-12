@@ -418,6 +418,37 @@ crate::words! { settings:
     plugins_tab_installed = "installed";
     /// place: the tabs
     plugins_tab_browse = "browse";
+    /// place: the tabs, which app opens which files (docs/plugin-apps.md A3, A6b)
+    plugins_tab_file_types = "File types";
+    /// File types: the group's head
+    file_types_head = "which app opens what";
+    /// File types: the app bise picks for a type
+    file_type_default = "default";
+    /// File types: the app he picked for a type (faint, never pink: nothing waits on him)
+    file_type_his = "your pick";
+    /// File types: no app of his opens this type
+    file_type_none = "no app";
+    /// File types: back to the app bise picks
+    file_type_reset = "Reset";
+    /// File types: nothing he added opens files yet
+    file_types_empty = "no app you added opens files yet";
+    /// a plugin's page, its about: the files its app opens
+    plugins_opens = "opens";
+    /// a plugin's page, its about: what its app makes (the launcher's New ›)
+    plugins_makes = "makes";
+    /// a plugin's page: one type it opens, `Excel workbook (.xlsx)`
+    plugins_opens_type(title, ending) = "{title} ({ending})";
+    /// a plugin's page: a type it opens that another app opens now, `.csv opens in Grid` (name: the
+    /// type's ending or its one-word title; a `name` hole is one token for tests/word_lint.py)
+    plugins_opens_elsewhere(name, app) = "{name} opens in {app}";
+    /// the add sheet: a type another app opens today, `.xlsx opens in Sheets now`
+    plugins_claim_now(ending, app) = "{ending} opens in {app} now";
+    /// the add sheet: leave that type with the app that has it (preselected: nothing switches without his word)
+    plugins_claim_keep(app) = "Keep {app}";
+    /// the add sheet: give that type to the new app
+    plugins_claim_use(app) = "Use {app}";
+    /// the add sheet's opens row: a wide claim said in plain words, `every .json file`
+    plugins_claim_wide(ending) = "every {ending} file";
     /// place: the Mistral catalog's group in browse
     plugins_browse_mistral = "Mistral connectors";
     /// place: a row's tag, Mistral

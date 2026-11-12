@@ -11,7 +11,7 @@
 // A View: the frame drawn at `z` (1 = fit) with its top-left corner at (tx, ty), in the window's CSS
 // px, relative to the frame's own box (w × h). A point p of the frame's box shows at t + z·p.
 
-/** The most it zooms: 8 screen px per page px, the image viewer's rule (kit/office/zoom.ts MAX_K; a law checks they are equal). */
+/** The most it zooms: 8 screen px per page px, Preview's image zoom (plugins/media's zoom.ts MAX_K; a law checks they are equal). */
 export const MAX_PAGE_ZOOM = 8;
 /** how much one wheel pixel of a pinch zooms (Chromium sends a trackpad pinch as a ctrl wheel), as the image viewer's */
 const PINCH_RATE = 0.01;

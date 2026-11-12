@@ -12,6 +12,7 @@
 //
 // The rule is the hub's too: rust/switchboard/src/artifacts_filter.rs (`sb artifact list --since
 // --agent`), both tested on tests/fixtures/artifacts-filter.json. Pure. Owner: artifacts-keep.
+import { appCompletions, appOf } from './apps';
 import type { Item } from './model';
 import { touchedOf } from './sections';
 
@@ -76,8 +77,22 @@ const by: Dimension = {
   keysOf: (it) => [whoOf(it)],
 };
 
-/** The bar's dimensions; apps-gallery adds `app:` on plugin-apps. */
-export const DIMENSIONS: readonly Dimension[] = [since, by];
+/**
+ * The app an item follows for `app:` (apps-gallery, apps.ts appOf: the hub's opener on its row, A2;
+ * a PR's review, a link's browser, his Mac), by its word lowercased: `sheets`, `pull requests`,
+ * `your mac`. The app tabs write the same token.
+ */
+export const appKeyOf = (it: Item): string => appOf(it.a).word.toLowerCase();
+
+const app: Dimension = {
+  token: 'app',
+  parse: (v) => (v === '' ? null : v),
+  match: (it, keys) => keys.has(appKeyOf(it)),
+  keysOf: (it) => [appKeyOf(it)],
+};
+
+/** The bar's dimensions; `app:` is apps-gallery's (plugin-apps). */
+export const DIMENSIONS: readonly Dimension[] = [since, by, app];
 
 /** The field's text read: the project typed (`in:`), each dimension's keys, the words. */
 export interface Filters {
@@ -200,6 +215,16 @@ export function whoOptions(items: readonly Item[], f: Filters, ctx: Ctx, typed: 
   const ranked = [...all.filter((x) => x.key === 'you'), ...all.filter((x) => x.key !== 'you')];
   if (t === '') return ranked;
   return [...ranked.filter((x) => x.key.startsWith(t)), ...ranked.filter((x) => !x.key.startsWith(t) && x.key.includes(t))];
+}
+
+/**
+ * The `app:` completion (his pick A): the apps in the scope with every other filter applied, whose
+ * word starts with, then holds, what he typed, the most first (apps.ts appCompletions). Pure.
+ */
+export function appOptions(items: readonly Item[], f: Filters, ctx: Ctx, typed: string): { key: string; word: string; n: number }[] {
+  const words = new Map(items.map((it) => [appKeyOf(it), appOf(it.a).word]));
+  const tabs = facetOf(items, f, ctx, 'app').filter((x) => x.n > 0).map((x) => ({ id: x.key, word: words.get(x.key) ?? x.key, n: x.n }));
+  return appCompletions(tabs, typed).map((t) => ({ key: t.id, word: t.word, n: t.n }));
 }
 
 /** The token being typed at the caret, for the completion: its key and what is typed of its value. */

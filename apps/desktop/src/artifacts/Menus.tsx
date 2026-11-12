@@ -5,8 +5,10 @@
 // Each is the ds PickerPop (the menu law), from the point he clicked or the ··· he pressed.
 // Owner: art-folders.
 import { useRef, type RefObject } from 'react';
-import { AppIcon, PickerPop, type PickerRow } from '@/ds';
+import { AppIcon, PickerPop, type PickerGroup, type PickerRow } from '@/ds';
 import { library } from '@/proto/words_library.gen';
+import { menus } from '@/proto/words_menus.gen';
+import type { PopupItem } from '@/shared/api';
 import type { Library } from './folders';
 
 /** Where a menu opens: a point on the screen (a right-click), or a box (a ··· pressed, a card: its rect). */
@@ -29,7 +31,7 @@ export function MenuAnchor({ at, anchor }: { at: MenuAt; anchor: RefObject<HTMLS
 }
 
 /** A card's menu's actions. */
-export type CardAct = 'open' | 'look' | 'versions' | 'put' | 'copy' | 'finder' | 'move' | 'archive' | KeepAct;
+export type CardAct = 'open' | 'with' | 'look' | 'versions' | 'put' | 'copy' | 'finder' | 'move' | 'archive' | KeepAct;
 
 /** His Keep (◆, it never goes to Done) or Let go (sections.ts; page artifacts-signal v3). */
 export type KeepAct = 'keep' | 'let_go';
@@ -39,8 +41,11 @@ export function keepRows(allKept: boolean): { id: KeepAct; name: string }[] {
   return [allKept ? { id: 'let_go', name: library.let_go } : { id: 'keep', name: library.keep }];
 }
 
-/** The card menu's rows: what applies to it (a link has no Finder), its key at the right. Pure. */
-export function cardRows(o: { finder: boolean; several: number }): { id: CardAct; name: string; key: string }[] {
+/**
+ * The card menu's rows: what applies to it (a link has no Finder; Open with when an app or his Mac
+ * opens it: docs/plugin-apps.md A6b), its key at the right. Pure.
+ */
+export function cardRows(o: { finder: boolean; several: number; openWith?: boolean }): { id: CardAct; name: string; key: string }[] {
   if (o.several > 1) {
     return [
       { id: 'move', name: library.menu_move, key: 'm' },
@@ -50,6 +55,7 @@ export function cardRows(o: { finder: boolean; several: number }): { id: CardAct
   }
   const rows: { id: CardAct; name: string; key: string }[] = [
     { id: 'open', name: library.menu_open, key: '⏎' },
+    ...(o.openWith === true ? [{ id: 'with' as const, name: `${menus.open_with}…`, key: '' }] : []),
     { id: 'look', name: library.menu_look, key: 'space' },
     { id: 'versions', name: library.menu_versions, key: 'v' },
     { id: 'put', name: library.put_in_message, key: '@' },
@@ -60,24 +66,65 @@ export function cardRows(o: { finder: boolean; several: number }): { id: CardAct
   return rows;
 }
 
-export function CardMenu({ at, finder, several, kept, onAct, onClose, testId }: {
+export function CardMenu({ at, finder, several, kept, openWith = false, onAct, onClose, testId }: {
   at: MenuAt;
   finder: boolean;
   several: number;
   /** every one it acts on is kept: its keep row says Let go */
   kept: boolean;
+  openWith?: boolean;
   onAct: (a: CardAct) => void;
   onClose: () => void;
   testId: string;
 }) {
   const anchor = useRef<HTMLSpanElement>(null);
-  const rows: PickerRow[] = cardRows({ finder, several }).map((r) => ({ id: r.id, name: r.name, trailing: r.key, testId: `${testId}.${r.id}` }));
+  const rows: PickerRow[] = cardRows({ finder, several, openWith }).map((r) => ({ id: r.id, name: r.name, ...(r.key === '' ? {} : { trailing: r.key }), testId: `${testId}.${r.id}` }));
   const keep: PickerRow[] = keepRows(kept).map((r) => ({ id: r.id, name: r.name, testId: `${testId}.${r.id}` }));
   return (
     <>
       <MenuAnchor at={at} anchor={anchor} />
       <PickerPop anchor={anchor} align="start" groups={[{ id: 'card', rows }, { id: 'keep', rows: keep }]} onClose={onClose}
         onPick={(id) => { onClose(); onAct(id as CardAct); }} testId={testId} />
+    </>
+  );
+}
+
+/**
+ * Open with as the gallery's picker draws it, from the artifact menu's own items (app/menus
+ * registry openWithSub: one list, one owner): the apps, the one that opens it now ticked, 'your Mac',
+ * then 'Always open .xlsx with' as a group of the same apps. A row's id is the registry's act. Pure.
+ */
+export function openWithGroups(items: readonly PopupItem[]): PickerGroup[] {
+  const top = items[0];
+  const inside = top?.type === 'submenu' ? top.items : [];
+  const apps: PickerRow[] = [];
+  const mac: PickerRow[] = [];
+  const groups: PickerGroup[] = [];
+  for (const x of inside) {
+    if (x.type === 'separator') continue;
+    if (x.type === 'submenu') {
+      groups.push({ id: 'always', head: x.label, rows: x.items.flatMap((y) => (y.type === 'separator' || y.type === 'submenu' ? [] : [{ id: y.id, name: y.label, testId: `always.${y.id}` }])) });
+      continue;
+    }
+    // 'your Mac' between two dividers (designer m_62233, block 1)
+    if (x.id === 'open-mac') { mac.push({ id: x.id, name: x.label, testId: 'mac' }); continue; }
+    apps.push({ id: x.id, name: x.label, ...(x.checked === true ? { current: true } : {}), testId: `app.${x.id}` });
+  }
+  return [
+    ...(apps.length === 0 ? [] : [{ id: 'apps', rows: apps }]),
+    ...(mac.length === 0 ? [] : [{ id: 'mac', rows: mac }]),
+    ...groups,
+  ];
+}
+
+/** Open with, from the card's ⋯ (its row 'Open with…'): the groups openWithGroups made; a pick runs the registry's act. */
+export function OpenWithPicker({ at, groups, onPick, onClose, testId }: { at: MenuAt; groups: readonly PickerGroup[]; onPick: (act: string) => void; onClose: () => void; testId: string }) {
+  const anchor = useRef<HTMLSpanElement>(null);
+  return (
+    <>
+      <MenuAnchor at={at} anchor={anchor} />
+      <PickerPop anchor={anchor} align="start" title={menus.open_with} groups={groups.map((g) => ({ ...g, rows: g.rows.map((r) => ({ ...r, testId: `${testId}.${r.testId ?? r.id}` })) }))} onClose={onClose}
+        onPick={(id) => { onClose(); onPick(id); }} testId={testId} />
     </>
   );
 }

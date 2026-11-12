@@ -1,25 +1,30 @@
 // @vitest-environment happy-dom
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { extOf, iconKindOf, KindIcon, PlayIcon, type IconKind } from './icons';
 import { AppIcon } from './icons-app';
 
 describe('iconKindOf', () => {
+  const sheets = { icon: 'sheet' };
   const cases: [Parameters<typeof iconKindOf>[0], IconKind][] = [
-    [{ kind: 'page', url: 'http://127.0.0.1:47438/p/x' }, 'page'],
-    [{ kind: 'file', path: '/a/b/shot.PNG' }, 'image'],
+    // a file: its app's icon, as the hub picked it (bise's types: a ds name; never its ending)
+    [{ kind: 'file', path: '/a/budget.xlsx', opener: sheets }, 'sheet'],
+    [{ kind: 'shots', path: '/a/b.png', opener: { icon: 'image' } }, 'image'],
+    [{ kind: 'page', url: 'http://127.0.0.1:47438/p/x', opener: { icon: 'page' } }, 'page'],
+    // a type's own icon its app declares (files[].icon), whatever app it is
+    [{ kind: 'file', path: '/a/clip.mp4', opener: { icon: 'video' } }, 'video'],
+    // the app's own (its /icon/<plugin> route), an unknown ds name: a file
+    [{ kind: 'file', path: '/a/q.fake', opener: { icon: '/icon/fake-opener' } }, 'file'],
+    [{ kind: 'file', path: '/a/q.xlsx', opener: { icon: 'spreadsheet' } }, 'file'],
+    // no app: the ending says nothing, the kind word does
+    [{ kind: 'file', path: '/a/budget.xlsx' }, 'file'],
+    [{ kind: 'file', path: '/a/appart.glb' }, 'file'],
     [{ kind: 'shots', path: '/a/b' }, 'image'],
-    [{ kind: 'file', path: '/a/budget.xlsx' }, 'sheet'],
-    [{ kind: 'file', path: '/a/pitch.pptx' }, 'deck'],
-    [{ kind: 'file', path: '/a/notes.md' }, 'doc'],
-    [{ kind: 'file', path: '/a/offre.pdf' }, 'doc'],
-    [{ kind: 'file', path: '/a/poof.mp4' }, 'video'],
-    [{ kind: 'file', path: '/a/voice.m4a' }, 'audio'],
-    [{ kind: 'file', path: '/a/appart.glb' }, '3d'],
-    [{ kind: 'file', path: '/a/bise.dmg' }, 'file'],
-    [{ kind: 'file', path: '/a/dir/' }, 'file'],
+    [{ kind: 'slides' }, 'deck'],
     [{ kind: 'link', url: 'https://drive.google.com/x' }, 'link'],
-    [{ kind: 'link', url: 'https://example.com/report.pdf' }, 'doc'],
+    [{ kind: 'link', url: 'https://example.com/report.pdf' }, 'link'],
     [{ kind: 'pr', url: 'https://github.com/a/b/pull/3' }, 'pr'],
     [{ kind: 'release', url: 'https://github.com/a/b/releases/tag/v1' }, 'release'],
     [{ kind: 'site', target: '/w/site/index.html' }, 'page'],
@@ -28,6 +33,18 @@ describe('iconKindOf', () => {
   ];
   it.each(cases)('%j → %s', (a, want) => {
     expect(iconKindOf(a)).toBe(want);
+  });
+});
+
+describe("the icons a type may declare (bend_plugins::opens::TYPE_ICONS)", () => {
+  it('are all ds line icons, so a declared one always draws', () => {
+    // vitest runs in apps/desktop (this file's happy-dom has no file: url)
+    const rs = readFileSync(join(process.cwd(), '../../rust/plugins/src/opens.rs'), 'utf8');
+    const m = /pub const TYPE_ICONS: \[&str; \d+\] = \[([^\]]*)\];/u.exec(rs);
+    expect(m, 'opens.rs declares TYPE_ICONS').not.toBeNull();
+    const names = [...(m?.[1] ?? '').matchAll(/"([^"]+)"/gu)].map((x) => x[1] ?? '');
+    expect(names.length).toBeGreaterThan(0);
+    for (const n of names) expect(iconKindOf({ kind: 'file', opener: { icon: n } }), n).toBe(n);
   });
 });
 

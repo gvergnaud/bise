@@ -33,6 +33,14 @@ pub struct Artifact {
     /// from before it, an older hub)
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub versions: Vec<ArtifactVersion>,
+    /// the app that opens it on his click (docs/plugin-apps.md A2, A3):
+    /// `bend_plugins::opens::pick`'s, set by the hub, never matched by a
+    /// client; none: no app, the window says his Mac's
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opener: Option<crate::rows::Opener>,
+    /// the other apps that can open it, in pick's order (Open with)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub openers: Vec<crate::rows::Opener>,
     // the rest of the art store's row, as the terminal's /artifacts reads
     // it (client-protocol step 4, P4c): left out when empty, so an older
     // hub's row or an older client still reads
@@ -308,5 +316,22 @@ pub struct ArtifactVersion {
     /// with no copy served or no page server (architect m_23970)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub frame_url: Option<String>,
+    /// who saved it (docs/plugin-apps.md A6b's save line, `perf saved a
+    /// newer version`); none for a version from before (architect m_60168)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub by: Option<SavedBy>,
+}
+
+/// Who saved a version: him (his sitting in a viewer) or an agent (its
+/// turn). The window words `You` from its catalog, never from this.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SavedBy {
+    You,
+    Agent { name: String },
+    /// a kind this version doesn't know (a newer hub)
+    #[serde(other)]
+    Unknown,
 }
 

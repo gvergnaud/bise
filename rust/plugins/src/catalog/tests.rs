@@ -132,7 +132,7 @@ fn skills(t: &Tmp) -> Vec<SkillEntry> {
 }
 
 fn build(t: &Tmp, st: &StateV2, pending: &[String]) -> Vec<Plugin> {
-    let roots = Roots { builtin: Some(t.0.join("builtin")), user: Some(t.0.join("user")), workspace: None, data: t.0.join("data"), state: st.clone() };
+    let roots = Roots { builtin: Some(t.0.join("builtin")), user: Some(t.0.join("user")), state: st.clone(), ..Roots::for_test(&t.0) };
     let res = resolve::resolve(&roots);
     let (cat, sk, sd) = (catalog(), skills(t), t.0.join("status"));
     let grants = crate::state::Grants::new();
@@ -373,7 +373,7 @@ fn prompts_must_be_strings_and_the_built_ins_have_three_uncut() {
     let bad = format!("{{\"$schema\":\"{PLUGIN_SCHEMA}\",\"name\":\"x\",\"extensions\":{{\"dev.bise\":{{\"prompts\":\"one\"}}}}}}");
     assert!(resolve::parse_manifest(&bad).unwrap_err().contains("prompts"));
     let t = tmp();
-    let roots = Roots { builtin: resolve::builtin_root(), user: None, workspace: None, data: t.0.join("data"), state: StateV2::default() };
+    let roots = Roots { builtin: resolve::builtin_root(), ..Roots::for_test(&t.0) };
     let res = resolve::resolve(&roots);
     for name in ["computer", "docs", "sheets", "slides"] {
         let p = res.plugins.iter().find(|p| p.name == name).unwrap_or_else(|| panic!("no built-in {name}"));
@@ -387,7 +387,7 @@ fn a_plugins_settings_say_whether_they_are_set_never_their_value() {
     let t = tmp();
     write(&t.0.join("builtin/maps/plugin.json"), &format!(
         r#"{{"$schema":"{PLUGIN_SCHEMA}","name":"maps","extensions":{{"dev.bise":{{"settings":[{{"var":"BP_CAT_MAPS_KEY","label":"Google Maps API key","secret":true,"help":"optional"}},{{"var":"BP_CAT_MAPS_UNITS","label":"Units","required":true}}]}}}}}}"#));
-    let roots = Roots { builtin: Some(t.0.join("builtin")), user: None, workspace: None, data: t.0.join("data"), state: StateV2::default() };
+    let roots = Roots { builtin: Some(t.0.join("builtin")), ..Roots::for_test(&t.0) };
     let res = resolve::resolve(&roots);
     let p = res.plugins.iter().find(|p| p.name == "maps").unwrap();
     let dir = t.0.join("secrets");

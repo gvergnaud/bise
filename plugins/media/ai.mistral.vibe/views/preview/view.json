@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "name": "preview",
+  "description": "Open an image, a pdf or a video: zoom and box an image, read a pdf's pages and select a passage, play a video and pick a moment. Opened by a click on the file; not for the agent to call.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "file": {
+        "type": "object",
+        "properties": { "name": { "type": "string" }, "resourceUri": { "type": "string" } },
+        "required": ["name", "resourceUri"]
+      }
+    },
+    "required": ["file"]
+  },
+  "ui": {
+    "csp": { "connectDomains": [], "resourceDomains": [], "frameDomains": [], "baseUriDomains": [] },
+    "permissions": {}
+  },
+  "_meta": {
+    "ai.mistral.vibe/ui": {
+      "entrypoints": [
+        { "type": "file", "extensions": [".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf", ".mp4", ".mov", ".webm", ".m4v"], "title": "Preview" }
+      ]
+    },
+    "dev.bise/ui": {
+      "files": [
+        { "match": ["*.png", "*.jpg", "*.jpeg", "*.gif", "*.webp"], "title": "Image", "rank": "owner", "icon": "image" },
+        { "match": ["*.pdf"], "title": "PDF document", "rank": "owner", "icon": "doc" },
+        { "match": ["*.mp4", "*.mov", "*.webm", "*.m4v"], "title": "Video", "rank": "owner", "icon": "video" }
+      ]
+    }
+  }
+}

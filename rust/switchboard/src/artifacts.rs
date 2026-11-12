@@ -39,6 +39,7 @@ use crate::artifacts_assets;
 use crate::artifacts_marks::{self, Audience};
 use crate::artifacts_turns::{self, Place, Rev, Sitting, Turn};
 use bise_proto::anchor::Anchor;
+use bise_proto::rows::SavedBy;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -47,8 +48,9 @@ use std::path::{Path, PathBuf};
 /// The largest file (or folder, summed) bise keeps a copy of.
 pub const MAX_COPY: u64 = 50 * 1024 * 1024;
 /// A version's `no_copy` when it is over [`MAX_COPY`]: the one name for it,
-/// written here and read by pages::site::served (a video too big to copy is
-/// streamed from its own file; video-artifact, architect m_54229).
+/// written here; a file too big to copy is read from its own file while
+/// its sig holds, by its app through a handle (view_files_disk,
+/// docs/plugin-apps.md A4).
 pub const TOO_BIG: &str = "over 50 MB";
 /// A folder with more files than this is not copied.
 const MAX_COPY_FILES: usize = 5000;
@@ -91,9 +93,29 @@ pub struct Version {
     /// request. None: a file, another link, or no listener at the add.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub serve: Option<crate::artifacts_serve::Serve>,
+    /// A folder's first-level names ([`folder_names`], the one
+    /// [`bise_proto::files::Names`] of folder rows and handles too:
+    /// `names`, and `names_more` when cut), read where the version is
+    /// added: what A2 matches a folder rule on (`*/index.html`,
+    /// app_openers::target_of), never a kind (docs/plugin-apps.md A2,
+    /// architect m_62393, m_62668). Empty: a file, a link, or a version
+    /// from before them.
+    #[serde(flatten)]
+    pub names: bise_proto::files::Names,
 }
 
 impl Version {
+    /// Who saved it: him (a sitting), else its turn's agent; none for a
+    /// version from before both (a document tab's "perf saved a newer
+    /// version" line, docs/plugin-apps.md A6b).
+    pub fn saved_by(&self) -> Option<SavedBy> {
+        match (&self.sitting, &self.turn) {
+            (Some(_), _) => Some(SavedBy::You),
+            (None, Some(t)) => Some(SavedBy::Agent { name: t.agent.clone() }),
+            (None, None) => None,
+        }
+    }
+
     /// Its newest save's number (1 for a version from before revs).
     pub fn rev(&self) -> u32 {
         self.revs.last().map_or(1, |r| r.rev)
@@ -193,6 +215,11 @@ pub struct Add {
     /// diff: `<feature>-diff`); taken by another one, or none: from its
     /// title. A next version keeps its id.
     pub id: Option<String>,
+    /// A copy staged off the hub's loop ([`Store::stage_copy`], a view's
+    /// write, docs/plugin-apps.md A4): renamed in as the version's copy
+    /// instead of copying the file on the loop; the caller already
+    /// decided it is a new save.
+    pub staged: Option<PathBuf>,
     /// `sb artifact add --for-you`: it is for him (crate::artifacts_marks);
     /// a next version only raises its audience, never lowers it.
     pub for_you: bool,
@@ -386,6 +413,38 @@ pub fn link_kind(url: &str) -> &'static str {
     "link"
 }
 
+/// A folder's first-level names as a version, a folder row and a handle
+/// keep them ([`bise_proto::files::Names::of`]): sorted, the names the id
+/// table skips (`.git`, `.DS_Store`, `x~`: `bise_ids::skipped`) out, the
+/// first [`bise_proto::files::Names::MAX`], `more` when there were more.
+/// Pure.
+pub fn folder_names(all: impl IntoIterator<Item = String>) -> bise_proto::files::Names {
+    let mut all: Vec<String> = all.into_iter().filter(|n| !n.is_empty()).collect();
+    all.sort();
+    all.dedup();
+    bise_proto::files::Names::of(all, bise_ids::skipped)
+}
+
+/// The first-level names of folder `p` ([`folder_names`]); none for a
+/// file or an unreadable folder.
+pub fn names_of(p: &Path) -> bise_proto::files::Names {
+    match std::fs::read_dir(p) {
+        Ok(rd) if p.is_dir() => folder_names(rd.filter_map(Result::ok).map(|e| e.file_name().to_string_lossy().to_string())),
+        _ => Default::default(),
+    }
+}
+
+/// A version's names for its row: its own, else (a folder version added
+/// before [`Version::names`]) its folder's, read now.
+// TODO(art-names-read): goes in v2026.12.15, once every folder version
+// kept since was added with its names; a version from before reads them here.
+fn names_or_read(v: &Version) -> bise_proto::files::Names {
+    match v.names.names.is_empty() && !is_link(&v.target) {
+        true => names_of(Path::new(&v.target)),
+        false => v.names.clone(),
+    }
+}
+
 /// The kind of a file or folder.
 pub fn path_kind(p: &Path) -> &'static str {
     if p.is_dir() {
@@ -423,8 +482,8 @@ fn default_title(target: &str, is_url: bool) -> String {
 }
 
 /// A file's sig now, as [`Version::sig`] has it for a file that links no
-/// other (`<bytes>:<mtime ms>`); None: not a file. The page server checks
-/// it before it streams a file bise kept no copy of (pages::media::own_holds).
+/// other (`<bytes>:<mtime ms>`); None: not a file. A handle's read checks
+/// it before it reads a file bise kept no copy of (view_files_disk).
 pub fn file_sig(p: &Path) -> Option<String> {
     std::fs::metadata(p).ok().filter(std::fs::Metadata::is_file)?;
     let (bytes, mtime, _) = measure(p);
@@ -652,6 +711,7 @@ impl Store {
                 return Ok(Added { meta: page_meta(&p, self.pages_base().as_deref()), new_version: false, page: true, not_artifact: false, replaced: false, ..Added::none() });
             }
         }
+        let names = path.as_deref().map(names_of).unwrap_or_default();
         let (source, target, kind) = match (&path, &url) {
             (Some(p), _) => {
                 let s = p.to_string_lossy().to_string();
@@ -738,7 +798,9 @@ impl Store {
                     _ => false,
                 }
             };
-            if same_sig || same_bytes() {
+            // a staged save was decided new by its caller: never read both
+            // files on the hub's loop to doubt it
+            if a.staged.is_none() && (same_sig || same_bytes()) {
                 self.save(&meta)?;
                 return Ok(Added { meta, new_version: false, page: false, not_artifact: false, replaced: false, ..Added::none() });
             }
@@ -767,7 +829,16 @@ impl Store {
                     let vdir = self.dir().join(&meta.id).join(format!("v{}", v));
                     // its files first, the html last: a reader of the html finds them there
                     let linked = assets.files.iter().try_for_each(|f| copy_whole(&root.join(f), &vdir.join(f)));
-                    match linked.and_then(|()| copy_whole(p, &self.dir().join(&meta.id).join(&rel))) {
+                    let to = self.dir().join(&meta.id).join(&rel);
+                    let copied = match &a.staged {
+                        // staged off the loop: a rename, the copy's bytes the file's
+                        Some(s) if assets.files.is_empty() => std::fs::create_dir_all(&vdir).and_then(|()| {
+                            crate::store_gen::bump();
+                            std::fs::rename(s, &to)
+                        }),
+                        _ => copy_whole(p, &to),
+                    };
+                    match linked.and(copied) {
                         Ok(()) => (Some(rel), None),
                         Err(e) => (None, Some(format!("copy failed: {}", e))),
                     }
@@ -784,15 +855,29 @@ impl Store {
                 }
                 let r = rev(&last.revs);
                 last.revs.push(r);
-                *last = Version { at_ms: now, target, copy, no_copy, sig, sitting: a.sitting.clone().or(last.sitting.clone()), ..last.clone() };
+                *last = Version { at_ms: now, target, copy, no_copy, sig, sitting: a.sitting.clone().or(last.sitting.clone()), names, ..last.clone() };
             }
             _ => {
                 let revs = vec![rev(&[])];
-                meta.versions.push(Version { v, at_ms: now, target, copy, no_copy, sig, turn: a.turn.clone(), sitting: a.sitting.clone(), revs, serve: None });
+                meta.versions.push(Version { v, at_ms: now, target, copy, no_copy, sig, turn: a.turn.clone(), sitting: a.sitting.clone(), revs, serve: None, names });
             }
         }
         self.save(&meta)?;
         Ok(Added { meta, new_version: true, page: false, not_artifact: false, replaced: same, assets: assets.files.len(), unkept: assets.unkept, scripts: assets.scripts })
+    }
+
+    /// A view's save of artifact `id`, staged as its next copy off the
+    /// hub's loop (docs/plugin-apps.md A4): `bytes` in a temp file inside
+    /// the artifact's folder, so [`Store::add`] with [`Add::staged`] only
+    /// renames it. The caller deletes it when the save loses its decide.
+    pub fn stage_copy(&self, id: &str, bytes: &[u8]) -> std::io::Result<PathBuf> {
+        static N: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let dir = self.dir().join(id);
+        std::fs::create_dir_all(&dir)?;
+        let p = dir.join(format!(".staged-{}-{}", std::process::id(), N.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
+        std::fs::write(&p, bytes)?;
+        std::fs::File::open(&p)?.sync_all()?;
+        Ok(p)
     }
 
     /// The bytes of bise's copy of version `v` (None: no copy, or unreadable).
@@ -803,21 +888,6 @@ impl Store {
     /// Where bise's copy of version `v` is (None: no copy kept).
     pub fn copy_path(&self, meta: &Meta, v: &Version) -> Option<PathBuf> {
         Some(self.dir().join(&meta.id).join(v.copy.as_ref()?))
-    }
-
-    /// His edits of a file artifact in the viewer (pages/artifact/save.rs,
-    /// daemon/art.rs `art_save`): `bytes` over its file, through a temp file
-    /// and a rename (a reader never sees half a file). Err: its folder is
-    /// gone (an archived agent's temp folder), or the write failed.
-    pub fn write_source(&self, meta: &Meta, bytes: &[u8]) -> Result<PathBuf, String> {
-        let p = PathBuf::from(&meta.source);
-        let dir = p.parent().filter(|d| d.is_dir()).ok_or_else(|| format!("{} is gone", meta.source))?;
-        let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-        let tmp = dir.join(format!(".{name}.bise-save"));
-        std::fs::write(&tmp, bytes).map_err(|e| e.to_string())?;
-        crate::store_gen::bump();
-        std::fs::rename(&tmp, &p).map_err(|e| e.to_string())?;
-        Ok(p)
     }
 
     /// Every artifact, stored ones and pages, newest first (the time of
@@ -954,9 +1024,9 @@ impl Store {
         let dir = self.dir().join(&m.id);
         let version = |v: &Version| {
             json!({
-                "v": v.v, "ts_ms": v.at_ms, "target": v.target,
+                "v": v.v, "ts_ms": v.at_ms, "target": v.target, "by": v.saved_by(),
                 "copy": v.copy.as_ref().map(|c| dir.join(c).to_string_lossy().to_string()),
-                // why it has no copy: a video too big to copy is framed from its own file (site::served)
+                // why it has no copy: a file too big to copy is read by its app from its own file
                 "no_copy": v.no_copy,
                 "note": if page {
                     notes(v.v)
@@ -979,6 +1049,9 @@ impl Store {
             "id": m.id, "title": m.title, "kind": m.kind, "agent": agent, "by": m.by,
             "archived": archived, "archived_at": archived_at, "ts_ms": cur.at_ms, "created_ms": m.created_ms, "v": cur.v,
             "target": cur.target,
+            // a folder's first-level names, what A2 matches (app_openers::target_of)
+            "names": names_or_read(&cur).names,
+            "names_more": cur.names.more,
             // an expired one's copy is deleted: none to frame (artifacts_retention)
             "copy": cur.copy.as_ref().filter(|_| m.expired_ms.is_none()).map(|c| dir.join(c).to_string_lossy().to_string()),
             "no_copy": if m.expired_ms.is_some() { Some("expired".to_string()) } else { cur.no_copy.clone() },

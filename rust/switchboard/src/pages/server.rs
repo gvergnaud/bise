@@ -107,12 +107,16 @@ pub struct Response {
     pub csp: Cow<'static, str>,
     /// a redirect's `Location` (a local site's door, artifact/live.rs)
     pub location: Option<String>,
+    /// its ETag (a view's own file, view_folder.rs): then `Cache-Control:
+    /// no-cache` (revalidated), else `no-store`
+    pub etag: Option<String>,
 }
 
 fn reason(status: u16) -> &'static str {
     match status {
         200 => "OK",
         302 => "Found",
+        304 => "Not Modified",
         502 => "Bad Gateway",
         400 => "Bad Request",
         403 => "Forbidden",
@@ -127,10 +131,10 @@ fn reason(status: u16) -> &'static str {
 
 impl Response {
     pub(crate) fn json(status: u16, v: &Value) -> Response {
-        Response { status, ctype: "application/json", body: v.to_string().into_bytes(), csp: CSP.into(), location: None }
+        Response { status, ctype: "application/json", body: v.to_string().into_bytes(), csp: CSP.into(), location: None, etag: None }
     }
     fn html(body: String) -> Response {
-        Response { status: 200, ctype: "text/html; charset=utf-8", body: body.into_bytes(), csp: CSP.into(), location: None }
+        Response { status: 200, ctype: "text/html; charset=utf-8", body: body.into_bytes(), csp: CSP.into(), location: None, etag: None }
     }
     pub(crate) fn err(status: u16, why: &str) -> Response {
         Response::json(status, &json!({"error": why}))
@@ -139,23 +143,33 @@ impl Response {
     /// JSON, which a browser reports as a stylesheet of the wrong MIME type
     /// (Benjamin's -31: "MIME type ('application/json')", the kit missing).
     pub(crate) fn missing(why: &str) -> Response {
-        Response { status: 404, ctype: "text/plain; charset=utf-8", body: why.as_bytes().to_vec(), csp: CSP.into(), location: None }
+        Response { status: 404, ctype: "text/plain; charset=utf-8", body: why.as_bytes().to_vec(), csp: CSP.into(), location: None, etag: None }
     }
 
     /// A 302 to `to` (a local site's door: its server, or bise's copy).
     pub(crate) fn redirect(to: &str) -> Response {
-        Response { status: 302, ctype: "text/plain; charset=utf-8", body: Vec::new(), csp: CSP.into(), location: Some(to.to_string()) }
+        Response { status: 302, ctype: "text/plain; charset=utf-8", body: Vec::new(), csp: CSP.into(), location: Some(to.to_string()), etag: None }
     }
     /// A page that says why (a local site's door when it could not open it).
     pub(crate) fn page(status: u16, html: String) -> Response {
-        Response { status, ctype: "text/html; charset=utf-8", body: html.into_bytes(), csp: CSP.into(), location: None }
+        Response { status, ctype: "text/html; charset=utf-8", body: html.into_bytes(), csp: CSP.into(), location: None, etag: None }
+    }
+
+    /// A 304: the client's copy (its `If-None-Match`) is the file's.
+    pub(crate) fn not_modified() -> Response {
+        Response { status: 304, ctype: "text/plain; charset=utf-8", body: Vec::new(), csp: CSP.into(), location: None, etag: None }
     }
 
     pub fn bytes(&self) -> Vec<u8> {
         // a Location never carries a line break (the header's end)
         let location = self.location.as_deref().filter(|l| !l.contains(['\r', '\n'])).map(|l| format!("Location: {l}\r\n")).unwrap_or_default();
+        // an ETag is the hub's own (view_folder::etag), never a request's
+        let cache = match self.etag.as_deref().filter(|t| !t.contains(['\r', '\n'])) {
+            Some(t) => format!("ETag: {t}\r\nCache-Control: no-cache"),
+            None => "Cache-Control: no-store".to_string(),
+        };
         let mut out = format!(
-            "HTTP/1.1 {} {}\r\n{location}Content-Type: {}\r\nContent-Length: {}\r\nContent-Security-Policy: {}\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n",
+            "HTTP/1.1 {} {}\r\n{location}Content-Type: {}\r\nContent-Length: {}\r\nContent-Security-Policy: {}\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\n{cache}\r\nConnection: close\r\n\r\n",
             self.status,
             reason(self.status),
             self.ctype,
@@ -195,6 +209,24 @@ fn handle(stream: TcpStream, pages: &Pages) {
         if super::media::send(&mut w, &path, ctype, super::site::ARTIFACT_CSP, req.header("range"), req.method == "HEAD") {
             return;
         }
+    }
+    // a document's file by its url (resources/url, A4): only on its
+    // session's view origin, GET or HEAD, byte ranges, never logged
+    let view = req.header("host").and_then(|h| super::views::view_host(h, pages.port));
+    if let Some((hash, token)) = view.zip(super::views::doc_file_token(&req.path)) {
+        if !matches!(req.method.as_str(), "GET" | "HEAD") {
+            let _ = w.write_all(&Response::err(405, "GET or HEAD only").bytes());
+            return;
+        }
+        // the table is read and let go before the file is (doc_files.rs)
+        if let Some(f) = pages.file_of_url(token, hash) {
+            let _ = w.set_write_timeout(Some(Duration::from_secs(30)));
+            if super::media::send(&mut w, &f.path, &f.mime, super::views::DOC_FILE_CSP, req.header("range"), req.method == "HEAD") {
+                return;
+            }
+        }
+        let _ = w.write_all(&Response::missing("no such file").bytes());
+        return;
     }
     let resp = route(pages, &req);
     let _ = w.write_all(&resp.bytes());
@@ -274,6 +306,10 @@ pub fn route(pages: &Pages, req: &Request) -> Response {
         [""] => Response::html(home(pages)),
         // a view in his browser (view_web.rs, C9)
         ["v", agent, call] => super::view_web::page(pages, agent, call),
+        // a document in its app in his browser (view_web.rs, A7's `O`)
+        ["d", id] => super::view_web::doc_page(pages, id),
+        // a plugin app's icon, the rows' Opener.icon (icon.rs, A1)
+        [seg, plugin] if format!("/{seg}/") == bend_plugins::opens::ICON_ROUTE => super::icon::serve(pages.icon_of(plugin), req.header("if-none-match")),
         ["kit", rest @ ..] if !rest.is_empty() => kit_file(pages, &rest.join("/")),
         ["a", id, v, rest @ ..] if valid_id(id) => artifact_file(pages, id, v, rest),
         ["p", id] if valid_id(id) => page(pages, id, None, false),
@@ -372,8 +408,7 @@ fn home(pages: &Pages) -> String {
     shell(pages, "for you", head, "id=\"bise-home\" data-home", &format!("{aside}{inner}"))
 }
 
-/// The file `/a/<id>/<v>/<rest>` names in bise's copy (or, for a video too
-/// big to copy, its own file: site::served, [`own_target`]), its content type and
+/// The file `/a/<id>/<v>/<rest>` names in bise's copy (site::served), its content type and
 /// whether it is the viewer's frame of a site (site::framed); Err: the 404
 /// in words. One rule for [`artifact_file`] and a video's ranges (media.rs).
 fn artifact_target(pages: &Pages, id: &str, v: &str, rest: &[&str]) -> Result<(std::path::PathBuf, &'static str, bool), Response> {
@@ -383,12 +418,7 @@ fn artifact_target(pages: &Pages, id: &str, v: &str, rest: &[&str]) -> Result<(s
     let at = format!("a/{id}/{v}/{}", rest.join("/"));
     let Some(m) = store.get(id).filter(|m| m.by != "page") else { return Err(Response::missing(&format!("no such artifact: {at}"))) };
     let Some(ver) = v.parse::<u64>().ok().and_then(|n| m.versions.iter().find(|x| x.v == n)) else { return Err(Response::missing(&format!("no such version: {at}"))) };
-    // its copy, or its own file for a video too big to copy (site::served, architect m_54229)
-    let copy = match super::site::served(&m.by, ver.copy.as_deref(), ver.no_copy.as_deref(), &ver.target) {
-        Some(super::site::Served::Copy(c)) => c,
-        Some(super::site::Served::Own(file)) => return own_target(file, &ver.sig, rest).ok_or_else(|| Response::missing(&format!("no such file: {at}"))),
-        None => return Err(Response::missing(&format!("no copy of it: {at}"))),
-    };
+    let Some(copy) = super::site::served(&m.by, ver.copy.as_deref()) else { return Err(Response::missing(&format!("no copy of it: {at}"))) };
     let base = state.join("artifacts").join(&m.id).join(copy);
     // the viewer's frame of a site (and its own links): the selection
     // script in its html (site::framed, architect m_24172)
@@ -398,19 +428,6 @@ fn artifact_target(pages: &Pages, id: &str, v: &str, rest: &[&str]) -> Result<(s
     let Some(path) = super::site::copy_file(&base, &rest) else { return Err(Response::missing(&format!("no such file: {at}"))) };
     let Some(ctype) = super::site::ctype(&path.to_string_lossy()) else { return Err(Response::missing(&format!("not served: {at}"))) };
     Ok((path, ctype, select))
-}
-
-/// A version's own file (site::Served::Own): the path is the store's,
-/// never the request's; the request names only its file (`/a/<id>/<v>/<name>`,
-/// %-encoded as copy_href writes it), and it is served while its sig holds
-/// (media::own_holds). None: another name, a changed or gone file.
-fn own_target(file: &str, sig: &str, rest: &[&str]) -> Option<(std::path::PathBuf, &'static str, bool)> {
-    let [name] = rest else { return None };
-    let path = std::path::Path::new(file);
-    if crate::artifacts_assets::decode(name) != super::site::file_of(file) || !super::media::own_holds(path, sig) {
-        return None;
-    }
-    Some((path.to_path_buf(), super::site::ctype(file)?, false))
 }
 
 /// A video copy (`GET` or `HEAD /a/<id>/<v>/<file>`, a `video/` type),
@@ -442,9 +459,9 @@ fn artifact_file(pages: &Pages, id: &str, v: &str, rest: &[&str]) -> Response {
         Ok(body) if ctype.starts_with("text/html") => {
             // its kept localStorage, every version's (artifacts_storage, web-storage)
             let kept = crate::artifacts_storage::read(&super::artifact::notes::arts(pages), id);
-            Response { status: 200, ctype, body: super::site::tagged(&body, select, &kept), csp: super::site::ARTIFACT_CSP.into(), location: None }
+            Response { status: 200, ctype, body: super::site::tagged(&body, select, &kept), csp: super::site::ARTIFACT_CSP.into(), location: None, etag: None }
         }
-        Ok(body) => Response { status: 200, ctype, body, csp: super::site::ARTIFACT_CSP.into(), location: None },
+        Ok(body) => Response { status: 200, ctype, body, csp: super::site::ARTIFACT_CSP.into(), location: None, etag: None },
         Err(_) => Response::missing(&format!("no such file: {at}")),
     }
 }
@@ -514,7 +531,7 @@ fn page_css(pages: &Pages, id: &str, n: u64) -> Response {
         None if n == 0 && pages.store.meta(id).is_some() => String::new(),
         None => return Response::missing(&format!("no such version: p/{id}/v/{n}/page.css")),
     };
-    Response { status: 200, ctype: "text/css; charset=utf-8", body: super::ui::page_css(&html).into_bytes(), csp: CSP.into(), location: None }
+    Response { status: 200, ctype: "text/css; charset=utf-8", body: super::ui::page_css(&html).into_bytes(), csp: CSP.into(), location: None, etag: None }
 }
 
 fn kit_file(pages: &Pages, rel: &str) -> Response {
@@ -534,7 +551,7 @@ fn kit_file(pages: &Pages, rel: &str) -> Response {
         _ => return Response::missing(&format!("not served: kit/{rel}")),
     };
     match std::fs::read(pages.kit_dir.join(rel)) {
-        Ok(body) => Response { status: 200, ctype, body, csp: CSP.into(), location: None },
+        Ok(body) => Response { status: 200, ctype, body, csp: CSP.into(), location: None, etag: None },
         Err(_) => Response::missing(&format!("no such file: kit/{rel}")),
     }
 }

@@ -16,6 +16,8 @@ const NOW = Date.UTC(2026, 9, 24, 18, 0);
 const art = (id: string, over: Partial<Artifact> = {}): Artifact =>
   ({ id, kind: 'file', title: id, agent: 'amb-home', url: '', at_ms: NOW, version: 1, new: false, ...over });
 const item = (project: string, a: Artifact): Item => ({ project, projectName: project, a });
+// the app the hub puts on a file's row (bend_plugins::opens' BUILTIN): its icon is the card's kind
+const app = (type: string, icon: string) => ({ opener: { plugin: 'media', tool: icon, app: 'Preview', type, type_title: type, icon, builtin: true } });
 
 const desk: Folder = { id: 'f-desk', name: 'desktop app', by: 'main', named_by_you: false };
 const view: Folder = { id: 'f-view', name: 'agent view', parent: 'f-desk', by: 'main', named_by_you: false };
@@ -24,11 +26,11 @@ const rue: Folder = { id: 'f-rue', name: '36 rue de Montreuil', by: 'you', named
 const FOLDERS = [desk, view, hero, rue];
 
 const ITEMS: Item[] = [
-  item('harness', art('step2', { folder: 'f-view', at_ms: NOW - 1000, new: true, path: '/x/step2.png' })),
-  item('harness', art('fixes', { folder: 'f-view', at_ms: NOW - 2000, agent: 'amb-win', path: '/x/fixes.png' })),
+  item('harness', art('step2', { folder: 'f-view', at_ms: NOW - 1000, new: true, path: '/x/step2.png', ...app('*.png', 'image') })),
+  item('harness', art('fixes', { folder: 'f-view', at_ms: NOW - 2000, agent: 'amb-win', path: '/x/fixes.png', ...app('*.png', 'image') })),
   item('harness', art('hero-shots', { folder: 'f-hero', at_ms: NOW - 3000, kind: 'page', agent: 'ds-hero' })),
-  item('ai-docs', art('dpe', { folder: 'f-rue', at_ms: NOW - 4000, path: '/x/dpe.md' })),
-  item('paint', art('offre', { folder: 'f-rue', at_ms: NOW - 5000, path: '/x/offre.pdf' })),
+  item('ai-docs', art('dpe', { folder: 'f-rue', at_ms: NOW - 4000, path: '/x/dpe.md', ...app('*.md', 'doc') })),
+  item('paint', art('offre', { folder: 'f-rue', at_ms: NOW - 5000, path: '/x/offre.pdf', ...app('*.pdf', 'doc') })),
   item('harness', art('loose', { at_ms: NOW - 6000, agent: 'you', by: 'you' })),
   // a folder gone from the list (deleted): reads as unfiled
   item('harness', art('orphan', { folder: 'f-gone', at_ms: NOW - 7000 })),

@@ -9,7 +9,8 @@ import { memo, type HTMLAttributes, type MouseEvent, type ReactNode } from 'reac
 import { iconKindOf, KindIcon, Press, tipAttrs } from '@/ds';
 import { useRouter } from '@/app/router';
 import { Thumb, thumbExt } from './thumbs';
-import { countTip, domainOf, extTip, isNew, lineTip, titleOf, topOf, type Card } from './gallery';
+import { countTip, domainOf, isNew, lineTip, titleOf, topOf, type Card } from './gallery';
+import { opensTip } from './apps';
 import { library } from '@/proto/words_library.gen';
 import { panel } from '@/proto/words_panel.gen';
 import { leaves, type Item } from './model';
@@ -67,7 +68,7 @@ export function CardPic({ card, it, visible, picked, onPick, onMenu, testId }: {
       {stack && <span className="art-card-s1" aria-hidden="true" />}
       <span className="art-card-th" data-testid={`${testId}.pic`}>
         <Thumb item={it} visible={visible} />
-        {ext !== null && !out && <span className="art-card-x" data-testid={`${testId}.ext`} {...tipAttrs(extTip(it))}>{ext}</span>}
+        {ext !== null && !out && <span className="art-card-x" data-testid={`${testId}.ext`} {...tipAttrs(opensTip(it.a) ?? undefined)}>{ext}</span>}
         {stack && <span className="art-card-n" data-testid={`${testId}.count`} {...tipAttrs(countTip(stack))}>{stack.items.length}</span>}
         {/* a PR hovers like any artifact: ⋯ and its tip, no 'github.com' over its tile (designer m_54748) */}
         {out && it.a.pr == null && <span className="art-card-lk" data-testid={`${testId}.out`} {...tipAttrs(library.tip_leaves)}>{domain === '' ? '↗' : `↗ ${domain}`}</span>}

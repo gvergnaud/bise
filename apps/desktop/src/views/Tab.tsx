@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { views } from '@/proto/words_views.gen';
 import type { Entity } from '@/shared/entity';
-import { viewKey, type ViewRef } from './port';
+import { isDoc, viewKey, type ViewRef } from './port';
 import { humanName } from './names';
 import type { ViewsStore } from './store';
 import { useViewState } from './hooks';
@@ -27,7 +27,7 @@ export function viewTitle(e: Extract<Entity, { kind: 'view' }>, store: ViewsStor
   const key = viewKey(e);
   const twin = store.live().some((k) => {
     const o = store.liveOf(k);
-    return k !== key && o !== undefined && store.modeOf(o.ref) === 'fullscreen' && nameOf(store, o.ref) === name;
+    return k !== key && o !== undefined && !isDoc(o.ref) && store.modeOf(o.ref) === 'fullscreen' && nameOf(store, o.ref) === name;
   });
   return twin && s.plugin !== '' ? views.tab_of({ plugin: s.plugin, name }) : name;
 }

@@ -1,0 +1,191 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>hostile opener</title>
+</head>
+<body>
+<h1>hostile opener</h1>
+<p>Each probe row is one escape a file-opened view tries; each control row
+is one thing it may do, which must work. A host is safe when every probe
+says <b>blocked</b> and every control says <b>ok</b>; a check reads
+<code>[data-probe]</code>, the same rules as tests/fixtures/mcp-apps'
+hostile view (docs/mcp-apps.md, the sandbox's checks; docs/plugin-apps.md
+A4, A5, Fixtures).</p>
+<ul id="rows"></ul>
+<script>
+// A probe is `blocked` only when the refusal it got is the one the host
+// owes it (a JSON-RPC code and reason, a 404); any other failure is
+// `broken`, never `blocked`: a dead host must turn this view red.
+//
+// The refusals owed (docs/plugin-apps.md A4's errors, bise_proto::view_rpc).
+// A made-up handle, a path, another session's or another artifact's handle
+// get the same answer, so a refusal never says a handle exists.
+const OWED = {
+  badHandle: { code: -32039, reason: "bad-handle" },
+  noGrant: { code: -32040, reason: "no_grant" },
+};
+// How a test runs it (one view, two runs):
+// - open two .hostile documents in two tabs: the second finds the first's
+//   handle and /f/ session in this origin's storage (one origin per plugin
+//   and view, C6) and probes them (`peer` rows; body[data-peer="1"]);
+// - once with the write grant (document.writable: the stale-ifMatch probe
+//   and the write control), once without (the no-grant probe).
+const rows = document.getElementById("rows");
+function row(kind, name, result, detail) {
+  const li = document.createElement("li");
+  li.dataset.probe = name;
+  li.dataset.kind = kind;
+  li.dataset.result = result;
+  li.textContent = name + ": " + result + (detail ? " (" + detail + ")" : "");
+  rows.appendChild(li);
+}
+const blocked = (detail) => ({ result: "blocked", detail });
+const leaked = (detail) => ({ result: "leaked", detail });
+const broken = (detail) => ({ result: "broken", detail });
+const says = (err) => String((err && (err.message || err.name)) || JSON.stringify(err));
+
+const pending = new Map();
+let nextId = 1;
+function request(method, params) {
+  const id = nextId++;
+  window.parent.postMessage({ jsonrpc: "2.0", id, method, params }, "*");
+  return new Promise((resolve, reject) => {
+    pending.set(id, { resolve, reject });
+    setTimeout(() => { if (pending.delete(id)) reject({ message: "no answer" }); }, 15000);
+  });
+}
+let started = false;
+window.addEventListener("message", (e) => {
+  if (e.source !== window.parent) return;
+  const m = e.data || {};
+  if (m.method === "ui/notifications/tool-input") {
+    const file = (m.params.arguments || {}).file;
+    if (file && !started) { started = true; run(file).finally(() => { document.body.dataset.done = "1"; }); }
+    return;
+  }
+  if (m.id === undefined || m.method) return;
+  const p = pending.get(m.id);
+  if (!p) return;
+  pending.delete(m.id);
+  m.error ? p.reject(m.error) : p.resolve(m.result);
+});
+
+async function probe(name, fn) {
+  let r;
+  try { r = await fn(); } catch (err) { r = broken("threw " + says(err)); }
+  row("probe", name, r.result, r.detail);
+}
+async function control(name, fn) {
+  let r;
+  try { r = await fn(); } catch (err) { r = { ok: false, detail: says(err) }; }
+  row("control", name, r.ok ? "ok" : "broken", r.detail);
+}
+
+async function refused(method, params, owed) {
+  try { await request(method, params); return leaked("it ran"); }
+  catch (err) {
+    return err && err.code === owed.code && err.data && err.data.reason === owed.reason
+      ? blocked(owed.code + " " + owed.reason)
+      : broken("want " + owed.code + " " + owed.reason + ", got " + JSON.stringify(err).slice(0, 160));
+  }
+}
+const readRefused = (uri) => refused("resources/read", { uri }, OWED.badHandle);
+
+// a /f/ read the pages server must answer 404 (as /mcp-app does)
+async function fNotFound(url) {
+  let r;
+  try { r = await fetch(url, { cache: "no-store" }); } catch (err) { return broken("fetch failed: " + says(err)); }
+  if (r.status === 404) return blocked("404");
+  if (r.ok) return leaked("status " + r.status + ": " + (await r.text()).slice(0, 60));
+  return broken("status " + r.status);
+}
+
+const first = (r) => ((r && r.contents) || [])[0] || {};
+const hex = (n) => Array.from({ length: n }, () => "0123456789abcdef"[Math.floor(Math.random() * 16)]).join("");
+// the view's own folder, as the hub's <base href="<origin>/f/<session>/">
+// says it (docs/plugin-apps.md A5)
+const ownBase = () => {
+  const u = new URL(".", document.baseURI);
+  return /\/f\/[^/]+\/$/.test(u.pathname) ? u.href : null;
+};
+const PEER_KEY = "hostile-opener:peer";
+
+async function run(file) {
+  const own = file.resourceUri;
+  const base = ownBase();
+  let peer = null;
+  try { peer = JSON.parse(localStorage.getItem(PEER_KEY) || "null"); } catch (_) { peer = null; }
+  if (peer && peer.handle === own) peer = null;
+  try { localStorage.setItem(PEER_KEY, JSON.stringify({ handle: own, base })); } catch (_) {}
+  document.body.dataset.peer = peer ? "1" : "0";
+
+  // ---- the controls: what a file-opened view may do works
+  let etag = null, writable = false;
+  await control("control-handle-shape", async () => ({ ok: /^view-file:\/\/[0-9a-f]{32}$/.test(own), detail: own }));
+  await control("control-read-own", async () => {
+    const c = first(await request("resources/read", { uri: own }));
+    etag = c._meta && c._meta.etag;
+    writable = !!(c._meta && c._meta.writable);
+    return { ok: typeof etag === "string" && (c.text !== undefined || c.blob !== undefined), detail: "etag " + etag + ", writable " + writable };
+  });
+  await control("control-f-own-file", async () => {
+    if (!base) return { ok: false, detail: "no <base> under /f/<session>/: " + document.baseURI };
+    const r = await fetch(new URL("own.txt", base).href, { cache: "no-store" });
+    const t = r.ok ? await r.text() : "";
+    return { ok: t.startsWith("hostile-opener's own file"), detail: "status " + r.status };
+  });
+  if (writable) {
+    await control("control-write-own", async () => {
+      const r = await request("ai.mistral.vibe/resources/write", { uri: own, ifMatch: etag, text: "saved by hostile " + Date.now() + "\n" });
+      const ok = r && r.outcome === "saved" && typeof r.etag === "string" && r.etag !== etag;
+      const stale = etag;
+      if (ok) etag = r.etag;
+      // ---- a save against the etag it just replaced: the store says conflict
+      await probe("write-stale-ifmatch", async () => {
+        if (!ok) return broken("the control write failed");
+        const w = await request("ai.mistral.vibe/resources/write", { uri: own, ifMatch: stale, text: "stale\n" });
+        if (w && w.outcome === "conflict") return blocked("conflict, etag " + w.etag);
+        return leaked("outcome " + (w && w.outcome));
+      });
+      return { ok, detail: "outcome " + (r && r.outcome) };
+    });
+  } else {
+    await probe("write-without-grant", () => refused("ai.mistral.vibe/resources/write", { uri: own, ifMatch: etag, text: "x\n" }, OWED.noGrant));
+  }
+
+  // ---- the probes: each handle the view did not get is refused alike
+  await probe("read-made-up-handle", () => readRefused("view-file://" + hex(32)));
+  await probe("read-handle-uppercase", () => readRefused(own.toUpperCase().replace("VIEW-FILE://", "view-file://")));
+  await probe("read-path-absolute", () => readRefused("/etc/hosts"));
+  await probe("read-path-file-uri", () => readRefused("file:///etc/hosts"));
+  await probe("read-path-in-handle", () => readRefused("view-file://../../../../etc/hosts"));
+  await probe("read-path-after-handle", () => readRefused(own + "/../../etc/hosts"));
+  await probe("write-made-up-handle", () => refused("ai.mistral.vibe/resources/write", { uri: "view-file://" + hex(32), text: "x\n" }, OWED.badHandle));
+  // ---- the view's own files: read only, under its folder, its session's
+  await probe("f-dotdot-encoded", () => base ? fNotFound(base + "%2e%2e/%2e%2e/%2e%2e/outside.txt") : broken("no base"));
+  await probe("f-dotdot-slash-encoded", () => base ? fNotFound(base + "..%2f..%2f..%2foutside.txt") : broken("no base"));
+  await probe("f-symlink-out", () => base ? fNotFound(base + "escape.txt") : broken("no base"));
+  await probe("f-listing", () => base ? fNotFound(base) : broken("no base"));
+  await probe("f-made-up-session", () => base ? fNotFound(base.replace(/\/f\/[^/]+\/$/, "/f/" + hex(32) + "/") + "own.txt") : broken("no base"));
+  await probe("f-write", async () => {
+    if (!base) return broken("no base");
+    let r;
+    try { r = await fetch(new URL("own.txt", base).href, { method: "PUT", body: "x" }); } catch (err) { return broken(says(err)); }
+    return r.ok ? leaked("status " + r.status) : (r.status === 404 || r.status === 405 ? blocked("status " + r.status) : broken("status " + r.status));
+  });
+  // ---- with a peer: another tab's handle and session (same origin)
+  if (peer) {
+    await probe("read-other-artifact-handle", () => readRefused(peer.handle));
+    await probe("write-other-artifact-handle", () => refused("ai.mistral.vibe/resources/write", { uri: peer.handle, text: "x\n" }, OWED.badHandle));
+    await probe("f-other-session", () => peer.base ? fNotFound(new URL("own.txt", peer.base).href) : broken("the peer had no base"));
+  }
+}
+
+request("ui/initialize", {
+  appInfo: { name: "hostile-opener", version: "0.1.0" }, appCapabilities: {}, protocolVersion: "2026-01-26",
+}).then(() => window.parent.postMessage({ jsonrpc: "2.0", method: "ui/notifications/initialized" }, "*"),
+        (err) => { row("control", "control-initialize", "broken", says(err)); document.body.dataset.done = "1"; });
+</script>
+</body>
+</html>

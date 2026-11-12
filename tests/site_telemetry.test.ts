@@ -163,7 +163,14 @@ function fakeNeon(psql: (sql: string) => { ok: boolean; out: string; err: string
     let raw = "";
     req.on("data", (c) => (raw += c));
     req.on("end", () => {
-      assert.ok(req.headers["neon-connection-string"], "the connection string goes in its header");
+      // a request without the connection string (the client's bug, or a stray one from another
+      // process on a busy machine) is refused as Neon would: the client's own call then fails its
+      // test. Never an assert here: it would throw after the hook that started the server ended
+      // (red under a loaded gate, green alone).
+      if (!req.headers["neon-connection-string"]) {
+        res.writeHead(400, { "content-type": "application/json" }).end(JSON.stringify({ message: "the connection string goes in its header" }));
+        return;
+      }
       const { query, params } = JSON.parse(raw) as { query: string; params: unknown[] };
       const r = psql(query.replace(/\$(\d+)/g, (_, n) => literal(params[Number(n) - 1])));
       if (!r.ok) {

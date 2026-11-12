@@ -68,7 +68,7 @@ export function step(store: ViewsStore, root: HTMLElement, last: Map<string, Pla
     showing.add(key);
     store.seen(key);
     const rect = { x: p.seen.x + off.x, y: p.seen.y + off.y, w: p.seen.w, h: p.seen.h };
-    frames.push({ project: live.ref.project, agent: live.ref.agent, call: live.ref.call, origin: live.res.origin, rect, perms: [...live.res.permissions], covers: coversOf(rect, over) });
+    frames.push({ key, origin: live.res.origin, rect, perms: [...live.res.permissions], covers: coversOf(rect, over) });
   }
   for (const k of [...last.keys()]) if (!store.live().includes(k)) last.delete(k);
   store.trim(showing);

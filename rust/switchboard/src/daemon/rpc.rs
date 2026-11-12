@@ -230,6 +230,11 @@ impl Shell {
         if row.cmd.starts_with("view_") || row.cmd == "plugin_views" {
             return self.view_rpc(id, rid, cmd);
         }
+        // plugin-apps A6: ~/bise's methods, the window's own, answered by
+        // their id (daemon/files_ids.rs)
+        if matches!(row.cmd, "folder_list" | "file_new" | "files_ids_subscribe" | "files_mint") {
+            return self.files_rpc(id, rid, cmd);
+        }
         let c = self.rpc.conns.entry(id).or_default();
         c.pending.push(Pending { id: rid.clone(), cmd: row.cmd, result: row.result });
         c.hold = Some(Vec::new());
@@ -487,6 +492,7 @@ impl Shell {
     pub(super) fn rpc_gone(&mut self, id: ClientId) {
         self.rpc.conns.remove(&id);
         self.rpc.peers.remove(&id);
+        self.ids_gone(id);
     }
 
     /// Connection `id`'s pid and program, for hub.log.
@@ -570,9 +576,11 @@ mod tests {
         // inbox_recorded: one record that changed; the history is read
         // with inbox/history, not carried in the state; activity (les
         // bims): what happens after a client's initialize, never replayed;
-        // guide: a diff's guide just written, read again with guide/get
+        // guide: a diff's guide just written, read again with guide/get;
+        // artifact_notes: an artifact's notes just written, read again with
+        // view/notes when its document view opens (plugin-apps A5)
         let moments: BTreeSet<&str> =
-            ["job_end", "followed_end", "route", "route_done", "page_changed", "inbox_recorded", "activity", "guide"].into_iter().collect();
+            ["job_end", "followed_end", "route", "route_done", "page_changed", "inbox_recorded", "activity", "guide", "artifact_notes"].into_iter().collect();
         let src = include_str!("rpc.rs");
         let body = src.split("fn hub_state(&mut self, id: ClientId)").nth(1).and_then(|s| s.split("\n    }\n").next()).unwrap();
         for row in rpc::NOTIFICATIONS.iter().filter(|r| r.scope == rpc::Scope::Hub) {

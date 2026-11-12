@@ -44,6 +44,16 @@
     "one": "and {n} more agent",
     "text": "and {n} more agents"
   },
+  "library.apps_label": {
+    "args": [],
+    "one": null,
+    "text": "apps"
+  },
+  "library.apps_more": {
+    "args": [],
+    "one": null,
+    "text": "More"
+  },
   "library.archive": {
     "args": [],
     "one": null,
@@ -193,6 +203,13 @@
     "one": null,
     "text": "file expired"
   },
+  "library.file_of": {
+    "args": [
+      "ending"
+    ],
+    "one": null,
+    "text": "{ending} file"
+  },
   "library.filters": {
     "args": [],
     "one": null,
@@ -207,6 +224,11 @@
     "args": [],
     "one": null,
     "text": "nothing here yet"
+  },
+  "library.folder_kind": {
+    "args": [],
+    "one": null,
+    "text": "Folder"
   },
   "library.folder_name": {
     "args": [],
@@ -353,11 +375,6 @@
     "args": [],
     "one": null,
     "text": "videos"
-  },
-  "library.kinds_label": {
-    "args": [],
-    "one": null,
-    "text": "kinds"
   },
   "library.let_go": {
     "args": [],
@@ -580,6 +597,11 @@
     "args": [],
     "one": null,
     "text": "video"
+  },
+  "library.opens_mac": {
+    "args": [],
+    "one": null,
+    "text": "opens on your Mac"
   },
   "library.picked": {
     "args": [
@@ -821,6 +843,21 @@
     ],
     "one": null,
     "text": "new inside: {n} since you last looked"
+  },
+  "library.tip_opens": {
+    "args": [
+      "kind",
+      "app"
+    ],
+    "one": null,
+    "text": "{kind} · opens in {app}"
+  },
+  "library.tip_opens_mac": {
+    "args": [
+      "kind"
+    ],
+    "one": null,
+    "text": "{kind} · opens on your Mac"
   },
   "library.tip_pick": {
     "args": [],

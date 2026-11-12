@@ -1,0 +1,44 @@
+/* bise kit · @bise/view's looks (docs/plugin-apps.md A5): his notes' marks on a view's parts
+   (kit/view/notes.js sets data-bise-mark), on the host's tokens. The host gives the spec's CSS
+   variables on :root (apps/desktop/src/views/context.ts maps bise's tokens on them) and
+   html[data-theme]; the fallbacks are bise's light theme, for a view opened alone. Like
+   kit/office/select.css: 3 px of accent on a part with a note sent (or a draft of his), ✓ on the
+   version that answered it; the accent is only for what is his. */
+
+:root {
+  --bv-accent: var(--color-text-info, #3b5bdb);
+  --bv-accent-soft: var(--color-background-info, #e7ecfd);
+  --bv-font: var(--font-sans, -apple-system, system-ui, sans-serif);
+  --bv-kicker: var(--font-text-xs-size, 11px);
+}
+
+/* the pill by a selection, in ink (the accent is only for his notes): kit/view/pill.js, placed by
+   CSSOM; select.css's .office-note-btn in the app (designer m_24098) */
+.bv-pill {
+  position: fixed; z-index: 2147483000; white-space: nowrap; cursor: pointer;
+  font: var(--bv-kicker) / 1 var(--bv-font);
+  color: var(--color-text-inverse, #fff); background: var(--color-background-inverse, #1d1d1f);
+  border: 0; border-radius: var(--border-radius-full, 999px); padding: 6px 12px;
+  box-shadow: var(--shadow-sm, 0 1px 4px rgba(0, 0, 0, 0.18));
+}
+.bv-pill:focus-visible { outline: 2px solid var(--color-ring-primary, #1d1d1f); outline-offset: 2px; }
+
+/* what changed since he last looked (kit/view/notes.js, dev.bise/changed; swap.js's in the
+   viewer): a 2 s outline in ink, then a dot on a part he hasn't had in sight yet */
+[data-bise-changed="flash"] { outline: 2px solid var(--color-text-primary, #1d1d1f); outline-offset: 2px; }
+@media (prefers-reduced-motion: no-preference) {
+  [data-bise-changed] { transition: outline-color 300ms ease-out; }
+}
+[data-bise-changed="dot"] { position: relative; }
+[data-bise-changed="dot"]::before {
+  content: ""; position: absolute; top: 4px; left: 4px; width: 6px; height: 6px; pointer-events: none;
+  border-radius: 50%; background: var(--color-text-primary, #1d1d1f);
+}
+
+[data-bise-mark] { box-shadow: inset 3px 0 0 var(--bv-accent); }
+[data-bise-mark="draft"] { box-shadow: inset 3px 0 0 var(--bv-accent-soft); }
+[data-bise-mark="done"] { box-shadow: none; position: relative; }
+[data-bise-mark="done"]::after {
+  content: "✓"; position: absolute; top: 0; right: 2px; pointer-events: none;
+  color: var(--bv-accent); font: 600 var(--bv-kicker) / 1 var(--bv-font);
+}

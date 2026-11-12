@@ -19,6 +19,7 @@
 
 import { VIEW_ORIGIN_RE } from '../proto/view_rules.gen';
 import type { ViewFrame } from '../shared/api';
+import { callViewKey } from '../shared/viewkey';
 import type { ViewPerm } from '../shared/viewperms';
 import { isPagesFrame } from './framelink';
 
@@ -181,22 +182,17 @@ export function freshGesture(at: number | undefined, taken: number | undefined, 
   return at !== undefined && at !== taken && at <= now && now - at <= GESTURE_MS;
 }
 
-/** A view's key: one per (project, agent, call). */
-export function viewKey(project: unknown, agent: unknown, call: unknown): string {
-  const s = (v: unknown): string => (typeof v === 'string' ? v : '');
-  return JSON.stringify([s(project), s(agent), s(call)]);
-}
 
 /**
  * Pure: the view_message command as it goes to the hub: `gesture_ms` is the time main saw the last
- * pointer-down inside that view's frame (`downs`, by viewKey), or absent; whatever the renderer
+ * pointer-down inside that view's frame (`downs`, by its key, shared/viewkey.ts), or absent; whatever the renderer
  * put there is dropped. Any other command is left as it is.
  */
 export function stampGesture(cmd: Readonly<Record<string, unknown>>, downs: ReadonlyMap<string, number>): Record<string, unknown> {
   if (cmd['cmd'] !== 'view_message') return { ...cmd };
   const rest: Record<string, unknown> = { ...cmd };
   delete rest['gesture_ms'];
-  const at = downs.get(viewKey(cmd['project'], cmd['agent'], cmd['call']));
+  const at = downs.get(callViewKey(cmd['project'], cmd['agent'], cmd['call']));
   return at === undefined ? rest : { ...rest, gesture_ms: at };
 }
 

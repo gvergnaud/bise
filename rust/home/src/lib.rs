@@ -63,6 +63,15 @@ pub fn exe_home_dir(exe_dir: &Path) -> PathBuf {
 
 /// Moves the whole state (the bise layout, at this path).
 pub const BISE_HOME: &str = "BISE_HOME";
+
+/// A plugin's documents under `root` (a [`Home::plugin_documents_root`]):
+/// `<root>/<plugin>/`, `None` when `plugin` is not one safe path segment
+/// (empty, a `/`, a `\`, a NUL, a leading `.`, so `..` too). Pure: the one
+/// rule, whose one caller is `bend_plugins::documents_dir_in`.
+pub fn plugin_app_dir_in(root: &Path, plugin: &str) -> Option<PathBuf> {
+    let safe = !plugin.is_empty() && !plugin.starts_with('.') && !plugin.contains(['/', '\\', '\0']);
+    safe.then(|| root.join(plugin))
+}
 /// [`Home::dictation_dir`]'s name under the root (the sandbox denies it).
 pub const DICTATION_DIR: &str = "dictation";
 /// The stamp of the exported paths: `<HOME>\n<BISE_HOME>` they were computed for.
@@ -180,6 +189,24 @@ impl Home {
     /// bise's own folder: `~/.bise` (`$BISE_HOME`).
     pub fn root(&self) -> &Path {
         &self.root
+    }
+
+    /// His taste rules, `<bise root>/taste.md` (`sb taste`).
+    pub fn taste_file(&self) -> PathBuf {
+        self.bise_root().join("taste.md")
+    }
+
+    /// Who is who for him, `<bise root>/people.md` (`sb people`).
+    pub fn people_file(&self) -> PathBuf {
+        self.bise_root().join("people.md")
+    }
+
+    /// Where every plugin's documents live, `<bise root>/Plugins/`: the
+    /// plugin resolver's root for them (`bend_plugins::resolve::Roots`);
+    /// one plugin's folder is [`plugin_app_dir_in`] under it, given to its
+    /// processes as `PLUGIN_DOCUMENTS` (docs/plugin-apps.md A6).
+    pub fn plugin_documents_root(&self) -> PathBuf {
+        self.bise_root().join("Plugins")
     }
 
     /// `config.toml` (`$BEND_CONFIG`).
@@ -422,6 +449,13 @@ impl Home {
     /// excluded_apps.
     pub fn prefs_file(&self) -> PathBuf {
         self.root.join("prefs.json")
+    }
+
+    /// `view-ids.json`: the home hub's id table of `~/bise`
+    /// (docs/plugin-apps.md A6 ids; `bise_ids::Snapshot`, one writer: the
+    /// home hub's table thread, tmp file + rename).
+    pub fn files_ids_file(&self) -> PathBuf {
+        self.root.join("view-ids.json")
     }
 
     /// `checks.json`: each model's last live test, for Settings and the

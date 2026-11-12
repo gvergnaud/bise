@@ -240,8 +240,6 @@ crate::words! { library:
     found_where = "in all folders · ⏎ opens the first, esc clears";
     /// the kind filter's first (in the toolbar above the list), `all 17`
     all_kinds = "All";
-    /// the kind filter, for VoiceOver
-    kinds_label = "kinds";
     /// the toolbar's search field: its placeholder and VoiceOver name
     search_placeholder = "search artifacts";
     /// the toolbar's one menu when the page is narrow (the kinds and the projects folded in it)
@@ -252,6 +250,23 @@ crate::words! { library:
     nothing_matches(q) = "nothing matches “{q}”.";
     /// no result: clear the words
     clear_search = "clear the search";
+
+    // ---- the filter by app (contract A6b; designer's page plugin-apps-mocks, blocks 1-2): one
+    // tab per app that has something here, the most first, five at most, the rest under More
+    /// a card's line, its lead when no app opens it: `opens on your Mac · 3 d`
+    opens_mac = "opens on your Mac";
+    /// a card's type tip: its type and its app, `Excel workbook · opens in Sheets`
+    tip_opens(kind, app) = "{kind} · opens in {app}";
+    /// a card's type tip when no app opens it, `ZIP file · opens on your Mac`
+    tip_opens_mac(kind) = "{kind} · opens on your Mac";
+    /// a type no app names, by its ending: `ZIP file`
+    file_of(ending) = "{ending} file";
+    /// a folder no app opens, its type in the tip
+    folder_kind = "Folder";
+    /// the app tabs, for VoiceOver; the app: completion's head
+    apps_label = "apps";
+    /// past five tabs, the menu that holds the rest: `More ▾`
+    apps_more = "More";
 
     // ---- the filter bar (his pick 'A + jetons', designer m_61790; apps/desktop/src/artifacts/filters.ts)
     /// the When chip, nothing picked

@@ -132,3 +132,10 @@ fn the_tool_row_draws_its_views_under_it() {
     assert!(text(&ls[bare]).contains("counter · fake-app") && text(&ls[bare]).contains(views::tui_app));
     assert!(text(&ls[bare + 1]).ends_with(views::tui_expired));
 }
+
+#[test]
+fn an_artifacts_web_page_is_the_hubs_d_route() {
+    // the TUI's `O` on an artifact in /artifacts (docs/plugin-apps.md A7): its /d/<id> page
+    assert_eq!(doc_web_url("http://127.0.0.1:4100", "q3-budget"), "http://127.0.0.1:4100/d/q3-budget");
+    assert_eq!(doc_web_url("http://127.0.0.1:4100/", "q3-budget"), "http://127.0.0.1:4100/d/q3-budget");
+}

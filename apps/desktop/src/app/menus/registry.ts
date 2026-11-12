@@ -10,8 +10,9 @@
 // typed fields (archived, status, main, changes, state, ended_ms), never from words. Pure; its
 // imports are relative: main's bundle reads it too (agentmenu.ts AGENT_MENU_IDLE), with no '@/' alias.
 // Owner: nm-menus.
-import type { Agent, Artifact, Proc, ProjectRow, ScheduledTask } from '../../proto';
+import type { Agent, Artifact, Opener, Proc, ProjectRow, ScheduledTask } from '../../proto';
 import { menus } from '../../proto/words_menus.gen';
+import { common } from '../../proto/words_common.gen';
 import type { PopupItem } from '../../shared/api';
 import type { Entity } from '../../shared/entity';
 
@@ -41,7 +42,13 @@ export type Act =
   | 'close-tab'
   | 'close-others'
   | 'move-bottom'
-  | 'change-model';
+  | 'change-model'
+  /** Open with › your Mac: the file in his Mac's own app for it (docs/plugin-apps.md A6b) */
+  | 'open-mac'
+  /** Open with › an app (its place in openersOf: the row's opener, then its others) */
+  | `open-with:${number}`
+  /** Open with › Always open .xlsx with › an app: his pick for the type */
+  | `always-open:${number}`;
 
 type Of<K extends Entity['kind']> = Extract<Entity, { kind: K }>;
 
@@ -62,7 +69,7 @@ export type MenuFacts =
   /** an office, a commit, a branch's diff, a diff, a plugin: opened in a tab or a window */
   | { readonly e: Of<'office' | 'commit' | 'branch' | 'diff' | 'plugin'> }
   /** a plugin's skill: its tab's own '…' holds its actions (plugins/SkillTab.tsx), its tab menu only the tab's; an MCP App's view (src/views): its tab menu only the tab's */
-  | { readonly e: Of<'skill' | 'view'> };
+  | { readonly e: Of<'skill' | 'view' | 'file'> };
 
 /** The menu bar's keys, as Electron's accelerators; the '…' and the right click show the same. */
 export const KEYS: Partial<Record<Act, string>> = {
@@ -92,6 +99,7 @@ export const ICONS: Record<Act, string> = {
   'open-browser': 'safari',
   'quick-look': 'eye',
   'show-in-finder': 'folder',
+  'open-mac': '',
   stop: 'stop.circle',
   archive: 'archivebox',
   restore: 'arrow.uturn.backward',
@@ -200,10 +208,37 @@ function projectMenu(p: ProjectRow): PopupItem[] {
 const pinItem = (pinned: boolean): PopupItem => (pinned ? item('unpin', menus.unpin) : item('pin', menus.pin));
 
 /** An artifact: Pin · Open, Open in new window · Quick Look, Show in Finder (a file) · Copy › Link. */
+/** The apps that open an artifact, as Open with lists them: the hub's pick first, then the others (A2's order). Pure. */
+export function openersOf(a: Artifact): Opener[] {
+  return [...(a.opener == null ? [] : [a.opener]), ...(a.openers ?? [])];
+}
+
+/** How a type key reads in 'Always open … with': its ending ('*.xlsx' -> '.xlsx'), else the type's name. Pure. */
+export function endingOf(o: Opener): string {
+  const m = /^\*(\.[^*?/]+)$/.exec(o.type);
+  return m?.[1] ?? o.type_title;
+}
+
+/**
+ * Open with (docs/plugin-apps.md A6b): the apps, the one that opens it now ticked, then 'your Mac'
+ * for a file (his Mac's own app for it), then 'Always open .xlsx with ›' and the same apps. A file
+ * no app opens: 'your Mac' alone (never a dead click); nothing to open: none. Pure.
+ */
+export function openWithSub(a: Artifact): PopupItem[] {
+  const all = openersOf(a);
+  const first = all[0];
+  const mac = when(present(a.path) && a.gone !== true, item('open-mac', common.your_mac));
+  if (first === undefined) return mac.length === 0 ? [] : sub(menus.open_with, OPEN_IN_ICON, mac);
+  const apps: PopupItem[] = all.map((o, i) => ({ id: `open-with:${String(i)}`, label: o.app, ...(i === 0 && a.opener != null ? { checked: true } : {}) }));
+  const always: PopupItem[] = all.map((o, i) => ({ id: `always-open:${String(i)}`, label: o.app }));
+  return sub(menus.open_with, OPEN_IN_ICON, [...apps, ...mac, { type: 'separator' }, ...sub(menus.always_open({ ending: endingOf(first) }), '', always)]);
+}
+
 function artifactMenu(a: Artifact, pinned: boolean): PopupItem[] {
   const file = present(a.path) && a.gone !== true;
   return grouped([
     [pinItem(pinned)],
+    openWithSub(a),
     [item('move-right', menus.move_right), item('new-window', menus.new_window)],
     when(file, item('quick-look', menus.quick_look), item('show-in-finder', menus.show_in_finder)),
     copySub([
@@ -284,6 +319,7 @@ export function menuOf(f: MenuFacts): PopupItem[] {
       return [item('move-right', menus.move_right), item('new-window', menus.new_window)];
     case 'skill':
     case 'view':
+    case 'file':
       return [];
   }
 }

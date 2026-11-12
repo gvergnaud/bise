@@ -14,10 +14,16 @@ use serde_json::Value;
 /// The CSP fields whose origins a view reaches, in the order shown.
 const DOMAIN_FIELDS: [&str; 4] = ["connectDomains", "resourceDomains", "frameDomains", "baseUriDomains"];
 
-/// The permissions a view's `_meta.ui` declares: its resource's `_meta`
-/// is `{"ui": ui}` (a static view's; bise_proto::view_rules::declared).
-pub fn declared(ui: &Value) -> Vec<String> {
-    view_rules::names(&view_rules::declared(&serde_json::json!({ "ui": ui })))
+/// A static view's whole `_meta` as the rules read it: its `view.json`
+/// `ui` and its `dev.bise/ui` (an opener's `write`, docs/plugin-apps.md
+/// A1); bise_proto::view_rules::declared reads what it asks.
+pub fn static_meta(v: &crate::views::StaticView) -> Value {
+    serde_json::json!({"ui": v.ui, "dev.bise/ui": v.meta.get("dev.bise/ui").cloned().unwrap_or(Value::Null)})
+}
+
+/// The permissions a view's resource `_meta` declares, as names.
+fn declared(meta: &Value) -> Vec<String> {
+    view_rules::names(&view_rules::declared(meta))
 }
 
 /// The origins a view's `_meta.ui.csp` declares, each once, in order.
@@ -34,8 +40,10 @@ pub fn domains(ui: &Value) -> Vec<String> {
 }
 
 /// One view of `plugin` as a part: `name` (its tool's), served by
-/// `server` (none: a Vibe static view), its `_meta.ui`, his grant.
-pub fn view_part(plugin: &str, server: Option<&str>, name: &str, uri: &str, ui: &Value, grants: &Grants, on: bool) -> PluginPart {
+/// `server` (none: a Vibe static view), its resource's `_meta` (`ui`,
+/// `dev.bise/ui`), his grant.
+pub fn view_part(plugin: &str, server: Option<&str>, name: &str, uri: &str, meta: &Value, grants: &Grants, on: bool) -> PluginPart {
+    let ui = meta.get("ui").unwrap_or(&Value::Null);
     let id = PluginId::plugin(plugin).part(IdPart::View, None, uri);
     let granted = state::view_grant(grants, plugin, uri);
     PluginPart {
@@ -53,7 +61,7 @@ pub fn view_part(plugin: &str, server: Option<&str>, name: &str, uri: &str, ui: 
         view: Some(PartView {
             uri: uri.to_string(),
             server: server.map(String::from),
-            declared: declared(ui),
+            declared: declared(meta),
             domains: domains(ui),
             asked: granted.is_some(),
             granted: granted.unwrap_or_default(),
@@ -65,7 +73,7 @@ pub fn view_part(plugin: &str, server: Option<&str>, name: &str, uri: &str, ui: 
 /// asked about that are not among them (a server's, granted at the add
 /// or on its page: their declarations come with the server's list).
 pub fn parts(plugin: &str, statics: &[crate::views::StaticView], grants: &Grants, on: bool) -> Vec<PluginPart> {
-    let mut out: Vec<PluginPart> = statics.iter().map(|v| view_part(plugin, None, &v.tool, &v.uri, &v.ui, grants, on)).collect();
+    let mut out: Vec<PluginPart> = statics.iter().map(|v| view_part(plugin, None, &v.tool, &v.uri, &static_meta(v), grants, on)).collect();
     let owner = PluginId::plugin(plugin);
     for id in grants.keys() {
         let PluginId::Part { owner: o, kind: IdPart::View, name: uri, .. } = id else { continue };
@@ -88,10 +96,12 @@ mod tests {
             "permissions": {"microphone": {}, "camera": false, "geolocation": {}, "midi": {}},
             "csp": {"connectDomains": ["https://api.open-meteo.com"], "resourceDomains": ["https://tile.openstreetmap.org", "https://api.open-meteo.com"]}
         });
-        assert_eq!(declared(&ui), vec!["microphone", "midi"]);
+        assert_eq!(declared(&json!({"ui": ui})), vec!["microphone", "midi"]);
         assert_eq!(domains(&ui), vec!["https://api.open-meteo.com", "https://tile.openstreetmap.org"]);
-        assert_eq!(declared(&json!({"permissions": ["clipboardWrite"]})), vec!["clipboardWrite"]);
+        assert_eq!(declared(&json!({"ui": {"permissions": ["clipboardWrite"]}})), vec!["clipboardWrite"]);
         assert!(declared(&Value::Null).is_empty() && domains(&Value::Null).is_empty());
+        // an opener that saves asks for write (docs/plugin-apps.md A1)
+        assert_eq!(declared(&json!({"ui": {}, "dev.bise/ui": {"write": true}})), vec!["write"]);
     }
 
     /// A static view's part declares as the hub reads its resource (its
@@ -101,17 +111,16 @@ mod tests {
     fn a_view_part_declares_as_the_shared_fixture_says() {
         let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/fixtures/mcp-apps/declared.json");
         let fx: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
-        for row in fx["rows"].as_array().unwrap().iter().filter(|r| r["meta"].get("dev.bise/ui").is_none()) {
-            let ui = row["meta"].get("ui").cloned().unwrap_or(Value::Null);
+        for row in fx["rows"].as_array().unwrap() {
             let want: Vec<String> = serde_json::from_value(row["declared"].clone()).unwrap();
-            let p = view_part("p", None, "t", "ui://p/v", &ui, &Grants::new(), true);
+            let p = view_part("p", None, "t", "ui://p/v", &row["meta"], &Grants::new(), true);
             assert_eq!(p.view.unwrap().declared, want, "{}", row["meta"]);
         }
     }
 
     #[test]
     fn a_view_part_says_what_he_granted_or_that_he_was_never_asked() {
-        let ui = json!({"permissions": {"microphone": {}}});
+        let ui = json!({"ui": {"permissions": {"microphone": {}}}});
         let p = view_part("voice-memo", Some("memo"), "record", "ui://voice-memo/rec", &ui, &Grants::new(), true);
         assert_eq!(p.kind, PartKind::View);
         assert_eq!(p.id, "voice-memo#view:ui%3A%2F%2Fvoice-memo%2Frec");

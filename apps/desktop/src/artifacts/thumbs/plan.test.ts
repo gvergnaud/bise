@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import type { Artifact } from '@/proto';
 import type { Item } from '../model';
 import { cacheKeyOf, extOf, fileOf, hostOf, isLocal, planOf, sigOf, thumbExt } from './plan';
-import { textThumb } from './text';
 import { bytesWords, secsWords } from './words';
 
 const art = (id: string, kind: string, extra: Partial<Artifact> = {}): Artifact => ({ id, kind, title: id, agent: 'perf', version: 1, at_ms: 1_000, url: '', new: false, ...extra });
@@ -80,18 +79,3 @@ describe('thumbs words', () => {
   });
 });
 
-describe('a text drawn from its words', () => {
-  it("takes a md's first heading as title and its first lines without marks", () => {
-    const md = '# Delta review\n\n38 **non-merge** commits not on [main](http://x).\n\n```sh\nls\n```\n- a `b`\n---\n## Next\n| a | b |\n|---|---|\n| 1 | 2 |\n';
-    expect(textThumb(md, true)).toEqual({ title: 'Delta review', lines: ['38 non-merge commits not on main.', 'a b', 'Next', 'a b', '1 2'] });
-  });
-
-  it("reads a front matter's title, skips html comments, caps the lines", () => {
-    const md = '---\ntitle: "Offre"\ndate: x\n---\n<!-- hidden\nstill -->\nline 1\nline 2\nline 3';
-    expect(textThumb(md, true, 2)).toEqual({ title: 'Offre', lines: ['line 1', 'line 2'] });
-  });
-
-  it("takes a txt's first line as title and keeps its marks", () => {
-    expect(textThumb('\n  notes  \n# not a heading\n*x*', false)).toEqual({ title: 'notes', lines: ['# not a heading', '*x*'] });
-  });
-});

@@ -1,13 +1,14 @@
 // src/views · the web host (docs/mcp-apps.md C9, piece 11): one view, full page, in his browser
-// (the TUI's `O`), on the hub's page `GET /v/<agent>/<call>` (mcp-apps-sandbox's): the same
-// ViewsStore and session as the app, the frame filling <main id="bise-view" data-agent
-// data-call>, its asks a `POST /api/view` with the page's token. No React: built alone by
-// views.web.vite.config.ts into kit/views/web.js + web.css. Owner: mcp-apps-host.
+// (the TUI's `O`), on the hub's page `GET /v/<agent>/<call>` (mcp-apps-sandbox's), or a document
+// on `GET /d/<artifact id>` (docs/plugin-apps.md A7, apps-hub-views'): the same ViewsStore and
+// session as the app, the frame filling <main id="bise-view" data-agent data-call | data-artifact>,
+// its asks a `POST /api/view` with the page's token. No React: built alone by
+// views.web.vite.config.ts into kit/views/web.js + web.css. Owner: apps-host.
 import { views } from '@/proto/words_views.gen';
 import { allowOf } from '@/shared/viewperms';
 import { readTokens, styleVariables, themeNow } from './context';
 import type { Download, Json, JsonObject } from './protocol';
-import { viewKey, type PluginViewsCmd, type ViewAnswer, type ViewCmd, type ViewRef } from './port';
+import { refKey, type AnyRef, type PluginViewsCmd, type ViewAnswer, type ViewCmd } from './port';
 import { ViewsStore, type ViewState } from './store';
 import '@/ds/tokens.css';
 import './web.css';
@@ -18,6 +19,10 @@ const METHOD: Readonly<Record<ViewCmd['cmd'], string>> = {
   view_call: 'view/call',
   view_message: 'view/message',
   view_context: 'view/context',
+  view_open: 'view/open',
+  view_close: 'view/close',
+  view_copy: 'view/copy',
+  view_notes: 'view/notes',
 };
 
 /** A view command as POST /api/view's body: its C5 method, its params without the window's ids. Pure. */
@@ -63,16 +68,30 @@ export function wordsOf(s: ViewState): string {
       return views.expired;
     case 'failed':
       return views.failed;
+    // a built-in page's document: not on the web host (its tab frames the page itself)
+    case 'frame':
+      return views.failed;
     case 'live':
       return s.phase === 'live' ? '' : views.loading;
   }
 }
 
+/**
+ * The page's view: a document's (`data-artifact`, the hub's GET /d/<id>, docs/plugin-apps.md A7,
+ * its version from `data-version`), else a tool call's (`data-agent`, `data-call`). Pure.
+ */
+export function refOf(data: { readonly [k: string]: string | undefined }): AnyRef {
+  const artifact = data['artifact'] ?? '';
+  if (artifact !== '') {
+    const v = Number(data['version'] ?? '');
+    return { project: '', target: Number.isInteger(v) && v > 0 ? { kind: 'artifact', id: artifact, version: v } : { kind: 'artifact', id: artifact } };
+  }
+  return { project: '', agent: data['agent'] ?? '', call: data['call'] ?? '' };
+}
+
 /** Starts the page's view: its store, its frame once the hub gave it, its words until it shows. */
 export function start(main: HTMLElement, token: string): void {
-  const agent = main.dataset['agent'] ?? '';
-  const call = main.dataset['call'] ?? '';
-  const ref: ViewRef = { project: '', agent, call };
+  const ref = refOf(main.dataset);
   const post = async (cmd: ViewCmd | PluginViewsCmd): Promise<ViewAnswer> => {
     if (cmd.cmd === 'plugin_views') return { error: { code: -32601, message: 'not on the web host' } };
     try {
@@ -94,13 +113,16 @@ export function start(main: HTMLElement, token: string): void {
     gesture: () => Promise.resolve('userActivation' in navigator && navigator.userActivation.isActive),
     // the page is the view: always fullscreen, no panel
     panel: { has: () => true, open: () => undefined, close: () => undefined },
+    // a tool call's view only here: no document, no composer
+    onSelection: () => undefined,
+    onCopied: () => undefined,
     watch: () => () => undefined,
     now: () => Date.now(),
     later: (ms, f) => {
       setTimeout(f, ms);
     },
   });
-  const key = viewKey(ref);
+  const key = refKey(ref);
   const line = document.createElement('div');
   line.className = 'vw-web-line';
   main.append(line);

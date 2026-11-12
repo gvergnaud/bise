@@ -1,0 +1,1 @@
+outside the view's folder: a /f/ read must never return this

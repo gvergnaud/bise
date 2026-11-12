@@ -17,7 +17,7 @@ import { usePageSearchKeys } from '@/app/searchkeys';
 import { hero } from '@/proto/words_hero.gen';
 import { openTab } from '@/app/panel/tabs';
 import { useBannerGutter } from '@/artifacts/hero/vignettes';
-import type { AppCmd, Plugin, PluginsSummary, ConnectorsProblem } from '@/proto';
+import type { AppCmd, FileType, Plugin, PluginsSummary, ConnectorsProblem } from '@/proto';
 import { settings } from '@/proto/words.gen';
 import {
   bandCells,
@@ -42,6 +42,7 @@ import {
 import { MonoTile, PluginIcon } from './PluginIcon';
 import { Room } from './Room';
 import { AddMenu, type AddItem } from './Add';
+import { FileTypes } from './FileTypes';
 import './plugins.css';
 
 /** What the place does (the shell's live ones, or a test's). */
@@ -72,11 +73,14 @@ export interface PlaceProps {
   ports: PlacePorts;
   /** the room's own drawing (bims' diorama); none: the plain stand-in */
   room?: ReactNode;
+  /** which app opens what (the plugins event's file_types): the File types group */
+  fileTypes?: readonly FileType[];
 }
 
-type Tab = 'installed' | 'browse';
+type Tab = 'installed' | 'browse' | 'types';
+const TABS: readonly Tab[] = ['installed', 'browse', 'types'];
 
-export function PlaceView({ rows, summary, browse, problem, project, projectName, kind: kind0, ports, room }: PlaceProps) {
+export function PlaceView({ rows, summary, browse, problem, project, projectName, kind: kind0, ports, room, fileTypes = [] }: PlaceProps) {
   const [tab, setTab] = useState<Tab>('installed');
   // /skills and /plugins mount it anew (the screen keys it by its kind)
   const [kind, setKind] = useState<KindFilter>(kind0 ?? 'all');
@@ -126,8 +130,12 @@ export function PlaceView({ rows, summary, browse, problem, project, projectName
               <AddMenu summary={summary} onPick={(item) => { if (item === 'browse') setTab('browse'); else ports.add(item); }} />
             </>
           }>
-          <Filters items={[{ id: 'installed', label: <TabWords words={sentenceCase(settings.plugins_tab_installed)} n={counts.all} /> }, { id: 'browse', label: <TabWords words={sentenceCase(settings.plugins_tab_browse)} n={toBrowse} /> }]}
-            on={tab} onPick={(id) => { setTab(id === 'browse' ? 'browse' : 'installed'); }} testId="plugins.tabs" />
+          <Filters items={[
+            { id: 'installed', label: <TabWords words={sentenceCase(settings.plugins_tab_installed)} n={counts.all} /> },
+            { id: 'browse', label: <TabWords words={sentenceCase(settings.plugins_tab_browse)} n={toBrowse} /> },
+            { id: 'types', label: <TabWords words={settings.plugins_tab_file_types} n={fileTypes.length} /> },
+          ]}
+            on={tab} onPick={(id) => { setTab(TABS.find((t) => t === id) ?? 'installed'); }} testId="plugins.tabs" />
         </ListBar>
         {tab === 'installed' ? (
           <>
@@ -165,6 +173,8 @@ export function PlaceView({ rows, summary, browse, problem, project, projectName
               ))
             )}
           </>
+        ) : tab === 'types' ? (
+          <FileTypes rows={fileTypes} send={ports.send} {...at} />
         ) : (
           <BrowseList browse={browse} q={q} project={project}
             onConnect={(id) => { ports.send({ cmd: 'plugin_connect', ...at, id }); }}

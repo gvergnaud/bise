@@ -262,13 +262,7 @@ fn the_bridge_keeps_a_server_that_needs_a_login_and_connects_it_after() {
     std::fs::write(p.join("plugin.json"), format!("{{\"$schema\":\"{}\",\"name\":\"oauth-one\",\"version\":\"1.0.0\"}}", resolve::PLUGIN_SCHEMA)).unwrap();
     std::fs::write(p.join("mcp.json"), json!({"mcpServers": {"fake": {"type": "http", "url": f.url("/mcp")}}}).to_string()).unwrap();
     let (dir, sd, secrets) = (base.join("run/plugins"), base.join("status"), base.join("secrets"));
-    let roots = resolve::Roots {
-        builtin: None,
-        user: None,
-        workspace: Some(base.join("ws/.agents/plugins")),
-        data: base.join("data"),
-        state: Default::default(),
-    };
+    let roots = resolve::Roots { workspace: Some(base.join("ws/.agents/plugins")), ..resolve::Roots::for_test(&base) };
     let mut parent = Command::new("sleep").arg("60").spawn().unwrap();
     let opts = bridge::Opts { status_dir: Some(sd.clone()), secrets_dir: Some(secrets.clone()), ..bridge::Opts::new(dir.clone(), Some(parent.id()), roots) };
     let srv = std::thread::spawn(move || bridge::serve(opts));
@@ -279,13 +273,7 @@ fn the_bridge_keeps_a_server_that_needs_a_login_and_connects_it_after() {
     let st = status::read(&sd, "oauth-one", "fake").unwrap();
     assert!(st.login);
     // the static listing says so, the designer's words
-    let res = resolve::resolve(&resolve::Roots {
-        builtin: None,
-        user: None,
-        workspace: Some(base.join("ws/.agents/plugins")),
-        data: base.join("data"),
-        state: Default::default(),
-    });
+    let res = resolve::resolve(&resolve::Roots { workspace: Some(base.join("ws/.agents/plugins")), ..resolve::Roots::for_test(&base) });
     let listing = bend_plugins::report::text_with(&res, None, Some(&sd));
     assert!(listing.contains(&format!("  mcp fake · 127.0.0.1:{} · needs a login · /plugins login", f.port)), "{}", listing);
     // the login (as /plugins login runs it): the bridge sees the store and connects

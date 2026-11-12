@@ -22,6 +22,7 @@
 mod accept;
 mod agent_req;
 mod answers;
+mod apps;
 mod art;
 mod art_folders;
 mod art_rows;
@@ -79,6 +80,9 @@ mod usage;
 mod usage_spool;
 mod view_out;
 mod tick;
+mod files_ids;
+mod view_files;
+mod view_open;
 mod views;
 mod wake_look;
 mod place_work;
@@ -453,6 +457,15 @@ struct Shell {
     /// mcp-apps (C5): the views' limits, waiting calls, contexts and the
     /// hub's views bridge (daemon/views.rs).
     views: views::Views,
+    /// plugin-apps (A3): the apps that open the artifacts, on their rows
+    /// (daemon/apps.rs, crate::app_openers)
+    apps: apps::Apps,
+    /// plugin-apps A4: the document files' one writer thread
+    /// (daemon/view_files.rs).
+    files: view_files::DocFiles,
+    /// plugin-apps A6 ids: the home hub's id table of ~/bise, its thread
+    /// and its subscribers (daemon/files_ids.rs)
+    ids: files_ids::Ids,
     /// `sb land`'s line: one land at a time per target ref (dev-flow §5).
     lands: crate::land::Queue,
     /// The feature branches (dev-flow §5.1): the registry, their facts,
@@ -1834,6 +1847,8 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
     // mcp-apps: a views bridge an older hub left (its view cards closed
     // in sb-core's boot step)
     sh.views_boot();
+    // plugin-apps A6 ids: the home hub's table of ~/bise, off the loop
+    sh.ids_boot();
     // land-claims: the shared folder's claims whose file has no change
     // left (stale from before, or landed while no hub ran) end, off the loop
     {

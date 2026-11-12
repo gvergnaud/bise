@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "name": "slides",
+  "description": "Open a PowerPoint deck in Slides: its slides drawn from the deck's outline, a rail to move, his notes on shapes and slides; read only.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "file": {
+        "type": "object",
+        "properties": { "name": { "type": "string" }, "resourceUri": { "type": "string" } },
+        "required": ["name", "resourceUri"]
+      }
+    },
+    "required": ["file"]
+  },
+  "ui": {
+    "csp": { "connectDomains": [], "resourceDomains": [], "frameDomains": [], "baseUriDomains": [] },
+    "permissions": {}
+  },
+  "_meta": {
+    "ai.mistral.vibe/ui": {
+      "entrypoints": [
+        { "type": "file", "extensions": [".pptx"], "title": "Slides" }
+      ]
+    },
+    "dev.bise/ui": {
+      "files": [
+        { "match": ["*.pptx"], "title": "PowerPoint deck", "rank": "owner" }
+      ]
+    }
+  }
+}

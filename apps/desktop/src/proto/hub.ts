@@ -5,11 +5,13 @@
 import type { OpenWhat } from './app_rows';
 import type { FnContext } from './context';
 import type { DiffFile, DiffResult, Guide, GuideState, GuideTarget } from './diff';
+import type { IdEntry, Make, OpenTarget } from './files';
 import type { InboxRecord, StateFilter } from './inbox';
 import type { BodyOf, Completion, CompletionAsk, LogItem } from './log';
 import type { BranchRow, ReleaseEv, UpdateEv, VersionItem } from './ops';
 import type { Part } from './parts';
 import type { Agent, ApprovalMode, ApprovalRule, ArchivedAgent, Artifact, ArtifactMoved, BiseUpdate, Card, CheckerKind, Feature, FlowMode, Folder, FolderOp, Growth, LibraryProject, Merged, Model, Page, Place, Pr, PrDetail, PrErr, Proc, Pulse, ReportKind, ScheduledTask, SwitchRow, UsageRow, Worktree } from './rows';
+import type { OpenWith } from './rpc';
 import type { Entry, FindHit, Mark } from './thread';
 
 export type JobState = "running" | "done" | "failed";
@@ -61,7 +63,19 @@ built?: string | null, } | { "ev": "agents", project: string, agents: Array<Agen
  * agents (kept 3 months after their task, artifacts_retention):
  * the From agents place's foot line; none from an older hub
  */
-agents_bytes?: number | null, } | { "ev": "artifacts_moved", project: string, moved: Array<ArtifactMoved>, } | { "ev": "folders", project: string, folders: Array<Folder>, made?: string | null, } | { "ev": "library", project: string, here: string, projects: Array<LibraryProject>, folders: Array<Folder>, } | { "ev": "scheduled", project: string, items: Array<ScheduledTask>, ended?: Array<ScheduledTask>, } | { "ev": "worktrees", project: string, items: Array<Worktree>, } | { "ev": "processes", project: string, items: Array<Proc>, } | { "ev": "proc_out", project: string, agent: string, id: string, at: number, data: string, end: number, } | { "ev": "merged", project: string, items: Array<Merged>, } | { "ev": "features", project: string, items: Array<Feature>, } | { "ev": "prs", project: string, head: string, items: Array<Pr>, none?: string | null, } | { "ev": "pr_detail", project: string, req: number, url: string, detail?: PrDetail, err?: PrErr, why?: string, } | { "ev": "pr_check_log", project: string, req: number, url: string, check: string, lines?: Array<string>, err?: PrErr, why?: string, } | { "ev": "pr_acted", project: string, req: number, url: string, act: PrAct, err?: PrActErr, why?: string, } | { "ev": "models", project: string, items: Array<Model>, } | { "ev": "tool_out", project: string, agent: string, pos: number, out: string, cut: boolean, 
+agents_bytes?: number | null, } | { "ev": "artifacts_moved", project: string, moved: Array<ArtifactMoved>, } | { "ev": "artifact_notes", project: string, artifact: string, } | { "ev": "files_ids", project: string, full: boolean, seq: number, 
+/**
+ * the canonical `Home::bise_root()` (in the full answer only)
+ */
+root: string, 
+/**
+ * `full`: every entry; else the new, moved and changed ones
+ */
+entries: Array<IdEntry>, 
+/**
+ * the ids gone (never in a `full` one)
+ */
+deleted: Array<string>, } | { "ev": "folders", project: string, folders: Array<Folder>, made?: string | null, } | { "ev": "library", project: string, here: string, projects: Array<LibraryProject>, folders: Array<Folder>, } | { "ev": "scheduled", project: string, items: Array<ScheduledTask>, ended?: Array<ScheduledTask>, } | { "ev": "worktrees", project: string, items: Array<Worktree>, } | { "ev": "processes", project: string, items: Array<Proc>, } | { "ev": "proc_out", project: string, agent: string, id: string, at: number, data: string, end: number, } | { "ev": "merged", project: string, items: Array<Merged>, } | { "ev": "features", project: string, items: Array<Feature>, } | { "ev": "prs", project: string, head: string, items: Array<Pr>, none?: string | null, } | { "ev": "pr_detail", project: string, req: number, url: string, detail?: PrDetail, err?: PrErr, why?: string, } | { "ev": "pr_check_log", project: string, req: number, url: string, check: string, lines?: Array<string>, err?: PrErr, why?: string, } | { "ev": "pr_acted", project: string, req: number, url: string, act: PrAct, err?: PrActErr, why?: string, } | { "ev": "models", project: string, items: Array<Model>, } | { "ev": "tool_out", project: string, agent: string, pos: number, out: string, cut: boolean, 
 /**
  * the whole output's size in bytes (the unit of the cap: '4 KB
  * of 18 KB shown'), when the session log answered; none for the
@@ -280,7 +294,7 @@ folder?: string | null, } | { "cmd": "artifacts_move", project: string, ids: Arr
  * the undo slot is the caller's (the desktop core's move across
  * projects records it whole): the hub leaves it
  */
-keep_undo?: boolean, } | { "cmd": "artifacts_folders", project: string, op: FolderOp, } | { "cmd": "artifacts_keep", project: string, ids: Array<string>, keep: boolean, } | { "cmd": "artifacts_opened", project: string, id: string, v?: number | null, } | { "cmd": "artifacts_library", project: string, } | { "cmd": "focus", project: string, focus: string, } | { "cmd": "versions", project: string, } | { "cmd": "version_info", project: string, } | { "cmd": "version_switch", project: string, to: string, } | { "cmd": "version_rollback", project: string, } | { "cmd": "version_restart", project: string, to?: string | null, } | { "cmd": "version_update", project: string, } | { "cmd": "bise_update", project: string, } | { "cmd": "release_plan", project: string, dry?: boolean, } | { "cmd": "release_run", project: string, tag: string, commit: string, dry?: boolean, } | { "cmd": "stop_hub", project: string, keep_agents?: boolean, } | { "cmd": "page_voice", project: string, page: string, phase: string, text?: string, } | { "cmd": "view_resource", project: string, agent: string, call: string, } | { "cmd": "view_call", project: string, agent: string, call: string, method: string, params: Record<string, unknown>, } | { "cmd": "view_message", project: string, agent: string, call: string, content: Array<Record<string, unknown>>, gesture_ms?: number | null, } | { "cmd": "view_context", project: string, agent: string, call: string, content: Array<Record<string, unknown>>, } | { "cmd": "plugin_views", project: string, plugin: string, };
+keep_undo?: boolean, } | { "cmd": "artifacts_folders", project: string, op: FolderOp, } | { "cmd": "artifacts_keep", project: string, ids: Array<string>, keep: boolean, } | { "cmd": "artifacts_opened", project: string, id: string, v?: number | null, } | { "cmd": "artifacts_library", project: string, } | { "cmd": "focus", project: string, focus: string, } | { "cmd": "versions", project: string, } | { "cmd": "version_info", project: string, } | { "cmd": "version_switch", project: string, to: string, } | { "cmd": "version_rollback", project: string, } | { "cmd": "version_restart", project: string, to?: string | null, } | { "cmd": "version_update", project: string, } | { "cmd": "bise_update", project: string, } | { "cmd": "release_plan", project: string, dry?: boolean, } | { "cmd": "release_run", project: string, tag: string, commit: string, dry?: boolean, } | { "cmd": "stop_hub", project: string, keep_agents?: boolean, } | { "cmd": "page_voice", project: string, page: string, phase: string, text?: string, } | { "cmd": "view_resource", project: string, agent: string, call: string, } | { "cmd": "view_call", project: string, agent?: string, call?: string, doc?: string | null, method: string, params: Record<string, unknown>, } | { "cmd": "view_message", project: string, agent: string, call: string, content: Array<Record<string, unknown>>, gesture_ms?: number | null, } | { "cmd": "view_context", project: string, agent?: string, call?: string, doc?: string | null, content: Array<Record<string, unknown>>, } | { "cmd": "plugin_views", project: string, plugin: string, } | { "cmd": "view_close", project: string, doc: string, } | { "cmd": "view_notes", project: string, doc: string, } | { "cmd": "view_open", project: string, target: OpenTarget, opener?: OpenWith | null, } | { "cmd": "view_copy", project: string, doc: string, text?: string | null, blob?: string | null, } | { "cmd": "folder_list", project: string, folder?: string | null, hidden?: boolean, } | { "cmd": "file_new", project: string, make: Make, library_folder?: string | null, in?: string | null, } | { "cmd": "files_ids_subscribe", project: string, } | { "cmd": "files_mint", project: string, path: string, };
 
 /**
  * draft: the kind of an [`HubEv::Error`], one enum for every typed

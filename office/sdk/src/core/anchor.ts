@@ -33,6 +33,8 @@ const FIELDS: Record<AnchorKind, Record<string, "string" | "count" | "rect" | "s
   text: { line: "count", quote: "string?" },
   // a video's moment, or a box on its frame there (video-view): t in seconds, finite, 0 or more
   time: { t: "seconds", rect: "rect?" },
+  // a plugin's view's own place (plugin-apps A5): its opaque key, and what he selected
+  view: { key: "string", quote: "string?", label: "string?" },
 };
 
 /** An anchor from a note's JSON, checked; throws OfficeError (anchor_kind, anchor_shape). */

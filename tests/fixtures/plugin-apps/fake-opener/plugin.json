@@ -1,0 +1,9 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "fake-opener",
+  "version": "0.1.0",
+  "description": "Test fixture for plugin apps (docs/plugin-apps.md, Fixtures): a static-view opener (*.fake, @documents/*.note, a folder rule */fake.json, makes, write) and a server opener (*.fake2, rank option) whose tool logs its file argument.",
+  "extensions": {
+    "ai.mistral.vibe": { "schemaVersion": 1 }
+  }
+}

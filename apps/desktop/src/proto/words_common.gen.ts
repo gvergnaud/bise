@@ -46,4 +46,6 @@ export const common = {
   agents_at_work: (a: { n: number }): string => a.n === 1 ? String(a.n) + " agent at work" : String(a.n) + " agents at work",
   /** nothing goes on: the tray's and the sidebar's tips (panel), bise's chip in the thread's head (thread) */
   all_quiet: "all quiet",
+  /** his Mac as the app of a type no app of his opens: the gallery's filter tab (library), File types' app button (settings) */
+  your_mac: "your Mac",
 } as const;

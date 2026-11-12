@@ -3,30 +3,27 @@
 //! office-viewer). server.rs calls [`route`] once, before its `/a/<id>/<v>/<file>`
 //! arm; what is not ours falls through to it.
 //!
-//! - `GET /a/<id>/view`, `GET /a/<id>/<v>/view`: bise's viewer of an xlsx,
-//!   pptx or docx ([`view`]), the newest version or version `v`;
+//! - `GET /a/<id>/view`, `GET /a/<id>/<v>/view`: bise's viewer of an image,
+//!   pdf, video or site ([`view`]), the newest version or version `v`;
 //! - `GET /a/<id>/events`: the stream of its saves ([`events`]; server.rs
 //!   runs it, as `/p/<id>/events`);
-//! - `GET /kit/office/office.js`, `/kit/office/office-view.js`,
-//!   `office-pdf.js`, `pdf.worker.js`, `office-sheet.js`, `office-md.js`: the office SDK's bundles (pdf.js and
-//!   its worker, pdf-notes; Univer's grid, xlsx-univer), read from `office/dist` in the app root (one copy, never
+//! - `GET /kit/office/office.js`: the office SDK's bundle, read from
+//!   `office/dist` in the app root (one copy, never
 //!   in `kit/`, architect m_23781); the renderers beside them
-//!   (`kit/office/*.js`) are kit files;
+//!   (`kit/office/*.js`) are kit files. Univer's grid, `office-sheet.js`, is
+//!   Sheets' own file (plugins/sheets, architect m_60401);
 //! - `GET /a/<id>/live[/<path>]`: the door of a local site bise serves
 //!   again ([`live`], site-revive): its server, bise's copy, or the hub
 //!   starts it again;
 //! - `GET /a/<id>/notes`, `POST /api/a/<id>/notes|send`: the notes on an
 //!   artifact ([`notes`]; the POSTs through [`post`], server.rs's `/api`
 //!   arm, after its token and origin checks);
-//! - `POST /api/a/<id>/save`: his edits in the xlsx grid, the file and its
-//!   next version ([`save`], decided and written by the hub);
 //! - `POST /api/a/<id>/storage`: a site's localStorage, kept for every
 //!   version ([`storage`], web-storage).
 
 pub mod events;
 pub mod live;
 pub mod notes;
-pub mod save;
 pub mod storage;
 pub mod view;
 
@@ -35,7 +32,7 @@ use super::store::valid_id;
 use super::Pages;
 
 /// The bundles the viewer loads, from `Pages::office_dir`.
-const BUNDLES: &[&str] = &["office.js", "office-view.js", "office-pdf.js", "pdf.worker.js", "office-sheet.js", "office-md.js"];
+const BUNDLES: &[&str] = &["office.js"];
 
 /// The response for `segs` (the path's segments), or None: not an
 /// artifact route of this module.
@@ -59,7 +56,6 @@ pub fn post(pages: &Pages, segs: &[&str], body: &[u8]) -> Option<Response> {
     Some(match segs {
         ["api", "a", id, "notes"] if valid_id(id) => notes::post_notes(pages, id, body),
         ["api", "a", id, "send"] if valid_id(id) => notes::post_send(pages, id),
-        ["api", "a", id, "save"] if valid_id(id) => save::post(pages, id, body),
         ["api", "a", id, "storage"] if valid_id(id) => storage::post(pages, id, body),
         _ => return None,
     })
@@ -67,7 +63,7 @@ pub fn post(pages: &Pages, segs: &[&str], body: &[u8]) -> Option<Response> {
 
 fn bundle(pages: &Pages, f: &str) -> Response {
     match std::fs::read(pages.office_dir.join(f)) {
-        Ok(body) => Response { status: 200, ctype: "text/javascript; charset=utf-8", body, csp: super::server::CSP.into(), location: None },
+        Ok(body) => Response { status: 200, ctype: "text/javascript; charset=utf-8", body, csp: super::server::CSP.into(), location: None, etag: None },
         Err(_) => Response::missing(&format!("no such file: kit/office/{f} (office/dist in the app root)")),
     }
 }
@@ -91,12 +87,14 @@ mod tests {
         std::fs::read(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../office/fixtures").join(name)).unwrap()
     }
 
-    /// office-artifacts plan §4: an xlsx, pptx or docx artifact's row is
-    /// framed at `/a/<id>/view`, which serves the viewer's shell under its
-    /// CSP, pointing at the copy's bytes, which are served too; an older
-    /// version at `/a/<id>/<v>/view`; anything else there is a 404 in words.
+    /// office-artifacts plan §4: a site artifact's row is framed at
+    /// `/a/<id>/view`, which serves the viewer's shell under its CSP,
+    /// pointing at the copy, which is served too; an older version at
+    /// `/a/<id>/<v>/view`; anything else there is a 404 in words. An xlsx
+    /// opens in Sheets (plugins/sheets, docs/plugin-apps.md step 4): its row
+    /// frames its copy, served as itself.
     #[test]
-    fn an_office_artifact_opens_in_the_viewer() {
+    fn a_site_artifact_opens_in_the_viewer() {
         let d = std::env::temp_dir().join(format!("sb-office-view-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         let work = d.join("work");
@@ -113,24 +111,14 @@ mod tests {
         let xlsx = add("q3.xlsx", 10);
         std::fs::write(work.join("q3.xlsx"), [fixture("tiny.xlsx"), b"more".to_vec()].concat()).unwrap();
         add("q3.xlsx", 20);
-        std::fs::write(work.join("deck.pptx"), fixture("tiny.pptx")).unwrap();
-        std::fs::write(work.join("memo.docx"), fixture("tiny.docx")).unwrap();
         std::fs::write(work.join("r.html"), "<h1>r</h1>").unwrap();
-        for f in ["deck.pptx", "memo.docx", "r.html"] {
-            add(f, 30);
-        }
+        add("r.html", 30);
 
         let rows = arts.rows(&|a: &str| Some((a.to_string(), false)), work.to_str().unwrap());
         let base = format!("http://127.0.0.1:{}", p.port);
-        let items = crate::proto_view::artifacts(&json!({"ev": "artifacts", "rows": rows, "seen_ms": 0}), |_| None, Some(&base));
+        let items = crate::proto_view::artifacts(&json!({"ev": "artifacts", "rows": rows, "seen_ms": 0}), |_| None, Some(&base), |_| Default::default());
         let frame = |id: &str| items.iter().find(|a| a.id == id).and_then(|a| a.frame_url.clone()).unwrap_or_default();
-        assert_eq!(frame(&xlsx.id), format!("{base}/a/{}/view", xlsx.id), "the newest, with no version in it");
-        for (name, kind) in [("deck", "pptx"), ("memo", "docx")] {
-            let a = items.iter().find(|a| a.title.starts_with(name)).unwrap();
-            let r = get(&p, frame(&a.id).strip_prefix(&base).unwrap());
-            assert_eq!(r.status, 200);
-            assert!(text(&r).contains(&format!("data-kind=\"{kind}\"")), "{}", text(&r));
-        }
+        assert_eq!(frame(&xlsx.id), format!("{base}/a/{}/2/q3.xlsx", xlsx.id), "its copy: Sheets opens it");
         let html = items.iter().find(|a| a.title.starts_with("r.html")).unwrap();
         assert_eq!(frame(&html.id), format!("{base}/a/{}/view", html.id), "a site in the viewer too (art-notes)");
         let site = text(&get(&p, &format!("/a/{}/view", html.id)));
@@ -140,23 +128,17 @@ mod tests {
         assert!(text(&get(&p, &format!("/a/{}/1/framed/r.html", html.id))).ends_with("<h1>r</h1><script src=\"/kit/site-select.js\"></script>"));
         assert_eq!(text(&get(&p, &format!("/a/{}/1/r.html", html.id))), format!("{}<h1>r</h1>", crate::pages::site::STORAGE_TAG));
 
-        let r = get(&p, &format!("/a/{}/view", xlsx.id));
-        assert_eq!((r.status, &*r.csp), (200, view::VIEW_CSP));
-        let shell = text(&r);
-        assert!(shell.contains("data-version=\"2\" data-latest=\"2\" data-follows"), "{shell}");
-        let file = format!("/a/{}/2/q3.xlsx", xlsx.id);
-        assert!(shell.contains(&format!("data-file=\"{file}\"")), "{shell}");
-        let bytes = get(&p, &file);
+        let bytes = get(&p, &format!("/a/{}/2/q3.xlsx", xlsx.id));
         assert_eq!((bytes.status, bytes.ctype), (200, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
         assert!(bytes.body.starts_with(b"PK"), "the copy's bytes");
 
-        let old = text(&get(&p, &format!("/a/{}/1/view", xlsx.id)));
-        assert!(old.contains("data-version=\"1\" data-latest=\"2\"") && !old.contains("data-follows"), "{old}");
-        assert!(old.contains(&format!("data-file=\"/a/{}/1/q3.xlsx\"", xlsx.id)));
+        let r = get(&p, &format!("/a/{}/view", html.id));
+        assert_eq!((r.status, &*r.csp), (200, view::VIEW_CSP));
+        assert!(text(&r).contains("data-version=\"1\" data-latest=\"1\" data-follows"), "{}", text(&r));
 
         for (path, why) in [
-            (format!("/a/{}/9/view", xlsx.id), "no such version"),
-            (format!("/a/{}/x/view", xlsx.id), "no such version"),
+            (format!("/a/{}/9/view", html.id), "no such version"),
+            (format!("/a/{}/x/view", html.id), "no such version"),
             ("/a/nope/view".to_string(), "no such artifact"),
             
         ] {
@@ -167,7 +149,8 @@ mod tests {
 
         let js = get(&p, "/kit/office/office.js");
         assert_eq!((js.status, js.ctype, text(&js).as_str()), (200, "text/javascript; charset=utf-8", "export const sheets = {};"), "from office/dist in the app root");
-        let none = get(&p, "/kit/office/office-view.js");
+        std::fs::remove_file(d.join("office/dist/office.js")).unwrap();
+        let none = get(&p, "/kit/office/office.js");
         assert_eq!(none.status, 404, "a bundle not shipped says so");
         assert!(text(&none).contains("office/dist"));
         let _ = std::fs::remove_dir_all(d);

@@ -43,13 +43,11 @@ type AnchorRect = { x: number; y: number; w: number; h: number };
 type Anchor = {
   kind?: string; block?: string; blocks?: string[]; quote?: string; offset?: number; sheet?: string; range?: string;
   slide?: number; shape?: string | number; para?: number; rect?: AnchorRect | null; page?: number | null; line?: number; t?: number;
+  key?: string; label?: string;
 };
 /** What block anchoring reads of a note (notes.js's). */
 type BlockNote = { block?: string | null; kind?: string; blocks?: string[]; after?: string; before?: string; quote?: string; offset?: number };
 type AnchorAt = "ok" | "moved";
-type PdfItem = { str?: string; hasEOL?: boolean } | null | undefined;
-type PdfRange = { i: number; start: number; end: number };
-type PdfPlace = { page: number; rect: AnchorRect; start?: undefined; end?: undefined } | { page: number; start: number; end: number; rect?: undefined };
 declare var BiseAnchors: {
   KINDS: string[];
   label(a: Anchor | null | undefined): string;
@@ -63,11 +61,6 @@ declare var BiseAnchors: {
     reanchor<N extends BlockNote>(notes: N[], blocks: Record<string, string>): (N & { anchor: AnchorAt; kept?: boolean })[];
     keptEdit(n: BlockNote, blocks: Record<string, string>): boolean;
     nearestQuote(text: unknown, offset: number, n?: number): { quote: string; offset: number } | null;
-  };
-  pdf: {
-    pageText(items: PdfItem[] | null | undefined): { text: string; ranges: PdfRange[] };
-    itemsIn(ranges: PdfRange[] | null | undefined, start: number, end: number): number[];
-    place(a: Anchor | null | undefined, pages: string[] | null | undefined): PdfPlace | null;
   };
 };
 /** CommonJS's module in node (office/sdk's tests require notes-anchors.js); undefined in a page. */

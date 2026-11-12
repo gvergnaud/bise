@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # bins.sh — the Bend native binaries (repl-live, repl-scripted, sb-core,
 # harness-demo), the V8 engine of a version (bend-jsrt, RELEASE build,
-# BISE-133), and the viewer's xlsx grid (office-sheet: Univer, ~7 MB of
-# JS built by office/sdk/build.ts into office/dist/office-sheet.js,
-# never committed, architect m_37322). They are NOT in git (BISE-114): each one is built from
+# BISE-133), and Sheets' xlsx grid (office-sheet: Univer, ~7 MB of JS
+# built by office/sdk/build.ts from plugins/sheets/src/sheet.ts into
+# plugins/sheets/ai.mistral.vibe/views/grid/office-sheet.js, never
+# committed, architect m_37322, m_60401). They are NOT in git (BISE-114): each one is built from
 # its sources into a cache keyed by the CONTENT of those sources, shared
 # by every worktree and by versions.sh, then copied where it is run.
 #
@@ -35,6 +36,8 @@
 # exported for the compile (bend -o calls cc) and part of the key.
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
+# where office-sheet goes in a tree: Sheets' view folder (docs/plugin-apps.md A5)
+GRID="plugins/sheets/ai.mistral.vibe/views/grid/office-sheet.js"
 # the same dir as bise_home (rust/home): $BISE_HOME/dev, else ~/.bise/dev
 STATE="${BISE_HOME:-$HOME/.bise}/dev"
 BUILD="${SB_BUILD_DIR:-$STATE/build}"
@@ -99,7 +102,7 @@ recipe() {
     # a cargo build (release): the crate and its path dependencies
     bend-jsrt) echo "cargo rust/jsrt rust/images rust/home" ;;
     # a node build (office/sdk/build.ts --only): its entry, the build, its node options and the lockfile
-    office-sheet) echo "node office/sdk/src/view/sheet.ts office/sdk/build.ts office/sdk/.npmrc office/sdk/package.json office/sdk/pnpm-lock.yaml" ;;
+    office-sheet) echo "node plugins/sheets/src/sheet.ts office/sdk/build.ts office/sdk/.npmrc office/sdk/package.json office/sdk/pnpm-lock.yaml" ;;
     *) say "unknown binary: $1 (repl-live repl-scripted sb-core harness-demo bend-jsrt office-sheet)"; exit 2 ;;
   esac
 }
@@ -275,8 +278,8 @@ prefetch() {  # <src> <name>...
 # <src>/<name> = the cache file (a new inode: a running binary keeps its own)
 place() {  # <src> <name>
   local src="$1" name="$2" f out="$1/$2"
-  # the grid's bundle goes where the page server reads it (pages/artifact BUNDLES)
-  if [ "$name" = office-sheet ]; then out="$1/office/dist/office-sheet.js"; fi
+  # the grid's bundle goes in Sheets' view folder, served there as the view's own file (/f/)
+  if [ "$name" = office-sheet ]; then out="$1/$GRID"; fi
   if ! f="$(cached "$src" "$name")"; then
     if [ -x "$out" ]; then say "compiling $name failed: the existing $out is kept"; return 0; fi
     say "compiling $name failed"; return 1

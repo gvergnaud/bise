@@ -3,7 +3,7 @@
 //! compile ts-rs), never hand-edited (architect m_9476).
 //!
 //! - one `.ts` per wire module (hub, draft, core_ev, app_cmd, app_rows,
-//!   thread, rows, diff, ops, context, helper, pty, rpc, commands, app_rpc) + `json.ts`
+//!   thread, rows, diff, ops, context, helper, pty, rpc, commands, app_rpc, files) + `json.ts`
 //!   (serde_json's Value) + `index.ts`; `methods.gen.ts`: rpc's tables;
 //!   `app_methods.gen.ts`: app_rpc's names as constants;
 //! - `anchor.ts` also goes, the same bytes, to
@@ -73,7 +73,7 @@ fn modules(cfg: &Config) -> Vec<(&'static str, Vec<Decl>)> {
         module!(cfg, "anchor": anchor::Rect, anchor::Anchor),
         module!(cfg, "parts": parts::PageNote, parts::HintKind, parts::Part),
         module!(cfg, "diff": diff::LineKind, diff::DiffLine, diff::Hunk, diff::DiffFile, diff::DiffResult, diff::Series, diff::DiffView, diff::Weight, diff::GuidePart, diff::Guide, diff::GuideTarget, diff::GuideState),
-        module!(cfg, "rows": rows::Status, rows::Phase, rows::ReportKind, rows::Report, rows::Agent, rows::ArchivedAgent, rows::OptAct, rows::Opt, rows::CardPage, rows::ArtLink, rows::Card, rows::CardBatch, rows::ReleaseNotes, rows::Merged, rows::ProcKind, rows::ProcState, rows::OutKind, rows::Fd1, rows::Proc, rows::Worktree, rows::FeatureTry, rows::Feature, rows::PrState, rows::PrChecks, rows::PrReview, rows::PrProvider, rows::PrYours, rows::PrTone, rows::PrPiece, rows::Pr, rows::PrDetail, rows::PrCheck, rows::PrCheckState, rows::PrNote, rows::PrVerdict, rows::PrErr, rows::Page, rows::Place, rows::ModelRole, rows::Model, rows::Artifact, rows::ArtifactPr, rows::ArtifactVersion, rows::ArtifactLive, rows::ArtifactBack, rows::ArtifactAudience, rows::ArtifactSection, rows::ArtifactKept, rows::Folder, rows::FolderOp, rows::ArtifactMoved, rows::LibraryProject, rows::ScheduledTask, rows::ScheduledEnd, rows::AgentUsage, rows::WaitingOn, rows::AgentMode, rows::Changes, rows::FlowMode, rows::ApprovalMode, rows::CheckerKind, rows::ApprovalRule, rows::WatchKind, rows::AgentWatch, rows::UsageSum, rows::UsageRow, rows::SwitchPhase, rows::SwitchRow, rows::DoingKind, rows::UsesKind, rows::Uses, rows::Doing, rows::Growth, rows::Pulse, rows::News, rows::NewsWhat, rows::BiseUpdateState, rows::BiseUpdate),
+        module!(cfg, "rows": rows::Status, rows::Phase, rows::ReportKind, rows::Report, rows::Agent, rows::ArchivedAgent, rows::OptAct, rows::Opt, rows::CardPage, rows::ArtLink, rows::Card, rows::CardBatch, rows::ReleaseNotes, rows::Merged, rows::ProcKind, rows::ProcState, rows::OutKind, rows::Fd1, rows::Proc, rows::Worktree, rows::FeatureTry, rows::Feature, rows::PrState, rows::PrChecks, rows::PrReview, rows::PrProvider, rows::PrYours, rows::PrTone, rows::PrPiece, rows::Pr, rows::PrDetail, rows::PrCheck, rows::PrCheckState, rows::PrNote, rows::PrVerdict, rows::PrErr, rows::Page, rows::Place, rows::ModelRole, rows::Model, rows::Artifact, rows::ArtifactPr, rows::ArtifactVersion, rows::SavedBy, rows::ArtifactLive, rows::ArtifactBack, rows::ArtifactAudience, rows::ArtifactSection, rows::ArtifactKept, rows::Folder, rows::FolderOp, rows::ArtifactMoved, rows::LibraryProject, rows::ScheduledTask, rows::ScheduledEnd, rows::AgentUsage, rows::WaitingOn, rows::AgentMode, rows::Changes, rows::FlowMode, rows::ApprovalMode, rows::CheckerKind, rows::ApprovalRule, rows::WatchKind, rows::AgentWatch, rows::UsageSum, rows::UsageRow, rows::SwitchPhase, rows::SwitchRow, rows::DoingKind, rows::UsesKind, rows::Uses, rows::Doing, rows::Growth, rows::Pulse, rows::News, rows::NewsWhat, rows::BiseUpdateState, rows::BiseUpdate, rows::Opener, rows::OpenRank, rows::PluginOpens, rows::PluginMake, rows::FileType, rows::OpenClaim),
         module!(cfg, "thread": thread::EntryKind, thread::ToolKind, thread::ToolState, thread::GateWait, thread::ToolGate, thread::FileCount, thread::ViewState, thread::ToolView, thread::ToolItem, thread::Tools, thread::EntryCard, thread::PageRef, thread::ReportRef, thread::Thinking, thread::Delivery, thread::NoticeLevel, thread::Notice, thread::NotDelivered, thread::Landed, thread::PrNewsState, thread::PrNews, thread::Made, thread::ImageRef, thread::Answered, thread::ApprovalFold, thread::Scheduled, thread::TurnFailed, thread::WakeEv, thread::WakeFold, thread::Went, thread::Entry, thread::RetryEnd, thread::Retry, thread::find::FindHit, thread::marks::Mark),
         module!(
             cfg,
@@ -94,7 +94,8 @@ fn modules(cfg: &Config) -> Vec<(&'static str, Vec<Decl>)> {
         module!(cfg, "ops": ops::BranchRow, ops::VersionItem, ops::ReleaseEv, ops::UpdateEv),
         module!(cfg, "inbox": inbox::InboxState, inbox::InboxKind, inbox::Where, inbox::AnswerAt, inbox::InboxRecord, inbox::StateFilter, inbox::HistoryParams, inbox::InboxPage),
         module!(cfg, "hub": hub::JobState, hub::Job, activity::Party, activity::MsgMode, activity::ActivityEv, hub::HubEv, hub::Mode, hub::PrAct, hub::PrActErr, hub::SendOpts, hub::HubCmd, hub::ErrorKind),
-        module!(cfg, "rpc": rpc::Id, rpc::Request, rpc::Notification, rpc::Response, rpc::ErrorData, rpc::RpcError, rpc::Watermark, rpc::ClientInfo, rpc::ClientKind, rpc::InitializeParams, rpc::HubState, rpc::AgentGetParams, rpc::AgentGetResult, rpc::InitializeResult, rpc::CommandsList, rpc::CommandRunResult, rpc::SendReason, rpc::SendResult, rpc::CardAnswer, rpc::AnswerResult, rpc::AppOpenResult, bise_proto::view_rpc::ViewResource, bise_proto::view_rpc::ViewCallResult, bise_proto::view_rpc::PluginViewsResult),
+        module!(cfg, "rpc": rpc::Id, rpc::Request, rpc::Notification, rpc::Response, rpc::ErrorData, rpc::RpcError, rpc::Watermark, rpc::ClientInfo, rpc::ClientKind, rpc::InitializeParams, rpc::HubState, rpc::AgentGetParams, rpc::AgentGetResult, rpc::InitializeResult, rpc::CommandsList, rpc::CommandRunResult, rpc::SendReason, rpc::SendResult, rpc::CardAnswer, rpc::AnswerResult, rpc::AppOpenResult, bise_proto::view_rpc::ViewResource, bise_proto::view_rpc::ViewCallResult, bise_proto::view_rpc::PluginViewsResult, bise_proto::view_rpc::OpenWith, bise_proto::view_rpc::DocumentFacts, bise_proto::view_rpc::DocVersion, bise_proto::view_rpc::OpenedWith, bise_proto::view_rpc::DocView, bise_proto::view_rpc::ViewOpened, bise_proto::view_rpc::NoWrite, bise_proto::view_rpc::ReadMeta, bise_proto::view_rpc::WriteOutcome),
+        module!(cfg, "files": bise_proto::files::FileKind, bise_proto::files::EntryArtifact, bise_proto::files::FolderRow, bise_proto::files::Crumb, bise_proto::files::FolderList, bise_proto::files::Make, bise_proto::files::FileNewResult, bise_proto::files::OpenTarget, bise_proto::files::IdEntry, bise_proto::files::FilesIds, bise_proto::files::FilesMintResult, bise_proto::files::ViewCopyResult),
         module!(cfg, "commands": commands::WordRow, commands::ArgRow, commands::CommandRow),
         module!(cfg, "draft": draft::Quote, draft::Queued, draft::DraftHubCmd, draft::ProjectView),
         module!(cfg, "app_rows": app_rows::ProjectRow, app_rows::OpenWhat, app_rows::Account, app_rows::KeyFrom, app_rows::CheckState, app_rows::CheckWhy, app_rows::Found, app_rows::AwayProject, app_rows::Plugin, app_rows::PluginSetting, app_rows::PluginLogin, app_rows::PluginKind, app_rows::PluginScope, app_rows::PluginState, app_rows::PluginAction, app_rows::PluginPart, app_rows::PartView, app_rows::PluginPreview, app_rows::PluginRun, app_rows::RunTransport, app_rows::PartKind, app_rows::LoginState, app_rows::ConnectorAccount, app_rows::AccountStatus, app_rows::PickWaits, app_rows::ConnectorsProblem, app_rows::PluginsSummary, app_rows::PluginSuggest, app_rows::Why, app_rows::WhySource, app_rows::SuggestKind, app_rows::CuRow, app_rows::CuProfile, app_rows::CuProfileKey, app_rows::ComputerAgent, app_rows::LiveKind, app_rows::PeekShot, app_rows::VoiceLit, app_rows::RoleRow, app_rows::FeatureId, app_rows::RoleId, app_rows::FeatureState, app_rows::PartSource, app_rows::SetupFix, app_rows::FeaturePart, app_rows::FeatureRow, app_rows::PermGrant, app_rows::SetupNext, app_rows::SetupGauge, app_rows::ModelNews, app_rows::Runs, app_rows::PickChoice, app_rows::PickArg, app_rows::PickCommand, app_rows::PickSkill, app_rows::PickFile, app_rows::PickFolder, app_rows::IndexRow, app_rows::StateAgent, app_rows::StateCard, app_rows::PhasePage, app_rows::PreviewAction, app_rows::PreviewWait, app_rows::PreviewReport),
@@ -321,13 +322,14 @@ fn render_view_rules() -> String {
     writeln!(s).unwrap();
     writeln!(s, "/** A permission: its `allow=` feature, whether it is a spec `_meta.ui.permissions` key (midi is bise's `dev.bise/ui`), its tick's label, its words in a sentence. */").unwrap();
     writeln!(s, "export interface ViewPermRow {{").unwrap();
-    writeln!(s, "  readonly perm: ViewPerm;\n  readonly feature: string;\n  readonly spec: boolean;\n  readonly word: string;\n  readonly inSentence: string;").unwrap();
+    writeln!(s, "  readonly perm: ViewPerm;\n  readonly feature: string | null;\n  readonly spec: boolean;\n  readonly word: string;\n  readonly inSentence: string;").unwrap();
     writeln!(s, "}}").unwrap();
     writeln!(s).unwrap();
     writeln!(s, "/** Every permission, in the order an `allow=`, a declared list and a grant list them. */").unwrap();
     writeln!(s, "export const VIEW_PERMS: readonly ViewPermRow[] = [").unwrap();
     for p in ViewPerm::ALL {
-        writeln!(s, "  {{ perm: {:?}, feature: {:?}, spec: {}, word: views.{}, inSentence: views.{} }},", p.name(), p.feature(), p.spec(), p.word_key(), p.in_sentence_key()).unwrap();
+        let feature = p.feature().map_or("null".to_string(), |f| format!("{f:?}"));
+        writeln!(s, "  {{ perm: {:?}, feature: {feature}, spec: {}, word: views.{}, inSentence: views.{} }},", p.name(), p.spec(), p.word_key(), p.in_sentence_key()).unwrap();
     }
     writeln!(s, "];").unwrap();
     writeln!(s).unwrap();
@@ -418,6 +420,25 @@ fn the_sdk_anchor_type_is_fresh() {
     }
     let have = std::fs::read_to_string(&p).unwrap_or_default();
     assert!(have == want, "office/sdk/src/anchor.gen.ts is stale; run {BLESS}=1 cargo test -p bise-proto --features ts --test ts");
+}
+
+/// @bise/view's words (bise_proto::words::viewkit), for the kit itself:
+/// a view's sandbox never reads apps/desktop (architect m_60509 (3): one
+/// catalog, designer signs once). `scripts/ts_emit.ts` makes its `.js`.
+fn kit_view_words() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../kit/view/words.gen.ts")
+}
+
+#[test]
+fn the_kit_view_words_are_fresh() {
+    let want = render_all().remove("words_viewkit.gen.ts").expect("the viewkit area is rendered");
+    let p = kit_view_words();
+    if std::env::var_os(BLESS).is_some_and(|v| v == "1") {
+        std::fs::write(&p, &want).unwrap_or_else(|e| panic!("{}: {e}", p.display()));
+        return;
+    }
+    let have = std::fs::read_to_string(&p).unwrap_or_default();
+    assert!(have == want, "kit/view/words.gen.ts is stale; run {BLESS}=1 cargo test -p bise-proto --features ts --test ts");
 }
 
 #[test]

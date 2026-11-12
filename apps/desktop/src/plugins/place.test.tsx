@@ -201,3 +201,31 @@ describe("a plugin's page", () => {
     expect(screen.queryByTestId('plugins.page.pay.remove')).toBeNull();
   });
 });
+
+describe("File types: the place's third group, where every pick is seen and reset (docs/plugin-apps.md A3)", () => {
+  const sheets = { plugin: 'sheets', tool: 'grid', app: 'Sheets', type: '*.xlsx', type_title: 'Excel workbook' };
+  const grid = { plugin: 'grid', tool: 'open', app: 'Grid', type: '*.csv', type_title: 'CSV table' };
+  const TYPES = [
+    { type: '*.xlsx', title: 'Excel workbook', app: sheets, others: [] },
+    { type: '*.csv', title: 'CSV table', app: grid, others: [{ ...sheets, type: '*.csv' }], his: true },
+  ];
+
+  it("one row per type: '.csv  Grid  your pick  Reset'; a pick and Reset send opener_set", () => {
+    const { sent } = place({ fileTypes: TYPES });
+    fireEvent.click(screen.getByTestId('plugins.tabs.types'));
+    expect(screen.getByTestId('plugins.types.row.*.xlsx.app').textContent).toBe('Sheets');
+    expect(screen.getByTestId('plugins.types.row.*.xlsx.status').textContent).toBe(settings.file_type_default);
+    expect(screen.queryByTestId('plugins.types.row.*.xlsx.reset')).toBeNull();
+    expect(screen.getByTestId('plugins.types.row.*.csv.status').textContent).toBe(settings.file_type_his);
+    fireEvent.click(screen.getByTestId('plugins.types.row.*.csv.app'));
+    fireEvent.click(screen.getByTestId('plugins.types.row.*.csv.pick.sheets#grid'));
+    fireEvent.click(screen.getByTestId('plugins.types.row.*.csv.reset'));
+    expect(sent).toEqual([{ cmd: 'opener_set', type: '*.csv', plugin: 'sheets', tool: 'grid' }, { cmd: 'opener_set', type: '*.csv' }]);
+  });
+
+  it('no app opens anything yet: one plain line', () => {
+    place();
+    fireEvent.click(screen.getByTestId('plugins.tabs.types'));
+    expect(screen.getByTestId('plugins.types.empty').textContent).toBe(settings.file_types_empty);
+  });
+});

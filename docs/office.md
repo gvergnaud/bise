@@ -26,31 +26,37 @@ TextDecoder are used when the host has them, else its own UTF-8:
   no web APIs; it reads the file from the app root, below);
 - the viewer in the side panel (the pages server serves the same file at
   `/kit/office/office.js`, from `office/dist` in the app root: one copy,
-  shipped by `scripts/versions.sh`, architect m_23781);
+  shipped by `scripts/versions.sh`, architect m_23781), and the plugins'
+  views, which import it as `./~kit/office/v1/office.js` (the same file,
+  a bise library for views: docs/plugin-apps.md A5, architect m_60401);
 - node, for the tests and for anyone who wants it.
 
-A second bundle, `office/dist/office-view.js`, is the viewer's alone:
-docx-preview (Apache-2.0) and jszip (taken under MIT) to draw a docx in a
-browser, `platform: "browser"`, a 2 MB budget `build.ts` enforces. It
-never goes into `office.js`, which stays DOM-free
-(`test/viewer.test.ts` imports it with no window).
+A renderer's bundle is its plugin's (architect m_60401): its entry in
+`plugins/<p>/src/`, built by `build.ts` with this folder's lockfile (its
+`node_modules` as esbuild's `nodePaths`) into the plugin's view folder,
+committed there. Writer's (plugins/docs): `office-view.js`, docx-preview
+(Apache-2.0) and jszip (taken under MIT) to draw a docx in a browser,
+`platform: "browser"`, a 2 MB budget; `office-md.js`, micromark + GFM for
+a markdown file. They never go into `office.js`, which stays DOM-free
+(`test/viewer.test.ts` imports it with no window); their tests are
+`plugins/docs/test/`.
 
-A third, `office/dist/office-sheet.js`, is the viewer's xlsx grid (page
-xlsx-univer, architect m_37322): Univer (Apache-2.0, open-source packages
-only; no Univer Pro), React and what they bundle, ~7 MB, loaded by
-kit/office/sheet.js alone when an xlsx is shown. It is **built, never
-committed** (a 7 MB blob per rebuild in a public history): `scripts/bins.sh
-office-sheet` builds it from `src/view/sheet.ts`, `build.ts` and the
-lockfile into its cache (keyed by their content) and places it with its
-`.key`; run.sh and versions.sh call it, and `tests/office_check.sh` fails
-when it is missing or stale. Univer's hyphenation dictionaries (5 MB) are
-empty modules in it (a cell never hyphenates). The grid reads the workbook
-as `book.univer()` (src/sheets/univer.ts: Univer's snapshot, plain JSON),
-and the user's edits come back as `editsBetween(before, after)` replayed with
-`book.apply(edits)` then `book.save()`: the grid never writes the xlsx, so
-what exceljs keeps (carry.ts: charts, pivots) comes through. The saves go to
-`POST /api/a/<id>/save` (rust/switchboard/src/pages/artifact/save.rs): the
-file on disk and the artifact's next version, one per sitting.
+Sheets' grid (plugins/sheets), `office-sheet.js`, is Univer (page
+xlsx-univer, architect m_37322; Apache-2.0, open-source packages only; no
+Univer Pro), React and what they bundle, ~7 MB, loaded by Sheets' `book.js`
+alone. It is **built, never committed** (a 7 MB blob per rebuild in a public
+history): `scripts/bins.sh office-sheet` builds it from
+`plugins/sheets/src/sheet.ts`, `build.ts` and the lockfile into its cache
+(keyed by their content) and places it in Sheets' view folder with its
+`.key`; run.sh, versions.sh and try_build.py call it,
+`scripts/runtime_check.sh` refuses a runtime whose view loads it without
+it, and `tests/office_check.sh` fails when it is missing or stale.
+Univer's hyphenation dictionaries (5 MB) are empty modules in it (a cell
+never hyphenates). The grid reads the workbook as `book.univer()`
+(src/sheets/univer.ts: Univer's snapshot, plain JSON), and the user's edits
+come back as `editsBetween(before, after)` replayed with `book.apply(edits)`
+then `book.save()`: the grid never writes the xlsx, so what exceljs keeps
+(carry.ts: charts, pivots) comes through.
 
 Cargo and nix never run pnpm, so the other bundles are committed like generated
 code. `build.ts` builds with esbuild `platform: "neutral"` (a node import
@@ -376,9 +382,62 @@ own words.
   budgets; a longer `description` in a `plugin.json` needs its budget.
 - `tests/release_plugins_test.py` lists them in what a release ships.
 
-## The viewer
+## Writer (plugins/docs)
 
-An xlsx, pptx or docx artifact opens in bise's viewer, a page of the pages
+A docx or a markdown file opens in Writer, the docs plugin's static view
+(`plugins/docs/ai.mistral.vibe/views/writer/`, docs/plugin-apps.md steps 1
+and 3): an opener for `*.docx`, `*.md`, `*.markdown`, read only (no write
+grant). `writer.js` connects with `@bise/view`, reads the document through
+its handle and draws it with the renderer of its type: `docx.js`
+(docx-preview's pages, each body paragraph tagged with its id from the
+docs outline, `office.js` at `~kit/office/v1/`) or `markdown.js`
+(micromark + GFM, the thread's parser; its source a toggle away). A note
+anchors on the canonical JSON of the old viewer's anchor minus its quote
+(`{"kind":"para","para":…}`, `{"block":…,"kind":"block"}`, architect
+m_60380), so the notes made before place too; one it can't place is
+listed detached. His place (scroll, the source toggle) is the view's
+state, given back when the tab reopens on a newer version. Links to the web
+leave through the host (`openLink`); a path beside the file is words only
+(a view never gets a path). Sources `.ts` beside their emitted `.js`
+(`plugins/docs/tsconfig.json`, checked in the gate's kit step); tests
+`plugins/docs/test/*.test.mjs`.
+
+## Slides (plugins/slides)
+
+A pptx opens in Slides, the slides plugin's static view
+(`plugins/slides/ai.mistral.vibe/views/slides/`, docs/plugin-apps.md step
+3), read only: `deck.js` draws the slides module's outline (`office.js` at
+`~kit/office/v1/`) as one scaled box per slide with a rail, ←/→ to move;
+text, shapes, pictures from the file's zip, tables, charts as SVG; what
+the module marks notDrawn said in the foot. A clicked shape is his
+selection; a note anchors on `{"kind":"shape","shape":…,"slide":n}` or
+`{"kind":"slide","slide":n}` (the old viewer's minus its quote). The slide
+he is on is the view's state. Tests `plugins/slides/test/`.
+
+## Sheets (plugins/sheets)
+
+An xlsx or a csv opens in Sheets, the sheets plugin's static view
+(`plugins/sheets/ai.mistral.vibe/views/grid/`, docs/plugin-apps.md step 4;
+`*.xlsx` rank owner, `*.csv` rank default), with the write grant. `grid.js`
+reads the document through its handle (past a read's 24 MiB, through its
+session URL, `resources/url`) and draws it in Univer's grid (`book.js`, on
+`office-sheet.js` above); a csv is one sheet from its rows (`csv.js`: RFC
+4180, the file's separator; a plain number is a number, anything else its
+text) and saves back as CSV text. His edits save themselves 2 s after the
+last one through `@bise/view`'s save (`ai.mistral.vibe/resources/write`) on
+the etag he last read or saved: the hub keeps one version per sitting (the
+kit's seq) and answers `conflict` when a version came in since; the tab's
+head then offers Reload and Keep mine as a copy, and his next edits still
+go to the hub on the same etag (the host keeps the latest body for the
+copy). The save state is the head's facts line, never drawn in the view.
+An older version or no write grant: the grid opens read only. A note
+anchors on `{"kind":"cell","range":…,"sheet":…}` (the old viewer's minus its
+quote); the sheet and range he is on are the view's state. Tests
+`plugins/sheets/test/`.
+
+## The viewer (images, pdf, video, sites: until their steps)
+
+An image, a pdf, a video or a site artifact opens in bise's viewer, a page of the pages
 server (plan §4): its row's `frame_url` is `/a/<id>/view` (the newest
 version: the side panel keeps that src when a new version lands), and an
 older version is `/a/<id>/<v>/view`. `pages::site::frame_href` decides it,
@@ -390,17 +449,11 @@ on the same rule that decides which copies the server sends
 | the routes, the bundles at `/kit/office/` | `rust/switchboard/src/pages/artifact/mod.rs` |
 | the shell (the file's facts as `data-` on `main#bise-office`) and its CSP | `pages/artifact/view.rs` |
 | fetch the copy, pick the renderer, the foot | `kit/office/viewer.js`, `viewer.css` |
-| xlsx: tabs, grid, formula bar, cell and range selection | `kit/office/sheet.js` (the sheets outline) |
-| pptx: slide rail, scaled slides, shapes, pictures, tables, charts as SVG | `kit/office/slides.js` (the slides outline) |
-| docx: docx-preview's pages, each body paragraph tagged `data-para` | `kit/office/docx.js` (+ the docs outline) |
 
-The renderers draw from each module's `inspect()` only: the props they
-read are named in each file's header (agreed with the module chunks). A
-renderer returns `{place, restore, selection, notes}`: the user's place,
+A renderer returns `{place, restore, selection, notes}`: the user's place,
 kept across a new version (`window.biseOffice.show(bytes)`, for the swap in
-place); the selection as an `Anchor`; and what it does not draw (charts and
-pivots of a sheet, SmartArt, formulas with no saved value), said in the
-frame's foot. A module not built yet: the frame says so in words.
+place); the selection as an `Anchor`; and what it does not draw, said in
+the frame's foot.
 
 The CSP (`VIEW_CSP`): our scripts only (no inline, no eval), the file's
 images and fonts as `data:`/`blob:`, inline styles (docx-preview needs

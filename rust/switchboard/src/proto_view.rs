@@ -428,13 +428,16 @@ pub fn cards(snap: &Snapshot, project: &str, now: u64, user_kind: fn(&str) -> bo
 /// with no server): a copied file's `frame_url` is it plus where the page
 /// server frames it (pages::site::frame_href: what bise's viewer draws, an
 /// office file, a site, an image or a pdf, at `/a/<id>/view`; any other
-/// file at its own link); a link or a page gets none.
-pub fn artifacts(ev: &Value, page_url: impl Fn(&str) -> Option<String>, frame_base: Option<&str>) -> Vec<Artifact> {
+/// file at its own link); a link or a page gets none. `opened`: the app
+/// that opens a row and the others (crate::app_openers, A3), the hub's
+/// matcher's answer, never the client's.
+pub fn artifacts(ev: &Value, page_url: impl Fn(&str) -> Option<String>, frame_base: Option<&str>, opened: impl Fn(&Value) -> bend_plugins::opens::Opened) -> Vec<Artifact> {
     let seen = ev.get("seen_ms").and_then(Value::as_u64).unwrap_or(0);
     let rows = ev.get("rows").and_then(Value::as_array).cloned().unwrap_or_default();
     rows.iter()
         .map(|r| {
             let (id, kind) = (s(r, "id"), s(r, "kind"));
+            let opened = opened(r);
             let at_ms = r.get("ts_ms").and_then(Value::as_u64).unwrap_or(0);
             let url = match page_url(&id).filter(|_| s(r, "by") == "page") {
                 Some(u) => u,
@@ -447,13 +450,13 @@ pub fn artifacts(ev: &Value, page_url: impl Fn(&str) -> Option<String>, frame_ba
             let target = s(r, "target");
             let path = Some(target.clone()).filter(|t| s(r, "by") != "page" && !crate::artifacts::is_link(t) && Path::new(t).is_absolute());
             let version = r.get("v").and_then(Value::as_u64).unwrap_or(0);
-            // a version's frame: its copy, or its own file for a video too big to
-            // copy (pages::site::served, architect m_54229; the server checks its sig)
+            // a version's frame: its copy (pages::site::served); a file too big to copy
+            // has none and opens in its app (docs/plugin-apps.md A4)
             let by = s(r, "by");
             let frame_of = |x: &Value, n: u64, newest: bool| -> Option<String> {
-                let (copy, no_copy, target) = (s(x, "copy"), s(x, "no_copy"), s(x, "target"));
-                let served = crate::pages::site::served(&by, Some(copy.as_str()), Some(no_copy.as_str()).filter(|w| !w.is_empty()), &target)?;
-                frame_base.map(|b| format!("{b}{}", crate::pages::site::frame_href(&id, n, served.file(), newest)))
+                let copy = s(x, "copy");
+                let copy = crate::pages::site::served(&by, Some(copy.as_str()))?;
+                frame_base.map(|b| format!("{b}{}", crate::pages::site::frame_href(&id, n, copy, newest)))
             };
             let frame_url = frame_of(r, version, true);
             let versions = r.get("versions").and_then(Value::as_array).map_or_else(Vec::new, |vs| {
@@ -468,6 +471,7 @@ pub fn artifacts(ev: &Value, page_url: impl Fn(&str) -> Option<String>, frame_ba
                             copy: Some(s(x, "copy")).filter(|c| !c.is_empty()),
                             // the row's rule, per version (architect m_23970)
                             frame_url: frame_of(x, n, n == version),
+                            by: x.get("by").and_then(|b| serde_json::from_value(b.clone()).ok()),
                         }
                     })
                     .collect()
@@ -484,6 +488,8 @@ pub fn artifacts(ev: &Value, page_url: impl Fn(&str) -> Option<String>, frame_ba
                 path,
                 frame_url,
                 versions,
+                opener: opened.opener,
+                openers: opened.others,
                 title: s(r, "title"),
                 agent: s(r, "agent"),
                 version: version as u32,
@@ -964,7 +970,7 @@ mod tests {
              "target": "https://x.dev", "copy": "/st/art/site/3"},
             {"id": "mine", "kind": "file", "title": "Mine", "agent": "main", "by": "you", "ts_ms": 300, "v": 1,
              "target": "/w/m.txt", "copy": null}]});
-        let a = artifacts(&ev, |id| (id == "perf-notes").then(|| "http://127.0.0.1:1/p/perf-notes".to_string()), None);
+        let a = artifacts(&ev, |id| (id == "perf-notes").then(|| "http://127.0.0.1:1/p/perf-notes".to_string()), None, |_| Default::default());
         let row = |i: usize| (a[i].id.as_str(), a[i].url.as_str(), a[i].version, a[i].new);
         assert_eq!(row(0), ("perf-notes", "http://127.0.0.1:1/p/perf-notes", 2, true), "a page: its server url");
         assert_eq!(row(1), ("deck", "/st/art/deck/1.pdf", 2, false), "a file: its kept copy, seen before");
@@ -989,14 +995,14 @@ mod tests {
                 {"v": 2, "ts_ms": 90, "target": "/w/q3.pptx", "copy": "/st/artifacts/q3/v2/q3.pptx"},
                 {"v": 3, "ts_ms": 95, "target": "/w/q3.pptx", "copy": null}]}]});
         let base = "http://127.0.0.1:47123";
-        let a = artifacts(&ev, |_| None, Some(base));
+        let a = artifacts(&ev, |_| None, Some(base), |_| Default::default());
         let urls: Vec<Option<String>> = a[0].versions.iter().map(|x| x.frame_url.clone()).collect();
         let href = |v: u64, newest: bool| Some(format!("{base}{}", crate::pages::site::frame_href("q3", v, "/st/artifacts/q3/v1/q3.pptx", newest)));
         assert_eq!(urls, [href(1, false), href(2, true), None], "older: /a/q3/1/view, newest: /a/q3/view, no copy: none");
         assert_eq!(a[0].frame_url, urls[1], "the row's and its newest version's are the same");
         assert_eq!(a[0].live.as_ref().and_then(|l| l.line.as_deref()), Some("v2 · 1 slide changed"));
         assert_eq!(a[0].live.as_ref().and_then(|l| l.back.as_ref()).map(|b| b.v), Some(1));
-        assert!(artifacts(&ev, |_| None, None)[0].versions.iter().all(|x| x.frame_url.is_none()), "no page server: none");
+        assert!(artifacts(&ev, |_| None, None, |_| Default::default())[0].versions.iter().all(|x| x.frame_url.is_none()), "no page server: none");
     }
 
     #[test]

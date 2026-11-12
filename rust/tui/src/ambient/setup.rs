@@ -118,6 +118,9 @@ pub type PluginsFn = Box<dyn Fn(&Path, &[String]) -> Vec<Plugin>>;
 pub type PluginSetFn = Box<dyn Fn(&str, bool) -> Result<(), String>>;
 /// a view's grant: plugin, uri, permissions (docs/mcp-apps.md C8)
 pub type PluginGrantFn = Box<dyn Fn(&str, &str, &[String]) -> Result<(), String>>;
+/// his pick of the app that opens a type: type key, (plugin, tool) or
+/// none for A2's order (docs/plugin-apps.md A2)
+pub type OpenerSetFn = Box<dyn Fn(&str, Option<(&str, &str)>) -> Result<(), String>>;
 pub type PluginSettingFn = Box<dyn Fn(&Path, &str, &str, Option<&str>) -> Result<(), String>>;
 /// (workspace, server name, the project it was asked for, the channel of its end)
 pub type PluginLoginFn = Box<dyn Fn(&Path, &str, Option<String>, Sender<Done>) -> Result<(), String>>;
@@ -218,6 +221,9 @@ pub struct SetupPorts {
     pub plugin_set: PluginSetFn,
     /// a view's grant in plugins.json, through bend_plugins' one writer
     pub plugin_grant: PluginGrantFn,
+    /// his pick of a type's app in plugins.json, through bend_plugins'
+    /// one writer
+    pub opener_set: OpenerSetFn,
     /// a plugin's setting in his MCP secrets, through bend_plugins' one
     /// writer: (workspace, plugin, var, value or none to forget)
     pub plugin_setting: PluginSettingFn,
@@ -614,6 +620,7 @@ pub fn live(flow: FlowFn) -> SetupPorts {
         plugins: Box::new(crate::plugins::rows),
         plugin_set: Box::new(|name, on| crate::plugins::set(name, on).map(|_| ())),
         plugin_grant: Box::new(|plugin, uri, perms| crate::plugins::grant(plugin, uri, perms).map(|_| ())),
+        opener_set: Box::new(|key, to| crate::plugins::opener_set(key, to).map(|_| ())),
         plugin_setting: Box::new(crate::plugins::setting),
         roles: Box::new(move || role_rows(&bise_catalog::Setup::load(&home().config_file()))),
         gauge_input: Box::new(move || {

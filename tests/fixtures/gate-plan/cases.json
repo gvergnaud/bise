@@ -180,6 +180,11 @@
   }
  },
  {
+  "name": "a first-party plugin's static view (Writer): its types and emit in the kit step, its tests in the gallery's",
+  "paths": ["plugins/docs/ai.mistral.vibe/views/writer/markdown.ts", "plugins/docs/tsconfig.json"],
+  "want": {"flags": {"kit": 1, "gallery": 1, "office_skills": 1}}
+ },
+ {
   "name": "a gallery plugin's view: MCP apps and the gallery",
   "paths": [
    "plugins/maps/views/map.html"

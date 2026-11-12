@@ -9,8 +9,10 @@
 //! root given to [`Pages::new`].
 
 pub mod checklist;
+pub mod doc_files;
 pub mod drafts;
 pub mod export;
+pub mod icon;
 pub mod lint;
 pub mod artifact;
 pub mod media;
@@ -23,6 +25,7 @@ pub mod site;
 pub mod store;
 pub mod ui;
 pub mod view_csp;
+pub mod view_folder;
 pub mod view_web;
 pub mod views;
 pub mod waiting;
@@ -33,6 +36,28 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 use store::{Meta, Publish, Store};
+
+/// The hub's answer to a page thread that waits for it: (status, body).
+pub struct Reply(pub std::sync::mpsc::Sender<(u16, Value)>);
+
+impl Reply {
+    pub fn send(self, status: u16, body: Value) {
+        let _ = self.0.send((status, body));
+    }
+}
+
+impl std::fmt::Debug for Reply {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Reply")
+    }
+}
+
+/// Two messages are equal on what they carry; a reply channel is no fact.
+impl PartialEq for Reply {
+    fn eq(&self, _: &Reply) -> bool {
+        true
+    }
+}
 
 /// What the page server tells the hub.
 #[derive(Debug, PartialEq)]
@@ -46,22 +71,22 @@ pub enum PageMsg {
     Sent { target: store::Target, agent: String, text: String, notes: Vec<store::Note> },
     /// the drafts of page `id` changed (its open notes count)
     Notes { id: String },
+    /// artifact `id`'s notes were written (store.rs `save_notes_of`, every
+    /// door): the hub tells its clients (`HubEv::ArtifactNotes`)
+    ArtifactNotes { id: String },
     /// the user answered question `block` of page `id` on the page
     /// (§4.2): `reply` goes to its card, as from the capsule
     Answer { id: String, block: String, reply: String },
     /// the user opened a newer version of page `id` in a browser
     Opened { id: String },
-    /// his edits of artifact `id` in the viewer's grid (artifact/save.rs):
-    /// the hub decides, writes the file and the version, and answers `reply`
-    Save { id: String, req: artifact::save::SaveReq, reply: artifact::save::Reply },
     /// the door of local site `id` (artifact/live.rs) found its port free:
     /// the hub starts its recipe again (daemon/revive.rs) and answers
     /// `reply` (200 `{pid}`, else `{why}`); the door waits for the port
-    Revive { id: String, reply: artifact::save::Reply },
+    Revive { id: String, reply: Reply },
     /// a view's request from the web host (`POST /api/view`, C9): C5's
     /// `method` and `params`; the hub answers `reply` (200 `{result}` or
     /// `{error}`) through the same dispatcher as hub.sock's
-    View { method: String, params: Value, reply: artifact::save::Reply },
+    View { method: String, params: Value, reply: Reply },
     /// the user's mirror of the public pages failed after a publish of `id`
     /// (mirror.rs): one line in main's thread
     Mirror { id: String, error: String },
@@ -81,7 +106,6 @@ pub struct Pages {
     pub office_dir: PathBuf,
     /// SSE streams of each page id ("" = the home list)
     subs: Mutex<HashMap<String, Vec<Sender<String>>>>,
-    to_hub: Mutex<Option<ToHub>>,
     /// each page's last `progress` frames
     progress: Mutex<HashMap<String, std::collections::VecDeque<String>>>,
     /// each artifact's last live words, for a new stream's first frame
@@ -103,6 +127,19 @@ pub struct Pages {
     /// each view origin's sandbox (views.rs): its hash → what
     /// `view/resource` registered; lost on a restart (the app asks again)
     views: Mutex<HashMap<String, views::ViewOrigin>>,
+    /// the handles of the views' sessions (docs/plugin-apps.md A4,
+    /// `crate::view_files`, apps-hub-files'): beside the sessions, ended
+    /// with them in one place (views.rs `sessions_end`). Never held across
+    /// I/O, nor with `views`: lock, copy the binding out, unlock, then
+    /// read, stat or send (architect m_60434): a range read of a video
+    /// holding it would stall the hub's loop at its next lookup.
+    pub(crate) files: Mutex<crate::view_files::Files>,
+    /// the on plugins' app icons (`/icon/<plugin>`, icon.rs): set by the
+    /// hub after each gather of the openers; read out of the lock first
+    icons: Mutex<icon::Icons>,
+    /// `Home::bise_root()`: a root file's handle is re-checked under it on
+    /// every use (doc_files.rs)
+    pub bise_root: PathBuf,
     /// the app's dev server, who may also frame a view (view_csp.rs): a
     /// hub run with `BISE_DEV` only
     pub view_dev: Option<&'static str>,
@@ -169,7 +206,6 @@ impl Pages {
             kit_dir: app_root.join("kit"),
             office_dir: app_root.join("office").join("dist"),
             subs: Mutex::new(HashMap::new()),
-            to_hub: Mutex::new(None),
             progress: Mutex::new(HashMap::new()),
             art_live: Mutex::new(HashMap::new()),
             busy: Mutex::new(std::collections::BTreeSet::new()),
@@ -177,8 +213,22 @@ impl Pages {
             holds: crate::idle::Holds::default(),
             rows_memo: Mutex::default(),
             views: Mutex::new(HashMap::new()),
+            files: Mutex::default(),
+            icons: Mutex::default(),
+            bise_root: bise_home::Home::from_env().bise_root(),
             view_dev: view_csp::dev_ancestor(std::env::var("BISE_DEV").ok().as_deref()),
         }
+    }
+
+    /// The plugins' app icons now (the hub's, after a gather).
+    pub fn set_icons(&self, icons: icon::Icons) {
+        *self.icons.lock().unwrap_or_else(|e| e.into_inner()) = icons;
+    }
+
+    /// `plugin`'s icon file, if it has one (cloned out: the read happens
+    /// with no lock held).
+    pub fn icon_of(&self, plugin: &str) -> Option<icon::IconAt> {
+        self.icons.lock().unwrap_or_else(|e| e.into_inner()).get(plugin).cloned()
     }
 
     /// The agents at work now (working, or idle and not done): their
@@ -213,19 +263,14 @@ impl Pages {
         busy || self.done_at.lock().unwrap_or_else(|e| e.into_inner()).get(&(id.to_string(), name.to_string())).is_some_and(|v| version <= *v)
     }
 
-    /// Where the hub hears the server.
+    /// Where the hub hears the server (kept by the store, whose notes
+    /// writer tells it too: one link).
     pub fn connect_hub(&self, f: ToHub) {
-        if let Ok(mut s) = self.to_hub.lock() {
-            *s = Some(f);
-        }
+        self.store.connect_hub(f);
     }
 
     pub(crate) fn tell_hub(&self, m: PageMsg) {
-        if let Ok(s) = self.to_hub.lock() {
-            if let Some(f) = s.as_ref() {
-                f(m);
-            }
-        }
+        self.store.tell_hub(m);
     }
 
     /// One writer at a time on the store.

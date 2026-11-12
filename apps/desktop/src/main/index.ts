@@ -27,7 +27,8 @@ import { aboutPanel } from './about';
 import { micHeld, onCoreEvent, onCoreState, sendToCore, startCore, stopCore } from './core/ipc';
 import { configOfPrefs } from './helper/config';
 import { Shots } from './helper/shot';
-import { installIpc, panelShown, sendClip, sendMenu, setProjectRoots } from './ipc';
+import { Looks } from './helper/look';
+import { installIpc, panelShown, sendClip, sendMenu, setLooks, setProjectRoots } from './ipc';
 import { installViewFrames } from './viewframes';
 import { installKeepIpc } from './keep';
 import { projectRoots } from './reveal';
@@ -158,8 +159,26 @@ void app.whenReady().then(() => {
       dir: join(app.getPath('userData'), 'shots'),
     });
     shots = s;
+    // an artifact card's Quick Look thumbnail (helper/look.ts, thumbs/make.ts); a test run's
+    // scripted helper draws nothing: Electron decodes what it can there, as before
+    const looks = testMode ? null : new Looks({
+      helper: (c) => {
+        helper.send(c);
+      },
+      later: (ms, f) => {
+        const t = setTimeout(f, ms);
+        return () => {
+          clearTimeout(t);
+        };
+      },
+      drop: (p) => {
+        rmSync(p, { force: true });
+      },
+    });
+    setLooks(looks);
     helper.on((ev) => {
       s.helperEv(ev);
+      looks?.ev(ev);
     });
     onCoreEvent((ev) => {
       if (ev['ev'] !== 'prefs') return;
@@ -268,9 +287,9 @@ void app.whenReady().then(() => {
   });
   onCoreEvent((ev) => {
     notifier.onCoreEvent(ev);
-    // the TUI's 'app ↗' on a view (hub app_open): the window comes forward, its renderer opens the
-    // view's panel tab (src/views/hooks.ts useViewOpen)
-    if (ev.ev === 'app_open' && ev.what === 'view') main.open();
+    // the TUI's 'app ↗' on a view, its 'o' on an artifact (hub app_open): the window comes forward,
+    // its renderer opens the panel tab (src/views/hooks.ts useViewOpen)
+    if (ev.ev === 'app_open' && (ev.what === 'view' || ev.what === 'artifact')) main.open();
   });
   // the counts outside the app (counts.ts): the Dock's badge, the menu bar's ':*' (the window's title
   // is the page's: what he looks at, app/title.ts)

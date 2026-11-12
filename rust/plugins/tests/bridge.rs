@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 
 use bend_plugins::connectors::Catalog;
 use bend_plugins::id::{PartKind, PluginId};
-use bend_plugins::model::{ConnectorAuth, ConnectorEntry, StateV2, ToolEntry};
+use bend_plugins::model::{ConnectorAuth, ConnectorEntry, ToolEntry};
 use bend_plugins::{bridge, resolve, secrets, state, status};
 
 mod common;
@@ -132,13 +132,7 @@ fn fixture_plugin_end_to_end() {
     let (base, plugins) = fixture_root("e2e");
     let dir = base.join("run/plugins");
     let mut parent = std::process::Command::new("sleep").arg("60").spawn().unwrap();
-    let roots = resolve::Roots {
-        builtin: None,
-        user: Some(base.join("nothing-here")),
-        workspace: Some(plugins.clone()),
-        data: base.join("data"),
-        state: Default::default(),
-    };
+    let roots = resolve::Roots { user: Some(base.join("nothing-here")), workspace: Some(plugins.clone()), ..resolve::Roots::for_test(&base) };
     let opts = opts(dir.clone(), Some(parent.id()), roots);
     let server = std::thread::spawn(move || bridge::serve(opts));
     let t0 = Instant::now();
@@ -217,13 +211,7 @@ fn failing_server_is_a_diagnostic() {
     )
     .unwrap();
     let dir = base.join("run/plugins");
-    let roots = resolve::Roots {
-        builtin: None,
-        user: None,
-        workspace: Some(plugins),
-        data: base.join("data"),
-        state: Default::default(),
-    };
+    let roots = resolve::Roots { workspace: Some(plugins), ..resolve::Roots::for_test(&base) };
     let mut parent = std::process::Command::new("sleep").arg("60").spawn().unwrap();
     let opts = opts(dir.clone(), Some(parent.id()), roots);
     let server = std::thread::spawn(move || bridge::serve(opts));
@@ -259,13 +247,7 @@ fn limits_filter_tools_bound_calls_and_late_servers_join() {
     .unwrap();
     let dir = base.join("run/plugins");
     let mut parent = std::process::Command::new("sleep").arg("60").spawn().unwrap();
-    let roots = resolve::Roots {
-        builtin: None,
-        user: None,
-        workspace: Some(plugins),
-        data: base.join("data"),
-        state: Default::default(),
-    };
+    let roots = resolve::Roots { workspace: Some(plugins), ..resolve::Roots::for_test(&base) };
     let opts = bridge::Opts { ready_wait: Duration::from_secs(4), ..opts(dir.clone(), Some(parent.id()), roots) };
     let server = std::thread::spawn(move || bridge::serve(opts));
     let t0 = Instant::now();
@@ -353,7 +335,7 @@ fn fake_catalog() -> bridge::CatalogSource {
 }
 
 fn roots_of(base: &Path, workspace: Option<PathBuf>) -> resolve::Roots {
-    resolve::Roots { builtin: None, user: None, workspace, data: base.join("data"), state: StateV2::default() }
+    resolve::Roots { workspace, ..resolve::Roots::for_test(base) }
 }
 
 fn index(dir: &Path) -> String {
@@ -448,7 +430,7 @@ fn a_removed_plugins_server_is_retired_within_a_poll() {
     let dir = base.join("run/plugins");
     let mut parent = std::process::Command::new("sleep").arg("60").spawn().unwrap();
     let ctx = bend_plugins::add::Ctx { user_root: plugins.clone(), ..bend_plugins::add::Ctx::under(&base) };
-    let roots = resolve::Roots { builtin: None, user: Some(plugins.clone()), workspace: None, data: base.join("data"), state: StateV2::default() };
+    let roots = resolve::Roots { user: Some(plugins.clone()), ..resolve::Roots::for_test(&base) };
     let opts = bridge::Opts {
         state_path: Some(ctx.state.clone()),
         poll: Duration::from_millis(100),

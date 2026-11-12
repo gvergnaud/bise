@@ -82,6 +82,14 @@ export const METHODS = {
   "view/message": { cmd: "view_message", result: null },
   "view/context": { cmd: "view_context", result: null },
   "plugin/views": { cmd: "plugin_views", result: null },
+  "view/close": { cmd: "view_close", result: null },
+  "view/notes": { cmd: "view_notes", result: null },
+  "view/open": { cmd: "view_open", result: null },
+  "view/copy": { cmd: "view_copy", result: null },
+  "folder/list": { cmd: "folder_list", result: null },
+  "file/new": { cmd: "file_new", result: null },
+  "files/ids/subscribe": { cmd: "files_ids_subscribe", result: null },
+  "files/mint": { cmd: "files_mint", result: null },
 } as const;
 
 export const NOTIFICATIONS = {
@@ -115,6 +123,8 @@ export const NOTIFICATIONS = {
   "route/done": { ev: "route_done", scope: "hub" },
   "card/open": { ev: "card_open", scope: "one" },
   "app/open": { ev: "app_open", scope: "one" },
+  "artifact/notes": { ev: "artifact_notes", scope: "hub" },
+  "files/ids": { ev: "files_ids", scope: "one" },
   "inbox/recorded": { ev: "inbox_recorded", scope: "hub" },
   "client/focused": { ev: "focused", scope: "one" },
   "hub/notice": { ev: "notice", scope: "one" },
@@ -143,6 +153,12 @@ export const RESULTS = {
   "card/answer": "AnswerResult",
   "view/resource": "ViewResource",
   "view/call": "ViewCallResult",
+  "view/open": "ViewOpened",
   "plugin/views": "PluginViewsResult",
+  "view/copy": "ViewCopyResult",
+  "folder/list": "FolderList",
+  "file/new": "FileNewResult",
+  "files/ids/subscribe": "FilesIds",
+  "files/mint": "FilesMintResult",
   "app/open": "AppOpenResult",
 } as const;

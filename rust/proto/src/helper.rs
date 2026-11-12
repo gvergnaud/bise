@@ -2,7 +2,8 @@
 //! m_9434; architect m_9461): one JSON object per line on the helper's
 //! stdin/stdout. The helper (`apps/desktop/native/mac`) does only what
 //! Electron can't: the fn key tap, the front app's context through
-//! Accessibility, the permission states, quiet moments, the screenshot.
+//! Accessibility, the permission states, quiet moments, the screenshot,
+//! a file's Quick Look thumbnail.
 //! Away (lock, sleep) is Electron's own powerMonitor; the mic is the core's.
 //!
 //! - [`HelperEv`], tagged `"ev"`: what the helper says;
@@ -93,6 +94,18 @@ pub enum HelperEv {
         /// an excluded app or a private window
         #[serde(default, skip_serializing_if = "is_false")]
         skipped: bool,
+    },
+    /// the answer to `thumb`: Quick Look's picture of the file written at
+    /// the command's `out` (`ok`), else nothing (Quick Look can't draw it:
+    /// the window asks the file's app, docs/plugin-apps.md A6b)
+    Thumb {
+        id: String,
+        #[serde(default, skip_serializing_if = "is_false")]
+        ok: bool,
+        /// its length (a video's, a sound's), in ms, when AVFoundation
+        /// reads one
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        ms: Option<u64>,
     },
     /// a command it could not do (a bad line, an unknown tag)
     Error {
@@ -191,7 +204,7 @@ pub enum PermAction {
 }
 
 impl HelperEv {
-    pub const TAGS: &'static [&'static str] = &["hello", "fn", "context", "front", "perms", "quiet", "shot", "error"];
+    pub const TAGS: &'static [&'static str] = &["hello", "fn", "context", "front", "perms", "quiet", "shot", "thumb", "error"];
 
     pub fn decode(line: &str) -> Result<HelperEv, String> {
         decode(parse(line)?, "ev", Self::TAGS, |tag, raw| HelperEv::Unknown { tag, raw })
@@ -232,6 +245,11 @@ pub enum HelperCmd {
     Perm { perm: Perm, action: PermAction },
     /// the front window as a PNG in `dir` -> `shot {id}`
     Shot { id: String, dir: String },
+    /// Quick Look's picture of the file at `path` (main resolved it from the
+    /// store or the root, never the renderer), `px` wide at most, as a PNG
+    /// at `out` -> `thumb {id}`. A thumbnail only, never the type's icon:
+    /// no picture means Quick Look can't draw it (architect m_60495)
+    Thumb { id: String, path: String, out: String, px: u32 },
     /// exit 0
     Quit,
     #[serde(skip)]
@@ -239,7 +257,7 @@ pub enum HelperCmd {
 }
 
 impl HelperCmd {
-    pub const TAGS: &'static [&'static str] = &["config", "route", "own_mic", "read_context", "perm", "shot", "quit"];
+    pub const TAGS: &'static [&'static str] = &["config", "route", "own_mic", "read_context", "perm", "shot", "thumb", "quit"];
 
     pub fn decode(line: &str) -> Result<HelperCmd, String> {
         decode(parse(line)?, "cmd", Self::TAGS, |tag, raw| HelperCmd::Unknown { tag, raw })

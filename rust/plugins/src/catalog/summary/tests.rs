@@ -33,6 +33,8 @@ fn row(id: &str, kind: PluginKind, scope: PluginScope, state: PluginState, on: b
         settings: Vec::new(),
         needs_node: false,
         logins: Vec::new(),
+        opens: Vec::new(),
+        makes: Vec::new(),
     }
 }
 

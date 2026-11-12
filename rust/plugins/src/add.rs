@@ -110,6 +110,8 @@ pub struct Ctx {
     pub builtin: Option<PathBuf>,
     /// where `${PLUGIN_DATA}` roots live
     pub data: PathBuf,
+    /// where `${PLUGIN_DOCUMENTS}` roots live (`Roots::documents`)
+    pub documents: PathBuf,
     /// `plugins.json` ([`crate::state::state_path`]): a removed
     /// plugin's ids go
     pub state: PathBuf,
@@ -129,6 +131,7 @@ impl Ctx {
             secrets_dir: bise_home::Home::from_env().mcp_secrets_dir(),
             builtin: roots.builtin,
             data: roots.data,
+            documents: roots.documents,
             state: crate::state::state_path(),
             status_dir: crate::status::dir(),
             oauth_dir: crate::oauth::store_dir(),
@@ -143,6 +146,7 @@ impl Ctx {
             secrets_dir: root.join("secrets"),
             builtin: None,
             data: root.join("data"),
+            documents: root.join("documents"),
             state: root.join("plugins.json"),
             status_dir: root.join("mcp-status"),
             oauth_dir: root.join("mcp-oauth"),
@@ -540,7 +544,7 @@ fn check(b: Built, ctx: &Ctx, token: String, dir: PathBuf) -> Result<Staged, Add
         let _ = std::fs::remove_dir_all(dir);
         Err(e)
     };
-    let roots = Roots { builtin: None, user: Some(dir.clone()), workspace: None, data: ctx.data.clone(), state: StateV2 { enabled: vec![b.name.clone()], ..StateV2::default() } };
+    let roots = Roots { builtin: None, user: Some(dir.clone()), workspace: None, data: ctx.data.clone(), documents: ctx.documents.clone(), state: StateV2 { enabled: vec![b.name.clone()], ..StateV2::default() } };
     let res = resolve::resolve(&roots);
     let errors: Vec<String> = res.diagnostics.iter().filter(|d| d.severity == Severity::Error).map(|d| d.message.clone()).collect();
     let Some(p) = res.plugins.iter().find(|p| p.state == State::Loaded && p.name == b.name) else {
@@ -558,7 +562,7 @@ fn check(b: Built, ctx: &Ctx, token: String, dir: PathBuf) -> Result<Staged, Add
     // his plugins of that name: bise's own folder of the same kind is
     // replaced, anything else refuses
     let dest = ctx.user_root.join(&b.name);
-    let mine = resolve::resolve(&Roots { builtin: ctx.builtin.clone(), user: Some(ctx.user_root.clone()), workspace: None, data: ctx.data.clone(), state: StateV2::default() });
+    let mine = resolve::resolve(&Roots { builtin: ctx.builtin.clone(), user: Some(ctx.user_root.clone()), workspace: None, data: ctx.data.clone(), documents: ctx.documents.clone(), state: StateV2::default() });
     let taken = mine.plugins.iter().any(|q| q.scope == resolve::Scope::User && q.name == b.name && q.root != dest.canonicalize().unwrap_or(dest.clone()));
     let mut replaces = None;
     if dest.exists() || taken {
@@ -569,7 +573,7 @@ fn check(b: Built, ctx: &Ctx, token: String, dir: PathBuf) -> Result<Staged, Add
         replaces = Some(b.name.clone());
     }
     if mine.plugins.iter().any(|q| q.scope == resolve::Scope::BuiltIn && q.name == b.name) {
-        notes.push(format!("it shadows the built-in {}", b.name));
+        notes.push(format!("it replaces bise's own {} part", b.name));
     }
     // what it runs, with the paths it will have once installed
     let staged_root = p.root.to_string_lossy().to_string();
@@ -605,6 +609,7 @@ fn check(b: Built, ctx: &Ctx, token: String, dir: PathBuf) -> Result<Staged, Add
         replaces,
         // its static views, their domains and permissions, never granted yet (C8: ticked on the add screen)
         views: crate::catalog::views::parts(&b.name, &p.views, &crate::state::Grants::new(), true),
+        claims: Vec::new(),
     };
     Ok(Staged { preview, token, dir, plugin: b.plugin, secrets: b.secrets })
 }
@@ -664,7 +669,7 @@ pub fn discard(staged: Staged) {
 pub fn try_servers(plugin_dir: &Path, ctx: &Ctx) -> Vec<(String, crate::status::Status)> {
     let name = plugin_dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     let state = StateV2 { enabled: vec![name], ..StateV2::default() };
-    let roots = Roots { builtin: None, user: Some(ctx.user_root.clone()), workspace: None, data: ctx.data.clone(), state };
+    let roots = Roots { builtin: None, user: Some(ctx.user_root.clone()), workspace: None, data: ctx.data.clone(), documents: ctx.documents.clone(), state };
     let Some(p) = resolve::resolve(&roots).plugins.into_iter().find(|p| p.root == plugin_dir && p.state == State::Loaded) else {
         return Vec::new();
     };

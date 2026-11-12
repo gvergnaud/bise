@@ -15,6 +15,138 @@
     "one": null,
     "text": "change it"
   },
+  "views.copy_first": {
+    "args": [],
+    "one": null,
+    "text": "(copy)"
+  },
+  "views.copy_nth": {
+    "args": [
+      "n"
+    ],
+    "one": null,
+    "text": "(copy {n})"
+  },
+  "views.doc_app_off": {
+    "args": [
+      "app"
+    ],
+    "one": null,
+    "text": "{app} is off"
+  },
+  "views.doc_detached": {
+    "args": [
+      "n"
+    ],
+    "one": "{n} note has no place in this version",
+    "text": "{n} notes have no place in this version"
+  },
+  "views.doc_failed": {
+    "args": [],
+    "one": null,
+    "text": "the view didn't load"
+  },
+  "views.doc_gone": {
+    "args": [],
+    "one": null,
+    "text": "this file was removed"
+  },
+  "views.doc_keep_copy": {
+    "args": [],
+    "one": null,
+    "text": "Keep mine as a copy"
+  },
+  "views.doc_newer": {
+    "args": [],
+    "one": null,
+    "text": "a newer version was saved"
+  },
+  "views.doc_newer_by": {
+    "args": [
+      "who",
+      "n"
+    ],
+    "one": null,
+    "text": "{who} saved v{n}"
+  },
+  "views.doc_older": {
+    "args": [],
+    "one": null,
+    "text": "there's a newer one"
+  },
+  "views.doc_open_newest": {
+    "args": [
+      "n"
+    ],
+    "one": null,
+    "text": "Open v{n}"
+  },
+  "views.doc_read_only": {
+    "args": [],
+    "one": null,
+    "text": "read only"
+  },
+  "views.doc_reload": {
+    "args": [],
+    "one": null,
+    "text": "Reload"
+  },
+  "views.doc_save_failed": {
+    "args": [],
+    "one": null,
+    "text": "couldn't save"
+  },
+  "views.doc_saved": {
+    "args": [
+      "time"
+    ],
+    "one": null,
+    "text": "saved {time}"
+  },
+  "views.doc_saving": {
+    "args": [],
+    "one": null,
+    "text": "saving…"
+  },
+  "views.doc_someone": {
+    "args": [],
+    "one": null,
+    "text": "someone"
+  },
+  "views.doc_tab": {
+    "args": [],
+    "one": null,
+    "text": "document"
+  },
+  "views.doc_too_large": {
+    "args": [
+      "max"
+    ],
+    "one": null,
+    "text": "too large to save ({max} at most)"
+  },
+  "views.doc_try_again": {
+    "args": [],
+    "one": null,
+    "text": "Try again"
+  },
+  "views.doc_turn_on": {
+    "args": [],
+    "one": null,
+    "text": "Turn on"
+  },
+  "views.doc_version": {
+    "args": [
+      "n"
+    ],
+    "one": null,
+    "text": "v{n}"
+  },
+  "views.doc_you": {
+    "args": [],
+    "one": null,
+    "text": "You"
+  },
   "views.expired": {
     "args": [],
     "one": null,
@@ -76,6 +208,11 @@
     "one": null,
     "text": "MIDI"
   },
+  "views.missing_write": {
+    "args": [],
+    "one": null,
+    "text": "saving your file"
+  },
   "views.no_grant": {
     "args": [
       "missing"
@@ -112,6 +249,11 @@
     "args": [],
     "one": null,
     "text": "MIDI"
+  },
+  "views.perm_write": {
+    "args": [],
+    "one": null,
+    "text": "save your files"
   },
   "views.preview_label": {
     "args": [],

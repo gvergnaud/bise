@@ -1089,3 +1089,86 @@
   align-items: center;
   min-width: 0;
 }
+
+/* a document drawn by its app (Document.tsx; designer's mocks, page plugin-apps-mocks §3): its
+   name and ⋯, one facts line under them, never a banner; the view fills the rest */
+.pn-doc {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.pn-doc-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-2) 0 var(--s-3);
+}
+.pn-doc-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--c-text);
+  font: 500 var(--f-ui);
+}
+.pn-doc-line {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-2);
+  padding: 0 var(--s-3) var(--s-2);
+  border-bottom: 1px solid var(--c-line);
+  color: var(--c-text-3);
+  font: 400 var(--f-meta);
+}
+.pn-doc-line-t {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.pn-doc-act {
+  flex: none;
+  color: var(--c-text-2);
+  font: var(--f-meta);
+}
+/* quiet acts (designer m_61435): ink and underline on hover; pink stays for what waits on him */
+.pn-doc-act:hover {
+  color: var(--c-ink);
+  text-decoration: underline;
+}
+.pn-doc-err {
+  color: var(--c-err);
+}
+.pn-doc-detached {
+  flex: none;
+  padding: var(--s-2) var(--s-3);
+  border-bottom: 1px solid var(--c-line);
+  color: var(--c-text-2);
+  font: 400 var(--f-meta);
+}
+.pn-doc-detached ul {
+  margin: var(--s-1) 0 0;
+  padding-left: var(--s-4);
+}
+.pn-doc-view {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+.pn-doc-view > .vw-tab-box {
+  flex: 1;
+  min-height: 0;
+}
+/* the body's one state left, loading: centred in the body both ways (designer m_61435) */
+.pn-doc-view > .vw-quiet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}

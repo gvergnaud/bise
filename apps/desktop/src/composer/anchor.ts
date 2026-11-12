@@ -30,8 +30,8 @@ const quoted = (q: string): string => `"${short(q, 40)}"`;
 const has = (q: string | undefined): q is string => q !== undefined && q.trim() !== '';
 
 /**
- * Where in the artifact: `Q3!B4:D9`, `slide 2`, `slide 2 · a box`, `slide 2 · a shape`,
- * `"net revenue…"`, `page 1 · a box`, `page 1 · "net revenue…"`, `line 40`, `0:12`, `0:12 · a box`; a kind this window
+ * Where in the artifact: `Q3!B4:D9`, `slide 2`, `slide 2 · an area`, `slide 2 · a shape`,
+ * `"net revenue…"`, `page 1 · an area`, `page 1 · "net revenue…"`, `line 40`, `0:12`, `0:12 · an area`; a kind this window
  * doesn't know: `a part`. Pure.
  */
 export function anchorLabel(a: Anchor): string {
@@ -41,7 +41,7 @@ export function anchorLabel(a: Anchor): string {
     case 'cell':
       return `${sheetRef(a.sheet)}!${a.range}`;
     case 'slide':
-      return a.rect === undefined ? `slide ${String(a.slide)}` : `slide ${String(a.slide)} · a box`;
+      return a.rect === undefined ? `slide ${String(a.slide)}` : `slide ${String(a.slide)} · an area`;
     case 'shape':
       // a shape is said by its words, never its id (designer m_24098)
       return has(a.quote) ? `slide ${String(a.slide)} · ${quoted(a.quote)}` : `slide ${String(a.slide)} · a shape`;
@@ -50,12 +50,17 @@ export function anchorLabel(a: Anchor): string {
     case 'region':
       // a pdf passage is said by its words (pdf-notes): `page 2 · "net revenue…"`
       if (has(a.quote)) return a.page === undefined ? quoted(a.quote) : `page ${String(a.page)} · ${quoted(a.quote)}`;
-      return a.page === undefined ? 'a box' : `page ${String(a.page)} · a box`;
+      return a.page === undefined ? 'an area' : `page ${String(a.page)} · an area`;
     case 'text':
       return `line ${String(a.line)}`;
     case 'time':
       // a video's moment, or a box on its frame there (video-view)
-      return a.rect === undefined ? clock(a.t) : `${clock(a.t)} · a box`;
+      return a.rect === undefined ? clock(a.t) : `${clock(a.t)} · an area`;
+    case 'view':
+      // a plugin's view: its key is opaque; its label names the place, his words what is there
+      // (plugin-apps A5, architect m_60509)
+      if (has(a.label)) return has(a.quote) ? `${a.label} · ${quoted(a.quote)}` : a.label;
+      return has(a.quote) ? quoted(a.quote) : 'a part';
     default:
       return 'a part';
   }

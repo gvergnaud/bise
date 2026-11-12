@@ -104,7 +104,7 @@ def words_read_check_holds(tmp):
     import gate_plan
     script = os.path.join(HERE, "words_read_check.py")
     root = os.path.join(tmp, "words-tree")
-    for d in ("tests/words", "rust/proto/src/words", "rust/x/src", "apps/desktop/src/a"):
+    for d in ("tests/words", "rust/proto/src/words", "rust/x/src", "apps/desktop/src/a", "kit/v", "plugins/p/views"):
         os.makedirs(os.path.join(root, d), exist_ok=True)
     json.dump({"_": "generated", "zz.never_read": {"text": "x"}}, open(os.path.join(root, "tests/words/zz.gen.json"), "w"))
 
@@ -121,17 +121,29 @@ def words_read_check_holds(tmp):
     for files, what in [({"rust/proto/src/words/zz.rs": "zz::never_read"}, "the catalog's own mention"),
                         ({"apps/desktop/src/a/b.test.ts": "zz.never_read"}, "a desktop test"),
                         ({"apps/desktop/src/a/b.gen.ts": "zz.never_read"}, "a generated file"),
-                        ({"rust/x/src/l.rs": "zz::never_read_too"}, "a longer name")]:
+                        ({"rust/x/src/l.rs": "zz::never_read_too"}, "a longer name"),
+                        ({"kit/v/words.gen.ts": "zz.never_read"}, "the kit's generated file"),
+                        ({"kit/v/v.check.ts": "zz.never_read"}, "a kit check"),
+                        ({"plugins/p/views/v.test.mjs": "zz.never_read"}, "a plugin's test")]:
         check(run(files)[0] == 1, "words_read_check: %s is no read" % what)
     for files, what in [({"rust/x/src/l.rs": "use w::zz::never_read;"}, "Rust"),
-                        ({"apps/desktop/src/a/b.tsx": "w.zz.never_read()"}, "the desktop")]:
+                        ({"apps/desktop/src/a/b.tsx": "w.zz.never_read()"}, "the desktop"),
+                        ({"kit/v/pill.ts": 'import { zz } from "./words.gen.js";\nb.textContent = zz.never_read;'}, "the kit"),
+                        ({"plugins/p/views/v.js": 'import { zz } from "./~kit/view/view.js";\nzz.never_read'}, "a plugin's view")]:
         check(run(files)[0] == 0, "words_read_check: a read by %s keeps it" % what)
+    # an area under another name would hide its reads (architect m_61995): red, named
+    for files, what in [({"kit/v/pill.ts": 'import { zz as W } from "./words.gen.js";\nW.never_read; zz.never_read'}, "an alias import"),
+                        ({"plugins/p/views/v.js": 'export { zz as w } from "./words.gen.js";\nzz.never_read'}, "an alias re-export"),
+                        ({"kit/v/pill.ts": 'import { zz } from "./words.gen.js";\nconst { never_read } = zz; zz.never_read'}, "a destructured area"),
+                        ({"plugins/p/views/v.js": 'import { zz } from "../words.gen.js";\nconst w = zz; zz.never_read'}, "an area under a new name")]:
+        rc, out = run(files)
+        check(rc == 1 and "another name" in out, "words_read_check: %s is red: %r" % (what, out))
     r = subprocess.run([sys.executable, "-B", script], capture_output=True, text=True)
     check(r.returncode == 0, "words_read_check: the real tree is green: %r" % r.stdout[-300:])
     import fnmatch
     globs = [g for n, _, gs in gate_plan.SELFTESTS if n == "words_read_check" for g in gs]
     for p in ("rust/switchboard/src/x.rs", "apps/desktop/src/inbox/Block.tsx", "apps/desktop/src/a/b.ts",
-              "tests/words/inbox.gen.json"):
+              "tests/words/inbox.gen.json", "kit/view/pill.ts", "plugins/media/views/preview.js"):
         check(any(fnmatch.fnmatchcase(p, g) for g in globs), "gate_plan: %s runs words_read_check" % p)
 
 

@@ -85,6 +85,96 @@ pub struct ViewCallResult(#[cfg_attr(feature = "ts", ts(type = "Record<string, u
 #[serde(transparent)]
 pub struct PluginViewsResult(#[cfg_attr(feature = "ts", ts(type = "{ views: Array<Record<string, unknown>> }"))] pub Value);
 
+/// The opener `view/open` may be asked for (Open with's pick); the hub
+/// checks it is a candidate for the target now, an off plugin's refused.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(deny_unknown_fields)]
+pub struct OpenWith {
+    pub plugin: String,
+    pub tool: String,
+}
+
+/// What a document view knows of its document (docs/plugin-apps.md A4,
+/// A9; the host context's `document`, C7): one type, built by one fn in
+/// the hub from the target and the view's grants. A9's notes-granted
+/// facts (who made it, its activity, where it went, its watch, his taste)
+/// join this type when the pages app is built (apps-sites, apps-lead
+/// m_61568).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct DocumentFacts {
+    /// its file's name (`plan.xlsx`)
+    pub name: String,
+    /// the type's name the matcher gave (`Excel workbook`)
+    #[serde(rename = "type")]
+    pub type_title: String,
+    /// the artifact's version opened; none: a file of `~/bise`
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub version: Option<u64>,
+    pub size: u64,
+    /// a save would be taken: the `write` grant, and the newest version
+    pub writable: bool,
+    /// the artifact's newest version (the "there's a newer version" line)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub latest: Option<u64>,
+    /// every version kept, oldest first
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub versions: Vec<DocVersion>,
+}
+
+/// One version of a document (its number, when it was made).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct DocVersion {
+    pub n: u64,
+    pub at_ms: u64,
+}
+
+/// The app a document opened in (the tab head's facts line).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct OpenedWith {
+    pub plugin: String,
+    pub tool: String,
+    /// the app's title (`Sheets`)
+    pub app: String,
+}
+
+/// A document opened in a plugin's view: the view's resource as
+/// `view/resource` answers it, its session (`doc`: every later method of
+/// that view carries it), its file's handle, its facts and its app.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct DocView {
+    pub doc: String,
+    pub handle: String,
+    pub document: DocumentFacts,
+    pub opener: OpenedWith,
+    #[serde(flatten)]
+    pub resource: ViewResource,
+}
+
+/// `view/open`'s answer (A4): the document in its app's view, or one of
+/// bise's own types not migrated yet, framed on today's path (a BUILTIN
+/// opener, A3).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ViewOpened {
+    /// boxed: a frame's answer stays small (clippy's large_enum_variant)
+    View(Box<DocView>),
+    Frame {
+        frame: String,
+    },
+    /// a kind this version doesn't know (a newer hub)
+    #[serde(other)]
+    #[cfg_attr(feature = "ts", ts(skip))]
+    Unknown,
+}
+
 /// Why the hub refused a view's request (C5).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ViewError {
@@ -104,12 +194,79 @@ pub enum ViewError {
     /// a `ui/message` without his fresh click in the view (risk 1; the
     /// web host never has one: no Electron main sees his clicks)
     NoGesture,
-    /// a `ui/update-model-context` over the hub's 16 KB (review d5)
+    /// a `ui/update-model-context` over the hub's 16 KB (review d5); a
+    /// whole `resources/read` past [`MAX_READ`] (read it by ranges)
     TooLarge,
+    /// a `view-file://` handle the hub refuses (docs/plugin-apps.md A4):
+    /// made up, another session's, another artifact's, a path. One answer
+    /// whatever the reason: nothing tells a view what exists
+    BadHandle,
+    /// a write without the view's `write` grant, or on an older version
+    /// (its [`NoWrite`] in `data.reason`, [`ViewError::no_write`])
+    NoWrite,
+    /// the handle's file or version is no more (deleted, moved, renamed)
+    Gone,
+}
+
+/// Why a view may not write its file: `data.reason` of a
+/// [`ViewError::NoWrite`] (architect m_59962 #3: the host says "there's a
+/// newer version" on the second, never "not allowed").
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum NoWrite {
+    NoGrant,
+    OlderVersion,
+}
+
+impl NoWrite {
+    pub fn reason(self) -> &'static str {
+        match self {
+            NoWrite::NoGrant => "no_grant",
+            NoWrite::OlderVersion => "older_version",
+        }
+    }
+}
+
+/// The most bytes one `resources/read` answers (A4): a bigger file is read
+/// by ranges.
+pub const MAX_READ: u64 = 24 << 20;
+/// The most bytes one `ai.mistral.vibe/resources/write` takes.
+pub const MAX_WRITE: u64 = 24 << 20;
+
+/// A `resources/read`'s `_meta` (A4): what a view needs to save it back.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct ReadMeta {
+    /// what a write sends back as `ifMatch`: an artifact's `<v>.<rev>`, a
+    /// root file's content hash
+    pub etag: String,
+    /// its `write` grant, on the newest version
+    pub writable: bool,
+    /// the whole file's bytes (a range reads part of it)
+    pub size: u64,
+}
+
+/// An `ai.mistral.vibe/resources/write`'s answer (A4). A refusal (no
+/// grant, an older version, a bad handle) is an error, never an outcome.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(tag = "outcome", rename_all = "kebab-case")]
+pub enum WriteOutcome {
+    /// written; `etag` the next write's `ifMatch`
+    Saved { etag: String },
+    /// it changed since `ifMatch` (another version, or on disk): `etag`
+    /// what it is now
+    Conflict { etag: String },
+    /// over [`MAX_WRITE`]
+    TooLarge {
+        #[serde(rename = "maxBytes")]
+        max_bytes: u64,
+    },
 }
 
 impl ViewError {
-    pub const ALL: [ViewError; 8] = [
+    pub const ALL: [ViewError; 11] = [
         ViewError::Expired,
         ViewError::NotVisible,
         ViewError::PluginOff,
@@ -118,10 +275,13 @@ impl ViewError {
         ViewError::RateLimited,
         ViewError::NoGesture,
         ViewError::TooLarge,
+        ViewError::BadHandle,
+        ViewError::NoWrite,
+        ViewError::Gone,
     ];
 
-    /// Its JSON-RPC code, -32030..-32035, -32037 and -32038 (-32036 was `server-restarted`, now a
-    /// result's `_meta`: never reuse it).
+    /// Its JSON-RPC code, -32030..-32035, -32037..-32041 (-32036 was
+    /// `server-restarted`, now a result's `_meta`: never reuse it).
     pub fn code(self) -> i64 {
         match self {
             ViewError::Expired => -32030,
@@ -132,6 +292,9 @@ impl ViewError {
             ViewError::RateLimited => -32035,
             ViewError::NoGesture => -32037,
             ViewError::TooLarge => -32038,
+            ViewError::BadHandle => -32039,
+            ViewError::NoWrite => -32040,
+            ViewError::Gone => -32041,
         }
     }
 
@@ -146,11 +309,30 @@ impl ViewError {
             ViewError::RateLimited => "rate-limited",
             ViewError::NoGesture => "no-gesture",
             ViewError::TooLarge => "too-large",
+            ViewError::BadHandle => "bad-handle",
+            ViewError::NoWrite => "no-write",
+            ViewError::Gone => "gone",
         }
     }
 
+    /// The error a `data.reason` names (a [`NoWrite`]'s: `NoWrite`).
     pub fn from_reason(reason: &str) -> Option<ViewError> {
+        if [NoWrite::NoGrant, NoWrite::OlderVersion].iter().any(|w| w.reason() == reason) {
+            return Some(ViewError::NoWrite);
+        }
         ViewError::ALL.into_iter().find(|e| e.reason() == reason)
+    }
+
+    /// A refused write, `data.reason` its [`NoWrite`].
+    pub fn no_write(why: NoWrite, what: &str) -> RpcError {
+        let mut e = ViewError::NoWrite.rpc(what);
+        if let Some(d) = e.data.as_mut() {
+            d.reason = Some(why.reason().into());
+        }
+        if why == NoWrite::OlderVersion {
+            e.message = format!("{what}: this is an older version; open the newest to save");
+        }
+        e
     }
 
     /// The words the view (and its developer) reads; `what` names the
@@ -164,7 +346,10 @@ impl ViewError {
             ViewError::NotSupported => format!("{what} is not supported in bise"),
             ViewError::RateLimited => format!("{what}: too many requests from this view"),
             ViewError::NoGesture => format!("{what} needs a click in the view first (and a browser tab never has one)"),
-            ViewError::TooLarge => format!("{what}: too big for bise (16 KB at most)"),
+            ViewError::TooLarge => format!("{what}: too big for bise"),
+            ViewError::BadHandle => format!("{what}: not a file this view was opened on"),
+            ViewError::NoWrite => format!("{what}: this view may not save its file"),
+            ViewError::Gone => format!("{what}: the file is gone"),
         }
     }
 
@@ -193,10 +378,39 @@ mod tests {
                 (-32035, "rate-limited"),
                 (-32037, "no-gesture"),
                 (-32038, "too-large"),
+                (-32039, "bad-handle"),
+                (-32040, "no-write"),
+                (-32041, "gone"),
             ]
         );
         for e in ViewError::ALL {
             assert_eq!(ViewError::from_reason(e.reason()), Some(e));
+        }
+    }
+
+    /// architect m_59962 #3: a refused write says why, as an enum.
+    #[test]
+    fn a_refused_write_says_no_grant_or_older_version() {
+        for (why, reason) in [(NoWrite::NoGrant, "no_grant"), (NoWrite::OlderVersion, "older_version")] {
+            let e = ViewError::no_write(why, "ai.mistral.vibe/resources/write");
+            assert_eq!(e.code, -32040);
+            assert_eq!(e.data.and_then(|d| d.reason).as_deref(), Some(reason));
+            assert_eq!(ViewError::from_reason(reason), Some(ViewError::NoWrite));
+            assert_eq!(serde_json::to_value(why).unwrap(), serde_json::json!(reason));
+        }
+    }
+
+    #[test]
+    fn a_write_answers_its_outcome() {
+        use serde_json::json;
+        let cases = [
+            (WriteOutcome::Saved { etag: "3.2".into() }, json!({"outcome": "saved", "etag": "3.2"})),
+            (WriteOutcome::Conflict { etag: "4.1".into() }, json!({"outcome": "conflict", "etag": "4.1"})),
+            (WriteOutcome::TooLarge { max_bytes: MAX_WRITE }, json!({"outcome": "too-large", "maxBytes": MAX_WRITE})),
+        ];
+        for (o, want) in cases {
+            assert_eq!(serde_json::to_value(&o).unwrap(), want);
+            assert_eq!(serde_json::from_value::<WriteOutcome>(want).unwrap(), o);
         }
     }
 

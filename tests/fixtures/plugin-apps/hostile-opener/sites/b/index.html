@@ -1,0 +1,49 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>site b</title></head>
+<body>
+<h1>site b</h1>
+<ul id="rows"></ul>
+<script>
+// Site b of the two-sites probe (docs/plugin-apps.md A5, step 5), opened
+// after site a: a's secret must be out of reach, in its storage and its
+// cookies. blocked: not there (its own origin) or a SecurityError (an
+// opaque origin); leaked: a's value.
+function row(name, result, detail) {
+  const li = document.createElement("li");
+  li.dataset.probe = name;
+  li.dataset.kind = "probe";
+  li.dataset.result = result;
+  li.textContent = name + ": " + result + " (" + detail + ")";
+  document.getElementById("rows").appendChild(li);
+}
+try {
+  const v = localStorage.getItem("plugin-apps-secret");
+  v === "from-site-a" ? row("site-storage-cross-read", "leaked", v) : row("site-storage-cross-read", "blocked", "not there");
+} catch (err) {
+  err && err.name === "SecurityError"
+    ? row("site-storage-cross-read", "blocked", "SecurityError")
+    : row("site-storage-cross-read", "broken", String(err && (err.message || err.name)));
+}
+try {
+  document.cookie.includes("from-site-a")
+    ? row("site-cookie-cross-read", "leaked", "a's cookie")
+    : row("site-cookie-cross-read", "blocked", "not there");
+} catch (err) {
+  err && err.name === "SecurityError"
+    ? row("site-cookie-cross-read", "blocked", "SecurityError")
+    : row("site-cookie-cross-read", "broken", String(err && (err.message || err.name)));
+}
+try {
+  /plugin-apps-wide(-dot)?=from-site-a/.test(document.cookie)
+    ? row("site-cookie-domain-read", "leaked", "a's Domain=localhost cookie")
+    : row("site-cookie-domain-read", "blocked", "not there");
+} catch (err) {
+  err && err.name === "SecurityError"
+    ? row("site-cookie-domain-read", "blocked", "SecurityError")
+    : row("site-cookie-domain-read", "broken", String(err && (err.message || err.name)));
+}
+document.body.dataset.done = "1";
+</script>
+</body>
+</html>

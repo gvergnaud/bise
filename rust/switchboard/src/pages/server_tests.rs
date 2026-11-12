@@ -199,7 +199,7 @@ fn a_copied_file_is_served_at_its_frame_url() {
     let rows = arts.rows(&|a: &str| Some((a.to_string(), false)), work.to_str().unwrap());
     let ev = json!({"ev": "artifacts", "rows": rows, "seen_ms": 0});
     let base = format!("http://127.0.0.1:{}", p.port);
-    let items = crate::proto_view::artifacts(&ev, |_| None, Some(&base));
+    let items = crate::proto_view::artifacts(&ev, |_| None, Some(&base), |_| Default::default());
     let html = items.iter().find(|a| a.title.contains("proof")).expect("the html artifact");
     let url = html.frame_url.clone().expect("a copied .html file has a frame_url");
     // framed in bise's viewer (art-notes), which frames the copy, still in its sandbox
@@ -212,12 +212,13 @@ fn a_copied_file_is_served_at_its_frame_url() {
     for a in items.iter().filter(|a| a.id != html.id && !a.title.contains("notes")) {
         assert_eq!(a.frame_url, None, "{} has no frame_url", a.id);
     }
-    // a pdf in the viewer too (pdf-notes: drawn by pdf.js, notes on a passage or a box)
+    // a pdf is framed as its copy: media's Preview draws it in the document
+    // tab, bise's viewer no longer does
     let pdf = items.iter().find(|a| a.title.contains("notes")).expect("the pdf");
-    let shell = text(&get(&p, pdf.frame_url.as_deref().expect("a pdf has a frame_url").strip_prefix(&base).unwrap()));
-    assert!(shell.contains("data-kind=\"pdf\""), "{shell}");
-    let r = get(&p, &crate::pages::site::copy_href(&pdf.id, 1, pdf.copy.as_deref().unwrap_or("")));
-    assert_eq!((r.status, r.ctype), (200, "application/pdf"));
+    let href = crate::pages::site::copy_href(&pdf.id, 1, pdf.copy.as_deref().unwrap_or(""));
+    assert_eq!(pdf.frame_url.as_deref().and_then(|u| u.strip_prefix(&base)), Some(href.as_str()), "a pdf's frame_url is its copy");
+    let r = get(&p, &href);
+    assert_eq!((r.status, r.ctype, text(&r)), (200, "application/pdf", "%PDF-1.4".to_string()));
     let _ = std::fs::remove_dir_all(d);
 }
 
@@ -520,9 +521,9 @@ fn a_page_is_served_whole_while_it_is_republished() {
     let _ = std::fs::remove_dir_all(d);
 }
 
-/// video-view (architect m_32064): a video artifact opens in the viewer
-/// (data-stream: the player reads its url, never the bytes whole), and its
-/// copy is served by its byte ranges through the real socket: 206 with the
+/// video-view (architect m_32064): a video artifact opens in its app
+/// (plugins/media's Preview, never bise's viewer), and its copy is served
+/// by its byte ranges through the real socket: 206 with the
 /// part asked, 416 past the end, a HEAD with no body, 200 whole with
 /// `Accept-Ranges` when no range is asked; a foreign Host still refused.
 #[test]
@@ -540,9 +541,7 @@ fn a_video_copy_is_served_by_its_byte_ranges() {
     let add = crate::artifacts::Add { target: "clip.mp4".into(), agent: "film".into(), by: "film".into(), cwd: d.join("work").to_string_lossy().to_string(), ..Default::default() };
     let id = arts.add(&add, 10).unwrap().meta.id;
     let p = std::sync::Arc::new(Pages::new(&d, port, &d));
-    let view = get(&p, &format!("/a/{id}/view"));
-    assert_eq!(view.status, 200);
-    assert!(text(&view).contains("data-kind=\"video\"") && text(&view).contains(" data-stream "), "{}", text(&view));
+    assert_eq!(get(&p, &format!("/a/{id}/view")).status, 404, "not a file bise's viewer draws");
     serve(listener, p.clone());
     let ask = |method: &str, host: &str, range: Option<&str>| {
         let mut s = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
@@ -571,69 +570,6 @@ fn a_video_copy_is_served_by_its_byte_ranges() {
     assert!(body.is_empty(), "a HEAD: no body");
     let (h, _) = ask("GET", "evil.test", Some("bytes=0-"));
     assert!(h.starts_with("HTTP/1.1 403 "), "another Host: refused as any route: {h}");
-    let _ = std::fs::remove_dir_all(d);
-}
-
-/// video-artifact (architect m_54229): a video too big to copy (no copy,
-/// `over 50 MB`) still plays: the viewer frames it and its own file is
-/// served by its ranges while its sig holds. The url names only the id,
-/// the version and the file's name: another name, a `..` or an encoded
-/// path serves nothing; the file changed or gone: 404 (the panel's file gone).
-#[test]
-fn a_video_too_big_to_copy_is_streamed_from_its_own_file() {
-    use std::io::Read;
-    let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
-    let port = listener.local_addr().unwrap().port();
-    let d = std::env::temp_dir().join(format!("sb-srv-bigvideo-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&d);
-    std::fs::create_dir_all(d.join("kit")).unwrap();
-    std::fs::create_dir_all(d.join("work")).unwrap();
-    let film = d.join("work/big film.mp4");
-    // sparse: over the cap, no 50 MB written
-    let mut f = std::fs::File::create(&film).unwrap();
-    f.write_all(b"head-bytes").unwrap();
-    f.set_len(crate::artifacts::MAX_COPY + 1).unwrap();
-    drop(f);
-    std::fs::write(d.join("work/secret.mp4"), b"not his to see").unwrap();
-    let arts = crate::artifacts::Store::new(&d);
-    let add = crate::artifacts::Add { target: "big film.mp4".into(), agent: "film".into(), by: "film".into(), cwd: d.join("work").to_string_lossy().to_string(), ..Default::default() };
-    let m = arts.add(&add, 10).unwrap().meta;
-    assert_eq!((m.versions[0].copy.as_deref(), m.versions[0].no_copy.as_deref()), (None, Some(crate::artifacts::TOO_BIG)));
-    let id = m.id.clone();
-    let p = std::sync::Arc::new(Pages::new(&d, port, &d));
-    let view = text(&get(&p, &format!("/a/{id}/view")));
-    assert!(view.contains("data-kind=\"video\"") && view.contains(" data-stream "), "{view}");
-    assert!(view.contains(&format!("data-file=\"/a/{id}/1/big%20film.mp4\"")), "the copy's url form, never his path: {view}");
-    assert!(!view.contains(&d.to_string_lossy().to_string()), "no path on his machine in the page");
-    serve(listener, p.clone());
-    let ask = |path: &str, range: Option<&str>| {
-        let mut s = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
-        let range = range.map(|r| format!("Range: {r}\r\n")).unwrap_or_default();
-        s.write_all(format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n{range}\r\n").as_bytes()).unwrap();
-        let mut out = Vec::new();
-        s.read_to_end(&mut out).unwrap();
-        let at = out.windows(4).position(|w| w == b"\r\n\r\n").unwrap() + 4;
-        (String::from_utf8_lossy(&out[..at]).to_string(), out[at..].to_vec())
-    };
-    let len = crate::artifacts::MAX_COPY + 1;
-    let (h, body) = ask(&format!("/a/{id}/1/big%20film.mp4"), Some("bytes=0-9"));
-    assert!(h.starts_with("HTTP/1.1 206 ") && h.contains("Content-Type: video/mp4\r\n") && h.contains(&format!("Content-Range: bytes 0-9/{len}\r\n")), "{h}");
-    assert_eq!(body, b"head-bytes");
-    let (h, body) = ask(&format!("/a/{id}/1/big%20film.mp4"), Some("bytes=-4"));
-    assert!(h.contains(&format!("Content-Range: bytes {}-{}/{len}", len - 4, len - 1)), "a seek to the end: {h}");
-    assert_eq!(body, vec![0u8; 4]);
-    // only its own name: a crafted name or path reaches no other file
-    for bad in ["secret.mp4", "..%2Fsecret.mp4", "x/big%20film.mp4", "..", "%2Ftmp%2Fx.mp4"] {
-        let (h, _) = ask(&format!("/a/{id}/1/{bad}"), Some("bytes=0-"));
-        assert!(h.starts_with("HTTP/1.1 404 "), "{bad}: {h}");
-    }
-    // the file changed since the version: neither the frame nor its bytes
-    std::fs::OpenOptions::new().write(true).open(&film).unwrap().set_len(len + 1).unwrap();
-    assert_eq!(get(&p, &format!("/a/{id}/view")).status, 404, "changed: the panel's file gone");
-    let (h, _) = ask(&format!("/a/{id}/1/big%20film.mp4"), Some("bytes=0-9"));
-    assert!(h.starts_with("HTTP/1.1 404 "), "changed: {h}");
-    std::fs::remove_file(&film).unwrap();
-    assert_eq!(get(&p, &format!("/a/{id}/view")).status, 404, "gone");
     let _ = std::fs::remove_dir_all(d);
 }
 
@@ -697,19 +633,19 @@ fn a_view_host_serves_its_proxy_and_nothing_else() {
     let vh = format!("v-{hash}.localhost:{}", p.port);
     assert_eq!(at(&vh, "GET", "/mcp-app").status, 404, "an origin the hub never registered");
     let declared = json!({"connectDomains": ["https://api.open-meteo.com", "*"], "domain": "https://evil.example"});
-    let session = p.view_sandbox(&hash, super::super::views::ViewSandbox { csp: declared.clone(), perms: vec!["microphone".into()] });
+    let session = p.view_sandbox(&hash, super::super::views::ViewSandbox { csp: declared.clone(), perms: vec!["microphone".into()], folder: None });
     assert!(session.len() == 32 && session.bytes().all(|b| b.is_ascii_hexdigit()), "{session}");
-    assert_ne!(session, p.view_sandbox(&hash, super::super::views::ViewSandbox { csp: declared.clone(), perms: vec!["microphone".into()] }), "a new session per view/resource");
+    assert_ne!(session, p.view_sandbox(&hash, super::super::views::ViewSandbox { csp: declared.clone(), perms: vec!["microphone".into()], folder: None }), "a new session per view/resource");
     assert_eq!(at(&vh, "GET", "/mcp-app").status, 404, "no session: a page that never asked the hub");
     assert_eq!(at(&vh, "GET", "/mcp-app?s=").status, 404);
     assert_eq!(at(&vh, "GET", &format!("/mcp-app?s={}", "0".repeat(32))).status, 404, "a wrong session");
     let other = super::super::views::hash("fake-app", "fake-app", "ui://fake-app/hostile");
     assert_eq!(at(&format!("v-{other}.localhost:{}", p.port), "GET", &format!("/mcp-app?s={session}")).status, 404, "another origin's session");
     assert_eq!(at(&vh, "GET", &format!("/mcp-app?x=1&s={session}")).status, 200, "an older session of the last 8 still loads");
-    let session = p.view_sandbox(&hash, super::super::views::ViewSandbox { csp: declared.clone(), perms: vec!["microphone".into()] });
+    let session = p.view_sandbox(&hash, super::super::views::ViewSandbox { csp: declared.clone(), perms: vec!["microphone".into()], folder: None });
     let r = at(&vh, "GET", &format!("/mcp-app?s={session}"));
     assert_eq!(r.status, 200);
-    assert_eq!(r.csp, super::super::view_csp::csp(&declared, p.port, p.view_dev), "the hub's policy, never the request's");
+    assert_eq!(r.csp, super::super::view_csp::csp(&declared, p.port, p.view_dev, false, false), "the hub's policy, never the request's");
     assert!(r.csp.contains("connect-src https://api.open-meteo.com;"), "{}", r.csp);
     let t = text(&r);
     assert!(t.contains("sandbox-proxy-ready") && t.contains(r#"const ALLOW = "microphone";"#), "{t}");
@@ -727,6 +663,95 @@ fn a_view_host_serves_its_proxy_and_nothing_else() {
     let _ = std::fs::remove_dir_all(d);
 }
 
+/// A view's own files (docs/plugin-apps.md A5): `/f/<session>/<rel>` on
+/// its origin, under a session `view/resource` minted for that origin;
+/// the proxy names it as the view's base and the CSP gets `'self'`; a
+/// `../`, a symlink out, another session or origin, a view with no
+/// folder: 404, like `/mcp-app`.
+#[test]
+fn a_view_with_a_folder_serves_its_own_files_only() {
+    use super::super::view_folder::{tag, ViewFolder};
+    use super::super::views::{hash as vhash, ViewSandbox};
+    let (p, d) = pages();
+    let plugin = d.join("plugin");
+    let dir = plugin.join("ai.mistral.vibe/views/grid");
+    std::fs::create_dir_all(dir.join("lib")).unwrap();
+    std::fs::write(dir.join("index.html"), "<script src=app.js></script>").unwrap();
+    std::fs::write(dir.join("app.js"), "1").unwrap();
+    std::fs::write(dir.join("lib/x.css"), "b{}").unwrap();
+    std::fs::write(plugin.join("secret.js"), "s").unwrap();
+    std::os::unix::fs::symlink(plugin.join("secret.js"), dir.join("out.js")).unwrap();
+    std::fs::create_dir_all(dir.join("~kit/view")).unwrap();
+    std::fs::write(dir.join("~kit/view/view.js"), "plugin's own").unwrap();
+    std::fs::create_dir_all(d.join("kit/view")).unwrap();
+    std::fs::write(d.join("kit/view/view.js"), "kit").unwrap();
+    std::fs::write(d.join("kit/view/.hidden.js"), "h").unwrap();
+    std::fs::create_dir_all(d.join("office/dist")).unwrap();
+    std::fs::write(d.join("office/dist/office.js"), "office").unwrap();
+    std::fs::write(d.join("office/dist/office-x.js"), "not allow-listed").unwrap();
+    std::fs::create_dir_all(dir.join("~kit/office/v1")).unwrap();
+    std::fs::write(dir.join("~kit/office/v1/office.js"), "plugin's own office").unwrap();
+    let dir = dir.canonicalize().unwrap();
+    let at = |host: &str, method: &str, target: &str, inm: Option<&str>| {
+        let (path, query) = target.split_once('?').unwrap_or((target, ""));
+        let mut headers = vec![("Host".to_string(), host.to_string())];
+        headers.extend(inm.map(|t| ("If-None-Match".to_string(), t.to_string())));
+        route(&p, &Request { method: method.into(), path: path.into(), query: query.into(), headers, body: vec![] })
+    };
+    let h = vhash("sheets", "~views", "ui://sheets/views/grid");
+    let vh = format!("v-{h}.localhost:{}", p.port);
+    let folder = ViewFolder { tag: tag(&plugin, Some("1.0.0")), dir: dir.clone() };
+    let s = p.view_sandbox(&h, ViewSandbox { csp: json!({}), perms: vec![], folder: Some(folder) });
+    let r = at(&vh, "GET", &format!("/f/{s}/app.js"), None);
+    assert_eq!((r.status, text(&r).as_str(), r.ctype), (200, "1", "text/javascript; charset=utf-8"));
+    assert!(r.csp.contains("script-src 'unsafe-inline' 'self'"), "{}", r.csp);
+    let etag = r.etag.clone().expect("an etag");
+    assert_eq!(at(&vh, "GET", &format!("/f/{s}/app.js"), Some(&etag)).status, 304, "cached by its version");
+    assert_eq!(at(&vh, "GET", &format!("/f/{s}/lib/x.css"), None).status, 200);
+    assert_eq!(text(&at(&vh, "GET", &format!("/f/{s}/~kit/view/view.js"), None)), "kit", "bise's kit, never the plugin's own ~kit");
+    assert_eq!(text(&at(&vh, "GET", &format!("/f/{s}/~kit/office/v1/office.js"), None)), "office", "bise's office reader, never the plugin's own");
+    // the proxy: the base is the hub's, with this session
+    let proxy = at(&vh, "GET", &format!("/mcp-app?s={s}"), None);
+    assert!(text(&proxy).contains(&format!(r#"const BASE = "http://{vh}/f/{s}/";"#)), "{}", text(&proxy));
+    assert!(proxy.csp.contains("base-uri 'self'"), "{}", proxy.csp);
+    // probes: each one a 404, never the file
+    let other = vhash("sheets", "~views", "ui://sheets/views/other");
+    let s_other = p.view_sandbox(&other, ViewSandbox { csp: json!({}), perms: vec![], folder: Some(ViewFolder { tag: "t".into(), dir: dir.clone() }) });
+    for bad in [
+        format!("/f/{s}/../../secret.js"),
+        format!("/f/{s}/%2e%2e/secret.js"),
+        format!("/f/{s}/lib/../app.js"),
+        format!("/f/{s}/out.js"),
+        format!("/f/{s}/"),
+        format!("/f/{s}/lib"),
+        format!("/f/{s}/index.html/x"),
+        format!("/f/{s}/~kit/view/.hidden.js"),
+        format!("/f/{s}/~kit/other.js"),
+        format!("/f/{s}/~kit/other/x.js"),
+        format!("/f/{s}/~kit/office/v1/office-x.js"),
+        format!("/f/{s}/~kit/office/v2/office.js"),
+        format!("/f/{s}/~kit/office/office.js"),
+        format!("/f/{s_other}/app.js"),
+        format!("/f/{}/app.js", "0".repeat(32)),
+        "/f//app.js".to_string(),
+    ] {
+        let r = at(&vh, "GET", &bad, None);
+        assert_eq!(r.status, 404, "{bad}");
+        assert!(r.etag.is_none(), "{bad}");
+    }
+    assert_eq!(at(&vh, "POST", &format!("/f/{s}/app.js"), None).status, 405, "read only");
+    assert_eq!(at(&vh, "GET", "/f", None).status, 403);
+    assert_eq!(get(&p, &format!("/f/{s}/app.js")).status, 404, "never on the main host");
+    // a server's view (no folder): no /f/, no base, the floor's base-uri
+    let srv = vhash("fake-app", "fake-app", "ui://fake-app/counter");
+    let vs = format!("v-{srv}.localhost:{}", p.port);
+    let s2 = p.view_sandbox(&srv, ViewSandbox { csp: json!({}), perms: vec![], folder: None });
+    assert_eq!(at(&vs, "GET", &format!("/f/{s2}/app.js"), None).status, 404);
+    let proxy = at(&vs, "GET", &format!("/mcp-app?s={s2}"), None);
+    assert!(text(&proxy).contains(r#"const BASE = "";"#) && proxy.csp.contains("base-uri 'none'") && !proxy.csp.contains("script-src 'unsafe-inline' 'self'"), "{}", proxy.csp);
+    let _ = std::fs::remove_dir_all(d);
+}
+
 /// The web host (docs/mcp-apps.md C9): `GET /v/<agent>/<call>` is the page
 /// the views host's script fills, framing only this port's views;
 /// `POST /api/view` needs the token and the Origin, and a view's message
@@ -741,6 +766,14 @@ fn the_web_host_serves_its_page_and_refuses_a_browsers_message() {
     assert!(t.contains(&format!("<meta name=\"bise-token\" content=\"{}\">", p.token)));
     assert_eq!(r.csp, super::super::view_web::page_csp(p.port));
     for bad in ["/v/t1/x", "/v/..%2F/1-2", "/v/t1/1-2-3", "/v/t1"] {
+        assert_eq!(get(&p, bad).status, 404, "{bad}");
+    }
+    // a document in his browser (A7's `O`): the same page, opening an artifact
+    let doc = get(&p, "/d/q3-budget");
+    assert_eq!((doc.status, doc.csp.as_ref()), (200, super::super::view_web::page_csp(p.port).as_str()));
+    let t = text(&doc);
+    assert!(t.contains("<main id=\"bise-view\" data-artifact=\"q3-budget\">") && t.contains("/kit/views/web.js") && t.contains(&p.token), "{t}");
+    for bad in ["/d/..%2Fx", "/d/a b", "/d/", "/d/x/y"] {
         assert_eq!(get(&p, bad).status, 404, "{bad}");
     }
     let (tok, o) = (p.token.clone(), format!("http://127.0.0.1:{}", p.port));
@@ -823,13 +856,169 @@ fn a_view_calls_bound_outlasts_its_card() {
 fn a_gone_copy_is_the_viewers_404() {
     let (p, d) = pages();
     std::fs::create_dir_all(d.join("work")).unwrap();
-    std::fs::write(d.join("work/notes.md"), "# notes\n").unwrap();
+    // an html page: the kind bise's viewer still draws (an xlsx opens in Sheets, plugins/sheets;
+    // a pdf in Preview, plugins/media)
+    std::fs::write(d.join("work/q3.html"), "<p>q3</p>").unwrap();
     let arts = crate::artifacts::Store::new(&d);
-    let add = crate::artifacts::Add { target: "notes.md".into(), agent: "perf".into(), by: "perf".into(), cwd: d.join("work").to_string_lossy().to_string(), ..Default::default() };
+    let add = crate::artifacts::Add { target: "q3.html".into(), agent: "perf".into(), by: "perf".into(), cwd: d.join("work").to_string_lossy().to_string(), ..Default::default() };
     let id = arts.add(&add, 10).unwrap().meta.id;
     assert_eq!(get(&p, &format!("/a/{id}/view")).status, 200);
     std::fs::remove_dir_all(d.join("artifacts").join(&id)).unwrap();
     let gone = get(&p, &format!("/a/{id}/view"));
     assert_eq!(gone.status, 404, "{}", text(&gone));
+    let _ = std::fs::remove_dir_all(d);
+}
+
+/// A session ends in one place (architect m_60434): pushed out by its
+/// origin's cap, or closed (`view/close`), its handles go with it; the
+/// other sessions' stay.
+#[test]
+fn a_sessions_end_ends_its_handles() {
+    use crate::view_files::{Binding, FileTarget, Opener};
+    use super::super::views::{hash as vhash, ViewSandbox, SESSIONS};
+    let (p, d) = pages();
+    let h = vhash("sheets", "~views", "ui://sheets/views/grid");
+    let opener = Opener { plugin: "sheets".into(), server: "~views".into(), uri: "ui://sheets/views/grid".into() };
+    let bind = |s: &str| p.mint_handle(Binding::new(s, opener.clone(), FileTarget::Artifact { id: "q3".into(), version: 1 }, false));
+    let first = p.view_sandbox(&h, ViewSandbox::default());
+    let closed = p.view_sandbox(&h, ViewSandbox::default());
+    let (u_first, u_closed) = (bind(&first), bind(&closed));
+    assert_eq!(p.doc_opener(&first), Some(opener.clone()));
+    p.view_session_end(&closed);
+    assert_eq!(p.doc_opener(&closed), None, "view/close: its handles end");
+    assert!(p.files.lock().unwrap().get(&closed, &u_closed).is_err());
+    assert!(p.files.lock().unwrap().get(&first, &u_first).is_ok(), "another session's stay");
+    for _ in 0..SESSIONS {
+        p.view_sandbox(&h, ViewSandbox::default());
+    }
+    assert_eq!(p.doc_opener(&first), None, "pushed out by its origin's cap: its handles end");
+    let _ = std::fs::remove_dir_all(d);
+}
+
+/// A document view's file by its url (`resources/url` → `/h/<token>`,
+/// A4/A5, architect m_60434): served on its session's origin only, GET
+/// and HEAD with byte ranges, under a CSP where nothing runs; another
+/// origin, an unknown token or another method gets nothing. A reader that
+/// stalls holds no lock: the handle table answers meanwhile, and another
+/// request of the same file is served.
+#[test]
+fn a_documents_file_is_served_by_its_url_on_its_origin_only() {
+    use super::super::views::{ViewSandbox, DOC_FILE_CSP};
+    use crate::view_files::{Binding, FileTarget, Opener};
+    use std::io::{Read, Write};
+    let (mut p, d) = pages();
+    let root = d.join("root");
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(root.join("notes.txt"), "0123456789").unwrap();
+    // big enough to fill the socket's buffers when no one reads it
+    std::fs::write(root.join("big.txt"), vec![b'x'; 16 << 20]).unwrap();
+    p.bise_root = root.clone();
+    let p = std::sync::Arc::new(p);
+    let (doc, hash) = (crate::pages::new_token(), "0123456789abcdef");
+    let opener = Opener { plugin: "fake".into(), server: "s".into(), uri: "ui://fake/v".into() };
+    let bind = |name: &str| p.mint_handle(Binding::new(&doc, opener.clone(), FileTarget::RootFile { path: root.join(name) }, false));
+    let (small, big) = (bind("notes.txt"), bind("big.txt"));
+    p.view_sandbox_as(hash, &doc, ViewSandbox::default());
+    let path_of = |handle: &str| {
+        let url = p.doc_url(&doc, handle).unwrap();
+        assert!(url.starts_with(&format!("http://v-{hash}.localhost:{}/h/", p.port)), "{url}");
+        url.split_once(".localhost").unwrap().1.split_once('/').map(|(_, rest)| format!("/{rest}")).unwrap()
+    };
+    let (small_path, big_path) = (path_of(&small), path_of(&big));
+    let l = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let port = l.local_addr().unwrap().port();
+    serve(l, p.clone());
+    let open = |method: &str, path: &str, host: &str, extra: &str| {
+        let mut s = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+        s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        s.write_all(format!("{method} {path} HTTP/1.1\r\nHost: {host}\r\n{extra}Connection: close\r\n\r\n").as_bytes()).unwrap();
+        s
+    };
+    let ask = |method: &str, path: &str, host: &str, extra: &str| {
+        let mut out = Vec::new();
+        let _ = open(method, path, host, extra).read_to_end(&mut out);
+        String::from_utf8_lossy(&out).to_string()
+    };
+    let own = format!("v-{hash}.localhost:{}", p.port);
+    let r = ask("GET", &small_path, &own, "");
+    assert!(r.starts_with("HTTP/1.1 200") && r.ends_with("\r\n\r\n0123456789"), "{r}");
+    assert!(r.contains("Content-Type: text/plain") && r.contains(&format!("Content-Security-Policy: {DOC_FILE_CSP}\r\n")), "{r}");
+    let r = ask("GET", &small_path, &own, "Range: bytes=2-5\r\n");
+    assert!(r.starts_with("HTTP/1.1 206") && r.contains("Content-Range: bytes 2-5/10") && r.ends_with("\r\n\r\n2345"), "{r}");
+    let r = ask("HEAD", &small_path, &own, "");
+    assert!(r.starts_with("HTTP/1.1 200") && r.contains("Content-Length: 10") && r.ends_with("\r\n\r\n"), "a HEAD: its head alone: {r}");
+    let other = format!("v-fedcba9876543210.localhost:{}", p.port);
+    assert!(ask("GET", &small_path, &other, "").starts_with("HTTP/1.1 404"), "another view's origin");
+    assert!(ask("GET", &small_path, &format!("127.0.0.1:{}", p.port), "").starts_with("HTTP/1.1 404"), "the main host: no /h/ there");
+    assert!(ask("GET", &format!("/h/{}", "0".repeat(32)), &own, "").starts_with("HTTP/1.1 404"), "an unknown token");
+    assert!(ask("POST", &small_path, &own, "Content-Length: 0\r\n").starts_with("HTTP/1.1 405"));
+    // a reader that never reads: its sender blocks on the socket, with no lock held
+    let stalled = open("GET", &big_path, &own, "");
+    std::thread::sleep(Duration::from_millis(300));
+    let t = std::time::Instant::now();
+    assert!(p.doc_binding(&doc, &big).is_ok() && p.file_of_url(big_path.trim_start_matches("/h/"), hash).is_some());
+    assert!(t.elapsed() < Duration::from_secs(1), "the table answered while a read stalls: {:?}", t.elapsed());
+    assert!(ask("GET", &small_path, &own, "").starts_with("HTTP/1.1 200"), "another request served meanwhile");
+    drop(stalled);
+    let _ = std::fs::remove_dir_all(d);
+}
+
+/// A video artifact too big to copy (architect m_63226, after 6a1668b59
+/// left `served()` copies only): view/open's steps give it a handle (the
+/// target resolved as view/open resolves it, bound to a document session),
+/// `resources/url` gives its `/h/<token>`, and that url streams its own
+/// file: a Range gets 206 from it, a HEAD its whole length.
+#[test]
+fn a_video_too_big_to_copy_streams_from_its_own_file_by_its_url() {
+    use super::super::views::ViewSandbox;
+    use crate::view_files::{Binding, Opener};
+    use std::io::{Read, Seek, Write};
+    let (p, d) = pages();
+    let work = d.join("work");
+    std::fs::create_dir_all(&work).unwrap();
+    // sparse: past the copy cap, no 50 MB written
+    let video = work.join("demo.mp4");
+    let mut f = std::fs::File::create(&video).unwrap();
+    f.write_all(b"FAKEVIDEO").unwrap();
+    f.set_len(crate::artifacts::MAX_COPY + 1).unwrap();
+    f.seek(std::io::SeekFrom::Start(crate::artifacts::MAX_COPY - 3)).unwrap();
+    f.write_all(b"END!").unwrap();
+    drop(f);
+    let len = crate::artifacts::MAX_COPY + 1;
+    // the store the pages server reads (artifact::notes::arts: its state folder)
+    let store = super::super::artifact::notes::arts(&p);
+    let add = crate::artifacts::Add { target: video.to_string_lossy().to_string(), agent: "t1".into(), by: "t1".into(), cwd: work.to_string_lossy().to_string(), ..Default::default() };
+    let id = store.add(&add, 10).unwrap().meta.id;
+    let m = store.get(&id).unwrap();
+    assert_eq!((m.versions[0].copy.as_deref(), m.versions[0].no_copy.as_deref()), (None, Some(crate::artifacts::TOO_BIG)), "too big: no copy");
+    // view/open's steps (daemon/view_open.rs): resolve, bind to a session, mint
+    let target = bise_proto::files::OpenTarget::Artifact { id: id.clone(), version: None };
+    let r = crate::view_files_disk::resolve(&store, &p.bise_root, &target).unwrap();
+    assert_eq!((r.name.as_str(), r.size, r.older), ("demo.mp4", len, false));
+    let (doc, hash) = (crate::pages::new_token(), "0123456789abcdef");
+    let opener = Opener { plugin: "media".into(), server: "~views".into(), uri: "ui://media/preview".into() };
+    let handle = p.mint_handle(Binding::new(&doc, opener, r.target, r.older));
+    p.view_sandbox_as(hash, &doc, ViewSandbox::default());
+    let url = p.doc_url(&doc, &handle).unwrap();
+    let path = format!("/h/{}", url.rsplit_once("/h/").unwrap().1);
+    let p = std::sync::Arc::new(p);
+    let l = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let port = l.local_addr().unwrap().port();
+    serve(l, p.clone());
+    let own = format!("v-{hash}.localhost:{}", p.port);
+    let ask = |method: &str, extra: &str| {
+        let mut s = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+        s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        s.write_all(format!("{method} {path} HTTP/1.1\r\nHost: {own}\r\n{extra}Connection: close\r\n\r\n").as_bytes()).unwrap();
+        let mut out = Vec::new();
+        let _ = s.read_to_end(&mut out);
+        String::from_utf8_lossy(&out).to_string()
+    };
+    let r = ask("GET", "Range: bytes=0-3\r\n");
+    assert!(r.starts_with("HTTP/1.1 206") && r.contains(&format!("Content-Range: bytes 0-3/{len}")) && r.contains("Content-Type: video/mp4") && r.ends_with("\r\n\r\nFAKE"), "{r}");
+    let r = ask("GET", &format!("Range: bytes={}-\r\n", len - 4));
+    assert!(r.starts_with("HTTP/1.1 206") && r.contains(&format!("Content-Range: bytes {}-{}/{len}", len - 4, len - 1)) && r.ends_with("\r\n\r\nEND!"), "its end, a seek: {r}");
+    let r = ask("HEAD", "");
+    assert!(r.starts_with("HTTP/1.1 200") && r.contains(&format!("Content-Length: {len}\r\n")) && r.contains("Accept-Ranges: bytes") && r.ends_with("\r\n\r\n"), "{r}");
     let _ = std::fs::remove_dir_all(d);
 }

@@ -1,0 +1,71 @@
+/* Slides (plugins/slides, docs/plugin-apps.md A5): the rail and the slide, on the host's tokens
+   (the spec's CSS variables and html[data-theme], apps/desktop/src/views/context.ts); the
+   fallbacks are bise's light theme, the dark ones under data-theme="dark", for a view opened
+   alone. A slide keeps the deck's own colors (white paper); a selected shape is ink; what is his
+   (a note's mark) is the kit's (~kit/view/view.css). */
+
+:root {
+  --s-ground: var(--color-background-primary, #f2ede2);
+  --s-ink: var(--color-text-primary, #1d1a17);
+  --s-dim: var(--color-text-secondary, #5a5349);
+  --s-faint: var(--color-text-tertiary, #8a8174);
+  --s-line: var(--color-border-secondary, #1d1a171c);
+  --s-danger: var(--color-text-danger, #b3261e);
+  --s-ui: var(--font-sans, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif);
+  --s-kicker: var(--font-text-sm-size, 12px);
+  --s-drop: #1d1a170c;
+}
+:root[data-theme="dark"] {
+  --s-ground: var(--color-background-primary, #171513);
+  --s-ink: var(--color-text-primary, #ece6da);
+  --s-dim: var(--color-text-secondary, #b8b0a3);
+  --s-faint: var(--color-text-tertiary, #8a8276);
+  --s-line: var(--color-border-secondary, #ece6da1c);
+  --s-drop: #00000038;
+}
+
+html, body { margin: 0; height: 100%; background: var(--s-ground); color: var(--s-ink); }
+body { font: var(--s-kicker) / 1.4 var(--s-ui); }
+:where(button) { cursor: pointer; }
+#slides { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.s-state { margin: 24px; color: var(--s-dim); font-size: var(--font-text-md-size, 13px); }
+.s-state[data-state="failed"] { color: var(--s-danger); }
+.s-foot { flex: none; border-top: 1px solid var(--s-line); padding: 6px 12px; color: var(--s-faint); font-size: var(--s-kicker); }
+.s-foot p { margin: 2px 0; }
+.s-view { flex: 1; min-height: 0; display: flex; }
+.s-empty { margin: 16px; color: var(--s-faint); }
+
+/* the rail and the slide */
+.s-deck { flex-direction: row; }
+.s-rail { flex: none; width: 148px; overflow-y: auto; border-right: 1px solid var(--s-line); padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+.s-rail .thumb { display: flex; gap: 6px; align-items: flex-start; background: none; border: 0; padding: 0; color: var(--s-faint); font: inherit; }
+.s-rail .thumb .n { width: 14px; text-align: right; }
+.s-rail .thumb .holder { flex: 1; overflow: hidden; outline: 1px solid var(--s-line); pointer-events: none; }
+.s-rail .thumb[aria-current="true"] .holder { outline: 2px solid var(--s-ink); }
+.s-stage { flex: 1; min-width: 0; overflow: auto; padding: 8px; outline: none; }
+.s-stage .holder { overflow: hidden; box-shadow: 0 1px 4px var(--s-drop); }
+
+/* a slide: the deck's own paper and colors */
+.slide { position: relative; transform-origin: 0 0; background: #ffffff; color: #1d1a17; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif; }
+.slide .shape { position: absolute; box-sizing: border-box; overflow: hidden; }
+.slide .shape.sel { outline: 1px solid var(--s-ink); background-image: linear-gradient(color-mix(in srgb, var(--s-ink) 9%, transparent), color-mix(in srgb, var(--s-ink) 9%, transparent)); }
+.slide .txt { display: flex; flex-direction: column; height: 100%; padding: 3.6pt 7.2pt; box-sizing: border-box; font-size: 18pt; }
+.slide .txt[data-valign="middle"], .slide .txt[data-valign="ctr"] { justify-content: center; }
+.slide .txt[data-valign="bottom"], .slide .txt[data-valign="b"] { justify-content: flex-end; }
+.slide .txt p { margin: 0 0 .2em; line-height: 1.15; }
+.slide .txt p[data-bullet]::before { content: attr(data-bullet) " "; }
+.slide .picture img { width: 100%; height: 100%; object-fit: fill; display: block; }
+.slide .missing { color: #8a8174; font-size: 12pt; }
+.slide table { width: 100%; height: 100%; border-collapse: collapse; font-size: 12pt; }
+.slide td { border: 1pt solid #1d1a1733; padding: 2pt 4pt; }
+.s-chart { width: 100%; height: 100%; }
+.s-chart text { font: 11px var(--s-ui); fill: #5a5349; }
+.s-chart .title { font-size: 13px; fill: #1d1a17; }
+.s-chart .axis { stroke: #1d1a1755; }
+.s-chart .s0 { fill: #c8264a; stroke: #c8264a; }
+.s-chart .s1 { fill: #3f6b35; stroke: #3f6b35; }
+.s-chart .s2 { fill: #5a5349; stroke: #5a5349; }
+.s-chart .s3 { fill: #b88a2e; stroke: #b88a2e; }
+.s-chart .s4 { fill: #2e6fb8; stroke: #2e6fb8; }
+.s-chart .s5 { fill: #8a8174; stroke: #8a8174; }
+.s-chart polyline { fill: none; stroke-width: 2; }

@@ -490,8 +490,7 @@ export function ArtifactOpen({ project, id, onClose, composer = true, lead, bare
   };
   useMenuAction('save', save);
   const frame = useRef<HTMLIFrameElement>(null);
-  // a video's player asks for the height that holds it: the card hugs the screen and its bar (designer m_32762)
-  const hug = useFrameNote(frame, src, project, id, it?.a.title ?? '');
+  useFrameNote(frame, src, project, id, it?.a.title ?? '');
   // page-unreach: the page is framed once its server answers; meanwhile the panel says why (reach.ts)
   const { reach, again } = useReach(src);
   // ⌘⏎ (front.ts): the head's first button, whether the head shows (the open view) or a panel tab's bar does
@@ -618,9 +617,8 @@ export function ArtifactOpen({ project, id, onClose, composer = true, lead, bare
             here from a list (leave.ts opens his browser): no 'opens in your browser' panel (designer m_21714) */}
         {/* the src stays /a/<id>/view while new versions land: the viewer swaps in place, never a
             reload (plan §6). Its name tells the viewer it sits in the app: a selection comes here
-            (useFrameNote) for the maker's composer, not the frame's own note. An image zooms in
-            the viewer itself (kit/office/image.js; image-pinch), its esc and ⌘0 lent by useFrameNote.
-            A video's player goes full screen from its own button (kit/office/video.js): allow it */}
+            (useFrameNote) for the maker's composer, not the frame's own note. A page may go full
+            screen from its own button: allow it */}
         {/* a .diff or .patch: its files and hunks, the review's own view (try-diff-open), never a blank frame */}
         {src === null && isDiff(a) && <DiffArtifact project={project} a={a} version={shown} onEscape={close} />}
         {/* a file with nothing to frame (no copy kept, no viewer for it): says why, never a blank body */}
@@ -648,7 +646,7 @@ export function ArtifactOpen({ project, id, onClose, composer = true, lead, bare
         )}
         {src !== null && reach === 'up' && (
           <iframe ref={frame} name={APP_FRAME_NAME} className="art-paper" src={src} title={a.title} sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-            allow="fullscreen" style={hug === null ? undefined : { maxHeight: `${String(hug)}px` }}
+            allow="fullscreen"
             data-testid="artifact.page" />
         )}
         {/* ⌘F's bar over the page's top right (find.ts, FindBar.tsx); a new src starts it again */}

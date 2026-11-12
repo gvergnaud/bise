@@ -140,6 +140,16 @@ pub(crate) fn grant(plugin: &str, uri: &str, perms: &[String]) -> Result<bool, S
     bend_plugins::state::grant(&path, &id, perms).map_err(|e| format!("{}: {e}", path.display()))
 }
 
+/// His pick of the app that opens type `key` (Open with's `Always open
+/// with`, Settings › Plugins › File types; docs/plugin-apps.md A2): `to`
+/// (plugin, tool), none for A2's order, through bend_plugins::state's
+/// one writer. Returns whether the file changed.
+pub(crate) fn opener_set(key: &str, to: Option<(&str, &str)>) -> Result<bool, String> {
+    let to = to.map(|(plugin, tool)| bend_plugins::state::OpenerRef { plugin: plugin.into(), tool: tool.into() });
+    let path = bend_plugins::state::state_path();
+    bend_plugins::state::pick_set(&path, key, to.as_ref()).map_err(|e| format!("{}: {e}", path.display()))
+}
+
 /// Give (or forget: `value` none) setting `var` of plugin `name` (the
 /// plugins page's field, `/plugins set NAME VAR`): its declared settings
 /// only, kept by bend_plugins::secrets' one writer (the add menu's). The

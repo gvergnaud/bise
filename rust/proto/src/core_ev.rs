@@ -91,6 +91,10 @@ pub enum CoreEv {
         /// why his Mistral connectors may be missing or old (none: fine)
         #[serde(default, skip_serializing_if = "Option::is_none")]
         connectors: Option<ConnectorsProblem>,
+        /// Settings › Plugins › File types (docs/plugin-apps.md A3): every
+        /// type an on plugin's app opens, by type key
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        file_types: Vec<crate::rows::FileType>,
     },
     /// what a source offers to add: `source` is `mistral` (the connectors
     /// not connected yet) or a marketplace's address

@@ -6,6 +6,7 @@
   "homepage": "https://bise.dev",
   "license": "Apache-2.0",
   "extensions": {
+    "ai.mistral.vibe": { "schemaVersion": 1 },
     "dev.bise": {
       "tagline": "PowerPoint decks: make, read, edit",
       "prompts": ["make a 5-slide status deck from this week's work", "read this pptx and sum up each slide in one line", "turn this page into a short pitch deck"]

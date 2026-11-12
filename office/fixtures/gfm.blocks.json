@@ -1,4 +1,4 @@
 {
-  "why": "the block structure of gfm.md (element tags in document order): the same from the artifact viewer's kit/office/markdown.js (office/sdk/test/viewer.test.ts) and the desktop thread's Markdown.tsx (apps/desktop/src/thread/markdown-parity.test.tsx), so a .md artifact reads as an answer does (md-artifact, architect m_38679)",
+  "why": "the block structure of gfm.md (element tags in document order): the same from Writer's markdown.js (plugins/docs/test/markdown.test.mjs) and the desktop thread's Markdown.tsx (apps/desktop/src/thread/markdown-parity.test.tsx), so a .md artifact reads as an answer does (md-artifact, architect m_38679)",
   "tags": ["h1", "p", "h2", "table", "tr", "th", "th", "tr", "td", "td", "tr", "td", "td", "hr", "h3", "blockquote", "p", "p", "ul", "li", "li", "ul", "li", "li", "li", "ol", "li", "li", "pre", "p"]
 }

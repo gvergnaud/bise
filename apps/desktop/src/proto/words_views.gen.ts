@@ -26,6 +26,8 @@ export const views = {
   missing_midi: "MIDI",
   /** a missing permission in no_grant: the clipboard */
   missing_clipboard: "the clipboard",
+  /** a missing permission in no_grant: saving the document it opened (docs/plugin-apps.md A1) */
+  missing_write: "saving your file",
   /** two or more missing permissions: 'the camera and the microphone' */
   list_and: (a: { head: string | number; last: string | number }): string => String(a.head) + " and " + String(a.last),
   /** the card's link that opens the view in the panel */
@@ -54,6 +56,8 @@ export const views = {
   perm_midi: "MIDI",
   /** the clipboardWrite permission's tick */
   perm_clipboard: "copy to the clipboard",
+  /** the write permission's tick: an app may save the file it opened (docs/plugin-apps.md A1) */
+  perm_write: "save your files",
   /** the add screen's label over its views */
   preview_label: "views, and what each may use",
   /** the add screen's line under its views: only what he turns on is granted */
@@ -68,6 +72,48 @@ export const views = {
   tab_view: "view",
   /** a view's panel tab title: its plugin, then its view's name ('kanban · board') */
   tab_of: (a: { plugin: string | number; name: string | number }): string => String(a.plugin) + " · " + String(a.name),
+  /** a document's tab title before its view says the document's name */
+  doc_tab: "document",
+  /** the facts line's version: 'Sheets · v3' */
+  doc_version: (a: { n: string | number }): string => "v" + String(a.n),
+  /** the facts line's save state after a save: 'Sheets · v3 · saved 09:41' */
+  doc_saved: (a: { time: string | number }): string => "saved " + String(a.time),
+  /** the facts line while a save goes to the hub */
+  doc_saving: "saving…",
+  /** the facts line when a newer version was saved while he edited (the write's conflict) */
+  doc_newer: "a newer version was saved",
+  /** the line of a tab on the newest he can edit when a newer version was saved: 'Sheets · v3 · perf saved v4 · Reload' */
+  doc_newer_by: (a: { who: string | number; n: string | number }): string => String(a.who) + " saved v" + String(a.n),
+  /** who saved it, when he did (ArtifactVersion.by you) */
+  doc_you: "You",
+  /** who saved it, when the hub doesn't say */
+  doc_someone: "someone",
+  /** the conflict line's act: open the newest version (his edits in the view go) */
+  doc_reload: "Reload",
+  /** the conflict line's act: his edits become their own document */
+  doc_keep_copy: "Keep mine as a copy",
+  /** the line of an older version he opened (a chip named it): 'Sheets · v2 · there's a newer one · Open v3' */
+  doc_older: "there's a newer one",
+  /** the older version's act: 'Open v5' */
+  doc_open_newest: (a: { n: string | number }): string => "Open v" + String(a.n),
+  /** the facts line when the app can't save this one */
+  doc_read_only: "read only",
+  /** the line when the document's app is off: 'Sheets is off' */
+  doc_app_off: (a: { app: string | number }): string => String(a.app) + " is off",
+  /** the app-off line's act: turns the plugin on */
+  doc_turn_on: "Turn on",
+  /** the line when the document's file is gone */
+  doc_gone: "this file was removed",
+  /** the line when a save was over the hub's limit: 'too large to save (24 MB at most)' */
+  doc_too_large: (a: { max: string | number }): string => "too large to save (" + String(a.max) + " at most)",
+  /** the line when a save failed for another reason */
+  doc_save_failed: "couldn't save",
+  /** the line when the view didn't load: '✗ the view didn't load · Try again' */
+  doc_failed: "the view didn't load",
+  /** the failed line's act: opens it again */
+  doc_try_again: "Try again",
+  /** the notes its view could not place on this version, listed under the head: '2 notes have no place in this version' */
+  doc_detached: (a: { n: number }): string => a.n === 1 ? String(a.n) + " note has no place in this version" : String(a.n) + " notes have no place in this version",
   /** the view wrote to its agent: 'sent to perf via kanban' */
   message_sent: (a: { agent: string | number; plugin: string | number }): string => "sent to " + String(a.agent) + " via " + String(a.plugin),
   /** a call of the view waits on his ok (an off-turn confirm notification placed view:<agent>/<call>, C5): the card's foot */
@@ -92,4 +138,8 @@ export const views = {
   tui_list_keys: "⏎ open in the app   b in your browser   esc back",
   /** /views with none */
   tui_list_empty: "no views in this thread yet.",
+  /** Keep mine as a copy: the copy's name after its file's, `q3 (copy).xlsx` */
+  copy_first: "(copy)",
+  /** the next free one when `(copy)` is taken, `q3 (copy 2).xlsx` */
+  copy_nth: (a: { n: string | number }): string => "(copy " + String(a.n) + ")",
 } as const;

@@ -5,7 +5,9 @@
 //! two plugins. On such a host the server answers `GET /mcp-app`, the
 //! sandbox proxy page (from the spec's "sandbox proxy"), and nothing
 //! else: every other route is 403 there, `/mcp-app` is 404 on the main
-//! host.
+//! host. A view with its own folder on disk (a static view, `~views`)
+//! also answers `GET /f/<session>/<rel>`, its folder's files
+//! (view_folder.rs, docs/plugin-apps.md A5), under the same sessions.
 //!
 //! The proxy is not a security boundary: the view runs in a `blob:` frame
 //! the proxy makes (`allow-same-origin`), so it can run code in the proxy.
@@ -27,6 +29,7 @@
 //! [`view_csp`]: super::view_csp
 
 use super::server::{Request, Response};
+use super::view_folder::{self, ViewFolder};
 use super::Pages;
 use bise_proto::view_rules;
 use serde_json::Value;
@@ -39,11 +42,18 @@ use sha2::{Digest, Sha256};
 pub struct ViewSandbox {
     pub csp: Value,
     pub perms: Vec<String>,
+    /// its own files on disk (a static view's folder): served at
+    /// `/f/<session>/`, `'self'` in its CSP, the proxy's `<base>`
+    pub folder: Option<ViewFolder>,
 }
 
 /// At most this many proxy sessions per view origin: an older tab of
-/// that view past them loads it again through `view/resource`.
-pub const SESSIONS: usize = 8;
+/// that view past them loads it again through `view/resource`. Above the
+/// desktop's live views (apps/desktop/src/views/place.ts `MAX_LIVE`, 8)
+/// twice over: a live tab holds two sessions at most (a reload while the
+/// old one drains), so a live tab of a document app never loses its own
+/// (architect m_60156).
+pub const SESSIONS: usize = 16;
 /// At most this many view origins kept (the least recently loaded go
 /// first; a tab of one loads it again through `view/resource`).
 pub const ORIGINS: usize = 512;
@@ -58,23 +68,32 @@ pub(super) struct ViewOrigin {
     pub(super) seq: u64,
 }
 
-/// Drop the least recently loaded origins past [`ORIGINS`].
-fn bound(m: &mut std::collections::HashMap<String, ViewOrigin>) {
+/// Drop the least recently loaded origins past [`ORIGINS`]: their
+/// sessions.
+fn bound(m: &mut std::collections::HashMap<String, ViewOrigin>) -> Vec<String> {
     if m.len() <= ORIGINS {
-        return;
+        return Vec::new();
     }
     let mut seqs: Vec<u64> = m.values().map(|o| o.seq).collect();
     seqs.sort_unstable();
     let cut = seqs[m.len() - ORIGINS];
-    m.retain(|_, o| o.seq >= cut);
+    let mut dropped = Vec::new();
+    m.retain(|_, o| {
+        let keep = o.seq >= cut;
+        if !keep {
+            dropped.append(&mut o.sessions);
+        }
+        keep
+    });
+    dropped
 }
 
 impl ViewOrigin {
-    /// `session` kept, the oldest past [`SESSIONS`] dropped.
-    fn add(&mut self, session: String) {
+    /// `session` kept, the oldest past [`SESSIONS`] dropped: them.
+    fn add(&mut self, session: String) -> Vec<String> {
         self.sessions.push(session);
         let over = self.sessions.len().saturating_sub(SESSIONS);
-        self.sessions.drain(..over);
+        self.sessions.drain(..over).collect()
     }
 }
 
@@ -97,6 +116,41 @@ pub fn hash(plugin: &str, server: &str, uri: &str) -> String {
     h.finalize()[..8].iter().map(|b| format!("{b:02x}")).collect()
 }
 
+/// A document's key in its view's origin (docs/plugin-apps.md A5,
+/// `isolate: "document"`): an artifact by its project and id, a `~/bise`
+/// entry by its id; never a version (a site's versions share one storage).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DocKey {
+    Artifact { project: String, id: String },
+    Entry(String),
+}
+
+impl DocKey {
+    fn text(&self) -> String {
+        match self {
+            DocKey::Artifact { project, id } => format!("artifact:{project}/{id}"),
+            DocKey::Entry(id) => format!("entry:{id}"),
+        }
+    }
+}
+
+/// The one hash input of a view's origin (A5, architect m_60421): the
+/// view, and the document for a view that isolates its documents; none:
+/// [`hash`] as every view had it.
+pub fn origin_key(plugin: &str, server: &str, uri: &str, doc: Option<&DocKey>) -> String {
+    match doc {
+        None => hash(plugin, server, uri),
+        Some(d) => {
+            let mut h = Sha256::new();
+            for part in [plugin, server, uri, &d.text()] {
+                h.update(part.as_bytes());
+                h.update([0]);
+            }
+            h.finalize()[..8].iter().map(|b| format!("{b:02x}")).collect()
+        }
+    }
+}
+
 /// A view's origin on the pages server of `port`.
 pub fn origin(plugin: &str, server: &str, uri: &str, port: u16) -> String {
     view_rules::origin_of(&hash(plugin, server, uri), port)
@@ -108,6 +162,21 @@ pub fn view_host(host: &str, port: u16) -> Option<&str> {
     view_rules::view_host(host).filter(|(_, p)| *p == port).map(|(h, _)| h)
 }
 
+/// Where a document's file is served by its url (`resources/url`, A4):
+/// `/h/<token>` on its session's view origin.
+pub const DOC_FILE_PREFIX: &str = "/h/";
+
+/// A document file's own CSP: it is data the view fetches or plays,
+/// never a page (opened alone, nothing in it runs).
+pub const DOC_FILE_CSP: &str = "default-src 'none'; sandbox";
+
+/// The token of a `/h/<token>` path (`pages::new_token`'s 32 lowercase
+/// hex), else None.
+pub fn doc_file_token(path: &str) -> Option<&str> {
+    let t = path.strip_prefix(DOC_FILE_PREFIX)?;
+    (t.len() == 32 && t.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))).then_some(t)
+}
+
 
 impl Pages {
     /// `view/resource` registers (or updates) the sandbox of view origin
@@ -115,15 +184,81 @@ impl Pages {
     /// random source, never written to a log): the session.
     pub fn view_sandbox(&self, hash: &str, s: ViewSandbox) -> String {
         let session = super::new_token();
+        self.view_sandbox_as(hash, &session, s);
+        session
+    }
+
+    /// [`Pages::view_sandbox`] with a session minted before (`view/open`
+    /// binds its handle to it before its opener runs). The sessions the
+    /// caps push out end here ([`Pages::sessions_end`]).
+    pub fn view_sandbox_as(&self, hash: &str, session: &str, s: ViewSandbox) {
+        let mut dropped = Vec::new();
         if let Ok(mut m) = self.views.lock() {
             let seq = m.values().map(|o| o.seq).max().unwrap_or(0) + 1;
             let o = m.entry(hash.to_string()).or_default();
             o.sandbox = s;
             o.seq = seq;
-            o.add(session.clone());
-            bound(&mut m);
+            dropped = o.add(session.to_string());
+            dropped.extend(bound(&mut m));
         }
-        session
+        self.sessions_end(&dropped);
+    }
+
+    /// A session ends before the caps push it out (a document's tab
+    /// closed, `view/close`): its proxy, its `/f/` and its handles answer
+    /// 404 or `bad-handle` from now.
+    pub fn view_session_end(&self, session: &str) {
+        if let Ok(mut m) = self.views.lock() {
+            for o in m.values_mut() {
+                o.sessions.retain(|s| s != session);
+            }
+        }
+        self.sessions_end(&[session.to_string()]);
+    }
+
+    /// The one place sessions end (the per-origin cap, the [`ORIGINS`]
+    /// bound, `view/close`): their handles and their URLs with them
+    /// (architect m_60434). Called with no other lock held.
+    fn sessions_end(&self, sessions: &[String]) {
+        if sessions.is_empty() {
+            return;
+        }
+        let mut f = self.files.lock().unwrap_or_else(|e| e.into_inner());
+        sessions.iter().for_each(|s| f.end(s));
+    }
+
+    /// A handle for `b` (a new 32 hex), on the table its session's end
+    /// clears: its `view-file://` uri.
+    pub fn mint_handle(&self, b: crate::view_files::Binding) -> String {
+        self.files.lock().unwrap_or_else(|e| e.into_inner()).mint(&super::new_token(), b)
+    }
+
+    /// The view a document session (`doc`) was opened with: its opener,
+    /// copied out (the lock is never held across I/O).
+    pub fn doc_opener(&self, doc: &str) -> Option<crate::view_files::Opener> {
+        self.files.lock().unwrap_or_else(|e| e.into_inner()).of_session(doc).map(|b| b.opener.clone())
+    }
+
+    /// The file a document session (`doc`) opened, copied out (the lock is
+    /// never held across I/O): what its notes are read on (A5).
+    pub fn doc_target(&self, doc: &str) -> Option<crate::view_files::FileTarget> {
+        self.files.lock().unwrap_or_else(|e| e.into_inner()).of_session(doc).map(|b| b.target.clone())
+    }
+
+    /// bise's view kit (`kit/view/`) as a view's folder: what
+    /// `/f/<session>/~kit/view/<file>` serves (view_folder.rs).
+    fn view_kit(&self) -> ViewFolder {
+        let dir = self.kit_dir.join("view");
+        let dir = dir.canonicalize().unwrap_or(dir);
+        ViewFolder { tag: view_folder::tag(&dir, Some(env!("CARGO_PKG_VERSION"))), dir }
+    }
+
+    /// bise's DOM-free office reader (`office/dist/`) as a view's folder:
+    /// `/f/<session>/~kit/office/v1/<file>`, its allow-listed files only
+    /// (architect m_60402).
+    fn office_kit(&self) -> ViewFolder {
+        let dir = self.office_dir.canonicalize().unwrap_or(self.office_dir.clone());
+        ViewFolder { tag: view_folder::tag(&dir, Some(env!("CARGO_PKG_VERSION"))), dir }
     }
 
     /// The sandbox of view origin `hash` for a proxy load with `session`:
@@ -136,23 +271,46 @@ impl Pages {
     }
 }
 
-/// Every request on view host `hash`: the proxy page, or 403.
+/// Every request on view host `hash`: the proxy page, its own files, or 403.
 pub fn route(pages: &Pages, req: &Request, hash: &str) -> Response {
-    if req.path != "/mcp-app" {
-        return Response::err(403, "a view's origin serves its proxy only");
+    let files = view_folder::split(&req.path);
+    if req.path != "/mcp-app" && files.is_none() {
+        return Response::err(403, "a view's origin serves its proxy and its own files only");
     }
     if req.method != "GET" {
         return Response::err(405, "GET only");
     }
+    if let Some((session, rel)) = files {
+        return own_file(pages, req, hash, session, &rel);
+    }
     // a session only view/resource gives (C6): a page that never asked
     // the hub (a .html file opened in his browser, which file: lets frame
     // the proxy) can't load the view's origin with its own html
-    let Some(s) = pages.sandbox_of(hash, req.param("s")) else { return Response::missing("no such view") };
-    let csp = super::view_csp::csp(&s.csp, pages.port, pages.view_dev);
-    let html = proxy_page(&csp, &view_rules::allow(&s.perms));
+    let Some(session) = req.param("s") else { return Response::missing("no such view") };
+    let Some(s) = pages.sandbox_of(hash, Some(session)) else { return Response::missing("no such view") };
+    let csp = super::view_csp::csp(&s.csp, pages.port, pages.view_dev, s.folder.is_some(), pages.doc_of(session).is_some());
+    // the base is the hub's, written now: never from the view's html
+    let base = s.folder.as_ref().map(|_| format!("{}{}{session}/", view_rules::origin_of(hash, pages.port), view_folder::PREFIX)).unwrap_or_default();
+    let html = proxy_page(&csp, &view_rules::allow(&s.perms), &base);
     let mut r = Response::page(200, html);
     r.csp = csp.into();
     r
+}
+
+/// `GET /f/<session>/<rel>` on view host `hash`: a file of its folder, or
+/// of bise's view kit under `~kit/view/` (docs/plugin-apps.md A5);
+/// another origin's session, a view with no folder: 404, as `/mcp-app`.
+fn own_file(pages: &Pages, req: &Request, hash: &str, session: &str, rel: &[&str]) -> Response {
+    let Some(s) = pages.sandbox_of(hash, Some(session)) else { return Response::missing("no such file") };
+    let Some(folder) = s.folder.as_ref() else { return Response::missing("no such file") };
+    let csp = super::view_csp::csp(&s.csp, pages.port, pages.view_dev, true, pages.doc_of(session).is_some());
+    let inm = req.header("if-none-match");
+    match rel {
+        [view_folder::KIT, "view", file] => view_folder::serve(&pages.view_kit(), &[file], inm, csp),
+        [view_folder::KIT, "office", view_folder::OFFICE_V, file] if view_folder::OFFICE_FILES.contains(file) => view_folder::serve(&pages.office_kit(), &[file], inm, csp),
+        [view_folder::KIT, ..] => Response::missing("no such file"),
+        _ => view_folder::serve(folder, rel, inm, csp),
+    }
 }
 
 /// JSON for an inline script: `<` never closes it.
@@ -166,8 +324,8 @@ fn script_json(s: &str) -> String {
 /// only, once, builds the view's blob frame (the hub's CSP in a meta,
 /// `allow=` the granted permissions) and relays JSON-RPC both ways, each
 /// way checking `event.source`.
-fn proxy_page(csp: &str, allow: &str) -> String {
-    PROXY.replace("__CSP__", &script_json(csp)).replace("__ALLOW__", &script_json(allow))
+fn proxy_page(csp: &str, allow: &str, base: &str) -> String {
+    PROXY.replace("__CSP__", &script_json(csp)).replace("__ALLOW__", &script_json(allow)).replace("__BASE__", &script_json(base))
 }
 
 const PROXY: &str = r#"<!doctype html>
@@ -183,6 +341,7 @@ const PROXY: &str = r#"<!doctype html>
   "use strict";
   const CSP = __CSP__;
   const ALLOW = __ALLOW__;
+  const BASE = __BASE__;
   const host = window.parent;
   if (host === window) return;
   let cross = false;
@@ -199,7 +358,10 @@ const PROXY: &str = r#"<!doctype html>
     // the meta goes after the view's own leading doctype: before it, the
     // document is in quirks mode (tables at 16 px, box sizing); nothing of
     // the view but that doctype comes before the meta
-    const meta = '<meta http-equiv="Content-Security-Policy" content="' + esc(CSP) + '">';
+    // a view with its own folder: its relative urls resolve at its
+    // /f/<session>/ (a blob has no base of its own), set before any of
+    // its markup
+    const meta = '<meta http-equiv="Content-Security-Policy" content="' + esc(CSP) + '">' + (BASE ? '<base href="' + esc(BASE) + '">' : "");
     const dt = /^\uFEFF?\s*<!doctype[^>]*>/i.exec(html);
     const doc = dt ? dt[0] + meta + html.slice(dt[0].length) : meta + html;
     f.src = URL.createObjectURL(new Blob([doc], { type: "text/html" }));
@@ -258,6 +420,22 @@ mod tests {
         }
     }
 
+    /// isolate: "document": one origin per document, never per version,
+    /// and the same artifact id in two projects is two origins (m_60439).
+    #[test]
+    fn a_document_gets_its_own_origin_when_its_view_isolates() {
+        let v = ("sites", "~views", "ui://sites/views/site");
+        let a = |p: &str, id: &str| DocKey::Artifact { project: p.into(), id: id.into() };
+        assert_eq!(origin_key(v.0, v.1, v.2, None), hash(v.0, v.1, v.2), "a view's own origin as before");
+        let one = origin_key(v.0, v.1, v.2, Some(&a("acme", "site")));
+        assert_ne!(one, hash(v.0, v.1, v.2));
+        assert_eq!(one, origin_key(v.0, v.1, v.2, Some(&a("acme", "site"))), "stable across opens and versions");
+        assert_ne!(one, origin_key(v.0, v.1, v.2, Some(&a("other", "site"))), "another project");
+        assert_ne!(one, origin_key(v.0, v.1, v.2, Some(&a("acme", "site2"))));
+        assert_ne!(one, origin_key(v.0, v.1, v.2, Some(&DocKey::Entry("site".into()))));
+        assert_eq!(one.len(), 16);
+    }
+
     #[test]
     fn a_view_host_is_exactly_its_shape() {
         let h = "0123456789abcdef";
@@ -283,12 +461,14 @@ mod tests {
     #[test]
     fn an_origin_keeps_its_last_sessions_only() {
         let mut o = ViewOrigin::default();
+        let mut dropped = Vec::new();
         for i in 0..SESSIONS + 3 {
-            o.add(format!("s{i}"));
+            dropped.extend(o.add(format!("s{i}")));
         }
+        assert_eq!(dropped, ["s0", "s1", "s2"], "the ones pushed out are said");
         assert_eq!(o.sessions.len(), SESSIONS);
         assert_eq!(o.sessions.first().map(String::as_str), Some("s3"), "the oldest went first");
-        assert_eq!(o.sessions.last().map(String::as_str), Some("s10"));
+        assert_eq!(o.sessions.last().map(String::as_str), Some(format!("s{}", SESSIONS + 2).as_str()));
         assert_eq!(proxy_url("http://v-0123456789abcdef.localhost:47123", "ab"), "http://v-0123456789abcdef.localhost:47123/mcp-app?s=ab");
     }
 
@@ -296,8 +476,9 @@ mod tests {
     fn the_view_origins_kept_are_bounded_newest_first() {
         let mut m = std::collections::HashMap::new();
         for i in 0..ORIGINS as u64 + 5 {
-            m.insert(format!("{i:016x}"), ViewOrigin { seq: i + 1, ..Default::default() });
-            bound(&mut m);
+            m.insert(format!("{i:016x}"), ViewOrigin { seq: i + 1, sessions: vec![format!("s{i}")], ..Default::default() });
+            let dropped = bound(&mut m);
+            assert_eq!(dropped, if i < ORIGINS as u64 { vec![] } else { vec![format!("s{}", i - ORIGINS as u64)] }, "an origin's sessions go with it");
         }
         assert_eq!(m.len(), ORIGINS);
         assert!(!m.contains_key(&format!("{:016x}", 4)), "the least recently loaded went");
@@ -306,7 +487,8 @@ mod tests {
 
     #[test]
     fn the_proxy_page_carries_the_hubs_policy_safely() {
-        let html = proxy_page("default-src 'none'</script><script>alert(1)", "camera");
+        let html = proxy_page("default-src 'none'</script><script>alert(1)", "camera", "http://x/</script><script>alert(2)");
+        assert!(!html.contains("</script><script>alert(2)"), "nor does a base");
         assert!(!html.contains("</script><script>alert"), "a policy never closes the script");
         assert!(html.contains(r#"const ALLOW = "camera";"#));
         assert!(html.contains("sandbox-proxy-ready") && html.contains("allow-scripts allow-same-origin allow-forms"));

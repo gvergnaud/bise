@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "name": "fake",
+  "description": "Open a .fake file, a .note of this plugin's documents, or a folder holding a fake.json.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "file": {
+        "type": "object",
+        "properties": { "name": { "type": "string" }, "resourceUri": { "type": "string" } },
+        "required": ["name", "resourceUri"]
+      }
+    },
+    "required": ["file"]
+  },
+  "ui": {
+    "csp": { "connectDomains": [], "resourceDomains": [], "frameDomains": [], "baseUriDomains": [] },
+    "permissions": {}
+  },
+  "_meta": {
+    "ai.mistral.vibe/ui": {
+      "entrypoints": [
+        { "type": "file", "extensions": [".fake"], "title": "Fake" }
+      ]
+    },
+    "dev.bise/ui": {
+      "files": [
+        { "match": ["*.fake"], "title": "Fake file", "rank": "owner" },
+        { "match": ["@documents/*.note"], "title": "Fake note" },
+        { "match": ["*/fake.json"], "folder": true, "title": "Fake folder" }
+      ],
+      "makes": [
+        { "ending": ".fake", "title": "Fake", "template": "./templates/empty.fake" },
+        { "ending": ".note", "title": "Note" }
+      ],
+      "write": true,
+      "icon": "./icon.svg"
+    }
+  }
+}

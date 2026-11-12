@@ -158,6 +158,24 @@ pub const METHODS: &[MethodRow] = &[
     m("view/context", "view_context", None),
     // C8: a plugin's views, through the hub's views bridge
     m("plugin/views", "plugin_views", None),
+    // plugin-apps (docs/plugin-apps.md A4): a document view's session ends
+    // (his tab); client sockets only, as view/*
+    m("view/close", "view_close", None),
+    // A5: a document view's notes ({notes, detached}), client sockets only
+    m("view/notes", "view_notes", None),
+    // his click opens a document in its app (A4): client sockets only
+    m("view/open", "view_open", None),
+    // plugin-apps A6b: Keep mine as a copy, the host's own (architect m_60222)
+    m("view/copy", "view_copy", None),
+    // plugin-apps A6, A4b: ~/bise's folders and New ›, the window's own
+    // methods (client sockets only, never a view's)
+    m("folder/list", "folder_list", None),
+    m("file/new", "file_new", None),
+    // plugin-apps A6 ids (architect m_60046): the home hub's id table, whole
+    // then its `files_ids` changes; a path's id for a client that saw it
+    // first (the Finder edge)
+    m("files/ids/subscribe", "files_ids_subscribe", None),
+    m("files/mint", "files_mint", None),
 ];
 
 /// The protocol's own methods (no [`HubCmd`]).
@@ -199,7 +217,14 @@ pub const OWN_RESULTS: &[(&str, &str)] = &[
     // mcp-apps (C5): a view's resource; a call answers its server's result
     ("view/resource", "ViewResource"),
     ("view/call", "ViewCallResult"),
+    ("view/open", "ViewOpened"),
     ("plugin/views", "PluginViewsResult"),
+    // plugin-apps A6b
+    ("view/copy", "ViewCopyResult"),
+    ("folder/list", "FolderList"),
+    ("file/new", "FileNewResult"),
+    ("files/ids/subscribe", "FilesIds"),
+    ("files/mint", "FilesMintResult"),
     // MCP Apps C9: how many desktop connections got it
     ("app/open", "AppOpenResult"),
 ];
@@ -274,6 +299,12 @@ pub const NOTIFICATIONS: &[NoteRow] = &[
     n("card/open", "card_open", Scope::One),
     // MCP Apps C9: a terminal's `app ↗`, to the desktop connections only
     n("app/open", "app_open", Scope::One),
+    // plugin-apps A5: an artifact's notes were written (ids only): its
+    // document views ask view/notes again
+    n("artifact/notes", "artifact_notes", Scope::Hub),
+    // plugin-apps A6 ids: the id table's changes, to the connections that
+    // sent files/ids/subscribe only (numbered by their own seq)
+    n("files/ids", "files_ids", Scope::One),
     // inbox-record: a card closed, or its answer's position came
     n("inbox/recorded", "inbox_recorded", Scope::Hub),
     n("client/focused", "focused", Scope::One),

@@ -268,6 +268,8 @@ export function applyTyped(s: Store, ev: Ev): void {
       return;
     case "plugins":
       s.put(`plugins:${ev.project ?? ""}`, ev.items);
+      // which app opens what, as the hub's matcher has it (File types, docs/plugin-apps.md A3)
+      s.put(`file_types:${ev.project ?? ""}`, ev.file_types ?? []);
       return;
     case "plugins_summary":
       // the sidebar's plugins row and the place's band (bend_plugins::catalog::summary)

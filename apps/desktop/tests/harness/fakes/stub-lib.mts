@@ -23,7 +23,7 @@ export type Cmd = {
   [k: string]: unknown;
 };
 /** A test's {"harness":"refuse"} line: the next request for that command (and card) fails so. */
-type Refusal = { cmd?: string; card?: unknown; message?: string; reason?: unknown };
+type Refusal = { cmd?: string; card?: unknown; message?: string; reason?: unknown; code?: unknown };
 /** A test's {"harness":"result"} line: a command's answer (and the events before it). */
 type Answer = { cmd?: string; card?: unknown; result?: unknown; before?: unknown[] };
 /** A JSON-RPC message the app wrote on stdin. */
@@ -85,7 +85,9 @@ function rpcSide(write: (line: string) => void, hubEvs: readonly string[]) {
       const i = refusals.findIndex((r) => r.cmd === cmd.cmd && (r.card === undefined || r.card === cmd.card));
       const r = i >= 0 ? refusals.splice(i, 1)[0] : undefined;
       if (r) {
-        write(JSON.stringify({ jsonrpc: '2.0', id: m.id, error: { code: -32001, message: r.message, ...(r.reason === undefined ? {} : { data: { reason: r.reason } }) } }));
+        // its code: the hub's own when the test gives one (a document's view: -32032 app off, -32041 gone)
+        const code = typeof r.code === 'number' ? r.code : -32001;
+        write(JSON.stringify({ jsonrpc: '2.0', id: m.id, error: { code, message: r.message, ...(r.reason === undefined ? {} : { data: { reason: r.reason } }) } }));
       } else {
         // the events the hub's step sent before it answered (its rows without the card it closed):
         // the real hub broadcasts a step's cards before the request's response (FakeCore.result)
@@ -150,6 +152,7 @@ export function runStub({ start = [], sock, log, quitCmd, answer, rpc, follow }:
   // (FakeCore's `hold` option: the app's very first ask waits, boot-speed)
   let holding: unknown = process.env.BISE_HARNESS_CORE_HOLD ?? null;
   let held: string[] = [];
+  const heldReqs: string[] = [];
   // a test's {"harness":"exit","code":n} line ends this process with that code (a core that
   // stops: the app restarts it, amb-win's app/keep); any other line goes out as is
   const relay = (line: string) => {
@@ -162,6 +165,8 @@ export function runStub({ start = [], sock, log, quitCmd, answer, rpc, follow }:
       const lines = held;
       held = [];
       for (const l of lines) out(l);
+      // the held requests, answered now in order (logged already when they came)
+      for (const l of heldReqs.splice(0)) handle(l, true);
       return;
     }
     if (line.startsWith('{"harness":"refuse"') || line.startsWith('{"harness":"result"')) {
@@ -196,13 +201,21 @@ export function runStub({ start = [], sock, log, quitCmd, answer, rpc, follow }:
     if (sock) rmSync(sock, { force: true });
     process.exit(code);
   }
-  const s = lines((line) => {
+  // `logged`: a held request answered on release, in the log since it came
+  function handle(line: string, logged = false) {
     // a JSON line: a command (a plain stub) or a JSON-RPC message (the core stub)
     let msg: (Cmd & RpcIn) | null;
     try { msg = JSON.parse(line) as typeof msg; } catch { if (log) appendFileSync(log, line + NL); return; /* not JSON: logged as is */ }
+    // a JSON-RPC request for the held command waits whole until release (its answer is the one armed
+    // then: FakeCore.result/refuse after the app asked); a test sees it asked at once (waitCmd)
+    if (side && msg && holding !== null && typeof msg.method === 'string' && msg.id !== undefined && msg.method.slice(msg.method.indexOf('/') + 1) === holding) {
+      heldReqs.push(line);
+      if (log) appendFileSync(log, JSON.stringify({ cmd: holding, ...(msg.params ?? {}) }) + NL);
+      return;
+    }
     const cmd = side && msg ? side.take(msg) : msg;
     if (cmd === null) return;
-    if (log) appendFileSync(log, (side ? JSON.stringify(cmd) : line) + NL);
+    if (log && !logged) appendFileSync(log, (side ? JSON.stringify(cmd) : line) + NL);
     if (quitCmd && cmd.cmd === quitCmd) quit();
     if (answer) {
       for (const l of answer(cmd)) {
@@ -211,7 +224,8 @@ export function runStub({ start = [], sock, log, quitCmd, answer, rpc, follow }:
         else out(line);
       }
     }
-  });
+  }
+  const s = lines(handle);
   process.stdin.setEncoding('utf8');
   process.stdin.on('data', (d: string) => { s.push(d); });
   process.stdin.on('end', () => { s.end(); quit(); });

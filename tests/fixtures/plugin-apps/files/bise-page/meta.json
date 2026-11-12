@@ -1,0 +1,8 @@
+{
+  "id": "bise-page",
+  "title": "tiny bise page",
+  "agent": "fixture",
+  "created_ms": 1762862400000,
+  "versions": [{ "n": 1, "at_ms": 1762862400000 }],
+  "state": "ready"
+}

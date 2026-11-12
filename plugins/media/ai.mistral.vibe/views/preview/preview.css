@@ -1,0 +1,123 @@
+/* Preview (plugins/media): an image, a pdf or a video in a document tab. Colors, fonts and radii
+   from the host's theme (the MCP spec's CSS variables on :root, which the desktop maps from bise's
+   tokens, apps/desktop/src/views/context.ts); the fallbacks are bise's light theme, for a view
+   opened alone. A selection is ink; the accent is only for what is his (a note's mark, the kit's
+   data-bise-mark; designer m_24098). Moved from kit/office/viewer.css and select.css. */
+
+:root {
+  --pv-surface: var(--color-background-secondary, #f6f4f0);
+  --pv-card: var(--color-background-primary, #fff);
+  --pv-hover: var(--color-background-tertiary, #efece6);
+  --pv-ink: var(--color-text-primary, #1d1a17);
+  --pv-dim: var(--color-text-secondary, #5a5349);
+  --pv-faint: var(--color-text-tertiary, #8a8174);
+  --pv-line: var(--color-border-secondary, #e4e0d8);
+  --pv-risk: var(--color-text-danger, #c8264a);
+  --pv-accent: var(--color-text-info, #3b5bdb);
+  --pv-accent-soft: var(--color-background-info, #e7ecfd);
+  --pv-ok: var(--color-text-success, #3f6b35);
+  --pv-drop: rgba(0, 0, 0, 0.12);
+  --pv-font: var(--font-sans, -apple-system, system-ui, sans-serif);
+  --pv-mono: var(--font-mono, ui-monospace, Menlo, monospace);
+  --pv-small: var(--font-text-xs-size, 11px);
+  --pv-text: var(--font-text-md-size, 13px);
+  --pv-radius: var(--border-radius-sm, 6px);
+  --pv-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+html[data-theme="dark"] { --pv-drop: rgba(0, 0, 0, 0.4); }
+
+html, body { margin: 0; height: 100%; background: var(--pv-surface); color: var(--pv-ink); }
+body { font: var(--pv-text) / 1.4 var(--pv-font); }
+/* the hand on every thing he can click, the arrow when disabled (kit/pointer.check.ts's rule) */
+:where(button, a[href], [role=button], [role=slider]) { cursor: pointer; }
+:is(:disabled, [aria-disabled="true"]) { cursor: default !important; }
+
+#preview { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.pv-stage { flex: 1; min-height: 0; display: flex; }
+.pv-state { margin: 24px; color: var(--pv-dim); }
+.pv-state[data-state="failed"] { color: var(--pv-risk); }
+.pv-foot { flex: none; border-top: 1px solid var(--pv-line); padding: 6px 12px; color: var(--pv-faint); font-size: var(--pv-small); }
+.pv-foot p { margin: 2px 0; }
+
+/* a box: drawn now (.pv-box, ink), or a note's (.pv-mark, the accent, only while the kit marks it) */
+.pv-box, .pv-mark { position: absolute; box-sizing: border-box; pointer-events: none; }
+.pv-box { outline: 1px solid var(--pv-ink); background: color-mix(in srgb, var(--pv-ink) 9%, transparent); }
+.pv-mark:not([data-bise-mark]) { display: none; }
+.pv-mark[data-bise-mark] { outline: 1px solid var(--pv-accent); box-shadow: inset 3px 0 0 var(--pv-accent); }
+.pv-mark[data-bise-mark="draft"] { outline-style: dashed; box-shadow: inset 3px 0 0 var(--pv-accent-soft); }
+.pv-mark[data-bise-mark="done"] { outline-color: var(--pv-ok); box-shadow: none; }
+.pv-mark[data-bise-mark="done"]::after { right: 4px; top: 2px; }
+
+/* an image (image.ts): fit, zoomed by a pinch, a box drawn with a plain drag */
+.pv-image { flex: 1; position: relative; overflow: hidden; cursor: crosshair; user-select: none; touch-action: none; }
+.pv-image .frame { position: absolute; left: 0; top: 0; }
+.pv-image:not([data-fit]) .frame { visibility: hidden; }
+.pv-image img { display: block; width: 100%; height: 100%; }
+.pv-image.pixels img { image-rendering: pixelated; }
+.pv-image.eased .frame { transition: transform 160ms var(--pv-ease), width 160ms var(--pv-ease), height 160ms var(--pv-ease); }
+.pv-image.panning { cursor: grab; }
+.pv-image.grabbing { cursor: grabbing; }
+/* the zoom's chip: '240%' while he zooms and 1.5 s after, then fades; a click: back to fit (designer m_30627) */
+.pv-zoom { position: absolute; right: 8px; bottom: 8px; z-index: 3; font: var(--pv-small) / 1 var(--pv-mono); color: var(--pv-dim); background: var(--pv-card); border: 1px solid var(--pv-line); border-radius: 999px; padding: 5px 9px; opacity: 0; pointer-events: none; transition: opacity 120ms ease-out; }
+.pv-zoom.on { opacity: 1; pointer-events: auto; }
+
+/* a pdf (pdf.ts): its pages on the view's surface, pdf.js's canvas and text layer on each; a
+   passage's marks tint its words with one 3 px bar down its lines (designer m_24905) */
+/* (a block, not the stage's flex row: its pages are 100% of its width, never shrunk to their content) */
+.pv-pdf { flex: 1; display: block; min-width: 0; overflow: auto; padding: 12px; }
+.pv-pdf .pv-pages { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.pv-pdf .page { position: relative; width: 100%; background: #fff; box-shadow: 0 1px 3px var(--pv-drop); cursor: crosshair; user-select: none; --scale-round-x: 1px; --scale-round-y: 1px; }
+.pv-pdf .page > canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.pv-pdf .textLayer { position: absolute; inset: 0; overflow: clip; line-height: 1; transform-origin: 0 0; z-index: 0; --min-font-size: 1; --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size)); --min-font-size-inv: calc(1 / var(--min-font-size)); }
+.pv-pdf .textLayer :is(span, br) { color: transparent; position: absolute; white-space: pre; cursor: text; transform-origin: 0% 0%; user-select: text; }
+.pv-pdf .textLayer > :not(.markedContent), .pv-pdf .textLayer .markedContent span:not(.markedContent) { z-index: 1; --font-height: 0; font-size: calc(var(--text-scale-factor) * var(--font-height)); --scale-x: 1; --rotate: 0deg; transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv)); }
+.pv-pdf .textLayer .markedContent { display: contents; }
+.pv-pdf .textLayer ::selection { background: color-mix(in srgb, #1d1a17 22%, transparent); }
+.pv-pdf .pv-box, .pv-pdf .pv-mark { z-index: 2; }
+.pv-pdf .pv-mark-words[data-bise-mark] { outline: 0; box-shadow: none; background: color-mix(in srgb, var(--pv-accent) 16%, transparent); }
+.pv-pdf .pv-mark-words[data-bise-mark="draft"] { background: color-mix(in srgb, var(--pv-accent-soft) 16%, transparent); }
+.pv-pdf .pv-mark-bar[data-bise-mark] { outline: 0; width: 3px !important; background: var(--pv-accent); box-shadow: none; }
+.pv-pdf .pv-mark-bar[data-bise-mark="draft"] { background: var(--pv-accent-soft); }
+.pv-pdf .pv-mark-words[data-bise-mark="done"]::after { content: none; }
+
+/* a video (video.ts; video-view, designer m_32678): the screen at the video's own ratio (black
+   only for thin side bars, and in full screen), then one 40 px bar right under it: play, the
+   time, the track (buffered, played, the head, the notes' ticks, the hover's frame), speed, loop,
+   sound, full screen. In full screen the bar floats over the foot of the frame. */
+.pv-video { flex: 1; min-width: 0; display: flex; flex-direction: column; outline: none; background: var(--pv-surface); position: relative; }
+.pv-video .screen { flex: none; min-height: 0; position: relative; overflow: hidden; background: #000; cursor: pointer; user-select: none; touch-action: none; }
+.pv-video:not([data-fit]) .frame { visibility: hidden; }
+.pv-video .frame { position: absolute; }
+.pv-video video { display: block; width: 100%; height: 100%; }
+.pv-video .pv-mark.off { display: none; }
+.pv-video .bar { flex: none; height: 40px; display: flex; align-items: center; gap: 4px; padding: 0 8px; border-top: 1px solid var(--pv-line); color: var(--pv-dim); font: var(--pv-small) / 1 var(--pv-font); }
+.pv-video .bar button { flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 28px; padding: 0 6px; border: 0; border-radius: var(--pv-radius); background: none; color: inherit; font: inherit; }
+.pv-video .bar button:hover { background: var(--pv-hover); color: var(--pv-ink); }
+.pv-video .bar button svg { width: 16px; height: 16px; }
+.pv-video .bar .play { color: var(--pv-ink); }
+.pv-video .bar [aria-pressed="true"] { color: var(--pv-ink); background: var(--pv-hover); }
+.pv-video .bar .rate { font-family: var(--pv-mono); min-width: 40px; }
+.pv-video .time { flex: none; padding: 0 6px; font-family: var(--pv-mono); font-variant-numeric: tabular-nums; color: var(--pv-dim); white-space: nowrap; }
+.pv-video .track { flex: 1; min-width: 60px; position: relative; height: 28px; margin: 0 6px; touch-action: none; }
+.pv-video .track::before, .pv-video .buffered, .pv-video .played { content: ""; position: absolute; left: 0; top: 50%; height: 3px; margin-top: -1.5px; border-radius: 2px; pointer-events: none; }
+.pv-video .track::before { right: 0; background: var(--pv-line); }
+.pv-video .buffered { background: color-mix(in srgb, var(--pv-ink) 14%, transparent); }
+.pv-video .played { background: var(--pv-ink); }
+.pv-video .head { position: absolute; top: 50%; width: 11px; height: 11px; margin: -5.5px 0 0 -5.5px; border-radius: 50%; background: var(--pv-ink); pointer-events: none; transition: transform 120ms var(--pv-ease); }
+.pv-video .track:hover .head { transform: scale(1.2); }
+.pv-video .ticks { position: absolute; inset: 0; pointer-events: none; }
+.pv-video .tick.pv-mark { position: absolute; top: 7px; bottom: 7px; width: 3px; margin-left: -1.5px; padding: 0; min-width: 0; height: auto; border: 0; border-radius: 1px; outline: 0; box-shadow: none; background: var(--pv-accent); pointer-events: auto; }
+.pv-video .tick.pv-mark[data-bise-mark="draft"] { background: color-mix(in srgb, var(--pv-accent) 45%, transparent); }
+.pv-video .tick.pv-mark[data-bise-mark="done"] { background: var(--pv-ok); }
+.pv-video .tick.pv-mark[data-bise-mark="done"]::after { content: none; }
+.pv-video .peek { position: absolute; bottom: 30px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 3px; border-radius: var(--pv-radius); background: var(--pv-card); box-shadow: 0 2px 10px var(--pv-drop), 0 0 0 1px var(--pv-line); pointer-events: none; z-index: 4; }
+.pv-video .peek[hidden] { display: none; }
+.pv-video .peek canvas { display: block; border-radius: 6px; background: #000; }
+.pv-video .peek .at { font-family: var(--pv-mono); font-variant-numeric: tabular-nums; color: var(--pv-ink); padding-bottom: 2px; }
+.pv-video.is-full { background: #000; }
+.pv-video.is-full .screen { flex: 1; }
+.pv-video.is-full .bar { position: absolute; left: 0; right: 0; bottom: 0; border-top: 0; background: color-mix(in srgb, var(--pv-surface) 88%, transparent); backdrop-filter: blur(12px); }
+
+@media (prefers-reduced-motion: reduce) {
+  .pv-image.eased .frame, .pv-zoom, .pv-video .head { transition: none; }
+}

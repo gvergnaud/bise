@@ -32,6 +32,8 @@ import os
 import shlex
 
 TOOLS = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+# where Sheets' grid (Univer, built by scripts/bins.sh office-sheet) goes in a root
+GRID = "plugins/sheets/ai.mistral.vibe/views/grid/office-sheet.js"
 
 
 def root_script(root):
@@ -55,12 +57,12 @@ def root_script(root):
             # the office SDK's bundles: the office skills' `bise office run` and the viewer
             # (versions.sh copies them the same way; without them no agent of the app made a pptx)
             "if [ -d office/dist ]; then mkdir -p %s/office && cp -R office/dist %s/office/dist; fi" % (q(t), q(t)),
-            # and the viewer's xlsx grid (Univer), built, never committed: bins.sh's cache, as
-            # versions.sh does (xlsx-fix: a root without it had kit/office/sheet.js import a 404,
-            # so the app never showed the grid); a failed build stops the root, never a root without it
-            "if [ -f office/sdk/src/view/sheet.ts ]; then g=\"$(scripts/bins.sh path --src \"$PWD\" office-sheet)\" "
-            "|| { echo 'try root: bins.sh office-sheet failed' >&2; exit 1; }; mkdir -p %s/office/dist && cp \"$g\" %s/office/dist/office-sheet.js "
-            "&& rm -f %s/office/dist/office-sheet.js.key; fi" % (q(t), q(t), q(t)),
+            # and Sheets' xlsx grid (Univer), built, never committed: bins.sh's cache, in its view
+            # folder, as versions.sh does (xlsx-fix: a root without it showed no grid); a failed
+            # build stops the root, never a root without it
+            "if [ -f plugins/sheets/src/sheet.ts ]; then g=\"$(scripts/bins.sh path --src \"$PWD\" office-sheet)\" "
+            "|| { echo 'try root: bins.sh office-sheet failed' >&2; exit 1; }; cp \"$g\" %s/%s "
+            "&& rm -f %s/%s.key; fi" % (q(t), GRID, q(t), GRID),
             "if [ -d computer-use/extension ]; then cp -R computer-use/extension %s/computer-use/extension && rm -rf %s/computer-use/extension/test; fi"
             % (q(t), q(t)),
             "printf 'id=%%s\\ncommit=%%s\\nrepo=%%s\\n' %s \"$(git rev-parse HEAD)\" \"$PWD\" > %s/VERSION" % (q(os.path.basename(root)), q(t)),

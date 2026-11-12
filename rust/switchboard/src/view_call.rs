@@ -28,6 +28,33 @@ impl ViewParams {
     }
 }
 
+/// Which view a `view/call` or `view/context` is from: an agent's call's
+/// view (C5's `{agent, call}`) or a document view (`{doc}`, the session
+/// `view/open` minted, docs/plugin-apps.md A4).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Key {
+    Call(ViewParams),
+    Doc(String),
+}
+
+impl Key {
+    /// From a request's params: exactly one of `{agent, call}` and
+    /// `{doc}` (both or neither: refused, never the first that matches,
+    /// architect m_60316); a doc is 32 lower hex.
+    pub fn of(params: &Value) -> Result<Key, ViewError> {
+        let has = |k: &str| params.get(k).is_some_and(|v| !v.is_null());
+        match (has("agent") || has("call"), has("doc")) {
+            (true, false) => ViewParams::of(params).map(Key::Call),
+            (false, true) => {
+                let doc = params.get("doc").and_then(Value::as_str).unwrap_or("");
+                let ok = doc.len() == 32 && doc.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b));
+                if ok { Ok(Key::Doc(doc.to_string())) } else { Err(ViewError::Expired) }
+            }
+            _ => Err(ViewError::Expired),
+        }
+    }
+}
+
 /// The views file of a call (C2), as the bridge wrote it.
 #[derive(Clone, Debug, Default, PartialEq, Deserialize)]
 pub struct ViewFile {
@@ -231,6 +258,27 @@ mod tests {
     fn a_bad_call_id_names_no_file() {
         assert_eq!(ViewParams::of(&json!({"agent": "docs", "call": "../../x"})), Err(ViewError::Expired));
         assert_eq!(ViewParams::of(&json!({"agent": "docs", "call": "1-2"})), Ok(ViewParams { agent: "docs".into(), call: "1-2".into() }));
+    }
+
+    /// A request names one view: an agent's call or a document, never
+    /// both nor neither (architect m_60316).
+    #[test]
+    fn a_request_names_a_call_or_a_doc_never_both() {
+        let doc = "0123456789abcdef0123456789abcdef";
+        assert_eq!(Key::of(&json!({"agent": "docs", "call": "1-2"})), Ok(Key::Call(ViewParams { agent: "docs".into(), call: "1-2".into() })));
+        assert_eq!(Key::of(&json!({"doc": doc})), Ok(Key::Doc(doc.into())));
+        assert_eq!(Key::of(&json!({"doc": doc, "agent": null, "call": null})), Ok(Key::Doc(doc.into())), "null is absent");
+        for bad in [
+            json!({"agent": "docs", "call": "1-2", "doc": doc}),
+            json!({"call": "1-2", "doc": doc}),
+            json!({}),
+            json!({"doc": "0123456789ABCDEF0123456789ABCDEF"}),
+            json!({"doc": "../x"}),
+            json!({"doc": 7}),
+            json!({"agent": "docs"}),
+        ] {
+            assert_eq!(Key::of(&bad), Err(ViewError::Expired), "{bad}");
+        }
     }
 
     #[test]

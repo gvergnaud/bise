@@ -10,6 +10,10 @@
 //! - `browser ↗` / `b`: `<pages url>/v/<agent>/<call>`, the hub's web host,
 //!   in his browser.
 //!
+//! An artifact's `o` and `O` (the artifacts screen, docs/plugin-apps.md
+//! A7) go the same ways: `app/open` (what `artifact`), or the web host's
+//! document page `<pages url>/d/<id>`.
+//!
 //! The words are the catalog's (`words::views::tui_*`); the pure parts
 //! (lines, urls, the list) have their tests in views_tui_tests.rs.
 
@@ -94,6 +98,12 @@ pub(crate) fn open(app: &mut App, how: How, call: &str) -> String {
             None => views::tui_no_web.to_string(),
         },
     }
+}
+
+/// A document's page on the web host (docs/plugin-apps.md A7, the hub's
+/// `GET /d/<artifact id>`): `<pages url>/d/<id>`.
+pub(crate) fn doc_web_url(pages_url: &str, id: &str) -> String {
+    format!("{}/d/{}", pages_url.trim_end_matches('/'), id)
 }
 
 /// `app/open`'s answer: no desktop connection got it, the flash says so.

@@ -2,9 +2,9 @@
 // HostContext; docs/mcp-apps.md C7): its theme, our design tokens mapped on the spec's CSS
 // variables (their computed values: a view can't read our var() names; the line heights read out of
 // our --f-* type styles; the ground --c-card, a thread card's fill made opaque), its display mode and
-// size, his locale and time zone, the tool it shows. Pure but for readTokens, which reads the
+// size, his locale and time zone, the tool it shows, a document view's document and kept state. Pure but for readTokens, which reads the
 // page's computed styles once per theme. Owner: mcp-apps-host.
-import type { DisplayMode, JsonObject } from './protocol';
+import type { DisplayMode, Json, JsonObject } from './protocol';
 import { DISPLAY_MODES } from './protocol';
 
 /**
@@ -100,6 +100,11 @@ export function themeNow(root: HTMLElement = document.documentElement): 'light' 
   return typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
 }
 
+/** Where a document's view gets its state back (the RFC's ai.mistral.vibe/viewState, A5). */
+export const VIEW_STATE_KEY = 'ai.mistral.vibe/viewState';
+/** Where a document's view reads what changed since he last looked (A5). */
+export const CHANGED_KEY = 'dev.bise/changed';
+
 /** What a context is made of. */
 export interface ContextIn {
   readonly theme: 'light' | 'dark';
@@ -111,6 +116,11 @@ export interface ContextIn {
   readonly locale: string;
   readonly timeZone: string;
   readonly tool: JsonObject | null;
+  /** a document's view (docs/plugin-apps.md A5): the document, and its state kept by the host */
+  readonly document?: JsonObject;
+  readonly viewState?: Json;
+  /** what changed since he last looked (`dev.bise/changed`, A5) */
+  readonly changed?: JsonObject;
 }
 
 /** The spec's HostContext. Pure. */
@@ -125,6 +135,9 @@ export function hostContext(c: ContextIn): JsonObject {
     timeZone: c.timeZone,
     platform: 'desktop',
     ...(c.tool === null ? {} : { toolInfo: { tool: c.tool } }),
+    ...(c.document === undefined ? {} : { document: c.document }),
+    ...(c.viewState === undefined ? {} : { [VIEW_STATE_KEY]: c.viewState }),
+    ...(c.changed === undefined ? {} : { [CHANGED_KEY]: c.changed }),
   };
 }
 

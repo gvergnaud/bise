@@ -73,6 +73,7 @@ pub const TAGS: &[&str] = &[
     "plugins",
     "plugin_set",
     "plugin_grant",
+    "opener_set",
     "plugin_setting",
     "plugin_login",
     "plugin_logout",
@@ -495,6 +496,16 @@ impl Core {
                 let shown = self.emit_plugins(project);
                 ("plugin_grant", res.and(shown))
             }
+            AppCmd::OpenerSet { project, type_key, plugin, tool } => {
+                let to = match (plugin.as_deref(), tool.as_deref()) {
+                    (Some(p), Some(t)) => Ok(Some((p, t))),
+                    (None, None) => Ok(None),
+                    _ => Err("opener_set: give both plugin and tool, or neither".to_string()),
+                };
+                let res = to.and_then(|to| (p.opener_set)(&type_key, to));
+                let shown = self.emit_plugins(project);
+                ("opener_set", res.and(shown))
+            }
             AppCmd::PluginSetting { project, name, var, value } => {
                 let res = self.workspace_of(project.as_deref()).and_then(|ws| (p.plugin_setting)(&ws, &name, &var, value.as_deref()));
                 let shown = self.emit_plugins(project);
@@ -764,7 +775,7 @@ impl Core {
         let connectors = (s.ports.connectors_problem)();
         self.emit_summary(project.clone(), &rows);
         let (browse, items): (Vec<_>, Vec<_>) = rows.into_iter().partition(|r| r.state == bise_proto::app_rows::PluginState::Available);
-        self.ev(CoreEv::Plugins { project, items, connectors: connectors.clone() });
+        self.ev(CoreEv::Plugins { project, items, connectors: connectors.clone(), file_types: Vec::new() });
         self.ev(CoreEv::Browse { source: MISTRAL.into(), items: browse, connectors });
         Ok(())
     }

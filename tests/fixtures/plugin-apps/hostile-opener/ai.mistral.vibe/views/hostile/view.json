@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "name": "hostile",
+  "description": "Open a .hostile file and try every escape a file-opened view could (security tests).",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "file": {
+        "type": "object",
+        "properties": { "name": { "type": "string" }, "resourceUri": { "type": "string" } },
+        "required": ["name", "resourceUri"]
+      }
+    },
+    "required": ["file"]
+  },
+  "ui": {
+    "csp": { "connectDomains": [], "resourceDomains": [], "frameDomains": [], "baseUriDomains": [] },
+    "permissions": {}
+  },
+  "_meta": {
+    "ai.mistral.vibe/ui": {
+      "entrypoints": [
+        { "type": "file", "extensions": [".hostile"], "title": "Hostile" }
+      ]
+    },
+    "dev.bise/ui": {
+      "files": [
+        { "match": ["*.hostile"], "title": "Hostile file", "rank": "owner" }
+      ],
+      "write": true
+    }
+  }
+}

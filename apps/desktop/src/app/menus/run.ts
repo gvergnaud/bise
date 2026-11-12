@@ -8,7 +8,7 @@ import type { HubCmd } from '@/proto';
 import type { WindowOpen } from '@/shared/api';
 import type { Entity } from '@/shared/entity';
 import { formatRoute, MAIN } from '../route';
-import { agentBranch, agentPath, procUrl, type Act, type MenuFacts } from './registry';
+import { agentBranch, agentPath, openersOf, procUrl, type Act, type MenuFacts } from './registry';
 import { pinRefOf, type PinKind } from '../pins';
 
 /** The effects a pick may have. */
@@ -37,6 +37,16 @@ export interface MenuFx {
   readonly closeTab: (id: string) => void;
   readonly closeOtherTabs: (id: string) => void;
   readonly moveTab: (id: string, to: 'bottom') => void;
+  /** a document opened with this app this once, in its tab (Open with, docs/plugin-apps.md A6b) */
+  readonly openWith: (project: string, id: string, pick: { readonly plugin: string; readonly tool: string }) => void;
+  /** his pick kept for a type ('Always open .xlsx with', the core's opener_set, A2) */
+  readonly setOpener: (project: string, type: string, pick: { readonly plugin: string; readonly tool: string }) => void;
+}
+
+/** An Open with pick: the app's place in openersOf and whether he keeps it for the type; null: another act. Pure. */
+export function openWithOf(act: Act): { readonly at: number; readonly always: boolean } | null {
+  const m = /^(open-with|always-open):(\d+)$/.exec(act);
+  return m === null ? null : { at: Number(m[2]), always: m[1] === 'always-open' };
 }
 
 /** The window an entity opens in, if it has one of its own (WindowOpen's kinds). Pure. */
@@ -105,6 +115,18 @@ export function runAct(act: Act, f: MenuFacts, fx: MenuFx): void {
     return;
   }
   const e = f.e;
+  const ow = openWithOf(act);
+  if (ow !== null) {
+    if (e.kind !== 'artifact') return;
+    const row = (f as Extract<MenuFacts, { e: { kind: 'artifact' } }>).row;
+    const o = row === undefined ? undefined : openersOf(row)[ow.at];
+    if (o === undefined) return;
+    const pick = { plugin: o.plugin, tool: o.tool };
+    // 'Always open .xlsx with': his pick for the type (the hub keeps it, A2), and this one opens with it now
+    if (ow.always) fx.setOpener(e.project, o.type, pick);
+    fx.openWith(e.project, e.id, pick);
+    return;
+  }
   if (act.startsWith('copy-')) {
     const text = copied(act, f, fx);
     if (text !== undefined && text !== '') fx.copy(text);
@@ -140,7 +162,8 @@ export function runAct(act: Act, f: MenuFacts, fx: MenuFx): void {
       if (p !== undefined) fx.showInFinder(p);
       return;
     }
-    case 'open-editor': {
+    case 'open-editor':
+    case 'open-mac': {
       const p = pathOf(f);
       if (p !== undefined) fx.openPath(p);
       return;

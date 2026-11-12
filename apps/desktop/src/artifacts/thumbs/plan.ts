@@ -5,6 +5,7 @@
 // which cache key. Owner: art-thumbs.
 import type { Artifact } from '@/proto';
 import type { Item } from '../model';
+import { extOf as rowExtOf } from '@/ds';
 
 /** A tile of words, drawn by the card itself: no file, no network. */
 export interface Tile {
@@ -128,7 +129,9 @@ export function thumbExt(it: Item): string | null {
   if (kind === 'pr' || kind === 'release' || kind === 'link') return null;
   if (kind === 'folder') return 'dir';
   const file = fileOf(a) ?? a.target ?? '';
-  const ext = isHttp(file) ? '' : extOf(file);
+  // bise's copy may have no ending ('…/art/q3/1'): the file's own, its target's or its url's says it
+  // (every file card has its mark, designer m_61626)
+  const ext = (isHttp(file) ? '' : extOf(file)) || rowExtOf(a);
   if (kind === 'page') return ext === '' || ext === 'html' || ext === 'htm' ? 'page' : ext;
   if (kind === 'site') return 'site';
   return ext === '' ? null : ext;

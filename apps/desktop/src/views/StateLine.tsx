@@ -5,11 +5,11 @@ import type { ReactNode } from 'react';
 import { Press } from '@/ds';
 import { views } from '@/proto/words_views.gen';
 import { quiet } from './names';
-import type { ViewRef } from './port';
+import type { AnyRef } from './port';
 import { DEFAULT_H, type ViewState, type ViewsStore } from './store';
 
 /** A view's state words: one quiet centred line in a box at the view's last height (no jump when it loads), 'try again' after a failure. */
-export function StateLine({ store, r, state, height = DEFAULT_H }: { store: ViewsStore; r: ViewRef; state: ViewState; height?: number }) {
+export function StateLine({ store, r, state, height = DEFAULT_H }: { store: ViewsStore; r: AnyRef; state: ViewState; height?: number }) {
   const box = (testId: string, children: ReactNode, title?: string) => (
     <div className="vw-quiet" style={{ height }} data-testid={testId} {...(title === undefined ? {} : { title })}>
       <span className="vw-line">{children}</span>
@@ -42,6 +42,9 @@ export function StateLine({ store, r, state, height = DEFAULT_H }: { store: View
       );
     case 'live':
       return state.phase === 'live' ? null : box('views.state.loading', views.loading);
+    // a built-in page's document draws its own frame (app/panel/Document.tsx)
+    case 'frame':
+      return null;
   }
 }
 

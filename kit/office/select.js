@@ -1,9 +1,9 @@
 // generated from select.ts by scripts/ts_emit.ts: never hand-edited (edit the .ts, then run it)
 // bise kit · notes on an artifact in its viewer (office-artifacts plan §5, §9b; architect m_23874):
-// the selection layer and the marks, over every renderer (sheet.js, slides.js, docx.js,
-// image.js, site.js: a site draws its marks in its own frame through view.marks; pdf.js places
-// its notes itself through view.where, re-anchored on the version's text; video.js too, ticks on
-// its track, and it says `bise:office-selection` when its selection moves with no mouseup). One store (pages/artifact/notes.rs), two doors:
+// the selection layer and the marks, over every renderer (site.js: a site draws its marks in
+// its own frame through view.marks; a renderer may place its notes itself through view.where,
+// and say `bise:office-selection` when its selection moves with no mouseup). One store
+// (pages/artifact/notes.rs), two doors:
 //
 // - in the desktop's side panel (the frame's name is `bise-app`, art-desktop m_23900) a
 //   selection's `note` button posts {bise: FRAME.anchor, artifact, version, anchor, quote} to the
@@ -19,7 +19,7 @@
 // They are drawn again on each version (swap.js's `bise:office-drawn`), from /a/<id>/notes and
 // the artifact's SSE (`notes`); a note whose part is gone is `moved` in the list.
 //
-// Pure helpers (exported for office/sdk/test/viewer.test.ts): inRange, markOf, quoteOf, message.
+// Pure helpers (exported for office/sdk/test/viewer.test.ts): markOf, quoteOf, message.
 import { FRAME } from "/kit/office/frame.js";
 const A = globalThis.BiseAnchors;
 const N = globalThis.BiseNotes && globalThis.BiseNotes.core;
@@ -32,33 +32,9 @@ const W = {
     moved: N ? N.NW.moved : "moved",
     doneIn: (v) => `✓ done in v${v}`,
     empty: {
-        xlsx: "no notes yet. select cells, then note.",
-        pptx: "no notes yet. click a shape, then note.",
-        docx: "no notes yet. select some text, then note.",
-        image: "no notes yet. draw a box, then note.",
         site: "no notes yet. select some text, then note.",
-        pdf: "no notes yet. select some text or draw a box, then note.",
-        video: "no notes yet. pause it or draw a box on it, then note.",
-        markdown: "no notes yet. select some text, then note.",
     },
 };
-/** `B4` inside `B4:D9` (refs as the grid writes them). */
-export function inRange(ref, range) {
-    const p = (r) => {
-        const m = /^\$?([A-Z]{1,3})\$?(\d+)$/i.exec(r || "");
-        if (!m)
-            return null;
-        let col = 0;
-        for (const ch of m[1].toUpperCase())
-            col = col * 26 + (ch.charCodeAt(0) - 64);
-        return { col, row: Number(m[2]) };
-    };
-    const [a, b = a] = String(range || "").split(":");
-    const c = p(ref), x = p(a), y = p(b);
-    if (!c || !x || !y)
-        return false;
-    return c.col >= Math.min(x.col, y.col) && c.col <= Math.max(x.col, y.col) && c.row >= Math.min(x.row, y.row) && c.row <= Math.max(x.row, y.row);
-}
 /** What a note's mark is in version `v`: `draft`, `sent`, `done` (✓, the answering version),
  * or null (no mark: answered in an older version, or not his yet). */
 export function markOf(note, v) {
@@ -117,45 +93,13 @@ function mount() {
         const s = stage();
         if (!s || !a)
             return { els: [], found: false };
-        // a renderer that places its own notes (pdf.js: re-anchored on the version's text)
+        // a renderer that places its own notes
         const own = office.view && office.view.where ? office.view.where(a) : null;
         if (own)
             return own;
         const q = (sel) => [...s.querySelectorAll(sel)];
         const esc = (v) => CSS.escape(String(v));
         switch (a.kind) {
-            case "cell": {
-                const tabs = q(".office-tabs button");
-                const tab = tabs.find((b) => b.textContent === a.sheet);
-                const shown = office.view && office.view.place && office.view.place().sheet === a.sheet;
-                const els = shown ? q("td[data-ref]").filter((td) => inRange(td.dataset.ref, a.range)) : tab ? [tab] : [];
-                return { els, found: !!tab || !!shown };
-            }
-            case "slide": {
-                const thumb = q(".office-rail .thumb")[a.slide - 1];
-                const big = q(`.office-slide .slide[data-slide="${esc(a.slide)}"]`);
-                return { els: [...(thumb ? [thumb] : []), ...big], found: !!thumb };
-            }
-            case "shape": {
-                const all = q(`.shape[data-slide="${esc(a.slide)}"][data-shape="${esc(a.shape)}"]`);
-                const thumb = q(".office-rail .thumb")[a.slide - 1];
-                const big = all.filter((e) => e.closest(".office-slide"));
-                return { els: [...big, ...(thumb && all.length ? [thumb] : [])], found: all.length > 0 };
-            }
-            case "para": {
-                const els = q(`[data-para="${esc(a.para)}"]`);
-                return { els, found: els.length > 0 };
-            }
-            case "region": {
-                const frame = s.querySelector(".office-image .frame, .frame");
-                if (!frame)
-                    return { els: [], found: false };
-                const box = el("div", "office-mark-box");
-                box.dataset.ours = "1";
-                Object.assign(box.style, { left: `${a.rect.x}%`, top: `${a.rect.y}%`, width: `${a.rect.w}%`, height: `${a.rect.h}%` });
-                frame.append(box);
-                return { els: [box], found: true };
-            }
             default:
                 return { els: [], found: false };
         }
@@ -259,7 +203,7 @@ function mount() {
             return null;
         if (office.view && office.view.box)
             return office.view.box();
-        const parts = [...s.querySelectorAll("td.sel, .office-slide .shape.sel, .office-box")];
+        const parts = [...s.querySelectorAll(".office-box")];
         const r = parts.length ? parts.map((e) => e.getBoundingClientRect()) : [];
         const sel = window.getSelection();
         if (!r.length && sel && sel.rangeCount && !sel.isCollapsed)
@@ -274,14 +218,6 @@ function mount() {
             return "";
         if (office.view && office.view.quote)
             return quoteOf(office.view.quote());
-        if (a.kind === "cell")
-            return quoteOf([...s.querySelectorAll("td.sel")].map((td) => td.textContent).filter(Boolean).join(" "));
-        if (a.kind === "shape")
-            return quoteOf((s.querySelector(".office-slide .shape.sel") || {}).textContent);
-        if (a.kind === "para")
-            return quoteOf(a.quote || (s.querySelector(`[data-para="${CSS.escape(a.para)}"]`) || {}).textContent);
-        if (a.kind === "region")
-            return quoteOf(a.quote);
         return "";
     }
     // a mouseup, or a renderer's bise:office-selection (its target: the main)
@@ -292,10 +228,7 @@ function mount() {
         // after the renderer's own handler set its selection
         setTimeout(() => {
             const view = office.view;
-            let a = view && view.selection ? view.selection() : null;
-            // a deck says its slide when no shape is picked: a note on the slide only from a click on it
-            if (a && a.kind === "slide" && !(t.closest && t.closest(".office-slide")))
-                a = null;
+            const a = view && view.selection ? view.selection() : null;
             const box = a && selectedBox();
             const r = box || (a && t.getBoundingClientRect && t.getBoundingClientRect());
             if (!a || !r) {
@@ -304,9 +237,6 @@ function mount() {
                 return;
             }
             const quote = quoteNow(a);
-            // a shape is said by its words, never its id (designer m_24098): they go in its anchor
-            if (a.kind === "shape" && quote && !a.quote)
-                a = { ...a, quote: quote.length > 80 ? `${quote.slice(0, 79)}…` : quote };
             picked = { anchor: a, quote };
             btn.textContent = inApp ? W.toMessage : W.note;
             Object.assign(btn.style, { left: `${Math.max(8, Math.min(window.innerWidth - 140, r.left))}px`, top: `${Math.min(window.innerHeight - 36, r.bottom + 6)}px` });
@@ -315,7 +245,7 @@ function mount() {
         }, 0);
     }
     main.addEventListener("mouseup", offer);
-    // a renderer whose selection changes with no mouseup (video.js: paused, a frame stepped)
+    // a renderer whose selection changes with no mouseup
     main.addEventListener("bise:office-selection", offer);
     main.addEventListener("keyup", (e) => {
         if (e.key === "Escape") {
@@ -476,7 +406,7 @@ function mount() {
             head.textContent = NW.listTitle(info.name || info.title, all.length);
             items.replaceChildren();
             if (!all.length)
-                items.append(el("li", "empty", W.empty[info.kind] || W.empty.image));
+                items.append(el("li", "empty", W.empty[info.kind] || W.empty.site));
             for (const n of all) {
                 const li = el("li", "item");
                 li.dataset.status = n.status;

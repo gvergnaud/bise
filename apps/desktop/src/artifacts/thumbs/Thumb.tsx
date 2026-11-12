@@ -1,18 +1,17 @@
 // An artifact card's picture (artifacts-gallery v7, blocks `kinds` and `b-card`): it fills the
 // card's 16:10 frame (art-grid's Card draws the frame, its radius and the marks over it). First
 // the kind's faint line icon, then the picture fades in over 160 ms; no shimmer, no spinner. A PR,
-// a release, a link: a tile of words, no fetch. A md or txt: its title and first lines, drawn from
-// its text in the theme's own colors. A file Quick Look can't draw: its extension, big, and its
-// size. A video: '▶ 0:04' bottom right. data-thumb says which: icon | img | tile | text | none.
+// a release, a link: a tile of words, no fetch. A file: Quick Look's picture (a md or a txt too);
+// one it can't draw: its extension, big, and its size. A video: '▶ 0:04' bottom right. data-thumb
+// says which: icon | img | tile | none.
 // Owner: art-thumbs.
 import { memo, useEffect, useMemo, useState } from 'react';
 import { iconKindOf, KindIcon, PlayIcon } from '@/ds';
 import type { ThumbAnswer } from '@/shared/api';
 import type { Item } from '../model';
-import { extOf, planOf, type Made, type Tile } from './plan';
+import { planOf, type Made, type Tile } from './plan';
 import { reqKey } from './queue';
 import { thumbQueue } from './run';
-import { textThumb } from './text';
 import { bytesWords, secsWords } from './words';
 import './thumbs.css';
 
@@ -40,8 +39,8 @@ function TileView({ t, item }: { t: Tile; item: Item }) {
   );
 }
 
-/** A made picture's answer drawn: the image (faded in), the text, the no-preview or folder tile. */
-function Answer({ a, item, fade, path }: { a: ThumbAnswer; item: Item; fade: boolean; path: string }) {
+/** A made picture's answer drawn: the image (faded in), the no-preview or folder tile. */
+function Answer({ a, item, fade }: { a: ThumbAnswer; item: Item; fade: boolean }) {
   const [shown, setShown] = useState(!fade);
   const secs = 'secs' in a && a.secs !== undefined ? secsWords(a.secs) : null;
   const play =
@@ -63,34 +62,11 @@ function Answer({ a, item, fade, path }: { a: ThumbAnswer; item: Item; fade: boo
       </span>
     );
   }
-  if ('text' in a) {
-    const ext = extOf(path);
-    const t = textThumb(a.text, ext === 'md' || ext === 'markdown');
-    return (
-      <span className="th th-text" data-thumb="text">
-        {t.title !== '' && <span className="th-h">{t.title}</span>}
-        {t.lines.map((l, i) => (
-          <span className="th-l" key={i}>
-            {l}
-          </span>
-        ))}
-      </span>
-    );
-  }
   if ('files' in a) {
     return (
       <span className="th th-tile" data-thumb="none">
         <KindIcon kind="file" size={24} />
         <span className="th-w">{`${String(a.files)} ${a.files === 1 ? 'file' : 'files'}`}</span>
-      </span>
-    );
-  }
-  // a sound: its line icon and its length (the extension is the card's, on hover)
-  if (secs !== null && iconKindOf(item.a) === 'audio') {
-    return (
-      <span className="th th-tile" data-thumb="none">
-        <KindIcon kind="audio" size={24} />
-        <span className="th-w">{secs}</span>
       </span>
     );
   }
@@ -127,7 +103,7 @@ function MadeView({ m, item, visible }: { m: Made; item: Item; visible: boolean 
       </span>
     );
   }
-  return <Answer a={got.a} item={item} fade={got.fade} path={m.src} />;
+  return <Answer a={got.a} item={item} fade={got.fade} />;
 }
 
 /** An artifact's picture, filling its parent (the card's 16:10 frame). */

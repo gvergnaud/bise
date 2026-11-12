@@ -106,10 +106,10 @@ export const DISPLAY_MODES: readonly DisplayMode[] = ['inline', 'fullscreen'];
 
 /**
  * What the host announces at ui/initialize (C7): links, downloads, its server's tools and
- * resources, logging, text messages and model context, and the sandbox it was given. Never
- * sampling. Pure.
+ * resources, logging, text messages (`message`: a tool call's view only, a document's has no agent,
+ * docs/plugin-apps.md A4) and model context, and the sandbox it was given. Never sampling. Pure.
  */
-export function hostCapabilities(sandbox: { readonly perms: readonly ViewPerm[]; readonly csp: Json }): JsonObject {
+export function hostCapabilities(sandbox: { readonly perms: readonly ViewPerm[]; readonly csp: Json }, message = true): JsonObject {
   const permissions: JsonObject = {};
   for (const p of sandbox.perms) permissions[p] = {};
   return {
@@ -118,7 +118,7 @@ export function hostCapabilities(sandbox: { readonly perms: readonly ViewPerm[];
     serverTools: {},
     serverResources: {},
     logging: {},
-    message: { text: {} },
+    ...(message ? { message: { text: {} } } : {}),
     updateModelContext: { text: {} },
     sandbox: { permissions, csp: sandbox.csp },
   };

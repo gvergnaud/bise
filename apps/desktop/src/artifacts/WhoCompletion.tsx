@@ -5,7 +5,7 @@
 import type { RefObject } from 'react';
 import { PickerPop, type PickerRow } from '@/ds';
 import { library } from '@/proto/words_library.gen';
-import { completeAt, tokenAt, whenFacet, whoOptions, type Ctx, type Filters, type When } from './filters';
+import { appOptions, completeAt, tokenAt, whenFacet, whoOptions, type Ctx, type Filters, type When } from './filters';
 import type { Item } from './model';
 import { WHEN_WORD } from './Toolbar';
 
@@ -25,7 +25,10 @@ export function completionOf(q: string, caret: number | null, items: readonly It
     ? whoOptions(items, filters, ctx, t.typed).map((o) => ({ id: o.key, name: o.key === 'you' ? library.by_you : o.key, trailing: String(o.n), testId: `artifacts.complete.${o.key}` }))
     : t.key === 'since'
       ? whenFacet(items, filters, ctx).filter((o) => o.key.startsWith(t.typed.toLowerCase())).map((o) => ({ id: o.key, name: WHEN_WORD[o.key as When], trailing: String(o.n), disabled: o.n === 0, testId: `artifacts.complete.${o.key}` }))
-      : [];
+      : t.key === 'app'
+        // the app: token (apps-gallery, plugin-apps): the apps in scope, the most first
+        ? appOptions(items, filters, ctx, t.typed).map((o) => ({ id: o.key, name: o.word, trailing: String(o.n), testId: `artifacts.complete.app.${o.key}` }))
+        : [];
   return rows.length === 0 ? null : { key: t.key, start: t.start, caret, rows };
 }
 
@@ -50,7 +53,7 @@ export function walk(c: Completion, at: string | null, by: 1 | -1): string | nul
 export function WhoCompletion({ c, active, field, onPick, onClose }: { readonly c: Completion; readonly active: string | null; readonly field: RefObject<HTMLInputElement | null>; readonly onPick: (id: string) => void; readonly onClose: () => void }) {
   return (
     <PickerPop anchor={field} align="start" testId="artifacts.complete" callerKeys active={active}
-      groups={[{ id: c.key, head: c.key === 'by' ? library.by_head : library.when, rows: c.rows }]}
+      groups={[{ id: c.key, head: c.key === 'by' ? library.by_head : c.key === 'app' ? library.apps_label : library.when, rows: c.rows }]}
       onPick={onPick} onClose={onClose} />
   );
 }
