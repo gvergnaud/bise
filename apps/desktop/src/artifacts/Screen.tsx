@@ -57,7 +57,7 @@ import { BigTile, FolderListRow, SmallTile } from './Tiles';
 import { cardDrag, FLASH_MS, TOAST_MS, useBrief, useDrop } from './drag';
 import { folderCmd, moveCmd, type FolderOp } from './ops';
 import { keepCmds } from './opened';
-import { itemsIn, sectionCounts, sectionPath, splitSectionPath, type SectionView } from './sections';
+import { bytesIn, sizeWords, itemsIn, sectionCounts, sectionPath, splitSectionPath, type SectionView } from './sections';
 import { BackRow, QuietRows, sectionHeads } from './SectionRows';
 import { useBannerGutter } from './hero/vignettes';
 import { RecentRow } from './Recent';
@@ -651,6 +651,12 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
   // over Done or Between agents: back to For you; under For you: those two, one click away
   const backRow = stack === null && !searching && <BackRow view={sect} n={inView.length} onBack={() => { setSect('you'); }} testId="artifacts.back" />;
   const quietRows = stack === null && !searching && sect === 'you' && !archivedOn && <QuietRows n={sectN} onGo={setSect} testId="artifacts.quiet" />;
+  // From agents' foot (designer m_62438): what their copies weigh and how long bise keeps them
+  // in one project its hub's count, in All projects the sum of those that said one
+  const agentsBytes = bytesIn(scope === '' ? projects.map((p) => p.project) : [scope], (p) => store.agentsBytes(p));
+  const agentsFoot = stack === null && !searching && sect === 'agents' && agentsBytes !== undefined && (
+    <p className="art-agents-foot" data-testid="artifacts.agents.foot">{library.agents_files({ size: sizeWords(agentsBytes) })}</p>
+  );
 
   const head = searching || atNow.at === 'all' || stack !== null ? null : (
     // the place's name is the window's bar's (its crumb: 'artifacts › launch'), never a second time
@@ -706,6 +712,7 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
             {backRow}
             <AddDrop place={place_} testId="artifacts.drop">{body}</AddDrop>
             {quietRows}
+            {agentsFoot}
             {archivedRow}
           </div>
         </div>

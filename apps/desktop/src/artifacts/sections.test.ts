@@ -8,7 +8,25 @@ import { keepRows } from './Menus';
 import type { Item } from './model';
 import { keepCmds, sayOpened } from './opened';
 import { sectionHeads } from './SectionRows';
-import { byTouched, groupsOf, itemsIn, keptByHim, sectionCounts, sectionOf, sectionPath, splitSectionPath } from './sections';
+import { bytesIn, sizeWords, byTouched, groupsOf, itemsIn, keptByHim, sectionCounts, sectionOf, sectionPath, splitSectionPath } from './sections';
+
+describe("From agents' foot line (designer m_62438)", () => {
+  it("reads one project's count, sums All projects' over the hubs that said one, none when none did", () => {
+    const said: Record<string, number | undefined> = { acme: 1_000, docs: 395, old: undefined };
+    const read = (p: string) => said[p];
+    expect(bytesIn(['acme'], read)).toBe(1_000);
+    expect(bytesIn(['acme', 'docs', 'old'], read)).toBe(1_395);
+    expect(bytesIn(['old'], read)).toBeUndefined();
+    expect(bytesIn([], read)).toBeUndefined();
+  });
+
+  it('says the size past a GB in GB (ui-review m_62843: 1395864371 read 1331.2 MB)', () => {
+    expect(sizeWords(1_395_864_371)).toBe('1.3 GB');
+    expect(sizeWords(512)).toBe('512 B');
+    expect(sizeWords(2_150)).toBe('2.1 KB');
+    expect(sizeWords(14 * 1024 * 1024)).toBe('14.0 MB');
+  });
+});
 
 const art = (id: string, extra: Partial<Artifact> = {}): Artifact => ({ id, kind: 'doc', title: id, agent: 'perf', version: 1, at_ms: 10, url: '', new: false, ...extra });
 const item = (a: Artifact, project = 'shop-1'): Item => ({ project, projectName: 'storefront', a });

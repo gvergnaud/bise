@@ -991,6 +991,11 @@ no_copy?: string | null,
  */
 gone?: boolean, 
 /**
+ * an agent's file 3 months after its task: bise deleted its copies,
+ * the row stays ('file expired', a link to the agent's thread)
+ */
+expired?: boolean, 
+/**
  * the row's dim words: a page's notes (`2 notes open`), a site's bare
  * link
  */

@@ -62,6 +62,9 @@ pub(super) struct Art {
     /// The store's backfill was tried since the hub started
     /// ([`Daemon::art_backfill_once`]).
     backfill_tried: bool,
+    /// A retention sweep runs on its thread now
+    /// ([`Daemon::art_retention_sweep`]): the next waits for its end.
+    sweeping: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
 /// Where an agent works and what its changes are measured against.
@@ -284,6 +287,7 @@ impl Shell {
             "rows": rows,
             "new": view.new,
             "seen_ms": view.seen_ms,
+            "agents_bytes": view.agents_bytes,
             "folders": super::art_folders::folder_rows(&lib),
         })
     }
@@ -409,7 +413,10 @@ impl Shell {
         let store = self.art_store();
         match r {
             Artifact::Add { target, cwd, title, kind, known_only, changed, folder, for_you } => {
-                let folder = match self.art_folder(from, folder.as_deref()) {
+                // its audience as the add will read it (artifacts_marks::audience_at_add): only what
+                // is for him makes a task's folder
+                let him = for_you || from == crate::model::MAIN || crate::forge::pr_link(&target).is_some();
+                let folder = match self.art_folder(from, folder.as_deref(), him) {
                     Ok(f) => f,
                     Err(e) => return json!({"ok": false, "error": e}),
                 };
@@ -549,6 +556,40 @@ impl Shell {
             Ok(Some(n)) => log_line(&paths, &format!("artifacts: backfilled · {} for you · {} between agents · {} kept", n.you, n.agents, n.kept)),
             Ok(None) => {}
             Err(e) => log_line(&paths, &format!("artifacts: backfill not done: {e}")),
+        });
+    }
+
+    /// The retention sweep (crate::artifacts_retention, architect
+    /// m_62392), at the hub's start and then daily: the archived agents'
+    /// names are copied here (no store read on the loop), the rest runs
+    /// on its own thread: ended.json noted, the expired copies deleted,
+    /// one log line when it expired something. Its writes bump store_gen:
+    /// the rows rebuild off the loop by themselves.
+    pub(super) fn art_retention_sweep(&mut self) {
+        use std::sync::atomic::Ordering;
+        if self.art.sweeping.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        let archived: BTreeSet<String> = self
+            .hub
+            .st
+            .agents
+            .values()
+            .filter(|a| a.status() == crate::model::Status::Archived)
+            .flat_map(|a| std::iter::once(a.name.clone()).chain(std::iter::once(a.dir.clone())).chain(a.aliases.iter().cloned()))
+            .collect();
+        let (state, paths, flag) = (self.opts.paths.state.clone(), self.opts.paths.clone(), self.art.sweeping.clone());
+        std::thread::spawn(move || {
+            let store = artifacts::Store::new(&state);
+            let now = now_ms();
+            let done = crate::artifacts_retention::note_ended(&store, &archived, now)
+                .and_then(|ended| crate::artifacts_retention::sweep(&store, &ended, now));
+            match done {
+                Ok(s) if s.rows > 0 => log_line(&paths, &format!("artifacts: retention · {} expired · {} bytes freed", s.rows, s.bytes)),
+                Ok(_) => {}
+                Err(e) => log_line(&paths, &format!("artifacts: retention sweep stopped: {e}")),
+            }
+            flag.store(false, Ordering::Release);
         });
     }
 

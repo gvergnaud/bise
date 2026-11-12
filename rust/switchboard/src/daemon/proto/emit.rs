@@ -198,6 +198,7 @@ impl Shell {
             project: self.project(),
             items: self.artifact_rows(ev),
             seen_ms: ev.get("seen_ms").and_then(Value::as_u64),
+            agents_bytes: ev.get("agents_bytes").and_then(Value::as_u64),
             folders: ev.get("folders").and_then(|f| serde_json::from_value(f.clone()).ok()).unwrap_or_default(),
         }
     }

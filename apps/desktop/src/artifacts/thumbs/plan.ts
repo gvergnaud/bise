@@ -59,6 +59,8 @@ export function isLocal(url: string): boolean {
 
 /** The file this version's picture is made from: bise's copy first (its own folder), else the file where it is. Pure. */
 export function fileOf(a: Artifact): string | null {
+  // an expired file's copies are deleted (artifacts_retention): no picture
+  if (a.expired === true) return null;
   const ver = a.versions?.find((x) => x.v === a.version);
   const copy = ver?.copy ?? a.copy ?? null;
   if (copy !== null && copy !== '') return copy;

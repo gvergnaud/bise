@@ -10,6 +10,13 @@
     "one": null,
     "text": "add files… · or drop them on the list"
   },
+  "library.agents_files": {
+    "args": [
+      "size"
+    ],
+    "one": null,
+    "text": "Agents' files · {size} · kept 3 months after their task"
+  },
   "library.all_artifacts": {
     "args": [],
     "one": null,
@@ -168,6 +175,23 @@
     "args": [],
     "one": null,
     "text": "empty for now"
+  },
+  "library.expired_thread": {
+    "args": [
+      "agent"
+    ],
+    "one": null,
+    "text": "{agent}'s thread ›"
+  },
+  "library.expired_tip": {
+    "args": [],
+    "one": null,
+    "text": "bise kept its copy 3 months after its task ended. the row stays"
+  },
+  "library.file_expired": {
+    "args": [],
+    "one": null,
+    "text": "file expired"
   },
   "library.filters": {
     "args": [],
@@ -665,12 +689,12 @@
   "library.sect_agents": {
     "args": [],
     "one": null,
-    "text": "Between agents"
+    "text": "From agents"
   },
   "library.sect_agents_tip": {
     "args": [],
     "one": null,
-    "text": "what agents trade: shots, gates, briefs. nothing is deleted"
+    "text": "what agents trade: shots, gates, briefs. kept 3 months after their task, the rows stay"
   },
   "library.sect_done": {
     "args": [],

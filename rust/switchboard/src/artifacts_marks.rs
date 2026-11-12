@@ -319,6 +319,9 @@ pub fn touched(version_ms: u64, opened_ms: Option<u64>, note_ms: Option<u64>) ->
 // The backfill's words (artifacts-audit's cls2.py, page artifacts-signal
 // v3): a stored artifact is for him when its title says a draft, a film,
 // a proto, a deck or a doc he asked for, and not a shot or a check.
+// Goes with shim artifacts-backfill (v2027.2.1, tests/shims.txt): when that
+// shim goes, these words and their keep line in tests/apps_purity.txt go
+// too (architect m_62878).
 const FOR_YOU_WORDS: &[&str] = &[
     "draft", "brouillon", "prototype", "preview", "film", "pitch", "readme", "note for", "plan q3", "projections",
     "learnings", "carnet", "démo", "landing", "bise.dev", "maquettes", "deck", ".pptx", ".xlsx", "easter eggs",

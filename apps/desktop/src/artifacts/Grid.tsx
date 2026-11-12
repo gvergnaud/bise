@@ -6,7 +6,7 @@
 // What a click, ··· and a drag do is the screen's (Screen.tsx, art-folders). Owner: art-grid.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type HTMLAttributes } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { ArtCard, type PickHow } from './Card';
+import { ArtCard, ExpiredLine, type PickHow } from './Card';
 import { ListHead, ListRow } from './List';
 import { usePrefetch } from './thumbs';
 import { GAP_Y, itemsOf, lineOf, rowHeight, rowIndexOf, rowsOf, type Card, type HeadOf, type Place, type Row } from './gallery';
@@ -124,7 +124,7 @@ export function ArtifactGrid({ cards, cols, view, now, place, days = true, curso
     return (
       <div className="art-grow" style={{ gridTemplateColumns: `repeat(${String(across)}, minmax(0, 1fr))` }}>
         {r.cards.map((c) => (
-          <ArtCard key={c.key} card={c} line={c.kind === 'one' && c.it.a.pr != null ? <PrWords a={c.it.a} fit /> : lineOf(c, place, now)} on={cursor === c.key} picked={picked.has(c.key)} many={many}
+          <ArtCard key={c.key} card={c} line={c.kind === 'one' && c.it.a.expired === true ? <ExpiredLine it={c.it} testId={`${testId}.card.${c.key}`} /> : c.kind === 'one' && c.it.a.pr != null ? <PrWords a={c.it.a} fit /> : lineOf(c, place, now)} on={cursor === c.key} picked={picked.has(c.key)} many={many}
             visible={inView(i)} onPick={onPick} onOpen={onOpen} {...(onMenu === undefined ? {} : { onMenu })}
             {...(dragOf === undefined ? {} : { dragOf })} testId={`${testId}.card.${c.key}`} />
         ))}

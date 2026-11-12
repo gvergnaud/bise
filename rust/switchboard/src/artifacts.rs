@@ -141,6 +141,10 @@ pub struct Meta {
     /// writes it, `artifacts_keep.rs`). A page is always for him.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub audience: Option<Audience>,
+    /// When the retention sweep deleted its copies (ms,
+    /// crate::artifacts_retention): the row stays, `file expired`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expired_ms: Option<u64>,
 }
 
 impl Meta {
@@ -507,7 +511,7 @@ impl Store {
         Store { state: state.to_path_buf() }
     }
 
-    fn dir(&self) -> PathBuf {
+    pub(crate) fn dir(&self) -> PathBuf {
         self.state.join("artifacts")
     }
 
@@ -524,7 +528,8 @@ impl Store {
             .collect()
     }
 
-    fn save(&self, m: &Meta) -> Result<(), String> {
+    /// The one meta.json writer (the retention sweep's `expired_ms` too).
+    pub(crate) fn save(&self, m: &Meta) -> Result<(), String> {
         let bytes = serde_json::to_vec_pretty(m).map_err(|e| e.to_string())?;
         write_atomic(&self.dir().join(&m.id).join("meta.json"), &bytes)
     }
@@ -694,6 +699,7 @@ impl Store {
                     },
                     pr_ended: false,
                     audience: None,
+                    expired_ms: None,
                 }
             }
         };
@@ -973,9 +979,12 @@ impl Store {
             "id": m.id, "title": m.title, "kind": m.kind, "agent": agent, "by": m.by,
             "archived": archived, "archived_at": archived_at, "ts_ms": cur.at_ms, "created_ms": m.created_ms, "v": cur.v,
             "target": cur.target,
-            "copy": cur.copy.as_ref().map(|c| dir.join(c).to_string_lossy().to_string()),
-            "no_copy": cur.no_copy,
+            // an expired one's copy is deleted: none to frame (artifacts_retention)
+            "copy": cur.copy.as_ref().filter(|_| m.expired_ms.is_none()).map(|c| dir.join(c).to_string_lossy().to_string()),
+            "no_copy": if m.expired_ms.is_some() { Some("expired".to_string()) } else { cur.no_copy.clone() },
             "gone": gone,
+            // the retention sweep deleted its copies (artifacts_retention)
+            "expired": m.expired_ms.is_some(),
             "detail": detail,
             "pr": crate::forge::pr_link(&cur.target).map(|l| json!({"repo": l.repo, "number": l.number, "tag": l.tag()})),
             "keys": keys_with(m, workspace, canon),
@@ -1104,7 +1113,14 @@ impl Store {
                     m.agent,
                     crate::util::age(cur.at_ms, now),
                     cur.target,
-                    if gone { if cur.copy.is_some() { " · ▲ gone from disk · bise kept a copy" } else { " · ▲ gone from disk" } } else { "" },
+                    if m.expired_ms.is_some() {
+                        // its copies went 3 months after its task (artifacts_retention)
+                        if gone { " · expired · gone from disk" } else { " · expired" }
+                    } else if gone {
+                        if cur.copy.is_some() { " · ▲ gone from disk · bise kept a copy" } else { " · ▲ gone from disk" }
+                    } else {
+                        ""
+                    },
                     kept
                 )
             })
@@ -1134,6 +1150,7 @@ fn page_meta(p: &PageMeta, base: Option<&str>) -> Meta {
         folder: None,
         pr_ended: false,
         audience: Some(Audience::You),
+        expired_ms: None,
         versions: p
             .versions
             .iter()

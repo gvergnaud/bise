@@ -64,6 +64,10 @@ pub struct Artifact {
     /// its target is a file that is no longer there
     #[serde(default, skip_serializing_if = "crate::is_false")]
     pub gone: bool,
+    /// an agent's file 3 months after its task: bise deleted its copies,
+    /// the row stays ('file expired', a link to the agent's thread)
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub expired: bool,
     /// the row's dim words: a page's notes (`2 notes open`), a site's bare
     /// link
     #[serde(default, skip_serializing_if = "String::is_empty")]

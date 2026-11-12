@@ -6,7 +6,8 @@
 // count at the top right ('16 shots saved in one turn'). Every mark has its tip
 // (page block tips). The picture inside the 16:10 box is art-thumbs' <Thumb>. Owner: art-grid.
 import { memo, type HTMLAttributes, type MouseEvent, type ReactNode } from 'react';
-import { Press, tipAttrs } from '@/ds';
+import { iconKindOf, KindIcon, Press, tipAttrs } from '@/ds';
+import { useRouter } from '@/app/router';
 import { Thumb, thumbExt } from './thumbs';
 import { countTip, domainOf, extTip, isNew, lineTip, titleOf, topOf, type Card } from './gallery';
 import { library } from '@/proto/words_library.gen';
@@ -50,6 +51,16 @@ export function CardPic({ card, it, visible, picked, onPick, onMenu, testId }: {
   const out = leaves(it.a);
   const domain = domainOf(it.a);
   const stack = card?.kind === 'stack' ? card : null;
+  // an expired file (artifacts_retention): no picture, its type icon in text-3 (designer m_62289)
+  if (it.a.expired === true) {
+    return (
+      <span className="art-card-pic">
+        <span className="art-card-th expired" data-testid={`${testId}.pic`} {...tipAttrs(library.expired_tip)}>
+          <span className="art-card-xi"><KindIcon kind={iconKindOf(it.a)} size={24} /></span>
+        </span>
+      </span>
+    );
+  }
   return (
     <span className={`art-card-pic${stack ? ' stack' : ''}`}>
       {stack && <span className="art-card-s2" aria-hidden="true" />}
@@ -79,6 +90,23 @@ export function CardPic({ card, it, visible, picked, onPick, onMenu, testId }: {
         </Press>
       )}
     </span>
+  );
+}
+
+/**
+ * An expired card's line (designer m_62289): 'file expired · perf's thread ›', the link in text-2,
+ * ink on hover; it opens the agent's thread and never the card.
+ */
+export function ExpiredLine({ it, testId }: { it: Item; testId: string }) {
+  const router = useRouter();
+  return (
+    <>
+      {library.file_expired} ·{' '}
+      <Press look="art-card-thr" data-testid={`${testId}.thread`}
+        onClick={(e) => { e.stopPropagation(); router.go({ screen: 'thread', project: it.project, agent: it.a.agent }); }}>
+        {library.expired_thread({ agent: it.a.agent })}
+      </Press>
+    </>
   );
 }
 
@@ -115,7 +143,7 @@ export const ArtCard = memo(function ArtCard({ card, line, on, picked, many, vis
         onPick={(how) => { onPick(card.key, how); }} {...(menu === undefined ? {} : { onMenu: menu })} testId={testId} />
       <span className="art-card-tt">
         <KeptMark a={it.a} testId={testId} />
-        <span className="art-card-t1" {...tipAttrs(name)}>{name}</span>
+        <span className={`art-card-t1${it.a.expired === true ? ' expired' : ''}`} {...tipAttrs(name)}>{name}</span>
         {isNew(card) && <span className="art-new" data-testid={`${testId}.new`} {...tipAttrs(library.tip_new)}>{panel.new_chip}</span>}
       </span>
       <span className="art-card-mt" data-testid={`${testId}.line`} {...tipAttrs(lineTip(card))}>{line}</span>

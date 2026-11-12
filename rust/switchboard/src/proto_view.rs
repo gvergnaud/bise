@@ -499,6 +499,7 @@ pub fn artifacts(ev: &Value, page_url: impl Fn(&str) -> Option<String>, frame_ba
                 copy: Some(s(r, "copy")).filter(|c| !c.is_empty()),
                 no_copy: Some(s(r, "no_copy")).filter(|w| !w.is_empty()),
                 gone: r.get("gone").and_then(Value::as_bool).unwrap_or(false),
+                expired: r.get("expired").and_then(Value::as_bool).unwrap_or(false),
                 detail: s(r, "detail"),
                 pr,
                 keys: r.get("keys").and_then(Value::as_array).map_or_else(Vec::new, |k| k.iter().filter_map(|x| x.as_str().map(String::from)).collect()),
