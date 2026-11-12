@@ -126,7 +126,10 @@ PY
 as_he_does() {
   local mode=$1 d="$out/$1"; shift
   rm -rf "$d"
-  env "$@" bash "$cand_sh" "$d" "$app" >"$out/$mode.log" 2>&1
+  # timing-bound: in the release's quiet window (heavy-run quiet, main m_63082), when installed
+  local hq="$HOME/.bise/run/heavy-run" q=()
+  [ -x "$hq" ] && [ -z "${NIGHTLY_DESKTOP_CAND:-}" ] && q=("$hq" quiet as-he-does --)
+  ${q[@]+"${q[@]}"} env "$@" bash "$cand_sh" "$d" "$app" >"$out/$mode.log" 2>&1
   local rc=$? r n=0
   while IFS= read -r r; do [ -n "$r" ] && { reds+=("$r"); n=$((n + 1)); }; done < <(cand_reds "$mode" "$d")
   if [ -e "$d/BREACH" ]; then reds+=("as-he-does/$mode: gate breach"); record "$mode" red "gate breach: $(head -1 "$d/BREACH")"

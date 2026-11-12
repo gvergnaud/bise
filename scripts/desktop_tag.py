@@ -188,7 +188,10 @@ def checks_run(bh, sha, repo, env):
     strip = "NODE_OPTIONS=--experimental-strip-types --disable-warning=ExperimentalWarning"
     cmd = (["bash", fake] if fake else ["env", strip, "node", os.path.join(repo, "apps", "desktop", "tests", "harness", "coverage", "covmap.mts")]) + ["checks", "--gate-dir", out]
     say("no desktop checks run of %s yet: running them now, in a heavy slot; its out: %s" % (sha[:12], out))
-    rc = subprocess.run(heavy_argv(["/usr/bin/caffeinate", "-is"] + cmd, os.path.join(bh, "run", "heavy.lock"), prio=True), cwd=repo, env=env).returncode
+    # timing-bound: in the release's quiet window (heavy-run quiet, main m_63082), when installed
+    hq = os.path.join(os.path.expanduser("~"), ".bise", "run", "heavy-run")
+    quiet = [hq, "quiet", "desktop-checks", "--"] if os.access(hq, os.X_OK) and not fake else []
+    rc = subprocess.run(heavy_argv(["/usr/bin/caffeinate", "-is"] + quiet + cmd, os.path.join(bh, "run", "heavy.lock"), prio=True), cwd=repo, env=env).returncode
     verdict = {0: "green", 1: "red"}.get(rc, "none")
     run = {"when": datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"), "verdict": verdict, "out": os.path.join(out, "desktop-cov-run")}
     os.makedirs(os.path.dirname(tsv), exist_ok=True)

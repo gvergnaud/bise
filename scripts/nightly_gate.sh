@@ -180,7 +180,8 @@ if [ "${1:-}" = --in-slot ]; then
   # -i alone is not enough: at night the display is off, the Mac is in a
   # DarkWake, which ignores it; -s (PreventSystemSleep) holds on AC only
   cd "$wt" || { echo "NOSTART cannot enter $wt"; exit 1; }
-  GATE_ALL=1 /usr/bin/caffeinate -is bash tests/gate.sh full --all
+  # GATE_QUIET: its e2e/tmux part runs in the release's quiet window (heavy-run quiet, main m_63082)
+  GATE_ALL=1 GATE_QUIET=tip-e2e /usr/bin/caffeinate -is bash tests/gate.sh full --all
   rc=$?
   # the night's steps after the gate, in this tree and slot, by value (review-gates m_32494):
   # desktop-checks, desktop-map + its audit, desktop-full, core-record (fast-try p2, p7, p5).

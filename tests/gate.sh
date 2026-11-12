@@ -997,7 +997,11 @@ if [ "$mode" = full ]; then
   esac
   rm -f "$gdir/pick-$$.why"
   # ${a[@]+...}: macOS /bin/bash 3.2 calls an empty array unbound under set -u
-  tests/run_all.sh ${pick_args[@]+"${pick_args[@]}"} & wait $!; rc=$?
+  # GATE_QUIET=<what> (the release's tip gate, nightly_gate.sh): the e2e/tmux part, timing-bound,
+  # runs in heavy-run's quiet window, no new job starting beside it (main m_63082, architect m_63085)
+  quiet=(); hq="$HOME/.bise/run/heavy-run"
+  [ -n "${GATE_QUIET:-}" ] && [ -x "$hq" ] && quiet=("$hq" quiet "$GATE_QUIET" --)
+  ${quiet[@]+"${quiet[@]}"} tests/run_all.sh ${pick_args[@]+"${pick_args[@]}"} & wait $!; rc=$?
   # which reds are known (tests/known_reds.txt, their owner on it) and which are new
   [ $rc = 0 ] || { [ -s "$red" ] && python3 tests/known_reds.py split $(cat "$red"); }
   [ $rc = 0 ] || { [ -s "$red" ] && echo "only e2e/tmux tests failed: gate.sh rerun runs them alone on this tree"; }

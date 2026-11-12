@@ -95,6 +95,8 @@ if [ "${1:-}" = quiet ]; then
     _ "$what" "$qd/$what.lock" "$@"; rc=$?
   held=$(ls "$HOME/.bise/run/queue" 2>/dev/null | grep -vc '^0-')
   printf "quiet\t%s\t%s\t%s\t%s\t%s\n" "$what" "$t0" "$(date +%s)" "$(( ($(date +%s) - t0) / 60 ))" "$held" >>"$HOME/.bise/run/heavy.log"
+  # the moment main may lift a hold (marketing m_62928: lifted too early on 11-12)
+  echo "heavy-run: timing-bound part done: quiet window '$what' closed after $(( ($(date +%s) - t0) / 60 )) min (rc $rc)" >&2
   return $rc
 fi
 # no heavy-run inside a heavy job (gate-reds, main m_33473): a job holding a
