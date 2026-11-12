@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "name": "writer",
+  "description": "Open a Word document or a markdown file in Writer: a docx drawn as its pages, a markdown file as a document (headings, tables, quotes, lists, code) with its source a toggle away; read only.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "file": {
+        "type": "object",
+        "properties": { "name": { "type": "string" }, "resourceUri": { "type": "string" } },
+        "required": ["name", "resourceUri"]
+      }
+    },
+    "required": ["file"]
+  },
+  "ui": {
+    "csp": { "connectDomains": [], "resourceDomains": [], "frameDomains": [], "baseUriDomains": [] },
+    "permissions": {}
+  },
+  "_meta": {
+    "ai.mistral.vibe/ui": {
+      "entrypoints": [
+        { "type": "file", "extensions": [".docx", ".md", ".markdown"], "title": "Writer" }
+      ]
+    },
+    "dev.bise/ui": {
+      "files": [
+        { "match": ["*.docx"], "title": "Word document", "rank": "owner" },
+        { "match": ["*.md", "*.markdown"], "title": "Markdown document", "rank": "owner" }
+      ]
+    }
+  }
+}

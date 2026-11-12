@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
-// md-artifact (architect m_38679): a .md artifact (kit/office/markdown.js on office-md.js, micromark
-// + GFM) reads as an answer does. The thread's Markdown draws office/fixtures/gfm.md with the block
-// structure the viewer draws it with (office/fixtures/gfm.blocks.json; the viewer's side:
-// office/sdk/test/viewer.test.ts).
+// md-artifact (architect m_38679): a .md file in Writer (plugins/docs, its markdown.js on office-md.js,
+// micromark + GFM) reads as an answer does. The thread's Markdown draws office/fixtures/gfm.md with the
+// block structure Writer draws it with (office/fixtures/gfm.blocks.json; Writer's side:
+// plugins/docs/test/markdown.test.mjs).
 import { readFileSync } from 'node:fs';
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, expect, it } from 'vitest';

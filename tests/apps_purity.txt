@@ -11,10 +11,7 @@
 # ---- step 1: image, markdown (media's Preview, docs' Writer)
 kit/office/image.ts | 4 | step 1 | the image viewer, moves to plugins/media
 kit/office/zoom.ts | 1 | step 1 | the image viewer's zoom, moves with it
-kit/office/markdown.ts | 2 | step 1 | the markdown viewer, moves to plugins/docs
-office/sdk/src/view/markdown.ts | 1 | step 1 | the markdown renderer's entry, moves to plugins/docs/src (architect m_60401)
 apps/desktop/src/artifacts/pagezoom.test.ts | 3 | step 1 | reads kit/office/zoom.ts's MAX_K: goes with the image viewer
-apps/desktop/tests/checks/artifacts/md-view.spec.ts | 3 | step 1 | the markdown viewer's page by /kit/office/ urls
 apps/desktop/src/plugins/SkillTab.tsx | 1 | step 1 | a skill's .md file drawn as markdown: opens in Writer
 
 # ---- step 2: pdf, video (media's Preview)
@@ -24,9 +21,6 @@ office/sdk/src/view/pdf.ts | 2 | step 2 | pdf.js's entry, moves to plugins/media
 office/sdk/src/view/pdf-worker.ts | 2 | step 2 | pdf.js's worker entry, moves with it
 
 # ---- step 3: docx, pptx (docs, slides)
-kit/office/docx.ts | 4 | step 3 | the docx viewer, moves to plugins/docs
-kit/office/slides.ts | 3 | step 3 | the pptx viewer, moves to plugins/slides
-office/sdk/src/view/index.ts | 2 | step 3 | docx-preview's entry (office-view.js), moves to plugins/docs/src
 
 # ---- step 4: xlsx, csv (sheets), and the viewer shell the office types share
 kit/office/sheet.ts | 6 | step 4 | the xlsx viewer, moves to plugins/sheets
@@ -34,7 +28,7 @@ kit/office/office-sheet.d.ts | 1 | step 4 | the Univer grid's types, move with i
 office/sdk/src/view/sheet.ts | 7 | step 4 | Univer's entry (office-sheet.js), moves to plugins/sheets/src
 office/sdk/src/view/sheet.pin.ts | 2 | step 4 | the grid's copy pin, moves with it
 office/sdk/build.ts | 4 | step 4 | the view bundles' entries (steps 1-4 each move theirs)
-office/sdk/test/viewer.test.ts | 9 | step 4 | the viewers' units, move with their views (steps 1-4)
+office/sdk/test/viewer.test.ts | 4 | step 4 | the viewers' units, move with their views (steps 1-4)
 office/sdk/test/notes.offscreen.ts | 3 | step 4 | the viewer page's notes check, by /kit/office/ urls
 office/sdk/test/sheet-grid.offscreen.ts | 3 | step 4 | the grid's offscreen check, by /kit/office/ urls
 office/sdk/test/swap.offscreen.ts | 3 | step 4 | the viewer's swap check, by /kit/office/ urls
@@ -52,7 +46,7 @@ kit/office/viewer.ts | 1 | step 5 | the viewer shell, until its last kind moves
 kit/office/frame.ts | 1 | step 5 | the viewer's frame messages, until its last kind moves
 apps/desktop/src/artifacts/frameNote.test.ts | 3 | step 5 | reads kit/office/frame.js's FRAME
 rust/switchboard/src/app_openers.rs | 1 | step 5 | target_of's site row as a folder of index.html: goes when a site row carries its own entries
-rust/switchboard/src/pages/site.rs | 10 | step 5 | viewer_kind, office_kind, VIDEO_EXTS and the sites' list: each step deletes its arms
+rust/switchboard/src/pages/site.rs | 7 | step 5 | viewer_kind, office_kind, VIDEO_EXTS and the sites' list: each step deletes its arms
 
 # ---- thumbs: thumbnails, icons and previews from the opener (A6b, apps-thumbs)
 apps/desktop/src/main/thumbs/prune.ts | 1 | thumbs | the cache's .png files, rewritten with the cache per version

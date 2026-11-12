@@ -664,7 +664,7 @@ Other components (section 3), by license:
   xmlchars 2.2.0 (XML character classes, used by saxes)  MIT
       https://github.com/lddubeau/xmlchars
 
-   office/dist/office-view.js: the office viewer's docx renderer (office/sdk/src/view, docs/office.md)
+   plugins/docs/ai.mistral.vibe/views/writer/office-view.js: Writer's docx renderer (plugins/docs/src/docx.ts, docs/office.md)
 
   docx-preview 0.4.1 (docx to HTML)  Apache-2.0
       https://github.com/VolodymyrBaydalka/docxjs
@@ -676,7 +676,7 @@ Other components (section 3), by license:
   pdfjs-dist 6.4.299 (pdf.js: pdf to canvas and text)  Apache-2.0
       https://github.com/mozilla/pdf.js
 
-   office/dist/office-md.js: the office viewer's markdown renderer, micromark and GFM (office/sdk/src/view/markdown.ts, md-artifact)
+   plugins/docs/ai.mistral.vibe/views/writer/office-md.js: Writer's markdown renderer, micromark and GFM (plugins/docs/src/markdown.ts, md-artifact)
 
   character-entities 2.0.2  MIT
       https://github.com/wooorm/character-entities

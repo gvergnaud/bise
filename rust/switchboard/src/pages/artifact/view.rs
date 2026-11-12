@@ -1,10 +1,10 @@
-//! bise's viewer of an xlsx, pptx or docx artifact (office-artifacts plan
+//! bise's viewer of an xlsx artifact (office-artifacts plan
 //! §4): `/a/<id>/view` (the newest version; the side panel keeps this src
 //! across versions) and `/a/<id>/<v>/view` (an older one). The server
 //! sends a small HTML shell; `kit/office/viewer.js` fetches the copy's bytes
 //! from `/a/<id>/<v>/<file>` (pages::site::copy_href) and draws them with a
-//! renderer per format (`kit/office/{sheet,slides,docx}.js`) on the office
-//! SDK's bundles (`/kit/office/office.js`, `office-view.js`).
+//! renderer per format (`kit/office/sheet.js`) on the office
+//! SDK's bundles (`/kit/office/office.js`).
 //!
 //! Which artifacts get the viewer is pages::site's one rule (served +
 //! viewer_kind), the same that gives the row its `frame_url`: its copy, or
@@ -20,8 +20,6 @@
 //! by kit/office/pdf.js (pdf.js, `office-pdf.js` and `pdf.worker.js`); a
 //! video too, played by kit/office/video.js from the copy's url (the shell
 //! says `data-stream`: no bytes fetched whole; its ranges: pages/media.rs).
-//! A markdown file too, drawn as a document by kit/office/markdown.js
-//! (micromark + GFM in `office-view.js`), its source a toggle away.
 //!
 //! [`shell`] is pure; [`serve`] reads the artifact store.
 
@@ -45,7 +43,7 @@ pub struct Shown<'a> {
     pub id: &'a str,
     pub title: &'a str,
     pub agent: &'a str,
-    /// `xlsx`, `pptx`, `docx`, `image`, `site`, `pdf`, `video`, `markdown` (site::viewer_kind)
+    /// `xlsx`, `image`, `site`, `pdf`, `video` (site::viewer_kind)
     pub kind: &'static str,
     /// the version drawn, and the artifact's newest
     pub v: u64,

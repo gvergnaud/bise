@@ -41,7 +41,7 @@ type OfficeView = {
   hold?(ev: OfficeVersion): boolean;
 };
 
-/** A renderer module (sheet.js, slides.js…). */
+/** A renderer module (sheet.js, image.js…). */
 type OfficeRenderer = { draw(root: HTMLElement, bytes: Uint8Array | null, info: OfficeInfo): OfficeView | Promise<OfficeView> };
 
 interface Window {

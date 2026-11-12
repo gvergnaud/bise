@@ -9,5 +9,12 @@
     "args": [],
     "one": null,
     "text": "type to ask about it"
+  },
+  "viewkit.slide": {
+    "args": [
+      "n"
+    ],
+    "one": null,
+    "text": "slide {n}"
   }
 }

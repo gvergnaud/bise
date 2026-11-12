@@ -1,6 +1,6 @@
 // generated from select.ts by scripts/ts_emit.ts: never hand-edited (edit the .ts, then run it)
 // bise kit · notes on an artifact in its viewer (office-artifacts plan §5, §9b; architect m_23874):
-// the selection layer and the marks, over every renderer (sheet.js, slides.js, docx.js,
+// the selection layer and the marks, over every renderer (sheet.js,
 // image.js, site.js: a site draws its marks in its own frame through view.marks; pdf.js places
 // its notes itself through view.where, re-anchored on the version's text; video.js too, ticks on
 // its track, and it says `bise:office-selection` when its selection moves with no mouseup). One store (pages/artifact/notes.rs), two doors:
@@ -33,13 +33,10 @@ const W = {
     doneIn: (v) => `✓ done in v${v}`,
     empty: {
         xlsx: "no notes yet. select cells, then note.",
-        pptx: "no notes yet. click a shape, then note.",
-        docx: "no notes yet. select some text, then note.",
         image: "no notes yet. draw a box, then note.",
         site: "no notes yet. select some text, then note.",
         pdf: "no notes yet. select some text or draw a box, then note.",
         video: "no notes yet. pause it or draw a box on it, then note.",
-        markdown: "no notes yet. select some text, then note.",
     },
 };
 /** `B4` inside `B4:D9` (refs as the grid writes them). */
@@ -130,21 +127,6 @@ function mount() {
                 const shown = office.view && office.view.place && office.view.place().sheet === a.sheet;
                 const els = shown ? q("td[data-ref]").filter((td) => inRange(td.dataset.ref, a.range)) : tab ? [tab] : [];
                 return { els, found: !!tab || !!shown };
-            }
-            case "slide": {
-                const thumb = q(".office-rail .thumb")[a.slide - 1];
-                const big = q(`.office-slide .slide[data-slide="${esc(a.slide)}"]`);
-                return { els: [...(thumb ? [thumb] : []), ...big], found: !!thumb };
-            }
-            case "shape": {
-                const all = q(`.shape[data-slide="${esc(a.slide)}"][data-shape="${esc(a.shape)}"]`);
-                const thumb = q(".office-rail .thumb")[a.slide - 1];
-                const big = all.filter((e) => e.closest(".office-slide"));
-                return { els: [...big, ...(thumb && all.length ? [thumb] : [])], found: all.length > 0 };
-            }
-            case "para": {
-                const els = q(`[data-para="${esc(a.para)}"]`);
-                return { els, found: els.length > 0 };
             }
             case "region": {
                 const frame = s.querySelector(".office-image .frame, .frame");
@@ -259,7 +241,7 @@ function mount() {
             return null;
         if (office.view && office.view.box)
             return office.view.box();
-        const parts = [...s.querySelectorAll("td.sel, .office-slide .shape.sel, .office-box")];
+        const parts = [...s.querySelectorAll("td.sel, .office-box")];
         const r = parts.length ? parts.map((e) => e.getBoundingClientRect()) : [];
         const sel = window.getSelection();
         if (!r.length && sel && sel.rangeCount && !sel.isCollapsed)
@@ -276,10 +258,6 @@ function mount() {
             return quoteOf(office.view.quote());
         if (a.kind === "cell")
             return quoteOf([...s.querySelectorAll("td.sel")].map((td) => td.textContent).filter(Boolean).join(" "));
-        if (a.kind === "shape")
-            return quoteOf((s.querySelector(".office-slide .shape.sel") || {}).textContent);
-        if (a.kind === "para")
-            return quoteOf(a.quote || (s.querySelector(`[data-para="${CSS.escape(a.para)}"]`) || {}).textContent);
         if (a.kind === "region")
             return quoteOf(a.quote);
         return "";
@@ -292,10 +270,7 @@ function mount() {
         // after the renderer's own handler set its selection
         setTimeout(() => {
             const view = office.view;
-            let a = view && view.selection ? view.selection() : null;
-            // a deck says its slide when no shape is picked: a note on the slide only from a click on it
-            if (a && a.kind === "slide" && !(t.closest && t.closest(".office-slide")))
-                a = null;
+            const a = view && view.selection ? view.selection() : null;
             const box = a && selectedBox();
             const r = box || (a && t.getBoundingClientRect && t.getBoundingClientRect());
             if (!a || !r) {
@@ -304,9 +279,6 @@ function mount() {
                 return;
             }
             const quote = quoteNow(a);
-            // a shape is said by its words, never its id (designer m_24098): they go in its anchor
-            if (a.kind === "shape" && quote && !a.quote)
-                a = { ...a, quote: quote.length > 80 ? `${quote.slice(0, 79)}…` : quote };
             picked = { anchor: a, quote };
             btn.textContent = inApp ? W.toMessage : W.note;
             Object.assign(btn.style, { left: `${Math.max(8, Math.min(window.innerWidth - 140, r.left))}px`, top: `${Math.min(window.innerHeight - 36, r.bottom + 6)}px` });

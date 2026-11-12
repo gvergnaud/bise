@@ -4,11 +4,11 @@
 //
 // - fetches the new bytes (`?rev=<r>`: a save in the same turn keeps the copy's path; a streamed
 //   kind, a video, is given the new url instead: its player reads it by ranges) and
-//   draws them through viewer.js's show(), which keeps his place (the slide, the sheet with
-//   its scroll and cell, the doc's scroll);
+//   draws them through viewer.js's show(), which keeps his place (the sheet with its scroll
+//   and cell);
 // - outlines what this save changed (`rev_changed`) in --term-ok for 2 s;
-// - puts a --term-ok dot on the rail thumbs and sheet tabs the version changed, until he
-//   has looked at that slide or sheet;
+// - puts a --term-ok dot on the sheet tabs the version changed, until he has looked at that
+//   sheet;
 // - draws the hub's words (`live`: the strip `∿ deck is updating · slide 2`, then the line
 //   `v3 · 2 slides changed` and its `← v2` link to that version) in a 28 px strip, unless the
 //   desktop's side panel frames it (window.name 'bise-app': the panel draws the row's).
@@ -17,16 +17,9 @@
 // during his edits); `office.take(ev)` draws one past the hold.
 //
 // It decides no words: they come from the hub (bise_proto::office::live_words).
-// Pure helpers exported for the tests: slidesOf, sheetsOf, cellIn, fileUrl.
+// Pure helpers exported for the tests: sheetsOf, cellIn, fileUrl.
 
 const MARK_MS = 2000;
-
-/** The slides a list of anchors names (a shape's slide too), 1-based, once each. */
-export function slidesOf(list: Anchor[] | null | undefined) {
-  const out: (number | undefined)[] = [];
-  for (const a of list || []) if ((a.kind === "slide" || a.kind === "shape") && !out.includes(a.slide)) out.push(a.slide);
-  return out;
-}
 
 /** The sheets a list of anchors names, once each. */
 export function sheetsOf(list: Anchor[] | null | undefined) {
@@ -54,19 +47,13 @@ export function fileUrl(id: string, n: number, name: string, rev: number | strin
   return `/a/${encodeURIComponent(id)}/${n}/${encodeURIComponent(name)}?rev=${rev}`;
 }
 
-/** The parts of the drawn view an anchor points at (shapes, a slide, cells, a paragraph). */
+/** The parts of the drawn view an anchor points at (cells). */
 function partsOf(main: HTMLElement, a: Anchor): Element[] {
-  if (a.kind === "shape") return [...main.querySelectorAll(`.office-slide .shape[data-slide="${a.slide}"][data-shape="${CSS.escape(String(a.shape))}"]`)];
-  if (a.kind === "slide") {
-    const s = main.querySelector(`.office-slide .slide[data-slide="${a.slide}"]`);
-    return s ? [s] : [];
-  }
   if (a.kind === "cell") {
     const tab = main.querySelector('.office-tabs button[aria-selected="true"]');
     if (!tab || tab.textContent !== a.sheet) return [];
     return [...main.querySelectorAll<HTMLElement>(".office-grid td[data-ref]")].filter((td) => cellIn(td.dataset.ref, a.range));
   }
-  if (a.kind === "para") return [...main.querySelectorAll(`[data-para="${CSS.escape(String(a.para))}"]`)];
   return [];
 }
 
@@ -79,15 +66,10 @@ function mark(main: HTMLElement, list: Anchor[] | null | undefined) {
   }, MARK_MS);
 }
 
-/** Dots on the rail thumbs and sheet tabs the version changed; gone once he looked there. */
-const unseen = { slides: new Set<number | undefined>(), sheets: new Set<string | null | undefined>() };
+/** Dots on the sheet tabs the version changed; gone once he looked there. */
+const unseen = { sheets: new Set<string | null | undefined>() };
 
 function dots(main: HTMLElement) {
-  const rail = [...main.querySelectorAll(".office-rail .thumb")];
-  rail.forEach((b, i) => {
-    if (b.getAttribute("aria-current") === "true") unseen.slides.delete(i + 1);
-    b.classList.toggle("office-unseen", unseen.slides.has(i + 1));
-  });
   for (const b of main.querySelectorAll(".office-tabs button")) {
     if (b.getAttribute("aria-selected") === "true") unseen.sheets.delete(b.textContent);
     b.classList.toggle("office-unseen", unseen.sheets.has(b.textContent));
@@ -150,7 +132,6 @@ function start() {
     main!.dataset.version = String(ev.n);
     main!.dataset.rev = String(ev.rev);
     await office!.show(bytes);
-    for (const n of slidesOf(ev.changed)) unseen.slides.add(n);
     for (const n of sheetsOf(ev.changed)) unseen.sheets.add(n);
     dots(main!);
     mark(main!, ev.rev_changed);
@@ -179,7 +160,7 @@ function start() {
     pump();
   });
   es.addEventListener("live", (e) => words(main, info, JSON.parse(e.data)));
-  // a click on a thumb or a tab, a key: what he now sees is seen
+  // a click on a tab, a key: what he now sees is seen
   main.addEventListener("click", () => setTimeout(() => dots(main), 0));
   main.addEventListener("keydown", () => setTimeout(() => dots(main), 0));
 }

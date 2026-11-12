@@ -920,9 +920,9 @@ fn a_view_calls_bound_outlasts_its_card() {
 fn a_gone_copy_is_the_viewers_404() {
     let (p, d) = pages();
     std::fs::create_dir_all(d.join("work")).unwrap();
-    std::fs::write(d.join("work/notes.md"), "# notes\n").unwrap();
+    std::fs::write(d.join("work/notes.pdf"), "%PDF-1.4\n").unwrap();
     let arts = crate::artifacts::Store::new(&d);
-    let add = crate::artifacts::Add { target: "notes.md".into(), agent: "perf".into(), by: "perf".into(), cwd: d.join("work").to_string_lossy().to_string(), ..Default::default() };
+    let add = crate::artifacts::Add { target: "notes.pdf".into(), agent: "perf".into(), by: "perf".into(), cwd: d.join("work").to_string_lossy().to_string(), ..Default::default() };
     let id = arts.add(&add, 10).unwrap().meta.id;
     assert_eq!(get(&p, &format!("/a/{id}/view")).status, 200);
     std::fs::remove_dir_all(d.join("artifacts").join(&id)).unwrap();

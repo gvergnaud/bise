@@ -74,6 +74,9 @@ FLAGS = [
 FLAG_NAMES = ["proto_ts", "office", "office_skills", "crossterm_changed", "kit", "mcpapps", "gallery", "cu", "aqa",
               "words", "bendw"]
 GALLERY = re.compile(r"^plugins/(\.view-kit/|[^/]+/(views/|server\.mjs$|lib/|test/|mcp\.json$|vendor/))")
+# a first-party plugin's static views and their types (Writer, ...; docs/plugin-apps.md A5): the
+# kit step typechecks them and checks their emitted .js
+PLUGIN_VIEWS = re.compile(r"^plugins/[^/]+/(tsconfig\.json$|ai\.mistral\.vibe/views/)")
 CU = ("computer-use/extension/", "computer-use/bench/", "computer-use/tsconfig.node.json")
 AQA = re.compile(r"^dev/plugins/ambient-qa/([^/]+\.ts|as-he-does/[^/]+\.ts|tsconfig\.json)$")
 WORDS = re.compile(r"^(tests/[^/]+_tmux\.py|apps/desktop/tests/|apps/desktop/src/|tests/words/|rust/proto/src/words/"
@@ -252,6 +255,8 @@ def _flags(p):
         out.add("mcpapps")
     if GALLERY.match(p):
         out |= {"mcpapps", "gallery"}
+    if PLUGIN_VIEWS.match(p):
+        out |= {"kit", "gallery"}
     if p.startswith(CU):
         out.add("cu")
     if AQA.match(p):

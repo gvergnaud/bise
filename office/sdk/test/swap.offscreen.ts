@@ -1,11 +1,11 @@
 // The off-screen check of live edits (office-artifacts plan §6, art-live): the real viewer
 // (kit/office/viewer.js + swap.js + the renderers, office/dist's bundles) in a headless Chrome
-// (playwright's chrome-headless-shell, driven over CDP: no window on screen), a deck and a sheet
-// saved while it looks, through an /a/<id>/events stream that sends the frames
+// (playwright's chrome-headless-shell, driven over CDP: no window on screen), a sheet saved
+// while it looks, through an /a/<id>/events stream that sends the frames
 // rust/switchboard/src/pages/artifact/events.rs sends (its test pins them).
 //
-// It checks: each save swaps in place keeping his place (the slide; the sheet and its scroll),
-// what the save changed is outlined for 2 s, changed thumbs and tabs get a dot until seen, the
+// It checks: each save swaps in place keeping his place (the sheet and its scroll), what the
+// save changed is outlined for 2 s, changed tabs get a dot until seen, the
 // strip says the hub's words. Screenshots light + dark at 1400, 1100, 800 into $SHOTS (or the temp
 // folder) with an index.html contact sheet, for designer.
 //
@@ -19,7 +19,7 @@ import { dirname, join, extname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir, tmpdir } from "node:os";
 import assert from "node:assert/strict";
-import { slides, sheets, changedAnchors } from "../../dist/office.js";
+import { sheets, changedAnchors } from "../../dist/office.js";
 import { must } from "./must.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -29,17 +29,6 @@ const SHOTS = process.env.SHOTS || join(process.env.TMPDIR || tmpdir(), "swap-sh
 mkdirSync(SHOTS, { recursive: true });
 
 // ---- the files: v1, then saves in one turn (v2 rev 1, rev 2), then the turn's end
-async function deckSaves() {
-  const v1 = fixture("tiny.pptx");
-  const d2 = await slides.open(v1);
-  d2.at({ kind: "shape", slide: 2, shape: "2" }).replace("Next steps", "Next steps, revised");
-  const r1 = await d2.save();
-  const d3 = await slides.open(r1);
-  d3.at({ kind: "shape", slide: 1, shape: "3" }).replace("4%", "5%");
-  const r2 = await d3.save();
-  return { v1, r1, r2 };
-}
-
 async function sheetSaves() {
   const book = await sheets.open(fixture("tiny.xlsx"));
   book.addSheet("Q4");
@@ -98,7 +87,7 @@ const server = http.createServer((req, res) => {
     const b = a.files.get(`${m[2]}/${rev}`) || a.files.get(`${m[2]}/1`);
     return b ? send(200, CT[extname(p)], Buffer.from(b)) : send(404, "text/plain", "no such version");
   }
-  if (p === "/kit/office/office.js" || p === "/kit/office/office-view.js") return send(200, CT[".js"], readFileSync(join(root, "office", "dist", p.split("/").pop() ?? "")));
+  if (p === "/kit/office/office.js") return send(200, CT[".js"], readFileSync(join(root, "office", "dist", p.split("/").pop() ?? "")));
   if (p.startsWith("/kit/") && !p.includes("..")) {
     const f = join(root, p);
     if (existsSync(f)) return send(200, CT[extname(f)] || "text/plain", readFileSync(f));
@@ -163,12 +152,8 @@ const sleep = (ms: number) => new Promise((ok) => setTimeout(ok, ms));
 async function main() {
   await new Promise<void>((ok) => server.listen(0, "127.0.0.1", () => ok()));
   const base = `http://127.0.0.1:${portOf(server)}`;
-  const deck = await deckSaves();
   const book = await sheetSaves();
-  arts.set("q3-pptx", { kind: "pptx", name: "q3.pptx", files: new Map([["1/1", deck.v1], ["2/1", deck.r1], ["2/2", deck.r2]]), n: 1, rev: 1, streams: [] });
   arts.set("q3-xlsx", { kind: "xlsx", name: "q3.xlsx", files: new Map([["1/1", book.v1], ["2/1", book.r1]]), n: 1, rev: 1, streams: [] });
-  const deckRev1 = must(await changedAnchors(deck.v1, deck.r1), "rev 1's changes");
-  const deckRev2 = must(await changedAnchors(deck.r1, deck.r2), "rev 2's changes");
   const sheetRev1 = await changedAnchors(book.v1, book.r1);
 
   const port = await freePort();
@@ -222,32 +207,6 @@ async function main() {
     for (const scheme of ["light", "dark"]) {
       for (const width of [1400, 1100, 800]) {
         const tag = `${scheme}-${width}`;
-        // the deck: he looks at slide 2; the agent saves slide 2, then slide 1, in one turn
-        await open("q3-pptx", width, scheme);
-        await js(`document.querySelectorAll('.office-rail .thumb')[1].click()`);
-        await save("q3-pptx", 2, 1, { changed: deckRev1, rev_changed: deckRev1, live: { strip: "∿ deck is updating · slide 2" } });
-        assert.equal(await js(`document.querySelector('.office-rail .thumb[aria-current="true"] .n').textContent`), "2", "his slide kept");
-        assert.ok(await js(`document.querySelectorAll('.office-slide .office-changed').length > 0`), "the changed shape outlined");
-        assert.equal(await js(`document.querySelector('.office-live').textContent`), "∿ deck is updating · slide 2");
-        assert.notEqual(await js(`getComputedStyle(document.querySelector('.office-live')).color`), await js(`getComputedStyle(document.querySelector('.office-changed')).outlineColor`), "the strip is text-2, never the change mark's green");
-        await shot(`deck-updating-${tag}`);
-        const both = [...deckRev1, ...deckRev2];
-        await save("q3-pptx", 2, 2, { changed: both, rev_changed: deckRev2, live: { strip: "∿ deck is updating · slide 1" } });
-        assert.equal(await js(`document.querySelector('.office-rail .thumb[aria-current="true"] .n').textContent`), "2", "still his slide");
-        assert.ok(await js(`document.querySelectorAll('.office-rail .thumb')[0].classList.contains('office-unseen')`), "slide 1's thumb has its dot");
-        assert.ok(!(await js(`document.querySelectorAll('.office-rail .thumb')[1].classList.contains('office-unseen')`)), "the slide he looks at is seen");
-        await shot(`deck-dot-${tag}`);
-        push("q3-pptx", "live", { line: "v2 · 2 slides changed", back: { text: "← v1", v: 1 } });
-        await until(`document.querySelector('.office-live')?.textContent === 'v2 · 2 slides changed← v1'`, "the line");
-        assert.equal(await js(`document.querySelector('.office-live a.back').getAttribute('href')`), "/a/q3-pptx/1/view", "← v1 opens v1");
-        assert.equal(await js(`getComputedStyle(document.querySelector('.office-live a.back')).marginLeft`), "16px");
-        await sleep(2100);
-        assert.equal(await js(`document.querySelectorAll('.office-changed').length`), 0, "the outline goes after 2 s");
-        await js(`document.querySelectorAll('.office-rail .thumb')[0].click()`);
-        await sleep(30);
-        assert.ok(!(await js(`document.querySelectorAll('.office-rail .thumb')[0].classList.contains('office-unseen')`)), "seen: the dot goes");
-        await shot(`deck-line-${tag}`);
-
         // the sheet: he is scrolled down on Q3; the agent sets Q3!B2 and Q4!A2
         await open("q3-xlsx", width, scheme);
         await js(`document.querySelector('.office-grid').scrollTop = 600`);
@@ -260,7 +219,7 @@ async function main() {
         await sleep(30);
         assert.ok(await js(`document.querySelectorAll('.office-grid td.office-changed').length > 0`), "B2 outlined");
         await shot(`sheet-updating-${tag}`);
-        results.push(`${tag}: deck and sheet ok`);
+        results.push(`${tag}: sheet ok`);
       }
     }
     page.close();

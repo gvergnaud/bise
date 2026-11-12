@@ -1,5 +1,5 @@
 // The notes on an artifact, off-screen (art-notes; office-artifacts §5, §9b): the viewer of a
-// sheet, a deck, a doc and an image served by a fake page server (the routes of
+// sheet and an image served by a fake page server (the routes of
 // pages/artifact/{view,notes}.rs, the shell's tags as view.rs writes them, fake notes), drawn by
 // a headless Chrome driven over CDP: the marks (sent, draft, ✓ on the answering version), the
 // `note` button on a selection, the browser's list, a note typed and sent (the POSTs the server
@@ -73,8 +73,6 @@ const fixture = (f: string) => readFileSync(join(root, "office", "fixtures", f))
 type Art = { kind: string; name: string; bytes: Buffer };
 const ARTS: Record<string, Art> = {
   "q3-xlsx": { kind: "xlsx", name: "q3.xlsx", bytes: fixture("tiny.xlsx") },
-  "deck-pptx": { kind: "pptx", name: "deck.pptx", bytes: fixture("tiny.pptx") },
-  "memo-docx": { kind: "docx", name: "memo.docx", bytes: fixture("tiny.docx") },
   "shot-png": { kind: "image", name: "shot.png", bytes: png() },
   // v2 of a report: a summary page put in front, so the passage noted on v1's page 1 is on page 2
   "report-pdf": { kind: "pdf", name: "report.pdf", bytes: pdf([["Summary", "Revenue up, costs flat."], ["Quarterly report", "Net revenue grew 4% in Q3.", "Costs held at last year's level.", "Hiring resumes in January."]]) },
@@ -128,7 +126,7 @@ const server = http.createServer((req, res) => {
     });
     return;
   }
-  if (segs[0] === "kit" && segs[1] === "office" && ["office.js", "office-view.js", "office-pdf.js", "pdf.worker.js"].includes(segs[2])) return send(200, "text/javascript", readFileSync(join(root, "office", "dist", segs[2])));
+  if (segs[0] === "kit" && segs[1] === "office" && ["office.js", "office-pdf.js", "pdf.worker.js"].includes(segs[2])) return send(200, "text/javascript", readFileSync(join(root, "office", "dist", segs[2])));
   if (segs[0] === "kit") {
     const p = join(root, ...segs);
     return existsSync(p) ? send(200, types[extname(p)] || "application/octet-stream", readFileSync(p)) : send(404, "text/plain", "no");
@@ -256,16 +254,8 @@ try {
   await open("/a/q3-xlsx/view", 1100, false);
   await until("document.querySelector('td[data-ref]')", "the grid");
   const sheet = await evalText("biseOffice.view.place().sheet");
-  await open("/a/deck-pptx/view", 1100, false);
-  await until("document.querySelector('.office-slide .shape')", "the slide");
-  const shape = await evalObj("(() => { const s = document.querySelector('.office-slide .shape'); return { slide: +s.dataset.slide, shape: s.dataset.shape }; })()", "the first shape");
-  await open("/a/memo-docx/view", 1100, false);
-  await until("document.querySelector('[data-para]')", "the doc's paragraphs");
-  const para = await evalText("document.querySelectorAll('[data-para]')[0].dataset.para");
   const n = (id: string, status: string, at: Record<string, unknown>, text: string, extra = {}): Note => ({ id, status, at, text, version: 1, kind: "note", at_ms: 1, ...extra });
   NOTES["q3-xlsx"] = [n("n1", "sent", { kind: "cell", sheet, range: "A2:B3" }, "these look low"), n("n2", "done", { kind: "cell", sheet, range: "A1" }, "say Q3", { done_in: VERSION })];
-  NOTES["deck-pptx"] = [n("n1", "sent", { kind: "shape", ...shape }, "shorter title"), n("n2", "done", { kind: "slide", slide: 1 }, "old", { done_in: 1 })];
-  NOTES["memo-docx"] = [n("n1", "sent", { kind: "para", para, quote: "" }, "too formal"), n("n2", "sent", { kind: "para", para: "GONE0000" }, "lost one")];
   NOTES["site-html"] = [n("n1", "sent", { kind: "block", block: "#intro", quote: "open the waitlist" }, "say which Monday"), n("n2", "done", { kind: "block", block: "body>p:nth-of-type(2)", quote: "twelve euros" }, "fifteen?", { done_in: VERSION }), n("n3", "sent", { kind: "block", block: "#gone", quote: "a sentence no longer there" }, "lost one")];
   NOTES["strict-html"] = [];
   NOTES["shot-png"] = [n("n1", "sent", { kind: "region", rect: { x: 10, y: 15, w: 30, h: 40 } }, "this red is off")];
@@ -283,15 +273,6 @@ try {
   assert.equal(await evaluate("document.querySelector('td[data-ref=\"A1\"]').dataset.mark"), "done", "✓ on the answering version");
   assert.equal(await evaluate("document.querySelector('.office-notes .head').textContent"), await evaluate("BiseNotes.core.NW.listTitle('q3.xlsx', 2)"), "notes.js's own words");
   ok("sheet: a range sent, a cell ✓ in the version that answered it, the list");
-  await open("/a/deck-pptx/view", 1100, false);
-  await until("document.querySelector('.office-slide .shape[data-mark]')", "a shape's mark");
-  assert.equal(await evaluate("document.querySelector('.office-rail .thumb').dataset.mark"), "sent", "its slide in the rail too");
-  assert.equal(await evaluate("[...document.querySelectorAll('.office-notes .tag')].map(t => t.textContent).join('|')"), "sent|✓ done in v1", "an older answer: no mark, its line says when");
-  ok("deck: a shape and its slide's thumb marked, an answer of v1 gone from v2");
-  await open("/a/memo-docx/view", 1100, false);
-  await until("document.querySelector('[data-para][data-mark]')", "a paragraph's mark");
-  await until("[...document.querySelectorAll('.office-notes .tag')].some(t => t.textContent === 'moved')", "a lost one says moved");
-  ok("doc: a paragraph marked, a lost anchor moved");
   await open("/a/shot-png/view", 1100, false);
   await until("document.querySelector('.office-mark-box')", "a box on the image");
   ok("image: a note's box drawn on it");

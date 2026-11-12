@@ -1,8 +1,8 @@
-// The viewer's markdown bundle, office/dist/office-md.js (md-artifact, architect m_38679): what
-// draws a .md artifact (kit/office/markdown.js alone loads it). micromark with its GFM extension
-// (MIT), the parser and the rules under the desktop thread's react-markdown + remark-gfm (same
-// versions as apps/desktop's lockfile), so a document reads as an answer does. Its own bundle,
-// out of office-view.js: docx-preview touches the DOM at load, this runs anywhere (node tests).
+// Writer's markdown bundle, office-md.js in its view's folder (md-artifact, architect m_38679;
+// built by office/sdk/build.ts with its lockfile, architect m_60401): what draws a .md file in
+// Writer (its markdown.js alone loads it). micromark with its GFM extension (MIT), the parser and
+// the rules under the desktop thread's react-markdown + remark-gfm (same versions as apps/desktop's
+// lockfile), so a document reads as an answer does. Its own bundle: it runs anywhere (node tests).
 
 import { micromark } from "micromark";
 import { gfm, gfmHtml } from "micromark-extension-gfm";

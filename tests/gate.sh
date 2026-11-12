@@ -266,6 +266,11 @@ kit_check() {
     echo "tsc -p site/tsconfig.json"; "$tsc" -p "$root/site/tsconfig.json" || return 1
     echo "ts_emit kit/tsconfig.json kit/office/tsconfig.json kit/view/tsconfig.json site/tsconfig.json --check"
     NODE_OPTIONS="$TS_NODE_OPTIONS" node "$root/scripts/ts_emit.ts" "$root/kit/tsconfig.json" "$root/kit/office/tsconfig.json" "$root/kit/view/tsconfig.json" "$root/site/tsconfig.json" --check || return 1
+    # the first-party plugins' views (plugins/<p>/tsconfig.json: Writer, Slides, Sheets; docs/plugin-apps.md A5)
+    for f in "$root"/plugins/*/tsconfig.json; do
+      echo "tsc -p ${f#"$root"/}"; "$tsc" -p "$f" || return 1
+      echo "ts_emit ${f#"$root"/} --check"; NODE_OPTIONS="$TS_NODE_OPTIONS" node "$root/scripts/ts_emit.ts" "$f" --check || return 1
+    done
   else echo "skipped kit types: no office/sdk/node_modules (pnpm -C office/sdk install)"; fi
 }
 # the extension's unit tests (no browser), then the types of its tests and the bench

@@ -375,6 +375,28 @@ floor plus declared origins, permissions granted at the add.
   shows up through its row and a new `view/open` (`Open v5`), never
   through this event; an open view keeps its own version's notes until
   then (architect m_61664, m_61696).
+- **Changed since he last looked** (architect m_60734; apps-lead m_60725:
+  today's live marks of the office viewer, back before plugin-apps
+  merges): the hub owns the version he last saw, `seen_v` beside
+  `opened_ms` in artifacts-keep's marks.json (set when an artifact opens,
+  `artifacts_opened` carries its version; forward only). `view/open` of
+  a read-only document on a version past `seen_v` answers `ViewOpened.changed?
+  {from, to, anchors: [view key]}`: the hub's `changedAnchors(from → to)`
+  mapped by `bise_proto::anchor::as_view_key`, the one fn that maps an
+  old typed note's anchor (m_60380), so a view reads them with its own
+  anchor parser. Computed on the view/open worker, never on the loop,
+  cached per (artifact, from, to), under a deadline: past it the open
+  answers without `changed`, never later. The host passes it as
+  `hostContext["dev.bise/changed"]` (the reopen on a newer version,
+  apps-host m_60432, is the same rule); `@bise/view` marks the parts
+  like notes (an outline for 2 s; a dot on a part out of sight, a slide
+  or a sheet tab, until seen), through the notes marks' API; the tab
+  head's facts line says the hub's words (`live_words`, from the words
+  catalog: `v3 · 2 slides changed · ← v2`). A writable tab stays on its
+  version (the save line) and gets none. Owners: artifacts-keep
+  (`seen_v`), apps-hub-views (`changed` in view/open), apps-viewkit (the
+  marks), apps-host (host context, the head line), apps-office (the
+  office views' keys).
 - Keep mine as a copy: its own hub method `view/copy {doc, text | blob}`
   → `{artifact}`, called by the host on his click with the body the hub
   answered conflict to (a view can't call it; `dev.bise/resources/copy`

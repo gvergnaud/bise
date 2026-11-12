@@ -1,0 +1,102 @@
+/* Writer (plugins/docs, docs/plugin-apps.md A5): a document drawn as a bise page reads, on the
+   host's tokens. The host gives the spec's CSS variables on :root and html[data-theme]
+   (apps/desktop/src/views/context.ts); the fallbacks are bise's light theme (kit/tokens.css), with
+   the dark ones under data-theme="dark", for a view opened alone. What is his (a note's mark) is
+   the kit's (~kit/view/view.css); a selection is ink. */
+
+:root {
+  --w-ground: var(--color-background-primary, #f2ede2);
+  --w-card: var(--color-background-secondary, #faf7f0);
+  --w-ink: var(--color-text-primary, #1d1a17);
+  --w-dim: var(--color-text-secondary, #5a5349);
+  --w-faint: var(--color-text-tertiary, #8a8174);
+  --w-line: var(--color-border-secondary, #1d1a171c);
+  --w-rule: var(--color-border-primary, #1d1a17);
+  --w-hover: var(--color-background-tertiary, #1d1a1708);
+  --w-danger: var(--color-text-danger, #b3261e);
+  --w-ui: var(--font-sans, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif);
+  --w-mono: var(--font-mono, "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace);
+  --w-display: Newsreader, "Iowan Old Style", Georgia, serif;
+  --w-kicker: var(--font-text-sm-size, 12px);
+  --w-read: 17px;
+  --w-small: 15px;
+  --w-measure: 68ch;
+  --w-drop: #1d1a170c;
+}
+:root[data-theme="dark"] {
+  --w-ground: var(--color-background-primary, #171513);
+  --w-card: var(--color-background-secondary, #1f1c19);
+  --w-ink: var(--color-text-primary, #ece6da);
+  --w-dim: var(--color-text-secondary, #b8b0a3);
+  --w-faint: var(--color-text-tertiary, #8a8276);
+  --w-line: var(--color-border-secondary, #ece6da1c);
+  --w-rule: var(--color-border-primary, #ece6da);
+  --w-hover: var(--color-background-tertiary, #ece6da0a);
+  --w-drop: #00000038;
+}
+
+html, body { margin: 0; height: 100%; background: var(--w-ground); color: var(--w-ink); }
+body { font: var(--w-kicker) / 1.4 var(--w-ui); }
+:where(button, a[href]) { cursor: pointer; }
+#writer { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+
+/* the one line of state: opening, failed */
+.w-state { margin: 24px; color: var(--w-dim); font-size: var(--font-text-md-size, 13px); }
+.w-state[data-state="failed"] { color: var(--w-danger); }
+
+/* what Writer does not draw of this file (each renderer's notes) */
+.w-foot { flex: none; border-top: 1px solid var(--w-line); padding: 6px 12px; color: var(--w-faint); font-size: var(--w-kicker); }
+.w-foot p { margin: 2px 0; }
+.w-stage { flex: 1; min-height: 0; display: flex; }
+
+/* docx (docx.js): docx-preview's pages on the paper */
+.w-docx { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: auto; }
+.w-pages { flex: 1; }
+.w-pages .docx-wrapper { background: transparent; padding: 16px 0; }
+.w-pages .docx-wrapper > section.docx { box-shadow: 0 1px 4px var(--w-drop); margin-bottom: 16px; }
+.w-pages [data-para] { scroll-margin-top: 24px; }
+
+/* markdown (markdown.js): the file as a bise page reads, its source a toggle away */
+.w-md { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; min-width: 0; }
+.md-page { flex: 1; min-height: 0; overflow: auto; }
+.md-doc, .md-source { box-sizing: border-box; max-width: calc(var(--w-measure) + 64px); margin: 0 auto; padding: 32px 32px 96px; }
+.md-doc { font: var(--w-read) / 1.6 var(--w-ui); color: var(--w-ink); overflow-wrap: break-word; }
+.md-doc[hidden], .md-source[hidden] { display: none; }
+.md-doc > :first-child { margin-top: 0; }
+.md-doc :is(p, ul, ol, blockquote, pre, table, hr) { margin: 0 0 16px; }
+.md-doc :is(h1, h2, h3, h4, h5, h6) { font-family: var(--w-ui); font-weight: 600; color: var(--w-ink); scroll-margin-top: 24px; }
+.md-doc h1 { font-family: var(--w-display); font-weight: 600; font-size: 40px; line-height: 1.1; letter-spacing: -.01em; margin: 8px 0 20px; }
+.md-doc h2 { font-size: 23px; line-height: 1.25; letter-spacing: -.01em; margin: 40px 0 12px; }
+.md-doc h3 { font-size: 19px; line-height: 1.3; margin: 28px 0 8px; }
+.md-doc :is(h4, h5, h6) { font-size: var(--w-read); margin: 24px 0 8px; }
+.md-doc :is(ul, ol) { padding-left: 1.3em; }
+.md-doc li { margin: 0 0 4px; }
+.md-doc li > :is(ul, ol) { margin: 4px 0 0; }
+.md-doc li > p { margin: 0 0 4px; }
+.md-doc li:has(> input[type="checkbox"]) { list-style: none; margin-left: -1.3em; }
+.md-doc input[type="checkbox"] { margin: 0 8px 0 0; accent-color: var(--w-ink); vertical-align: -1px; }
+.md-doc strong, .md-doc b { font-weight: 600; }
+.md-doc a { color: var(--w-ink); text-decoration: underline; text-decoration-color: var(--w-line); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.md-doc a:hover { text-decoration-color: var(--w-ink); }
+.md-doc a:not([href]) { cursor: text; }
+.md-doc blockquote { color: var(--w-dim); padding-left: 16px; border-left: 2px solid var(--w-line); margin-left: 0; }
+.md-doc blockquote > :last-child { margin-bottom: 0; }
+.md-doc code { font: .88em var(--w-mono); background: var(--w-card); border-radius: 4px; padding: 1px 4px; }
+.md-doc pre { font: 14px/1.6 var(--w-mono); background: var(--w-card); border-radius: 8px; padding: 12px 16px; white-space: pre-wrap; overflow-wrap: anywhere; box-shadow: 3px 3px 0 var(--w-drop); }
+.md-doc pre code { font: inherit; background: none; padding: 0; }
+.md-doc hr { border: 0; border-top: 1px solid var(--w-line); margin: 32px 0; }
+.md-doc img { max-width: 100%; height: auto; border-radius: 8px; }
+/* a picture beside the file: no path reaches a view, so its words stand in its place */
+.md-doc .md-img { color: var(--w-faint); font-style: italic; }
+.md-doc table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; font-size: var(--w-small); }
+.md-doc th { font: 400 var(--w-kicker) var(--w-mono); color: var(--w-faint); text-align: left; padding: 8px 12px 4px; border-bottom: 1.5px solid var(--w-rule); vertical-align: bottom; white-space: nowrap; }
+.md-doc td { padding: 8px 12px; border-bottom: 1px solid var(--w-line); vertical-align: baseline; line-height: 1.5; }
+.md-doc :is(th, td):first-child { padding-left: 0; }
+.md-doc del { color: var(--w-dim); }
+.md-doc .footnotes { font-size: var(--w-small); color: var(--w-dim); border-top: 1px solid var(--w-line); margin-top: 32px; padding-top: 12px; }
+.md-doc sup a { text-decoration: none; font: 600 11px var(--w-mono); }
+.md-doc [data-block][data-bise-mark] { margin-left: -12px; padding-left: 12px; }
+.md-doc blockquote[data-block][data-bise-mark] { margin-left: -12px; padding-left: 26px; }
+.md-source { margin: 0 auto; font: 13px/1.6 var(--w-mono); color: var(--w-ink); white-space: pre-wrap; overflow-wrap: anywhere; }
+.md-toggle { position: absolute; top: 8px; right: 16px; z-index: 2; height: 24px; padding: 0 8px; border: 0; border-radius: 6px; background: var(--w-ground); color: var(--w-faint); font: var(--w-kicker) / 1 var(--w-ui); }
+.md-toggle:hover, .md-toggle[aria-pressed="true"] { color: var(--w-ink); background: var(--w-hover); }

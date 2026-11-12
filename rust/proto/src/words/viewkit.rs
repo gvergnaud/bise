@@ -19,4 +19,6 @@ crate::words! { viewkit:
     // `page {n} · an area`, `slide {n}`, `slide {n} · an area`, `{t} · an area` (t as a
     // player says it), `line {n}`, `lines {from}-{to}`, `cell {r}`, `{sheet} · {range}` (one
     // sheet: the range alone); lowercase but proper names and cell refs.
+    /// a place: the slide a selection is on (plugins/slides' view, a clicked shape's label)
+    slide(n) = "slide {n}";
 }

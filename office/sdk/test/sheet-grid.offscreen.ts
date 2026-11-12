@@ -87,7 +87,7 @@ const server = http.createServer((req, res) => {
     });
     return;
   }
-  if (segs[0] === "kit" && segs[1] === "office" && ["office.js", "office-view.js", "office-sheet.js"].includes(segs[2])) return send(200, "text/javascript", existsSync(join(APP, "office", "dist", segs[2])) ? readFileSync(join(APP, "office", "dist", segs[2])) : "");
+  if (segs[0] === "kit" && segs[1] === "office" && ["office.js", "office-sheet.js"].includes(segs[2])) return send(200, "text/javascript", existsSync(join(APP, "office", "dist", segs[2])) ? readFileSync(join(APP, "office", "dist", segs[2])) : "");
   if (segs[0] === "kit") {
     const p = join(APP, ...segs);
     return existsSync(p) ? send(200, types[extname(p)] || "application/octet-stream", readFileSync(p)) : send(404, "text/plain", "no");

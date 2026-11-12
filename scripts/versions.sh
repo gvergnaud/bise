@@ -176,8 +176,8 @@ build_from() {
     mkdir -p "$tmp/apps/ambient"; cp -R "$src/apps/ambient/kit" "$tmp/apps/ambient/kit"
   fi
   # the office SDK's bundles: `bise office run` hands bend-jsrt
-  # <app root>/office/dist/office.js; the page server serves office.js and
-  # office-view.js to the viewer at /kit/office/ (docs/office.md)
+  # <app root>/office/dist/office.js; the page server serves office.js to
+  # the viewer at /kit/office/ and to the views at ~kit/office/v1/ (docs/office.md)
   if [ -d "$src/office/dist" ]; then mkdir -p "$tmp/office"; cp -R "$src/office/dist" "$tmp/office/dist"; fi
   # and the xlsx grid (Univer), built, never committed: bins.sh's cache (xlsx-univer)
   if [ -f "$src/office/sdk/src/view/sheet.ts" ]; then

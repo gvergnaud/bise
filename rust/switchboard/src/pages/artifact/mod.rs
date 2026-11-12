@@ -3,12 +3,12 @@
 //! office-viewer). server.rs calls [`route`] once, before its `/a/<id>/<v>/<file>`
 //! arm; what is not ours falls through to it.
 //!
-//! - `GET /a/<id>/view`, `GET /a/<id>/<v>/view`: bise's viewer of an xlsx,
-//!   pptx or docx ([`view`]), the newest version or version `v`;
+//! - `GET /a/<id>/view`, `GET /a/<id>/<v>/view`: bise's viewer of an xlsx
+//!   ([`view`]), the newest version or version `v`;
 //! - `GET /a/<id>/events`: the stream of its saves ([`events`]; server.rs
 //!   runs it, as `/p/<id>/events`);
-//! - `GET /kit/office/office.js`, `/kit/office/office-view.js`,
-//!   `office-pdf.js`, `pdf.worker.js`, `office-sheet.js`, `office-md.js`: the office SDK's bundles (pdf.js and
+//! - `GET /kit/office/office.js`,
+//!   `office-pdf.js`, `pdf.worker.js`, `office-sheet.js`: the office SDK's bundles (pdf.js and
 //!   its worker, pdf-notes; Univer's grid, xlsx-univer), read from `office/dist` in the app root (one copy, never
 //!   in `kit/`, architect m_23781); the renderers beside them
 //!   (`kit/office/*.js`) are kit files;
@@ -32,7 +32,7 @@ use super::store::valid_id;
 use super::Pages;
 
 /// The bundles the viewer loads, from `Pages::office_dir`.
-const BUNDLES: &[&str] = &["office.js", "office-view.js", "office-pdf.js", "pdf.worker.js", "office-sheet.js", "office-md.js"];
+const BUNDLES: &[&str] = &["office.js", "office-pdf.js", "pdf.worker.js", "office-sheet.js"];
 
 /// The response for `segs` (the path's segments), or None: not an
 /// artifact route of this module.
@@ -87,7 +87,7 @@ mod tests {
         std::fs::read(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../office/fixtures").join(name)).unwrap()
     }
 
-    /// office-artifacts plan §4: an xlsx, pptx or docx artifact's row is
+    /// office-artifacts plan §4: an xlsx artifact's row is
     /// framed at `/a/<id>/view`, which serves the viewer's shell under its
     /// CSP, pointing at the copy's bytes, which are served too; an older
     /// version at `/a/<id>/<v>/view`; anything else there is a 404 in words.
@@ -109,24 +109,14 @@ mod tests {
         let xlsx = add("q3.xlsx", 10);
         std::fs::write(work.join("q3.xlsx"), [fixture("tiny.xlsx"), b"more".to_vec()].concat()).unwrap();
         add("q3.xlsx", 20);
-        std::fs::write(work.join("deck.pptx"), fixture("tiny.pptx")).unwrap();
-        std::fs::write(work.join("memo.docx"), fixture("tiny.docx")).unwrap();
         std::fs::write(work.join("r.html"), "<h1>r</h1>").unwrap();
-        for f in ["deck.pptx", "memo.docx", "r.html"] {
-            add(f, 30);
-        }
+        add("r.html", 30);
 
         let rows = arts.rows(&|a: &str| Some((a.to_string(), false)), work.to_str().unwrap());
         let base = format!("http://127.0.0.1:{}", p.port);
         let items = crate::proto_view::artifacts(&json!({"ev": "artifacts", "rows": rows, "seen_ms": 0}), |_| None, Some(&base), |_| Default::default());
         let frame = |id: &str| items.iter().find(|a| a.id == id).and_then(|a| a.frame_url.clone()).unwrap_or_default();
         assert_eq!(frame(&xlsx.id), format!("{base}/a/{}/view", xlsx.id), "the newest, with no version in it");
-        for (name, kind) in [("deck", "pptx"), ("memo", "docx")] {
-            let a = items.iter().find(|a| a.title.starts_with(name)).unwrap();
-            let r = get(&p, frame(&a.id).strip_prefix(&base).unwrap());
-            assert_eq!(r.status, 200);
-            assert!(text(&r).contains(&format!("data-kind=\"{kind}\"")), "{}", text(&r));
-        }
         let html = items.iter().find(|a| a.title.starts_with("r.html")).unwrap();
         assert_eq!(frame(&html.id), format!("{base}/a/{}/view", html.id), "a site in the viewer too (art-notes)");
         let site = text(&get(&p, &format!("/a/{}/view", html.id)));
@@ -163,7 +153,7 @@ mod tests {
 
         let js = get(&p, "/kit/office/office.js");
         assert_eq!((js.status, js.ctype, text(&js).as_str()), (200, "text/javascript; charset=utf-8", "export const sheets = {};"), "from office/dist in the app root");
-        let none = get(&p, "/kit/office/office-view.js");
+        let none = get(&p, "/kit/office/office-pdf.js");
         assert_eq!(none.status, 404, "a bundle not shipped says so");
         assert!(text(&none).contains("office/dist"));
         let _ = std::fs::remove_dir_all(d);

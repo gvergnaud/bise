@@ -266,9 +266,8 @@ pub fn frame_href(id: &str, v: u64, copy: &str, newest: bool) -> String {
 /// a note is a box drawn on it) or a site (`site`: a folder or an html
 /// file, still served sandboxed at [`copy_href`], framed inside the viewer
 /// so notes can sit on its blocks; art-notes) or a pdf (`pdf`: drawn by
-/// pdf.js, a note on a passage or a box; pdf-notes) or a markdown file
-/// (`markdown`: .md, drawn as a document by kit/office/markdown.js;
-/// md-artifact). None: framed as itself.
+/// pdf.js, a note on a passage or a box; pdf-notes). None: framed as
+/// itself (a markdown file opens in Writer, plugins/docs).
 /// The videos bise's viewer plays (the browser's: an mkv is framed as itself).
 pub const VIDEO_EXTS: &[&str] = &["mp4", "mov", "webm", "m4v"];
 
@@ -292,23 +291,18 @@ pub fn viewer_kind(copy: &str) -> Option<&'static str> {
         // a video: played by kit/office/video.js from its byte ranges (media.rs), a
         // note on a moment or a box on its frame (video-view)
         _ if VIDEO_EXTS.contains(&ext.as_str()) => Some("video"),
-        // a markdown file: drawn as a document by kit/office/markdown.js (headings, tables,
-        // quotes...), its source a toggle away, notes on its blocks (md-artifact); its copy
-        // stays text/plain at copy_href
-        _ if ext == "md" || ext == "markdown" => Some("markdown"),
         _ => None,
     }
 }
 
-/// The office file a copy is (`xlsx`, `pptx`, `docx`), by its extension:
-/// the files bise's viewer draws. None: any other file, or a folder.
+/// The office file a copy is (`xlsx`), by its extension: the files bise's
+/// viewer draws (a docx opens in Writer, plugins/docs; a pptx in Slides,
+/// plugins/slides). None: any other file, or a folder.
 pub fn office_kind(copy: &str) -> Option<&'static str> {
     let file = file_of(copy);
     match file.rsplit('.').next()?.to_ascii_lowercase().as_str() {
         _ if file.is_empty() => None,
         "xlsx" => Some("xlsx"),
-        "pptx" => Some("pptx"),
-        "docx" => Some("docx"),
         _ => None,
     }
 }
@@ -432,7 +426,7 @@ mod tests {
             assert_eq!(viewer_kind(&sample), Some(b.kind), "{b:?}");
         }
         // every ending the viewer draws has its row
-        let ends = bise_proto::parts::IMAGE_EXTS.iter().chain(VIDEO_EXTS).chain(&["pdf", "md", "markdown", "html", "htm", "docx", "pptx", "xlsx"]);
+        let ends = bise_proto::parts::IMAGE_EXTS.iter().chain(VIDEO_EXTS).chain(&["pdf", "html", "htm", "xlsx"]);
         for e in ends {
             let kind = viewer_kind(&format!("v1/x.{e}")).unwrap_or_else(|| panic!("the viewer draws .{e}"));
             assert!(BUILTIN.iter().any(|b| !b.folder && b.key == format!("*.{e}") && b.kind == kind), ".{e} ({kind}) has no BUILTIN row");
@@ -532,19 +526,19 @@ mod tests {
         assert!(!ARTIFACT_CSP.contains("frame-ancestors"), "the desktop's file:// renderer frames it");
     }
 
-    /// office-artifacts plan §4: an xlsx, pptx or docx is served (its bytes,
-    /// for the viewer) and framed in bise's viewer, the newest at a url
-    /// with no version (a new version never reloads the frame); any other
-    /// copy is framed as itself, by the same rule (serves_copy).
+    /// office-artifacts plan §4: an xlsx is served (its bytes, for the
+    /// viewer) and framed in bise's viewer, the newest at a url with no
+    /// version (a new version never reloads the frame); any other copy is
+    /// framed as itself, by the same rule (serves_copy).
     #[test]
     fn an_office_file_is_framed_in_the_viewer() {
-        for (copy, kind) in [("v2/q3.xlsx", "xlsx"), ("v2/Deck.PPTX", "pptx"), ("v1/memo.docx", "docx")] {
-            assert_eq!(office_kind(copy), Some(kind));
-            assert!(serves_copy("office-lead", copy), "{copy}: its bytes are served");
-            assert_eq!(frame_href("q3", 2, copy, true), "/a/q3/view");
-            assert_eq!(frame_href("q3", 2, copy, false), "/a/q3/2/view");
-        }
-        for copy in ["v1/a.xls", "v1/a.ppt", "v1/a.doc", "v1/site", "v1/docx", "v1/r.html"] {
+        let copy = "v2/q3.xlsx";
+        assert_eq!(office_kind(copy), Some("xlsx"));
+        assert!(serves_copy("office-lead", copy), "{copy}: its bytes are served");
+        assert_eq!(frame_href("q3", 2, copy, true), "/a/q3/view");
+        assert_eq!(frame_href("q3", 2, copy, false), "/a/q3/2/view");
+        // a docx opens in Writer, a pptx in Slides (docs/plugin-apps.md step 3)
+        for copy in ["v1/memo.docx", "v2/Deck.PPTX", "v1/a.xls", "v1/a.ppt", "v1/a.doc", "v1/site", "v1/docx", "v1/r.html"] {
             assert_eq!(office_kind(copy), None, "{copy}");
         }
         // a site in the viewer too (art-notes: notes on its blocks); its copy keeps its own link
@@ -555,9 +549,9 @@ mod tests {
         // an image too (art-notes: a note is a box drawn on it)
         assert_eq!((viewer_kind("v1/shot.PNG"), viewer_kind("v1/q3.xlsx"), viewer_kind("v1/a.csv")), (Some("image"), Some("xlsx"), None));
         assert_eq!((viewer_kind("v2/report.pdf"), viewer_kind("v2/R.PDF")), (Some("pdf"), Some("pdf")));
-        // md-artifact: a markdown file drawn as a document (its copy still text/plain); a .txt framed as itself
-        assert_eq!((viewer_kind("v3/learnings.md"), viewer_kind("v1/A.Markdown"), viewer_kind("v1/notes.txt")), (Some("markdown"), Some("markdown"), None));
-        assert_eq!(frame_href("l", 3, "v3/learnings.md", true), "/a/l/view");
+        // a markdown file opens in Writer (plugins/docs, docs/plugin-apps.md step 1), framed as
+        // itself here (its copy text/plain); a .txt too
+        assert_eq!((viewer_kind("v3/learnings.md"), viewer_kind("v1/A.Markdown"), viewer_kind("v1/notes.txt")), (None, None, None));
         assert!(serves_copy("learnings", "v3/learnings.md") && ctype("v3/learnings.md") == Some("text/plain; charset=utf-8"));
         // video-view: the browser's videos played in the viewer, served by ranges; a gif stays an image, an mkv is framed as itself
         for f in ["v1/film.mp4", "v1/a.MOV", "v1/b.webm", "v1/c.m4v"] {

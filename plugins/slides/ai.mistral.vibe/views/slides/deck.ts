@@ -1,15 +1,20 @@
-// bise kit · the pptx renderer of the office viewer (viewer.js; plan §4): the slides module's
-// outline (slides.open(bytes).inspect(), office-slides m_23797: boxes in pt, colors resolved)
-// as HTML, one 16:9 (or the deck's) box per slide scaled to the frame, a slide rail on the
-// left, ←/→ to move. Text with its paragraphs, filled and outlined shapes, pictures (their
-// bytes from the file's zip), tables, and charts as SVG from their data. A click on a shape
-// selects it (an Anchor `shape`). Not drawn, said in the foot: what the module marks notDrawn
-// (SmartArt and animations show their text only).
+// Slides · the deck (docs/plugin-apps.md, migration step 3; office-artifacts plan §4): the slides
+// module's outline (the office SDK at ~kit/office/v1/office.js: slides.open(bytes).inspect(),
+// office-slides m_23797: boxes in pt, colors resolved) as HTML, one 16:9 (or the deck's) box per
+// slide scaled to the frame, a slide rail on the left, ←/→ to move. Text with its paragraphs,
+// filled and outlined shapes, pictures (their bytes from the file's zip), tables, and charts as
+// SVG from their data. A click on a shape selects it. Not drawn, said in the foot: what the
+// module marks notDrawn (SmartArt and animations show their text only).
 //
-// Pure helpers (exported for office/sdk/test/viewer.test.ts): pct, chartSvg.
+// A note's anchor is the canonical JSON of the old viewer's anchor minus its quote (sorted keys:
+// architect m_60380): a shape `{"kind":"shape","shape":"4","slide":2}`, a slide
+// `{"kind":"slide","slide":2}` (a box on it keeps its `rect`), so the notes made before place
+// too. A shape's note marks the shape and its slide's thumb; a slide's, its thumb.
+//
+// Pure helpers (plugins/slides/test/deck.test.mjs): pct, shapeKey, slideKey, anchorOf.
 
-import { slides, openPackage } from "/kit/office/office.js";
-import type { OutlineNode, Package } from "/kit/office/office.js";
+import { slides, openPackage } from "./~kit/office/v1/office.js";
+import type { OutlineNode, Package } from "./~kit/office/v1/office.js";
 
 // what slides' inspect() says in a node's props (office/sdk/src/slides), the fields drawn here
 type Chart = { series?: { values?: (number | null)[] }[]; categories?: unknown[]; title?: string; type?: string };
@@ -26,10 +31,47 @@ const propsOf = (n: OutlineNode) => (n.props || {}) as Props;
 
 const SVG = "http://www.w3.org/2000/svg";
 
+/** What the view gives the deck: say his selection (its anchor, words and where it is). */
+export type Host = { select(anchor: string | null, text: string | null, at: Element | null): void };
+
+/** What the deck gives the view back. */
+export type Deck = {
+  /** what it could not draw, one line each (the foot) */
+  notes: string[];
+  place(): { slide: number };
+  restore(place: unknown): void;
+  onChange(fn: () => void): void;
+  /** the parts a note's anchor names; [] when this version has none */
+  find(anchor: string): Element[];
+};
+
 /** A box in pt as left/top/width/height in % of a slide of w × h pt. */
 export function pct(box: number[], w: number, h: number) {
   const [x, y, bw, bh] = box;
   return { left: (x / w) * 100, top: (y / h) * 100, width: (bw / w) * 100, height: (bh / h) * 100 };
+}
+
+/** A shape's anchor: `{"kind":"shape","shape":"<id>","slide":<n>}`. */
+export function shapeKey(slide: number, shape: string) {
+  return JSON.stringify({ kind: "shape", shape, slide });
+}
+
+/** A slide's anchor: `{"kind":"slide","slide":<n>}`. */
+export function slideKey(slide: number) {
+  return JSON.stringify({ kind: "slide", slide });
+}
+
+/** The slide (and the shape) an anchor names; null when it is not one of a deck's. */
+export function anchorOf(key: string): { slide: number; shape?: string } | null {
+  try {
+    const a = JSON.parse(key);
+    if (!a || !Number.isInteger(a.slide) || a.slide < 1) return null;
+    if (a.kind === "slide") return { slide: a.slide };
+    if (a.kind === "shape" && typeof a.shape === "string") return { slide: a.slide, shape: a.shape };
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string | null, text?: string) {
@@ -46,8 +88,8 @@ function svgEl(tag: string, attrs: Record<string, string | number>) {
 }
 
 /** A chart's data as an SVG (bars, or lines for a line chart), in a 400 × 240 box. */
-export function chartSvg(chart: Chart | null | undefined) {
-  const svg = svgEl("svg", { viewBox: "0 0 400 240", class: "office-chart", role: "img" });
+function chartSvg(chart: Chart | null | undefined) {
+  const svg = svgEl("svg", { viewBox: "0 0 400 240", class: "s-chart", role: "img" });
   const series = (chart && chart.series) || [];
   const cats = (chart && chart.categories) || [];
   const values = series.flatMap((s) => (s.values || []).filter((v) => typeof v === "number"));
@@ -138,7 +180,7 @@ function drawShape(into: HTMLElement, shape: OutlineNode, slide: Slide, ctx: Ctx
   if (p.fill && p.fill !== "none") e.style.background = p.fill;
   if (p.line && p.line !== "none") e.style.border = `1pt solid ${p.line}`;
   if (p.geometry === "ellipse") e.style.borderRadius = "50%";
-  if (p.font) e.style.fontFamily = `"${p.font}", var(--font-body, sans-serif)`;
+  if (p.font) e.style.fontFamily = `"${p.font}", sans-serif`;
   if (shape.type === "picture") {
     const u = pictureUrl(ctx.zip, p.image, ctx.urls);
     if (u) {
@@ -175,7 +217,7 @@ function drawSlide(node: OutlineNode, n: number, ctx: Ctx): Drawn {
   return { box, ...slide };
 }
 
-export async function draw(root: HTMLElement, bytes: Uint8Array): Promise<OfficeView> {
+export async function draw(root: HTMLElement, bytes: Uint8Array, host: Host): Promise<Deck> {
   const deck = await slides.open(bytes);
   const nodes = deck.inspect().nodes.filter((n) => n.type === "slide");
   let zip: Ctx["zip"] = null;
@@ -183,16 +225,16 @@ export async function draw(root: HTMLElement, bytes: Uint8Array): Promise<Office
     zip = openPackage(bytes).zip;
   } catch {}
   const ctx: Ctx = { zip, urls: [], notDrawn: new Set() };
-  root.classList.add("office-deck");
-  const rail = el("nav", "office-rail");
+  root.classList.add("s-deck");
+  const rail = el("nav", "s-rail");
   rail.setAttribute("aria-label", "slides");
-  const stage = el("div", "office-slide");
+  const stage = el("div", "s-stage");
   stage.tabIndex = 0;
   root.append(rail, stage);
 
   const big = nodes.map((n, i) => drawSlide(n, i + 1, ctx));
   let current = 0;
-  let selected: { slide: number; shape: string | undefined } | null = null;
+  const changed = new Set<() => void>();
 
   /** Scale a w × h pt slide to `width` px wide (1pt = 4/3 px). */
   function scaleTo(holder: HTMLElement, s: Drawn, width: number) {
@@ -205,6 +247,7 @@ export async function draw(root: HTMLElement, bytes: Uint8Array): Promise<Office
     const thumb = drawSlide(nodes[i], i + 1, { ...ctx, notDrawn: new Set() });
     const b = el("button", "thumb");
     b.type = "button";
+    b.dataset.slide = String(i + 1);
     b.setAttribute("aria-label", `slide ${i + 1}`);
     const holder = el("div", "holder");
     holder.append(thumb.box);
@@ -223,18 +266,30 @@ export async function draw(root: HTMLElement, bytes: Uint8Array): Promise<Office
     for (const t of big) t.thumb!.fit!();
   }
 
+  function select(shape: HTMLElement | null) {
+    for (const x of stage.querySelectorAll(".shape.sel")) x.classList.remove("sel");
+    if (!shape) return host.select(null, null, null);
+    shape.classList.add("sel");
+    const slide = Number(shape.dataset.slide);
+    host.select(shapeKey(slide, shape.dataset.shape!), (shape.textContent || "").replace(/\s+/g, " ").trim() || null, shape);
+  }
+
   function go(i: number) {
     if (big.length === 0) {
-      stage.replaceChildren(el("p", "office-empty", "this deck has no slides."));
+      stage.replaceChildren(el("p", "s-empty", "this deck has no slides."));
       return;
     }
-    current = Math.max(0, Math.min(big.length - 1, i));
+    const next = Math.max(0, Math.min(big.length - 1, i));
+    const moved = next !== current;
+    current = next;
     const holder = el("div", "holder");
     holder.append(big[current].box);
     stage.replaceChildren(holder);
-    for (const [j, b] of [...rail.children].entries()) b.setAttribute("aria-current", String(j === current));
+    for (const b of rail.children) b.setAttribute("aria-current", String(b === rail.children[current]));
     rail.children[current]?.scrollIntoView({ block: "nearest" });
     fit();
+    select(null);
+    if (moved) changed.forEach((fn) => fn());
   }
 
   new ResizeObserver(fit).observe(stage);
@@ -244,20 +299,27 @@ export async function draw(root: HTMLElement, bytes: Uint8Array): Promise<Office
     else return;
     e.preventDefault();
   });
-  stage.addEventListener("click", (e) => {
-    for (const x of stage.querySelectorAll(".shape.sel")) x.classList.remove("sel");
-    const s = (e.target as Element).closest<HTMLElement>(".shape");
-    selected = s ? { slide: Number(s.dataset.slide), shape: s.dataset.shape } : null;
-    if (s) s.classList.add("sel");
-  });
+  stage.addEventListener("click", (e) => select((e.target as Element).closest<HTMLElement>(".shape")));
+  current = -1;
   go(0);
 
   const words: Record<string, string> = { smartart: "SmartArt shows its text only", animation: "animations are not played" };
   return {
     notes: [...ctx.notDrawn].map((k) => `${words[k] || `${k} is not drawn`} here.`),
-    place: () => ({ slide: current }),
-    restore: (p) => go((p.slide as number) ?? 0),
-    /** The selection as an Anchor (`shape`, or the slide shown), never null on a deck with slides. */
-    selection: () => (selected ? { kind: "shape", ...selected } : big.length ? { kind: "slide", slide: current + 1 } : null),
+    place: () => ({ slide: current + 1 }),
+    restore(p) {
+      const at = p as { slide?: number } | null;
+      if (at && Number.isInteger(at.slide)) go(at.slide! - 1);
+    },
+    onChange: (fn) => changed.add(fn),
+    find(anchor) {
+      const a = anchorOf(anchor);
+      const s = a && big[a.slide - 1];
+      if (!a || !s) return [];
+      const thumb = rail.children[a.slide - 1];
+      if (!a.shape) return [thumb];
+      const shape = s.box.querySelector(`.shape[data-shape="${CSS.escape(a.shape)}"]`);
+      return shape ? [shape, thumb] : [];
+    },
   };
 }

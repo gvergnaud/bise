@@ -1,13 +1,15 @@
 // Builds src/ into office/dist/office.js: one ESM bundle, no node imports
 // (platform neutral, so an `fs` or `node:` import fails the build), the
-// same bytes for the same sources and lockfile; and src/view/ into
-// office/dist/office-view.js, the viewer's docx renderer (browser only); src/view/pdf.ts and
-// src/view/pdf-worker.ts into office/dist/office-pdf.js and pdf.worker.js (pdf.js); src/view/markdown.ts
-// into office/dist/office-md.js (micromark + GFM).
+// same bytes for the same sources and lockfile; and src/view/pdf.ts and
+// src/view/pdf-worker.ts into office/dist/office-pdf.js and pdf.worker.js (pdf.js).
+// A plugin's renderer bundle (architect m_60401) is built here too, from the plugin's own
+// src/ (one lockfile: this folder's node_modules as esbuild's nodePaths), into the plugin's view
+// folder: plugins/docs/src/markdown.ts and docx.ts into Writer's office-md.js (micromark + GFM)
+// and office-view.js (docx-preview).
 // Committed (cargo and nix never run pnpm); shipped in the app root
 // (scripts/versions.sh), where the page server and bise office run read it.
 // Beside each committed bundle, its types: <bundle>.d.ts re-exports its entry's
-// (the SDK's tests, office/fixtures/make.ts and kit/office import the bundle typed).
+// (the SDK's tests, office/fixtures/make.ts, kit/office and the plugins' views import the bundle typed).
 //
 //   node build.ts           write ../dist/office.js and ../dist/office-view.js
 //   node build.ts --check   rebuild in memory, exit 1 when a committed file differs
@@ -78,12 +80,12 @@ const stubs: Plugin = {
   },
 };
 
-// office.js: the SDK, for bise office run, the viewer and the tests; no DOM, no node;
-//   with the stubs above; fails past 3 MB (architect m_23769)
-// office-view.js: what draws a docx in the viewer (docx-preview + jszip), browser only,
-//   loaded by kit/office/docx.js alone (architect m_23781); fails past 2 MB
-// office-md.js: micromark + GFM, what draws a .md artifact (kit/office/markdown.js alone; md-artifact),
-//   platform neutral (no DOM, tested in node), minified, fails past 256 KB
+// office.js: the SDK, for bise office run, the views (~kit/office/v1/office.js) and the tests; no
+//   DOM, no node; with the stubs above; fails past 3 MB (architect m_23769)
+// office-view.js: what draws a docx in Writer (docx-preview + jszip), browser only, loaded by its
+//   docx.js alone (architect m_23781); fails past 2 MB
+// office-md.js: micromark + GFM, what draws a .md file in Writer (plugins/docs, its markdown.js
+//   alone; md-artifact), platform neutral (no DOM, tested in node), minified, fails past 256 KB
 // office-pdf.js and pdf.worker.js: pdf.js (pdfjs-dist, Apache-2.0), what draws a pdf in the
 //   viewer and its worker, two files served under the viewer's script rule (architect m_24668:
 //   never a blob worker), loaded by kit/office/pdf.js alone; minified (pdf.js ships its own
@@ -107,7 +109,10 @@ const hyphenation: Plugin = {
 //   Fails past 8 MB.
 type Bundle = {
   file: string;
+  /** from this folder (office/sdk) */
   entry: string;
+  /** the folder it goes to, from the repo's root; none: office/dist */
+  dir?: string;
   platform: Platform;
   max: number;
   mainFields?: string[];
@@ -119,9 +124,23 @@ type Bundle = {
 };
 const bundles: Bundle[] = [
   { file: "office.js", entry: join("src", "index.ts"), platform: "neutral", mainFields: ["module", "main"], plugins: [stubs], max: 3 * 1024 * 1024 },
-  { file: "office-view.js", entry: join("src", "view", "index.ts"), platform: "browser", max: 2 * 1024 * 1024 },
+  {
+    file: "office-view.js",
+    entry: join("..", "..", "plugins", "docs", "src", "docx.ts"),
+    dir: join("plugins", "docs", "ai.mistral.vibe", "views", "writer"),
+    platform: "browser",
+    max: 2 * 1024 * 1024,
+  },
   { file: "office-pdf.js", entry: join("src", "view", "pdf.ts"), platform: "browser", minify: true, max: 1024 * 1024 },
-  { file: "office-md.js", entry: join("src", "view", "markdown.ts"), platform: "neutral", mainFields: ["module", "main"], minify: true, max: 256 * 1024 },
+  {
+    file: "office-md.js",
+    entry: join("..", "..", "plugins", "docs", "src", "markdown.ts"),
+    dir: join("plugins", "docs", "ai.mistral.vibe", "views", "writer"),
+    platform: "neutral",
+    mainFields: ["module", "main"],
+    minify: true,
+    max: 256 * 1024,
+  },
   { file: "pdf.worker.js", entry: join("src", "view", "pdf-worker.ts"), platform: "browser", minify: true, max: 1.5 * 1024 * 1024 },
   {
     file: "office-sheet.js",
@@ -139,13 +158,17 @@ const bundles: Bundle[] = [
 // what V8 alone (bend-jsrt's script mode) and a browser lack: none may stay
 const banned = [/\brequire\(\s*["']/, /from\s*["']node:/, /import\(\s*["']node:/, /\bprocess\.env\b/, /\bBuffer\.from\b/];
 
+const repo = join(here, "..", "..");
 const dist = join(here, "..", "dist");
 let failed = false;
 for (const b of bundles) {
   if (only !== undefined ? b.file !== only : b.built && check) continue;
-  const out = only !== undefined && outArg ? outArg : join(dist, b.file);
+  const dir = b.dir ? join(repo, b.dir) : dist;
+  const out = only !== undefined && outArg ? outArg : join(dir, b.file);
   const res = await build({
     entryPoints: [join(here, b.entry)],
+    // an entry in a plugin's src/ finds its packages here: one lockfile
+    nodePaths: [join(here, "node_modules")],
     bundle: true,
     format: "esm",
     platform: b.platform,
@@ -173,30 +196,31 @@ for (const b of bundles) {
     console.error(`${b.file} is ${size} bytes, over its ${b.max} budget (architect m_23769, m_23781)`);
     process.exit(1);
   }
-  emit(b.file, out, js);
+  emit(out, js);
   // its types, beside a committed bundle: its entry's, re-exported
   if (!b.built && only === undefined) {
-    const dts = b.file.replace(/\.js$/, ".d.ts");
-    const entry = relative(dist, join(here, b.entry)).split("\\").join("/");
-    emit(dts, join(dist, dts), `${banner.js}\nexport * from "${entry}";\n`);
+    const dts = join(dir, b.file.replace(/\.js$/, ".d.ts"));
+    const entry = relative(dir, join(here, b.entry)).split("\\").join("/");
+    emit(dts, `${banner.js}\nexport * from "${entry.startsWith(".") ? entry : "./" + entry}";\n`);
   }
 }
 if (failed) process.exit(1);
 
-// write a file of office/dist, or with --check say whether the committed one is the same
-function emit(file: string, out: string, text: string): void {
+// write a bundle (or its types), or with --check say whether the committed one is the same
+function emit(out: string, text: string): void {
+  const file = relative(repo, out).split("\\").join("/");
   if (check) {
     let have = "";
     try {
       have = readFileSync(out, "utf8");
     } catch {}
     if (have !== text) {
-      console.error(`office/dist/${file} is stale or hand-edited: run pnpm -C office/sdk build and commit it`);
+      console.error(`${file} is stale or hand-edited: run pnpm -C office/sdk build and commit it`);
       failed = true;
-    } else console.log(`office/dist/${file} is fresh (${text.length} bytes)`);
+    } else console.log(`${file} is fresh (${text.length} bytes)`);
   } else {
     mkdirSync(dirname(out), { recursive: true });
     writeFileSync(out, text);
-    console.log(`wrote office/dist/${file} (${text.length} bytes)`);
+    console.log(`wrote ${file} (${text.length} bytes)`);
   }
 }

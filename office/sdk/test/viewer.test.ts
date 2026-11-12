@@ -1,5 +1,6 @@
 // The viewer's pure parts (kit/office/*.js, plan §4) and the bundles' split (architect m_23781):
-// office.js stays DOM-free (bise office run loads it), office-view.js carries docx-preview.
+// office.js stays DOM-free (bise office run and the views load it); Writer's and Slides' (plugins/docs,
+// plugins/slides) are tested in their plugins' test/.
 // The renderers import the bundles by their served path (/kit/office/…): their pure helpers
 // are loaded here without those imports, so no DOM is needed.
 
@@ -31,10 +32,7 @@ test("office.js loads with no window or document, and has no docx-preview in it"
   const office = await import("../../dist/office.js");
   assert.equal(typeof office.sheets.open, "function");
   const js = readFileSync(join(root, "office", "dist", "office.js"), "utf8");
-  assert.ok(!js.includes("docx-preview"), "docx-preview lives in office-view.js only");
-  const view = readFileSync(join(root, "office", "dist", "office-view.js"), "utf8");
-  assert.match(view, /export\s*\{[^}]*renderDocx/, "office-view.js exports renderDocx");
-  assert.ok(view.length < 2 * 1024 * 1024, "within its 2 MB budget");
+  assert.ok(!js.includes("docx-preview"), "docx-preview lives in Writer's office-view.js only (plugins/docs)");
 });
 
 test("the grid names cells and ranges as the sheets module does", async () => {
@@ -67,26 +65,6 @@ test("the save's words: nothing at rest, then edited, saving, saved, or what he 
   assert.deepEqual(c.actions.map((a: { text: string }) => a.text), ["keep mine", "take v5"]);
   assert.equal(saveState({ kind: "conflict", v: 5, rev: 1, disk: true }).text, "the file changed on disk while you edited");
   assert.deepEqual(saveState({ kind: "failed", why: "the file is gone" }).actions.map((a: { id: string }) => a.id), ["retry"]);
-});
-
-test("a slide's boxes are placed in % of the slide", async () => {
-  const { pct } = await helpers("slides.js");
-  assert.deepEqual(pct([72, 54, 480, 270], 960, 540), { left: 7.5, top: 10, width: 50, height: 50 });
-});
-
-test("drawn paragraphs pair with the outline's, passing over what it skips", async () => {
-  const { matchParas, parasOf } = await helpers("docx.js");
-  const outline = parasOf([
-    { id: "p1", type: "para", text: "Title" },
-    { id: "t", type: "table", children: [{ id: "p2", type: "para", text: "cell  one" }, { id: "c", type: "comment" }] },
-    { id: "p3", type: "para", text: "Body" },
-  ]);
-  type Para = { id: string; text: string };
-  assert.deepEqual(outline.map((n: Para) => n.id), ["p1", "p2", "p3"], "a table's paragraphs in place, no comment");
-  // a text box's paragraph drawn between them is passed over; whitespace does not count
-  assert.deepEqual(matchParas(["Title", "in a text box", "cell one", "Body"], outline.map((n: Para) => n.text)), [0, -1, 1, 2]);
-  // a paragraph docx-preview did not draw: the next ones still pair
-  assert.deepEqual(matchParas(["Title", "Body"], outline.map((n: Para) => n.text)), [0, 2]);
 });
 
 // art-notes: the notes layer's pure parts (kit/office/select.js, image.js, kit/notes-anchors.js)
@@ -411,31 +389,3 @@ test("a column resized and a cell typed in the grid save as the next version, on
   assert.equal(save.state.kind, "saved");
 });
 
-// md-artifact (architect m_38679): a .md artifact drawn as a document by kit/office/markdown.js on
-// office-md.js (micromark + GFM, the thread's parser): its own bundle, DOM-free, raw html escaped
-const BLOCK_TAGS = /<(h[1-6]|p|blockquote|ul|ol|li|table|tr|th|td|pre|hr)[\s>/]/g;
-
-test("office-md.js draws gfm.md with the block structure the thread's Markdown.tsx draws", async () => {
-  const { markdownHtml } = await import("../../dist/office-md.js");
-  const html = markdownHtml(readFileSync(join(root, "office", "fixtures", "gfm.md"), "utf8"));
-  const want = JSON.parse(readFileSync(join(root, "office", "fixtures", "gfm.blocks.json"), "utf8")).tags;
-  assert.deepEqual([...html.matchAll(BLOCK_TAGS)].map((m) => m[1]), want);
-  // raw html shows as text, an unsafe link loses its url
-  assert.ok(!html.includes("<script") && !html.includes("<b>"), "raw html escaped");
-  assert.ok(html.includes("&lt;script&gt;"));
-  assert.doesNotMatch(markdownHtml("[x](javascript:alert(1))"), /javascript:/);
-  const view = readFileSync(join(root, "office", "dist", "office-view.js"), "utf8");
-  assert.ok(!view.includes("micromark"), "the docx bundle carries no markdown parser");
-});
-
-test("a markdown file's text and links: utf-8 without BOM, relative paths beside the copy, the web out", async () => {
-  const { textOf, outUrl } = await helpers("markdown.js");
-  assert.equal(textOf(new Uint8Array([0xef, 0xbb, 0xbf, 0x23, 0x20, 0xc3, 0xa9, 0x0d, 0x0a, 0x61])), "# é\na");
-  const file = "/a/learn/3/learnings.md";
-  const base = "http://127.0.0.1:4000/a/learn/view";
-  assert.deepEqual(outUrl("https://bise.dev", file, base), { href: "https://bise.dev", out: true });
-  assert.deepEqual(outUrl("mailto:g@x.y", file, base), { href: "mailto:g@x.y", out: true });
-  assert.deepEqual(outUrl("shots/a.png", file, base), { href: "/a/learn/3/shots/a.png", out: false });
-  assert.deepEqual(outUrl("#f01", file, base), { href: "#f01", out: false });
-  assert.deepEqual(outUrl("artifact:deck@v2", file, base), { href: "artifact:deck@v2", out: false });
-});

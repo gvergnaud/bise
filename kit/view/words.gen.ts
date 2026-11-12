@@ -8,4 +8,6 @@ export const viewkit = {
   ask: "type to ask about it",
   /** the pill, a moment after he asked (then it goes) */
   added: "added to your message",
+  /** a place: the slide a selection is on (plugins/slides' view, a clicked shape's label) */
+  slide: (a: { n: string | number }): string => "slide " + String(a.n),
 } as const;

@@ -26,14 +26,20 @@ TextDecoder are used when the host has them, else its own UTF-8:
   no web APIs; it reads the file from the app root, below);
 - the viewer in the side panel (the pages server serves the same file at
   `/kit/office/office.js`, from `office/dist` in the app root: one copy,
-  shipped by `scripts/versions.sh`, architect m_23781);
+  shipped by `scripts/versions.sh`, architect m_23781), and the plugins'
+  views, which import it as `./~kit/office/v1/office.js` (the same file,
+  a bise library for views: docs/plugin-apps.md A5, architect m_60401);
 - node, for the tests and for anyone who wants it.
 
-A second bundle, `office/dist/office-view.js`, is the viewer's alone:
-docx-preview (Apache-2.0) and jszip (taken under MIT) to draw a docx in a
-browser, `platform: "browser"`, a 2 MB budget `build.ts` enforces. It
-never goes into `office.js`, which stays DOM-free
-(`test/viewer.test.ts` imports it with no window).
+A renderer's bundle is its plugin's (architect m_60401): its entry in
+`plugins/<p>/src/`, built by `build.ts` with this folder's lockfile (its
+`node_modules` as esbuild's `nodePaths`) into the plugin's view folder,
+committed there. Writer's (plugins/docs): `office-view.js`, docx-preview
+(Apache-2.0) and jszip (taken under MIT) to draw a docx in a browser,
+`platform: "browser"`, a 2 MB budget; `office-md.js`, micromark + GFM for
+a markdown file. They never go into `office.js`, which stays DOM-free
+(`test/viewer.test.ts` imports it with no window); their tests are
+`plugins/docs/test/`.
 
 A third, `office/dist/office-sheet.js`, is the viewer's xlsx grid (page
 xlsx-univer, architect m_37322): Univer (Apache-2.0, open-source packages
@@ -376,9 +382,41 @@ own words.
   budgets; a longer `description` in a `plugin.json` needs its budget.
 - `tests/release_plugins_test.py` lists them in what a release ships.
 
+## Writer (plugins/docs)
+
+A docx or a markdown file opens in Writer, the docs plugin's static view
+(`plugins/docs/ai.mistral.vibe/views/writer/`, docs/plugin-apps.md steps 1
+and 3): an opener for `*.docx`, `*.md`, `*.markdown`, read only (no write
+grant). `writer.js` connects with `@bise/view`, reads the document through
+its handle and draws it with the renderer of its type: `docx.js`
+(docx-preview's pages, each body paragraph tagged with its id from the
+docs outline, `office.js` at `~kit/office/v1/`) or `markdown.js`
+(micromark + GFM, the thread's parser; its source a toggle away). A note
+anchors on the canonical JSON of the old viewer's anchor minus its quote
+(`{"kind":"para","para":…}`, `{"block":…,"kind":"block"}`, architect
+m_60380), so the notes made before place too; one it can't place is
+listed detached. His place (scroll, the source toggle) is the view's
+state, given back when the tab reopens on a newer version. Links to the web
+leave through the host (`openLink`); a path beside the file is words only
+(a view never gets a path). Sources `.ts` beside their emitted `.js`
+(`plugins/docs/tsconfig.json`, checked in the gate's kit step); tests
+`plugins/docs/test/*.test.mjs`.
+
+## Slides (plugins/slides)
+
+A pptx opens in Slides, the slides plugin's static view
+(`plugins/slides/ai.mistral.vibe/views/slides/`, docs/plugin-apps.md step
+3), read only: `deck.js` draws the slides module's outline (`office.js` at
+`~kit/office/v1/`) as one scaled box per slide with a rail, ←/→ to move;
+text, shapes, pictures from the file's zip, tables, charts as SVG; what
+the module marks notDrawn said in the foot. A clicked shape is his
+selection; a note anchors on `{"kind":"shape","shape":…,"slide":n}` or
+`{"kind":"slide","slide":n}` (the old viewer's minus its quote). The slide
+he is on is the view's state. Tests `plugins/slides/test/`.
+
 ## The viewer
 
-An xlsx, pptx or docx artifact opens in bise's viewer, a page of the pages
+An xlsx artifact opens in bise's viewer, a page of the pages
 server (plan §4): its row's `frame_url` is `/a/<id>/view` (the newest
 version: the side panel keeps that src when a new version lands), and an
 older version is `/a/<id>/<v>/view`. `pages::site::frame_href` decides it,
@@ -391,8 +429,6 @@ on the same rule that decides which copies the server sends
 | the shell (the file's facts as `data-` on `main#bise-office`) and its CSP | `pages/artifact/view.rs` |
 | fetch the copy, pick the renderer, the foot | `kit/office/viewer.js`, `viewer.css` |
 | xlsx: tabs, grid, formula bar, cell and range selection | `kit/office/sheet.js` (the sheets outline) |
-| pptx: slide rail, scaled slides, shapes, pictures, tables, charts as SVG | `kit/office/slides.js` (the slides outline) |
-| docx: docx-preview's pages, each body paragraph tagged `data-para` | `kit/office/docx.js` (+ the docs outline) |
 
 The renderers draw from each module's `inspect()` only: the props they
 read are named in each file's header (agreed with the module chunks). A
