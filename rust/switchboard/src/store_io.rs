@@ -8,6 +8,9 @@
 //! Every read of a store file goes through here: its JSON and text, its
 //! folders' listings, a stat (a target's `gone`, a stamp's mtime), a
 //! realpath. A new read path that skips it is a read the guard misses.
+//! `sb history` and `sb show`'s transcript reads (search.rs, a message's
+//! position in daemon/history.rs) count here too: the loop reads none
+//! (history-loop, architect m_61891; daemon/history_work.rs).
 
 use std::path::{Path, PathBuf};
 
@@ -30,6 +33,11 @@ pub fn reads() -> u64 {
 pub fn read(p: &Path) -> std::io::Result<Vec<u8>> {
     counted();
     std::fs::read(p)
+}
+
+pub fn open(p: &Path) -> std::io::Result<std::fs::File> {
+    counted();
+    std::fs::File::open(p)
 }
 
 pub fn read_to_string(p: &Path) -> std::io::Result<String> {

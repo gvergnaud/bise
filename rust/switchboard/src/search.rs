@@ -160,7 +160,7 @@ impl Thread {
 
     /// Index the lines written since the last call.
     fn refresh(&mut self) {
-        let Ok(mut f) = std::fs::File::open(&self.path) else { return };
+        let Ok(mut f) = crate::store_io::open(&self.path) else { return };
         let len = f.metadata().map(|m| m.len()).unwrap_or(0);
         if len < self.read {
             // rewritten (never by the hub): start over
@@ -197,7 +197,7 @@ impl Thread {
 
     /// The readable text of a doc, read back from the file.
     fn text(&self, d: &Doc) -> String {
-        let Ok(mut f) = std::fs::File::open(&self.path) else { return String::new() };
+        let Ok(mut f) = crate::store_io::open(&self.path) else { return String::new() };
         if f.seek(SeekFrom::Start(d.off)).is_err() {
             return String::new();
         }
@@ -303,6 +303,8 @@ fn resolve<'a>(who: &'a [Who], dirs: &'a BTreeMap<String, Thread>, name: &str) -
 #[derive(Debug, Default)]
 pub struct Index {
     threads: BTreeMap<String, Thread>,
+    /// ms spent reading the transcripts since `take_refresh_ms`.
+    refresh_ms: u64,
 }
 
 /// What one refresh did (for the perf log).
@@ -318,18 +320,7 @@ impl Index {
     /// Read what was written since the last refresh, in every
     /// `<agents_dir>/<dir>/transcript.log`.
     pub fn refresh(&mut self, agents_dir: &Path) {
-        let Ok(rd) = std::fs::read_dir(agents_dir) else { return };
-        for e in rd.flatten() {
-            let path = e.path().join("transcript.log");
-            if !path.is_file() {
-                continue;
-            }
-            let dir = e.file_name().to_string_lossy().to_string();
-            self.threads
-                .entry(dir)
-                .or_insert_with(|| Thread::new(path))
-                .refresh();
-        }
+        self.refresh_keyed(agents_dir, |dir| dir.to_string());
     }
 
     /// The same as `refresh` for another hub's `agents_dir` (stream C, S2
@@ -337,15 +328,29 @@ impl Index {
     /// several projects and one query ranks them together. Called only
     /// when a query runs (never on a tick: core-idle-cpu's burn).
     pub fn refresh_as(&mut self, agents_dir: &Path, prefix: &str) {
-        let Ok(rd) = std::fs::read_dir(agents_dir) else { return };
+        self.refresh_keyed(agents_dir, |dir| format!("{prefix}/{dir}"));
+    }
+
+    /// Each `<agents_dir>/<dir>/transcript.log` read since its last
+    /// refresh, keyed `key(dir)`. Its reads are counted (crate::store_io:
+    /// the hub loop reads none, daemon/history_work.rs).
+    fn refresh_keyed(&mut self, agents_dir: &Path, key: impl Fn(&str) -> String) {
+        let t0 = std::time::Instant::now();
+        let Ok(rd) = crate::store_io::read_dir(agents_dir) else { return };
         for e in rd.flatten() {
             let path = e.path().join("transcript.log");
             if !path.is_file() {
                 continue;
             }
-            let dir = format!("{}/{}", prefix, e.file_name().to_string_lossy());
+            let dir = key(&e.file_name().to_string_lossy());
             self.threads.entry(dir).or_insert_with(|| Thread::new(path)).refresh();
         }
+        self.refresh_ms += t0.elapsed().as_millis() as u64;
+    }
+
+    /// ms spent reading the transcripts since the last call.
+    pub fn take_refresh_ms(&mut self) -> u64 {
+        std::mem::take(&mut self.refresh_ms)
     }
 
     /// Drops the threads whose `<prefix>/` is not in `keep` (a project

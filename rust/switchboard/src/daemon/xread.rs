@@ -14,17 +14,20 @@
 //! (`projects::target`), and every folder name joined under
 //! `<hubs>/<id>/agents/` is one plain path component ([`plain`]).
 //!
-//! The other projects' threads are one more search index (`Shell.xsearch`),
+//! The other projects' threads are one more search index (the history
+//! worker's `others`, history_work.rs: these reads run off the hub loop),
 //! keyed `<project>/<dir>` (`Index::refresh_as`), so `--all` ranks home and
 //! projects with one query and one scoring. It refreshes only when a query
 //! runs, never on a tick (core-idle-cpu's burn).
 
 use super::history::{inspect_page, respond, Look};
+use super::history_work::{HistoryJob, XCtx};
 use super::Shell;
-use crate::search::Who;
+use crate::search::{Index, Who};
 use crate::util::now_ms;
 use bise_proto::sb::{History, Inspect};
 use serde_json::{json, Value};
+use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 
 /// The prefix of bise's own threads under `--all`.
@@ -114,9 +117,62 @@ fn qualify(h: &History, p: &str, scope: Option<&str>) -> Look {
     look
 }
 
+/// `p`'s threads read into `index` (bise's own under `bise`), and its
+/// agents (history worker).
+fn refresh_one(index: &mut Index, x: &XCtx, p: &str) -> Result<(String, Vec<Who>), String> {
+    if p == HOME {
+        index.refresh_as(&x.agents, HOME);
+        return Ok((HOME.to_string(), x.who.clone()));
+    }
+    let pr = project(&x.home, p, &crate::paths::workspace_id(&x.workspace))?;
+    index.refresh_as(&pr.state.join("agents"), &pr.name);
+    let who = who_of(&pr.name, &pr.state);
+    Ok((pr.name, who))
+}
+
+/// `sb show <p>/<agent>#<pos>` on the history worker.
+pub(super) fn show(index: &mut Index, x: &XCtx, agent: &str, pos: u64, context: Option<u64>) -> Value {
+    let t0 = std::time::Instant::now();
+    if !super::xhub::is_home(&x.workspace) {
+        return json!({"ok": false, "error": REFUSED});
+    }
+    let res = split_ref(agent).and_then(|(p, a)| {
+        let (name, who) = refresh_one(index, x, &p)?;
+        Ok(respond(index, &who, &Look::show(&format!("{name}/{a}"), pos, context), now_ms(), t0))
+    });
+    res.unwrap_or_else(|e| json!({"ok": false, "error": e}))
+}
+
+/// `sb history --project|--all` on the history worker.
+pub(super) fn search(index: &mut Index, x: &XCtx, h: &History) -> Value {
+    let t0 = std::time::Instant::now();
+    if !super::xhub::is_home(&x.workspace) {
+        return json!({"ok": false, "error": REFUSED});
+    }
+    let res = if h.all {
+        let ps = projects(&x.home, &crate::paths::workspace_id(&x.workspace));
+        let mut keep = vec![HOME.to_string()];
+        let mut who = x.who.clone();
+        index.refresh_as(&x.agents, HOME);
+        for pr in &ps {
+            index.refresh_as(&pr.state.join("agents"), &pr.name);
+            who.extend(who_of(&pr.name, &pr.state));
+            keep.push(pr.name.clone());
+        }
+        index.retain_prefixes(&keep);
+        Ok(respond(index, &who, &qualify(h, HOME, None), now_ms(), t0))
+    } else {
+        refresh_one(index, x, h.project.as_deref().unwrap_or_default()).map(|(name, who)| respond(index, &who, &qualify(h, &name, Some(&name)), now_ms(), t0))
+    };
+    res.unwrap_or_else(|e| json!({"ok": false, "error": e}))
+}
+
 impl Shell {
-    fn home_who(&self) -> Vec<Who> {
-        self.hub
+    /// What a read of other projects needs of this hub, from memory: its
+    /// agents keyed `bise/...` (the worker reads the rest).
+    fn xctx(&self) -> XCtx {
+        let who = self
+            .hub
             .st
             .agents
             .values()
@@ -126,57 +182,18 @@ impl Shell {
                 aliases: a.aliases.iter().map(|x| format!("{HOME}/{x}")).collect(),
                 archived: a.status() == crate::model::Status::Archived,
             })
-            .collect()
+            .collect();
+        XCtx { home: self.opts.home.clone(), workspace: self.opts.paths.workspace.clone(), agents: self.opts.paths.state.join("agents"), who }
     }
 
-    /// `p`'s threads read (bise's own under `bise`) and its agents.
-    fn refresh_one(&mut self, p: &str) -> Result<(String, Vec<Who>), String> {
-        if p == HOME {
-            let dir = self.opts.paths.state.join("agents");
-            self.xsearch.refresh_as(&dir, HOME);
-            return Ok((HOME.to_string(), self.home_who()));
-        }
-        let pr = project(&self.opts.home, p, &self.project())?;
-        self.xsearch.refresh_as(&pr.state.join("agents"), &pr.name);
-        let who = who_of(&pr.name, &pr.state);
-        Ok((pr.name, who))
+    /// `sb show <p>/<agent>#<pos>`: the history worker's job.
+    pub(super) fn xshow(&self, stream: UnixStream, from: &str, agent: String, pos: u64, context: Option<u64>) {
+        self.history.ask(stream, from, HistoryJob::XShow { x: self.xctx(), agent, pos, context });
     }
 
-    /// `sb history --project|--all` and `sb show <p>/<agent>#<pos>`.
-    pub(super) fn xshow(&mut self, agent: &str, pos: u64, context: Option<u64>) -> Value {
-        let t0 = std::time::Instant::now();
-        if !super::xhub::is_home(&self.opts.paths.workspace) {
-            return json!({"ok": false, "error": REFUSED});
-        }
-        let res = split_ref(agent).and_then(|(p, a)| {
-            let (name, who) = self.refresh_one(&p)?;
-            Ok(respond(&self.xsearch, &who, &Look::show(&format!("{name}/{a}"), pos, context), now_ms(), t0))
-        });
-        res.unwrap_or_else(|e| json!({"ok": false, "error": e}))
-    }
-
-    /// `sb history --project|--all`.
-    pub(super) fn xsearch(&mut self, h: &History) -> Value {
-        let t0 = std::time::Instant::now();
-        if !super::xhub::is_home(&self.opts.paths.workspace) {
-            return json!({"ok": false, "error": REFUSED});
-        }
-        let res = if h.all {
-            let ps = projects(&self.opts.home, &self.project());
-            let mut keep = vec![HOME.to_string()];
-            let mut who = self.home_who();
-            self.xsearch.refresh_as(&self.opts.paths.state.join("agents"), HOME);
-            for pr in &ps {
-                self.xsearch.refresh_as(&pr.state.join("agents"), &pr.name);
-                who.extend(who_of(&pr.name, &pr.state));
-                keep.push(pr.name.clone());
-            }
-            self.xsearch.retain_prefixes(&keep);
-            Ok(respond(&self.xsearch, &who, &qualify(h, HOME, None), now_ms(), t0))
-        } else {
-            self.refresh_one(h.project.as_deref().unwrap_or_default()).map(|(name, who)| respond(&self.xsearch, &who, &qualify(h, &name, Some(&name)), now_ms(), t0))
-        };
-        res.unwrap_or_else(|e| json!({"ok": false, "error": e}))
+    /// `sb history --project|--all`: the history worker's job.
+    pub(super) fn xsearch(&self, stream: UnixStream, from: &str, h: History) {
+        self.history.ask(stream, from, HistoryJob::XSearch { x: self.xctx(), h });
     }
 
     /// `sb inspect <p>/<agent>`: a page of that project's thread.

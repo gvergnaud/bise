@@ -222,3 +222,88 @@ const LINE_MS: f64 = 1.0;
 /// his message to a live agent: 4.8-8.3 ms (3x the high side 7.4 of
 /// the medians kept, 23).
 const DELIVER_MS: f64 = 23.0;
+
+/// Lines in each thread of the history test: his 1340 threads, fewer
+/// lines each than his ~700 (927k entries, 2026-11-12) so the test stays
+/// a unit test; the loop's work before this change grew with both.
+const ENTRIES: usize = 40;
+
+/// Each agent's transcript.log, ENTRIES lines of his kinds.
+fn transcripts(sh: &Shell) {
+    let agents = sh.opts.paths.state.join("agents");
+    for a in sh.hub.st.agents.values() {
+        let d = agents.join(&a.dir);
+        std::fs::create_dir_all(&d).unwrap();
+        let lines: String = (0..ENTRIES)
+            .map(|i| match i % 4 {
+                0 => format!("{}\tsb you : look at the walrus in thread {} line {i}\n", 1_000 + i, a.name),
+                1 => format!("{}\t  obs: assistant: the walrus of {} is in the attic, line {i}\n", 1_000 + i, a.name),
+                2 => format!("{}\ttool #{i} bash : rg -n walrus src/ | head -20\n", 1_000 + i),
+                _ => format!("{}\ttool_result #{i} ok : src/attic.rs:12: walrus\n", 1_000 + i),
+            })
+            .collect();
+        std::fs::write(d.join("transcript.log"), lines).unwrap();
+    }
+}
+
+/// sb history and sb show at his scale (history-loop, main m_61883,
+/// architect m_61891): the loop only hands the request to the history
+/// worker. On 2026-11-12 the search (its refresh of 1340 transcripts,
+/// then the ranking) ran on the loop: 32 s at load 90, his messages
+/// waited. The guard: 0 transcript reads on the loop thread and its CPU
+/// under HISTORY_MS, for a cold search, a warm one, a show and --all.
+#[test]
+fn sb_history_and_show_never_hold_the_loop() {
+    let root = std::env::temp_dir().join(format!("sb-loop-history-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let (mut sh, _rx) = shell_at_scale(&root);
+    transcripts(&sh);
+    let live = format!("t{ARCHIVED}");
+    let dir = sh.hub.st.agents[&live].dir.clone();
+    let asker = accept::Asker { who: crate::peer::Who::Agent(dir), peer: "budget".into(), sock: crate::peer::Sock::Agent };
+    let mut token = 1000;
+    let mut ask = |sh: &mut Shell, mut v: Value| {
+        v["from"] = json!(live);
+        token += 1;
+        let (ours, theirs) = UnixStream::pair().unwrap();
+        let (t, w, r) = (cpu_ms(), std::time::Instant::now(), crate::store_io::reads());
+        sh.agent_new(token, theirs, v, &asker);
+        let (ms, wall, n) = (cpu_ms() - t, w.elapsed(), crate::store_io::reads() - r);
+        // EINVAL once the reply is written and its end closed (macOS)
+        let _ = ours.set_read_timeout(Some(Duration::from_secs(120)));
+        let mut line = String::new();
+        std::io::BufRead::read_line(&mut std::io::BufReader::new(ours), &mut line).unwrap();
+        let reply: Value = serde_json::from_str(&line).unwrap_or_else(|e| panic!("{e}: {line:?}"));
+        (ms, wall, n, reply)
+    };
+    let mut seen = Vec::new();
+    for (what, v) in [
+        ("a cold sb history", json!({"cmd": "history", "query": "walrus attic"})),
+        ("a warm sb history", json!({"cmd": "history", "query": "walrus attic", "page": 2})),
+        ("sb show", json!({"cmd": "show", "agent": "t3", "pos": 2})),
+        ("sb history --all", json!({"cmd": "history", "query": "walrus", "all": true})),
+    ] {
+        let (ms, wall, n, reply) = ask(&mut sh, v);
+        seen.push((what, ms, wall, n, reply));
+    }
+    let _ = std::fs::remove_dir_all(&root);
+    for (what, ms, wall, n, _) in &seen {
+        eprintln!("{what}: the loop's CPU {ms:.2} ms, its wall {wall:?}, {n} transcript reads on the loop");
+    }
+    // what they answer: the search's own (history_work.rs's test compares it)
+    assert_eq!(seen[0].4["ok"], json!(true), "{}", seen[0].4);
+    assert!(seen[0].4["text"].as_str().is_some_and(|t| t.contains("walrus")), "{}", seen[0].4);
+    assert_eq!(seen[2].4["ok"], json!(true), "{}", seen[2].4);
+    for (what, ms, _, n, _) in &seen {
+        assert_eq!(*n, 0, "{what} read {n} transcript files on the loop thread (32 s on 2026-11-12)");
+        assert!(*ms < HISTORY_MS, "{what} took {ms:.2} ms of the loop's CPU (budget {HISTORY_MS})");
+    }
+}
+
+/// sb history or sb show's part on the loop (architect m_61891): its
+/// sender's check (sb-core's speaks step, every agent request takes it),
+/// the agents' list for the search, the job handed to the worker:
+/// 4.5-5.4 ms (2026-11-12, M-series, load 50-150), 3x the high side.
+/// Before, the search on the loop: a cold one here 2.3 s of reads, his
+/// 32 s at his scale (hub.log, 2026-11-12).
+const HISTORY_MS: f64 = 16.0;

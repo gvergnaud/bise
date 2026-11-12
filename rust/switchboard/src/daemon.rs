@@ -11,7 +11,8 @@
 //!   `SB_SOCKET` (`daemon/accept`, `crate::peer`, docs/issues/16);
 //! - `journal.jsonl`: the durable state; `agents/<dir>/transcript.log`:
 //!   every line of each feed, for the views, `sb inspect` and
-//!   `sb history`.
+//!   `sb history` (searched by the history worker, off the loop:
+//!   `daemon/history_work`).
 //!
 //! The loop (`run`): every thread sends a `Msg` on one channel; the
 //! loop reads it through `daemon/inbox` (the clients' messages ahead of
@@ -34,6 +35,7 @@ mod fn_context;
 pub(crate) mod gate;
 mod guide;
 mod history;
+mod history_work;
 mod lines;
 mod names;
 mod page_cards;
@@ -96,7 +98,6 @@ use crate::devflow;
 use crate::model::{Agent, Lifecycle, MAIN};
 use crate::paths::Paths;
 use crate::prompts;
-use crate::search;
 use crate::transcript;
 use crate::util::{now_ms, wire_escape};
 use crate::worktree::GitEnv;
@@ -350,11 +351,10 @@ struct Shell {
     buffers: BTreeMap<String, VecDeque<(usize, u64, String)>>,
     /// The position of the last line of each feed's transcript.
     positions: BTreeMap<String, usize>,
-    /// Every thread, indexed for `sb history` (built at the first search).
-    search: search::Index,
-    /// The other projects' threads (and bise's under `bise/`), for `sb
-    /// history --project|--all` (xread.rs; refreshed only by a query).
-    xsearch: search::Index,
+    /// `sb history` and `sb show`'s worker: it owns the search indexes
+    /// (this hub's threads, the other projects'), off the loop
+    /// (daemon/history_work.rs).
+    history: history_work::HistoryWork,
     /// Wire-log offsets processed since the last flush to `wire.offset`.
     offsets: BTreeMap<String, u64>,
     /// True while `Input::Boot` runs: its spawns may adopt a REPL.
