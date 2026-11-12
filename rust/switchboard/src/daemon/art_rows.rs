@@ -116,6 +116,12 @@ impl ArtRows {
         by_backstop
     }
 
+    /// A build runs off the loop now.
+    #[cfg(test)]
+    pub(super) fn building(&self) -> bool {
+        self.building
+    }
+
     /// The build could not start (no thread): the next ask tries again.
     pub(super) fn failed(&mut self) {
         self.building = false;

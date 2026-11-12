@@ -778,7 +778,10 @@ impl Shell {
             .zip(choices)
             .map(|((name, _, main, _), c)| (name.clone(), setup.in_use(if *main { "main" } else { "agent" }, &c), c))
             .collect();
-        let others: Vec<&str> = used.iter().map(|(_, u, _)| u.model.name.as_str()).collect();
+        // each model name once: tag() asks whether any other one clashes,
+        // so the distinct names answer the same (hub-loop: 1350 agents made
+        // it 1350 x 1350 comparisons at each state push)
+        let others: Vec<&str> = used.iter().map(|(_, u, _)| u.model.name.as_str()).collect::<BTreeSet<&str>>().into_iter().collect();
         let models: crate::board::Models = used
             .iter()
             .map(|(n, u, c)| {
@@ -2019,3 +2022,5 @@ mod tests;
 // at the end: the source scans read daemon.rs up to its first cfg(test)
 #[cfg(test)]
 mod boot_bench_tests;
+#[cfg(test)]
+mod loop_budget_tests;

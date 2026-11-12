@@ -113,6 +113,7 @@ pub mod transcript;
 pub mod trunk;
 pub mod spent;
 pub mod store_gen;
+pub mod store_io;
 pub mod usage_count;
 pub mod usage_ledger;
 pub mod util;

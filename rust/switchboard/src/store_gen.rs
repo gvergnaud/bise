@@ -59,13 +59,47 @@ pub fn disk_now() -> u64 {
 /// the folder). One stat per folder: cheap next to reading the files.
 pub fn dir_stamp(dir: &Path) -> u64 {
     use std::hash::{Hash, Hasher};
-    let mtime = |p: &Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
+    let mtime = |p: &Path| crate::store_io::metadata(p).and_then(|m| m.modified()).ok();
     let mut h = std::collections::hash_map::DefaultHasher::new();
     mtime(dir).hash(&mut h);
-    let mut kids: Vec<_> = std::fs::read_dir(dir).map(|rd| rd.flatten().map(|e| (e.file_name(), mtime(&e.path()))).collect()).unwrap_or_default();
+    let mut kids: Vec<_> = crate::store_io::read_dir(dir).map(|rd| rd.flatten().map(|e| (e.file_name(), mtime(&e.path()))).collect()).unwrap_or_default();
     kids.sort();
     kids.hash(&mut h);
     h.finish()
+}
+
+/// How often the stamps' thread reads each watched folder again.
+pub const STAMP_EVERY: std::time::Duration = std::time::Duration::from_secs(1);
+
+type Watched = std::sync::Mutex<Vec<(std::path::PathBuf, std::sync::Arc<AtomicU64>)>>;
+
+/// [`dir_stamp`] of `dir` as the `store-stamps` thread last read it
+/// (every [`STAMP_EVERY`]): the loop reads an atomic, never the folder
+/// (hub-loop, architect m_61480: the artifacts' key listed 1550 folders
+/// with a stat each on the loop, a disk wait at load). The first ask for
+/// a folder reads it once there. A write by another process is seen
+/// within STAMP_EVERY; the hub's own writes move the generation at once.
+pub fn stamp(dir: &Path) -> u64 {
+    static WATCHED: std::sync::OnceLock<std::sync::Arc<Watched>> = std::sync::OnceLock::new();
+    let watched = WATCHED.get_or_init(|| {
+        let w: std::sync::Arc<Watched> = Default::default();
+        let mine = w.clone();
+        let _ = std::thread::Builder::new().name("store-stamps".into()).spawn(move || loop {
+            std::thread::sleep(STAMP_EVERY);
+            let dirs = mine.lock().unwrap_or_else(|e| e.into_inner()).clone();
+            for (d, v) in dirs {
+                v.store(dir_stamp(&d), Ordering::Release);
+            }
+        });
+        w
+    });
+    let mut list = watched.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((_, v)) = list.iter().find(|(d, _)| d == dir) {
+        return v.load(Ordering::Acquire);
+    }
+    let s = dir_stamp(dir);
+    list.push((dir.to_path_buf(), std::sync::Arc::new(AtomicU64::new(s))));
+    s
 }
 
 /// A value derived from a key: built again only when the key differs

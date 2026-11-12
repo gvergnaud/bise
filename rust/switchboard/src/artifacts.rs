@@ -256,7 +256,7 @@ pub struct Store {
 }
 
 fn read_json<T: serde::de::DeserializeOwned>(p: &Path) -> Option<T> {
-    serde_json::from_slice(&std::fs::read(p).ok()?).ok()
+    serde_json::from_slice(&crate::store_io::read(p).ok()?).ok()
 }
 
 fn write_atomic(p: &Path, bytes: &[u8]) -> Result<(), String> {
@@ -496,7 +496,7 @@ impl Store {
 
     /// Every stored artifact (not the pages), any order.
     pub fn stored(&self) -> Vec<Meta> {
-        let Ok(rd) = std::fs::read_dir(self.dir()) else { return Vec::new() };
+        let Ok(rd) = crate::store_io::read_dir(&self.dir()) else { return Vec::new() };
         rd.flatten()
             .filter_map(|e| read_json::<Meta>(&e.path().join("meta.json")))
             .filter(|m| !m.id.is_empty() && !m.versions.is_empty())
@@ -539,13 +539,13 @@ impl Store {
     /// The page server's base (`http://127.0.0.1:<port>`), from
     /// `<state>/pages.port`.
     pub fn pages_base(&self) -> Option<String> {
-        let port = std::fs::read_to_string(self.state.join("pages.port")).ok()?;
+        let port = crate::store_io::read_to_string(&self.state.join("pages.port")).ok()?;
         let port: u16 = port.trim().parse().ok()?;
         Some(format!("http://127.0.0.1:{}", port))
     }
 
     fn pages(&self) -> Vec<PageMeta> {
-        let Ok(rd) = std::fs::read_dir(self.pages_dir()) else { return Vec::new() };
+        let Ok(rd) = crate::store_io::read_dir(&self.pages_dir()) else { return Vec::new() };
         rd.flatten()
             .filter_map(|e| read_json::<PageMeta>(&e.path().join("meta.json")))
             .filter(|p| !p.id.is_empty() && !p.versions.is_empty())
@@ -929,7 +929,7 @@ impl Store {
             })
         };
         let cur = m.current().cloned().unwrap_or_default();
-        let gone = !is_link(&cur.target) && !Path::new(&cur.target).exists();
+        let gone = !is_link(&cur.target) && !crate::store_io::exists(Path::new(&cur.target));
         let detail = if page {
             notes(cur.v)
         } else if m.kind == "site" && is_link(&cur.target) {
@@ -1141,7 +1141,7 @@ pub struct Canon(std::cell::RefCell<std::collections::HashMap<String, PathBuf>>)
 
 impl Canon {
     fn of(&self, base: &str) -> PathBuf {
-        self.0.borrow_mut().entry(base.to_string()).or_insert_with(|| Path::new(base).canonicalize().unwrap_or_else(|_| PathBuf::from(base))).clone()
+        self.0.borrow_mut().entry(base.to_string()).or_insert_with(|| crate::store_io::canonicalize(Path::new(base)).unwrap_or_else(|_| PathBuf::from(base))).clone()
     }
 }
 

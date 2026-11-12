@@ -88,12 +88,12 @@ impl Shell {
         let now = now_ms();
         let project = crate::paths::workspace_id(&self.opts.paths.workspace);
         // ⌘K's index: the same rows as the typed artifacts event
-        // (none before the rows' first build lands: written again then)
-        let ev = self.artifacts_ev();
-        let n = ev.as_ref().map(|ev| self.artifact_rows(ev));
+        // (none before the rows' first build lands: written again then;
+        // the typed rows' memo, daemon/art.rs artifact_rows_now)
+        let rows = self.artifact_rows_now();
         // les bims: the same cached growth as the typed event
-        let growth = self.growth_of(Some(snap), n.as_ref().map(|a| a.len() as u32));
-        let arts = n.unwrap_or_default();
+        let growth = self.growth_of(Some(snap), rows.as_ref().map(|a| a.len() as u32));
+        let arts: &[bise_proto::rows::Artifact] = rows.as_deref().map_or(&[], |r| r.as_slice());
         // and the same rows as the typed scheduled event
         let sched = crate::proto_view::scheduled(self.hub.timers());
         // the H1 sidebar: the pulse the typed event has (fresh at a stop)

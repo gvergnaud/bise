@@ -169,8 +169,7 @@ impl Shell {
         };
         if self.pulse.arts.is_none() {
             // none before the artifact rows' first build (daemon/art_rows.rs)
-            if let Some(ev) = self.artifacts_ev() {
-                let rows = self.artifact_rows(&ev);
+            if let Some(rows) = self.artifact_rows_now() {
                 self.pulse_artifacts(&rows);
             }
         }

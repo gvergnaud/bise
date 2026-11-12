@@ -47,6 +47,9 @@ pub(super) struct Art {
     /// off the loop when their key moves (daemon/art_rows.rs, hub-loop):
     /// the state push and the view ask for them up to 10 times a second.
     pub(super) rows: std::cell::RefCell<super::art_rows::ArtRows>,
+    /// The typed rows of the last view and send-time key (artifact_rows_now).
+    #[allow(clippy::type_complexity)]
+    typed: std::cell::RefCell<Option<((u64, Option<std::time::SystemTime>, u64, bool), std::rc::Rc<super::art_rows::ArtView>, std::rc::Rc<Vec<bise_proto::rows::Artifact>>)>>,
     /// The library's folders, read by its mtime (daemon/art_folders.rs).
     pub(super) lib: super::art_folders::LibCache,
     /// The open PR artifacts' links, newest first, by the store's
@@ -166,7 +169,7 @@ impl Shell {
     /// process).
     fn art_key(&self, now: u64) -> super::art_rows::ArtKey {
         let st = &self.opts.paths.state;
-        let disk = crate::store_gen::dir_stamp(&st.join("pages")) ^ crate::store_gen::dir_stamp(&st.join("artifacts")).rotate_left(1);
+        let disk = crate::store_gen::stamp(&st.join("pages")) ^ crate::store_gen::stamp(&st.join("artifacts")).rotate_left(1);
         (crate::store_gen::disk_now(), self.art_who_key(), now / super::art_rows::BACKSTOP_MS, disk)
     }
 
@@ -218,6 +221,44 @@ impl Shell {
     /// their loading state).
     pub(super) fn artifacts_ev(&self) -> Option<Value> {
         let view = self.art_view(now_ms())?;
+        Some(self.artifacts_ev_of(&view))
+    }
+
+    /// The typed rows now (⌘K's index in view.json, the pulse, the
+    /// growth count): built again only when the view or what is joined
+    /// to it at send time moved (hub-loop: their conversion and copy of
+    /// 1550 rows held the loop 1-3 s at each state push at load 30).
+    /// None before the rows' first build lands.
+    pub(super) fn artifact_rows_now(&self) -> Option<std::rc::Rc<Vec<bise_proto::rows::Artifact>>> {
+        let view = self.art_view(now_ms())?;
+        let key = self.art_typed_key();
+        if let Some((k, v, rows)) = self.art.typed.borrow().as_ref() {
+            if *k == key && std::rc::Rc::ptr_eq(v, &view) {
+                return Some(rows.clone());
+            }
+        }
+        let rows = std::rc::Rc::new(self.artifact_rows(&self.artifacts_ev_of(&view)));
+        *self.art.typed.borrow_mut() = Some((key, view, rows.clone()));
+        Some(rows)
+    }
+
+    /// What the event joins to the built view at send time, as one key:
+    /// the makers' turns (`live`), the library's stamp (folders), the
+    /// PRs' rows (their status) and whether a page server runs (links).
+    fn art_typed_key(&self) -> (u64, Option<std::time::SystemTime>, u64, bool) {
+        use std::hash::{Hash, Hasher};
+        let mut live = std::collections::hash_map::DefaultHasher::new();
+        for a in self.hub.st.agents.values().filter(|a| a.turn_ms.is_some()) {
+            (&a.name, a.turn_ms).hash(&mut live);
+        }
+        let mut pr = std::collections::hash_map::DefaultHasher::new();
+        serde_json::to_string(&self.hub.pr_rows_by_url(now_ms())).unwrap_or_default().hash(&mut pr);
+        (live.finish(), super::art_folders::library_stamp(&self.opts.home), pr.finish(), self.pg.pages.is_some())
+    }
+
+    /// The event of a built view: its rows joined with what changes
+    /// without a store write (live turns, folders, PR status).
+    fn artifacts_ev_of(&self, view: &super::art_rows::ArtView) -> Value {
         let mut rows = view.rows.clone();
         self.art_live_rows(&view.stored, &mut rows);
         // the library joined at send time (his rename in the desktop core
@@ -226,13 +267,13 @@ impl Shell {
         artifacts::resolve_folders(&mut rows, &lib);
         // each PR's status, the hub's row of it (a change re-sends the event)
         artifacts::join_pr_status(&mut rows, &self.hub.pr_rows_by_url(now_ms()));
-        Some(json!({
+        json!({
             "ev": "artifacts",
             "rows": rows,
             "new": view.new,
             "seen_ms": view.seen_ms,
             "folders": super::art_folders::folder_rows(&lib),
-        }))
+        })
     }
 
     /// One number for what `art_who` answers: each agent's names and

@@ -30,6 +30,11 @@ pub(super) struct LibCache {
     seen: Option<SystemTime>,
 }
 
+/// The library file's stamp (the typed artifact rows' key, daemon/art.rs).
+pub(super) fn library_stamp(home: &bise_home::Home) -> Option<SystemTime> {
+    mtime(home)
+}
+
 fn mtime(home: &bise_home::Home) -> Option<SystemTime> {
     let f = home.library_folders();
     std::fs::metadata(f).ok()?.modified().ok()
