@@ -188,6 +188,7 @@ pub const VARS: &[Var] = &[
     test("BISE_RELEASE_SCRIPT", "the release script the hub runs (tests)"),
     internal("BISE_RENDER", "repl-live's render mode: the .wire of a ring slot to make another provider's request body of (/debug completion <provider>, no call)"),
     internal("BISE_RENDER_OUT", "where repl-live's render mode writes the body it made"),
+    internal("BISE_REPL_TOKEN", "a REPL's say-port token: a connection opens with 'hello <token>' or is refused (a fence against probes and browsers, not same-user processes)"),
     internal("BISE_ROLE", "main or agent, for a REPL's model"),
     user("BISE_SANDBOX", "0: no sandbox for the agents' commands"),
     internal("BISE_SESSION_CHOICE", "an agent's own model and effort file"),

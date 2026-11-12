@@ -466,20 +466,161 @@ def greeted(+greet: Maybe<&2, Nat>) -> Bool:
 # the connection loop ended: Go keeps serving (checkpoint + accept the
 # next client, with the calls' memory), Stop unwinds to main (the
 # reload exit)
-def serve_after.cont(f: Flow, l2: Listener,
-    next: Listener -> Maybe<&2, Nat> -> T.Session -> Pvp.CallMem -> IO(Flow))
+def serve_after.cont(f: Flow, l2: Listener, +quiet: Nat,
+    next: Listener -> Maybe<&2, Nat> -> T.Session -> Pvp.CallMem -> Nat -> IO(Flow))
     -> IO(Flow):
   match f:
     case Go{+sess2, +mem2}:
       do IO<Flow>:
         P.save(sess2)
-        next(l2)(None{})(sess2)(mem2)
+        next(l2)(None{})(sess2)(mem2)(quiet)
     case Stop{}:
       IO.pure(Flow, Stop{})
 
-def serve_after(+live: Bool, am: Listener & Result<&1, &1, U32 & String, Socket>,
-    +greet: Maybe<&2, Nat>, +sess: T.Session, +mem: Pvp.CallMem,
-    next: Listener -> Maybe<&2, Nat> -> T.Session -> Pvp.CallMem -> IO(Flow))
+# an opened connection: the greeting, then its lines
+def serve_open(+live: Bool, s: Socket, l2: Listener, +greet: Maybe<&2, Nat>,
+    +sess: T.Session, +mem: Pvp.CallMem, +quiet: Nat,
+    next: Listener -> Maybe<&2, Nat> -> T.Session -> Pvp.CallMem -> Nat -> IO(Flow))
+    -> IO(Flow):
+  do IO<Flow>:
+    +model : String <- ev_model(live)
+    +cut : Bool <- Pv.inflight_take(greeted(greet))
+    out2 : Pv.Out <- greet_out(greet, s, mem, sess,
+      Ev.sess_evs(sess, model, "config"))
+    f : Flow <- greet_conn(live, out2, sess, cut)
+    serve_after.cont(f, l2, quiet, next)
+
+# ---- the say port's hello (say-port; Rcp.hello_ok) ----
+
+# the first line's bytes, one recv of one byte each, so nothing past its
+# newline is taken (the hub's next lines stay for repl_conn), `n` at
+# most: Some at the newline, None on a close, an error or past `n`
+@unsafe
+def hello_read(n: Nat, s: Socket, +acc: List<&2, U32>)
+    -> IO(Socket & Maybe<&2, String>):
+  match n:
+    case 0n:
+      IO.pure(Socket & Maybe<&2, String>, (s, None{}))
+    case 1n+k:
+      do IO<Socket & Maybe<&2, String>>:
+        rm : Socket & Result<&1, &1, U32 & String, Maybe<&1, List<&2, U32>>> <- TCP.recv_bytes(s, 1)
+        hello_got(k, rm, acc)
+
+@unsafe
+def hello_got(k: Nat, rm: Socket & Result<&1, &1, U32 & String, Maybe<&1, List<&2, U32>>>,
+    +acc: List<&2, U32>) -> IO(Socket & Maybe<&2, String>):
+  match rm:
+    case (s, Fail{_}):
+      IO.pure(Socket & Maybe<&2, String>, (s, None{}))
+    case (s, Done{m}):
+      hello_byte(k, s, Rcp.recv_bytes(m), acc)
+
+@unsafe
+def hello_byte(k: Nat, s: Socket, +bs: List<&2, U32>, +acc: List<&2, U32>)
+    -> IO(Socket & Maybe<&2, String>):
+  match bs:
+    case Nil{}:
+      IO.pure(Socket & Maybe<&2, String>, (s, None{}))
+    case Con{+b, _}:
+      hello_next(k, s, Rcp.hello_step(acc, b))
+
+@unsafe
+def hello_next(k: Nat, s: Socket, +st: Rcp.HelloStep)
+    -> IO(Socket & Maybe<&2, String>):
+  match st:
+    case Rcp.HMore{+acc2}:
+      hello_read(k, s, acc2)
+    case Rcp.HLine{+line}:
+      IO.pure(Socket & Maybe<&2, String>, (s, Some{Rcp.hello_text(line)}))
+
+# a refused connection's log line, at most one per Rcp.refused_every_ms
+# (a flood never grows repl.log); answers the next quiet time
+def refused_log.pick(due: Bool, +note: String, +now: Nat, +quiet: Nat) -> IO(Nat):
+  match due:
+    case True{}:
+      do IO<Nat>:
+        u : Unit <- IO.print(note)
+        IO.pure(Nat, Nat.add(now, Rcp.refused_every_ms()))
+    case False{}:
+      IO.pure(Nat, quiet)
+
+def refused_log(+note: String, +quiet: Nat) -> IO(Nat):
+  do IO<Nat>:
+    +now : Nat <- IO.now()
+    refused_log.pick(Nat.is_ge(now, quiet), note, now, quiet)
+
+# refused: closed with no greeting, no wire line, no session change;
+# the next connection is accepted
+def serve_refuse(s: Socket, l2: Listener, +greet: Maybe<&2, Nat>,
+    +sess: T.Session, +mem: Pvp.CallMem, +note: String, +quiet: Nat,
+    next: Listener -> Maybe<&2, Nat> -> T.Session -> Pvp.CallMem -> Nat -> IO(Flow))
+    -> IO(Flow):
+  do IO<Flow>:
+    Socket.close(s)
+    +q2 : Nat <- refused_log(note, quiet)
+    next(l2)(greet)(sess)(mem)(q2)
+
+def serve_line(+live: Bool, ok: Bool, s: Socket, l2: Listener,
+    +greet: Maybe<&2, Nat>, +sess: T.Session, +mem: Pvp.CallMem, +line: String,
+    +quiet: Nat,
+    next: Listener -> Maybe<&2, Nat> -> T.Session -> Pvp.CallMem -> Nat -> IO(Flow))
+    -> IO(Flow):
+  match ok:
+    case True{}:
+      serve_open(live, s, l2, greet, sess, mem, quiet, next)
+    case False{}:
+      serve_refuse(s, l2, greet, sess, mem, Rcp.refused_note(line), quiet, next)
+
+def serve_hello.got(+live: Bool, +token: String, got: Socket & Maybe<&2, String>,
+    l2: Listener, +greet: Maybe<&2, Nat>, +sess: T.Session, +mem: Pvp.CallMem,
+    +quiet: Nat,
+    next: Listener -> Maybe<&2, Nat> -> T.Session -> Pvp.CallMem -> Nat -> IO(Flow))
+    -> IO(Flow):
+  match got:
+    case (s, None{}):
+      serve_refuse(s, l2, greet, sess, mem,
+        "say port: refused a connection with no hello (closed, or no newline in its first 256 bytes)",
+        quiet, next)
+    case (s, Some{+line}):
+      serve_line(live, Rcp.hello_ok(token, line), s, l2, greet, sess, mem, line,
+        quiet, next)
+
+# no first line in Rcp.hello_wait_ms: the late read keeps the socket
+# (it ends when its peer closes), the next connection is accepted
+def serve_hello(+live: Bool, +token: String,
+    r: Maybe<&1, Socket & Maybe<&2, String>>, l2: Listener,
+    +greet: Maybe<&2, Nat>, +sess: T.Session, +mem: Pvp.CallMem, +quiet: Nat,
+    next: Listener -> Maybe<&2, Nat> -> T.Session -> Pvp.CallMem -> Nat -> IO(Flow))
+    -> IO(Flow):
+  match r:
+    case None{}:
+      do IO<Flow>:
+        +q2 : Nat <- refused_log("say port: refused a connection with no hello in 5 s", quiet)
+        next(l2)(greet)(sess)(mem)(q2)
+    case Some{got}:
+      serve_hello.got(live, token, got, l2, greet, sess, mem, quiet, next)
+
+# a REPL with no token opens every connection (nc, the tests' bare
+# REPLs); with one, only a connection whose first line is its hello
+@unsafe
+def serve_gate(+live: Bool, open: Bool, +token: String, s: Socket, l2: Listener,
+    +greet: Maybe<&2, Nat>, +sess: T.Session, +mem: Pvp.CallMem, +quiet: Nat,
+    next: Listener -> Maybe<&2, Nat> -> T.Session -> Pvp.CallMem -> Nat -> IO(Flow))
+    -> IO(Flow):
+  match open:
+    case True{}:
+      serve_open(live, s, l2, greet, sess, mem, quiet, next)
+    case False{}:
+      do IO<Flow>:
+        r : Maybe<&1, Socket & Maybe<&2, String>> <- IO.within(Socket & Maybe<&2, String>,
+          Rcp.hello_wait_ms(), hello_read(Rcp.hello_max(), s, Nil{}))
+        serve_hello(live, token, r, l2, greet, sess, mem, quiet, next)
+
+@unsafe
+def serve_after(+live: Bool, +token: String,
+    am: Listener & Result<&1, &1, U32 & String, Socket>,
+    +greet: Maybe<&2, Nat>, +sess: T.Session, +mem: Pvp.CallMem, +quiet: Nat,
+    next: Listener -> Maybe<&2, Nat> -> T.Session -> Pvp.CallMem -> Nat -> IO(Flow))
     -> IO(Flow):
   match am:
     case (l2, Fail{_}):
@@ -487,26 +628,25 @@ def serve_after(+live: Bool, am: Listener & Result<&1, &1, U32 & String, Socket>
         u : Unit <- IO.print("accept failed")
         IO.pure(Flow, Stop{})
     case (l2, Done{s}):
-      do IO<Flow>:
-        +model : String <- ev_model(live)
-        +cut : Bool <- Pv.inflight_take(greeted(greet))
-        out2 : Pv.Out <- greet_out(greet, s, mem, sess,
-          Ev.sess_evs(sess, model, "config"))
-        f : Flow <- greet_conn(live, out2, sess, cut)
-        serve_after.cont(f, l2, next)
+      serve_gate(live, String.is_empty(token), token, s, l2, greet, sess, mem,
+        quiet, next)
 
 @unsafe
-def serve.go(+live: Bool, l: Listener, greet: Maybe<&2, Nat>, sess: T.Session,
-    +mem: Pvp.CallMem) -> IO(Flow):
+def serve.go(+live: Bool, +token: String, l: Listener, greet: Maybe<&2, Nat>,
+    sess: T.Session, +mem: Pvp.CallMem, +quiet: Nat) -> IO(Flow):
   do IO<Flow>:
     am : Listener & Result<&1, &1, U32 & String, Socket> <- TCP.accept(l)
-    serve_after(live, am, greet, sess, mem,
-      l2 => g2 => s2 => +m2 => serve.go(live, l2, g2, s2, m2))
+    serve_after(live, token, am, greet, sess, mem, quiet,
+      l2 => g2 => s2 => +m2 => +q2 => serve.go(live, token, l2, g2, s2, m2, q2))
 
-# the accept loop, from an empty memory of calls (a new process)
+# the accept loop, from an empty memory of calls (a new process); the
+# say port's token from BISE_REPL_TOKEN (the hub's; none: no hello)
 @unsafe
 def serve(+live: Bool, l: Listener, greet: Maybe<&2, Nat>, sess: T.Session) -> IO(Flow):
-  serve.go(live, l, greet, sess, Pvp.mem0())
+  do IO<Flow>:
+    tk : Result<&1, &1, U32 & String, String> <- IO.get_env("BISE_REPL_TOKEN")
+    +token : String <- IO.pure(String, String.trim(P.env_or(tk, "")))
+    serve.go(live, token, l, greet, sess, Pvp.mem0(), 0n)
 
 # the REPL listen port: BEND_REPL_PORT env (default: the entry's) so several
 # harness instances can run side by side

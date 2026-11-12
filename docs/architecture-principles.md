@@ -36,7 +36,17 @@ Crates: `home` (every path) ← `session`, `plugins`, `images` ← `catalog` ←
   bise-proto --test core_gen`), never written by hand (issue 25).
 - **hub ↔ REPL**: `say`/`interrupt` on TCP, steer and interrupt files; the
   events come back through `wire.log` + `wire.offset`; `repl.json` lets a new
-  hub adopt a running REPL.
+  hub adopt a running REPL. The say port opens a connection only when its
+  first line is `hello <BISE_REPL_TOKEN>` (the hub makes one per REPL, kept
+  in `repl.json`, mode 0600; repl-core's `serve_gate`, laws `hello_*` in
+  `bend/laws/session.bend`): anything else is closed with one log line in
+  `repl.log`, before any of its lines can become his words (say-port: the
+  hub's own HTTP probe did). A fence against probes, local tools and a
+  browser page posting to `127.0.0.1:<port>`, not against a process of his
+  own, which can read the token; the agent's own commands run without it
+  (bash-pure's `bg_unset_private`). The real fix for those is a unix socket
+  with the peer judge (`bise_peer`, like `agent.sock`); a REPL with no
+  token (nc, a test's bare REPL) takes any connection.
 - **clients ↔ hub**: `hub.sock` (its path from `bise_home::socket`),
   JSON-RPC 2.0 (`initialize`, one method per action, numbered
   notifications: `docs/client-protocol.md`, types in `bise_proto::rpc`);

@@ -174,7 +174,7 @@ law bg_wrapper_script:
   {Sh.bg_wrap("whoami", "/tmp/bend-bg-0", 30, "/i")
     == "BG=/tmp/bend-bg-0
 IF=/i
-unset BEND_SESSION_FILE BEND_CONTEXT_FILE BEND_WIRE_LOG BEND_REPL_PORT BEND_EXTRA_PROMPT BEND_CONTINUE BEND_CRASH_NOTE BEND_DEBUG_DIR
+unset BEND_SESSION_FILE BEND_CONTEXT_FILE BEND_WIRE_LOG BEND_REPL_PORT BEND_EXTRA_PROMPT BEND_CONTINUE BEND_CRASH_NOTE BEND_DEBUG_DIR BISE_REPL_TOKEN
 mkdir -p $BG
 i=0
 f=0
@@ -523,7 +523,8 @@ law bg_wrapper_unsets_repl_env:
   {Bool.and(String.contains(Sh.bg_wrap("x", "/d", 5, "/i"),
        "
 unset BEND_SESSION_FILE BEND_CONTEXT_FILE BEND_WIRE_LOG BEND_REPL_PORT "),
-     Bool.not(String.contains(Sh.bg_unset_private(), "SB_SOCKET")))
+     Bool.and(Bool.not(String.contains(Sh.bg_unset_private(), "SB_SOCKET")),
+       String.contains(Sh.bg_unset_private(), " BISE_REPL_TOKEN")))
     == True{} : Bool}
 
 # LAW: only the command's own output is capped: no `ulimit -f` (it

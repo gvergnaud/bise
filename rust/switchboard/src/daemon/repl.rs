@@ -19,6 +19,41 @@ pub(super) struct ReplInfo {
     pub(super) bin: PathBuf,
     steer: String,
     interrupt: String,
+    /// its say port's token (`BISE_REPL_TOKEN`); none: a REPL an older
+    /// hub started, which takes no hello
+    token: Option<String>,
+}
+
+/// A REPL's say port and the token its connections open with.
+pub(super) struct SayPort {
+    pub(super) port: u16,
+    pub(super) token: String,
+}
+
+/// The first line the hub writes on a connection to a REPL it started
+/// with `token` (repl-core's serve_gate: anything else is refused, so a
+/// probe, a local tool or a browser's request never speaks as him).
+pub(super) fn hello(token: &str) -> String {
+    format!("hello {token}\n")
+}
+
+/// A connection to a REPL is the hub's once its hello is written.
+fn say_hello(mut stream: &TcpStream, token: Option<&str>) -> std::io::Result<()> {
+    use std::io::Write;
+    match token {
+        Some(t) => stream.write_all(hello(t).as_bytes()),
+        None => Ok(()),
+    }
+}
+
+/// `repl.json`, the private file an adopting hub reads (its token).
+fn write_repl_json(path: &Path, v: &Value) {
+    use std::io::Write;
+    use std::os::unix::fs::OpenOptionsExt;
+    let _ = std::fs::remove_file(path);
+    if let Ok(mut f) = std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(path) {
+        let _ = f.write_all(v.to_string().as_bytes());
+    }
 }
 
 pub(super) use crate::procs::terminate as kill_pid;
@@ -42,6 +77,7 @@ pub(super) fn adoptable(adir: &Path) -> Option<ReplInfo> {
         bin: PathBuf::from(v.get("bin").and_then(|b| b.as_str()).unwrap_or("")),
         steer: v.get("steer")?.as_str()?.to_string(),
         interrupt: v.get("interrupt")?.as_str()?.to_string(),
+        token: v.get("token").and_then(|t| t.as_str()).map(str::to_string),
     };
     (adir.join("wire.log").exists() && pid_alive(r.pid) && is_repl(r.pid)).then_some(r)
 }
@@ -174,6 +210,9 @@ pub(super) fn adopt(r: ReplInfo, dir: String, gen: u64, adir: PathBuf, tx: Sende
         Err(e) => return gone(format!("reconnecting to the REPL: {}", e)),
     };
     let _ = stream.set_nodelay(true);
+    if let Err(e) = say_hello(&stream, r.token.as_deref()) {
+        return gone(format!("reconnecting to the REPL: {}", e));
+    }
     let Ok(writer) = stream.try_clone() else {
         return gone("socket".into());
     };
@@ -214,10 +253,11 @@ pub(super) fn supervise(
     dir: String,
     gen: u64,
     adir: PathBuf,
-    port: u16,
+    say: SayPort,
     tx: Sender<Msg>,
     paths: Paths,
 ) {
+    let SayPort { port, token } = say;
     let log_path = adir.join("repl.log");
     let err_path = adir.join("repl.err");
     let bin = PathBuf::from(cmd.get_program());
@@ -280,17 +320,22 @@ pub(super) fn supervise(
         }
     };
     let _ = stream.set_nodelay(true);
+    if let Err(e) = say_hello(&stream, Some(&token)) {
+        let _ = child.kill();
+        let _ = child.wait();
+        return gone(format!("connecting to the REPL: {}", e));
+    }
     let writer = match stream.try_clone() {
         Ok(r) => r,
         Err(e) => return gone(e.to_string()),
     };
-    // what the next hub needs to adopt this REPL; `sock`: its SB_SOCKET is
-    // agent.sock, so its sandbox may close hub.sock (docs/issues/16)
-    let _ = std::fs::write(
-        adir.join("repl.json"),
-        json!({"pid": child.id(), "port": port, "steer": steer, "interrupt": interrupt,
-               "bin": bin.to_string_lossy(), "sock": "agent"})
-        .to_string(),
+    // what the next hub needs to adopt this REPL, its token too (so the
+    // file is his alone); `sock`: its SB_SOCKET is agent.sock, so its
+    // sandbox may close hub.sock (docs/issues/16)
+    write_repl_json(
+        &adir.join("repl.json"),
+        &json!({"pid": child.id(), "port": port, "steer": steer, "interrupt": interrupt,
+               "bin": bin.to_string_lossy(), "sock": "agent", "token": token}),
     );
     let _ = tx.send(Msg::ReplConnected {
         dir: dir.clone(),
@@ -327,6 +372,25 @@ pub(super) fn supervise(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// say-port: the hub's first line on a REPL it started is its hello,
+    /// one whole line; repl.json, which holds the token for adoption, is
+    /// his alone (0600) and an adopting hub reads the token back; an older
+    /// REPL's repl.json has none, so no hello reaches it as his words.
+    #[test]
+    fn the_hub_opens_a_repl_with_its_token() {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(hello("ab12"), "hello ab12\n");
+        let d = std::env::temp_dir().join(format!("say-port-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&d);
+        let f = d.join("repl.json");
+        std::fs::write(&f, "old").unwrap();
+        write_repl_json(&f, &json!({"pid": 1, "port": 2, "steer": "s", "interrupt": "i", "token": "ab12"}));
+        assert_eq!(std::fs::metadata(&f).unwrap().permissions().mode() & 0o777, 0o600);
+        let v: Value = serde_json::from_str(&std::fs::read_to_string(&f).unwrap()).unwrap();
+        assert_eq!(v["token"], "ab12");
+        let _ = std::fs::remove_dir_all(&d);
+    }
 
     /// stop-not-crash (m_48183): a TERM, INT or HUP is a request to stop;
     /// a crash signal, a KILL or an exit code is not.

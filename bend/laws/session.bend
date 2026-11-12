@@ -1422,3 +1422,37 @@ law resume_needs_idle:
       Some{T.Turn{0n, Nil{}, Nil{}, False{}}}, None{}, Nil{}, Nil{}},
       T.Resume{S.RESUME_NOTE()})
     == T.Rejected{"a turn is running"} : T.Res}
+
+# ---- the say port's hello (say-port, architect m_61333) ----
+# A REPL the hub started with a token opens a connection only when its
+# first line is the whole hello; anything else is closed before any of
+# its lines reaches Cm.interpret (tonight the hub's own HTTP probe's
+# 'HEAD / HTTP/1.0', 'Host: 127.0.0.1', 'Connection: close' were seven
+# user turns of apps-gallery).
+
+# LAW: an HTTP request line, a browser's POST and a bare line are no hello.
+law hello_refuses_http:
+  {Bool.or(Rp.hello_ok("t0k", "HEAD / HTTP/1.0"),
+     Bool.or(Rp.hello_ok("t0k", "POST / HTTP/1.1"),
+       Bool.or(Rp.hello_ok("t0k", "Host: 127.0.0.1"),
+         Rp.hello_ok("t0k", "say hello t0k"))))
+    == False{} : Bool}
+
+# LAW: the hello is compared whole: never a prefix nor a longer line.
+law hello_is_whole:
+  {(Rp.hello_ok("t0k", "hello t0k"),
+     (Rp.hello_ok("t0k", "hello t0"), Rp.hello_ok("t0k", "hello t0kk")))
+    == (True{}, (False{}, False{})) : Bool & (Bool & Bool)}
+
+# LAW: the first line ends at its newline, a CR before it dropped; the
+# bytes before it accumulate newest first.
+law hello_line_ends_at_newline:
+  {(Rp.hello_step([105, 104], 13), Rp.hello_step([13, 105, 104], 10))
+    == (Rp.HMore{[13, 105, 104]}, Rp.HLine{[104, 105]})
+    : Rp.HelloStep & Rp.HelloStep}
+
+# LAW: a refused line is logged clipped to 60 chars, its control chars `?`.
+law refused_note_is_clipped:
+  {Rp.refused_note(String.append("a\tb\u{1b}", String.append("0123456789012345678901234567890123456789012345678901234567", "TAIL")))
+    == "say port: refused a connection with no hello, its first line: a?b?01234567890123456789012345678901234567890123456789012345"
+    : String}

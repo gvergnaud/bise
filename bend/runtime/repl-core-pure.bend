@@ -7,6 +7,7 @@ import ./model.bend as M
 import ../core/types.bend as T
 import ../core/text.bend as Tx
 import ../vendor/json.bend as J
+import ../core/utf8.bend as U8
 
 # TCP.recv's None (bend 2.0.37: the peer sent everything) is the closed
 # connection the empty text was before
@@ -289,3 +290,96 @@ def solo_tone.pick(empty: Bool, +tone: String) -> String:
 
 def solo_tone(+extra: String, +tone: String) -> String:
   solo_tone.pick(String.is_empty(String.trim(extra)), tone)
+
+# ---- the say port's hello (say-port) ----
+# A REPL the hub started with a token (BISE_REPL_TOKEN) takes a
+# connection only when its first line is `hello <token>`, whole: the
+# hub's own probe, another local tool or a browser's request ('HEAD /
+# HTTP/1.0', 'POST / HTTP/1.1') was read as his words before. A fence
+# against accidental and browser connections, not against a process of
+# his own (it can read the token): docs/agent-runtime.md. No token (nc,
+# the tests' bare REPLs, a REPL an older hub started): no hello.
+
+# the first line, at most this many bytes: past it, no hello
+def hello_max() -> Nat:
+  256n
+
+# how long a connection has to send its first line (ms)
+def hello_wait_ms() -> U32:
+  5000
+
+# a refused connection is logged at most once per this many ms
+def refused_every_ms() -> Nat:
+  1000n
+
+def hello_line(+token: String) -> String:
+  String.append("hello ", token)
+
+# the first line opens the connection: the whole hello, never a prefix
+# nor a longer line
+def hello_ok(+token: String, +line: String) -> Bool:
+  String.eq(line, hello_line(token))
+
+# a byte of a refused line as the log shows it: a control char is `?`
+def shown_char.pick(ctl: Bool, +c: U32) -> Char:
+  match ctl:
+    case True{}:
+      Chr{63}
+    case False{}:
+      Chr{c}
+
+def shown_char(+c: U32) -> Char:
+  shown_char.pick(Bool.or(U32.is_lt(c, 32), U32.is_eq(c, 127)), c)
+
+def shown(s: String) -> String:
+  match s:
+    case SNil{}:
+      SNil{}
+    case SCon{h, t}:
+      SCon{shown_char(Char.to_u32(h)), shown(t)}
+
+# the log line of a refused connection: its first line, clipped and
+# with no control char (a flood of them never writes a long log)
+def refused_note(+line: String) -> String:
+  String.append("say port: refused a connection with no hello, its first line: ",
+    shown(String.take(line, 60n)))
+
+# the first line's bytes so far (newest first) and one more byte: the
+# line is whole at a newline (a CR before it dropped)
+type HelloStep is Data:
+  HMore{acc: List<&2, U32>}
+  HLine{line: List<&2, U32>}
+
+def hello_drop_cr.pick(cr: Bool, +acc: List<&2, U32>, +t: List<&2, U32>)
+    -> List<&2, U32>:
+  match cr:
+    case True{}:
+      t
+    case False{}:
+      acc
+
+def hello_drop_cr(+acc: List<&2, U32>) -> List<&2, U32>:
+  match acc:
+    case Nil{}:
+      Nil{}
+    case Con{+h, +t}:
+      hello_drop_cr.pick(U32.is_eq(h, 13), acc, t)
+
+def hello_step.pick(nl: Bool, +acc: List<&2, U32>, +b: U32) -> HelloStep:
+  match nl:
+    case True{}:
+      HLine{List.reverse(&2, U32, hello_drop_cr(acc))}
+    case False{}:
+      HMore{Con{b, acc}}
+
+def hello_text.of(r: String & List<&2, U32>) -> String:
+  match r:
+    case (t, _):
+      t
+
+# the first line's text (a char cut at the limit: U+FFFD, never a hello)
+def hello_text(+bs: List<&2, U32>) -> String:
+  hello_text.of(U8.decode(Nil{}, bs))
+
+def hello_step(+acc: List<&2, U32>, +b: U32) -> HelloStep:
+  hello_step.pick(U32.is_eq(b, 10), acc, b)

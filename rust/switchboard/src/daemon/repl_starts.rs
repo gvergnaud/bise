@@ -274,6 +274,9 @@ impl Shell {
             }
         };
         let (session, cont) = self.prepare_session(&a, &dir, &adir, resume);
+        // its say port opens only with this hello (repl-core's serve_gate,
+        // say-port): a fresh one per process, kept in repl.json for adoption
+        let token = crate::pages::new_token();
         let mut cmd = Command::new(&self.opts.repl_bin);
         cmd.current_dir(&self.opts.app_root);
         // its whole environment: the hub's minus every internal and test
@@ -282,6 +285,7 @@ impl Shell {
             bise_home::env::Child::Repl,
             [
                 ("BEND_REPL_PORT", std::ffi::OsString::from(port.to_string())),
+                ("BISE_REPL_TOKEN", token.clone().into()),
                 // its run dir is the hub's (`Paths::run`): its bridge.json
                 // is where the hub looks for it
                 ("BEND_RUN_DIR", self.opts.paths.run.clone().into()),
@@ -404,7 +408,7 @@ impl Shell {
             step();
             slow_spawn_for_tests();
             env.apply(&mut cmd);
-            supervise(cmd, dir, gen, adir, port, tx, paths)
+            supervise(cmd, dir, gen, adir, super::repl::SayPort { port, token }, tx, paths)
         });
     }
 }

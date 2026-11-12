@@ -23,6 +23,7 @@ fn agent(name: &str, sids: &[u32], bg: &[(u32, u32, &str)]) -> AgentIn {
         name: name.into(),
         dir: name.into(),
         sessions: sids.iter().copied().collect(),
+        repl: None,
         bg: bg.iter().map(|(n, pgid, cmd)| BgJob { n: *n, pgid: *pgid, cmd: cmd.to_string() }).collect(),
     }
 }
@@ -283,6 +284,31 @@ fn a_new_repl_and_bises_wrappers_are_never_detached() {
         "not the REPL (no sids yet), not the runner nor its watch loop in a group of its own"
     );
     assert_eq!(got[0].cmd, "python3 -u -m http.server 8000");
+}
+
+/// The shape of apps-gallery's REPL tonight (say-port): adopted after a
+/// hub restart, so not the hub's child, and in no session of repl.sids.
+/// repl.json names it: never a detached row, so its say port is never
+/// listed nor HTTP-probed (the probes queued behind the hub's connection
+/// and became his words at the next one); and the probe skips every say
+/// port and bise's own ports whatever the rows say.
+#[test]
+fn an_adopted_repl_is_never_detached_and_its_say_port_never_probed() {
+    let t = Some("aa.apps.1");
+    let rows = vec![
+        r(1, 0, 1, 1, None, "launchd"),
+        r(100, 1, 100, 100, None, "bise sbd"),
+        r(66559, 1, 66559, 66559, t, "/v/repl-live"),
+        r(66600, 66559, 66559, 66559, t, "/bin/sh -c pnpm test"),
+        r(300, 1, 300, 300, t, "python3 -m http.server 8000"),
+    ];
+    let mut a = agent("apps", &[], &[]);
+    a.repl = Some(Repl { pid: 66559, port: 63180 });
+    let got = trees(&rows, HUB, std::slice::from_ref(&a), 100);
+    assert_eq!(kinds(&got), vec![("apps".into(), ProcKind::Detached, 300, vec![300])], "only the agent's own server");
+    assert_eq!(never_probed(&[a, agent("docs", &[], &[])], &[47438, 51800]), [47438, 51800, 63180].into());
+    assert_eq!(base_port("http://127.0.0.1:51800/tok"), Some(51800));
+    assert_eq!(base_port("http://example.com:80/x"), None);
 }
 
 /// bise's plugins bridge forks away from its REPL (parent 1, the REPL's

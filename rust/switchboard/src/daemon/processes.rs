@@ -19,7 +19,9 @@
 //! follower's output every 200 ms. Ports: one lsof for the pids not
 //! asked yet (all of them while the list is watched); lsof missing: no
 //! ports. Each port is asked once whether it answers HTTP (a no again
-//! after `HTTP_RETRY`): a row's `url` only then.
+//! after `HTTP_RETRY`): a row's `url` only then. Never an agent's say
+//! port (its `repl.json`) nor a port bise serves itself (pages, bridges):
+//! a probe queued on a say port became his words at the next connection.
 //!
 //! How a row ends: its bg job's `.rc` (exited), his stop (stopped by
 //! you: the stop marks it before its signals), proc-cleanup's reap
@@ -333,9 +335,19 @@ impl State {
                         Some(BgJob { n: n.parse().ok()?, pgid, cmd })
                     })
                     .collect();
-                AgentIn { name: a.name.clone(), dir: a.dir.clone(), sessions: crate::procs::read_sids(&self.paths.agent_dir(&a.dir).join("repl.sids")), bg: jobs }
+                let adir = self.paths.agent_dir(&a.dir);
+                AgentIn { name: a.name.clone(), dir: a.dir.clone(), sessions: crate::procs::read_sids(&adir.join("repl.sids")), repl: repl_of(&adir), bg: jobs }
             })
             .collect()
+    }
+
+    /// The ports bise serves itself: its pages server, its views bridge
+    /// and each live REPL's plugins bridge (never probed).
+    fn own_ports(&self, agents: &[AgentIn]) -> Vec<u16> {
+        let base = |p: &Path| std::fs::read_to_string(p).ok().and_then(|t| crate::view_call::bridge_base(&t)).and_then(|b| pv::base_port(&b));
+        let pages = std::fs::read_to_string(self.paths.state.join("pages.port")).ok().and_then(|t| t.trim().parse().ok());
+        let bridges = agents.iter().filter_map(|a| a.repl).filter_map(|r| base(&self.paths.agent_bridge_json(r.port)));
+        pages.into_iter().chain(base(&self.paths.views_bridge_json())).chain(bridges).collect()
     }
 
     /// One scan: the rows now, what ended since the last one, the counts.
@@ -381,7 +393,7 @@ impl State {
         self.ports.retain(|k, _| alive.contains(k));
         self.asked.retain(|k| alive.contains(k));
         self.files.retain(|k, _| alive.contains(k));
-        self.probe_http();
+        self.probe_http(&pv::never_probed(&agents, &self.own_ports(&agents)));
         let http: BTreeSet<u16> = self.http.iter().filter(|(_, (yes, _))| *yes).map(|((_, port), _)| *port).collect();
         let ports_by: BTreeMap<u32, Vec<u16>> = self.ports.iter().map(|((p, _), v)| (*p, v.clone())).collect();
         let files_by: BTreeMap<u32, Files> = self.files.iter().map(|((p, _), v)| (*p, v.clone())).collect();
@@ -415,8 +427,10 @@ impl State {
 
     /// Asks each listening port whether it serves HTTP: once, a no again
     /// after `HTTP_RETRY`; the ports of processes gone are forgotten.
-    fn probe_http(&mut self) {
-        let listening: BTreeSet<((u32, String), u16)> = self.ports.iter().flat_map(|(k, v)| v.iter().map(move |p| (k.clone(), *p))).collect();
+    /// Never one of `never` (`pv::never_probed`: a say port, bise's own).
+    fn probe_http(&mut self, never: &BTreeSet<u16>) {
+        let listening: BTreeSet<((u32, String), u16)> =
+            self.ports.iter().flat_map(|(k, v)| v.iter().filter(|p| !never.contains(p)).map(move |p| (k.clone(), *p))).collect();
         self.http.retain(|k, _| listening.contains(k));
         let now = std::time::Instant::now();
         for k in listening {
@@ -685,6 +699,13 @@ fn http_answers(port: u16) -> bool {
         }
     }
     pv::answers_http(&buf[..got])
+}
+
+/// The agent's REPL as `repl.json` names it (`daemon/repl.rs` writes it
+/// at the spawn, an adopting hub trusts it).
+fn repl_of(adir: &Path) -> Option<pv::Repl> {
+    let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(adir.join("repl.json")).ok()?).ok()?;
+    Some(pv::Repl { pid: v.get("pid")?.as_u64()?.try_into().ok()?, port: v.get("port")?.as_u64()?.try_into().ok()? })
 }
 
 /// One lsof on `pids` with `what` (no lsof: nothing).
