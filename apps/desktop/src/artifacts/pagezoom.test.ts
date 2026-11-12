@@ -9,10 +9,10 @@ const close = (a: { x: number; y: number }, b: { x: number; y: number }) => {
 };
 
 describe('a web page pinch (pagezoom)', () => {
-  it("the most it zooms is the image viewer's (kit/office/zoom.ts MAX_K): 8 screen px per page px", () => {
-    const kit = readFileSync(new URL('../../../../kit/office/zoom.ts', import.meta.url), 'utf8');
-    const m = /export const MAX_K = (\d+(?:\.\d+)?);/u.exec(kit);
-    expect(m, 'kit/office/zoom.ts exports MAX_K').not.toBeNull();
+  it("the most it zooms is Preview's image zoom (plugins/media's zoom.ts MAX_K): 8 screen px per page px", () => {
+    const zoom = readFileSync(new URL('../../../../plugins/media/ai.mistral.vibe/views/preview/zoom.ts', import.meta.url), 'utf8');
+    const m = /export const MAX_K = (\d+(?:\.\d+)?);/u.exec(zoom);
+    expect(m, "Preview's zoom.ts exports MAX_K").not.toBeNull();
     expect(MAX_PAGE_ZOOM).toBe(Number(m?.[1]));
   });
 

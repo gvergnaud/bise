@@ -1,0 +1,20 @@
+{
+  "//": "Preview's view (ai.mistral.vibe/views/preview/): ES modules that import each other and @bise/view (./~kit/view/view.js, served by the hub beside the view: rootDirs maps it to kit/view-root, types only) by relative URL. Emitted next to their .ts by scripts/ts_emit.ts and committed (cargo and the release never run node). src/ holds pdf.js's bundle entries, built by office/sdk/build.ts with its node_modules into the view's folder (architect m_60401: one lockfile; paths says the same to tsc). typescript is office/sdk's.",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "allowImportingTsExtensions": true,
+    "rootDirs": ["ai.mistral.vibe/views/preview", "../../kit/view-root"],
+    "paths": { "*": ["../../office/sdk/node_modules/*"] },
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": [],
+    "strict": true,
+    "alwaysStrict": false,
+    "erasableSyntaxOnly": true,
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "include": ["ai.mistral.vibe/views/preview/*.ts"]
+}

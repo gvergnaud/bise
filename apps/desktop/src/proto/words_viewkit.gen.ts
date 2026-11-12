@@ -8,6 +8,18 @@ export const viewkit = {
   ask: "type to ask about it",
   /** the pill, a moment after he asked (then it goes) */
   added: "added to your message",
+  /** a view before its document is drawn */
+  opening: "opening…",
+  /** a view whose document failed to load (its reason follows on its own line) */
+  didnt_open: "this didn't open",
   /** a place: the slide a selection is on (plugins/slides' view, a clicked shape's label) */
   slide: (a: { n: string | number }): string => "slide " + String(a.n),
+  /** a box he drew on an image */
+  area: "an area",
+  /** a passage of a pdf, on its page (its words follow in the chip) */
+  page: (a: { n: string | number }): string => "page " + String(a.n),
+  /** a box he drew on a pdf's page */
+  page_area: (a: { n: string | number }): string => "page " + String(a.n) + " · an area",
+  /** a box he drew on a video's frame at that moment (t as the player says it, `0:12`) */
+  moment_area: (a: { t: string | number }): string => String(a.t) + " · an area",
 } as const;

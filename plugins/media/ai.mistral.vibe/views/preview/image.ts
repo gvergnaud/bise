@@ -1,61 +1,54 @@
-// bise kit · the image renderer of the viewer (viewer.js; office-artifacts plan §5): the picture,
-// fit to the frame, and a box drawn on it with the pointer as the selection, a `region` anchor
-// in % of the image (bise_proto::anchor). The notes layer (select.js) does the rest.
+// Preview · an image (png, jpg, gif, webp): the picture fit to the view, and a box drawn on it
+// with the pointer as his selection, a `region` place in % of the image (keys.ts). His notes'
+// boxes are drawn on it, the kit marks them (data-bise-mark).
 //
-// It zooms (his m_22822; image-pinch, designer m_30627, architect m_30628), the math is zoom.js's:
+// It zooms (his m_22822; image-pinch, designer m_30627, architect m_30628), the math is zoom.ts's:
 // a trackpad pinch (Chromium's wheel + ctrlKey) zooms the image around the pointer, never the
 // window; two fingers or the wheel (shift: sideways) pan it while zoomed, and space+drag for a
 // mouse; a plain drag always draws a box, zoomed or not; a double-click toggles fit and 100%;
 // esc, ⌘0 or a click on the '240%' chip go back to fit. The .frame (the img and every box, all in
 // % of it) is sized k × the image and moved, never scaled: boxes and marks ride the zoom, their
-// lines stay 1 px; past 200% its pixels show (designer m_30807). In the desktop's frame (name bise-app) it tells the window {bise: zoom, fit}
-// so the window's esc and ⌘0 come back here as {bise: fit} while zoomed (kit/office/frame.js).
-//
-// Pure helper (exported for office/sdk/test/viewer.test.ts): boxPct.
+// lines stay 1 px; past 200% its pixels show (designer m_30807). The zoom is the view's state: a
+// tab unloaded and drawn again comes back zoomed where he was.
 
-import { fitted, isFit, isFitKey, panBy, pinchFactor, place, toggled, wheelPan, zoomAt, zoomWords } from "/kit/office/zoom.js";
-import { FRAME } from "/kit/office/frame.js";
-import type { Dims, Zoom } from "/kit/office/zoom.js";
-
-type XY = { x: number; y: number };
+import { capture } from "./dom.js";
+import { boxPct, isClick, type Place, type Rect } from "./keys.js";
+import type { Ctx, Shown, Source } from "./shown.js";
+import { fitted, isFit, isFitKey, panBy, pinchFactor, place, toggled, wheelPan, zoomAt, zoomWords } from "./zoom.js";
+import type { Dims, Zoom } from "./zoom.js";
 
 const MIME: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp" };
 
 /** How long the chip stays after the last zoom step, then it fades (designer m_30627). */
 const CHIP_MS = 1500;
 
-/** Two points (px, in an element of `w` × `h`) as a rect in % of it, 0.1 apart, clamped. */
-export function boxPct(a: XY, b: XY, w: number, h: number) {
-  const clamp = (v: number) => Math.max(0, Math.min(100, Math.round(v * 10) / 10));
-  const x0 = clamp((Math.min(a.x, b.x) / w) * 100);
-  const y0 = clamp((Math.min(a.y, b.y) / h) * 100);
-  const x1 = clamp((Math.max(a.x, b.x) / w) * 100);
-  const y1 = clamp((Math.max(a.y, b.y) / h) * 100);
-  return { x: x0, y: y0, w: Math.round((x1 - x0) * 10) / 10, h: Math.round((y1 - y0) * 10) / 10 };
-}
-
 /** A field he types in: space is his there, never a pan. */
 const typing = (t: EventTarget | null) => !!t && ((t as HTMLElement).isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test((t as HTMLElement).tagName || ""));
 
-export async function draw(root: HTMLElement, bytes: Uint8Array<ArrayBuffer>, info: OfficeInfo): Promise<OfficeView> {
-  root.classList.add("office-image");
-  const ext = String(info.name || "").split(".").pop()!.toLowerCase();
-  const url = URL.createObjectURL(new Blob([bytes], { type: MIME[ext] || "image/png" }));
+/** The state this view keeps: the image's size and its zoom (none at fit). */
+type State = { nw: number; nh: number; zoom: Zoom | null };
+
+const boxAt = (el: HTMLElement, r: Rect) => Object.assign(el.style, { left: `${r.x}%`, top: `${r.y}%`, width: `${r.w}%`, height: `${r.h}%` });
+
+export async function draw(root: HTMLElement, src: Source, ctx: Ctx): Promise<Shown> {
+  root.classList.add("pv-image");
+  const ext = src.name.split(".").pop()!.toLowerCase();
+  const url = src.url ?? URL.createObjectURL(new Blob([src.bytes as Uint8Array<ArrayBuffer>], { type: MIME[ext] || "image/png" }));
   const frame = document.createElement("div");
   frame.className = "frame";
   const img = document.createElement("img");
-  img.alt = info.name || "";
+  img.alt = src.name;
   img.draggable = false;
   frame.append(img);
   const chip = document.createElement("button");
   chip.type = "button";
-  chip.className = "office-zoom";
+  chip.className = "pv-zoom";
   chip.title = "fit · ⌘0";
   chip.hidden = true;
   root.append(frame, chip);
   await new Promise<void>((ok, no) => {
     img.onload = () => ok();
-    img.onerror = () => no(Object.assign(new Error("not an image this browser draws"), { code: "not_office" }));
+    img.onerror = () => no(Object.assign(new Error("not an image this browser draws"), { code: "unreadable" }));
     img.src = url;
   });
 
@@ -64,17 +57,11 @@ export async function draw(root: HTMLElement, bytes: Uint8Array<ArrayBuffer>, in
   const nh = img.naturalHeight;
   let d: Dims = { bw: 0, bh: 0, nw, nh };
   let z: Zoom = { k: 1, x: 0, y: 0 };
-  // a zoom put back after a new version (restore), applied once the box has its size
+  // a zoom put back (restore), applied once the box has its size
   let pending: Zoom | null = null;
-  let told: boolean | null = null;
   let chipTimer = 0;
-  const inApp = window.name === "bise-app" && window.parent !== window;
-  const tell = (fit: boolean) => {
-    if (!inApp || fit === told) return;
-    told = fit;
-    window.parent.postMessage({ bise: FRAME.zoom, fit }, "*");
-  };
   const apply = (next: Zoom, ease = false) => {
+    const was = z;
     z = next;
     root.classList.toggle("eased", ease);
     Object.assign(frame.style, { width: `${nw * z.k}px`, height: `${nh * z.k}px`, transform: `translate(${z.x}px, ${z.y}px)` });
@@ -88,7 +75,7 @@ export async function draw(root: HTMLElement, bytes: Uint8Array<ArrayBuffer>, in
       chip.classList.remove("on");
       clearTimeout(chipTimer);
     }
-    tell(fit);
+    if (was.k !== z.k || was.x !== z.x || was.y !== z.y) ctx.moved();
   };
   /** The chip says the zoom while he zooms and CHIP_MS after; never at fit. */
   const showChip = () => {
@@ -108,12 +95,12 @@ export async function draw(root: HTMLElement, bytes: Uint8Array<ArrayBuffer>, in
   // the box's size: a fitted image refits, a zoomed one keeps its place, held at the edges
   new ResizeObserver(() => {
     if (!root.isConnected) return;
-    const was = isFit(d, z);
+    const was = d.bw > 0 && isFit(d, z);
     d = { bw: root.clientWidth, bh: root.clientHeight, nw, nh };
     if (d.bw <= 0 || d.bh <= 0) return;
     const back = pending;
     pending = null;
-    apply(back ? place(d, back) : was ? fitted(d) : place(d, z));
+    apply(back ? place(d, back) : was || z.k === 1 ? fitted(d) : place(d, z));
   }).observe(root);
 
   // a pinch zooms here, never the window; two fingers or the wheel pan while zoomed
@@ -142,8 +129,8 @@ export async function draw(root: HTMLElement, bytes: Uint8Array<ArrayBuffer>, in
   });
   chip.addEventListener("click", toFit);
 
-  // esc and ⌘0 while zoomed: back to fit, used (the desktop's esc forwarder then leaves the
-  // artifact open); capture, before the notes layer's keys. Space held: a drag pans.
+  // esc and ⌘0 while zoomed: back to fit, used; capture, before the kit reads a typed key as
+  // his first word. Space held: a drag pans.
   let space = false;
   const spaceUp = () => {
     space = false;
@@ -168,27 +155,22 @@ export async function draw(root: HTMLElement, bytes: Uint8Array<ArrayBuffer>, in
   );
   document.addEventListener("keyup", (e) => e.code === "Space" && spaceUp());
   window.addEventListener("blur", spaceUp);
-  // the window's esc or ⌘0 while zoomed (its focus outside this frame): only from the parent
-  window.addEventListener("message", (e) => {
-    if (!root.isConnected || window.parent === window || e.source !== window.parent) return;
-    if (e.data && e.data.bise === FRAME.fit) toFit();
-  });
 
   // ---- the box: a plain drag on the image, zoomed or not (designer m_30627)
-  let selected: Anchor | null = null;
+  type XY = { x: number; y: number };
   let start: XY | null = null;
   let pan: XY | null = null;
   const box = document.createElement("div");
-  box.className = "office-box";
+  box.className = "pv-box";
   // the pointer in % of the image, read against the image as drawn at that moment: a press and
   // its release during a zoom's ease (160 ms) fall on the same image point, never a box between
   const at = (e: MouseEvent) => {
     const r = img.getBoundingClientRect();
     const pct = (v: number, size: number) => (size > 0 ? Math.max(0, Math.min(100, (v / size) * 100)) : 0);
-    return { x: pct(e.clientX - r.left, r.width), y: pct(e.clientY - r.top, r.height), w: 100, h: 100 };
+    return { x: pct(e.clientX - r.left, r.width), y: pct(e.clientY - r.top, r.height) };
   };
-  const show = (rect: AnchorRect) => {
-    Object.assign(box.style, { left: `${rect.x}%`, top: `${rect.y}%`, width: `${rect.w}%`, height: `${rect.h}%` });
+  const show = (rect: Rect) => {
+    boxAt(box, rect);
     if (!box.isConnected) frame.append(box);
   };
   root.addEventListener("pointerdown", (e) => {
@@ -196,14 +178,12 @@ export async function draw(root: HTMLElement, bytes: Uint8Array<ArrayBuffer>, in
     if (space) {
       pan = { x: e.clientX, y: e.clientY };
       root.classList.add("grabbing");
-      root.setPointerCapture(e.pointerId);
+      capture(root, e.pointerId);
       return;
     }
     if (!frame.contains(e.target as Node)) return;
     start = at(e);
-    root.setPointerCapture(e.pointerId);
-    // no preventDefault: it would cancel the mouseup the notes layer offers its button on
-    // (pdf-notes found it: a real drag drew the box but showed no button)
+    capture(root, e.pointerId);
   });
   // a box drawn selects nothing on the way
   root.addEventListener("selectstart", (e) => (start || pan) && e.preventDefault());
@@ -214,9 +194,7 @@ export async function draw(root: HTMLElement, bytes: Uint8Array<ArrayBuffer>, in
       apply(panBy(d, z, e.clientX - from.x, e.clientY - from.y));
       return;
     }
-    if (!start) return;
-    const p = at(e);
-    show(boxPct(start, p, p.w, p.h));
+    if (start) show(boxPct(start, at(e), 100, 100));
   });
   const up = (e: PointerEvent) => {
     if (pan) {
@@ -225,29 +203,44 @@ export async function draw(root: HTMLElement, bytes: Uint8Array<ArrayBuffer>, in
       return;
     }
     if (!start) return;
-    const p = at(e);
-    const rect = boxPct(start, p, p.w, p.h);
+    const rect = boxPct(start, at(e), 100, 100);
     start = null;
     // a click, not a box: the selection goes (a double-click never leaves one)
-    if (rect.w < 1 || rect.h < 1) {
-      selected = null;
+    if (isClick(rect)) {
       box.remove();
+      ctx.select(null);
       return;
     }
-    selected = { kind: "region", rect };
     show(rect);
+    ctx.select({ kind: "region", rect }, null, box);
   };
   root.addEventListener("pointerup", up);
   root.addEventListener("pointercancel", up);
 
+  // ---- his notes' boxes: one element per place, kept; the kit marks the ones it places
+  const marks = new Map<string, HTMLElement>();
   return {
-    notes: [],
-    /** Where he is: the zoom, kept for a new version of the same size. */
-    place: () => ({ nw, nh, zoom: isFit(d, z) ? null : { ...z } }),
-    restore: (p) => {
-      if (p && p.zoom && p.nw === nw && p.nh === nh) pending = p.zoom as Zoom;
+    foot: [],
+    place(p: Place) {
+      // a box on an image has no page and no moment; another kind is not this image's
+      if (p.kind !== "region" || p.page !== undefined) return null;
+      const k = `${p.rect.x},${p.rect.y},${p.rect.w},${p.rect.h}`;
+      let m = marks.get(k);
+      if (!m) {
+        m = document.createElement("div");
+        m.className = "pv-mark";
+        boxAt(m, p.rect);
+        frame.append(m);
+        marks.set(k, m);
+      }
+      return [m];
     },
-    /** The box drawn as an Anchor (`region`), or null. */
-    selection: () => selected,
+    state: (): State => ({ nw, nh, zoom: d.bw > 0 && !isFit(d, z) ? { ...z } : null }),
+    restore(s) {
+      const st = s as Partial<State> | null;
+      if (!st || !st.zoom || st.nw !== nw || st.nh !== nh) return;
+      if (d.bw > 0) apply(place(d, st.zoom));
+      else pending = st.zoom;
+    },
   };
 }

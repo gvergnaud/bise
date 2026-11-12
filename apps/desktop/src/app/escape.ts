@@ -12,7 +12,7 @@
 //   5b. an artifact's find bar open, the focus elsewhere in that artifact (its page's frame: the
 //      window gets that key with the frame as its active element): the bar closes, the artifact
 //      stays (artifacts/find.ts openFindAt; ui-review m_52779)                   'artFind'
-//   6. a zoomed image: back to fit                                                'zoom'
+//   6. a zoomed page: back to fit                                                 'zoom'
 //   7. an artifact in front of the open panel: its tab closes, the panel as it was before it came,
 //      and the route back when the artifact came by its route (artifacts/<p>/<id>); before the
 //      composer reads the esc, so his words and the answering mode stay           'artifact'
@@ -142,7 +142,7 @@ const ESC_KEY = { key: 'Escape', code: 'Escape', metaKey: false, ctrlKey: false,
 
 /**
  * The artifact page's own esc (its frame forwards the one it didn't use, guard.ts ESC_FORWARD;
- * panel/Browser.tsx hears it): the same order as the window's 6 then 7. A zoomed page or image
+ * panel/Browser.tsx hears it): the same order as the window's 6 then 7. A zoomed page
  * goes back to fit first (his focus is in the page after a pinch, so the window's keydown never
  * sees that esc: web-pinch, ui-review m_45656); the next esc closes the tab `tab`.
  */

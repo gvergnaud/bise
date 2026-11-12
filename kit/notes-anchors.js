@@ -6,13 +6,12 @@
 //
 // - `block`: anchoring on a block's text with its whitespace collapsed (notes.js's, moved here as
 //   is): locate a quote, is a note still where it was, re-anchor on a new version;
-// - `pdf`: a pdf's `region` (a box on a page, or a passage with its words): a page's text from
-//   its pdf.js items, where a note sits on a new version (pdf-notes);
 // - `label(anchor)`: what a chip and a note's line call it, bise_proto::anchor::label's rule
 //   (both pinned by rust/proto/fixtures/anchor_label.json, kit/office/check.mjs);
 // - `same(a, b)`, `KINDS`: one anchor equal to another, the kinds this version knows.
 //
-// Pure: no DOM. Where an office anchor is drawn is each viewer's (kit/office/select.js, pdf.js).
+// Pure: no DOM. Where an office anchor is drawn is each viewer's (kit/office/select.js); an
+// image's, a pdf's or a video's is Preview's (plugins/media, its pdftext.ts).
 (function (root) {
     "use strict";
     // ---- anchoring: on the block's text with its whitespace collapsed (what you see)
@@ -91,56 +90,6 @@
         }
         return { quote: words.slice(a, b + 1).map((x) => x.w).join(" "), offset: words[a].at };
     }
-    // ---- a pdf's `region` (pdf-notes, architect m_24668): a box on a page, or a passage (its
-    // words' box and its words in `quote`). A page's text is its pdf.js text items in order, a
-    // line's end a space, whitespace collapsed as `norm` does; `pageText` also says where each
-    // item sits in it, so the words found can be drawn on their items.
-    function pageText(items) {
-        let text = "";
-        const ranges = [];
-        let space = false; // a collapsed space waits to be written before the next word
-        (items || []).forEach((it, i) => {
-            const raw = String((it && it.str) || "") + (it && it.hasEOL ? " " : "");
-            let start = -1;
-            for (const ch of raw) {
-                if (/\s/.test(ch)) {
-                    space = text.length > 0;
-                    continue;
-                }
-                if (space)
-                    text += " ";
-                space = false;
-                if (start < 0)
-                    start = text.length;
-                text += ch;
-            }
-            if (start >= 0)
-                ranges.push({ i, start, end: text.length });
-        });
-        return { text, ranges };
-    }
-    // the items under the words [start, end) of a page (pageText's ranges)
-    const itemsIn = (ranges, start, end) => (ranges || []).filter((r) => r.start < end && r.end > start).map((r) => r.i);
-    // where a pdf note sits in a version whose pages' texts are `pages` (pageText's, page 1 first):
-    // a passage on its page if its words are there (the occurrence nearest its old box), else on
-    // the nearest page that has them; a box on its page while the pdf has it. null: moved.
-    function place(a, pages) {
-        if (!a || a.kind !== "region" || !a.rect)
-            return null;
-        const n = (pages || []).length;
-        const page = a.page == null ? 1 : Number(a.page);
-        if (!norm(a.quote))
-            return page >= 1 && page <= n ? { page, rect: a.rect } : null;
-        const order = [...Array(n).keys()].map((k) => k + 1).sort((x, y) => Math.abs(x - page) - Math.abs(y - page) || x - y);
-        for (const p of order) {
-            const t = pages[p - 1] || ""; // pages is there: no pages, no order
-            const hint = p === page ? Math.round((Number(a.rect.y) / 100) * t.length) : 0;
-            const at = locate(t, a.quote, hint);
-            if (at)
-                return { page: p, start: at.start, end: at.end };
-        }
-        return null;
-    }
     // ---- the chip's words (bise_proto::anchor::label; designer signs them)
     const KINDS = ["block", "cell", "slide", "shape", "para", "region", "text", "time", "view"];
     // one line, at most `max` characters, `…` when cut
@@ -185,7 +134,7 @@
     }
     // the same place (a quote, a rect's exact numbers: the same selection)
     const same = (a, b) => !!a && !!b && JSON.stringify(a) === JSON.stringify(b);
-    const api = { KINDS, label, clock, same, short, block: { norm, locate, anchorOf, reanchor, keptEdit, nearestQuote }, pdf: { pageText, itemsIn, place } };
+    const api = { KINDS, label, clock, same, short, block: { norm, locate, anchorOf, reanchor, keptEdit, nearestQuote } };
     root.BiseAnchors = api;
     if (typeof module !== "undefined" && module.exports)
         module.exports = api;

@@ -363,10 +363,11 @@ fn the_repo_ships_the_computer_plugin() {
     let p = res.plugins.iter().find(|p| p.name == "computer").unwrap();
     assert_eq!(p.state, State::Disabled);
     assert!(p.servers.is_empty() && p.skills.is_empty());
-    // the office plugins (sheets, slides, docs) are on by default: only they load
+    // the apps that open bise's own files (sheets, slides, docs, media's Preview) are on by
+    // default: only they load
     let mut loaded: Vec<&str> = res.loaded().map(|p| p.name.as_str()).collect();
     loaded.sort();
-    assert_eq!(loaded, ["docs", "sheets", "slides"]);
+    assert_eq!(loaded, ["docs", "media", "sheets", "slides"]);
 }
 
 #[test]

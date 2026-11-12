@@ -204,51 +204,21 @@ pub fn serves_copy(by: &str, copy: &str) -> bool {
     by != "page" && !copy.is_empty() && (file.is_empty() || ctype(&file).is_some())
 }
 
-/// Where the page server reads a version's bytes (video-artifact,
-/// architect m_54229): the one rule for the server's routes
-/// (`artifact_target`, `media`), the viewer's shell (artifact/view.rs) and
-/// the typed row's `frame_url` (proto_view::artifacts).
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Served<'a> {
-    /// bise's copy ([`serves_copy`])
-    Copy(&'a str),
-    /// its own file (an absolute local path): a streamed kind
-    /// ([`STREAMED_KINDS`]) too big to copy (`artifacts::TOO_BIG`), read by
-    /// its ranges (media.rs) only while its sig still holds
-    /// (media::own_holds); the path never goes in a url, a page or an event
-    Own(&'a str),
-}
-
-impl<'a> Served<'a> {
-    /// what its name and kind are read from ([`frame_href`], [`viewer_kind`], [`copy_href`])
-    pub fn file(self) -> &'a str {
-        match self {
-            Served::Copy(f) | Served::Own(f) => f,
-        }
-    }
-}
-
 /// What the page server serves for a version of an artifact added `by`
-/// with that `copy`, `no_copy` and `target`: its copy when it serves one;
-/// else its own file for a streamed kind with no copy because it was too
-/// big; else nothing (a link, a bise page, a file too big to copy that is
-/// not streamed). Pure: the sig is checked where the bytes are read.
-pub fn served<'a>(by: &str, copy: Option<&'a str>, no_copy: Option<&str>, target: &'a str) -> Option<Served<'a>> {
-    if let Some(c) = copy.filter(|c| serves_copy(by, c)) {
-        return Some(Served::Copy(c));
-    }
-    let own = by != "page"
-        && copy.is_none_or(str::is_empty)
-        && no_copy == Some(crate::artifacts::TOO_BIG)
-        && !is_link(target)
-        && std::path::Path::new(target).is_absolute()
-        && viewer_kind(target).is_some_and(|k| STREAMED_KINDS.contains(&k));
-    own.then_some(Served::Own(target))
+/// with that `copy`: its copy when it serves one ([`serves_copy`]); else
+/// nothing (a link, a bise page, a file too big to copy). The one rule for
+/// the server's route (`artifact_target`), the viewer's shell
+/// (artifact/view.rs) and the typed row's `frame_url`
+/// (proto_view::artifacts). A file bise kept no copy of is read by its app
+/// through a handle, from its own file while its sig holds
+/// (view_files_disk, docs/plugin-apps.md A4), never here.
+pub fn served<'a>(by: &str, copy: Option<&'a str>) -> Option<&'a str> {
+    copy.filter(|c| serves_copy(by, c))
 }
 
 /// Where an artifact's copy is framed (the typed row's `frame_url`,
 /// proto_view::artifacts): what bise's viewer draws ([`viewer_kind`]: an
-/// office file, a site, an image, a pdf; pages/artifact/view.rs), at
+/// office file, a site, a markdown file; pages/artifact/view.rs), at
 /// `/a/<id>/view` for the newest version (the
 /// frame keeps that src when a new one lands) or `/a/<id>/<v>/view` for an
 /// older one; any other copy at [`copy_href`]. Only for a copy that
@@ -262,20 +232,11 @@ pub fn frame_href(id: &str, v: u64, copy: &str, newest: bool) -> String {
 }
 
 /// What bise's viewer draws a copy as (pages/artifact/view.rs): an office
-/// file ([`office_kind`]), an image (`image`: png, jpg, gif, webp, where
-/// a note is a box drawn on it) or a site (`site`: a folder or an html
-/// file, still served sandboxed at [`copy_href`], framed inside the viewer
-/// so notes can sit on its blocks; art-notes) or a pdf (`pdf`: drawn by
-/// pdf.js, a note on a passage or a box; pdf-notes). None: framed as
-/// itself (a markdown file opens in Writer, plugins/docs).
-/// The videos bise's viewer plays (the browser's: an mkv is framed as itself).
-pub const VIDEO_EXTS: &[&str] = &["mp4", "mov", "webm", "m4v"];
-
-/// The viewer kinds whose bytes the viewer never fetches whole: the player
-/// reads them by their byte ranges from the copy's url (media.rs); the
-/// shell says it (`data-stream`, pages/artifact/view.rs) to viewer.js and swap.js.
-pub const STREAMED_KINDS: &[&str] = &["video"];
-
+/// file ([`office_kind`]) or a site (`site`: a folder or an html file,
+/// still served sandboxed at [`copy_href`], framed inside the viewer so
+/// notes can sit on its blocks; art-notes). None: framed as itself, or
+/// opened by its app (docs/plugin-apps.md steps 1-2: a markdown file in
+/// Writer, plugins/docs; images, pdfs and videos in Preview, plugins/media).
 pub fn viewer_kind(copy: &str) -> Option<&'static str> {
     let file = file_of(copy);
     let ext = file.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
@@ -285,12 +246,6 @@ pub fn viewer_kind(copy: &str) -> Option<&'static str> {
         // a site: a folder (its index.html) or a copied html file, framed
         // as itself inside the viewer (kit/office/site.js), notes on its blocks
         _ if file.is_empty() || ext == "html" || ext == "htm" => Some("site"),
-        _ if bise_proto::parts::IMAGE_EXTS.contains(&ext.as_str()) => Some("image"),
-        // a pdf: drawn by pdf.js (kit/office/pdf.js), notes on a passage or a box (pdf-notes)
-        _ if ext == "pdf" => Some("pdf"),
-        // a video: played by kit/office/video.js from its byte ranges (media.rs), a
-        // note on a moment or a box on its frame (video-view)
-        _ if VIDEO_EXTS.contains(&ext.as_str()) => Some("video"),
         _ => None,
     }
 }
@@ -426,7 +381,7 @@ mod tests {
             assert_eq!(viewer_kind(&sample), Some(b.kind), "{b:?}");
         }
         // every ending the viewer draws has its row
-        let ends = bise_proto::parts::IMAGE_EXTS.iter().chain(VIDEO_EXTS).chain(&["pdf", "html", "htm", "xlsx"]);
+        let ends = ["html", "htm", "xlsx"];
         for e in ends {
             let kind = viewer_kind(&format!("v1/x.{e}")).unwrap_or_else(|| panic!("the viewer draws .{e}"));
             assert!(BUILTIN.iter().any(|b| !b.folder && b.key == format!("*.{e}") && b.kind == kind), ".{e} ({kind}) has no BUILTIN row");
@@ -546,21 +501,21 @@ mod tests {
         assert_eq!((viewer_kind("v3/r.html"), viewer_kind("v1/site"), viewer_kind("v1/a.HTM"), viewer_kind("v1/notes.txt"), viewer_kind("")), (Some("site"), Some("site"), Some("site"), None, None));
         assert_eq!(copy_href("r", 3, "v3/r.html"), "/a/r/3/r.html");
         assert_eq!((framed_href("r", 3, "v3/r.html"), framed_href("f", 1, "v1/site")), ("/a/r/3/framed/r.html".to_string(), "/a/f/1/framed/".to_string()));
-        // an image too (art-notes: a note is a box drawn on it)
-        assert_eq!((viewer_kind("v1/shot.PNG"), viewer_kind("v1/q3.xlsx"), viewer_kind("v1/a.csv")), (Some("image"), Some("xlsx"), None));
-        assert_eq!((viewer_kind("v2/report.pdf"), viewer_kind("v2/R.PDF")), (Some("pdf"), Some("pdf")));
+        assert_eq!((viewer_kind("v1/q3.xlsx"), viewer_kind("v1/a.csv")), (Some("xlsx"), None));
+        // images, pdfs and videos open in their app (plugins/media's Preview), their copy at its
+        // own href, a video's by its ranges (media.rs)
+        for f in ["v1/shot.PNG", "v2/report.pdf", "v1/film.mp4", "v1/a.MOV", "v1/loop.gif"] {
+            assert_eq!(viewer_kind(f), None, "{f}");
+            assert!(serves_copy("main", f), "{f}");
+        }
+        assert_eq!(frame_href("s", 1, "v1/shot.png", true), "/a/s/1/shot.png");
         // a markdown file opens in Writer (plugins/docs, docs/plugin-apps.md step 1), framed as
         // itself here (its copy text/plain); a .txt too
         assert_eq!((viewer_kind("v3/learnings.md"), viewer_kind("v1/A.Markdown"), viewer_kind("v1/notes.txt")), (None, None, None));
         assert!(serves_copy("learnings", "v3/learnings.md") && ctype("v3/learnings.md") == Some("text/plain; charset=utf-8"));
-        // video-view: the browser's videos played in the viewer, served by ranges; a gif stays an image, an mkv is framed as itself
         for f in ["v1/film.mp4", "v1/a.MOV", "v1/b.webm", "v1/c.m4v"] {
-            assert_eq!(viewer_kind(f), Some("video"), "{f}");
-            assert!(ctype(f).is_some_and(|c| c.starts_with("video/")), "{f}");
+            assert!(ctype(f).is_some_and(|c| c.starts_with("video/")), "{f}: a video copy is sent by its ranges");
         }
-        assert_eq!((viewer_kind("v1/loop.gif"), viewer_kind("v1/x.mkv")), (Some("image"), None));
-        assert!(STREAMED_KINDS.iter().all(|k| *k == "video"), "only a video is streamed");
-        assert_eq!(frame_href("s", 1, "v1/shot.png", true), "/a/s/view");
         assert!(!serves_copy("page", "v1/q3.xlsx"), "a bise page is served at /p/");
         assert!(!serves_copy("x", "v1/a.xls"), "an old binary format is not sent");
     }
@@ -568,30 +523,15 @@ mod tests {
     /// architect m_24172: the selection script only for the viewer's frame
     /// (and the site's own links in it), never the plain copy; the bytes
     /// otherwise as they are.
-    /// video-artifact (architect m_54229): the copy wins when there is one;
-    /// its own file only for a streamed kind too big to copy, at an absolute
-    /// local path; anything else: nothing to frame.
+    /// The server frames a copy only: a file too big to copy (a long video)
+    /// opens in its app, read through a handle from its own file
+    /// (docs/plugin-apps.md A4), never at a page server url.
     #[test]
-    fn a_video_too_big_to_copy_is_served_from_its_own_file() {
-        let big = Some(crate::artifacts::TOO_BIG);
-        let film = "/w/film.mp4";
-        assert_eq!(served("main", Some("v1/film.mp4"), None, film), Some(Served::Copy("v1/film.mp4")), "a copy first");
-        assert_eq!(served("main", None, big, film), Some(Served::Own(film)));
-        assert_eq!(served("main", Some(""), big, "/w/clip.MOV"), Some(Served::Own("/w/clip.MOV")));
-        assert_eq!(frame_href("q", 1, Served::Own(film).file(), true), "/a/q/view", "framed in bise's viewer");
-        assert_eq!(copy_href("q", 1, Served::Own("/w/big film.mp4").file()), "/a/q/1/big%20film.mp4", "its name only, never its path");
-        for (by, no_copy, target, why) in [
-            ("main", Some("copy failed: x"), film, "no copy for another reason"),
-            ("main", Some("archived"), film, "archived: not kept"),
-            ("main", None, film, "no reason"),
-            ("page", big, film, "a bise page"),
-            ("main", big, "/w/deck.pptx", "not streamed"),
-            ("main", big, "/w/site", "a folder"),
-            ("main", big, "film.mp4", "not absolute"),
-            ("main", big, "https://x.test/film.mp4", "a link"),
-        ] {
-            assert_eq!(served(by, None, no_copy, target), None, "{why}");
-        }
+    fn only_a_copy_is_served() {
+        assert_eq!(served("main", Some("v1/film.mp4")), Some("v1/film.mp4"));
+        assert_eq!(served("main", None), None, "too big to copy: no frame");
+        assert_eq!(served("main", Some("")), None);
+        assert_eq!(served("page", Some("v1/q3.xlsx")), None, "a bise page is served at /p/");
     }
 
     #[test]

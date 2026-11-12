@@ -59,12 +59,11 @@ only writer):
   without its `.git`), when it is at most 50 MB (a folder: summed, at
   most 5000 files). Bigger: no copy, `no_copy: "over 50 MB"`
   (`artifacts::TOO_BIG`), and the add says `no copy kept (over 50 MB)`.
-  A video too big to copy still plays in bise's viewer (video-artifact,
-  architect m_54229): `pages::site::served` gives it its own file
-  (`Served::Own`), streamed by ranges (pages/media.rs) only while its sig
-  (`<bytes>:<mtime>`) still holds; changed or gone: 404, the panel's file
-  gone. Its url names only the id, the version and the file's name. Any
-  other file with nothing to frame: the panel says why (`no copy kept:
+  A file too big to copy (a long video) still opens in its app
+  (docs/plugin-apps.md A4: Preview, plugins/media): its handle reads its
+  own file, by ranges through `/h/`, only while its sig
+  (`<bytes>:<mtime>`) still holds; changed or gone: `gone`, the tab's file
+  gone. Any other file with nothing to frame: the panel says why (`no copy kept:
   over 50 MB`, or no viewer for it) with show in Finder, never a blank body.
 - **An html file's assets** (`artifacts_assets.rs`, art-assets, architect
   m_25093): an `.html`/`.htm` file is copied with the local files it

@@ -274,9 +274,11 @@ fn which_app_opens_a_file() {
             openers_fp(vec![("aardvark", op("open", "A", &[("*.xlsx", W, false)])), ("sheets", op("open_sheet", "Sheets", &[("*.xlsx", W, false)]))], &["sheets"]), Picks::new(),
             (Some("sheets#open_sheet"), vec!["aardvark#open"])),
         // a migrated type: its plugin's own opener hides the built-in row
-        ("media's own png opener hides the built-in png", Target::file("a.png"),
-            openers_fp(vec![("media", op("open_image", "Preview", &[("*.png", W, false)]))], &["media"]), Picks::new(),
-            (Some("media#open_image"), vec![])),
+        ("docs's own docx opener hides the built-in docx", Target::file("a.docx"),
+            openers_fp(vec![("docs", op("open_docx", "Writer", &[("*.docx", W, false)]))], &["docs"]), Picks::new(),
+            (Some("docs#open_docx"), vec![])),
+        ("a migrated type has no built-in row: no plugin, no opener", Target::file("a.png"), Openers::default(), Picks::new(),
+            (None, vec![])),
         ("a bise page by its name", Target::file("plugin-apps.page"), Openers::default(), Picks::new(),
             (Some("pages#page"), vec![])),
         ("a plugin's default entry stays behind a built-in", Target::file("plan.xlsx"),
@@ -296,8 +298,8 @@ fn the_row_says_the_matched_type() {
     let o = openers(vec![("sheets", op("open_sheet", "Sheets", &[("*.csv", D, false), ("*.xlsx", W, false)]))]);
     let got = pick(&Target::file("q.CSV"), &o, &Picks::new()).opener.unwrap();
     assert_eq!(got, Opener { plugin: "sheets".into(), tool: "open_sheet".into(), app: "Sheets".into(), type_key: "*.csv".into(), type_title: "*.csv file".into(), icon: None, builtin: false });
-    let b = pick(&Target::file("a.png"), &Openers::default(), &Picks::new()).opener.unwrap();
-    assert!(b.builtin && b.app == "Preview" && b.type_title == "PNG image");
+    let b = pick(&Target::file("a.page"), &Openers::default(), &Picks::new()).opener.unwrap();
+    assert!(b.builtin && b.app == "Pages" && b.type_title == "bise page");
 }
 
 /// The fixtures resolved as his plugins, `off` turned off.
@@ -395,8 +397,8 @@ fn every_builtin_key_is_canonical() {
         assert!(BUILTIN_ICONS.contains(&b.icon), "{b:?}");
     }
     // the icon goes on the built-in opener, a design-system name
-    let png = pick(&Target::file("a.png"), &Openers::default(), &Picks::new()).opener.unwrap();
-    assert_eq!((png.icon.as_deref(), png.builtin), (Some("image"), true));
+    let page = pick(&Target::file("a.page"), &Openers::default(), &Picks::new()).opener.unwrap();
+    assert_eq!((page.icon.as_deref(), page.builtin), (Some("page"), true));
     let xlsx = pick(&Target::file("a.xlsx"), &Openers::default(), &Picks::new()).opener.unwrap();
     assert_eq!(xlsx.icon.as_deref(), Some("sheet"));
 }

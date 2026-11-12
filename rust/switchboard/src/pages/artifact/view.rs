@@ -7,19 +7,16 @@
 //! SDK's bundles (`/kit/office/office.js`).
 //!
 //! Which artifacts get the viewer is pages::site's one rule (served +
-//! viewer_kind), the same that gives the row its `frame_url`: its copy, or
-//! a video too big to copy from its own file while its sig holds
-//! (media::own_holds; video-artifact).
+//! viewer_kind), the same that gives the row its `frame_url`: its copy.
+//! Images, pdfs and videos open in their app (plugins/media's Preview,
+//! docs/plugin-apps.md steps 1-2), not here.
 //!
 //! The shell sets the theme the panel asked for first (`?theme=`,
 //! kit/office/theme.js: kit.js's rule; md-artifact). It also carries the page server's token and loads the notes
 //! layer (kit/notes-anchors.js, kit/notes.js's model and words,
 //! kit/office/select.js: the selection, the marks, the browser's list;
-//! pages/artifact/notes.rs is its api). An image gets the same frame
-//! (`site::viewer_kind`), drawn by kit/office/image.js; a pdf too, drawn
-//! by kit/office/pdf.js (pdf.js, `office-pdf.js` and `pdf.worker.js`); a
-//! video too, played by kit/office/video.js from the copy's url (the shell
-//! says `data-stream`: no bytes fetched whole; its ranges: pages/media.rs).
+//! pages/artifact/notes.rs is its api). A site gets the same frame
+//! (`site::viewer_kind`), drawn by kit/office/site.js.
 //!
 //! [`shell`] is pure; [`serve`] reads the artifact store.
 
@@ -43,7 +40,7 @@ pub struct Shown<'a> {
     pub id: &'a str,
     pub title: &'a str,
     pub agent: &'a str,
-    /// `xlsx`, `image`, `site`, `pdf`, `video` (site::viewer_kind)
+    /// `xlsx`, `site` (site::viewer_kind)
     pub kind: &'static str,
     /// the version drawn, and the artifact's newest
     pub v: u64,
@@ -62,8 +59,6 @@ pub struct Shown<'a> {
 /// the file's facts as `data-` attributes on `main#bise-office`.
 pub fn shell(s: &Shown) -> String {
     let follows = if s.follows { " data-follows" } else { "" };
-    // a video: the player reads the copy's url by ranges, never the bytes whole (site::STREAMED_KINDS)
-    let stream = if site::STREAMED_KINDS.contains(&s.kind) { " data-stream" } else { "" };
     format!(
         "<!doctype html>
 <html lang=\"en\">
@@ -83,7 +78,7 @@ pub fn shell(s: &Shown) -> String {
 <script type=\"module\" src=\"/kit/office/swap.js\"></script>
 </head>
 <body>
-<main id=\"bise-office\" data-artifact=\"{id}\" data-kind=\"{kind}\" data-version=\"{v}\" data-latest=\"{latest}\"{follows}{stream} data-file=\"{file}\" data-name=\"{name}\" data-agent=\"{agent}\" data-title=\"{title}\">
+<main id=\"bise-office\" data-artifact=\"{id}\" data-kind=\"{kind}\" data-version=\"{v}\" data-latest=\"{latest}\"{follows} data-file=\"{file}\" data-name=\"{name}\" data-agent=\"{agent}\" data-title=\"{title}\">
 <p class=\"office-state\" data-state=\"opening\">opening {name}…</p>
 </main>
 </body>
@@ -117,18 +112,11 @@ pub fn serve(pages: &Pages, id: &str, v: Option<u64>) -> Response {
     }) else {
         return Response::missing(&format!("no such version: {at}"));
     };
-    // its copy, or its own file for a video too big to copy (site::served, architect m_54229)
-    let Some(served) = site::served(&m.by, ver.copy.as_deref(), ver.no_copy.as_deref(), &ver.target) else { return Response::missing(&format!("no copy of it: {at}")) };
-    let copy = served.file();
+    let Some(copy) = site::served(&m.by, ver.copy.as_deref()) else { return Response::missing(&format!("no copy of it: {at}")) };
     let Some(kind) = site::viewer_kind(copy) else { return Response::missing(&format!("not a file bise's viewer draws: {at}")) };
-    // its copy gone from bise's store, or its own file changed or gone: the 404 the window reads
-    // to draw its 'file gone' state (desktop probe.ts; artifact-find), never a viewer that fails
-    // inside the frame
-    let there = match served {
-        site::Served::Copy(c) => site::copy_file(&state.join("artifacts").join(&m.id).join(c), &[]).is_some(),
-        site::Served::Own(file) => super::super::media::own_holds(std::path::Path::new(file), &ver.sig),
-    };
-    if !there {
+    // its copy gone from bise's store: the 404 the window reads to draw its 'file gone' state
+    // (desktop probe.ts; artifact-find), never a viewer that fails inside the frame
+    if site::copy_file(&state.join("artifacts").join(&m.id).join(copy), &[]).is_none() {
         return Response::missing(&format!("no such file: {at}"));
     }
     let shown = Shown {
@@ -201,9 +189,6 @@ mod tests {
         // art-live: the swap in place, after the viewer (window.biseOffice)
         assert!(html.contains("<script type=\"module\" src=\"/kit/office/swap.js\"></script>"));
         assert!(!html.contains("<script>"), "no inline script: the CSP would refuse it");
-        assert!(!html.contains("data-stream"), "an office file's bytes are fetched whole");
         assert!(shell(&Shown { follows: true, ..s }).contains("data-follows"));
-        // video-view: a video is streamed, its player reads the copy's url by ranges (site::STREAMED_KINDS)
-        assert!(shell(&Shown { kind: "video", file: "/a/q3/2/film.mp4".into(), name: "film.mp4".into(), ..s }).contains(" data-stream "));
     }
 }

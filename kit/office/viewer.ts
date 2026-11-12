@@ -1,9 +1,9 @@
 // bise kit · the office viewer (office-artifacts plan §4): the shell the page server sends at
 // /a/<id>/view and /a/<id>/<v>/view (rust/switchboard/src/pages/artifact/view.rs) carries the
 // file's facts on main#bise-office; this fetches the copy's bytes and draws them with the
-// renderer of its kind (sheet.js; image.js for a picture, site.js for a site, art-notes; pdf.js for a pdf, pdf-notes;
-// video.js for a video, which plays the copy's url by its ranges: no fetch, video-view; a .md file
-// or a docx opens in Writer, plugins/docs; a pptx in Slides, plugins/slides), on the office SDK's bundle
+// renderer of its kind (sheet.js; site.js for a site, art-notes; a picture, a pdf or a video opens
+// in Preview, plugins/media; a .md file or a docx in Writer, plugins/docs; a pptx in Slides,
+// plugins/slides), on the office SDK's bundle
 // (/kit/office/office.js, office/dist in the app root). No inline script: the viewer's CSP
 // refuses one (architect m_23781).
 //
@@ -15,7 +15,7 @@
 // window.biseOffice: { info, view, show(bytes) } for the swap in place (art-live's swap.js)
 // and the notes layer (art-notes): show() draws new bytes and keeps the user's place.
 
-const RENDERERS: Record<string, string> = { xlsx: "./sheet.js", image: "./image.js", site: "./site.js", pdf: "./pdf.js", video: "./video.js" };
+const RENDERERS: Record<string, string> = { xlsx: "./sheet.js", site: "./site.js" };
 
 // (the shell always has it and writes each of these: pages/artifact/view.rs)
 const main = document.getElementById("bise-office")!;
@@ -25,9 +25,6 @@ const info: OfficeInfo = {
   version: Number(main.dataset.version),
   latest: Number(main.dataset.latest),
   follows: main.hasAttribute("data-follows"),
-  // a streamed kind (site::STREAMED_KINDS: a video): its renderer plays info.file by its byte
-  // ranges, never handed the bytes whole (draw gets null)
-  stream: main.hasAttribute("data-stream"),
   file: main.dataset.file as string,
   name: main.dataset.name as string,
   agent: main.dataset.agent as string,
@@ -80,7 +77,7 @@ let renderer: OfficeRenderer | null = null;
 let view: OfficeView | null = null;
 
 /** Draw `bytes` (a new version's, or the first), keeping the user's place. */
-async function show(bytes: Uint8Array | null) {
+async function show(bytes: Uint8Array) {
   const place = view ? view.place() : null;
   try {
     renderer ??= (await import(RENDERERS[info.kind])) as OfficeRenderer;
@@ -105,8 +102,7 @@ async function show(bytes: Uint8Array | null) {
 window.biseOffice = { info, view: null, show };
 
 if (main && RENDERERS[info.kind]) {
-  if (info.stream) show(null);
-  else fetchBytes(info.file).then(show, (e) => say("failed", words(e, info.kind, info.name)));
+  fetchBytes(info.file).then(show, (e) => say("failed", words(e, info.kind, info.name)));
 } else if (main) {
   say("failed", `bise has no viewer for ${info.kind || "this"} files.`);
 }

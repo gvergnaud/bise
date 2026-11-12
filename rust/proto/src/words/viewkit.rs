@@ -13,6 +13,11 @@ crate::words! { viewkit:
     ask = "type to ask about it";
     /// the pill, a moment after he asked (then it goes)
     added = "added to your message";
+    // ---- a document view's own state (Preview, Sites: one pair, apps-sites m_62274)
+    /// a view before its document is drawn
+    opening = "opening…";
+    /// a view whose document failed to load (its reason follows on its own line)
+    didnt_open = "this didn't open";
     // ---- places a view names (a note's label: the chip reads `page 2 · "net revenue…"`): each
     // view adds its own here in the land that reads them (architect m_61995 (3)). Designer
     // signed these (m_61894): `an area` (never 'a box': he drew a region), `page {n}`,
@@ -21,4 +26,13 @@ crate::words! { viewkit:
     // sheet: the range alone); lowercase but proper names and cell refs.
     /// a place: the slide a selection is on (plugins/slides' view, a clicked shape's label)
     slide(n) = "slide {n}";
+    // Preview (plugins/media): a box drawn on an image, a pdf's page, a video's moment
+    /// a box he drew on an image
+    area = "an area";
+    /// a passage of a pdf, on its page (its words follow in the chip)
+    page(n) = "page {n}";
+    /// a box he drew on a pdf's page
+    page_area(n) = "page {n} · an area";
+    /// a box he drew on a video's frame at that moment (t as the player says it, `0:12`)
+    moment_area(t) = "{t} · an area";
 }

@@ -212,12 +212,13 @@ fn a_copied_file_is_served_at_its_frame_url() {
     for a in items.iter().filter(|a| a.id != html.id && !a.title.contains("notes")) {
         assert_eq!(a.frame_url, None, "{} has no frame_url", a.id);
     }
-    // a pdf in the viewer too (pdf-notes: drawn by pdf.js, notes on a passage or a box)
+    // a pdf is framed as its copy: media's Preview draws it in the document
+    // tab, bise's viewer no longer does
     let pdf = items.iter().find(|a| a.title.contains("notes")).expect("the pdf");
-    let shell = text(&get(&p, pdf.frame_url.as_deref().expect("a pdf has a frame_url").strip_prefix(&base).unwrap()));
-    assert!(shell.contains("data-kind=\"pdf\""), "{shell}");
-    let r = get(&p, &crate::pages::site::copy_href(&pdf.id, 1, pdf.copy.as_deref().unwrap_or("")));
-    assert_eq!((r.status, r.ctype), (200, "application/pdf"));
+    let href = crate::pages::site::copy_href(&pdf.id, 1, pdf.copy.as_deref().unwrap_or(""));
+    assert_eq!(pdf.frame_url.as_deref().and_then(|u| u.strip_prefix(&base)), Some(href.as_str()), "a pdf's frame_url is its copy");
+    let r = get(&p, &href);
+    assert_eq!((r.status, r.ctype, text(&r)), (200, "application/pdf", "%PDF-1.4".to_string()));
     let _ = std::fs::remove_dir_all(d);
 }
 
@@ -520,9 +521,9 @@ fn a_page_is_served_whole_while_it_is_republished() {
     let _ = std::fs::remove_dir_all(d);
 }
 
-/// video-view (architect m_32064): a video artifact opens in the viewer
-/// (data-stream: the player reads its url, never the bytes whole), and its
-/// copy is served by its byte ranges through the real socket: 206 with the
+/// video-view (architect m_32064): a video artifact opens in its app
+/// (plugins/media's Preview, never bise's viewer), and its copy is served
+/// by its byte ranges through the real socket: 206 with the
 /// part asked, 416 past the end, a HEAD with no body, 200 whole with
 /// `Accept-Ranges` when no range is asked; a foreign Host still refused.
 #[test]
@@ -540,9 +541,7 @@ fn a_video_copy_is_served_by_its_byte_ranges() {
     let add = crate::artifacts::Add { target: "clip.mp4".into(), agent: "film".into(), by: "film".into(), cwd: d.join("work").to_string_lossy().to_string(), ..Default::default() };
     let id = arts.add(&add, 10).unwrap().meta.id;
     let p = std::sync::Arc::new(Pages::new(&d, port, &d));
-    let view = get(&p, &format!("/a/{id}/view"));
-    assert_eq!(view.status, 200);
-    assert!(text(&view).contains("data-kind=\"video\"") && text(&view).contains(" data-stream "), "{}", text(&view));
+    assert_eq!(get(&p, &format!("/a/{id}/view")).status, 404, "not a file bise's viewer draws");
     serve(listener, p.clone());
     let ask = |method: &str, host: &str, range: Option<&str>| {
         let mut s = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
@@ -571,69 +570,6 @@ fn a_video_copy_is_served_by_its_byte_ranges() {
     assert!(body.is_empty(), "a HEAD: no body");
     let (h, _) = ask("GET", "evil.test", Some("bytes=0-"));
     assert!(h.starts_with("HTTP/1.1 403 "), "another Host: refused as any route: {h}");
-    let _ = std::fs::remove_dir_all(d);
-}
-
-/// video-artifact (architect m_54229): a video too big to copy (no copy,
-/// `over 50 MB`) still plays: the viewer frames it and its own file is
-/// served by its ranges while its sig holds. The url names only the id,
-/// the version and the file's name: another name, a `..` or an encoded
-/// path serves nothing; the file changed or gone: 404 (the panel's file gone).
-#[test]
-fn a_video_too_big_to_copy_is_streamed_from_its_own_file() {
-    use std::io::Read;
-    let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
-    let port = listener.local_addr().unwrap().port();
-    let d = std::env::temp_dir().join(format!("sb-srv-bigvideo-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&d);
-    std::fs::create_dir_all(d.join("kit")).unwrap();
-    std::fs::create_dir_all(d.join("work")).unwrap();
-    let film = d.join("work/big film.mp4");
-    // sparse: over the cap, no 50 MB written
-    let mut f = std::fs::File::create(&film).unwrap();
-    f.write_all(b"head-bytes").unwrap();
-    f.set_len(crate::artifacts::MAX_COPY + 1).unwrap();
-    drop(f);
-    std::fs::write(d.join("work/secret.mp4"), b"not his to see").unwrap();
-    let arts = crate::artifacts::Store::new(&d);
-    let add = crate::artifacts::Add { target: "big film.mp4".into(), agent: "film".into(), by: "film".into(), cwd: d.join("work").to_string_lossy().to_string(), ..Default::default() };
-    let m = arts.add(&add, 10).unwrap().meta;
-    assert_eq!((m.versions[0].copy.as_deref(), m.versions[0].no_copy.as_deref()), (None, Some(crate::artifacts::TOO_BIG)));
-    let id = m.id.clone();
-    let p = std::sync::Arc::new(Pages::new(&d, port, &d));
-    let view = text(&get(&p, &format!("/a/{id}/view")));
-    assert!(view.contains("data-kind=\"video\"") && view.contains(" data-stream "), "{view}");
-    assert!(view.contains(&format!("data-file=\"/a/{id}/1/big%20film.mp4\"")), "the copy's url form, never his path: {view}");
-    assert!(!view.contains(&d.to_string_lossy().to_string()), "no path on his machine in the page");
-    serve(listener, p.clone());
-    let ask = |path: &str, range: Option<&str>| {
-        let mut s = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
-        let range = range.map(|r| format!("Range: {r}\r\n")).unwrap_or_default();
-        s.write_all(format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n{range}\r\n").as_bytes()).unwrap();
-        let mut out = Vec::new();
-        s.read_to_end(&mut out).unwrap();
-        let at = out.windows(4).position(|w| w == b"\r\n\r\n").unwrap() + 4;
-        (String::from_utf8_lossy(&out[..at]).to_string(), out[at..].to_vec())
-    };
-    let len = crate::artifacts::MAX_COPY + 1;
-    let (h, body) = ask(&format!("/a/{id}/1/big%20film.mp4"), Some("bytes=0-9"));
-    assert!(h.starts_with("HTTP/1.1 206 ") && h.contains("Content-Type: video/mp4\r\n") && h.contains(&format!("Content-Range: bytes 0-9/{len}\r\n")), "{h}");
-    assert_eq!(body, b"head-bytes");
-    let (h, body) = ask(&format!("/a/{id}/1/big%20film.mp4"), Some("bytes=-4"));
-    assert!(h.contains(&format!("Content-Range: bytes {}-{}/{len}", len - 4, len - 1)), "a seek to the end: {h}");
-    assert_eq!(body, vec![0u8; 4]);
-    // only its own name: a crafted name or path reaches no other file
-    for bad in ["secret.mp4", "..%2Fsecret.mp4", "x/big%20film.mp4", "..", "%2Ftmp%2Fx.mp4"] {
-        let (h, _) = ask(&format!("/a/{id}/1/{bad}"), Some("bytes=0-"));
-        assert!(h.starts_with("HTTP/1.1 404 "), "{bad}: {h}");
-    }
-    // the file changed since the version: neither the frame nor its bytes
-    std::fs::OpenOptions::new().write(true).open(&film).unwrap().set_len(len + 1).unwrap();
-    assert_eq!(get(&p, &format!("/a/{id}/view")).status, 404, "changed: the panel's file gone");
-    let (h, _) = ask(&format!("/a/{id}/1/big%20film.mp4"), Some("bytes=0-9"));
-    assert!(h.starts_with("HTTP/1.1 404 "), "changed: {h}");
-    std::fs::remove_file(&film).unwrap();
-    assert_eq!(get(&p, &format!("/a/{id}/view")).status, 404, "gone");
     let _ = std::fs::remove_dir_all(d);
 }
 
@@ -920,9 +856,10 @@ fn a_view_calls_bound_outlasts_its_card() {
 fn a_gone_copy_is_the_viewers_404() {
     let (p, d) = pages();
     std::fs::create_dir_all(d.join("work")).unwrap();
-    std::fs::write(d.join("work/notes.pdf"), "%PDF-1.4\n").unwrap();
+    // an xlsx: the kind bise's viewer still draws (a pdf opens in Preview, plugins/media)
+    std::fs::write(d.join("work/q3.xlsx"), "PK").unwrap();
     let arts = crate::artifacts::Store::new(&d);
-    let add = crate::artifacts::Add { target: "notes.pdf".into(), agent: "perf".into(), by: "perf".into(), cwd: d.join("work").to_string_lossy().to_string(), ..Default::default() };
+    let add = crate::artifacts::Add { target: "q3.xlsx".into(), agent: "perf".into(), by: "perf".into(), cwd: d.join("work").to_string_lossy().to_string(), ..Default::default() };
     let id = arts.add(&add, 10).unwrap().meta.id;
     assert_eq!(get(&p, &format!("/a/{id}/view")).status, 200);
     std::fs::remove_dir_all(d.join("artifacts").join(&id)).unwrap();

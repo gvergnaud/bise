@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { FIT_MESSAGE, FRAME_KINDS, originOf, readAnchor, readFrame, readFrameNote } from './frameNote';
+import { FRAME_KINDS, originOf, readAnchor, readFrame, readFrameNote } from './frameNote';
 import { frameSrc } from './Open';
 
 describe('the frame and the window name one list of message kinds (architect m_30630)', () => {
@@ -13,30 +13,19 @@ describe('the frame and the window name one list of message kinds (architect m_3
   });
 });
 
-describe("readFrame: an image's zoom from the side panel frame (image-pinch)", () => {
+describe('readFrame: what the side panel frame tells the window', () => {
   const SRV = 'http://127.0.0.1:47438';
   const w = { name: 'the frame' };
   const fr = { origin: SRV, window: w };
-  it('reads {bise: zoom, fit} and a selection through the one reader', () => {
-    expect(readFrame({ bise: 'zoom', fit: false }, { origin: SRV, source: w }, fr)).toEqual({ kind: 'zoom', fit: false });
-    expect(readFrame({ bise: 'zoom', fit: true, extra: 1 }, { origin: SRV, source: w }, fr)).toEqual({ kind: 'zoom', fit: true });
-    const sel = { bise: 'anchor', artifact: 'hero', version: 1, anchor: { kind: 'region', rect: { x: 1, y: 2, w: 3, h: 4 } } };
+  it('reads a selection through the one reader, only from that frame; never esc, never a kind it no more sends', () => {
+    const sel = { bise: 'anchor', artifact: 'q3', version: 1, anchor: { kind: 'cell', sheet: 'Summary', range: 'B4' } };
     expect(readFrame(sel, { origin: SRV, source: w }, fr)?.kind).toBe('anchor');
-  });
-  it('only from that frame on the pages server, fit a boolean', () => {
-    expect(readFrame({ bise: 'zoom', fit: false }, { origin: SRV, source: { name: 'another' } }, fr)).toBeNull();
-    expect(readFrame({ bise: 'zoom', fit: false }, { origin: 'https://evil.example', source: w }, fr)).toBeNull();
-    expect(readFrame({ bise: 'zoom', fit: 'no' }, { origin: SRV, source: w }, fr)).toBeNull();
-    expect(readFrame({ bise: 'zoom' }, { origin: SRV, source: w }, fr)).toBeNull();
+    expect(readFrame(sel, { origin: SRV, source: { name: 'another' } }, fr)).toBeNull();
+    expect(readFrame(sel, { origin: 'https://evil.example', source: w }, fr)).toBeNull();
     expect(readFrame({ bise: 'esc' }, { origin: SRV, source: w }, fr), "esc is ArtifactView's, never read here").toBeNull();
-  });
-  it("reads a video's {bise: size, h}: a finite height in px, never from elsewhere (video-view)", () => {
-    expect(readFrame({ bise: 'size', h: 467.4 }, { origin: SRV, source: w }, fr)).toEqual({ kind: 'size', h: 467 });
-    for (const h of [0, -5, Number.NaN, Number.POSITIVE_INFINITY, '400', 50_000]) expect(readFrame({ bise: 'size', h }, { origin: SRV, source: w }, fr)).toBeNull();
-    expect(readFrame({ bise: 'size', h: 400 }, { origin: 'https://evil.example', source: w }, fr)).toBeNull();
-  });
-  it('the way back to fit is {bise: fit}', () => {
-    expect(FIT_MESSAGE).toEqual({ bise: 'fit' });
+    // an image's zoom and a video's height: Preview's own now (plugins/media), never the window's
+    expect(readFrame({ bise: 'zoom', fit: false }, { origin: SRV, source: w }, fr)).toBeNull();
+    expect(readFrame({ bise: 'size', h: 400 }, { origin: SRV, source: w }, fr)).toBeNull();
   });
   it("reads a web page's {bise: pinch} and {bise: pan} (web-pinch): finite numbers in bounds, a width above 0, only from that frame", () => {
     const at = { origin: SRV, source: w };

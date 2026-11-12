@@ -5,11 +5,6 @@
 //
 // - anchor: a selection, frame -> window (frameNote.ts readFrame)
 // - esc: an esc the page didn't use, frame -> window (guard.ts ESC_FORWARD; ArtifactView.tsx)
-// - zoom: {fit}, an image's zoom left or reached fit, frame -> window (useFrameNote.ts claims esc
-//   and ⌘0 while fit is false)
-// - fit: back to fit, window -> frame (kit/office/image.js)
-// - size: {h}, the height that holds the viewer's content, frame -> window (kit/office/video.js;
-//   the card hugs it: useFrameNote.ts, designer m_32762)
 // - pinch: {dy, x, y, w}, a trackpad pinch the page didn't use, frame -> window (guard.ts injects
 //   main/pinch.ts PINCH_FORWARD; useFrameNote.ts zooms the frame, artifacts/pagezoom.ts)
 // - pan: {dx, dy, w}, two fingers while the page is zoomed with room that way, frame -> window
@@ -21,4 +16,4 @@
 // - find: {q, at, seq}, ⌘F's needle and the current match (-1: none), window -> frame, and a
 //   frame -> its own frames (main/findagent.ts FIND_AGENT, artifacts/FindBar.tsx)
 // - found: {seq, n}, how many matches the frame and its own frames hold, frame -> parent (FIND_AGENT)
-export const FRAME_KINDS = { anchor: 'anchor', esc: 'esc', zoom: 'zoom', fit: 'fit', size: 'size', pinch: 'pinch', pan: 'pan', room: 'room', storage: 'site-storage', find: 'find', found: 'found' } as const;
+export const FRAME_KINDS = { anchor: 'anchor', esc: 'esc', pinch: 'pinch', pan: 'pan', room: 'room', storage: 'site-storage', find: 'find', found: 'found' } as const;

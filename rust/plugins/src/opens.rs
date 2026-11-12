@@ -601,16 +601,6 @@ const fn b(key: &'static str, plugin: &'static str, app: &'static str, type_titl
 /// bise's own types not migrated yet (docs/plugin-apps.md A3, migration
 /// table): each step deletes its rows with its `viewer_kind` arms.
 pub const BUILTIN: &[Builtin] = &[
-    b("*.png", "media", "Preview", "PNG image", "image", "image"),
-    b("*.jpg", "media", "Preview", "JPEG image", "image", "image"),
-    b("*.jpeg", "media", "Preview", "JPEG image", "image", "image"),
-    b("*.gif", "media", "Preview", "GIF image", "image", "image"),
-    b("*.webp", "media", "Preview", "WebP image", "image", "image"),
-    b("*.pdf", "media", "Preview", "PDF document", "pdf", "doc"),
-    b("*.mp4", "media", "Preview", "MP4 video", "video", "video"),
-    b("*.mov", "media", "Preview", "QuickTime video", "video", "video"),
-    b("*.webm", "media", "Preview", "WebM video", "video", "video"),
-    b("*.m4v", "media", "Preview", "MPEG-4 video", "video", "video"),
     b("*.xlsx", "sheets", "Sheets", "Excel workbook", "xlsx", "sheet"),
     b("*.html", "sites", "Sites", "Web page", "site", "page"),
     b("*.htm", "sites", "Sites", "Web page", "site", "page"),

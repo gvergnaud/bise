@@ -62,7 +62,7 @@ fn target_of(r: &Resolved) -> Target {
 /// `meta`, at `base` (the page server's): a page's page, a copy bise's
 /// viewer draws at `/a/<id>/view` (or `/a/<id>/<v>/view` for an older
 /// version), any other copy at its own link. None: nothing to frame (a
-/// link, a file too big to copy that is not streamed), or no such version.
+/// link, a file too big to copy: its app reads it by handle), or no such version.
 pub fn frame_of(meta: &crate::artifacts::Meta, version: Option<u64>, base: &str) -> Option<String> {
     let newest = meta.versions.iter().map(|v| v.v).max()?;
     let n = version.unwrap_or(newest);
@@ -70,8 +70,8 @@ pub fn frame_of(meta: &crate::artifacts::Meta, version: Option<u64>, base: &str)
     if meta.by == "page" {
         return Some(format!("{base}/p/{}", meta.id));
     }
-    let served = crate::pages::site::served(&meta.by, v.copy.as_deref(), v.no_copy.as_deref(), &v.target)?;
-    Some(format!("{base}{}", crate::pages::site::frame_href(&meta.id, n, served.file(), n == newest)))
+    let copy = crate::pages::site::served(&meta.by, v.copy.as_deref())?;
+    Some(format!("{base}{}", crate::pages::site::frame_href(&meta.id, n, copy, n == newest)))
 }
 
 /// Step 1's answer: a BUILTIN's frame (the whole answer), or a plugin's

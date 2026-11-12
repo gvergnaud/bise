@@ -408,8 +408,7 @@ fn home(pages: &Pages) -> String {
     shell(pages, "for you", head, "id=\"bise-home\" data-home", &format!("{aside}{inner}"))
 }
 
-/// The file `/a/<id>/<v>/<rest>` names in bise's copy (or, for a video too
-/// big to copy, its own file: site::served, [`own_target`]), its content type and
+/// The file `/a/<id>/<v>/<rest>` names in bise's copy (site::served), its content type and
 /// whether it is the viewer's frame of a site (site::framed); Err: the 404
 /// in words. One rule for [`artifact_file`] and a video's ranges (media.rs).
 fn artifact_target(pages: &Pages, id: &str, v: &str, rest: &[&str]) -> Result<(std::path::PathBuf, &'static str, bool), Response> {
@@ -419,12 +418,7 @@ fn artifact_target(pages: &Pages, id: &str, v: &str, rest: &[&str]) -> Result<(s
     let at = format!("a/{id}/{v}/{}", rest.join("/"));
     let Some(m) = store.get(id).filter(|m| m.by != "page") else { return Err(Response::missing(&format!("no such artifact: {at}"))) };
     let Some(ver) = v.parse::<u64>().ok().and_then(|n| m.versions.iter().find(|x| x.v == n)) else { return Err(Response::missing(&format!("no such version: {at}"))) };
-    // its copy, or its own file for a video too big to copy (site::served, architect m_54229)
-    let copy = match super::site::served(&m.by, ver.copy.as_deref(), ver.no_copy.as_deref(), &ver.target) {
-        Some(super::site::Served::Copy(c)) => c,
-        Some(super::site::Served::Own(file)) => return own_target(file, &ver.sig, rest).ok_or_else(|| Response::missing(&format!("no such file: {at}"))),
-        None => return Err(Response::missing(&format!("no copy of it: {at}"))),
-    };
+    let Some(copy) = super::site::served(&m.by, ver.copy.as_deref()) else { return Err(Response::missing(&format!("no copy of it: {at}"))) };
     let base = state.join("artifacts").join(&m.id).join(copy);
     // the viewer's frame of a site (and its own links): the selection
     // script in its html (site::framed, architect m_24172)
@@ -434,19 +428,6 @@ fn artifact_target(pages: &Pages, id: &str, v: &str, rest: &[&str]) -> Result<(s
     let Some(path) = super::site::copy_file(&base, &rest) else { return Err(Response::missing(&format!("no such file: {at}"))) };
     let Some(ctype) = super::site::ctype(&path.to_string_lossy()) else { return Err(Response::missing(&format!("not served: {at}"))) };
     Ok((path, ctype, select))
-}
-
-/// A version's own file (site::Served::Own): the path is the store's,
-/// never the request's; the request names only its file (`/a/<id>/<v>/<name>`,
-/// %-encoded as copy_href writes it), and it is served while its sig holds
-/// (media::own_holds). None: another name, a changed or gone file.
-fn own_target(file: &str, sig: &str, rest: &[&str]) -> Option<(std::path::PathBuf, &'static str, bool)> {
-    let [name] = rest else { return None };
-    let path = std::path::Path::new(file);
-    if crate::artifacts_assets::decode(name) != super::site::file_of(file) || !super::media::own_holds(path, sig) {
-        return None;
-    }
-    Some((path.to_path_buf(), super::site::ctype(file)?, false))
 }
 
 /// A video copy (`GET` or `HEAD /a/<id>/<v>/<file>`, a `video/` type),

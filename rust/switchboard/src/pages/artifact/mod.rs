@@ -7,9 +7,8 @@
 //!   ([`view`]), the newest version or version `v`;
 //! - `GET /a/<id>/events`: the stream of its saves ([`events`]; server.rs
 //!   runs it, as `/p/<id>/events`);
-//! - `GET /kit/office/office.js`,
-//!   `office-pdf.js`, `pdf.worker.js`, `office-sheet.js`: the office SDK's bundles (pdf.js and
-//!   its worker, pdf-notes; Univer's grid, xlsx-univer), read from `office/dist` in the app root (one copy, never
+//! - `GET /kit/office/office.js`, `office-sheet.js`: the office SDK's bundles
+//!   (Univer's grid, xlsx-univer), read from `office/dist` in the app root (one copy, never
 //!   in `kit/`, architect m_23781); the renderers beside them
 //!   (`kit/office/*.js`) are kit files;
 //! - `GET /a/<id>/live[/<path>]`: the door of a local site bise serves
@@ -32,7 +31,7 @@ use super::store::valid_id;
 use super::Pages;
 
 /// The bundles the viewer loads, from `Pages::office_dir`.
-const BUNDLES: &[&str] = &["office.js", "office-pdf.js", "pdf.worker.js", "office-sheet.js"];
+const BUNDLES: &[&str] = &["office.js", "office-sheet.js"];
 
 /// The response for `segs` (the path's segments), or None: not an
 /// artifact route of this module.
@@ -153,7 +152,7 @@ mod tests {
 
         let js = get(&p, "/kit/office/office.js");
         assert_eq!((js.status, js.ctype, text(&js).as_str()), (200, "text/javascript; charset=utf-8", "export const sheets = {};"), "from office/dist in the app root");
-        let none = get(&p, "/kit/office/office-pdf.js");
+        let none = get(&p, "/kit/office/office-sheet.js");
         assert_eq!(none.status, 404, "a bundle not shipped says so");
         assert!(text(&none).contains("office/dist"));
         let _ = std::fs::remove_dir_all(d);

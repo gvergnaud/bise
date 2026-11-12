@@ -14,44 +14,11 @@
 .office-rail .thumb[data-mark="done"] .n::before { display: none; }
 .office-rail .thumb[data-mark="done"]::after { left: 0; right: auto; }
 
-/* a box on an image: drawn now (.office-box), or a note's (.office-mark-box) */
-/* the image zooms (kit/office/image.js, zoom.js): the frame is sized k × the image and moved in
-   the box, hidden until the box has its size; space held: a drag pans */
-.office-image { flex: 1; position: relative; overflow: hidden; cursor: crosshair; user-select: none; touch-action: none; }
-.office-image .frame { position: absolute; left: 0; top: 0; }
-.office-image:not([data-fit]) .frame { visibility: hidden; }
-.office-image img { display: block; width: 100%; height: 100%; }
-.office-image.pixels img { image-rendering: pixelated; }
-.office-image.eased .frame { transition: transform 160ms var(--ease-arrive), width 160ms var(--ease-arrive), height 160ms var(--ease-arrive); }
-.office-image.panning { cursor: grab; }
-.office-image.grabbing { cursor: grabbing; }
-/* the zoom's chip: '240%' while he zooms and 1.5 s after, then fades; a click: back to fit (designer m_30627) */
-.office-zoom { position: absolute; right: 8px; bottom: 8px; z-index: 3; font: var(--text-kicker) / 1 var(--font-mono); color: var(--dim); background: var(--surface-card); border: 1px solid var(--line); border-radius: 999px; padding: 5px 9px; cursor: pointer; opacity: 0; pointer-events: none; transition: opacity 120ms ease-out; }
-.office-zoom.on { opacity: 1; pointer-events: auto; }
-@media (prefers-reduced-motion: reduce) {
-  .office-image.eased .frame, .office-zoom { transition: none; }
-}
+/* a box: drawn now (.office-box), or a note's (.office-mark-box) */
 .office-box, .office-mark-box { position: absolute; box-sizing: border-box; pointer-events: none; }
 .office-box { outline: 1px solid var(--ink); background: color-mix(in srgb, var(--ink) 9%, transparent); }
 .office-mark-box { outline: 1px solid var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
 .office-mark-box[data-mark="draft"] { outline-style: dashed; }
-
-/* a pdf (kit/office/pdf.js): its pages in a column, a canvas and pdf.js's text layer each; a box
-   drawn off the words, a passage's mark on its words (a wash of accent, one 3 px bar down its lines) */
-.office-pdf { flex: 1; overflow: auto; padding: 12px; }
-.office-pdf .office-pages { display: flex; flex-direction: column; align-items: center; gap: 12px; }
-.office-pdf .page { position: relative; width: 100%; background: #fff; box-shadow: 0 1px 3px var(--drop); cursor: crosshair; user-select: none; --scale-round-x: 1px; --scale-round-y: 1px; }
-.office-pdf .page > canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-.office-pdf .textLayer { position: absolute; inset: 0; overflow: clip; line-height: 1; transform-origin: 0 0; z-index: 0; --min-font-size: 1; --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size)); --min-font-size-inv: calc(1 / var(--min-font-size)); }
-.office-pdf .textLayer :is(span, br) { color: transparent; position: absolute; white-space: pre; cursor: text; transform-origin: 0% 0%; user-select: text; }
-.office-pdf .textLayer > :not(.markedContent), .office-pdf .textLayer .markedContent span:not(.markedContent) { z-index: 1; --font-height: 0; font-size: calc(var(--text-scale-factor) * var(--font-height)); --scale-x: 1; --rotate: 0deg; transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv)); }
-.office-pdf .textLayer .markedContent { display: contents; }
-.office-pdf .textLayer ::selection { background: color-mix(in srgb, var(--ink) 22%, transparent); }
-.office-pdf .office-box, .office-pdf .office-mark-box { z-index: 2; }
-.office-pdf .office-mark-words { outline: 0; box-shadow: none; background: color-mix(in srgb, var(--accent) 16%, transparent); }
-.office-pdf .office-mark-bar { outline: 0; width: 3px !important; background: var(--accent); box-shadow: none; }
-.office-pdf .office-mark-bar[data-mark="draft"] { background: var(--accent-soft); }
-.office-pdf .office-mark-words[data-mark="draft"] { background: color-mix(in srgb, var(--accent-soft) 16%, transparent); }
 
 /* the control by a selection, in ink (the accent is only for his notes): the browser's `note`
    button; in the app the thread's quote pill, 'type to ask about it · ⌘C copy' (designer m_24098) */

@@ -107,7 +107,7 @@ MANUAL = [
         dict(name="jszip 3.10.2 (zip; dual MIT or GPL-3.0, taken under MIT)", license="MIT", url="https://github.com/Stuk/jszip",
              files=["jszip.LICENSE"]),
     ]),
-    ("office/dist/office-pdf.js and pdf.worker.js: the office viewer's pdf renderer and its worker (office/sdk/src/view, pdf-notes)", [
+    ("plugins/media/ai.mistral.vibe/views/preview/pdfjs.js and pdf.worker.js: Preview's pdf renderer and its worker (plugins/media/src, pdf-notes)", [
         dict(name="pdfjs-dist 6.4.299 (pdf.js: pdf to canvas and text)", license="Apache-2.0", url="https://github.com/mozilla/pdf.js",
              files=["pdfjs-dist.LICENSE"]),
     ]),

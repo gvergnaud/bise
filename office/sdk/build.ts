@@ -1,11 +1,11 @@
 // Builds src/ into office/dist/office.js: one ESM bundle, no node imports
 // (platform neutral, so an `fs` or `node:` import fails the build), the
-// same bytes for the same sources and lockfile; and src/view/pdf.ts and
-// src/view/pdf-worker.ts into office/dist/office-pdf.js and pdf.worker.js (pdf.js).
+// same bytes for the same sources and lockfile.
 // A plugin's renderer bundle (architect m_60401) is built here too, from the plugin's own
 // src/ (one lockfile: this folder's node_modules as esbuild's nodePaths), into the plugin's view
 // folder: plugins/docs/src/markdown.ts and docx.ts into Writer's office-md.js (micromark + GFM)
-// and office-view.js (docx-preview).
+// and office-view.js (docx-preview); plugins/media/src/pdfjs.ts and pdf-worker.ts into
+// Preview's pdfjs.js and pdf.worker.js (pdf.js).
 // Committed (cargo and nix never run pnpm); shipped in the app root
 // (scripts/versions.sh), where the page server and bise office run read it.
 // Beside each committed bundle, its types: <bundle>.d.ts re-exports its entry's
@@ -86,10 +86,10 @@ const stubs: Plugin = {
 //   docx.js alone (architect m_23781); fails past 2 MB
 // office-md.js: micromark + GFM, what draws a .md file in Writer (plugins/docs, its markdown.js
 //   alone; md-artifact), platform neutral (no DOM, tested in node), minified, fails past 256 KB
-// office-pdf.js and pdf.worker.js: pdf.js (pdfjs-dist, Apache-2.0), what draws a pdf in the
-//   viewer and its worker, two files served under the viewer's script rule (architect m_24668:
-//   never a blob worker), loaded by kit/office/pdf.js alone; minified (pdf.js ships its own
-//   minified builds), fail past 1 MB and 1.5 MB
+// pdfjs.js and pdf.worker.js: pdf.js (pdfjs-dist, Apache-2.0), what draws a pdf in Preview
+//   (plugins/media) and its worker, two files of its view's folder served under the view's own
+//   script rule (architect m_24668: never a blob worker), loaded by its pdf.js alone; minified
+//   (pdf.js ships its own minified builds), fail past 1 MB and 1.5 MB
 // Univer's hyphenation patterns (85 languages, 5 MB): engine-render imports them by language
 // for a docs layout that hyphenates; a cell never does. Each becomes an empty module.
 const hyphenation: Plugin = {
@@ -122,6 +122,8 @@ type Bundle = {
   minify?: boolean;
   built?: boolean;
 };
+/** Preview's view folder (plugins/media): pdf.js and its worker go beside the view that loads them */
+const PREVIEW = join("plugins", "media", "ai.mistral.vibe", "views", "preview");
 const bundles: Bundle[] = [
   { file: "office.js", entry: join("src", "index.ts"), platform: "neutral", mainFields: ["module", "main"], plugins: [stubs], max: 3 * 1024 * 1024 },
   {
@@ -131,7 +133,7 @@ const bundles: Bundle[] = [
     platform: "browser",
     max: 2 * 1024 * 1024,
   },
-  { file: "office-pdf.js", entry: join("src", "view", "pdf.ts"), platform: "browser", minify: true, max: 1024 * 1024 },
+  { file: "pdfjs.js", entry: join("..", "..", "plugins", "media", "src", "pdfjs.ts"), dir: PREVIEW, platform: "browser", minify: true, max: 1024 * 1024 },
   {
     file: "office-md.js",
     entry: join("..", "..", "plugins", "docs", "src", "markdown.ts"),
@@ -141,7 +143,7 @@ const bundles: Bundle[] = [
     minify: true,
     max: 256 * 1024,
   },
-  { file: "pdf.worker.js", entry: join("src", "view", "pdf-worker.ts"), platform: "browser", minify: true, max: 1.5 * 1024 * 1024 },
+  { file: "pdf.worker.js", entry: join("..", "..", "plugins", "media", "src", "pdf-worker.ts"), dir: PREVIEW, platform: "browser", minify: true, max: 1.5 * 1024 * 1024 },
   {
     file: "office-sheet.js",
     entry: join("src", "view", "sheet.ts"),

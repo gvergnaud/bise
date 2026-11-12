@@ -47,8 +47,9 @@ use std::path::{Path, PathBuf};
 /// The largest file (or folder, summed) bise keeps a copy of.
 pub const MAX_COPY: u64 = 50 * 1024 * 1024;
 /// A version's `no_copy` when it is over [`MAX_COPY`]: the one name for it,
-/// written here and read by pages::site::served (a video too big to copy is
-/// streamed from its own file; video-artifact, architect m_54229).
+/// written here; a file too big to copy is read from its own file while
+/// its sig holds, by its app through a handle (view_files_disk,
+/// docs/plugin-apps.md A4).
 pub const TOO_BIG: &str = "over 50 MB";
 /// A folder with more files than this is not copied.
 const MAX_COPY_FILES: usize = 5000;
@@ -415,8 +416,8 @@ fn default_title(target: &str, is_url: bool) -> String {
 }
 
 /// A file's sig now, as [`Version::sig`] has it for a file that links no
-/// other (`<bytes>:<mtime ms>`); None: not a file. The page server checks
-/// it before it streams a file bise kept no copy of (pages::media::own_holds).
+/// other (`<bytes>:<mtime ms>`); None: not a file. A handle's read checks
+/// it before it reads a file bise kept no copy of (view_files_disk).
 pub fn file_sig(p: &Path) -> Option<String> {
     std::fs::metadata(p).ok().filter(std::fs::Metadata::is_file)?;
     let (bytes, mtime, _) = measure(p);
@@ -927,7 +928,7 @@ impl Store {
             json!({
                 "v": v.v, "ts_ms": v.at_ms, "target": v.target, "by": v.saved_by(),
                 "copy": v.copy.as_ref().map(|c| dir.join(c).to_string_lossy().to_string()),
-                // why it has no copy: a video too big to copy is framed from its own file (site::served)
+                // why it has no copy: a file too big to copy is read by its app from its own file
                 "no_copy": v.no_copy,
                 "note": if page {
                     notes(v.v)

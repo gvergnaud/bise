@@ -1,19 +1,19 @@
 // generated from video.ts by scripts/ts_emit.ts: never hand-edited (edit the .ts, then run it)
-// bise kit · the video renderer of the viewer (viewer.js; video-view, his ask main m_32004): the
-// copy played by the browser's own <video> from its url (info.file), read by its byte ranges
-// (rust/switchboard/src/pages/media.rs: a long file seeks without being read whole; viewer.js
-// hands this renderer no bytes, site::STREAMED_KINDS). Our controls, no browser chrome: play,
-// the track (a hover shows that moment's frame, drawn by a second muted player), the time,
-// the speed, loop, sound, fullscreen. Keys: space plays or pauses, ← → 5 s, , . one frame
-// (paused). A note: a frame he clicked is the selection (a `time` anchor, bise_proto::anchor);
-// a box drawn on the frame pauses it and is the selection with its rect (in % of the frame).
-// In the panel the screen takes the video's own ratio, the bar right under it (designer m_32678).
-// The notes layer (select.js) does the rest; its marks are ticks on the track, and a box on
-// the frame around its moment (view.where).
+// Preview · a video (video-view, his ask main m_32004): played by the browser's own <video> from
+// the document's session url (resources/url, architect m_60354: the hub serves the file's byte
+// ranges on this view's origin, so a long file seeks without being read whole). Our controls, no
+// browser chrome: play, the track (a hover shows that moment's frame, drawn by a second muted
+// player), the time, the speed, loop, sound, fullscreen. Keys: space plays or pauses, ← → 5 s,
+// , . one frame (paused). His selection: a frame he clicked (a `time` place, keys.ts) or a box
+// drawn on the frame, which pauses it (the place with its rect, in % of the frame). The screen
+// takes the video's own ratio, the bar right under it (designer m_32678). His notes: a tick on
+// the track at each one's moment, its box on the frame near it. Where he is (the moment, speed,
+// loop, sound) is the view's state.
 //
-// Pure helpers (exported for office/sdk/test/viewer.test.ts): stateOf, keyAction, stepped,
+// Pure helpers (exported for plugins/media/test/video.test.mjs): stateOf, keyAction, stepped,
 // seekAt, nextRate, near, screenHeight, timeWords.
-import { FRAME } from "/kit/office/frame.js";
+import { capture } from "./dom.js";
+import { clock } from "./keys.js";
 /** The speeds the speed button goes through, in order. */
 export const RATES = [1, 1.5, 2, 0.5];
 /** ← → move this many seconds. */
@@ -71,16 +71,14 @@ export function nextRate(r) {
 export function near(now, t) {
     return Math.abs(now - t) <= NEAR_S;
 }
-/** The screen's height in the panel: the video's own ratio at the panel's width (the caller
- * holds it to the room there is). */
+/** The screen's height: the video's own ratio at the view's width (the caller holds it to the
+ * room there is). */
 export function screenHeight(w, vw, vh) {
     return vw > 0 && vh > 0 && w > 0 ? Math.round((w * vh) / vw) : 0;
 }
-/** The time line: `0:12 / 1:30` (bise_proto::anchor::clock's words, kit/notes-anchors.js). */
+/** The time line: `0:12 / 1:30`. */
 export function timeWords(t, dur) {
-    // (notes-anchors.js: loaded before the viewer's modules, view.rs)
-    const A = globalThis.BiseAnchors;
-    return Number.isFinite(dur) && dur > 0 ? `${A.clock(t)} / ${A.clock(dur)}` : A.clock(t);
+    return Number.isFinite(dur) && dur > 0 ? `${clock(t)} / ${clock(dur)}` : clock(t);
 }
 // ---- the DOM
 const SVG = "http://www.w3.org/2000/svg";
@@ -110,8 +108,9 @@ function icon(name) {
 }
 /** A field he types in: its keys are his. */
 const typing = (t) => !!t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName || ""));
-export async function draw(root, _bytes, info) {
-    root.classList.add("office-video");
+const boxAt = (el, r) => Object.assign(el.style, { left: `${r.x}%`, top: `${r.y}%`, width: `${r.w}%`, height: `${r.h}%` });
+export async function draw(root, src, ctx) {
+    root.classList.add("pv-video");
     root.tabIndex = -1;
     const el = (tag, cls, text) => {
         const e = document.createElement(tag);
@@ -131,6 +130,7 @@ export async function draw(root, _bytes, info) {
         return b;
     };
     const setIcon = (b, glyph) => b.replaceChildren(icon(glyph));
+    const url = src.url;
     // the screen: the frame fit in it (the video and every box, all in % of the frame)
     const screen = el("div", "screen");
     const frame = el("div", "frame");
@@ -170,35 +170,23 @@ export async function draw(root, _bytes, info) {
     const full = button("full", "full screen", "full");
     bar.append(play, time, track, rate, loop, sound, full);
     root.append(screen, bar);
-    for (const e of [bar, ...bar.querySelectorAll("*"), screen, frame, video])
-        e.dataset.ours = "1";
     // the file, its first frame, or what failed in words
     await new Promise((ok, no) => {
         video.addEventListener("loadedmetadata", () => ok(), { once: true });
-        video.addEventListener("error", () => no(Object.assign(new Error("not a video this player plays"), { code: "not_office" })), { once: true });
-        video.src = info.file;
+        video.addEventListener("error", () => no(Object.assign(new Error("not a video this player plays"), { code: "unreadable" })), { once: true });
+        video.src = url;
     });
     const vw = video.videoWidth || 16;
     const vh = video.videoHeight || 9;
     const dur = () => (Number.isFinite(video.duration) ? video.duration : 0);
     // ---- the frame fit in the screen (up or down), centred: boxes in % of what is drawn
-    const inApp = window.name === "bise-app" && window.parent !== window;
-    let told = 0;
     const fit = () => {
-        // in the panel the screen takes the video's own ratio, the bar right under it, the rest the
-        // page's surface; in full screen it takes the whole screen (designer m_32678)
-        const full = document.fullscreenElement === root;
-        const rw = root.clientWidth;
+        // the screen takes the video's own ratio, the bar right under it, the rest the view's
+        // surface; in full screen it takes the whole screen (designer m_32678)
+        const isFull = document.fullscreenElement === root;
         const room = root.clientHeight - bar.offsetHeight;
-        const want = screenHeight(rw, vw, vh);
-        screen.style.height = full ? "" : `${Math.max(0, Math.min(room, want))}px`;
-        // in the desktop's panel the card hugs the screen and its bar: the window is told the height
-        // that holds them, from the width only, so its answer never moves it again (designer m_32762)
-        const hug = want + bar.offsetHeight;
-        if (inApp && !full && want > 0 && hug !== told) {
-            told = hug;
-            window.parent.postMessage({ bise: FRAME.size, h: hug }, "*");
-        }
+        const want = screenHeight(root.clientWidth, vw, vh);
+        screen.style.height = isFull ? "" : `${Math.max(0, Math.min(room, want))}px`;
         const bw = screen.clientWidth;
         const bh = screen.clientHeight;
         if (bw <= 0 || bh <= 0)
@@ -227,14 +215,16 @@ export async function draw(root, _bytes, info) {
         track.setAttribute("aria-valuetext", timeWords(video.currentTime, dur()));
         const b = video.buffered;
         buffered.style.width = b.length && dur() > 0 ? `${(b.end(b.length - 1) / dur()) * 100}%` : "0%";
-        for (const m of frame.querySelectorAll(".office-mark-box[data-t]"))
+        for (const m of frame.querySelectorAll(".pv-mark[data-t]"))
             m.classList.toggle("off", !near(video.currentTime, Number(m.dataset.t)));
     };
     for (const ev of ["play", "pause", "ended", "seeked", "timeupdate", "progress", "durationchange", "loadeddata", "ratechange"])
         video.addEventListener(ev, paint);
+    // where he is, kept as the view's state: on a pause, a seek, a speed, loop or sound change
+    for (const ev of ["pause", "seeked", "ratechange", "volumechange"])
+        video.addEventListener(ev, () => ctx.moved());
     // a smooth head while it plays (timeupdate comes 4 times a second)
     const tick = () => {
-        // a new version drew another player (swap.js): this one stops and lets its file go
         if (!root.isConnected) {
             for (const v of [video, peeker]) {
                 v.pause();
@@ -269,8 +259,25 @@ export async function draw(root, _bytes, info) {
     let picked = false;
     let rect = null;
     let box = null;
-    // tells the notes layer the selection changed (it offers its button, or takes it away)
-    const said = () => root.dispatchEvent(new CustomEvent("bise:office-selection", { bubbles: true }));
+    /** The frame he picked, paused: its moment, with the box; else null. */
+    const selection = () => {
+        if (!picked || !video.paused || scrubbing)
+            return null;
+        const t = Math.round(video.currentTime * 100) / 100;
+        return rect ? { kind: "time", t, rect } : { kind: "time", t };
+    };
+    /** Where the kit's pill goes: by the box, or at the frame's foot. */
+    const pillAt = () => {
+        if (box && rect)
+            return box;
+        const r = frame.getBoundingClientRect();
+        const y = Math.min(r.bottom, screen.getBoundingClientRect().bottom) - 40;
+        return new DOMRect(r.left + 12, y, 0, 0);
+    };
+    const said = () => {
+        const s = selection();
+        ctx.select(s, null, s ? pillAt() : null);
+    };
     const clearBox = () => {
         rect = null;
         box?.remove();
@@ -296,8 +303,8 @@ export async function draw(root, _bytes, info) {
     // click picks the frame it shows, the next plays
     const clickFrame = () => {
         if (!video.paused && !video.ended) {
-            video.pause();
             picked = true;
+            video.pause();
         }
         else if (!picked) {
             picked = true;
@@ -317,6 +324,7 @@ export async function draw(root, _bytes, info) {
     loop.addEventListener("click", () => {
         video.loop = !video.loop;
         loop.setAttribute("aria-pressed", String(video.loop));
+        ctx.moved();
     });
     sound.addEventListener("click", () => {
         video.muted = !video.muted;
@@ -338,7 +346,7 @@ export async function draw(root, _bytes, info) {
             return;
         scrubbing = { was: !video.paused };
         video.pause();
-        track.setPointerCapture(e.pointerId);
+        capture(track, e.pointerId);
         seek(seekAt(x(e), track.clientWidth, dur()));
     });
     track.addEventListener("pointermove", (e) => {
@@ -371,7 +379,7 @@ export async function draw(root, _bytes, info) {
     const peeker = el("video");
     peeker.muted = true;
     peeker.preload = "metadata";
-    peeker.src = info.file;
+    peeker.src = url;
     const pw = 160;
     peekCanvas.width = pw * (window.devicePixelRatio || 1);
     peekCanvas.height = Math.round((pw * vh) / vw) * (window.devicePixelRatio || 1);
@@ -402,7 +410,7 @@ export async function draw(root, _bytes, info) {
             return;
         const w = track.clientWidth;
         const t = seekAt(x(e), w, dur());
-        peekText.data = globalThis.BiseAnchors.clock(t);
+        peekText.data = clock(t);
         const half = pw / 2;
         peek.style.left = `${Math.min(w - half, Math.max(half, x(e)))}px`;
         peek.hidden = false;
@@ -420,9 +428,8 @@ export async function draw(root, _bytes, info) {
         return { x: r1(x0), y: r1(y0), w: r1(Math.max(a.x, b.x) - x0), h: r1(Math.max(a.y, b.y) - y0) };
     };
     const showBox = (r) => {
-        box ??= el("div", "office-box");
-        box.dataset.ours = "1";
-        Object.assign(box.style, { left: `${r.x}%`, top: `${r.y}%`, width: `${r.w}%`, height: `${r.h}%` });
+        box ??= el("div", "pv-box");
+        boxAt(box, r);
         if (!box.isConnected)
             frame.append(box);
     };
@@ -430,7 +437,7 @@ export async function draw(root, _bytes, info) {
         if (e.button !== 0 || !frame.contains(e.target))
             return;
         start = at(e);
-        screen.setPointerCapture(e.pointerId);
+        capture(screen, e.pointerId);
     });
     screen.addEventListener("selectstart", (e) => start && e.preventDefault());
     screen.addEventListener("pointermove", (e) => {
@@ -458,10 +465,11 @@ export async function draw(root, _bytes, info) {
         picked = true;
         rect = r;
         showBox(r);
+        said();
     };
     screen.addEventListener("pointerup", up);
     screen.addEventListener("pointercancel", () => (start = null));
-    // ---- the keys: capture, before the notes layer reads a typed key as his first word
+    // ---- the keys: capture, before the kit reads a typed key as his first word
     document.addEventListener("keydown", (e) => {
         if (!root.isConnected)
             return;
@@ -482,65 +490,53 @@ export async function draw(root, _bytes, info) {
     }, true);
     paint();
     fit();
-    // ---- the notes' marks: a tick on the track at each note's moment, its box on the frame near it
-    const where = (a) => {
-        // (a.t: a finite number past this line)
-        if (!a || a.kind !== "time" || !Number.isFinite(a.t))
+    // ---- his notes' marks: a tick on the track at each one's moment, its box on the frame near it
+    const marks = new Map();
+    const placeOf = (p) => {
+        if (p.kind !== "time")
             return null;
         const d = dur();
-        const found = d <= 0 || a.t <= d + 0.05;
-        const t = el("button", "tick office-mark-box");
+        // a moment past this version's end: not here (detached)
+        if (d > 0 && p.t > d + 0.05)
+            return null;
+        const t = el("button", "tick pv-mark");
         t.type = "button";
-        t.dataset.ours = "1";
-        t.dataset.t = String(a.t);
-        t.title = globalThis.BiseAnchors.label(a);
-        t.style.left = `${d > 0 ? Math.min(100, (a.t / d) * 100) : 0}%`;
+        t.dataset.t = String(p.t);
+        t.title = ctx.label(p);
+        t.style.left = `${d > 0 ? Math.min(100, (p.t / d) * 100) : 0}%`;
         ticks.append(t);
-        const els = [t];
-        if (a.rect) {
-            const m = el("div", "office-mark-box");
-            m.dataset.ours = "1";
-            m.dataset.t = String(a.t);
-            Object.assign(m.style, { left: `${a.rect.x}%`, top: `${a.rect.y}%`, width: `${a.rect.w}%`, height: `${a.rect.h}%` });
-            m.classList.toggle("off", !near(video.currentTime, a.t));
-            frame.append(m);
-            els.push(m);
-        }
-        return { els, found };
+        if (!p.rect)
+            return [t];
+        const m = el("div", "pv-mark");
+        m.dataset.t = String(p.t);
+        boxAt(m, p.rect);
+        m.classList.toggle("off", !near(video.currentTime, p.t));
+        frame.append(m);
+        return [t, m];
     };
     return {
-        notes: [],
-        /** Where he is: the moment, playing or not, its speed, loop and sound. */
-        place: () => ({ t: video.currentTime, paused: video.paused, rate: video.playbackRate, loop: video.loop, muted: video.muted }),
-        restore: (p) => {
-            if (!p)
+        foot: [],
+        place(p) {
+            const k = JSON.stringify(p);
+            if (!marks.has(k))
+                marks.set(k, placeOf(p));
+            return marks.get(k);
+        },
+        state: () => ({ t: video.currentTime, paused: video.paused, rate: video.playbackRate, loop: video.loop, muted: video.muted }),
+        restore(s) {
+            const p = s;
+            if (!p || typeof p.t !== "number")
                 return;
-            // (a place this view gave: its numbers)
-            video.currentTime = Math.min(p.t || 0, dur() || p.t || 0);
-            video.playbackRate = p.rate || 1;
+            video.currentTime = Math.min(p.t, dur() || p.t);
+            video.playbackRate = typeof p.rate === "number" ? p.rate : 1;
             rateText.data = `${video.playbackRate}×`;
             video.loop = !!p.loop;
             loop.setAttribute("aria-pressed", String(video.loop));
             video.muted = !!p.muted;
             setIcon(sound, video.muted ? "muted" : "sound");
+            sound.setAttribute("aria-pressed", String(video.muted));
             if (p.paused === false)
                 video.play().catch(() => { });
         },
-        /** A frame he picked (clicked, or drew a box on), paused: its moment, with the box; else null. */
-        selection: () => {
-            if (!picked || !video.paused || scrubbing)
-                return null;
-            const t = Math.round(video.currentTime * 100) / 100;
-            return rect ? { kind: "time", t, rect } : { kind: "time", t };
-        },
-        /** Where the notes layer puts its button: by the box, or at the frame's foot. */
-        box: () => {
-            if (box && rect)
-                return box.getBoundingClientRect();
-            const r = frame.getBoundingClientRect();
-            const y = Math.min(r.bottom, screen.getBoundingClientRect().bottom) - 40;
-            return { left: r.left + 12, top: y, right: r.left + 12, bottom: y };
-        },
-        where,
     };
 }

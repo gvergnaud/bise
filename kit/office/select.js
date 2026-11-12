@@ -1,9 +1,9 @@
 // generated from select.ts by scripts/ts_emit.ts: never hand-edited (edit the .ts, then run it)
 // bise kit · notes on an artifact in its viewer (office-artifacts plan §5, §9b; architect m_23874):
 // the selection layer and the marks, over every renderer (sheet.js,
-// image.js, site.js: a site draws its marks in its own frame through view.marks; pdf.js places
-// its notes itself through view.where, re-anchored on the version's text; video.js too, ticks on
-// its track, and it says `bise:office-selection` when its selection moves with no mouseup). One store (pages/artifact/notes.rs), two doors:
+// site.js: a site draws its marks in its own frame through view.marks; a renderer may place its
+// notes itself through view.where, and say `bise:office-selection` when its selection moves with
+// no mouseup). One store (pages/artifact/notes.rs), two doors:
 //
 // - in the desktop's side panel (the frame's name is `bise-app`, art-desktop m_23900) a
 //   selection's `note` button posts {bise: FRAME.anchor, artifact, version, anchor, quote} to the
@@ -33,10 +33,7 @@ const W = {
     doneIn: (v) => `✓ done in v${v}`,
     empty: {
         xlsx: "no notes yet. select cells, then note.",
-        image: "no notes yet. draw a box, then note.",
         site: "no notes yet. select some text, then note.",
-        pdf: "no notes yet. select some text or draw a box, then note.",
-        video: "no notes yet. pause it or draw a box on it, then note.",
     },
 };
 /** `B4` inside `B4:D9` (refs as the grid writes them). */
@@ -114,7 +111,7 @@ function mount() {
         const s = stage();
         if (!s || !a)
             return { els: [], found: false };
-        // a renderer that places its own notes (pdf.js: re-anchored on the version's text)
+        // a renderer that places its own notes
         const own = office.view && office.view.where ? office.view.where(a) : null;
         if (own)
             return own;
@@ -127,16 +124,6 @@ function mount() {
                 const shown = office.view && office.view.place && office.view.place().sheet === a.sheet;
                 const els = shown ? q("td[data-ref]").filter((td) => inRange(td.dataset.ref, a.range)) : tab ? [tab] : [];
                 return { els, found: !!tab || !!shown };
-            }
-            case "region": {
-                const frame = s.querySelector(".office-image .frame, .frame");
-                if (!frame)
-                    return { els: [], found: false };
-                const box = el("div", "office-mark-box");
-                box.dataset.ours = "1";
-                Object.assign(box.style, { left: `${a.rect.x}%`, top: `${a.rect.y}%`, width: `${a.rect.w}%`, height: `${a.rect.h}%` });
-                frame.append(box);
-                return { els: [box], found: true };
             }
             default:
                 return { els: [], found: false };
@@ -258,8 +245,6 @@ function mount() {
             return quoteOf(office.view.quote());
         if (a.kind === "cell")
             return quoteOf([...s.querySelectorAll("td.sel")].map((td) => td.textContent).filter(Boolean).join(" "));
-        if (a.kind === "region")
-            return quoteOf(a.quote);
         return "";
     }
     // a mouseup, or a renderer's bise:office-selection (its target: the main)
@@ -287,7 +272,7 @@ function mount() {
         }, 0);
     }
     main.addEventListener("mouseup", offer);
-    // a renderer whose selection changes with no mouseup (video.js: paused, a frame stepped)
+    // a renderer whose selection changes with no mouseup
     main.addEventListener("bise:office-selection", offer);
     main.addEventListener("keyup", (e) => {
         if (e.key === "Escape") {
@@ -448,7 +433,7 @@ function mount() {
             head.textContent = NW.listTitle(info.name || info.title, all.length);
             items.replaceChildren();
             if (!all.length)
-                items.append(el("li", "empty", W.empty[info.kind] || W.empty.image));
+                items.append(el("li", "empty", W.empty[info.kind] || W.empty.site));
             for (const n of all) {
                 const li = el("li", "item");
                 li.dataset.status = n.status;

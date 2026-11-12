@@ -5,10 +5,46 @@
     "one": null,
     "text": "added to your message"
   },
+  "viewkit.area": {
+    "args": [],
+    "one": null,
+    "text": "an area"
+  },
   "viewkit.ask": {
     "args": [],
     "one": null,
     "text": "type to ask about it"
+  },
+  "viewkit.didnt_open": {
+    "args": [],
+    "one": null,
+    "text": "this didn't open"
+  },
+  "viewkit.moment_area": {
+    "args": [
+      "t"
+    ],
+    "one": null,
+    "text": "{t} · an area"
+  },
+  "viewkit.opening": {
+    "args": [],
+    "one": null,
+    "text": "opening…"
+  },
+  "viewkit.page": {
+    "args": [
+      "n"
+    ],
+    "one": null,
+    "text": "page {n}"
+  },
+  "viewkit.page_area": {
+    "args": [
+      "n"
+    ],
+    "one": null,
+    "text": "page {n} · an area"
   },
   "viewkit.slide": {
     "args": [

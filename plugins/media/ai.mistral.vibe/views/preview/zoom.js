@@ -1,9 +1,9 @@
 // generated from zoom.ts by scripts/ts_emit.ts: never hand-edited (edit the .ts, then run it)
-// bise kit · an image's zoom in the viewer (his m_22822; image-pinch, designer m_30627, architect
-// m_30628): a trackpad pinch zooms the image itself around the pointer, never the window; two
-// fingers, the wheel or space+drag pan it while zoomed; a double-click toggles fit and 100%; esc
-// or ⌘0 back to fit. The math's one home, pure: image.js keeps the state and the DOM. Laws in
-// office/sdk/test/viewer.test.ts.
+// Preview · an image's zoom (his m_22822; image-pinch, designer m_30627, architect m_30628): a
+// trackpad pinch zooms the image itself around the pointer, never the window; two fingers, the
+// wheel or space+drag pan it while zoomed; a double-click toggles fit and 100%; esc or ⌘0 back to
+// fit. The math's one home, pure: image.js keeps the state and the DOM. Laws in
+// plugins/media/test/zoom.test.mjs.
 //
 // Dims: the box and the image's natural size, in CSS px { bw, bh, nw, nh }.
 // Zoom: the image drawn at `k` CSS px per image px, its top-left corner at (x, y) in the box.
