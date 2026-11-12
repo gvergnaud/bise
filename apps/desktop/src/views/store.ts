@@ -8,7 +8,7 @@
 // session ends with view/close when it unloads, its app is swapped or its tab closes. One store per
 // window (`views`); a test makes its own with fakes. Owner: apps-host.
 import type { ViewPerm } from '@/shared/viewperms';
-import { copiedOf, copyBody, docContext, docOpenOf, IDLE, notesOf, saveOf, type DocInfo, type OpenerInfo, type Save, type Selection, type ViewNote, type Changed } from './doc';
+import { copiedOf, copyBody, docContext, docOpenOf, IDLE, lostOf, notesOf, type DetachedNote, saveOf, type DocInfo, type OpenerInfo, type Save, type Selection, type ViewNote, type Changed } from './doc';
 import type { ContextIn } from './context';
 import { evict, MAX_LIVE } from './place';
 import type { DisplayMode, Download, Json, JsonObject } from './protocol';
@@ -55,8 +55,8 @@ export interface DocLive {
   readonly document: DocInfo;
   readonly opener: OpenerInfo;
   readonly save: Save;
-  /** the notes its view could not place on this version (A5): listed by the tab, never lost */
-  readonly detached: readonly ViewNote[];
+  /** the notes with no place in its view (A5): the view's dev.bise/detached, then the hub's own; listed by the tab, never lost */
+  readonly detached: readonly DetachedNote[];
 }
 
 /** What the store needs from the window (fakes in a test). */
@@ -116,6 +116,8 @@ interface DocRec {
   /** the notes its view was given last, and the ids it could not place */
   notes: readonly ViewNote[];
   detached: readonly string[];
+  /** the notes the hub could make no view key for (view/notes' detached) */
+  lost: readonly DetachedNote[];
   /** the live session's wire key and facts */
   live: { readonly wire: DocWire; readonly document: DocInfo; readonly opener: OpenerInfo; readonly changed?: Changed } | null;
 }
@@ -183,7 +185,7 @@ export class ViewsStore {
     const k = refKey(ref);
     let r = this.recs.get(k);
     if (r === undefined) {
-      const doc: DocRec | null = isDoc(ref) ? { state: null, save: IDLE, conflicted: null, notes: [], detached: [], live: null } : null;
+      const doc: DocRec | null = isDoc(ref) ? { state: null, save: IDLE, conflicted: null, notes: [], detached: [], lost: [], live: null } : null;
       r = { ref, state: NONE, session: null, frame: null, height: DEFAULT_H, sizes: {}, seenAt: this.env.now(), messageAt: null, plugin: '', phase: 'proxy', note: 'none', asking: false, doc };
       this.recs.set(k, r);
     }
@@ -276,6 +278,7 @@ export class ViewsStore {
       d.save = IDLE;
       d.conflicted = null;
       d.detached = [];
+      d.lost = [];
       this.start(r, o.res, o.ungranted, wire);
       this.askNotes(r);
     });
@@ -376,7 +379,9 @@ export class ViewsStore {
       // the session that asked is still the record's: a reopen meanwhile asks again
       if (r.session !== s || 'error' in a || r.doc === null) return;
       r.doc.notes = notesOf(a.result);
+      r.doc.lost = lostOf(a.result);
       s.notes(r.doc.notes);
+      this.refresh(r);
     });
   }
 
@@ -466,7 +471,7 @@ export class ViewsStore {
       tool: str(res?.tool ?? null, 'title') || str(res?.tool ?? null, 'name'),
       plugin: r.plugin,
       messageAt: r.messageAt,
-      ...(live == null || r.doc === null ? {} : { doc: { document: live.document, opener: live.opener, save: r.doc.save, detached: r.doc.notes.filter((n) => r.doc?.detached.includes(n.id) === true) } }),
+      ...(live == null || r.doc === null ? {} : { doc: { document: live.document, opener: live.opener, save: r.doc.save, detached: [...r.doc.notes.filter((n) => r.doc?.detached.includes(n.id) === true), ...r.doc.lost] } }),
     };
   }
 

@@ -228,6 +228,32 @@ export function copiedOf(r: Json): string | null {
   return isObj(r) && typeof r['artifact'] === 'string' && r['artifact'] !== '' ? r['artifact'] : null;
 }
 
+/** A note listed under the head, with no place in the view: its id, its words, what it quoted. */
+export interface DetachedNote {
+  readonly id: string;
+  readonly text: string;
+  readonly quote?: string;
+}
+
+/**
+ * hub/view_notes' `detached`: the notes the hub can make no view key for (an older typed anchor
+ * with no canonical JSON), never given to the view: listed by the tab. Pure.
+ */
+export function lostOf(r: Json): DetachedNote[] {
+  const list = isObj(r) ? r['detached'] : null;
+  if (!Array.isArray(list)) return [];
+  const out: DetachedNote[] = [];
+  for (const n of list) {
+    if (!isObj(n)) continue;
+    const id = str(n, 'id');
+    const text = str(n, 'text');
+    if (id === null || text === null) continue;
+    const quote = str(n, 'quote');
+    out.push({ id, text, ...(quote === null || quote === '' ? {} : { quote }) });
+  }
+  return out;
+}
+
 /** dev.bise/detached's ids, only those of notes the view was given (others dropped). Pure. */
 export function detachedOf(p: JsonObject, given: readonly ViewNote[]): string[] {
   const ids = p['ids'];

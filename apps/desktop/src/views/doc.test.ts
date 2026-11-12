@@ -1,7 +1,7 @@
 // A document's view, the pure parts (docs/plugin-apps.md A4, A5): view/open's answer read, the
 // selection, the notes a view gets, the state it may keep, a write's answer as the save line.
 import { describe, expect, it } from 'vitest';
-import { bytesOf, copyBody, detachedOf, docOpenOf, keptState, MAX_ANCHOR, MAX_VIEW_STATE, notesOf, saveOf, selectionOf } from './doc';
+import { bytesOf, copyBody, detachedOf, docOpenOf, keptState, lostOf, MAX_ANCHOR, MAX_VIEW_STATE, notesOf, saveOf, selectionOf } from './doc';
 import type { Json } from './protocol';
 import { DOC_ERR } from './port';
 
@@ -88,6 +88,22 @@ describe('notes', () => {
       { id: 'n1', anchor: 'r:1', text: 'why?', status: 'sent', version: 2 },
       { id: 'n2', anchor: 'r:2', text: 'ok', quote: 'B2', status: 'done', version: 1, done_in: 3 },
     ]);
+  });
+
+  it("the hub's detached (no view key for them): listed whole, a bad one dropped (apps-viewkit 09ca8b43d)", () => {
+    const r = {
+      notes: [],
+      detached: [
+        { id: 'n7', text: 'this cell?', quote: 'B4', status: 'sent', version: 1 },
+        { id: 'n8', text: 'plain', quote: '', status: 'sent', version: 1 },
+        { id: 3, text: 'x', quote: 'q', status: 'sent', version: 1 },
+      ],
+    };
+    expect(lostOf(r)).toEqual([
+      { id: 'n7', text: 'this cell?', quote: 'B4' },
+      { id: 'n8', text: 'plain' },
+    ]);
+    expect(lostOf({ notes: [] }), 'an older hub: none').toEqual([]);
   });
 
   it('detached: only ids of notes the view was given', () => {

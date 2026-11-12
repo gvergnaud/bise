@@ -331,7 +331,7 @@ describe("a document's view (docs/plugin-apps.md A4, A5)", () => {
         opens += 1;
         return { result: opened({ doc: opens === 1 ? SID : OTHER_SID, proxy: `${ORIGIN}/mcp-app?s=${opens === 1 ? SID : OTHER_SID}` }) };
       }
-      if (c.cmd === 'view_notes') return { result: { notes: [{ id: 'n1', anchor: { kind: 'view', key: 'r:1' }, text: 'why?', status: 'sent', version: 3 }] } };
+      if (c.cmd === 'view_notes') return { result: { notes: [{ id: 'n1', anchor: { kind: 'view', key: 'r:1' }, text: 'why?', status: 'sent', version: 3 }], detached: [{ id: 'n0', text: 'old one', quote: 'B4', status: 'sent', version: 1 }] } };
       if (c.cmd === 'view_copy') return { result: { artifact: 'art2' } };
       return { result: {} };
     });
@@ -364,6 +364,8 @@ describe("a document's view (docs/plugin-apps.md A4, A5)", () => {
     expect(asked.some((c) => c.cmd === 'view_notes' && 'doc' in c && c.doc === SID)).toBe(true);
     expect(proxy.got.map((m) => m['method']).filter(Boolean)).toEqual([UI.resourceReady, UI.toolInput, UI.toolResult, 'dev.bise/notes']);
     expect((proxy.got.at(-1)?.['params'] as JsonObject)['notes']).toEqual([{ id: 'n1', anchor: 'r:1', text: 'why?', status: 'sent', version: 3 }]);
+    // the hub's detached (no view key) never reach the view: the tab lists them (apps-viewkit 09ca8b43d)
+    expect(store.state(DOC_REF)).toMatchObject({ doc: { detached: [{ id: 'n0', text: 'old one', quote: 'B4' }] } });
     proxy.send({ jsonrpc: '2.0', id: 2, method: UI.message, params: { content: [{ type: 'text', text: 'hi' }] } });
     await flush();
     expect(proxy.got.at(-1)).toMatchObject({ id: 2, error: { code: -32601 } });
