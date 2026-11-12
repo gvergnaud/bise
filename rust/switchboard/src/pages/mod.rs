@@ -11,6 +11,7 @@
 pub mod checklist;
 pub mod drafts;
 pub mod export;
+pub mod icon;
 pub mod lint;
 pub mod artifact;
 pub mod media;
@@ -113,6 +114,9 @@ pub struct Pages {
     /// read, stat or send (architect m_60434): a range read of a video
     /// holding it would stall the hub's loop at its next lookup.
     pub(crate) files: Mutex<crate::view_files::Files>,
+    /// the on plugins' app icons (`/icon/<plugin>`, icon.rs): set by the
+    /// hub after each gather of the openers; read out of the lock first
+    icons: Mutex<icon::Icons>,
     /// the app's dev server, who may also frame a view (view_csp.rs): a
     /// hub run with `BISE_DEV` only
     pub view_dev: Option<&'static str>,
@@ -187,8 +191,20 @@ impl Pages {
             rows_memo: Mutex::default(),
             views: Mutex::new(HashMap::new()),
             files: Mutex::default(),
+            icons: Mutex::default(),
             view_dev: view_csp::dev_ancestor(std::env::var("BISE_DEV").ok().as_deref()),
         }
+    }
+
+    /// The plugins' app icons now (the hub's, after a gather).
+    pub fn set_icons(&self, icons: icon::Icons) {
+        *self.icons.lock().unwrap_or_else(|e| e.into_inner()) = icons;
+    }
+
+    /// `plugin`'s icon file, if it has one (cloned out: the read happens
+    /// with no lock held).
+    pub fn icon_of(&self, plugin: &str) -> Option<icon::IconAt> {
+        self.icons.lock().unwrap_or_else(|e| e.into_inner()).get(plugin).cloned()
     }
 
     /// The agents at work now (working, or idle and not done): their

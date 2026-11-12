@@ -76,6 +76,7 @@ mod usage;
 mod usage_spool;
 mod view_out;
 mod tick;
+mod view_open;
 mod views;
 mod wake_look;
 mod place_work;

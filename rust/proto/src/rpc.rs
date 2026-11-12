@@ -159,6 +159,8 @@ pub const METHODS: &[MethodRow] = &[
     m("view/close", "view_close", None),
     // A5: a document view's notes ({notes, detached}), client sockets only
     m("view/notes", "view_notes", None),
+    // his click opens a document in its app (A4): client sockets only
+    m("view/open", "view_open", None),
 ];
 
 /// The protocol's own methods (no [`HubCmd`]).
@@ -200,6 +202,7 @@ pub const OWN_RESULTS: &[(&str, &str)] = &[
     // mcp-apps (C5): a view's resource; a call answers its server's result
     ("view/resource", "ViewResource"),
     ("view/call", "ViewCallResult"),
+    ("view/open", "ViewOpened"),
     ("plugin/views", "PluginViewsResult"),
     // MCP Apps C9: how many desktop connections got it
     ("app/open", "AppOpenResult"),

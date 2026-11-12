@@ -84,6 +84,33 @@ impl AppOpeners {
     pub fn picks(&self) -> &Picks {
         &self.picks
     }
+
+    /// The servers' tools known now (`view/open` gathers again over them).
+    pub fn tools(&self) -> &ServerTools {
+        &self.tools
+    }
+
+    /// The documents folders the openers gathered now use (A1): the hub
+    /// makes them, off the loop, after each gather that changed them.
+    pub fn documents(&self) -> Vec<std::path::PathBuf> {
+        self.openers.documents_to_make(&self.res)
+    }
+
+    /// The plugins' app icons now (`/icon/<plugin>`, pages/icon.rs).
+    pub fn icons(&self) -> crate::pages::icon::Icons {
+        crate::pages::icon::icons_of(&self.openers, &self.res)
+    }
+}
+
+/// Make the plugins' documents folders (`dirs`, [`AppOpeners::documents`]);
+/// disk work: call it off the loop. A folder that fails stays unmade (its
+/// opener's first write says so).
+pub fn make_documents(dirs: &[std::path::PathBuf]) {
+    for d in dirs {
+        if let Err(e) = std::fs::create_dir_all(d) {
+            eprintln!("apps: documents folder not made ({}): {e}", d.display());
+        }
+    }
 }
 
 /// What an art store row opens as (A2's target), from the row alone; a

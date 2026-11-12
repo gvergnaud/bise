@@ -145,6 +145,7 @@ fn method_of(cmd: HubCmd) -> Option<(&'static str, Value)> {
         HubCmd::PluginViews { plugin, .. } => ("plugin/views", json!({"plugin": plugin})),
         HubCmd::ViewClose { doc, .. } => ("view/close", json!({"doc": doc})),
         HubCmd::ViewNotes { doc, .. } => ("view/notes", json!({"doc": doc})),
+        HubCmd::ViewOpen { project, target, opener } => ("view/open", json!({"project": project, "target": target, "opener": opener})),
         _ => return None,
     })
 }
@@ -156,7 +157,7 @@ fn some(s: String) -> Option<String> {
 }
 
 /// A server's JSON-RPC error, as the view gets it.
-fn server_error(e: &Value) -> RpcError {
+pub(super) fn server_error(e: &Value) -> RpcError {
     RpcError {
         code: e.get("code").and_then(Value::as_i64).unwrap_or(-32603),
         message: e.get("message").and_then(Value::as_str).unwrap_or("the server failed").to_string(),
@@ -169,7 +170,7 @@ fn is_gone(e: &RpcError) -> bool {
     e.data.as_ref().and_then(|d| d.reason.as_deref()) == Some(REASON_SERVER_GONE)
 }
 
-fn gone(why: &str) -> RpcError {
+pub(super) fn gone(why: &str) -> RpcError {
     RpcError { code: -32000, message: format!("the view's server is not reachable: {why}"), data: Some(ErrorData { reason: Some(REASON_SERVER_GONE.into()), ..Default::default() }) }
 }
 
@@ -178,7 +179,7 @@ fn gone(why: &str) -> RpcError {
 /// resolver finds it now, tagged with that plugin's version. A server's
 /// view: none (its `ui://` resource stays inline). Off the loop: it reads
 /// the plugins.
-fn static_folder(f: &ViewFile, ws: &Path) -> Option<ViewFolder> {
+pub(super) fn static_folder(f: &ViewFile, ws: &Path) -> Option<ViewFolder> {
     if f.server != bend_plugins::views::SERVER {
         return None;
     }
@@ -186,6 +187,19 @@ fn static_folder(f: &ViewFile, ws: &Path) -> Option<ViewFolder> {
     let p = res.loaded().find(|p| p.name == f.plugin)?;
     let v = p.views.iter().find(|v| v.uri == f.uri)?;
     Some(ViewFolder { dir: v.html.parent()?.to_path_buf(), tag: crate::pages::view_folder::tag(&p.root, p.version.as_deref()) })
+}
+
+/// A view's resource read on its server at `url` (the one read path of
+/// `view/resource` and `view/open`, architect m_60316 #5): its HTML and
+/// sandbox, its server's `tools/list` answer (none: `{}`), and what he
+/// granted the view (C8; never asked: nothing). Off the loop.
+pub(super) fn read_view(url: &str, plugin: &str, uri: &str) -> Result<(view_call::ResourceRead, Value, Vec<String>), RpcError> {
+    let got = request(url, Some(&view_call::request("resources/read", &json!({"uri": uri}))), CALL_TIMEOUT).map_err(|e| gone(&e))?;
+    let res = view_call::answer(&got).map_err(|e| server_error(&e))?;
+    let r = view_call::resource_read(&res).ok_or_else(|| ViewError::Expired.rpc(uri))?;
+    let list = request(url, Some(&view_call::request("tools/list", &json!({}))), CALL_TIMEOUT).ok().and_then(|v| view_call::answer(&v).ok()).unwrap_or_default();
+    let grant = bend_plugins::state::view_grant(&bend_plugins::state::grants(&bend_plugins::state::state_path()), plugin, uri).unwrap_or_default();
+    Ok((r, list, grant))
 }
 
 /// A view's call judged off the loop: its views file (`file`), its
@@ -260,6 +274,7 @@ impl Shell {
         match method {
             "plugin/views" => return self.plugin_views(params, done),
             "view/close" => return self.view_close(params, done),
+            "view/open" => return self.view_open(params, done),
             _ => {}
         }
         let p = match view_call::Key::of(&params) {
@@ -278,7 +293,7 @@ impl Shell {
     }
 
     /// Hands a thread's next step to the loop.
-    fn view_step(&self) -> impl Fn(ViewStep) + Send + 'static {
+    pub(super) fn view_step(&self) -> impl Fn(ViewStep) + Send + 'static {
         let tx = self.tx.clone();
         move |s: ViewStep| {
             let _ = tx.send(Msg::View(s));
@@ -313,6 +328,14 @@ impl Shell {
         }
         let (exe, d, json, ws) = (self.opts.exe.clone(), self.opts.paths.views_bridge_dir(), self.opts.paths.views_bridge_json(), self.opts.paths.workspace.clone());
         self.views.bridge.ensure(&exe, &d, &json, &ws, now_ms()).map(|p| (p, true))
+    }
+
+    /// The hub's views bridge, started when it is not running: its
+    /// `bridge.json` (a document's opener and its calls go there, never
+    /// to an agent's bridge).
+    pub(super) fn views_bridge(&mut self) -> Result<PathBuf, String> {
+        let (exe, d, json, ws) = (self.opts.exe.clone(), self.opts.paths.views_bridge_dir(), self.opts.paths.views_bridge_json(), self.opts.paths.workspace.clone());
+        self.views.bridge.ensure(&exe, &d, &json, &ws, now_ms())
     }
 
     // ---- plugin/views (C8) ----
@@ -360,13 +383,8 @@ impl Shell {
                 let (json_path, _) = bridge.map_err(|e| gone(&e))?;
                 let base = wait_base(&json_path).ok_or_else(|| gone("no bridge"))?;
                 let url = view_call::route_url(&base, &f.plugin, &f.server);
-                let got = request(&url, Some(&view_call::request("resources/read", &json!({"uri": f.uri}))), CALL_TIMEOUT).map_err(|e| gone(&e))?;
-                let res = view_call::answer(&got).map_err(|e| server_error(&e))?;
-                let r = view_call::resource_read(&res).ok_or_else(|| ViewError::Expired.rpc(&f.uri))?;
-                let list = request(&url, Some(&view_call::request("tools/list", &json!({}))), CALL_TIMEOUT).ok().and_then(|v| view_call::answer(&v).ok()).unwrap_or_default();
+                let (r, list, grant) = read_view(&url, &f.plugin, &f.uri)?;
                 let tool = view_call::tool_of(&list, &f.tool);
-                // C8: what he granted this view (never asked: nothing)
-                let grant = bend_plugins::state::view_grant(&bend_plugins::state::grants(&bend_plugins::state::state_path()), &f.plugin, &f.uri).unwrap_or_default();
                 Ok((f, r, tool, grant, list))
             };
             match read() {
@@ -565,8 +583,7 @@ impl Shell {
             return done(Err(ViewError::RateLimited.rpc(&what)));
         }
         let f = ViewFile { plugin: d.plugin, server: d.server, uri: d.uri, ..Default::default() };
-        let (exe, dir, json, ws) = (self.opts.exe.clone(), self.opts.paths.views_bridge_dir(), self.opts.paths.views_bridge_json(), self.opts.paths.workspace.clone());
-        let bridge = self.views.bridge.ensure(&exe, &dir, &json, &ws, now_ms()).map(|p| (p, true));
+        let bridge = self.views_bridge().map(|p| (p, true));
         let state_path = bend_plugins::state::state_path();
         let step = self.view_step();
         std::thread::spawn(move || {

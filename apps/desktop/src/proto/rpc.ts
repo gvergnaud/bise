@@ -231,6 +231,112 @@ export type ViewCallResult = Record<string, unknown>;
 export type PluginViewsResult = { views: Array<Record<string, unknown>> };
 
 /**
+ * The opener `view/open` may be asked for (Open with's pick); the hub
+ * checks it is a candidate for the target now, an off plugin's refused.
+ */
+export type OpenWith = { plugin: string, tool: string, };
+
+/**
+ * What a document view knows of its document (docs/plugin-apps.md A4,
+ * A9; the host context's `document`, C7): one type, built by one fn in
+ * the hub from the target and the view's grants. A9's notes-granted
+ * facts (who made it, its activity, where it went, its watch, his taste)
+ * join this type when the pages app is built (apps-sites, apps-lead
+ * m_61568).
+ */
+export type DocumentFacts = { 
+/**
+ * its file's name (`plan.xlsx`)
+ */
+name: string, 
+/**
+ * the type's name the matcher gave (`Excel workbook`)
+ */
+type: string, 
+/**
+ * the artifact's version opened; none: a file of `~/bise`
+ */
+version?: number, size: number, 
+/**
+ * a save would be taken: the `write` grant, and the newest version
+ */
+writable: boolean, 
+/**
+ * the artifact's newest version (the "there's a newer version" line)
+ */
+latest?: number, 
+/**
+ * every version kept, oldest first
+ */
+versions?: Array<DocVersion>, };
+
+/**
+ * One version of a document (its number, when it was made).
+ */
+export type DocVersion = { n: number, at_ms: number, };
+
+/**
+ * The app a document opened in (the tab head's facts line).
+ */
+export type OpenedWith = { plugin: string, tool: string, 
+/**
+ * the app's title (`Sheets`)
+ */
+app: string, };
+
+/**
+ * A document opened in a plugin's view: the view's resource as
+ * `view/resource` answers it, its session (`doc`: every later method of
+ * that view carries it), its file's handle, its facts and its app.
+ */
+export type DocView = { doc: string, handle: string, document: DocumentFacts, opener: OpenedWith, 
+/**
+ * `http://v-<16 hex>.localhost:<pages port>` (C6)
+ */
+origin: string, 
+/**
+ * the sandbox proxy's URL for this load, the one the host frames:
+ * `<origin>/mcp-app?s=<32 hex>`, a session the hub made for this
+ * `view/resource` (C6: a page that never asked the hub, a `.html`
+ * file opened in his browser, can't frame the view's origin)
+ */
+proxy?: string, html: string, 
+/**
+ * the resource's `_meta.ui.csp` as it declared it (the pages server
+ * makes the header from it)
+ */
+csp: Record<string, unknown>, 
+/**
+ * what it may use: declared and granted at the plugin's add (C8)
+ */
+permissions: Array<string>, 
+/**
+ * what it declared (`_meta.ui.permissions`, MIDI from
+ * `_meta["dev.bise/ui"].permissions`): the card says what runs
+ * without its grant
+ */
+declared: Array<string>, prefersBorder: boolean, 
+/**
+ * the call's arguments; none: no views file kept them
+ */
+toolInput: Record<string, unknown> | null, 
+/**
+ * the call's whole result (`{"truncated": true}` past 4 MiB)
+ */
+toolResult: Record<string, unknown> | null, 
+/**
+ * the tool as its server lists it (`toolInfo`)
+ */
+tool: Record<string, unknown> | null, };
+
+/**
+ * `view/open`'s answer (A4): the document in its app's view, or one of
+ * bise's own types not migrated yet, framed on today's path (a BUILTIN
+ * opener, A3).
+ */
+export type ViewOpened = { "kind": "view" } & DocView | { "kind": "frame", frame: string, };
+
+/**
  * Why a view may not write its file: `data.reason` of a
  * [`ViewError::NoWrite`] (architect m_59962 #3: the host says "there's a
  * newer version" on the second, never "not allowed").

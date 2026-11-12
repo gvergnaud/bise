@@ -37,7 +37,7 @@ impl Shell {
             let step: ViewStep = Box::new(move |sh: &mut Shell| {
                 sh.apps.reading = false;
                 if sh.apps.openers.refresh(res, cold, picks) {
-                    crate::store_gen::bump();
+                    sh.apps_changed();
                 }
             });
             let _ = tx.send(Msg::View(step));
@@ -49,7 +49,22 @@ impl Shell {
     pub(super) fn apps_seen(&mut self, plugin: &str, server: &str, tools: &Value) {
         let Some(list) = tools.get("tools").and_then(Value::as_array) else { return };
         if self.apps.openers.seen(plugin, server, list.clone()) {
-            crate::store_gen::bump();
+            self.apps_changed();
+        }
+    }
+
+    /// The openers changed: the rows are built again, the page server's
+    /// icons (`/icon/<plugin>`) are the new ones, and the plugins'
+    /// documents folders (A1) are made off the loop (a create_dir_all of
+    /// a folder that is there already costs one stat).
+    fn apps_changed(&self) {
+        crate::store_gen::bump();
+        if let Some(pages) = self.pg.pages.as_ref() {
+            pages.set_icons(self.apps.openers.icons());
+        }
+        let dirs = self.apps.openers.documents();
+        if !dirs.is_empty() {
+            std::thread::spawn(move || crate::app_openers::make_documents(&dirs));
         }
     }
 }

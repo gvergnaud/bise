@@ -29,8 +29,9 @@ use std::time::Duration;
 /// still open; each request holds its own server thread.
 pub(crate) const WAIT: Duration = Duration::from_millis(bise_proto::view_rpc::VIEW_CALL_MAX_MS);
 
-/// The methods a web host may ask (C5's, `view/message` refused below).
-const METHODS: [&str; 4] = ["view/resource", "view/call", "view/message", "view/context"];
+/// The methods a web host may ask (C5's, `view/message` refused below;
+/// a document's, docs/plugin-apps.md A4).
+const METHODS: [&str; 6] = ["view/resource", "view/call", "view/message", "view/context", "view/open", "view/close"];
 
 /// An agent's name as the hub writes them: letters, digits, `-`, `_`, `.`.
 pub fn valid_agent(a: &str) -> bool {
@@ -48,6 +49,22 @@ pub fn page(pages: &Pages, agent: &str, call: &str) -> Response {
     if !valid_agent(agent) || !call_ok(call) {
         return Response::missing("no such view");
     }
+    host_page(pages, agent, &format!("data-agent=\"{}\" data-call=\"{}\"", esc(agent), esc(call)))
+}
+
+/// `GET /d/<artifact id>`: a document in its app in his browser (the
+/// TUI's `O`, docs/plugin-apps.md A7): the same page, its script opening
+/// the artifact through `view/open`. Artifacts only: a `~/bise` entry's id
+/// is the window's.
+pub fn doc_page(pages: &Pages, id: &str) -> Response {
+    if !super::store::valid_id(id) {
+        return Response::missing("no such document");
+    }
+    host_page(pages, id, &format!("data-artifact=\"{}\"", esc(id)))
+}
+
+/// The web host's page: its token, its script, `attrs` on its main.
+fn host_page(pages: &Pages, title: &str, attrs: &str) -> Response {
     let html = format!(
         "<!doctype html>
 <html lang=\"en\">
@@ -61,14 +78,13 @@ pub fn page(pages: &Pages, agent: &str, call: &str) -> Response {
 <script src=\"/kit/views/web.js\" defer></script>
 </head>
 <body>
-<main id=\"bise-view\" data-agent=\"{}\" data-call=\"{}\"></main>
+<main id=\"bise-view\" {}></main>
 </body>
 </html>
 ",
         pages.token,
-        esc(agent),
-        esc(agent),
-        esc(call)
+        esc(title),
+        attrs
     );
     let mut r = Response::page(200, html);
     r.csp = Cow::Owned(page_csp(pages.port));
@@ -83,12 +99,16 @@ fn parse(body: &[u8]) -> Result<(String, Value), String> {
         return Err(format!("not a view method: {method}"));
     }
     let params = v.get("params").cloned().unwrap_or(Value::Null);
-    let agent = params.get("agent").and_then(Value::as_str).unwrap_or("");
-    let call = params.get("call").and_then(Value::as_str).unwrap_or("");
-    if !valid_agent(agent) || !call_ok(call) {
-        return Err("params need an agent and a call".into());
+    // a document's open: an artifact only (the web host has no ~/bise ids)
+    if method == "view/open" {
+        let artifact = params.get("target").and_then(|t| t.get("kind")).and_then(Value::as_str) == Some("artifact");
+        return if artifact { Ok((method.to_string(), params)) } else { Err("a web host opens an artifact".into()) };
     }
-    Ok((method.to_string(), params))
+    match crate::view_call::Key::of(&params) {
+        Ok(crate::view_call::Key::Call(p)) if valid_agent(&p.agent) => Ok((method.to_string(), params)),
+        Ok(crate::view_call::Key::Doc(_)) => Ok((method.to_string(), params)),
+        _ => Err("params need an agent and a call, or a doc".into()),
+    }
 }
 
 /// The answer's body: `{result}` or `{error}`.
@@ -141,7 +161,19 @@ mod tests {
         let ok = parse(br#"{"method":"view/call","params":{"agent":"t1","call":"1-2","method":"tools/call","params":{}}}"#).unwrap();
         assert_eq!(ok.0, "view/call");
         assert_eq!(ok.1["method"], "tools/call");
-        for bad in [&b"x"[..], br#"{"method":"plugin/views","params":{"agent":"t1","call":"1-2"}}"#, br#"{"method":"view/call","params":{"agent":"t1"}}"#, br#"{"method":"view/call","params":{"agent":"../x","call":"1-2"}}"#] {
+        let doc = parse(br#"{"method":"view/call","params":{"doc":"0123456789abcdef0123456789abcdef","method":"tools/call","params":{}}}"#).unwrap();
+        assert_eq!(doc.0, "view/call");
+        assert!(parse(br#"{"method":"view/open","params":{"target":{"kind":"artifact","id":"q3"}}}"#).is_ok());
+        assert!(parse(br#"{"method":"view/close","params":{"doc":"0123456789abcdef0123456789abcdef"}}"#).is_ok());
+        for bad in [
+            &b"x"[..],
+            br#"{"method":"plugin/views","params":{"agent":"t1","call":"1-2"}}"#,
+            br#"{"method":"view/call","params":{"agent":"t1"}}"#,
+            br#"{"method":"view/call","params":{"agent":"../x","call":"1-2"}}"#,
+            br#"{"method":"view/call","params":{"agent":"t1","call":"1-2","doc":"0123456789abcdef0123456789abcdef"}}"#,
+            br#"{"method":"view/open","params":{"target":{"kind":"entry","id":"e:1"}}}"#,
+            br#"{"method":"view/open","params":{"target":"/etc/passwd"}}"#,
+        ] {
             assert!(parse(bad).is_err(), "{}", String::from_utf8_lossy(bad));
         }
     }

@@ -85,6 +85,96 @@ pub struct ViewCallResult(#[cfg_attr(feature = "ts", ts(type = "Record<string, u
 #[serde(transparent)]
 pub struct PluginViewsResult(#[cfg_attr(feature = "ts", ts(type = "{ views: Array<Record<string, unknown>> }"))] pub Value);
 
+/// The opener `view/open` may be asked for (Open with's pick); the hub
+/// checks it is a candidate for the target now, an off plugin's refused.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(deny_unknown_fields)]
+pub struct OpenWith {
+    pub plugin: String,
+    pub tool: String,
+}
+
+/// What a document view knows of its document (docs/plugin-apps.md A4,
+/// A9; the host context's `document`, C7): one type, built by one fn in
+/// the hub from the target and the view's grants. A9's notes-granted
+/// facts (who made it, its activity, where it went, its watch, his taste)
+/// join this type when the pages app is built (apps-sites, apps-lead
+/// m_61568).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct DocumentFacts {
+    /// its file's name (`plan.xlsx`)
+    pub name: String,
+    /// the type's name the matcher gave (`Excel workbook`)
+    #[serde(rename = "type")]
+    pub type_title: String,
+    /// the artifact's version opened; none: a file of `~/bise`
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub version: Option<u64>,
+    pub size: u64,
+    /// a save would be taken: the `write` grant, and the newest version
+    pub writable: bool,
+    /// the artifact's newest version (the "there's a newer version" line)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub latest: Option<u64>,
+    /// every version kept, oldest first
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub versions: Vec<DocVersion>,
+}
+
+/// One version of a document (its number, when it was made).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct DocVersion {
+    pub n: u64,
+    pub at_ms: u64,
+}
+
+/// The app a document opened in (the tab head's facts line).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct OpenedWith {
+    pub plugin: String,
+    pub tool: String,
+    /// the app's title (`Sheets`)
+    pub app: String,
+}
+
+/// A document opened in a plugin's view: the view's resource as
+/// `view/resource` answers it, its session (`doc`: every later method of
+/// that view carries it), its file's handle, its facts and its app.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct DocView {
+    pub doc: String,
+    pub handle: String,
+    pub document: DocumentFacts,
+    pub opener: OpenedWith,
+    #[serde(flatten)]
+    pub resource: ViewResource,
+}
+
+/// `view/open`'s answer (A4): the document in its app's view, or one of
+/// bise's own types not migrated yet, framed on today's path (a BUILTIN
+/// opener, A3).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ViewOpened {
+    /// boxed: a frame's answer stays small (clippy's large_enum_variant)
+    View(Box<DocView>),
+    Frame {
+        frame: String,
+    },
+    /// a kind this version doesn't know (a newer hub)
+    #[serde(other)]
+    #[cfg_attr(feature = "ts", ts(skip))]
+    Unknown,
+}
+
 /// Why the hub refused a view's request (C5).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ViewError {

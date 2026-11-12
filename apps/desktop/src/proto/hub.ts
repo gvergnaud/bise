@@ -5,11 +5,13 @@
 import type { OpenWhat } from './app_rows';
 import type { FnContext } from './context';
 import type { DiffFile, DiffResult, Guide, GuideState, GuideTarget } from './diff';
+import type { OpenTarget } from './files';
 import type { InboxRecord, StateFilter } from './inbox';
 import type { BodyOf, Completion, CompletionAsk, LogItem } from './log';
 import type { BranchRow, ReleaseEv, UpdateEv, VersionItem } from './ops';
 import type { Part } from './parts';
 import type { Agent, ApprovalMode, ApprovalRule, ArchivedAgent, Artifact, ArtifactMoved, BiseUpdate, Card, CheckerKind, Feature, FlowMode, Folder, FolderOp, Growth, LibraryProject, Merged, Model, Page, Place, Pr, PrDetail, PrErr, Proc, Pulse, ReportKind, ScheduledTask, SwitchRow, UsageRow, Worktree } from './rows';
+import type { OpenWith } from './rpc';
 import type { Entry, FindHit } from './thread';
 
 export type JobState = "running" | "done" | "failed";
@@ -274,7 +276,7 @@ folder?: string | null, } | { "cmd": "artifacts_move", project: string, ids: Arr
  * the undo slot is the caller's (the desktop core's move across
  * projects records it whole): the hub leaves it
  */
-keep_undo?: boolean, } | { "cmd": "artifacts_folders", project: string, op: FolderOp, } | { "cmd": "artifacts_library", project: string, } | { "cmd": "focus", project: string, focus: string, } | { "cmd": "versions", project: string, } | { "cmd": "version_info", project: string, } | { "cmd": "version_switch", project: string, to: string, } | { "cmd": "version_rollback", project: string, } | { "cmd": "version_restart", project: string, to?: string | null, } | { "cmd": "version_update", project: string, } | { "cmd": "bise_update", project: string, } | { "cmd": "release_plan", project: string, dry?: boolean, } | { "cmd": "release_run", project: string, tag: string, commit: string, dry?: boolean, } | { "cmd": "stop_hub", project: string, keep_agents?: boolean, } | { "cmd": "page_voice", project: string, page: string, phase: string, text?: string, } | { "cmd": "view_resource", project: string, agent: string, call: string, } | { "cmd": "view_call", project: string, agent?: string, call?: string, doc?: string | null, method: string, params: Record<string, unknown>, } | { "cmd": "view_message", project: string, agent: string, call: string, content: Array<Record<string, unknown>>, gesture_ms?: number | null, } | { "cmd": "view_context", project: string, agent?: string, call?: string, doc?: string | null, content: Array<Record<string, unknown>>, } | { "cmd": "plugin_views", project: string, plugin: string, } | { "cmd": "view_close", project: string, doc: string, } | { "cmd": "view_notes", project: string, doc: string, };
+keep_undo?: boolean, } | { "cmd": "artifacts_folders", project: string, op: FolderOp, } | { "cmd": "artifacts_library", project: string, } | { "cmd": "focus", project: string, focus: string, } | { "cmd": "versions", project: string, } | { "cmd": "version_info", project: string, } | { "cmd": "version_switch", project: string, to: string, } | { "cmd": "version_rollback", project: string, } | { "cmd": "version_restart", project: string, to?: string | null, } | { "cmd": "version_update", project: string, } | { "cmd": "bise_update", project: string, } | { "cmd": "release_plan", project: string, dry?: boolean, } | { "cmd": "release_run", project: string, tag: string, commit: string, dry?: boolean, } | { "cmd": "stop_hub", project: string, keep_agents?: boolean, } | { "cmd": "page_voice", project: string, page: string, phase: string, text?: string, } | { "cmd": "view_resource", project: string, agent: string, call: string, } | { "cmd": "view_call", project: string, agent?: string, call?: string, doc?: string | null, method: string, params: Record<string, unknown>, } | { "cmd": "view_message", project: string, agent: string, call: string, content: Array<Record<string, unknown>>, gesture_ms?: number | null, } | { "cmd": "view_context", project: string, agent?: string, call?: string, doc?: string | null, content: Array<Record<string, unknown>>, } | { "cmd": "plugin_views", project: string, plugin: string, } | { "cmd": "view_close", project: string, doc: string, } | { "cmd": "view_notes", project: string, doc: string, } | { "cmd": "view_open", project: string, target: OpenTarget, opener?: OpenWith | null, };
 
 /**
  * draft: the kind of an [`HubEv::Error`], one enum for every typed

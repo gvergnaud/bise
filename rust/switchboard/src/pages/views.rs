@@ -116,6 +116,41 @@ pub fn hash(plugin: &str, server: &str, uri: &str) -> String {
     h.finalize()[..8].iter().map(|b| format!("{b:02x}")).collect()
 }
 
+/// A document's key in its view's origin (docs/plugin-apps.md A5,
+/// `isolate: "document"`): an artifact by its project and id, a `~/bise`
+/// entry by its id; never a version (a site's versions share one storage).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DocKey {
+    Artifact { project: String, id: String },
+    Entry(String),
+}
+
+impl DocKey {
+    fn text(&self) -> String {
+        match self {
+            DocKey::Artifact { project, id } => format!("artifact:{project}/{id}"),
+            DocKey::Entry(id) => format!("entry:{id}"),
+        }
+    }
+}
+
+/// The one hash input of a view's origin (A5, architect m_60421): the
+/// view, and the document for a view that isolates its documents; none:
+/// [`hash`] as every view had it.
+pub fn origin_key(plugin: &str, server: &str, uri: &str, doc: Option<&DocKey>) -> String {
+    match doc {
+        None => hash(plugin, server, uri),
+        Some(d) => {
+            let mut h = Sha256::new();
+            for part in [plugin, server, uri, &d.text()] {
+                h.update(part.as_bytes());
+                h.update([0]);
+            }
+            h.finalize()[..8].iter().map(|b| format!("{b:02x}")).collect()
+        }
+    }
+}
+
 /// A view's origin on the pages server of `port`.
 pub fn origin(plugin: &str, server: &str, uri: &str, port: u16) -> String {
     view_rules::origin_of(&hash(plugin, server, uri), port)
@@ -368,6 +403,22 @@ mod tests {
             let got = host.zip(port).and_then(|(h, p)| view_host(h, p)).is_some();
             assert_eq!(got, c["view"].as_bool().unwrap(), "{o}");
         }
+    }
+
+    /// isolate: "document": one origin per document, never per version,
+    /// and the same artifact id in two projects is two origins (m_60439).
+    #[test]
+    fn a_document_gets_its_own_origin_when_its_view_isolates() {
+        let v = ("sites", "~views", "ui://sites/views/site");
+        let a = |p: &str, id: &str| DocKey::Artifact { project: p.into(), id: id.into() };
+        assert_eq!(origin_key(v.0, v.1, v.2, None), hash(v.0, v.1, v.2), "a view's own origin as before");
+        let one = origin_key(v.0, v.1, v.2, Some(&a("acme", "site")));
+        assert_ne!(one, hash(v.0, v.1, v.2));
+        assert_eq!(one, origin_key(v.0, v.1, v.2, Some(&a("acme", "site"))), "stable across opens and versions");
+        assert_ne!(one, origin_key(v.0, v.1, v.2, Some(&a("other", "site"))), "another project");
+        assert_ne!(one, origin_key(v.0, v.1, v.2, Some(&a("acme", "site2"))));
+        assert_ne!(one, origin_key(v.0, v.1, v.2, Some(&DocKey::Entry("site".into()))));
+        assert_eq!(one.len(), 16);
     }
 
     #[test]

@@ -832,6 +832,14 @@ fn the_web_host_serves_its_page_and_refuses_a_browsers_message() {
     for bad in ["/v/t1/x", "/v/..%2F/1-2", "/v/t1/1-2-3", "/v/t1"] {
         assert_eq!(get(&p, bad).status, 404, "{bad}");
     }
+    // a document in his browser (A7's `O`): the same page, opening an artifact
+    let doc = get(&p, "/d/q3-budget");
+    assert_eq!((doc.status, doc.csp.as_ref()), (200, super::super::view_web::page_csp(p.port).as_str()));
+    let t = text(&doc);
+    assert!(t.contains("<main id=\"bise-view\" data-artifact=\"q3-budget\">") && t.contains("/kit/views/web.js") && t.contains(&p.token), "{t}");
+    for bad in ["/d/..%2Fx", "/d/a b", "/d/", "/d/x/y"] {
+        assert_eq!(get(&p, bad).status, 404, "{bad}");
+    }
     let (tok, o) = (p.token.clone(), format!("http://127.0.0.1:{}", p.port));
     let msg = json!({"method": "view/message", "params": {"agent": "t1", "call": "1-2", "content": [{"type": "text", "text": "yes do it"}]}});
     assert_eq!(post(&p, "/api/view", None, Some(&o), msg.clone()).status, 403, "no token");

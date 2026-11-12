@@ -288,6 +288,10 @@ pub fn route(pages: &Pages, req: &Request) -> Response {
         [""] => Response::html(home(pages)),
         // a view in his browser (view_web.rs, C9)
         ["v", agent, call] => super::view_web::page(pages, agent, call),
+        // a document in its app in his browser (view_web.rs, A7's `O`)
+        ["d", id] => super::view_web::doc_page(pages, id),
+        // a plugin app's icon, the rows' Opener.icon (icon.rs, A1)
+        [seg, plugin] if format!("/{seg}/") == bend_plugins::opens::ICON_ROUTE => super::icon::serve(pages.icon_of(plugin), req.header("if-none-match")),
         ["kit", rest @ ..] if !rest.is_empty() => kit_file(pages, &rest.join("/")),
         ["a", id, v, rest @ ..] if valid_id(id) => artifact_file(pages, id, v, rest),
         ["p", id] if valid_id(id) => page(pages, id, None, false),
