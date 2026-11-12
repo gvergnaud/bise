@@ -69,7 +69,8 @@ def keep_old_root(saved):
 
 def holds_bundle(cmd, app):
     """Whether a process (its `ps` command line) holds the bundle `app`: it runs from it, and it is
-    not the browsers' native host, `<packed bise> computer-use chrome-host chrome-extension://…`.
+    not the browsers' native host, `<packed bise> computer-use chrome-host chrome-extension://…`,
+    nor the computer-use broker, `<packed bise> computer-use broker [args]`.
     The host is exempt: a stateless relay (rust/computer-use/src/host.rs: frames to the broker's
     socket; the broker is its own process, outside the bundle) that the browser starts through
     ~/.bise/bin/bise-chrome-host and starts again within 2 s when killed, so no swap could wait it
@@ -79,8 +80,13 @@ def holds_bundle(cmd, app):
     contents = app.rstrip("/") + "/Contents/"
     if not cmd.startswith(contents):
         return False
-    host = os.path.join(contents, "Resources", "bin", "bise") + " computer-use chrome-host chrome-extension://"
-    return not cmd.startswith(host)
+    bise = os.path.join(contents, "Resources", "bin", "bise")
+    host = bise + " computer-use chrome-host chrome-extension://"
+    # the computer-use broker too (keep-current m_61362): a long-lived launchd child that runs from
+    # the bundle and refused tonight's swap. Renamed under it, it keeps its old inode and serves
+    # until it exits; the next start (the host's spawn_broker, same path) runs the new bundle's
+    broker = bise + " computer-use broker"
+    return not (cmd.startswith(host) or cmd == broker or cmd.startswith(broker + " "))
 
 
 def not_swapped(staged, live, procs, most=6):

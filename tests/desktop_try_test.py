@@ -136,9 +136,11 @@ def pure():
         app + "/Contents/MacOS/bise try", app + "/Contents/Frameworks/bise try Helper.app/Contents/MacOS/bise try Helper --type=gpu",
         bin_ + " core --desktop", bin_ + " daemon --repo /r", bin_ + " computer-use chrome-host chrome-extension://bogffepmbkbmbfejcadaipgphgkocgob/",
         bin_ + " computer-use chrome-host", "/h/other.app/Contents/Resources/bin/bise computer-use chrome-host chrome-extension://x/",
-        "/h/.local/share/bise/versions/root-x/bise computer-use broker", "/h/dist/bise try.app.old/Contents/MacOS/bise try")}
-    check([c for c, h in held.items() if h] == list(held)[:4] + [bin_ + " computer-use chrome-host"],
-          "only the app's own processes hold it; the browsers' host (its exact argv) never: %s" % held)
+        "/h/.local/share/bise/versions/root-x/bise computer-use broker", "/h/dist/bise try.app.old/Contents/MacOS/bise try",
+        # the broker from the bundle, a long-lived launchd child (keep-current m_61362): never holds it
+        bin_ + " computer-use broker", bin_ + " computer-use broker --idle-exit 600", bin_ + " computer-use brokerx")}
+    check([c for c, h in held.items() if h] == list(held)[:4] + [bin_ + " computer-use chrome-host", bin_ + " computer-use brokerx"],
+          "only the app's own processes hold it; the browsers' host and the broker (their argv) never: %s" % held)
     sc = T.build_script(p, "/h/sign")
     order = [sc.index(x) for x in ("cargo build -p bend-harness", "bins.sh repl-live repl-scripted sb-core", "native/mac/build.sh",
                                    "pnpm install --frozen-lockfile", "pnpm build", "pnpm dist")]
