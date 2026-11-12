@@ -25,8 +25,6 @@ mod art;
 mod art_folders;
 mod art_rows;
 mod assemble;
-#[cfg(test)]
-mod boot_bench_tests;
 mod attach;
 mod boot;
 mod capsule;
@@ -2018,3 +2016,6 @@ fn claim(paths: &Paths, app_root: &Path) -> std::io::Result<Option<Claimed>> {
 #[cfg(test)]
 #[path = "daemon_tests.rs"]
 mod tests;
+// at the end: the source scans read daemon.rs up to its first cfg(test)
+#[cfg(test)]
+mod boot_bench_tests;
