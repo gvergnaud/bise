@@ -53,6 +53,7 @@ pub const METHODS: &[MethodRow] = &[
     m("thread/unsubscribe", "unsubscribe", None),
     m("thread/page", "page", Some("thread")),
     m("thread/find", "find", Some("thread_hits")),
+    m("thread/marks", "marks", Some("thread_marks")),
     m("turn/send", "send", None),
     m("turn/interrupt", "stop", None),
     m("card/answer", "answer", None),
@@ -119,6 +120,9 @@ pub const METHODS: &[MethodRow] = &[
     // artifacts in folders (docs/artifacts.md, "Folders")
     m("artifacts/move", "artifacts_move", Some("artifacts_moved")),
     m("artifacts/folders", "artifacts_folders", Some("folders")),
+    // his keep and his opens (artifacts_marks; page artifacts-signal)
+    m("artifacts/keep", "artifacts_keep", None),
+    m("artifacts/opened", "artifacts_opened", None),
     m("artifacts/library", "artifacts_library", Some("library")),
     m("branches/list", "branches", Some("branches")),
     m("client/focus", "focus", None),

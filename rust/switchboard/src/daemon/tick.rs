@@ -104,6 +104,17 @@ pub(super) const JOBS: &[Job] = &[
     // a restart, which this clock's memory cannot (one stat a Tick)
     Job { name: "images", every: Every::Tick, first: First::Now, run: |s, _| s.image_care() },
     Job { name: "library", every: Every::Tick, first: First::Now, run: |s, _| s.library_watch() },
+    // the store's one-shot backfill at the first Tick, then his opens gathered
+    // since the last write (daemon/art.rs): one write a second at most
+    Job {
+        name: "artifact marks",
+        every: Every::Ms(1_000),
+        first: First::Now,
+        run: |s, _| {
+            s.art_backfill_once();
+            s.art_opens_flush(true);
+        },
+    },
     Job { name: "disk", every: Every::Tick, first: First::Now, run: |s, _| s.disk_check() },
     // computer use (design §7.3): each stop, one line in main's feed
     Job {

@@ -96,6 +96,8 @@
 {"cmd":"log_body","project":"acme-1a2b3c4d","agent":"perf","of":{"of":"block","slot":3,"req":41,"provider":"openai/gpt-5","raw":true,"row":4,"block":1}}
 {"cmd":"artifacts_move","project":"acme-1a2b3c4d","ids":["perf-notes","report-html"],"folder":"f-abcdefghij","to":"site","keep_undo":true}
 {"cmd":"artifacts_folders","project":"acme-1a2b3c4d","op":{"make":{"name":"pricing","parent":"f-abcdefghij"}}}
+{"cmd":"artifacts_keep","project":"acme-1a2b3c4d","ids":["pricing-page"],"keep":true}
+{"cmd":"artifacts_opened","project":"acme-1a2b3c4d","id":"pricing-page","v":3}
 {"cmd":"artifacts_library","project":"acme-1a2b3c4d"}
 {"cmd":"view_resource","project":"acme-1a2b3c4d","agent":"perf","call":"1730000000000-1"}
 {"cmd":"view_call","project":"acme-1a2b3c4d","agent":"perf","call":"1730000000000-1","method":"tools/call","params":{"name":"bump","arguments":{"by":1}}}
@@ -105,3 +107,4 @@
 {"cmd":"diff","project":"acme-1a2b3c4d","artifact":"cu-upload-diff","version":2,"req":7}
 {"cmd":"guide","project":"acme-1a2b3c4d","target":{"kind":"agent","name":"perf"}}
 {"cmd":"guide","project":"acme-1a2b3c4d","target":{"kind":"pr","url":"https://github.com/acme/app/pull/412"},"run":true}
+{"cmd":"marks","project":"acme-1a2b3c4d","agent":"perf","limit":20}

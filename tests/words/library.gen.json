@@ -54,6 +54,11 @@
     "one": null,
     "text": "show the archived ones · a"
   },
+  "library.back_for_you": {
+    "args": [],
+    "one": null,
+    "text": "← For you"
+  },
   "library.cancel": {
     "args": [],
     "one": null,
@@ -194,6 +199,30 @@
     "one": "in {n} folder",
     "text": "in {n} folders"
   },
+  "library.keep": {
+    "args": [],
+    "one": null,
+    "text": "Keep"
+  },
+  "library.kept_by": {
+    "args": [
+      "agent"
+    ],
+    "one": null,
+    "text": "kept by {agent}"
+  },
+  "library.kept_tip_agent": {
+    "args": [
+      "agent"
+    ],
+    "one": null,
+    "text": "{agent} kept it · Let go"
+  },
+  "library.kept_tip_you": {
+    "args": [],
+    "one": null,
+    "text": "you kept it · Let go"
+  },
   "library.key_back": {
     "args": [],
     "one": null,
@@ -278,6 +307,11 @@
     "args": [],
     "one": null,
     "text": "kinds"
+  },
+  "library.let_go": {
+    "args": [],
+    "one": null,
+    "text": "Let go"
   },
   "library.library_head": {
     "args": [],
@@ -581,6 +615,36 @@
     "args": [],
     "one": null,
     "text": "search artifacts"
+  },
+  "library.sect_agents": {
+    "args": [],
+    "one": null,
+    "text": "Between agents"
+  },
+  "library.sect_agents_tip": {
+    "args": [],
+    "one": null,
+    "text": "what agents trade: shots, gates, briefs. nothing is deleted"
+  },
+  "library.sect_done": {
+    "args": [],
+    "one": null,
+    "text": "Done"
+  },
+  "library.sect_done_tip": {
+    "args": [],
+    "one": null,
+    "text": "what ended with its task or its pull request. nothing is deleted"
+  },
+  "library.sect_kept": {
+    "args": [],
+    "one": null,
+    "text": "Kept"
+  },
+  "library.sect_open": {
+    "args": [],
+    "one": null,
+    "text": "Open work"
   },
   "library.sheet_all": {
     "args": [

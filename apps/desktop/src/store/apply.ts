@@ -21,6 +21,7 @@ import {
   takeKey,
   threadKey,
   type ThreadHits,
+  type ThreadMarks,
   type ToolOut,
   toolOutKey,
   type VersionsList,
@@ -57,6 +58,9 @@ export function applyTyped(s: Store, ev: Ev): void {
       return;
     case "thread_hits":
       s.put(`hits:${threadKey(ev.project, ev.agent)}`, { rid: ev.rid, hits: ev.hits, upto: ev.upto } satisfies ThreadHits);
+      return;
+    case "thread_marks":
+      s.put(`marks:${threadKey(ev.project, ev.agent)}`, { marks: ev.marks, upto: ev.upto } satisfies ThreadMarks);
       return;
     case "typing": {
       const key = threadKey(ev.project, ev.agent);

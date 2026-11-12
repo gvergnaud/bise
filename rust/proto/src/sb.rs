@@ -582,7 +582,16 @@ pub enum Artifact {
         /// the agent when the path is not there
         #[serde(default, skip_serializing_if = "Option::is_none")]
         folder: Option<String>,
+        /// `--for-you`: it is for the user (a draft that leaves, a
+        /// deliverable he asked for), not between agents
+        #[serde(default, skip_serializing_if = "crate::is_false")]
+        for_you: bool,
     },
+    /// `sb artifact keep <id>...`: kept, in his Kept section, the card
+    /// saying which agent kept it
+    Keep { ids: Vec<String> },
+    /// `sb artifact unkeep <id>...`: let go (never his own keep)
+    Unkeep { ids: Vec<String> },
     /// `sb artifact move <id>... <folder> | --unfiled`
     Move {
         ids: Vec<String>,

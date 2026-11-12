@@ -181,6 +181,69 @@ restarted), a dead tab. Now:
   starts again on open; another server on its port and a gone folder give
   a why-page and no start; the static copy opens once its folder is gone).
 
+### For him or between agents, kept, done (artifacts-keep; his pick on page artifacts-signal v3)
+
+The library opens on what is for him; what agents trade is one click
+away; nothing is deleted. Design signed by architect (m_60685), words
+by designer (m_60689). Pure rules in `artifacts_marks.rs` (laws in
+`artifacts_marks_tests.rs`), the store's side in `artifacts_keep.rs`.
+
+- **audience** (`you` | `agents`), a stored artifact's own fact in its
+  `meta.json`, set at the add (`artifacts_marks::audience_at_add`):
+  `--for-you`, his own add and a PR are `you`, the rest `agents`; a next
+  version keeps it, `--for-you` only raises it. A bise page is always
+  `you`.
+- **`<state>/artifacts/marks.json`** `{"v":1, "backfilled"?:1, "marks":
+  {"<id>": {"kept"?: {"by": "you"|"<agent>", "at_ms"}, "opened_ms"?,
+  "seen_v"?}}}`: one file for stored artifacts and pages alike (a
+  page's meta.json is the page store's), written only by the daemon's
+  thread, tmp + rename; unknown keys kept, a `v` > 1 never written over.
+  His keep wins: an agent's keep never writes over his, an agent's
+  unkeep never lets his go; he lets any keep go. `opened_ms` (his last
+  open) and `seen_v` (the version he last saw; plugin-apps' view/open
+  reads it, `Store::marks().seen_v(id)`) only move forward; his opens
+  are gathered and written at most once a second (the tick's `artifact
+  marks` job).
+- **done**, read at send time, never stored (`artifacts::join_sections`,
+  after the PR states are joined): its agent archived, the artifact
+  archived (his `sb artifact archive`, or the hub's at its PR's end), its
+  PR merged or closed; a page with something waiting on him (the page
+  rows' `waiting`/`asking`) stays open.
+- **section**, the hub's one decision (`artifacts_marks::section`):
+  kept → `kept` (whatever its audience), `agents` → `agents`, done →
+  `done`, else `open`. Clients read it, never re-decide it; inside a
+  section they order by `touched_ms` (newest version, his open, a note
+  on a page: the last), then id.
+- What moves a section, so the rows go again: a keep or an unkeep, an
+  add, an agent archived or back (`art_who_key`), an artifact archived
+  or back, a PR's state, a page's waiting items, his open.
+- **The backfill** (shim `artifacts-backfill`, tests/shims.txt), at the
+  hub's first tick, once per store (`backfilled`): each stored artifact
+  without an audience gets artifacts-audit's title rules
+  (`artifacts_marks::classify`); what is for him and outlives its task
+  (`evergreen`: learnings, changelog, a PRD, the architecture, a pitch,
+  a film…) is kept by its own agent. One log line with the counts. It
+  never touches an artifact that has an audience or a mark.
+
+Rows gain `audience`, `kept {by, at_ms}`, `done`, `section`,
+`opened_ms`, `seen_v`, `touched_ms` (all left out when empty: an older
+hub's row reads as open work). Hub methods: `artifacts/keep {project,
+ids, keep}` (his), `artifacts/opened {project, id, v?}` (the desktop's
+`openTab` of an artifact and its browser door, `artifacts/opened.ts`).
+`sb artifact add … --for-you`, `sb artifact keep|unkeep <id>...` (an
+agent's; words: `kept: <title> · its card says "kept by <agent>"; the
+user can let it go`, `<title> is kept by the user: only they can let it
+go`, `let go: <title> · it goes to Done when its task ends`).
+
+The gallery (desktop, `artifacts/sections.ts` pure, `SectionRows.tsx`,
+`KeptMark.tsx`): every place opens on For you, Kept then Open work under
+their heads (`Kept · 4`), with `Done · N ▸` and `Between agents · N ▸`
+under them; those open a flat list in place, newest touch first, with
+`← For you` over it, as a route step (`done/…`, `agents/…`). A search
+keeps every section. A card he kept shows ◆ in ink, an agent's ◆ in
+text-3 and its line says `kept by perf`; its menu has Keep / Let go as
+their own group.
+
 ### Archive
 
 `sb artifact archive <id>... | --agent <a> | --before <YYYY-MM-DD[THH:MM]>

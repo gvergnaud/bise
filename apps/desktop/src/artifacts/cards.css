@@ -91,3 +91,7 @@
 .art-card.sheet { padding-top: 0; }
 .art-card.sheet .art-card-pic { margin-right: 0; }
 .art-sheet-cp { display: block; margin-top: var(--card-room); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font: var(--t-11)/1.4 var(--font-mono); color: var(--c-text-3); }
+
+/* ◆ a kept card (KeptMark.tsx; designer m_60689): ink when he kept it, text-3 when an agent did */
+.art-kept { flex: none; font: var(--t-11) var(--font-ui); line-height: 18px; color: var(--c-text); }
+.art-kept.agent { color: var(--c-text-3); }

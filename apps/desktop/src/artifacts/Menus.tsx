@@ -29,7 +29,15 @@ export function MenuAnchor({ at, anchor }: { at: MenuAt; anchor: RefObject<HTMLS
 }
 
 /** A card's menu's actions. */
-export type CardAct = 'open' | 'look' | 'versions' | 'put' | 'copy' | 'finder' | 'move' | 'archive';
+export type CardAct = 'open' | 'look' | 'versions' | 'put' | 'copy' | 'finder' | 'move' | 'archive' | KeepAct;
+
+/** His Keep (◆, it never goes to Done) or Let go (sections.ts; page artifacts-signal v3). */
+export type KeepAct = 'keep' | 'let_go';
+
+/** The menu's keep group, its own (plugin-apps adds an Open with group beside it): Let go when every one picked is kept, else Keep. Pure. */
+export function keepRows(allKept: boolean): { id: KeepAct; name: string }[] {
+  return [allKept ? { id: 'let_go', name: library.let_go } : { id: 'keep', name: library.keep }];
+}
 
 /** The card menu's rows: what applies to it (a link has no Finder), its key at the right. Pure. */
 export function cardRows(o: { finder: boolean; several: number }): { id: CardAct; name: string; key: string }[] {
@@ -52,13 +60,23 @@ export function cardRows(o: { finder: boolean; several: number }): { id: CardAct
   return rows;
 }
 
-export function CardMenu({ at, finder, several, onAct, onClose, testId }: { at: MenuAt; finder: boolean; several: number; onAct: (a: CardAct) => void; onClose: () => void; testId: string }) {
+export function CardMenu({ at, finder, several, kept, onAct, onClose, testId }: {
+  at: MenuAt;
+  finder: boolean;
+  several: number;
+  /** every one it acts on is kept: its keep row says Let go */
+  kept: boolean;
+  onAct: (a: CardAct) => void;
+  onClose: () => void;
+  testId: string;
+}) {
   const anchor = useRef<HTMLSpanElement>(null);
   const rows: PickerRow[] = cardRows({ finder, several }).map((r) => ({ id: r.id, name: r.name, trailing: r.key, testId: `${testId}.${r.id}` }));
+  const keep: PickerRow[] = keepRows(kept).map((r) => ({ id: r.id, name: r.name, testId: `${testId}.${r.id}` }));
   return (
     <>
       <MenuAnchor at={at} anchor={anchor} />
-      <PickerPop anchor={anchor} align="start" groups={[{ id: 'card', rows }]} onClose={onClose}
+      <PickerPop anchor={anchor} align="start" groups={[{ id: 'card', rows }, { id: 'keep', rows: keep }]} onClose={onClose}
         onPick={(id) => { onClose(); onAct(id as CardAct); }} testId={testId} />
     </>
   );

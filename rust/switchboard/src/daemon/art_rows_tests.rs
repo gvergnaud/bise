@@ -68,7 +68,7 @@ fn a_key_change_with_1300_artifacts_answers_at_once() {
             "cwd": "/nowhere/ws", "versions": [{"v": 1, "at_ms": i, "target": format!("/nowhere/ws/f{i}.md")}]});
         std::fs::write(d.join("meta.json"), meta.to_string()).unwrap();
     }
-    let job = |now| ArtJob { state: state.clone(), workspace: "/nowhere/ws".into(), who: vec![], now };
+    let job = |now| ArtJob { state: state.clone(), workspace: "/nowhere/ws".into(), who: vec![], now, pages: None };
     let mut r = ArtRows::default();
     assert!(r.ask((1, 0, 0, 0)).1);
     let t = std::time::Instant::now();

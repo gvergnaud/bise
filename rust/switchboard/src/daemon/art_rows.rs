@@ -41,6 +41,9 @@ pub(super) struct ArtView {
     pub(super) stored: BTreeMap<String, Meta>,
     pub(super) new: usize,
     pub(super) seen_ms: u64,
+    /// The pages with something waiting on him (the page rows'
+    /// `waiting`/`asking`): they stay open work (artifacts::join_sections).
+    pub(super) waiting: std::collections::BTreeSet<String>,
 }
 
 /// An agent as `art_who` reads it, copied for the builder's thread.
@@ -58,6 +61,9 @@ pub(super) struct ArtJob {
     pub(super) workspace: String,
     pub(super) who: Vec<WhoRow>,
     pub(super) now: u64,
+    /// The page store, for which pages wait on him (its own memo; read
+    /// here, never on the loop).
+    pub(super) pages: Option<std::sync::Arc<crate::pages::Pages>>,
 }
 
 impl ArtJob {
@@ -78,6 +84,7 @@ impl ArtJob {
             new: store.new_count_from(&all, self.now),
             seen_ms: store.seen_ms(self.now),
             stored: stored.into_iter().map(|m| (m.id.clone(), m)).collect(),
+            waiting: self.pages.map(|p| p.list_rows().into_iter().filter(|r| r.waiting > 0 || r.asking).map(|r| r.id).collect()).unwrap_or_default(),
         }
     }
 }

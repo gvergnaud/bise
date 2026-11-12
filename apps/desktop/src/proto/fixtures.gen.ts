@@ -135,6 +135,7 @@ export const hub_ev: readonly HubEv[] = [
   {"ev":"guide","hash":"0b7e6a5f4c3d2e1f","model":"anthropic/claude-opus-5-5","project":"acme-1a2b3c4d","state":"needs_click","tokens":5200},
   {"cards":[{"agent":"main","id":924,"kind":"feature_try","options":[{"label":"try it","n":1},{"act":{"act":"open","artifact":"security-diff","review":{"kind":"branch","name":"security"}},"label":"show the diff","n":2},{"label":"not yet","n":3}],"place":"feature:security","project":"acme-1a2b3c4d","question":"security is ready to try","rank":1,"since_ms":1791100350000,"urgent":false}],"ev":"cards","project":"acme-1a2b3c4d"},
   {"ev":"guide","guide":{"overview":"the slow path caches its plan now; the hot loop reads the cache","parts":[{"area":"Planner","hunks":["3fa9c0d2e1"],"summary":"slow() keeps its plan in a cache keyed by the query","title":"Cache the plan once","weight":"critical"}],"rest":[]},"hash":"9f2c41d07a3be815","project":"acme-1a2b3c4d","state":"ready","target":{"kind":"pr","url":"https://github.com/acme/web/pull/412"}},
+  {"agent":"perf","ev":"thread_marks","marks":[{"at_ms":1700000000000,"pos":3,"text":"make the bench faster"},{"at_ms":1700000600000,"pos":40,"text":"and the cold one too"}],"project":"acme-1a2b3c4d","upto":41},
 ];
 
 /** rust/proto/fixtures/hub_cmd.jsonl */
@@ -237,6 +238,8 @@ export const hub_cmd: readonly HubCmd[] = [
   {"agent":"perf","cmd":"log_body","of":{"block":1,"of":"block","provider":"openai/gpt-5","raw":true,"req":41,"row":4,"slot":3},"project":"acme-1a2b3c4d"},
   {"cmd":"artifacts_move","folder":"f-abcdefghij","ids":["perf-notes","report-html"],"keep_undo":true,"project":"acme-1a2b3c4d","to":"site"},
   {"cmd":"artifacts_folders","op":{"make":{"name":"pricing","parent":"f-abcdefghij"}},"project":"acme-1a2b3c4d"},
+  {"cmd":"artifacts_keep","ids":["pricing-page"],"keep":true,"project":"acme-1a2b3c4d"},
+  {"cmd":"artifacts_opened","id":"pricing-page","project":"acme-1a2b3c4d","v":3},
   {"cmd":"artifacts_library","project":"acme-1a2b3c4d"},
   {"agent":"perf","call":"1730000000000-1","cmd":"view_resource","project":"acme-1a2b3c4d"},
   {"agent":"perf","call":"1730000000000-1","cmd":"view_call","method":"tools/call","params":{"arguments":{"by":1},"name":"bump"},"project":"acme-1a2b3c4d"},
@@ -246,6 +249,7 @@ export const hub_cmd: readonly HubCmd[] = [
   {"artifact":"cu-upload-diff","cmd":"diff","project":"acme-1a2b3c4d","req":7,"version":2},
   {"cmd":"guide","project":"acme-1a2b3c4d","target":{"kind":"agent","name":"perf"}},
   {"cmd":"guide","project":"acme-1a2b3c4d","run":true,"target":{"kind":"pr","url":"https://github.com/acme/app/pull/412"}},
+  {"agent":"perf","cmd":"marks","limit":20,"project":"acme-1a2b3c4d"},
 ];
 
 /** rust/proto/fixtures/core_ev.jsonl */

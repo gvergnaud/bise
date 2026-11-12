@@ -92,6 +92,30 @@ export const library = {
   archived_n: (a: { n: string | number }): string => String(a.n) + " archived",
   /** the same toggle's tip, with its key */
   archived_tip: "show the archived ones · a",
+  /** what he or an agent kept (◆): it never goes to Done */
+  sect_kept: "Kept",
+  /** what is for him and still at work: its task lives or its PR is open */
+  sect_open: "Open work",
+  /** what ended with its task or its PR (the quiet row, `Done · 199 ▸`) */
+  sect_done: "Done",
+  /** what agents trade (the quiet row, `Between agents · 1 234 ▸`) */
+  sect_agents: "Between agents",
+  /** the Done row's tip */
+  sect_done_tip: "what ended with its task or its pull request. nothing is deleted",
+  /** the Between agents row's tip */
+  sect_agents_tip: "what agents trade: shots, gates, briefs. nothing is deleted",
+  /** the back row over Done or Between agents (⌘← too) */
+  back_for_you: "← For you",
+  /** a card an agent kept: its line, `kept by perf` */
+  kept_by: (a: { agent: string | number }): string => "kept by " + String(a.agent),
+  /** the ◆ mark's tip on a card he kept */
+  kept_tip_you: "you kept it · Let go",
+  /** the ◆ mark's tip on a card an agent kept, `perf kept it · Let go` */
+  kept_tip_agent: (a: { agent: string | number }): string => String(a.agent) + " kept it · Let go",
+  /** a card's menu: keep it (◆, it never goes to Done) */
+  keep: "Keep",
+  /** a card's menu: let a kept one go */
+  let_go: "Let go",
   /** the kind filter of pull requests (pr-integration A) */
   kind_prs: "Pull requests",
   /** inside it, the PRs still at work: open and draft (the default) */

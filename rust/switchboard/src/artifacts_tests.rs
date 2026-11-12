@@ -717,3 +717,145 @@ fn law_rows_read_the_folder_through_the_library() {
     assert_eq!(rows_of(&state, "", &lib).len(), 2, "delete never deletes an artifact");
     assert_eq!(std::fs::read_to_string(state.join("artifacts/a-md/meta.json")).unwrap(), before);
 }
+
+// his pick on page artifacts-signal (artifacts_marks): audience, kept, opens, sections
+
+fn add_as(store: &Store, work: &Path, file: &str, title: &str, by: &str, for_you: bool, now: u64) -> Added {
+    std::fs::write(work.join(file), format!("{file}@{now}")).unwrap();
+    let a = Add { target: file.into(), title: Some(title.into()), agent: by.into(), by: by.into(), cwd: work.to_string_lossy().to_string(), for_you, ..Default::default() };
+    store.add(&a, now).unwrap()
+}
+
+fn marks_world(name: &str) -> (PathBuf, PathBuf, Store) {
+    let root = tmp(name);
+    let (state, work) = (root.join("state"), root.join("work"));
+    std::fs::create_dir_all(&work).unwrap();
+    let s = Store::new(&state);
+    (state, work, s)
+}
+
+fn sections(s: &Store, who: Who, waiting: &[&str]) -> BTreeMap<String, (String, bool)> {
+    let mut rows = s.rows(who, "/");
+    join_sections(&mut rows, &waiting.iter().map(|w| w.to_string()).collect());
+    rows.iter().map(|r| (r["id"].as_str().unwrap().to_string(), (r["section"].as_str().unwrap().to_string(), r["done"].as_bool().unwrap()))).collect()
+}
+
+#[test]
+fn law_an_add_sets_its_audience_and_for_you_only_raises_it() {
+    let (state, work, s) = marks_world("audience");
+    let shot = add_as(&s, &work, "a.png", "gate shots", "ui-review", false, 1);
+    assert_eq!(shot.meta.audience, Some(Audience::Agents));
+    let mail = add_as(&s, &work, "m.md", "mail to Benjamin", "writer", true, 2);
+    assert_eq!(mail.meta.audience, Some(Audience::You));
+    // its next version without --for-you stays for him; --for-you raises the shot
+    assert_eq!(add_as(&s, &work, "m.md", "mail to Benjamin", "writer", false, 3).meta.audience, Some(Audience::You));
+    assert_eq!(add_as(&s, &work, "a.png", "gate shots", "ui-review", true, 4).meta.audience, Some(Audience::You));
+    // his own add is for him; a page always
+    let his = add_as(&s, &work, "h.md", "his", "you", false, 5);
+    assert_eq!(his.meta.audience, Some(Audience::You));
+    page(&state, "plan", "the plan", &[(1, 6)], json!([]));
+    let rows = s.rows(&nobody, "/");
+    assert!(rows.iter().all(|r| r["audience"] == "you"), "{rows:?}");
+}
+
+#[test]
+fn law_a_keep_is_all_or_none_and_rows_say_who_kept_it() {
+    let (_state, work, s) = marks_world("keeprows");
+    add_as(&s, &work, "n.md", "learnings notebook", "learnings", true, 1);
+    let err = s.keep_t(&["learnings-notebook".into(), "nope".into()], artifacts_marks::Who::Agent("learnings"), true, 5).unwrap_err();
+    assert!(err.contains("no artifact nope"), "{err}");
+    assert!(s.marks().marks.is_empty(), "an unknown id keeps nothing");
+    s.keep_t(&["learnings-notebook".into()], artifacts_marks::Who::Agent("learnings"), true, 5).unwrap();
+    assert!(s.list_text("", None, false, 9).ends_with(" · ◆ kept by learnings"), "sb artifact list says who kept it");
+    // the row names the keeper by its name now (a renamed agent)
+    let renamed = |a: &str| (a == "learnings").then(|| ("notebook".to_string(), false));
+    let row = &s.rows(&renamed, "/")[0];
+    assert_eq!(row["kept"], json!({"by": "notebook", "at_ms": 5}));
+    assert_eq!(sections(&s, &renamed, &[])["learnings-notebook"].0, "kept");
+}
+
+#[test]
+fn law_his_opens_move_touched_and_seen_v_forward() {
+    let (_state, work, s) = marks_world("opens");
+    add_as(&s, &work, "d.md", "deck", "writer", true, 10);
+    assert!(s.opened(&[("deck".into(), 50, Some(1)), ("deck".into(), 40, None)]).unwrap());
+    let row = &s.rows(&nobody, "/")[0];
+    assert_eq!((row["opened_ms"].as_u64(), row["seen_v"].as_u64(), row["touched_ms"].as_u64()), (Some(50), Some(1), Some(50)));
+    assert!(!s.opened(&[("deck".into(), 20, Some(1))]).unwrap(), "an older open moves nothing");
+}
+
+#[test]
+fn law_each_end_moves_a_row_to_done_and_a_keep_holds_it() {
+    let (state, work, s) = marks_world("ends");
+    add_as(&s, &work, "a.md", "plan a", "task-a", true, 1);
+    add_as(&s, &work, "b.md", "plan b", "task-b", true, 2);
+    add_as(&s, &work, "c.png", "shots", "task-a", false, 3);
+    page(&state, "ask", "a page that asks", &[(1, 4)], json!([]));
+    let live = |a: &str| Some((a.to_string(), false));
+    let now = sections(&s, &live, &[]);
+    assert_eq!(now["plan-a"], ("open".into(), false));
+    assert_eq!(now["shots"].0, "agents");
+    // its task archived: done in the next rows; a page of an archived task that waits on him stays open
+    let a_gone = |a: &str| Some((a.to_string(), a == "task-a" || a == "ambient-pm"));
+    let now = sections(&s, &a_gone, &["ask"]);
+    assert_eq!(now["plan-a"], ("done".into(), true));
+    assert_eq!(now["plan-b"].0, "open");
+    assert_eq!(now["shots"].0, "agents", "between agents stays there, done or not");
+    assert_eq!(now["ask"], ("open".into(), false));
+    assert_eq!(sections(&s, &a_gone, &[])["ask"].0, "done");
+    // the artifact itself archived
+    s.archive(&archive::Pick { ids: vec!["plan-b".into()], ..Default::default() }, 9).unwrap();
+    assert_eq!(sections(&s, &live, &[])["plan-b"].0, "done");
+    // kept: never done
+    s.keep_t(&["plan-a".into()], artifacts_marks::Who::You, true, 9).unwrap();
+    assert_eq!(sections(&s, &a_gone, &[])["plan-a"].0, "kept");
+}
+
+#[test]
+fn law_a_merged_or_closed_pr_is_done() {
+    let (_state, work, s) = marks_world("prdone");
+    let a = Add { target: "https://github.com/o/r/pull/6".into(), agent: "perf".into(), by: "perf".into(), cwd: work.to_string_lossy().to_string(), ..Default::default() };
+    s.add(&a, 1).unwrap();
+    for (state, want) in [("open", "open"), ("merged", "done"), ("closed", "done")] {
+        let mut rows = s.rows(&nobody, "/");
+        rows[0]["pr"]["status"] = json!({"state": state});
+        join_sections(&mut rows, &Default::default());
+        assert_eq!(rows[0]["section"], want, "{state}");
+    }
+}
+
+#[test]
+fn law_the_backfill_runs_once_and_never_touches_what_has_its_fields() {
+    let (state, work, s) = marks_world("backfill");
+    // three artifacts from before the fields
+    for (file, title, by) in [("p.pptx", "bise-pitch-investisseurs.pptx", "pitch"), ("s.png", "agent view shot 3", "ui-review"), ("b.md", "brief: land-all", "fast-loop")] {
+        let m = add_as(&s, &work, file, title, by, false, 1).meta;
+        s.save(&Meta { audience: None, ..m }).unwrap();
+    }
+    // one already for him, and a page
+    add_as(&s, &work, "c.md", "changelog notes", "changelog", true, 2);
+    page(&state, "learnings", "learnings", &[(1, 3)], json!([]));
+    let n = s.backfill().unwrap().unwrap();
+    assert_eq!((n.you, n.agents), (3, 2));
+    let all: BTreeMap<String, Meta> = s.all().into_iter().map(|m| (m.id.clone(), m)).collect();
+    assert_eq!(all["bise-pitch-investisseurs-pptx"].audience, Some(Audience::You));
+    assert_eq!(all["agent-view-shot-3"].audience, Some(Audience::Agents));
+    // kept by their own agent: the pitch (for him, evergreen) and the page; never one that had its audience
+    let m = s.marks();
+    assert_eq!(m.kept("bise-pitch-investisseurs-pptx").map(|k| k.by.as_str()), Some("pitch"));
+    assert_eq!(m.kept("learnings").map(|k| k.by.as_str()), Some("ambient-pm"));
+    assert!(m.kept("changelog-notes").is_none(), "it had its audience: untouched");
+    assert_eq!(n.kept, 2);
+    // once: he lets everything go, the backfill never keeps it again
+    s.keep_t(&["learnings".into(), "bise-pitch-investisseurs-pptx".into()], artifacts_marks::Who::You, false, 9).unwrap();
+    assert_eq!(s.backfill().unwrap(), None);
+    assert!(s.marks().kept("learnings").is_none());
+}
+
+impl Store {
+    /// keep with the titles from the store's own list (the daemon reads them from its rows)
+    fn keep_t(&self, ids: &[String], who: artifacts_marks::Who, keep: bool, now: u64) -> Result<Vec<(String, String, artifacts_marks::Outcome)>, String> {
+        let all = self.all();
+        self.keep(ids, &|id: &str| all.iter().find(|m| m.id == id).map(|m| m.title.clone()), who, keep, now)
+    }
+}

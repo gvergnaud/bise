@@ -34,7 +34,7 @@ import { AddButton, AddDrop, useAddPlace } from './Drops';
 import { ArtifactGrid } from './Grid';
 import { StackSheet } from './Sheet';
 import { useGridKeys, type View } from './gridKeys';
-import { itemsOf, ownerOf, topOf, whenOf, type Card, type Place, type Stack } from './gallery';
+import { itemsOf, ownerOf, topOf, whenOf, type Card, type HeadOf, type Place, type Stack } from './gallery';
 import { Thumb } from './thumbs';
 import { keyOf, revealPathOf, splitArchived, type Item } from './model';
 import {
@@ -54,6 +54,9 @@ import { Toolbar } from './Toolbar';
 import { BigTile, FolderListRow, SmallTile } from './Tiles';
 import { cardDrag, FLASH_MS, TOAST_MS, useBrief, useDrop } from './drag';
 import { folderCmd, moveCmd, type FolderOp } from './ops';
+import { keepCmds } from './opened';
+import { itemsIn, sectionCounts, sectionPath, splitSectionPath, type SectionView } from './sections';
+import { BackRow, QuietRows, sectionHeads } from './SectionRows';
 import { useBannerGutter } from './hero/vignettes';
 import { RecentRow } from './Recent';
 import { LiveVignette } from './hero/Live';
@@ -100,7 +103,9 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
   const [now] = useState(() => Date.now());
   // the scope and the place are the route's (the title bar's path follows the place)
   const scope = project;
-  const at = atOfPath(atRoute);
+  // the section view is the route's too (sections.ts): Done and Between agents are history steps
+  const { view: sect, rest: placePath } = splitSectionPath(atRoute);
+  const at = atOfPath(placePath);
   const [q, setQ] = useState('');
   const [chip, setChip] = useState<ChipKind | null>(null);
   // the Pull requests filter's side: open & draft first, merged & closed one click away
@@ -150,6 +155,11 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
     go(scope, a);
   };
   const setScope = (p: string) => { go(p, at); };
+  // For you, Done or Between agents, in the same place (a history step: ⌘← goes back)
+  const setSect = (v: SectionView) => {
+    const path = sectionPath(v, atPath(atNow));
+    router.go(path === '' ? { screen: 'artifacts', project: scope } : { screen: 'artifacts', project: scope, at: path });
+  };
 
 
   const { live, archived } = splitArchived(all);
@@ -174,10 +184,18 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
   // requests filter's second side shows them (pr-integration A)
   const allScoped = eff === '' ? all : all.filter((it) => it.project === eff);
   const hereAll = searching ? searchItems(lib, allScoped, parsed.words) : itemsAt(lib, allScoped, atNow);
-  const anyPr = hereAll.some((it) => chipOf(it) === 'prs');
-  const chips0 = chipsOf(here);
+  // the Pull requests chip with no PR in it shows only under For you and a search (ui-review: never an
+  // empty 'Pull requests 0' over Done or Between agents)
+  const anyPr = (searching || sect === 'you') && hereAll.some((it) => chipOf(it) === 'prs');
+  // the place's items by section (sections.ts: the hub's section, ordered by last touch): For you
+  // is Kept then Open work, Done and Between agents one list each; a search keeps every section
+  const inView = itemsIn(here, searching ? 'all' : sect);
+  const chips0 = chipsOf(inView);
   const chips = anyPr && !chips0.some((c) => c.kind === 'prs') ? [...chips0, { kind: 'prs' as const, n: 0 }] : chips0;
-  const shown = chip === null ? here : chip === 'prs' ? prSideItems(hereAll, prSide) : here.filter((it) => chipOf(it) === chip);
+  const shown = chip === null ? inView : chip === 'prs' ? prSideItems(hereAll, prSide) : inView.filter((it) => chipOf(it) === chip);
+  // what each section holds with the kind chip on: the heads count what is shown, the quiet rows what is one click away
+  const sectN = sectionCounts(chip === null || chip === 'prs' ? here : here.filter((it) => chipOf(it) === chip));
+  const heads = searching || sect === 'you' ? sectionHeads(sectionCounts(shown)) : false;
   const byKey = new Map(base.map((it) => [keyOf(it), it]));
   const place = placeOf(lib, atNow, searching, shown);
   const curId = atNow.at === 'folder' ? atNow.id : null;
@@ -203,7 +221,7 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
   const { sel, setSel, ref, onKeyDown, cards, cols, cardOf } = useGridKeys({
     items: shown,
     view,
-    days: atNow.at !== 'recent',
+    days: heads,
     keepAs: `artifacts.sel:${project}`,
     onOpen: (k) => { openCard(k); },
     onKey: (e, k) => rowKey(e, k === null ? undefined : itemOfKey(k), { onOpen: openIt, onLook: look, onPut: putIt }) || screenKey(e, k),
@@ -366,6 +384,8 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
       case 'look': look(it); return;
       case 'put': for (const x of itemsOfKeys(keys)) putIt(x); return;
       case 'move': setOver({ k: 'move', keys, at: boxOf(key) }); return;
+      case 'keep':
+      case 'let_go': for (const c of keepCmds(itemsOfKeys(keys), act === 'keep')) store.command(c); return;
       default:
         // versions, copy, finder, archive: the card's own keys (List.tsx rowKey)
         setSel(key);
@@ -396,7 +416,7 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
   useLayoutEffect(() => { published.current = colBits; publishColumn(colBits); });
   useEffect(() => () => { retractColumn(published.current); }, []);
   const column = <FolderColumn {...colBits} testId="artifacts.col" />;
-  const grid = (items: readonly Card[], placeHere: Place, days: boolean, testId: string) => (
+  const grid = (items: readonly Card[], placeHere: Place, days: boolean | HeadOf, testId: string) => (
     <ArtifactGrid cards={items} cols={cols} view={view} now={now} place={placeHere} days={days} cursor={sel} picked={picked}
       onPick={onPick} onOpen={(c) => { openCard(c.key); }}
       onMenu={(key, p) => { setOver({ k: 'card', key, at: p }); }}
@@ -410,7 +430,7 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
   const current = atNow.at === 'folder' ? lib.byId.get(atNow.id) : undefined;
   // the toolbar above the list (his m_44961, designer's spec D): the kinds the place holds (all,
   // then each kind with its count), the project scope; the cards/list switch, the search ('/'), +
-  const kindsTotal = searching ? found.length : here.length;
+  const kindsTotal = inView.length;
   const toolbar = stack === null && (
     <Toolbar testId="artifacts.toolbar" lead={narrow ? fold : null}
       kinds={searching || chips.length > 1 ? [{ id: 'all', word: library.all_kinds, n: kindsTotal }, ...chips.map((c) => ({ id: c.kind, word: chipWord(c.kind), n: c.n }))] : null}
@@ -456,7 +476,7 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
       // a filter on the same list (designer m_45293): every match, under the same day heads as All
       return (
         <SearchResults q={searchWords} total={found.length} testId="artifacts.results">
-          {grid(cards, place, true, 'artifacts.grid')}
+          {grid(cards, place, heads, 'artifacts.grid')}
         </SearchResults>
       );
     }
@@ -464,12 +484,11 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
       const themes = lib.themes.filter((t) => eff === '' || (counts.get(t.id)?.n ?? 0) > 0);
       return (
         <>
-          {/* the 20 newest, whatever their folder (page art-recent): the scope and the kind chip apply */}
-          {/* what he pinned (app/pins.ts, his m_49100), above Recent: the scope and the kind chip apply */}
-          <RecentRow kind="pinned" items={pinnedOf(shown)} lib={lib} now={now} list={view === 'list'} onOpen={openIt} testId="artifacts.pinned" />
-          <RecentRow items={shown} lib={lib} now={now} list={view === 'list'} onOpen={openIt}
-            onAll={() => { setAt({ at: 'recent' }); }} testId="artifacts.recent" />
-          {themes.length > 0 && (
+          {/* what he pinned (app/pins.ts, his m_49100): the scope and the kind chip apply. No Recent strip:
+              For you's sections are newest first already and Recent is a place in the column (designer
+              m_61101); Done and Between agents are one flat list, nothing over them (ui-review) */}
+          {sect === 'you' && <RecentRow kind="pinned" items={pinnedOf(shown)} lib={lib} now={now} list={view === 'list'} onOpen={openIt} testId="artifacts.pinned" />}
+          {sect === 'you' && themes.length > 0 && (
             <>
               <GroupLabel tip={library.recent_first} testId="artifacts.sect.folders">{library.folders}</GroupLabel>
               {view === 'list' ? (
@@ -502,8 +521,8 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
               )}
             </>
           )}
-          {/* every one, newest first, under its day's head (designer m_45148: no 'Recent' label) */}
-          {grid(cards, place, true, 'artifacts.grid')}
+          {/* For you: Kept, then Open work, each under its head, newest touch first (sections.ts) */}
+          {grid(cards, place, heads, 'artifacts.grid')}
         </>
       );
     }
@@ -535,10 +554,13 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
             })}
           </div>
         )}
-        {grid(cards, place, atNow.at !== 'recent', 'artifacts.grid')}
+        {grid(cards, place, heads, 'artifacts.grid')}
       </>
     );
   })();
+  // over Done or Between agents: back to For you; under For you: those two, one click away
+  const backRow = stack === null && !searching && <BackRow view={sect} n={inView.length} onBack={() => { setSect('you'); }} testId="artifacts.back" />;
+  const quietRows = stack === null && !searching && sect === 'you' && !archivedOn && <QuietRows n={sectN} onGo={setSect} testId="artifacts.quiet" />;
 
   const head = searching || atNow.at === 'all' || stack !== null ? null : (
     // the place's name is the window's bar's (its crumb: 'artifacts › launch'), never a second time
@@ -591,7 +613,9 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
               </div>
             )}
             {stackHead ?? head}
+            {backRow}
             <AddDrop place={place_} testId="artifacts.drop">{body}</AddDrop>
+            {quietRows}
             {archivedRow}
           </div>
         </div>
@@ -624,6 +648,7 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
       )}
       {over?.k === 'card' && (
         <CardMenu at={over.at} several={picked.has(over.key) ? picked.size : 1} finder={(() => { const it = itemOfKey(over.key); return it !== undefined && revealPathOf(it.a) !== null; })()}
+          kept={itemsOfKeys(picked.has(over.key) ? [...picked] : [over.key]).every((x) => x.a.kept != null)}
           onAct={(a) => { doCard(over.key, a); }} onClose={() => { setOver((o) => (o?.k === 'card' ? null : o)); }} testId="artifacts.menu" />
       )}
       {over?.k === 'folder' && (

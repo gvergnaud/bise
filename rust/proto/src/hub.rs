@@ -111,6 +111,11 @@ pub enum HubEv {
     /// `rid` the find's own. Entries after `upto` the client matches itself
     /// as they come.
     ThreadHits { project: Project, agent: String, rid: u64, needle: String, hits: Vec<crate::thread::find::FindHit>, upto: Pos },
+    /// the answer to `marks` (`thread/marks`, msg-dots): his last
+    /// messages in the thread up to the line `upto`, oldest first, at most
+    /// the `limit` asked (`thread::marks`' rule). His messages after `upto`
+    /// the client adds itself as they come.
+    ThreadMarks { project: Project, agent: String, marks: Vec<crate::thread::marks::Mark>, upto: Pos },
     /// a subscribed thread's entry, live: a new pos appends, a known pos
     /// replaces (a tools entry growing, a card answered)
     Entry { project: Project, agent: String, entry: Box<Entry> },
@@ -615,7 +620,7 @@ pub enum HubEv {
 }
 
 impl HubEv {
-    pub const TAGS: &'static [&'static str] = &["welcome", "agents", "cards", "thread", "thread_hits", "entry", "typing", "partial", "artifacts", "artifacts_moved", "folders", "library", "scheduled", "worktrees", "processes", "proc_out", "merged", "features", "prs", "pr_acted", "pr_detail", "pr_check_log", "models", "tool_out", "queued_taken", "log", "completion", "log_body", "diff", "guide", "branches", "versions", "release", "update", "route", "route_done", "jobs", "job_end", "followed_end", "activity", "flow", "paused", "switch", "growth", "pulse", "bise_update", "usage", "pages", "page_changed", "card_open", "app_open", "inbox_history", "inbox_recorded", "focused", "approvals", "notice", "refused", "error"];
+    pub const TAGS: &'static [&'static str] = &["welcome", "agents", "cards", "thread", "thread_hits", "thread_marks", "entry", "typing", "partial", "artifacts", "artifacts_moved", "folders", "library", "scheduled", "worktrees", "processes", "proc_out", "merged", "features", "prs", "pr_acted", "pr_detail", "pr_check_log", "models", "tool_out", "queued_taken", "log", "completion", "log_body", "diff", "guide", "branches", "versions", "release", "update", "route", "route_done", "jobs", "job_end", "followed_end", "activity", "flow", "paused", "switch", "growth", "pulse", "bise_update", "usage", "pages", "page_changed", "card_open", "app_open", "inbox_history", "inbox_recorded", "focused", "approvals", "notice", "refused", "error"];
 
     pub fn decode(line: &str) -> Result<HubEv, String> {
         Self::from_value(parse(line)?)
@@ -749,6 +754,11 @@ pub enum HubCmd {
     /// transcript off its loop and answers `thread_hits`; a newer find of the
     /// same connection and agent stops an older one still running
     Find { project: Project, agent: String, needle: String, rid: u64 },
+    /// his last `limit` messages in a thread (`thread/marks`, msg-dots:
+    /// the desktop's ticks beside it), at most `thread::marks::MAX_MARKS`:
+    /// the hub reads its transcript back off its loop and answers
+    /// `thread_marks`
+    Marks { project: Project, agent: String, limit: u32 },
     /// his words to an agent (main included), as the TUI sends them, with
     /// how they go ([`SendOpts`]: mode, context, voice, via)
     Send {
@@ -1100,6 +1110,18 @@ pub enum HubCmd {
     },
     /// his change of the library's folders: `folders` answers
     ArtifactsFolders { project: Project, op: FolderOp },
+    /// his Keep (`keep`) or Let go of artifacts, whoever kept them
+    /// before (crate's artifacts_marks): `artifacts` comes again
+    ArtifactsKeep { project: Project, ids: Vec<String>, keep: bool },
+    /// he opened an artifact (its tab, its browser door), seeing version
+    /// `v` when the window knows it: its `opened_ms` and `seen_v` move
+    /// forward, `artifacts` comes again
+    ArtifactsOpened {
+        project: Project,
+        id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        v: Option<u64>,
+    },
     /// the other projects' artifacts, read once: `library` answers
     ArtifactsLibrary { project: Project },
     /// the TUI's focus moved to `focus` (an agent's name): the hub's
@@ -1214,7 +1236,7 @@ pub enum HubCmd {
 }
 
 impl HubCmd {
-    pub const TAGS: &'static [&'static str] = &["subscribe", "unsubscribe", "page", "find", "send", "answer", "close", "approvals", "remove_rule", "stop", "archive", "unarchive", "artifacts_seen", "tool_out", "log", "completion", "log_body", "queued_take", "queued_steer", "diff", "worktrees", "processes", "proc_out", "proc_follow", "proc_stop", "merged", "features", "prs", "pr_act", "pr_detail", "pr_check_log", "inbox_history", "scheduled", "scheduled_stop", "wake_stop", "models", "new", "rename", "model", "effort", "route_correct", "route_cancel", "follow", "slash", "guide", "branches", "scheduled_run", "artifacts_add", "artifacts_move", "artifacts_folders", "artifacts_library", "focus", "versions", "version_info", "version_switch", "version_rollback", "version_restart", "version_update", "bise_update", "release_plan", "release_run", "stop_hub", "page_voice", "usage", "pause", "resume", "view_resource", "view_call", "view_message", "view_context", "plugin_views", "app_open"];
+    pub const TAGS: &'static [&'static str] = &["subscribe", "unsubscribe", "page", "find", "marks", "send", "answer", "close", "approvals", "remove_rule", "stop", "archive", "unarchive", "artifacts_seen", "tool_out", "log", "completion", "log_body", "queued_take", "queued_steer", "diff", "worktrees", "processes", "proc_out", "proc_follow", "proc_stop", "merged", "features", "prs", "pr_act", "pr_detail", "pr_check_log", "inbox_history", "scheduled", "scheduled_stop", "wake_stop", "models", "new", "rename", "model", "effort", "route_correct", "route_cancel", "follow", "slash", "guide", "branches", "scheduled_run", "artifacts_add", "artifacts_move", "artifacts_folders", "artifacts_keep", "artifacts_opened", "artifacts_library", "focus", "versions", "version_info", "version_switch", "version_rollback", "version_restart", "version_update", "bise_update", "release_plan", "release_run", "stop_hub", "page_voice", "usage", "pause", "resume", "view_resource", "view_call", "view_message", "view_context", "plugin_views", "app_open"];
 
     pub fn decode(line: &str) -> Result<HubCmd, String> {
         Self::from_value(parse(line)?)
@@ -1247,6 +1269,7 @@ impl HubCmd {
             | HubCmd::Unsubscribe { project, .. }
             | HubCmd::Page { project, .. }
             | HubCmd::Find { project, .. }
+            | HubCmd::Marks { project, .. }
             | HubCmd::Send { project, .. }
             | HubCmd::Answer { project, .. }
             | HubCmd::Close { project, .. }
@@ -1290,6 +1313,8 @@ impl HubCmd {
             | HubCmd::ArtifactsAdd { project, .. }
             | HubCmd::ArtifactsMove { project, .. }
             | HubCmd::ArtifactsFolders { project, .. }
+            | HubCmd::ArtifactsKeep { project, .. }
+            | HubCmd::ArtifactsOpened { project, .. }
             | HubCmd::ArtifactsLibrary { project }
             | HubCmd::Focus { project, .. }
             | HubCmd::Versions { project }

@@ -376,11 +376,11 @@ struct Shell {
     /// Each agent's answer as it streams in (its `partial` lines, by
     /// name): memory only, never journaled (daemon/lines.rs).
     partials: BTreeMap<String, bise_proto::thread::lines::Partial>,
-    /// Each transcript's offset index (thread pages and `thread/find`,
-    /// daemon/tindex.rs): built by a worker the first time it is paged.
+    /// Each transcript's offset index (thread pages, `thread/find` and
+    /// `thread/marks`, daemon/tindex.rs): built by a worker the first time it is paged.
     tix: tindex::Indexes,
     /// Each connection's newest `thread/find` per agent: an older search
-    /// still running stops when it sees it moved (daemon/proto/find.rs).
+    /// still running stops when it sees it moved (daemon/proto/walk.rs).
     finds: BTreeMap<(ClientId, String), std::sync::Arc<std::sync::atomic::AtomicU64>>,
     /// Versions being built (`/version <commit>`), by revision.
     building: BTreeSet<String>,

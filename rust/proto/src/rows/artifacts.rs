@@ -92,6 +92,77 @@ pub struct Artifact {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub turn: Option<u64>,
+    // his pick on page artifacts-signal (the hub's artifacts_marks): who it
+    // is for, who kept it, whether its work is done, the section it reads in,
+    // his last open. Left out when empty: an older hub's row reads as open work
+    /// who it is for; none: an older hub (read as for him)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub audience: Option<ArtifactAudience>,
+    /// who kept it (◆): him, or an agent by its name now
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub kept: Option<ArtifactKept>,
+    /// its task archived, itself archived, or its PR merged or closed (a
+    /// page waiting on him never)
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub done: bool,
+    /// the section it reads in, the hub's one decision (clients never
+    /// re-decide it); none: an older hub (read as open work)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub section: Option<ArtifactSection>,
+    /// when he last opened it (ms)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub opened_ms: Option<u64>,
+    /// the version he last saw (plugin-apps' 'changed since he last looked')
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub seen_v: Option<u64>,
+    /// its last touch: its newest version, his last open, a note on it
+    /// (ms): a section's order, newest first
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub touched_ms: Option<u64>,
+}
+
+/// Who an artifact is for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum ArtifactAudience {
+    /// a bise page, a draft that leaves, what he asked for, his add, a PR
+    You,
+    /// what agents trade (shots, gates, briefs)
+    Agents,
+    /// a value this version doesn't know (a newer hub)
+    #[serde(other)]
+    Unknown,
+}
+
+/// The section of the library an artifact reads in: Kept ◆, Open work,
+/// Done, Between agents.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum ArtifactSection {
+    Kept,
+    Open,
+    Done,
+    Agents,
+    /// a section this version doesn't know (a newer hub)
+    #[serde(other)]
+    Unknown,
+}
+
+/// Who kept an artifact and when.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct ArtifactKept {
+    /// `you`, or the agent's name
+    pub by: String,
+    pub at_ms: u64,
 }
 
 /// A folder of the artifacts library (`bise_home::library`, one list for

@@ -50,6 +50,7 @@ import { entryKey } from './entry';
 import { thread } from '@/proto/words.gen';
 import { flashEntry, useAnswerReveal } from './useAnswerReveal';
 import { useFindGo } from './useFindGo';
+import { MsgDots } from './MsgDots';
 import { quoteSourcePos } from './quote';
 import { QUOTE_SOURCE_EVENT } from '@/composer/pm/AttachList';
 import { FindBar } from './FindBar';
@@ -359,6 +360,8 @@ export function ThreadScreen({ project, agent, bise = false, projectName, artifa
             it sat bottom-left at the column's edge) */}
         <div className="th-main">
           <Rows tkey={tkey} project={project} agent={agent} bise={bise} listRef={list} onReading={setReading} />
+          {/* his ticks in the column's left room: one per message of his, a click goes there (msg-dots) */}
+          <MsgDots tkey={tkey} project={project} agent={agent} listRef={list} />
           {/* main's empty thread: the empty home (composer/home, bise fait mac), on a project's welcome */}
           {agent === MAIN && me?.archived !== true && <HomeSlot tkey={tkey} project={project} composer={composer} bise={bise} />}
           {/* ⌘F: a compact bar over the list's top right (his m_25471) */}

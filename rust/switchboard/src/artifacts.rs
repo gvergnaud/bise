@@ -36,6 +36,7 @@
 //! writer, so there is no lock.
 
 use crate::artifacts_assets;
+use crate::artifacts_marks::{self, Audience};
 use crate::artifacts_turns::{self, Place, Rev, Sitting, Turn};
 use bise_proto::anchor::Anchor;
 use serde::{Deserialize, Serialize};
@@ -135,9 +136,24 @@ pub struct Meta {
     /// is undone when the PR is reopened; his own archive never is.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub pr_ended: bool,
+    /// Who it is for (crate::artifacts_marks): set at its add, raised by
+    /// `--for-you`; none on a meta.json from before it (the backfill
+    /// writes it, `artifacts_keep.rs`). A page is always for him.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audience: Option<Audience>,
 }
 
 impl Meta {
+    /// Who it is for: a page always him; a stored one from before the
+    /// field (not backfilled yet) reads as the backfill would make it.
+    pub fn audience(&self) -> Audience {
+        match self.audience {
+            _ if self.by == "page" => Audience::You,
+            Some(a) => a,
+            None => artifacts_marks::classify(&self.title, &self.kind, &self.by),
+        }
+    }
+
     pub fn current(&self) -> Option<&Version> {
         self.versions.last()
     }
@@ -173,6 +189,9 @@ pub struct Add {
     /// diff: `<feature>-diff`); taken by another one, or none: from its
     /// title. A next version keeps its id.
     pub id: Option<String>,
+    /// `sb artifact add --for-you`: it is for him (crate::artifacts_marks);
+    /// a next version only raises its audience, never lowers it.
+    pub for_you: bool,
 }
 
 /// An add's folder: `Asked` (`--folder`) files it, a next version too;
@@ -240,6 +259,8 @@ struct PageNote {
     version: u64,
     #[serde(default = "draft")]
     status: String,
+    #[serde(default)]
+    at_ms: u64,
 }
 
 fn draft() -> String {
@@ -672,9 +693,11 @@ impl Store {
                         None => None,
                     },
                     pr_ended: false,
+                    audience: None,
                 }
             }
         };
+        meta.audience = Some(artifacts_marks::audience_at_add(meta.audience, &a.by, &kind, a.for_you));
         if let Some(Filed::Asked(f)) = &a.folder {
             meta.folder = Some(f.clone());
         }
@@ -870,6 +893,12 @@ impl Store {
         Ok(out)
     }
 
+    /// When his newest note on a page came (none: no note).
+    fn page_note_ms(&self, id: &str) -> Option<u64> {
+        let notes: Vec<PageNote> = read_json(&self.pages_dir().join(id).join("notes.json")).unwrap_or_default();
+        notes.iter().map(|n| n.at_ms).max()
+    }
+
     /// The open notes of a page, per version: (open, done).
     fn page_notes(&self, id: &str, v: u64) -> (usize, usize) {
         let notes: Vec<PageNote> = read_json(&self.pages_dir().join(id).join("notes.json")).unwrap_or_default();
@@ -889,16 +918,19 @@ impl Store {
     pub fn rows_from(&self, all: &[Meta], who: Who, workspace: &str) -> Vec<Value> {
         let put_away = self.archived();
         let canon = Canon::default();
-        all.iter().map(|m| self.row_with(m, who, workspace, put_away.get(&m.id).copied(), &canon)).collect()
+        let marks = self.marks();
+        all.iter().map(|m| self.row_with(m, who, workspace, put_away.get(&m.id).copied(), &canon, &marks)).collect()
     }
 
     /// `archived_at`: when the artifact itself was archived (`sb artifact
-    /// archive`), or None; `archived` is its agent's.
+    /// archive`), or None; `archived` is its agent's. Its marks
+    /// (artifacts_marks): who it is for, who kept it, his last open; its
+    /// `done` and `section` are joined at send time ([`join_sections`]).
     pub fn row(&self, m: &Meta, who: Who, workspace: &str, archived_at: Option<u64>) -> Value {
-        self.row_with(m, who, workspace, archived_at, &Canon::default())
+        self.row_with(m, who, workspace, archived_at, &Canon::default(), &self.marks())
     }
 
-    fn row_with(&self, m: &Meta, who: Who, workspace: &str, archived_at: Option<u64>, canon: &Canon) -> Value {
+    fn row_with(&self, m: &Meta, who: Who, workspace: &str, archived_at: Option<u64>, canon: &Canon, marks: &artifacts_marks::Marks) -> Value {
         let (agent, archived) = who(&m.agent).unwrap_or_else(|| (m.agent.clone(), false));
         let page = m.by == "page";
         let notes = |v: u64| -> String {
@@ -954,6 +986,13 @@ impl Store {
             // a local site bise serves again (artifacts_serve): the page
             // server's door, what every client opens; `target` stays the link
             "live": self.live_url(m),
+            // his pick on page artifacts-signal (artifacts_marks): who it is for,
+            // who kept it (an agent by its name now), his last open, its last touch
+            "audience": m.audience().word(),
+            "kept": marks.kept(&m.id).map(|k| json!({"by": who(&k.by).map_or_else(|| k.by.clone(), |(n, _)| n), "at_ms": k.at_ms})),
+            "opened_ms": marks.opened_ms(&m.id),
+            "seen_v": marks.seen_v(&m.id),
+            "touched_ms": artifacts_marks::touched(cur.at_ms, marks.opened_ms(&m.id), page.then(|| self.page_note_ms(&m.id)).flatten()),
         })
     }
 
@@ -1014,6 +1053,7 @@ impl Store {
     /// ones only with `archived` (else a last line counts them).
     pub fn list_text(&self, words: &str, agent: Option<&str>, archived: bool, now: u64) -> String {
         let put_away = self.archived();
+        let marks = self.marks();
         let all = self.all();
         let hidden = all.iter().filter(|m| put_away.contains_key(&m.id) != archived).count();
         let foot = if archived || hidden == 0 {
@@ -1041,8 +1081,10 @@ impl Store {
             .map(|m| {
                 let cur = m.current().cloned().unwrap_or_default();
                 let gone = !is_link(&cur.target) && !Path::new(&cur.target).exists();
+                // who kept it, for an agent deciding whether to keep or let go (architect m_60685)
+                let kept = marks.kept(&m.id).map(|k| format!(" · ◆ kept by {}", if k.his() { "the user" } else { k.by.as_str() })).unwrap_or_default();
                 format!(
-                    "[{}](artifact:{}) · {} · v{} · {} · {} ago · {}{}",
+                    "[{}](artifact:{}) · {} · v{} · {} · {} ago · {}{}{}",
                     m.title,
                     m.id,
                     m.kind,
@@ -1050,7 +1092,8 @@ impl Store {
                     m.agent,
                     crate::util::age(cur.at_ms, now),
                     cur.target,
-                    if gone { if cur.copy.is_some() { " · ▲ gone from disk · bise kept a copy" } else { " · ▲ gone from disk" } } else { "" }
+                    if gone { if cur.copy.is_some() { " · ▲ gone from disk · bise kept a copy" } else { " · ▲ gone from disk" } } else { "" },
+                    kept
                 )
             })
             .collect::<Vec<_>>()
@@ -1078,6 +1121,7 @@ fn page_meta(p: &PageMeta, base: Option<&str>) -> Meta {
         cwd: String::new(),
         folder: None,
         pr_ended: false,
+        audience: Some(Audience::You),
         versions: p
             .versions
             .iter()
@@ -1105,6 +1149,27 @@ pub fn join_pr_status(rows: &mut [Value], by_url: &BTreeMap<String, bise_proto::
     }
 }
 
+/// Each row's `done` and `section` (artifacts_marks), read from its other
+/// fields once the PR states are joined ([`join_pr_status`]): its agent
+/// archived, itself archived, its PR merged or closed; `waiting`: the
+/// pages with something waiting on him, which stay open work. The hub's
+/// one decision of the section; clients read it.
+pub fn join_sections(rows: &mut [Value], waiting: &std::collections::BTreeSet<String>) {
+    for r in rows.iter_mut() {
+        let pr_state = r["pr"]["status"]["state"].as_str();
+        let ending = artifacts_marks::Ending {
+            agent_archived: r["archived"].as_bool().unwrap_or(false),
+            archived: r["archived_at"].is_u64(),
+            pr_ended: matches!(pr_state, Some("merged" | "closed")),
+            waiting: r["by"] == "page" && r["id"].as_str().is_some_and(|id| waiting.contains(id)),
+        };
+        let audience = if r["audience"] == "agents" { Audience::Agents } else { Audience::You };
+        let done = artifacts_marks::done(ending);
+        r["done"] = json!(done);
+        r["section"] = json!(artifacts_marks::section(audience, r["kept"].is_object(), done).word());
+    }
+}
+
 /// The rows' `folder`, raw from their metas, as readers read it: the
 /// live library folder it resolves to (a merged one's target), else
 /// none (a deleted or unknown id: unfiled). The one join of the
@@ -1124,6 +1189,8 @@ pub fn rows_of(state: &Path, workspace: &str, lib: &bise_home::library::Library)
     let store = Store::new(state);
     let mut rows = store.rows(&|_: &str| None, workspace);
     resolve_folders(&mut rows, lib);
+    // read once, never watched: its PRs' states and its pages' waits are its hub's
+    join_sections(&mut rows, &std::collections::BTreeSet::new());
     rows
 }
 
@@ -1226,6 +1293,9 @@ pub fn added_text(a: &Added) -> String {
 
 #[path = "artifacts_archive.rs"]
 mod archive;
+#[path = "artifacts_keep.rs"]
+mod keep;
+pub use keep::Backfilled;
 pub use archive::{archived_text, parse_before, unarchived_text, Archived, Pick};
 
 #[cfg(test)]

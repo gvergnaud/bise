@@ -2,7 +2,7 @@
 // checked complete at compile time), the slices' list types, and the key and
 // compare helpers. Pure, no state. Split out of store.ts (pure move). Owner:
 // amb-core (the hub slices with amb-win).
-import type { AwayProject, CoreEv, FindHit, GuideTarget, HubEv, InboxRecord, Mode, Part, Pr, PickFile, PickFolder, BranchRow, Page, VersionItem } from '@/proto';
+import type { AwayProject, CoreEv, FindHit, GuideTarget, HubEv, InboxRecord, Mark, Mode, Part, Pr, PickFile, PickFolder, BranchRow, Page, VersionItem } from '@/proto';
 export type Ev = HubEv | CoreEv;
 export type EvOf<T extends Ev['ev']> = Extract<Ev, { ev: T }>;
 
@@ -13,6 +13,7 @@ export const TAGS = {
   cards: true,
   thread: true,
   thread_hits: true,
+  thread_marks: true,
   entry: true,
   typing: true,
   partial: true,
@@ -248,6 +249,15 @@ export interface Pending {
 export interface ThreadHits {
   readonly rid: number;
   readonly hits: readonly FindHit[] | null;
+  readonly upto: number;
+}
+
+/**
+ * The hub's answer to `thread/marks` (store.subscribeThread, msg-dots): his last messages in the
+ * thread up to line `upto`, oldest first; his messages after it come as live entries.
+ */
+export interface ThreadMarks {
+  readonly marks: readonly Mark[];
   readonly upto: number;
 }
 

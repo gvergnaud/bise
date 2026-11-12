@@ -9,6 +9,7 @@ import type { Artifact } from '@/proto';
 import { extOf } from '@/ds';
 import { library } from '@/proto/words_library.gen';
 import { dayOf, dayWords, kindOf, leaves, timeOf, type Item } from './model';
+import { keptByHim, sectionOf } from './sections';
 
 /** The turn that made an artifact's current version (art-store m_39731: its start, ms); none for his adds and old rows. */
 const turnOf = (a: Artifact): number | null => a.turn ?? null;
@@ -71,7 +72,8 @@ export function cardsOf(items: readonly Item[]): Card[] {
   const groupOf = (it: Item): string | null => {
     const turn = turnOf(it.a);
     if (turn === null) return null;
-    return `${it.project}\u0000${it.a.agent}\u0000${String(turn)}\u0000${splitTitle(it.a.title).head}`;
+    // a stack never spans two sections (sections.ts): a kept shot stays out of its turn's stack
+    return `${it.project}\u0000${it.a.agent}\u0000${String(turn)}\u0000${sectionOf(it.a)}\u0000${splitTitle(it.a.title).head}`;
   };
   for (const it of items) {
     const g = groupOf(it);
@@ -127,6 +129,8 @@ export const whoOf = (a: Artifact): string => (a.by === 'you' ? library.you : a.
 export function lineOf(c: Card, place: Place, now: number): string {
   const top = topOf(c);
   const when = whenOf(atOf(c), now);
+  // an agent's keep says which agent (designer m_60689): 'kept by perf · 14:02'
+  if (top.a.kept != null && !keptByHim(top.a)) return `${library.kept_by({ agent: top.a.kept.by })} · ${when}`;
   const with_ = (what: string) => (what === '' ? when : `${what} · ${when}`);
   switch (place.kind) {
     case 'folder':
@@ -215,10 +219,14 @@ export type Row =
   | { readonly kind: 'day'; readonly key: string; readonly day: string; readonly title: string }
   | { readonly kind: 'cards'; readonly key: string; readonly cards: readonly Card[] };
 
-/** The rows: each day's title (when `days`), then its cards `cols` a row. Pure. */
-export function rowsOf(cards: readonly Card[], cols: number, now: number, days = true): Row[] {
+/** A group's head of a card: its key and title (the sections' 'Kept · 4', sections.ts headOf). */
+export type HeadOf = (c: Card) => { readonly key: string; readonly title: string };
+
+/** The rows: each group's title (each day's when `days`, or `days`' own heads), then its cards `cols` a row. Pure. */
+export function rowsOf(cards: readonly Card[], cols: number, now: number, days: boolean | HeadOf = true): Row[] {
   const out: Row[] = [];
   const per = Math.max(1, cols);
+  const headOf: HeadOf | null = typeof days === 'function' ? days : days ? (c) => ({ key: dayOf(atOf(c)), title: dayWords(atOf(c), now) }) : null;
   let run: Card[] = [];
   let day = '';
   const flush = () => {
@@ -229,11 +237,11 @@ export function rowsOf(cards: readonly Card[], cols: number, now: number, days =
     run = [];
   };
   for (const c of cards) {
-    const d = dayOf(atOf(c));
-    if (days && d !== day) {
+    const h = headOf?.(c);
+    if (h !== undefined && h.key !== day) {
       flush();
-      day = d;
-      out.push({ kind: 'day', key: `d:${d}`, day: d, title: dayWords(atOf(c), now) });
+      day = h.key;
+      out.push({ kind: 'day', key: `d:${h.key}`, day: h.key, title: h.title });
     }
     run.push(c);
   }

@@ -55,6 +55,13 @@ pub(super) struct Art {
     /// The open PR artifacts' links, newest first, by the store's
     /// generation (daemon/pr_arts.rs: the PRs the poller follows).
     pub(super) prs: std::cell::RefCell<Option<(u64, Vec<String>)>>,
+    /// His opens not written yet (id, at, version seen): marks.json is
+    /// written at most once a second ([`Daemon::art_opens_flush`]).
+    opens: Vec<(String, u64, Option<u64>)>,
+    opens_written_ms: u64,
+    /// The store's backfill was tried since the hub started
+    /// ([`Daemon::art_backfill_once`]).
+    backfill_tried: bool,
 }
 
 /// Where an agent works and what its changes are measured against.
@@ -191,6 +198,8 @@ impl Shell {
                     .map(|a| super::art_rows::WhoRow { name: a.name.clone(), dir: a.dir.clone(), aliases: a.aliases.clone(), archived: a.status() == crate::model::Status::Archived })
                     .collect(),
                 now,
+                // the pages waiting on him are read by the build, off the loop (hub-loop m_61273)
+                pages: self.pg.pages.clone(),
             };
             let tx = self.tx.clone();
             let spawned = std::thread::Builder::new().name("art-rows".into()).spawn(move || {
@@ -267,6 +276,9 @@ impl Shell {
         artifacts::resolve_folders(&mut rows, &lib);
         // each PR's status, the hub's row of it (a change re-sends the event)
         artifacts::join_pr_status(&mut rows, &self.hub.pr_rows_by_url(now_ms()));
+        // each row's done and section (artifacts_marks), once its PR's state is in;
+        // a page with something waiting on him stays open work (the set the build read off the loop)
+        artifacts::join_sections(&mut rows, &view.waiting);
         json!({
             "ev": "artifacts",
             "rows": rows,
@@ -396,7 +408,7 @@ impl Shell {
         use bise_proto::sb::Artifact;
         let store = self.art_store();
         match r {
-            Artifact::Add { target, cwd, title, kind, known_only, changed, folder } => {
+            Artifact::Add { target, cwd, title, kind, known_only, changed, folder, for_you } => {
                 let folder = match self.art_folder(from, folder.as_deref()) {
                     Ok(f) => f,
                     Err(e) => return json!({"ok": false, "error": e}),
@@ -415,6 +427,7 @@ impl Shell {
                     changed: changed.as_ref().and_then(bise_proto::office::Changed::of_value).map(|c| c.0),
                     folder,
                     id: None,
+                    for_you,
                 };
                 match store.add(&add, now_ms()) {
                     Ok(a) => {
@@ -440,6 +453,8 @@ impl Shell {
                 let agent = agent.filter(|a| !a.is_empty());
                 json!({"ok": true, "text": store.list_text(&words, agent.as_deref(), archived, now_ms())})
             }
+            Artifact::Keep { ids } => self.artifact_keep(from, &ids, true),
+            Artifact::Unkeep { ids } => self.artifact_keep(from, &ids, false),
             Artifact::Archive(p) => self.artifact_pick(true, p),
             Artifact::Unarchive(p) => self.artifact_pick(false, p),
             Artifact::Move { ids, folder } => self.artifact_move_cmd(from, &ids, folder.as_deref()),
@@ -448,6 +463,89 @@ impl Shell {
                 json!({"ok": true, "text": super::art_folders::folders_text(&lib, &store.all())})
             }
         }
+    }
+
+    /// `sb artifact keep|unkeep` (an agent's): kept in his Kept section
+    /// under its name, or let go; his own keep stands
+    /// (crate::artifacts_marks). One line per artifact.
+    fn artifact_keep(&mut self, from: &str, ids: &[String], keep: bool) -> Value {
+        let store = self.art_store();
+        let title = self.art_titles();
+        match store.keep(ids, &|id: &str| title.get(id).cloned(), crate::artifacts_marks::Who::Agent(from), keep, now_ms()) {
+            Ok(done) => {
+                let marks = store.marks();
+                let text = done
+                    .iter()
+                    .map(|(id, t, o)| crate::artifacts_marks::keep_text(t, from, keep, o, marks.kept(id).map(|k| k.by.as_str())))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                self.artifacts_refresh(false);
+                json!({"ok": true, "text": text})
+            }
+            Err(e) => json!({"ok": false, "error": e}),
+        }
+    }
+
+    /// `artifacts_keep` (his, from a window): kept or let go, whoever kept
+    /// it before; the list to every client.
+    pub(super) fn artifacts_keep_his(&mut self, ids: &[String], keep: bool) -> Result<(), String> {
+        let title = self.art_titles();
+        self.art_store().keep(ids, &|id: &str| title.get(id).cloned(), crate::artifacts_marks::Who::You, keep, now_ms())?;
+        self.artifacts_refresh(false);
+        Ok(())
+    }
+
+    /// Each artifact's title by id, from the last rows built (hub-loop's
+    /// rule: no store read on the loop); before the first build lands,
+    /// the store's own list (once, at a hub's start).
+    fn art_titles(&self) -> BTreeMap<String, String> {
+        match self.art_view(now_ms()) {
+            Some(v) => v.rows.iter().filter_map(|r| Some((r["id"].as_str()?.to_string(), r["title"].as_str().unwrap_or_default().to_string()))).collect(),
+            None => self.art_store().all().into_iter().map(|m| (m.id, m.title)).collect(),
+        }
+    }
+
+    /// `artifacts_opened` (his, from a window): its `opened_ms` and the
+    /// version he saw, gathered and written at most once a second
+    /// ([`Self::art_opens_flush`], also on the tick): never a write per
+    /// click on the loop (architect m_60685).
+    pub(super) fn artifacts_opened(&mut self, id: &str, v: Option<u64>) {
+        self.art.opens.push((id.to_string(), now_ms(), v));
+        self.art_opens_flush(false);
+    }
+
+    /// Write the opens gathered, when the last write is a second old (or
+    /// `force`); the list again when one moved.
+    pub(super) fn art_opens_flush(&mut self, force: bool) {
+        let now = now_ms();
+        if self.art.opens.is_empty() || (!force && now < self.art.opens_written_ms + 1000) {
+            return;
+        }
+        let opens = std::mem::take(&mut self.art.opens);
+        self.art.opens_written_ms = now;
+        match self.art_store().opened(&opens) {
+            Ok(true) => self.artifacts_refresh(false),
+            Ok(false) => {}
+            Err(e) => log_line(&self.opts.paths, &format!("artifacts: his opens not kept: {e}")),
+        }
+    }
+
+    /// The store's one-shot backfill (TODO(artifacts-backfill): goes in a
+    /// later release, tests/shims.txt), started once per hub start on its
+    /// own thread, off the loop (hub-loop m_61273); it runs once per store
+    /// (artifacts_keep.rs, each write guarded against the loop's). Its
+    /// writes bump store_gen: the rows rebuild off the loop by themselves.
+    /// One log line with its counts.
+    pub(super) fn art_backfill_once(&mut self) {
+        if std::mem::replace(&mut self.art.backfill_tried, true) {
+            return;
+        }
+        let (state, paths) = (self.opts.paths.state.clone(), self.opts.paths.clone());
+        std::thread::spawn(move || match artifacts::Store::new(&state).backfill() {
+            Ok(Some(n)) => log_line(&paths, &format!("artifacts: backfilled · {} for you · {} between agents · {} kept", n.you, n.agents, n.kept)),
+            Ok(None) => {}
+            Err(e) => log_line(&paths, &format!("artifacts: backfill not done: {e}")),
+        });
     }
 
     /// `sb artifact archive|unarchive`: those picked out of the list, or
