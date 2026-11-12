@@ -23,13 +23,14 @@ describe("the card's ⋯ Open with (docs/plugin-apps.md A6b)", () => {
 
   it("draws the registry's own items: the apps, the hub's pick ticked, 'your Mac', then Always open as a group", () => {
     const g = openWithGroups(openWithSub(file({ path: '/w/acme/q3.xlsx', opener: sheets, openers: [grid] })));
-    expect(g.map((x) => x.id)).toEqual(['apps', 'always']);
+    // three groups: the picker draws a divider between each
+    expect(g.map((x) => x.id)).toEqual(['apps', 'mac', 'always']);
     expect(g[0]?.rows.map((r) => [r.id, r.name, r.current === true])).toEqual([
       ['open-with:0', 'Sheets', true],
       ['open-with:1', 'Grid', false],
-      ['open-mac', common.your_mac, false],
     ]);
-    expect(g[1]?.rows.map((r) => r.id)).toEqual(['always-open:0', 'always-open:1']);
+    expect(g[1]?.rows.map((r) => [r.id, r.name])).toEqual([['open-mac', common.your_mac]]);
+    expect(g[2]?.rows.map((r) => r.id)).toEqual(['always-open:0', 'always-open:1']);
   });
 
   it("a file no app opens: 'your Mac' alone; nothing on disk: no Open with", () => {

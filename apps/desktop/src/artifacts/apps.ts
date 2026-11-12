@@ -92,7 +92,7 @@ export function appTabs(tags: readonly AppTag[], keep: readonly AppTag[] = [], m
   if (all.length <= room) return { tabs: all, more: [] };
   const tabs = all.slice(0, room);
   const more = all.slice(room);
-  const pr = more.findIndex((t) => t.id === PRS.id);
+  const pr = more.findIndex((t) => t.id === PRS.id || t.id === keyOfTag(PRS));
   if (pr >= 0) {
     // PRs keep their tab: the last shown app moves under More, at its head (it has the most there)
     const [prTab] = more.splice(pr, 1);
@@ -101,6 +101,25 @@ export function appTabs(tags: readonly AppTag[], keep: readonly AppTag[] = [], m
     if (prTab !== undefined) tabs.push(prTab);
   }
   return { tabs, more };
+}
+
+/** A tag's key in the `app:` token (filters.ts appKeyOf): its word lowercased, `pull requests`. Pure. */
+export const keyOfTag = (t: AppTag): string => t.word.toLowerCase();
+
+/**
+ * The bar's app tabs by the `app:` token's keys (filters.ts): `rows` the ones every other filter
+ * keeps (the facet), `picked` the keys in the field (kept at 0 so he can take them off),
+ * `keepPrs` the Pull requests tab even at 0 (archived PRs one click away). Pure.
+ */
+export function appTabsOf(rows: readonly AppRow[], picked: ReadonlySet<string>, keepPrs: boolean, max = MAX_TABS): { tabs: AppTab[]; more: AppTab[] } {
+  const tags = rows.map((r) => {
+    const t = appOf(r);
+    return { id: keyOfTag(t), word: t.word };
+  });
+  const words = new Map(tags.map((t) => [t.id, t.word]));
+  const keep: AppTag[] = [...picked].map((k) => ({ id: k, word: words.get(k) ?? k }));
+  if (keepPrs) keep.push({ id: keyOfTag(PRS), word: PRS.word });
+  return appTabs(tags, keep, max);
 }
 
 /** The rows of the apps he picked: one of them (OR inside the dimension); none picked: every row. Pure. */

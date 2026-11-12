@@ -200,8 +200,6 @@ export const library = {
   found_where: "in all folders · ⏎ opens the first, esc clears",
   /** the kind filter's first (in the toolbar above the list), `all 17` */
   all_kinds: "All",
-  /** the kind filter, for VoiceOver */
-  kinds_label: "kinds",
   /** the toolbar's search field: its placeholder and VoiceOver name */
   search_placeholder: "search artifacts",
   /** the toolbar's one menu when the page is narrow (the kinds and the projects folded in it) */
@@ -222,6 +220,10 @@ export const library = {
   file_of: (a: { ending: string | number }): string => String(a.ending) + " file",
   /** a folder no app opens, its type in the tip */
   folder_kind: "Folder",
+  /** the app tabs, for VoiceOver; the app: completion's head */
+  apps_label: "apps",
+  /** past five tabs, the menu that holds the rest: `More ▾` */
+  apps_more: "More",
   /** the When chip, nothing picked */
   when: "When",
   /** the When chip's values: changed since he last looked */

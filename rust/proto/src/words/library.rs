@@ -228,8 +228,6 @@ crate::words! { library:
     found_where = "in all folders · ⏎ opens the first, esc clears";
     /// the kind filter's first (in the toolbar above the list), `all 17`
     all_kinds = "All";
-    /// the kind filter, for VoiceOver
-    kinds_label = "kinds";
     /// the toolbar's search field: its placeholder and VoiceOver name
     search_placeholder = "search artifacts";
     /// the toolbar's one menu when the page is narrow (the kinds and the projects folded in it)
@@ -253,6 +251,10 @@ crate::words! { library:
     file_of(ending) = "{ending} file";
     /// a folder no app opens, its type in the tip
     folder_kind = "Folder";
+    /// the app tabs, for VoiceOver; the app: completion's head
+    apps_label = "apps";
+    /// past five tabs, the menu that holds the rest: `More ▾`
+    apps_more = "More";
 
     // ---- the filter bar (his pick 'A + jetons', designer m_61790; apps/desktop/src/artifacts/filters.ts)
     /// the When chip, nothing picked

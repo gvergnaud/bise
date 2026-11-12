@@ -23,11 +23,20 @@ export interface KindOpt {
   readonly n: number;
 }
 
+/** The app tabs (apps.ts appTabsOf, faceted): All and its count, five tabs at most, the rest under More. */
+export interface AppsOpt {
+  readonly total: number;
+  readonly tabs: readonly KindOpt[];
+  readonly more: readonly KindOpt[];
+}
+
 export interface ToolbarProps {
-  /** the kinds (all first, then each kind with its count); none: no kind filter (one kind, a stack) */
-  readonly kinds: readonly KindOpt[] | null;
-  readonly kind: string;
-  readonly onKind: (id: string) => void;
+  /** the app tabs (docs/plugin-apps.md A6b, his pick A); none: no app filter (one app, a stack) */
+  readonly apps: AppsOpt | null;
+  /** the `app:` keys he picked (OR); none: All */
+  readonly appsOn: readonly string[];
+  /** a tab, More's row or All ('all'): `add` is ⌘-click (adds it or takes it off) */
+  readonly onApp: (id: string, add: boolean) => void;
   /** first on the left, never folded: under 900 the library's crumb (Fold.tsx), else nothing */
   readonly lead?: ReactNode;
   /** the project scope as drawn wide (Scope.tsx ProjectScope) */
@@ -86,49 +95,56 @@ export function WhenChip({ rows, on, onPick, testId }: WhenProps & { readonly te
 }
 
 /** How many filters are on (the folded menu's count). Pure. */
-export function filtersOn(kind: string, project: string): number {
-  return (kind === 'all' ? 0 : 1) + (project === '' ? 0 : 1);
+export function filtersOn(apps: number, project: string): number {
+  return apps + (project === '' ? 0 : 1);
 }
 
-export function Toolbar({ lead, kinds: kindOpts, kind, onKind, scope, projects, project, onProject, view, onView, q, onQ, onQKey, onClear, searchRef, add, when = null, onClearAll = null, completion = null, testId }: ToolbarProps) {
+export function Toolbar({ lead, apps, appsOn, onApp, scope, projects, project, onProject, view, onView, q, onQ, onQKey, onClear, searchRef, add, when = null, onClearAll = null, completion = null, testId }: ToolbarProps) {
   const box = useRef<HTMLDivElement>(null);
-  const [folded, setFolded] = useState(false);
   // the filters fold once the row has less room than they need beside the right side (never an
-  // overflow, ui-review m_45291): what they need is measured while whole and kept while folded; new
-  // kinds or another project measure again. An unmeasured box (a test's DOM) stays whole.
+  // overflow, ui-review m_45291), in two steps (his pick A): first the app tabs into one 'All ▾'
+  // (stage 1), then every filter into one 'Filters ▾' (stage 2); the search stays. What a stage
+  // needs is measured while in it and kept; new tabs or another project measure again. An
+  // unmeasured box (a test's DOM) stays whole.
+  const [stage, setStage] = useState<Stage>(0);
   const left = useRef<HTMLSpanElement>(null);
   const right = useRef<HTMLSpanElement>(null);
-  const need = useRef(0);
-  const isFolded = useRef(false);
-  const sig = `${(kindOpts ?? []).map((k) => `${k.id}${String(k.n)}`).join()}|${project}`;
+  const needs = useRef<number[]>([0, 0, 0]);
+  const at = useRef<Stage>(0);
+  const measure = useRef<() => void>(() => undefined);
+  const sig = `${apps === null ? '' : [...apps.tabs, ...apps.more].map((k) => `${k.id}${String(k.n)}`).join()}|${appsOn.join()}|${project}`;
   useLayoutEffect(() => {
     const el = box.current;
     if (el === null) return undefined;
-    isFolded.current = false;
-    setFolded(false);
-    const measure = () => {
+    at.current = 0;
+    needs.current = [0, 0, 0];
+    setStage(0);
+    measure.current = () => {
       const w = el.clientWidth;
-      if (w === 0) return;
-      if (!isFolded.current) {
-        const l = left.current;
-        const r = right.current;
-        if (l === null || r === null) return;
-        need.current = l.scrollWidth + r.offsetWidth + GAP_PX;
-      }
-      const fold = w < need.current;
-      if (fold !== isFolded.current) {
-        isFolded.current = fold;
-        setFolded(fold);
+      const l = left.current;
+      const r = right.current;
+      if (w === 0 || l === null || r === null) return;
+      needs.current[at.current] = l.scrollWidth + r.offsetWidth + GAP_PX;
+      const next = nextStage(at.current, w, needs.current);
+      if (next !== at.current) {
+        at.current = next;
+        setStage(next);
       }
     };
-    measure();
+    measure.current();
     if (typeof ResizeObserver === 'undefined') return undefined;
-    const ro = new ResizeObserver(measure);
+    const ro = new ResizeObserver(() => { measure.current(); });
     ro.observe(el);
     return () => { ro.disconnect(); };
   }, [sig]);
-  const kinds = kindOpts !== null && <KindFilters kinds={kindOpts} on={kind} onPick={onKind} />;
-  const on = filtersOn(kind, project);
+  // a new stage measures what it needs (and folds once more if that is still too wide)
+  useLayoutEffect(() => { measure.current(); }, [stage]);
+  const folded = stage === 2;
+  const tabs = apps !== null && (stage === 0
+    ? <AppTabs apps={apps} on={appsOn} onPick={onApp} />
+    : <AppsFolded apps={apps} on={appsOn} onPick={onApp} testId={`${testId}.apps`} />);
+  const on = filtersOn(appsOn.length, project);
+  const appRows = apps === null ? [] : [{ id: 'all', word: library.all_kinds, n: apps.total }, ...apps.tabs, ...apps.more];
   return (
     <ListBar ref={box} startRef={left} endRef={right} folded={folded} testId={testId}
       end={
@@ -147,13 +163,13 @@ export function Toolbar({ lead, kinds: kindOpts, kind, onKind, scope, projects, 
         <Dropdown testId={`${testId}.fold`}
           label={<>{sentenceCase(library.filters)}{on > 0 && <span className="art-n">{on}</span>}</>}
           groups={[
-            ...(kindOpts === null ? [] : [{ id: 'kinds', head: library.kinds_label, rows: kindOpts.map((k) => ({ id: `k:${k.id}`, name: k.word, trailing: String(k.n), current: kind === k.id, testId: `${testId}.fold.k.${k.id}` })) }]),
+            ...(apps === null ? [] : [{ id: 'apps', head: library.apps_label, rows: appRows.map((k) => ({ id: `k:${k.id}`, name: k.word, trailing: String(k.n), current: isOn(appsOn, k.id), testId: `${testId}.fold.k.${k.id}` })) }]),
             { id: 'projects', rows: projects.map((r) => ({ id: `p:${r.project}`, name: r.name, trailing: String(r.n), current: project === r.project, testId: `${testId}.fold.p.${r.project === '' ? 'all' : r.project}` })) },
           ]}
-          onPick={(id) => { if (id.startsWith('k:')) onKind(id.slice(2)); else onProject(id.slice(2)); }} />
+          onPick={(id) => { if (id.startsWith('k:')) onApp(id.slice(2), false); else onProject(id.slice(2)); }} />
       ) : (
         <>
-          {kinds}
+          {tabs}
           {scope}
         </>
       )}
@@ -163,11 +179,46 @@ export function Toolbar({ lead, kinds: kindOpts, kind, onKind, scope, projects, 
   );
 }
 
-/** The kinds as the bar had them (ds Filters): 'All 866', then each kind with its count. */
-function KindFilters({ kinds, on, onPick }: { kinds: readonly KindOpt[]; on: string; onPick: (id: string) => void }) {
+/** How far the filters folded: 0 whole, 1 the app tabs in 'All ▾', 2 every filter in 'Filters ▾'. */
+type Stage = 0 | 1 | 2;
+
+/**
+ * The next stage at width `w` from what each stage needs (0: not measured yet): one step more
+ * folded while too narrow, one step back once the less folded one fits again. Pure.
+ */
+export function nextStage(s: Stage, w: number, needs: readonly number[]): Stage {
+  if (s < 2 && w < (needs[s] ?? 0)) return (s + 1) as Stage;
+  const back = needs[s - 1] ?? 0;
+  if (s > 0 && back > 0 && w >= back) return (s - 1) as Stage;
+  return s;
+}
+
+/** A tab is on: one of the picked keys; none picked: All. Pure. */
+const isOn = (on: readonly string[], id: string): boolean => (on.length === 0 ? id === 'all' : on.includes(id));
+
+/** The app tabs (ds Filters, several on): 'All 866', each app with its count, then 'More ▾' past five. */
+function AppTabs({ apps, on, onPick }: { apps: AppsOpt; on: readonly string[]; onPick: (id: string, add: boolean) => void }) {
   return (
-    <Filters label={library.kinds_label} on={on} testId="artifacts.kinds"
-      items={kinds.map((k) => ({ id: k.id, label: <>{k.word}<span className="art-n">{k.n}</span></> }))}
-      onPick={onPick} />
+    <>
+      <Filters label={library.apps_label} on={on.length === 0 ? 'all' : on} testId="artifacts.apps"
+        items={[{ id: 'all', word: library.all_kinds, n: apps.total }, ...apps.tabs].map((k) => ({ id: k.id, label: <>{k.word}<span className="art-n">{k.n}</span></> }))}
+        onPick={(id, how) => { onPick(id, how?.add === true); }} />
+      {apps.more.length > 0 && (
+        <Dropdown look="chip" testId="artifacts.apps.more" label={library.apps_more}
+          groups={[{ id: 'more', rows: apps.more.map((k) => ({ id: k.id, name: k.word, trailing: String(k.n), current: on.includes(k.id), testId: `artifacts.apps.more.${k.id}` })) }]}
+          onPick={(id) => { onPick(id, false); }} />
+      )}
+    </>
+  );
+}
+
+/** The app tabs folded (stage 1): one 'All ▾' (or the picked apps' words) holding All, the tabs and More's. */
+function AppsFolded({ apps, on, onPick, testId }: { apps: AppsOpt; on: readonly string[]; onPick: (id: string, add: boolean) => void; testId: string }) {
+  const rows = [{ id: 'all', word: library.all_kinds, n: apps.total }, ...apps.tabs, ...apps.more];
+  const words = rows.filter((k) => k.id !== 'all' && on.includes(k.id)).map((k) => k.word);
+  return (
+    <Dropdown look="chip" testId={testId} label={words.length === 0 ? library.all_kinds : words.join(' + ')}
+      groups={[{ id: 'apps', rows: rows.map((k) => ({ id: k.id, name: k.word, trailing: String(k.n), current: isOn(on, k.id), testId: `${testId}.${k.id}` })) }]}
+      onPick={(id) => { onPick(id, false); }} />
   );
 }

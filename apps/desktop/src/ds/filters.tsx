@@ -33,9 +33,10 @@ export interface FilterOpt {
 
 export interface FiltersProps {
   items: readonly FilterOpt[];
-  /** the chosen one's id */
-  on: string;
-  onPick?: (id: string) => void;
+  /** the chosen one's id; several (a filter that takes several, OR: the gallery's app tabs) */
+  on: string | readonly string[];
+  /** `add`: ⌘-click (a filter that takes several adds the part to the chosen ones, or takes it off) */
+  onPick?: (id: string, how?: { readonly add: boolean }) => void;
   /** its VoiceOver name ('show') */
   label?: string;
   testId?: string;
@@ -43,12 +44,14 @@ export interface FiltersProps {
 
 /** the segmented filter: 28 high, segments 24, chosen --c-solid + --e-1 */
 export function Filters({ items, on, onPick, label, testId }: FiltersProps) {
+  const isOn = (id: string): boolean => (typeof on === "string" ? on === id : on.includes(id));
+  const first = items.find((o) => isOn(o.id))?.id;
   return (
     <span className="b-filters b-chrome" role="tablist" aria-label={label} data-testid={testId}>
       {items.map((o) => (
-        <span key={o.id} role="tab" tabIndex={o.id === on ? 0 : -1} aria-selected={o.id === on} aria-disabled={o.disabled === true || undefined} className={cx(o.id === on && "on", o.disabled === true && "dis")}
+        <span key={o.id} role="tab" tabIndex={o.id === first ? 0 : -1} aria-selected={isOn(o.id)} aria-disabled={o.disabled === true || undefined} className={cx(isOn(o.id) && "on", o.disabled === true && "dis")}
           {...tipAttrs(o.tip)}
-          onClick={onPick && o.disabled !== true ? () => { onPick(o.id); } : undefined}
+          onClick={onPick && o.disabled !== true ? (e) => { if (e.metaKey || e.ctrlKey) onPick(o.id, { add: true }); else onPick(o.id); } : undefined}
           onKeyDown={onPick && o.disabled !== true ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onPick(o.id); } } : undefined}
           data-testid={sub(testId, o.id)}>
           {o.label}

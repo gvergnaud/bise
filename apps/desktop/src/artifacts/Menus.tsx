@@ -98,6 +98,7 @@ export function openWithGroups(items: readonly PopupItem[]): PickerGroup[] {
   const top = items[0];
   const inside = top?.type === 'submenu' ? top.items : [];
   const apps: PickerRow[] = [];
+  const mac: PickerRow[] = [];
   const groups: PickerGroup[] = [];
   for (const x of inside) {
     if (x.type === 'separator') continue;
@@ -105,9 +106,15 @@ export function openWithGroups(items: readonly PopupItem[]): PickerGroup[] {
       groups.push({ id: 'always', head: x.label, rows: x.items.flatMap((y) => (y.type === 'separator' || y.type === 'submenu' ? [] : [{ id: y.id, name: y.label, testId: `always.${y.id}` }])) });
       continue;
     }
+    // 'your Mac' between two dividers (designer m_62233, block 1)
+    if (x.id === 'open-mac') { mac.push({ id: x.id, name: x.label, testId: 'mac' }); continue; }
     apps.push({ id: x.id, name: x.label, ...(x.checked === true ? { current: true } : {}), testId: `app.${x.id}` });
   }
-  return apps.length === 0 ? groups : [{ id: 'apps', rows: apps }, ...groups];
+  return [
+    ...(apps.length === 0 ? [] : [{ id: 'apps', rows: apps }]),
+    ...(mac.length === 0 ? [] : [{ id: 'mac', rows: mac }]),
+    ...groups,
+  ];
 }
 
 /** Open with, from the card's ⋯ (its row 'Open with…'): the groups openWithGroups made; a pick runs the registry's act. */

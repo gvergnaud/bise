@@ -37,6 +37,16 @@
     "one": "and {n} more agent",
     "text": "and {n} more agents"
   },
+  "library.apps_label": {
+    "args": [],
+    "one": null,
+    "text": "apps"
+  },
+  "library.apps_more": {
+    "args": [],
+    "one": null,
+    "text": "More"
+  },
   "library.archive": {
     "args": [],
     "one": null,
@@ -341,11 +351,6 @@
     "args": [],
     "one": null,
     "text": "videos"
-  },
-  "library.kinds_label": {
-    "args": [],
-    "one": null,
-    "text": "kinds"
   },
   "library.let_go": {
     "args": [],
