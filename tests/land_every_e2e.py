@@ -3,21 +3,23 @@
 A real hub (bise sbd, scripted model) on a clone of this checkout (its HEAD
 plus its uncommitted changes, on main, no remote), whose bise.toml the test
 sets to run `tests/gate.sh land` (the repo itself has no [land] check since
-d3616e24f; the check's code still serves repos that set one). Reds are planted and landed; each is refused with its
-step and its log, and main's sha does not move:
+d3616e24f; the check's code still serves repos that set one).
 
-  reds:  clippy (a warning), proto_ts (a generated TS file stale), desktop
-         (a type error; skipped with the reason without node_modules),
-         word_lint (a UI word as a literal in a tmux test)
   ways:  a worktree land whose base moved, one whose base did not, a
          `sb land --here` from main's checkout, `sb feature merge`
 
-Every red goes the new way (a worktree land whose base did not move); the
-cheap one (word_lint) goes the other three (architect m_28364: the whole
-ways x trunk x moved matrix is land_check.rs's unit table).
-
 A docs-only change lands on each way, before (bise.toml without [land]) and
 after; the land wall times are printed (p50, max), before and after.
+
+One red, a UI word as a literal in a tmux test (word_lint), is planted on a
+worktree land and on `sb land --here` from the shared folder: the two ways
+whose refusal, --add and claim read are different shell code (architect
+m_62929). Each is refused with its step and its log, and main's sha does not
+move. Which step each kind of red stops at (clippy, proto_ts, desktop) is
+the core's table, land_tests.rs's 15 tests; the ways x trunk x moved matrix
+is land_check.rs's unit table (architect m_28364). Until release-speed plan
+A step 2, 7 refused lands here (4 reds x the worktree way, word_lint on the
+3 others) were ~2 min of every release pass.
 
 The cargo target is a clone (cp -c: no bytes) of the caller's warm one;
 both check trees (the agent's worktree, the hub's .land-check) build the
@@ -41,6 +43,7 @@ from e2e import EXE, ROOT, check, out, sh  # noqa: E402
 
 NL = chr(10)
 WAYS = ("worktree-moved", "worktree", "here", "merge")
+RED_WAYS = ("worktree", "here")
 LAND_TIMEOUT = 1500
 
 
@@ -85,24 +88,10 @@ def append(path, text):
         f.write(text)
 
 
-def reds(desktop):
-    """name -> (step, plant(dir)): each plants one red in a checkout."""
-    def clippy(d):
-        append(os.path.join(d, "rust/home/src/lib.rs"), NL + "#[allow(dead_code)]" + NL + "fn land_every_red() { let unused = 1; }" + NL)
-
-    def proto(d):
-        append(os.path.join(d, "apps/desktop/src/proto/diff.ts"), "// stale: not what bise-proto writes" + NL)
-
-    def ts(d):
-        append(os.path.join(d, "apps/desktop/src/app/landEveryRed.ts"), "export const landEveryRed: number = 'x';" + NL)
-
-    def word(d):
-        with open(os.path.join(d, "tests/land_every_red_tmux.py"), "w") as f:
-            f.write("WAIT_ON = %r" % a_word() + NL)
-    rs = {"clippy": ("clippy", clippy), "proto_ts": ("proto_ts", proto), "word_lint": ("word_lint", word)}
-    if desktop:
-        rs["desktop"] = ("desktop", ts)
-    return rs
+def plant_word(d):
+    """The planted red: a UI word as a literal in a tmux test (word_lint)."""
+    with open(os.path.join(d, "tests/land_every_red_tmux.py"), "w") as f:
+        f.write("WAIT_ON = %r" % a_word() + NL)
 
 
 class Lands:
@@ -137,10 +126,6 @@ def main():
     E = e2e.Env()
     clone_checkout(E.ws)
     E.env["CARGO_TARGET_DIR"] = warm_target(E.tmp)
-    nm = os.path.join(ROOT, "apps", "desktop", "node_modules")
-    desktop = os.path.isdir(nm) and shutil.which("pnpm") is not None
-    if not desktop:
-        print("SKIP the desktop red: no %s (or no pnpm): its typecheck cannot run here" % nm)
     ws = E.ws
     main_sha = lambda: out(ws, "git rev-parse main")  # noqa: E731
     # the repo dropped its own [land] check (d3616e24f); the test plants the
@@ -212,23 +197,17 @@ def main():
             check(rc == 0, "%s: a docs-only land lands (no step): %s" % (way, o))
             check(main_sha() != m, "%s: main moved" % way)
             print("ok   %s: a docs-only change lands" % way)
-        # every red on the new path (a worktree land whose base did not
-        # move); the cheap one (a UI word as a literal) on the other three
-        # (architect m_28364: the 4 x 3 matrix is land_check's unit table)
-        rs = reds(desktop)
-        plan = [(n, "worktree") for n in rs] + [("word_lint", w) for w in WAYS if w != "worktree"]
-        for name, way in plan:
-            step, plant = rs[name]
-            if True:
-                m = main_sha()
-                rc, o = land(way, plant, "red %s" % name, "red")
-                if way == "worktree-moved":
-                    m = out(ws, "git rev-parse main")  # the docs commit that moved it
-                check(rc != 0, "%s / %s: refused: %s" % (name, way, o))
-                check("the land check is red at %s" % step in o, "%s / %s: the step's words: %s" % (name, way, o))
-                check("(log: " in o, "%s / %s: its log path: %s" % (name, way, o))
-                check(main_sha() == m, "%s / %s: main did not move" % (name, way))
-                print("ok   %s / %s: refused at %s, main unmoved" % (name, way, step))
+        # one red per shell path (architect m_62929): a UI word as a literal, on a worktree land
+        # and on `sb land --here` from the shared folder, the two ways whose refusal, --add and
+        # claim read are different shell code
+        for way in RED_WAYS:
+            m = main_sha()
+            rc, o = land(way, plant_word, "red word_lint", "red")
+            check(rc != 0, "word_lint / %s: refused: %s" % (way, o))
+            check("the land check is red at word_lint" in o, "word_lint / %s: the step's words: %s" % (way, o))
+            check("(log: " in o, "word_lint / %s: its log path: %s" % (way, o))
+            check(main_sha() == m, "word_lint / %s: main did not move" % way)
+            print("ok   word_lint / %s: refused, main unmoved" % way)
         print("land wall time, docs-only, before: %s" % stats(L.times.get("docs-before")))
         print("land wall time, docs-only, after:  %s" % stats(L.times.get("docs-after")))
         print("land wall time, refused reds:      %s" % stats(L.times.get("red")))
