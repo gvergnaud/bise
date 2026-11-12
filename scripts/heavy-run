@@ -23,7 +23,8 @@
 #   reclaimable()); HEAVY_TMP_CAP_GB (2) an agent tmp's size printed once. A job gets, beside
 #   HEAVY_SLOT, HEAVY_CPUS: the cpus over the heavy jobs running at its start,
 #   itself included (vitest's workers, apps/desktop/src/test-workers.ts); tests:
-#   HEAVY_RECLAIM_ROOTS, HEAVY_RECLAIM_KEEP, HEAVY_TMP_ROOTS,
+#   HEAVY_RECLAIM_ROOTS, HEAVY_RECLAIM_SHARED (the shared trees, found from the
+#   worktrees' .git files otherwise), HEAVY_RECLAIM_KEEP, HEAVY_TMP_ROOTS,
 #   HEAVY_FREE_KB_FILE, HEAVY_DISK_VOLUME, HEAVY_RECLAIM, HEAVY_RECLAIM_GAP.
 #   slot 1 = ~/.bise/run/heavy.lock (the old single lock: old callers still count)
 #   slot 2 = ~/.bise/run/heavy2.lock

@@ -105,16 +105,17 @@ def protected(path, keep, allow=()):
     return _under(p, keep) and not _under(p, allow)
 
 
-def plan(targets, free_gb, want_gb, now, idle_h, min_idle_min, strays=frozenset()):
+def plan(targets, free_gb, want_gb, now, idle_h, min_idle_min, strays=frozenset(), pinned=frozenset()):
     """The targets to delete, in order, with why.
 
-    targets: [(path, last_used_epoch, busy)]. Returns [(path, reason)]:
+    targets: [(path, last_used_epoch, busy)]; pinned: never deleted whole (a shared tree's
+    targets: the user's clone, a seed reclone is the most it gets). Returns [(path, reason)]:
     first the strays (a rust/target in a task worktree whose task builds in
     <task>/target) unused >= min_idle_min, then every idle one (unused >= idle_h), then, only while free_gb is
     under want_gb, the least recently used of the rest unused >= min_idle_min.
     The caller deletes them in that order and stops the 'low' ones as soon
     as the disk has want_gb free (it re-reads the free space after each)."""
-    free = [(p, t) for p, t, busy in targets if not busy]
+    free = [(p, t) for p, t, busy in targets if not busy and p not in pinned]
     # a second target of a task (strays): unused min_idle_min is enough
     out = [(p, "stray") for t, p in sorted((t, p) for p, t in free if p in strays and now - t >= min_idle_min * 60)]
     idle = sorted([(t, p) for p, t in free if p not in strays and now - t >= idle_h * 3600])
@@ -173,6 +174,17 @@ def _self_test():
     assert all(p != "/d" for p, _ in plan(t, 0, 99, now, 0, 0)), "a busy target is never planned"
     assert plan(t, 50, 25, now, 6, 30, {"/b", "/c", "/d"}) == [("/b", "stray"), ("/a", "idle")], "a stray goes after 30 min"
     assert plan(t, 10, 25, now, 6, 30, {"/b"}) == [("/b", "stray"), ("/a", "idle"), ("/e", "low")], "once"
+    # a shared tree's target (his clone) is never deleted whole: idle, low or stray (main m_61934)
+    for pins in ({"/a"}, {"/a", "/b", "/e"}):
+        got = [p for p, _ in plan(t, 0, 99, now, 0, 0, {"/a", "/b"}, pins)]
+        assert not set(got) & pins and got, (pins, got)
+    # the root finder: a worktree's .git file points into <shared>/.git/worktrees/<x>
+    assert shared_of("gitdir: /u/lab/harness/.git/worktrees/harness6\n") == "/u/lab/harness"
+    assert shared_of("gitdir: /u/lab/harness/.git/worktrees/harness6/") == "/u/lab/harness"
+    assert shared_of("gitdir: ../.git/modules/vendor/x") is None, "a submodule: no shared tree"
+    assert shared_of("gitdir: /.git/worktrees/x") is None and shared_of("") is None and shared_of("ref: x") is None
+    assert exec_holders("/s/rust/target", [(7, "/s/rust/target/debug/bise"), (8, "/s/rust/target2/x"),
+                                           (9, "/usr/bin/cargo")]) == [7], "a process runs from it"
     import tempfile
     with tempfile.TemporaryDirectory() as d:
         build = os.path.join(d, "state", "build")
@@ -282,10 +294,68 @@ def roots():
     HEAVY_RECLAIM_ROOTS (tests): a ':' list instead."""
     r = os.environ.get("HEAVY_RECLAIM_ROOTS")
     if r:
-        return [p for p in r.split(":") if p]
+        return [p for p in r.split(":") if p] + shared_trees()
     base = os.path.expanduser("~/.bise/worktrees")
     return [os.path.join(base, h, a) for h in _ls(base) for a in _ls(os.path.join(base, h))] \
-        + [os.path.expanduser(p) for p in ("~/.bise/run/tip-check", "~/.bise/run/nightly/tree", "~/.bise/dev/build/desktop-cand")]
+        + [os.path.expanduser(p) for p in ("~/.bise/run/tip-check", "~/.bise/run/nightly/tree", "~/.bise/dev/build/desktop-cand")] \
+        + shared_trees()
+
+
+def shared_of(gitfile):
+    """The shared tree a worktree's .git file points into, pure: 'gitdir: <shared>/.git/worktrees/<x>'
+    gives <shared>; anything else, None."""
+    line = gitfile.strip().splitlines()[0] if gitfile.strip() else ""
+    if not line.startswith("gitdir:"):
+        return None
+    g = line[len("gitdir:"):].strip().rstrip("/")
+    head, sep, _ = g.rpartition("/.git/worktrees/")
+    return head if sep and head else None
+
+
+def shared_trees():
+    """The shared trees (the user's clones the task worktrees come from; main m_61934: harness's
+    rust/target reached 46 GB, seen by no reclaim): found from the worktrees' .git files, each once.
+    Their targets get the trims (own-cap, want, green mark, low-incremental), never a whole delete
+    (plan()'s pinned). HEAVY_RECLAIM_SHARED (tests): a ':' list instead."""
+    s = os.environ.get("HEAVY_RECLAIM_SHARED")
+    if s is not None or os.environ.get("HEAVY_RECLAIM_ROOTS"):  # a test's roots: never his real trees
+        return [p for p in (s or "").split(":") if p]
+    base = os.path.expanduser("~/.bise/worktrees")
+    out = []
+    for h in _ls(base):
+        for a in _ls(os.path.join(base, h)):
+            for w in _ls(os.path.join(base, h, a)):
+                g = os.path.join(base, h, a, w, ".git")
+                try:
+                    if not os.path.isfile(g):
+                        continue
+                    t = shared_of(open(g).read(200))
+                except OSError:
+                    continue
+                t = t and os.path.realpath(t)
+                if t and os.path.isdir(t) and t not in out:
+                    out.append(t)
+    return out
+
+
+def exec_holders(t, procs):
+    """The pids of the processes exec'd from t, pure. procs: [(pid, exe path)]."""
+    pre = t.rstrip("/") + "/"
+    return [p for p, e in procs if e.startswith(pre)]
+
+
+def running_procs():
+    """[(pid, exe path as exec'd)] of the running processes; None when ps fails."""
+    try:
+        out = subprocess.run(["ps", "-Ao", "pid=,comm="], capture_output=True, text=True, timeout=20).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    rows = []
+    for line in out.splitlines():
+        pid, _, exe = line.strip().partition(" ")
+        if pid.isdigit() and exe.strip():
+            rows.append((int(pid), exe.strip()))
+    return rows
 
 
 def stray(t):
@@ -591,12 +661,18 @@ def trim_one(t, trim_gb, log, measured=None, tag="trim", seed=seed_into, wt=None
     finally:
         for f in fds:
             os.close(f)
+    swapped = act == "reclone" and fresh is None
     if fresh:
         shutil.rmtree(fresh, ignore_errors=True)
     for a in away:
         shutil.rmtree(a, ignore_errors=True)
     gb = max(0, free_kb() - before) / (GB / 1024)
     _log(log, t, gb, "%s-%s" % (tag, act))
+    if swapped:
+        # each reclone, its own GB before and why (architect m_61939: count them per day; several
+        # a day on a shared tree's target means the cap is revisited, with these numbers)
+        with open(os.path.join(os.path.dirname(log), "reclones.log"), "a") as fh:
+            fh.write("%d\t%s\t%.1f\t%.1f\t%s%s" % (time.time(), t, own, gb, tag, chr(10)))
     return act, gb
 
 
@@ -944,8 +1020,20 @@ def main():
     except OSError:
         print("disk_reclaim: another reclaim runs")
         return 0
-    # leftovers of a reclaim that died mid-rm
+    shared = shared_trees()
+    log = os.path.join(run, "reclaim.log")
+    if shared:  # once per run: which shared trees it watches (architect m_61939)
+        _log(log, ":".join(shared), 0, "shared-trees")
+    # leftovers of a reclaim that died mid-rm; in a shared tree (his clone, never walked), only
+    # beside its targets
     for r in roots():
+        if r in shared:
+            for t in find_targets(r):
+                p = os.path.dirname(t)
+                for d in _ls(p):
+                    if d.startswith("target.reclaiming-"):
+                        shutil.rmtree(os.path.join(p, d), ignore_errors=True)
+            continue
         for dirpath, dirs, _ in os.walk(r):
             for d in list(dirs):
                 if d.startswith("target.reclaiming-"):
@@ -963,7 +1051,12 @@ def main():
     root_of = {t: r for r in roots() for t in find_targets(r) if not protected(t, keep, allow)}
     ts = [(t, last_used(t), busy(t, exes, r, cwds)) for t, r in root_of.items()]
     used = {t: u for t, u, _ in ts}
-    log = os.path.join(run, "reclaim.log")
+    pinned = {t for t, r in root_of.items() if r in shared}
+    procs = running_procs() if pinned else None
+    for t in sorted(pinned):  # a shared target a process runs from stays: say why, once per run
+        for pid in exec_holders(t, procs or []):
+            _log(log, t, 0, "kept: %d runs from it" % pid)
+            break
     freed, n, trimmed = 0.0, 0, set()
     # the trim: a target a green gate marked, idle since, over HEAVY_TRIM_GB of its own
     marked = [(t, u, b, mtime(os.path.join(t, ".idle-since"))) for t, u, b in ts]
@@ -1006,7 +1099,8 @@ def main():
         freed += gb
         n += 1
         print("disk_reclaim: deleted %s (%s, %.1f GB)" % (p, why, gb))
-    todo = plan(ts, free_kb() / (GB / 1024), a.want, now, a.idle_h, a.min_idle_min, {t for t, _, _ in ts if stray(t)})
+    todo = plan(ts, free_kb() / (GB / 1024), a.want, now, a.idle_h, a.min_idle_min, {t for t, _, _ in ts if stray(t)},
+                pinned)
     for t, reason in todo:
         if t in trimmed or not os.path.isdir(t):
             continue  # trimmed in this pass: its use dates are stale
