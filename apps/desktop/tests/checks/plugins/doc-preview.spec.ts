@@ -240,7 +240,7 @@ for (const theme of ['light', 'dark']) {
       note('n2', { kind: 'region', page: 3, rect: rect(5, 5, 10, 10) }, 'and this one?'),
     ]);
     try {
-      const { page, frame, core } = s;
+      const { page, frame } = s;
       await expect(frame.locator('.pv-image[data-fit="true"] img')).toBeVisible({ timeout: 15_000 });
       await expect(frame.locator('.pv-mark[data-bise-mark="sent"]')).toHaveCount(1);
       await expect(page.getByTestId('app.panel.doc.detached')).toContainText('and this one?');
@@ -259,21 +259,22 @@ for (const theme of ['light', 'dark']) {
       await expect(frame.locator('.pv-image')).toHaveAttribute('data-fit', 'true');
 
       // a box drawn with a plain drag on the image: the selection, and the kit's pill by it
+      // (events made in the frame: the off-screen app's mouse stops at the host's iframe and never
+      // reaches the view's nested frame; pointer 7, not the mouse's 1, so no capture outlives them)
       await frame.locator('.pv-image img').evaluate((img) => {
         const r = img.getBoundingClientRect();
-        const at = (fx: number, fy: number) => ({ bubbles: true, button: 0, pointerId: 1, clientX: r.left + r.width * fx, clientY: r.top + r.height * fy });
+        const at = (fx: number, fy: number) => ({ bubbles: true, button: 0, pointerId: 7, clientX: r.left + r.width * fx, clientY: r.top + r.height * fy });
         img.dispatchEvent(new PointerEvent('pointerdown', at(0.55, 0.2)));
         img.dispatchEvent(new PointerEvent('pointermove', at(0.7, 0.4)));
         img.dispatchEvent(new PointerEvent('pointerup', at(0.8, 0.6)));
       });
       await expect(frame.locator('.pv-box')).toBeVisible();
       await expect(frame.locator('.bv-pill')).toBeVisible();
-      const asked = (x: unknown): Record<string, unknown> => x as Record<string, unknown>;
-      const sel = asked(await core.waitCmd((x) => JSON.stringify(x).includes('dev.bise/selection')));
-      // its label in the catalog's words (bise_proto::words::viewkit)
-      expect(JSON.stringify(sel)).toContain(viewkit.area);
-      expect(JSON.stringify(sel)).toContain('\\"kind\\":\\"region\\"');
       await shot(page, `image-box-${theme}`);
+      // a click on the pill asks about it: the window keeps a selection that only moved and takes
+      // it into his message only then (docselect.ts), and the pill says so
+      await frame.locator('.bv-pill').dispatchEvent('click');
+      await expect(frame.locator('.bv-pill')).toHaveText(viewkit.added);
     } finally {
       await s.close();
     }

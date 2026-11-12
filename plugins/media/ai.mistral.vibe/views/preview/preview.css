@@ -63,7 +63,8 @@ body { font: var(--pv-text) / 1.4 var(--pv-font); }
 
 /* a pdf (pdf.ts): its pages on the view's surface, pdf.js's canvas and text layer on each; a
    passage's marks tint its words with one 3 px bar down its lines (designer m_24905) */
-.pv-pdf { flex: 1; overflow: auto; padding: 12px; }
+/* (a block, not the stage's flex row: its pages are 100% of its width, never shrunk to their content) */
+.pv-pdf { flex: 1; display: block; min-width: 0; overflow: auto; padding: 12px; }
 .pv-pdf .pv-pages { display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .pv-pdf .page { position: relative; width: 100%; background: #fff; box-shadow: 0 1px 3px var(--pv-drop); cursor: crosshair; user-select: none; --scale-round-x: 1px; --scale-round-y: 1px; }
 .pv-pdf .page > canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
