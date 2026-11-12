@@ -370,6 +370,18 @@ export class ViewsStore {
     if (r !== undefined) this.askNotes(r);
   }
 
+  /**
+   * The hub's artifact_notes: that artifact's notes were written (any door). Each of its document
+   * tabs, whatever version it shows, gets the whole list again; a new version reaches a view through
+   * its row and a new view/open, never this (architect m_61696).
+   */
+  artifactNotes(project: string, id: string): void {
+    for (const r of this.recs.values()) {
+      const ref = r.ref;
+      if (isDoc(ref) && ref.project === project && ref.target.kind === 'artifact' && ref.target.id === id) this.askNotes(r);
+    }
+  }
+
   /** hub/view_notes for a live document view (an artifact's; a ~/bise file has none, A5). */
   private askNotes(r: Rec): void {
     const live = r.doc?.live;

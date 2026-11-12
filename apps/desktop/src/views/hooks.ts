@@ -40,7 +40,8 @@ export function artifactOpenOf(ev: Ev): { readonly project: string; readonly id:
 
 /**
  * On the hub's `app_open` for a view, its panel tab opens; for an artifact, its tab, drawn by its app
- * when its row names one (main/index.ts brings the window forward).
+ * when its row names one (main/index.ts brings the window forward). On its `artifact_notes`, that
+ * artifact's document views get their notes again.
  */
 export function useViewOpen(store: ViewsStore): void {
   const on = useCallback(
@@ -49,6 +50,8 @@ export function useViewOpen(store: ViewsStore): void {
       if (r !== null) store.fullscreen(r);
       const a = artifactOpenOf(ev);
       if (a !== null) openTab({ kind: 'artifact', project: a.project, id: a.id });
+      // an artifact's notes written (apps-viewkit 26d1f44f1): its document tabs ask view/notes again
+      if (ev.ev === 'artifact_notes') store.artifactNotes(ev.project, ev.artifact);
     },
     [store],
   );

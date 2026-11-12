@@ -352,6 +352,23 @@ describe("a document's view (docs/plugin-apps.md A4, A5)", () => {
     return { proxy, stop };
   }
 
+  it("the hub's artifact_notes: that artifact's tabs ask view/notes again, another artifact's don't (apps-viewkit 26d1f44f1)", async () => {
+    const { store, asked } = docRig();
+    const { proxy, stop } = await live(store);
+    await flush();
+    const notesAsked = () => asked.filter((c) => c.cmd === 'view_notes').length;
+    const before = notesAsked();
+    store.artifactNotes('p', 'other');
+    store.artifactNotes('q', 'art1');
+    await flush();
+    expect(notesAsked()).toBe(before);
+    store.artifactNotes('p', 'art1');
+    await flush();
+    expect(notesAsked()).toBe(before + 1);
+    expect(proxy.got.filter((m) => m['method'] === 'dev.bise/notes')).toHaveLength(2);
+    stop();
+  });
+
   it('opens by view/open, lives in its tab, gets its document, no ui/message, then its notes', async () => {
     const { store, asked } = docRig();
     const { proxy, stop } = await live(store);
