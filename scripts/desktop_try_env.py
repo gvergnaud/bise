@@ -82,9 +82,9 @@ def holds_bundle(cmd, app):
         return False
     bise = os.path.join(contents, "Resources", "bin", "bise")
     host = bise + " computer-use chrome-host chrome-extension://"
-    # the computer-use broker too (keep-current m_61362): a long-lived launchd child that runs from
-    # the bundle and refused tonight's swap. Renamed under it, it keeps its old inode and serves
-    # until it exits; the next start (the host's spawn_broker, same path) runs the new bundle's
+    # the computer-use broker too (keep-current m_61362, m_61383): the host's child, from the
+    # bundle; killed, the host starts it again within 1 s, so it refused every swap. Renamed under
+    # it, it keeps its old inode until Chrome restarts the host, which starts the new bundle's
     broker = bise + " computer-use broker"
     return not (cmd.startswith(host) or cmd == broker or cmd.startswith(broker + " "))
 

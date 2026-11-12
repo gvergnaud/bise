@@ -137,7 +137,7 @@ def pure():
         bin_ + " core --desktop", bin_ + " daemon --repo /r", bin_ + " computer-use chrome-host chrome-extension://bogffepmbkbmbfejcadaipgphgkocgob/",
         bin_ + " computer-use chrome-host", "/h/other.app/Contents/Resources/bin/bise computer-use chrome-host chrome-extension://x/",
         "/h/.local/share/bise/versions/root-x/bise computer-use broker", "/h/dist/bise try.app.old/Contents/MacOS/bise try",
-        # the broker from the bundle, a long-lived launchd child (keep-current m_61362): never holds it
+        # the broker from the bundle, chrome-host's child, respawned within 1 s (keep-current m_61383): never holds it
         bin_ + " computer-use broker", bin_ + " computer-use broker --idle-exit 600", bin_ + " computer-use brokerx")}
     check([c for c, h in held.items() if h] == list(held)[:4] + [bin_ + " computer-use chrome-host", bin_ + " computer-use brokerx"],
           "only the app's own processes hold it; the browsers' host and the broker (their argv) never: %s" % held)
