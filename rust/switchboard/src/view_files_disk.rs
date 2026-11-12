@@ -175,6 +175,30 @@ pub fn mime(path: &Path) -> &'static str {
     }
 }
 
+/// The first free name in `dir` for `stem` + `ending`, created empty and
+/// exclusive (`O_EXCL`: a file that appears meanwhile only moves it to
+/// the next name, never over a file), and its file. Try 1 is
+/// `<stem> <first><ending>` (no `first`: `<stem><ending>`), try n is
+/// `<stem> <nth(n)><ending>`; the words are the catalog's (view/copy's
+/// `(copy)`, `(copy 2)`; file/new's `Sheet.xlsx`, `Sheet 2.xlsx`). The one
+/// name pick of both (architect m_63160).
+pub fn free_name(dir: &Path, stem: &str, ending: &str, first: Option<&str>, nth: &dyn Fn(u32) -> String) -> std::io::Result<(PathBuf, std::fs::File)> {
+    for n in 1..1000 {
+        let name = match (n, first) {
+            (1, None) => format!("{stem}{ending}"),
+            (1, Some(f)) => format!("{stem} {f}{ending}"),
+            _ => format!("{stem} {}{ending}", nth(n)),
+        };
+        let p = dir.join(name);
+        match std::fs::OpenOptions::new().write(true).create_new(true).open(&p) {
+            Ok(f) => return Ok((p, f)),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e),
+        }
+    }
+    Err(std::io::Error::other("no free name"))
+}
+
 /// Whether a read of `mime` answers `text` (else a base64 `blob`).
 pub fn is_text(mime: &str) -> bool {
     mime.starts_with("text/") || mime == "application/json" || mime == "image/svg+xml"

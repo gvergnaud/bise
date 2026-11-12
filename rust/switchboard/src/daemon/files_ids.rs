@@ -33,7 +33,6 @@ use bise_ids::{skipped, tracked, Cover, Entry, Kind, Scan, Snapshot};
 use bise_proto::files::{Crumb, EntryArtifact, FileKind, FilesIds, FilesMintResult, FolderList, FolderRow, Names};
 use bise_proto::hub::{HubCmd, HubEv};
 use bise_proto::jsonrpc::{Id, RpcError};
-use bise_proto::view_rpc::ViewError;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
@@ -65,6 +64,9 @@ enum Job {
     /// `view/open {kind: entry}`: where an id is now (none: unknown),
     /// answered to the asker's thread at once, a whole walk or not.
     Path(String, Sender<Option<PathBuf>>),
+    /// `file/new`: its make found and its template read off the loop
+    /// (daemon/file_new.rs); the file, its id and the store's copy here.
+    New(ClientId, Id, Box<super::file_new::NewFile>),
 }
 
 /// How long `view/open` waits for an id's path before it answers busy
@@ -89,6 +91,12 @@ pub(super) enum NoPath {
 }
 
 impl IdsAsk {
+    /// `file/new`'s file to make, from its thread; false: the table's
+    /// thread is gone.
+    pub(super) fn new_file(&self, client: ClientId, rid: Id, n: super::file_new::NewFile) -> bool {
+        self.0.send(Job::New(client, rid, Box::new(n))).is_ok()
+    }
+
     /// The absolute path of entry `id` now.
     pub(super) fn path(&self, id: &str, wait: Duration) -> Result<PathBuf, NoPath> {
         let (tx, rx) = channel();
@@ -135,7 +143,7 @@ impl Shell {
                 return self.rpc_answer(client, rid, Err(RpcError::refused(why, Some("bad_request"))));
             }
             HubCmd::FolderList { folder, .. } => (Job::List(client, rid.clone(), folder, self.art_links()), "folder/list"),
-            HubCmd::FileNew { .. } => return self.rpc_answer(client, rid, Err(ViewError::NotSupported.rpc("file/new"))),
+            HubCmd::FileNew { make, library_folder, in_folder, .. } => return self.file_new(client, rid, make, library_folder, in_folder),
             _ => return,
         };
         let sent = self.ids.jobs.as_ref().is_some_and(|j| j.send(job).is_ok());
@@ -315,6 +323,23 @@ fn ask(t: &mut Table, job: Job, o: &Out) -> bool {
         Job::Path(id, reply) => {
             let _ = reply.send(t.path(&id));
             true
+        }
+        Job::New(client, rid, n) => {
+            let made = t.new_file(n.folder.as_deref(), &n.title, &n.ending, &n.bytes, o.log);
+            let (made, changes) = match made {
+                Ok((path, entry, changes)) => (Ok((path, entry)), changes),
+                Err(e) => (Err(e), Vec::new()),
+            };
+            // the store's copy staged here, so the loop only renames it in
+            let made = made.map(|(path, entry)| {
+                let staged = crate::artifacts::Store::new(&n.state).stage_new(&n.bytes).ok();
+                (path, entry, staged)
+            });
+            o.changes(t, changes)
+                && o.step(Box::new(move |sh: &mut Shell| match made {
+                    Ok((path, entry, staged)) => sh.file_made(client, rid, &path, entry, staged, n.library_folder),
+                    Err(e) => sh.rpc_answer(client, rid, Err(e)),
+                }))
         }
         Job::Fs(_) => true,
     }
@@ -510,6 +535,45 @@ impl Table {
         Some(self.root.join(rel))
     }
 
+    /// The table path of folder `folder` (an id; none or the root's crumb:
+    /// the root, `""`); an unknown id or a file: refused (bad_request).
+    fn folder_rel(&self, method: &str, folder: Option<&str>) -> Result<String, RpcError> {
+        let bad = |f: &str, why: &str| RpcError::refused(format!("{method} {f:?}: {why}"), Some("bad_request"));
+        let Some(f) = folder.filter(|f| *f != ROOT_CRUMB) else { return Ok(String::new()) };
+        let at = f.parse().ok().and_then(|id| self.snap.path_of(id)).map(str::to_string);
+        match at.as_deref().and_then(|r| self.snap.get(r)) {
+            Some((_, e)) if e.kind == Kind::Folder => Ok(at.unwrap_or_default()),
+            Some(_) => Err(bad(f, "not a folder")),
+            None => Err(bad(f, "no such folder of ~/bise")),
+        }
+    }
+
+    /// `file/new`'s file (A4b): `bytes` (its template's, or none) in
+    /// folder `folder` (as [`Table::folder_rel`]) under the first free
+    /// name of `title` + `ending` (never over a file), then its id. Its
+    /// absolute path, its id and the changes (they go out first).
+    pub(super) fn new_file(&mut self, folder: Option<&str>, title: &str, ending: &str, bytes: &[u8], log: &dyn Fn(&str)) -> Result<(PathBuf, String, Vec<bise_ids::Change>), RpcError> {
+        use std::io::Write;
+        const WHAT: &str = "file/new";
+        let rel = self.folder_rel(WHAT, folder)?;
+        let gone = || RpcError::refused(format!("{WHAT}: {rel:?} is gone from ~/bise"), Some("not_found"));
+        let dir = if rel.is_empty() { self.root.clone() } else { self.root.join(&rel) };
+        let nth = |n: u32| bise_proto::words::views::new_nth(n);
+        let (path, mut f) = crate::view_files_disk::free_name(&dir, title, ending, None, &nth).map_err(|e| match e.kind() {
+            std::io::ErrorKind::NotFound => gone(),
+            _ => RpcError::refused(format!("{WHAT}: {e}"), Some("server_error")),
+        })?;
+        let wrote = f.write_all(bytes).and_then(|()| f.sync_all());
+        if let Err(e) = wrote {
+            let _ = std::fs::remove_file(&path);
+            return Err(RpcError::refused(format!("{WHAT}: {e}"), Some("server_error")));
+        }
+        let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        let at = if rel.is_empty() { name } else { format!("{rel}/{name}") };
+        let (id, changes) = self.mint(&at, log)?;
+        Ok((path, id, changes))
+    }
+
     /// `folder/list`: folder `folder` (an id; none or the root's crumb:
     /// the root) read again from disk, then its rows from the table, each
     /// with its matcher's target (the loop adds the apps), and the
@@ -517,17 +581,9 @@ impl Table {
     /// artifacts' current files, a row that is one says so.
     #[allow(clippy::type_complexity)]
     pub(super) fn list(&mut self, folder: Option<&str>, links: &Links, log: &dyn Fn(&str)) -> (Result<(FolderList, Vec<Target>), RpcError>, Vec<bise_ids::Change>) {
-        let bad = |f: &str, why: &str| RpcError::refused(format!("folder/list {f:?}: {why}"), Some("bad_request"));
-        let rel = match folder.filter(|f| *f != ROOT_CRUMB) {
-            None => String::new(),
-            Some(f) => {
-                let at = f.parse().ok().and_then(|id| self.snap.path_of(id)).map(str::to_string);
-                match at.as_deref().and_then(|r| self.snap.get(r)) {
-                    Some((_, e)) if e.kind == Kind::Folder => at.unwrap_or_default(),
-                    Some(_) => return (Err(bad(f, "not a folder")), Vec::new()),
-                    None => return (Err(bad(f, "no such folder of ~/bise")), Vec::new()),
-                }
-            }
+        let rel = match self.folder_rel("folder/list", folder) {
+            Ok(r) => r,
+            Err(e) => return (Err(e), Vec::new()),
         };
         let changes = self.walk_apply(&[Cover::Dir(rel.clone())], log, &mut |_| {});
         if !rel.is_empty() && self.snap.id_of(&rel).is_none() {

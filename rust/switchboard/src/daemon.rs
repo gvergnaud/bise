@@ -80,6 +80,7 @@ mod usage;
 mod usage_spool;
 mod view_out;
 mod tick;
+mod file_new;
 mod files_ids;
 mod view_files;
 mod view_open;

@@ -871,9 +871,20 @@ impl Store {
     /// the artifact's folder, so [`Store::add`] with [`Add::staged`] only
     /// renames it. The caller deletes it when the save loses its decide.
     pub fn stage_copy(&self, id: &str, bytes: &[u8]) -> std::io::Result<PathBuf> {
+        self.stage_in(&self.dir().join(id), bytes)
+    }
+
+    /// A new artifact's first copy, staged off the loop (`file/new`,
+    /// architect m_63160): its id is not known yet, so in the store's own
+    /// folder; [`Store::add`] with [`Add::staged`] renames it into its
+    /// version's folder. The caller deletes it when the add fails.
+    pub fn stage_new(&self, bytes: &[u8]) -> std::io::Result<PathBuf> {
+        self.stage_in(&self.dir(), bytes)
+    }
+
+    fn stage_in(&self, dir: &Path, bytes: &[u8]) -> std::io::Result<PathBuf> {
         static N: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let dir = self.dir().join(id);
-        std::fs::create_dir_all(&dir)?;
+        std::fs::create_dir_all(dir)?;
         let p = dir.join(format!(".staged-{}-{}", std::process::id(), N.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
         std::fs::write(&p, bytes)?;
         std::fs::File::open(&p)?.sync_all()?;

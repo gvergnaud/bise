@@ -354,26 +354,16 @@ fn commit_root(pages: &Pages, path: &std::path::Path, s: &mut Staged) -> Result<
     Ok((WriteOutcome::Saved { etag: w.hash }, None))
 }
 
-/// `bytes` beside `source` as `<name> (copy).<ext>`, a free name (the
-/// words catalog's), never over a file: created exclusive (`O_EXCL`), so a
-/// file that appears meanwhile only moves it to the next name. Its path.
+/// `bytes` beside `source` as `<name> (copy).<ext>`, a free name
+/// ([`crate::view_files_disk::free_name`]), never over a file. Its path.
 fn write_copy(source: &std::path::Path, bytes: &[u8]) -> std::io::Result<PathBuf> {
     use std::io::Write;
     let dir = source.parent().ok_or_else(|| std::io::Error::other("no folder"))?;
     let stem = source.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
     let ext = source.extension().map(|e| format!(".{}", e.to_string_lossy())).unwrap_or_default();
-    for n in 1..1000 {
-        let suffix = if n == 1 { bise_proto::words::views::copy_first.to_string() } else { bise_proto::words::views::copy_nth(n) };
-        let p = dir.join(format!("{stem} {suffix}{ext}"));
-        match std::fs::OpenOptions::new().write(true).create_new(true).open(&p) {
-            Ok(mut f) => {
-                f.write_all(bytes)?;
-                f.sync_all()?;
-                return Ok(p);
-            }
-            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
-            Err(e) => return Err(e),
-        }
-    }
-    Err(std::io::Error::other("no free name"))
+    let nth = |n: u32| bise_proto::words::views::copy_nth(n);
+    let (p, mut f) = crate::view_files_disk::free_name(dir, &stem, &ext, Some(bise_proto::words::views::copy_first), &nth)?;
+    f.write_all(bytes)?;
+    f.sync_all()?;
+    Ok(p)
 }

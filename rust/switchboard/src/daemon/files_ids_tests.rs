@@ -333,3 +333,25 @@ fn fresher_wins_drops_the_folders_read_before_a_newer_listing() {
     let (_, covers, _) = fresher_wins(vec![Cover::FULL, Cover::Dir("A".into())], Read::new(), &BTreeMap::new(), &known);
     assert_eq!(covers, vec![Cover::FULL, Cover::Dir("A".into())]);
 }
+
+/// file/new's file (A4b): the make's title, then `Sheet 2` when taken
+/// (the words' pick, never over a file), in the folder asked, with its
+/// id at once; a file or an unknown id as the folder: refused.
+#[test]
+fn a_new_file_takes_the_first_free_name_in_its_folder_and_its_id() {
+    let (root, mut t) = table("new");
+    fs::create_dir_all(root.join("q3")).unwrap();
+    fs::write(root.join("Sheet.xlsx"), "his").unwrap();
+    fs::write(root.join("q3/a.md"), "a").unwrap();
+    t.walk_apply(&[Cover::FULL], &|_| {}, &mut |_| {});
+    let (p, e, changes) = t.new_file(None, "Sheet", ".xlsx", b"xl", &|_| {}).unwrap();
+    assert_eq!(p, root.join(format!("Sheet {}.xlsx", bise_proto::words::views::new_nth(2))));
+    assert_eq!((fs::read(&p).unwrap(), fs::read(root.join("Sheet.xlsx")).unwrap()), (b"xl".to_vec(), b"his".to_vec()), "never over his file");
+    assert_eq!((id(&t, "Sheet 2.xlsx"), changes.len()), (Some(e), 1));
+    let q3 = id(&t, "q3").unwrap();
+    let (p, e, _) = t.new_file(Some(&q3), "Sheet", ".xlsx", b"", &|_| {}).unwrap();
+    assert_eq!((p, id(&t, "q3/Sheet.xlsx")), (root.join("q3/Sheet.xlsx"), Some(e)));
+    let a = id(&t, "q3/a.md").unwrap();
+    assert_eq!(reason(t.new_file(Some(&a), "Sheet", ".xlsx", b"", &|_| {}).unwrap_err()), "bad_request");
+    assert_eq!(reason(t.new_file(Some("e:999999"), "Sheet", ".xlsx", b"", &|_| {}).unwrap_err()), "bad_request");
+}

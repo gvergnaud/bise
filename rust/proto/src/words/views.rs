@@ -161,4 +161,6 @@ crate::words! { views:
     hidden_not_listed = "hidden files are not listed yet";
     /// view/open of a ~/bise file while the hub reads ~/bise and can't say where it is yet
     files_busy = "bise is still reading ~/bise: try again in a moment";
+    /// New ›'s next free name when its make's title is taken, `Sheet 2.xlsx`
+    new_nth(n) = "{n}";
 }
