@@ -84,6 +84,27 @@ pub struct OpenerDecl {
     pub write: bool,
     /// its view's origin (A5's `isolate`)
     pub isolate: Isolate,
+    /// its app's icon (A1's `icon`): `./…` a `.svg`, `.png` or `.webp`
+    /// inside the plugin, checked lexically here; the hub's reader at
+    /// [`ICON_ROUTE`] checks its realpath and size
+    pub icon: Option<String>,
+    /// its view may be drawn in `displayMode: "thumbnail"` (A6b): a
+    /// static view always, a server's only with `thumbnail: true`
+    pub thumbnail: bool,
+}
+
+/// Where the hub serves a plugin's icon: `/icon/<plugin>`, an
+/// [`Opener`]'s `icon` for a plugin that declares one (a built-in's is a
+/// design-system icon name, `builtin: true`).
+pub const ICON_ROUTE: &str = "/icon/";
+
+/// The icon files a plugin may declare (lowercase endings).
+const ICON_ENDINGS: [&str; 3] = [".svg", ".png", ".webp"];
+
+/// A path inside the plugin, as A1 writes it (`./templates/empty.xlsx`):
+/// `./` then segments, none empty, `.` or `..`, no `\`. Lexical only.
+fn inside_plugin(path: &str) -> bool {
+    path.strip_prefix("./").is_some_and(|rel| !rel.is_empty() && !rel.contains(['\\', '\0']) && !rel.split('/').any(|s| s.is_empty() || s == "." || s == ".."))
 }
 
 /// Which origin a document's view runs on (A5, `dev.bise/ui.isolate`).
@@ -194,13 +215,9 @@ fn make_of(i: usize, v: &Value) -> Result<Make, String> {
     }
     let template = match o.get("template") {
         None => None,
-        Some(Value::String(t)) => {
-            let rel = t.strip_prefix("./").ok_or(format!("{at}.template must start with ./ (a file in the plugin)"))?;
-            if rel.is_empty() || rel.split('/').any(|s| s.is_empty() || s == "." || s == "..") || rel.contains('\\') {
-                return Err(format!("{at}.template must stay inside the plugin"));
-            }
-            Some(t.clone())
-        }
+        Some(Value::String(t)) if !t.starts_with("./") => return Err(format!("{at}.template must start with ./ (a file in the plugin)")),
+        Some(Value::String(t)) if !inside_plugin(t) => return Err(format!("{at}.template must stay inside the plugin")),
+        Some(Value::String(t)) => Some(t.clone()),
         Some(_) => return Err(format!("{at}.template must be a string")),
     };
     Ok(Make { ending, title: title_of(o.get("title"), &at)?, template })
@@ -303,12 +320,30 @@ pub fn parse(plugin: &str, server: &str, tool: &Value) -> (Option<OpenerDecl>, V
             Isolate::View
         }
     };
+    let icon = match bise.and_then(|b| b.get("icon")) {
+        None => None,
+        Some(Value::String(p)) if inside_plugin(p) && ICON_ENDINGS.iter().any(|e| fold(p).ends_with(e)) => Some(p.clone()),
+        Some(v) => {
+            diags.push(invalid(plugin, name, format!("dev.bise/ui.icon {v} must be a ./ path to a .svg, .png or .webp inside the plugin; dropped")));
+            None
+        }
+    };
+    // a static view is bise's to draw; a server's runs its own code, so
+    // only when it says so
+    let thumbnail = match bise.and_then(|b| b.get("thumbnail")) {
+        None => server == crate::views::SERVER,
+        Some(Value::Bool(b)) => *b || server == crate::views::SERVER,
+        Some(_) => {
+            diags.push(invalid(plugin, name, "dev.bise/ui.thumbnail must be true or false; taken as false".into()));
+            server == crate::views::SERVER
+        }
+    };
     if entries.is_empty() {
         diags.push(invalid(plugin, name, "no valid file entry; dropped".into()));
         return (None, diags);
     }
     let app = app.unwrap_or_else(|| plugin.to_string());
-    (Some(OpenerDecl { server: server.to_string(), tool: name.to_string(), uri, app, entries, makes, write, isolate }), diags)
+    (Some(OpenerDecl { server: server.to_string(), tool: name.to_string(), uri, app, entries, makes, write, isolate, icon, thumbnail }), diags)
 }
 
 /// A plugin's openers from one server's tools as its `tools/list` lists
@@ -395,7 +430,9 @@ pub struct Openers {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PluginOpeners {
     pub plugin: String,
-    pub icon: Option<String>,
+    /// its app's icon file: its first opener's that declares one, under
+    /// its root (what the hub's [`ICON_ROUTE`] reads)
+    pub icon: Option<std::path::PathBuf>,
     /// bise's own (scope built-in, from the resolver): wins a tie over a
     /// third party's claim (architect m_60451); his pick still decides
     pub first_party: bool,
@@ -433,7 +470,8 @@ impl Openers {
                 list.truncate(MAX_OPENERS);
             }
             if !list.is_empty() {
-                plugins.push(PluginOpeners { plugin: p.name.clone(), icon: None, first_party: p.scope == crate::resolve::Scope::BuiltIn, openers: list });
+                let icon = list.iter().find_map(|o| o.icon.as_deref()).and_then(|i| i.strip_prefix("./")).map(|rel| p.root.join(rel));
+                plugins.push(PluginOpeners { plugin: p.name.clone(), icon, first_party: p.scope == crate::resolve::Scope::BuiltIn, openers: list });
             }
         }
         (Openers { plugins }, diags)
@@ -531,36 +569,42 @@ pub struct Builtin {
     /// today's viewer kind (`pages::site::viewer_kind`), its tool's name
     pub kind: &'static str,
     pub folder: bool,
+    /// its design-system icon (one of [`BUILTIN_ICONS`]), its opener's
+    /// `icon`: the one per-type icon table, which goes with its row
+    pub icon: &'static str,
 }
 
-const fn b(key: &'static str, plugin: &'static str, app: &'static str, type_title: &'static str, kind: &'static str) -> Builtin {
-    Builtin { key, plugin, app, type_title, kind, folder: false }
+/// The design-system icons a built-in type may carry (A6b).
+pub const BUILTIN_ICONS: [&str; 6] = ["image", "video", "doc", "sheet", "deck", "page"];
+
+const fn b(key: &'static str, plugin: &'static str, app: &'static str, type_title: &'static str, kind: &'static str, icon: &'static str) -> Builtin {
+    Builtin { key, plugin, app, type_title, kind, folder: false, icon }
 }
 
 /// bise's own types not migrated yet (docs/plugin-apps.md A3, migration
 /// table): each step deletes its rows with its `viewer_kind` arms.
 pub const BUILTIN: &[Builtin] = &[
-    b("*.png", "media", "Preview", "PNG image", "image"),
-    b("*.jpg", "media", "Preview", "JPEG image", "image"),
-    b("*.jpeg", "media", "Preview", "JPEG image", "image"),
-    b("*.gif", "media", "Preview", "GIF image", "image"),
-    b("*.webp", "media", "Preview", "WebP image", "image"),
-    b("*.md", "docs", "Writer", "Markdown document", "markdown"),
-    b("*.markdown", "docs", "Writer", "Markdown document", "markdown"),
-    b("*.pdf", "media", "Preview", "PDF document", "pdf"),
-    b("*.mp4", "media", "Preview", "MP4 video", "video"),
-    b("*.mov", "media", "Preview", "QuickTime video", "video"),
-    b("*.webm", "media", "Preview", "WebM video", "video"),
-    b("*.m4v", "media", "Preview", "MPEG-4 video", "video"),
-    b("*.docx", "docs", "Writer", "Word document", "docx"),
-    b("*.pptx", "slides", "Slides", "PowerPoint deck", "pptx"),
-    b("*.xlsx", "sheets", "Sheets", "Excel workbook", "xlsx"),
-    b("*.html", "sites", "Sites", "Web page", "site"),
-    b("*.htm", "sites", "Sites", "Web page", "site"),
-    Builtin { key: "*/index.html", plugin: "sites", app: "Sites", type_title: "Website", kind: "site", folder: true },
+    b("*.png", "media", "Preview", "PNG image", "image", "image"),
+    b("*.jpg", "media", "Preview", "JPEG image", "image", "image"),
+    b("*.jpeg", "media", "Preview", "JPEG image", "image", "image"),
+    b("*.gif", "media", "Preview", "GIF image", "image", "image"),
+    b("*.webp", "media", "Preview", "WebP image", "image", "image"),
+    b("*.md", "docs", "Writer", "Markdown document", "markdown", "doc"),
+    b("*.markdown", "docs", "Writer", "Markdown document", "markdown", "doc"),
+    b("*.pdf", "media", "Preview", "PDF document", "pdf", "doc"),
+    b("*.mp4", "media", "Preview", "MP4 video", "video", "video"),
+    b("*.mov", "media", "Preview", "QuickTime video", "video", "video"),
+    b("*.webm", "media", "Preview", "WebM video", "video", "video"),
+    b("*.m4v", "media", "Preview", "MPEG-4 video", "video", "video"),
+    b("*.docx", "docs", "Writer", "Word document", "docx", "doc"),
+    b("*.pptx", "slides", "Slides", "PowerPoint deck", "pptx", "deck"),
+    b("*.xlsx", "sheets", "Sheets", "Excel workbook", "xlsx", "sheet"),
+    b("*.html", "sites", "Sites", "Web page", "site", "page"),
+    b("*.htm", "sites", "Sites", "Web page", "site", "page"),
+    Builtin { key: "*/index.html", plugin: "sites", app: "Sites", type_title: "Website", kind: "site", folder: true, icon: "page" },
     // a bise page: the hub names a page artifact `<id>.page` for A2 (A9,
     // architect m_60436); today's frame is its `/p/<id>`
-    b("*.page", "pages", "Pages", "bise page", "page"),
+    b("*.page", "pages", "Pages", "bise page", "page", "page"),
 ];
 
 /// Which app opens `target` (A2), and the others in the same order.
@@ -579,7 +623,7 @@ pub fn pick(target: &Target, openers: &Openers, picks: &Picks) -> Opened {
                 .filter_map(|e| entry_match(&po.plugin, e, target).map(|k| (specificity(&k), e.rank, k, &e.title)))
                 .max_by(|a, b| a.0.cmp(&b.0).then(b.1.cmp(&a.1)));
             if let Some((spec, rank, key, title)) = best {
-                let opener = Opener { plugin: po.plugin.clone(), tool: o.tool.clone(), app: o.app.clone(), type_key: key, type_title: title.clone(), icon: po.icon.clone(), builtin: false };
+                let opener = Opener { plugin: po.plugin.clone(), tool: o.tool.clone(), app: o.app.clone(), type_key: key, type_title: title.clone(), icon: po.icon.as_ref().map(|_| format!("{ICON_ROUTE}{}", po.plugin)), builtin: false };
                 cands.push(Candidate { opener, rank, spec, first_party: po.first_party });
             }
         }
@@ -592,7 +636,7 @@ pub fn pick(target: &Target, openers: &Openers, picks: &Picks) -> Opened {
             if cands.iter().any(|c| c.opener.plugin == bi.plugin) {
                 continue;
             }
-            let opener = Opener { plugin: bi.plugin.into(), tool: bi.kind.into(), app: bi.app.into(), type_key: key.clone(), type_title: bi.type_title.into(), icon: None, builtin: true };
+            let opener = Opener { plugin: bi.plugin.into(), tool: bi.kind.into(), app: bi.app.into(), type_key: key.clone(), type_title: bi.type_title.into(), icon: Some(bi.icon.into()), builtin: true };
             cands.push(Candidate { opener, rank: OpenRank::Owner, spec: specificity(&key), first_party: true });
         }
     }

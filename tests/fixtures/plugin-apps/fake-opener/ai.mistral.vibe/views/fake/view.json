@@ -33,7 +33,8 @@
         { "ending": ".fake", "title": "Fake", "template": "./templates/empty.fake" },
         { "ending": ".note", "title": "Note" }
       ],
-      "write": true
+      "write": true,
+      "icon": "./icon.svg"
     }
   }
 }

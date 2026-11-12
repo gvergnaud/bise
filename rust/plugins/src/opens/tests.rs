@@ -175,6 +175,8 @@ fn op(tool: &str, app: &str, entries: &[(&str, OpenRank, bool)]) -> OpenerDecl {
         makes: vec![],
         write: false,
         isolate: Isolate::View,
+        icon: None,
+        thumbnail: true,
     }
 }
 
@@ -374,6 +376,15 @@ fn only_openers_that_use_documents_get_a_documents_folder() {
     let (o, d) = Openers::gather(&res, &servers);
     assert!(d.is_empty(), "{d:?}");
     assert_eq!(o.documents_to_make(&res), [dir.join("documents").join("maker")]);
+
+    // two openers with an icon: the plugin's is the first one's, in the
+    // order its server lists them, every time (architect m_61848)
+    let with_icon = |name: &str, icon: &str| tool(name, json!({"ui": {"resourceUri": format!("ui://maker/{name}")}, "dev.bise/ui": {"files": [{"match": [format!("*.{name}")], "title": "T"}], "icon": icon}}));
+    for (first, second) in [("./a.svg", "./b.png"), ("./b.png", "./a.svg")] {
+        let servers: ServerTools = [(("maker".to_string(), "srv".to_string()), vec![with_icon("one", first), with_icon("two", second)])].into_iter().collect();
+        let (o, _) = Openers::gather(&res, &servers);
+        assert_eq!(o.plugins[0].icon, Some(dir.join("user/maker").join(&first[2..])), "{first} then {second}");
+    }
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -381,5 +392,55 @@ fn only_openers_that_use_documents_get_a_documents_folder() {
 fn every_builtin_key_is_canonical() {
     for b in BUILTIN {
         assert_eq!(type_key(b.key).as_deref(), Some(b.key), "{b:?}");
+        assert!(BUILTIN_ICONS.contains(&b.icon), "{b:?}");
     }
+    // the icon goes on the built-in opener, a design-system name
+    let png = pick(&Target::file("a.png"), &Openers::default(), &Picks::new()).opener.unwrap();
+    assert_eq!((png.icon.as_deref(), png.builtin), (Some("image"), true));
+    let xlsx = pick(&Target::file("a.xlsx"), &Openers::default(), &Picks::new()).opener.unwrap();
+    assert_eq!(xlsx.icon.as_deref(), Some("sheet"));
+}
+
+fn with_bise(extra: serde_json::Value) -> serde_json::Value {
+    let mut ui = json!({"files": [{"match": ["*.x"], "title": "X"}]});
+    ui.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+    tool("open", json!({"ui": {"resourceUri": "ui://p/v"}, "dev.bise/ui": ui}))
+}
+
+#[test]
+fn an_icon_is_a_picture_inside_the_plugin() {
+    for ok in ["./icon.svg", "./assets/App.PNG", "./a/b.webp"] {
+        let (o, d) = parse("p", "srv", &with_bise(json!({"icon": ok})));
+        assert_eq!((o.unwrap().icon.as_deref(), d), (Some(ok), vec![]), "{ok}");
+    }
+    for bad in [json!("icon.svg"), json!("/abs/icon.svg"), json!("./../x.svg"), json!("./a//b.svg"), json!("./a\\b.svg"), json!("./icon.gif"), json!("./"), json!(3)] {
+        let (o, d) = parse("p", "srv", &with_bise(json!({"icon": bad})));
+        assert_eq!(o.unwrap().icon, None, "{bad}: dropped, the opener stays");
+        assert_eq!(d.len(), 1, "{bad}: warned");
+    }
+}
+
+#[test]
+fn a_static_view_may_always_draw_a_thumbnail_a_server_only_when_it_says() {
+    let thumb = |server: &str, extra| parse("p", server, &with_bise(extra)).0.unwrap().thumbnail;
+    assert!(thumb(crate::views::SERVER, json!({})));
+    assert!(thumb(crate::views::SERVER, json!({"thumbnail": false})), "bise draws its static views");
+    assert!(!thumb("srv", json!({})));
+    assert!(thumb("srv", json!({"thumbnail": true})));
+    let (o, d) = parse("p", "srv", &with_bise(json!({"thumbnail": "yes"})));
+    assert_eq!((o.unwrap().thumbnail, d.len()), (false, 1));
+}
+
+#[test]
+fn a_plugins_icon_is_its_first_openers_served_by_the_hub() {
+    let res = fixtures(&[]);
+    let (o, _) = Openers::gather(&res, &ServerTools::new());
+    let root = res.plugins.iter().find(|p| p.name == "fake-opener").unwrap().root.clone();
+    let fake = o.plugins.iter().find(|p| p.plugin == "fake-opener").unwrap();
+    assert_eq!(fake.icon, Some(root.join("icon.svg")));
+    assert!(fake.icon.as_ref().unwrap().is_file(), "the fixture ships it");
+    assert_eq!(o.plugins.iter().find(|p| p.plugin == "fake-claim").unwrap().icon, None);
+    let opened = pick(&Target::file("a.fake"), &o, &Picks::new());
+    assert_eq!(opened.opener.unwrap().icon.as_deref(), Some("/icon/fake-opener"));
+    assert_eq!(opened.others[0].icon, None, "fake-claim has none: the window's own");
 }

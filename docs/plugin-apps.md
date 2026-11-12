@@ -47,7 +47,9 @@ An opener is a tool whose `_meta` has a view and a file entrypoint:
       {"match": ["@documents/boards/*.board.json"], "title": "Board"},
       {"match": ["*/index.html"], "folder": true, "title": "Website"}],
     "makes": [{"ending": ".xlsx", "title": "Sheet", "template": "./templates/empty.xlsx"}],
-    "write": true
+    "write": true,
+    "icon": "./icon.svg",
+    "thumbnail": true
   }
 }
 ```
@@ -75,6 +77,20 @@ An opener is a tool whose `_meta` has a view and a file entrypoint:
   The launcher's New › and the agents' hint read it. `write`: its view may save (a grant he
   gives at the add, like mic and camera: C8's `view_grants` gains the
   `write` permission).
+- `icon` (A6b): its app's icon, a `./` path to a `.svg`, `.png` or
+  `.webp` inside the plugin (checked like a template; its realpath and
+  64 KiB cap where the hub reads it, `GET /icon/<plugin>`). A plugin's
+  icon is its first opener's that declares one; its openers' `icon` on
+  rows is `/icon/<plugin>`. A built-in type's is a design-system icon
+  name (`image`, `video`, `doc`, `sheet`, `deck`, `page`) from
+  `opens::BUILTIN`, the one per-type icon table.
+- `thumbnail` (A6b): its view may be drawn in `displayMode:
+  "thumbnail"`. A static view always may; a server's opener only with
+  `thumbnail: true`. Carried on the opener (`OpenerDecl.thumbnail`), so
+  view/open refuses the rest.
+- Each opener knows its server (`OpenerDecl.server`: the stdio or
+  remote id, `~views` for a static view); `Openers::decl(plugin, tool)`
+  is what view/open routes on.
 - A bad entry: a warning in the plugin's diagnostics
   (`plugin.opener.invalid`), that entry dropped, the rest loads.
   Caps: 16 openers a plugin, 32 entries an opener.
