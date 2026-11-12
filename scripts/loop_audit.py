@@ -949,8 +949,8 @@ def self_test():
         fs = flake_section(hd, now)
         assert fs["worst"] == 0.2 and fs["offenders"] == [{"test": "a_e2e", "flaky": 2, "runs": 10}], fs
         kr = known_reds_section(hd)
-        # the repo's own file, on a home with no runs: its open lines, the expired ones a list
-        assert kr["open"] and isinstance(kr["expired"], list), kr
+        # the repo's own file, on a home with no runs: its open lines (0 when every red is closed), the expired ones a list
+        assert isinstance(kr["open"], int) and isinstance(kr["expired"], list), kr
         rep = {"gates": {"quick": {"secs_p50": 1}, "full": {"runs": 0, "secs_p50": 1, "queue_p50": 0}}, "heavy": {"wait_p50": 0},
                "waits": {"ended_at_max": []}, "related_misses": [], "flakes": fs, "known_reds": {"open": 3, "expired": ["x (y)"]}}
         # the tip check's CPU per day, from tip-verdicts.tsv (tip_check.verdict_line's format)
