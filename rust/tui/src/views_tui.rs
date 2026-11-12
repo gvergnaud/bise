@@ -100,6 +100,12 @@ pub(crate) fn open(app: &mut App, how: How, call: &str) -> String {
     }
 }
 
+/// A document's page on the web host (docs/plugin-apps.md A7, the hub's
+/// `GET /d/<artifact id>`): `<pages url>/d/<id>`.
+pub(crate) fn doc_web_url(pages_url: &str, id: &str) -> String {
+    format!("{}/d/{}", pages_url.trim_end_matches('/'), id)
+}
+
 /// `app/open`'s answer: no desktop connection got it, the flash says so.
 pub(crate) fn app_opened(app: &mut App, v: &Value) {
     if delivered(v) == 0 {

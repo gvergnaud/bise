@@ -11,7 +11,7 @@ import { ViewCard } from './Card';
 import { ViewTab } from './Tab';
 import { MAX_LIVE, type Place } from './place';
 import { UI, type Json, type JsonObject } from './protocol';
-import { refKey, viewKey, type DocRef, type ViewAnswer, type ViewCmd, type ViewRef } from './port';
+import { DOC_ERR, refKey, viewKey, type DocRef, type ViewAnswer, type ViewCmd, type ViewRef } from './port';
 import { opened } from './doc.test';
 import { resourceOf } from './resource';
 import { ViewsStore, type ViewsEnv } from './store';
@@ -338,6 +338,32 @@ describe("a document's view (docs/plugin-apps.md A4, A5)", () => {
     r.tabs.add(refKey(DOC_REF));
     return { ...r, copied };
   }
+
+  it("a failed view/open inside the 10 s grace stays loading and is asked again; a real answer says it at once (apps-lead m_60748)", async () => {
+    let n = 0;
+    const { store, asked, timers } = docRig((c) => {
+      if (c.cmd !== 'view_open') return undefined;
+      n += 1;
+      // a hub still starting refuses twice, then answers the document is gone
+      return n <= 2 ? { error: { code: -32001, message: 'no hub yet' } } : { error: { code: DOC_ERR.gone, message: 'gone' } };
+    });
+    store.ensure(DOC_REF);
+    await flush();
+    expect(store.state(DOC_REF).kind).toBe('loading');
+    expect(timers).toHaveLength(1);
+    timers.splice(0).forEach((t) => {
+      t();
+    });
+    await flush();
+    expect(store.state(DOC_REF).kind).toBe('loading');
+    timers.splice(0).forEach((t) => {
+      t();
+    });
+    await flush();
+    expect(store.state(DOC_REF)).toMatchObject({ kind: 'failed', code: DOC_ERR.gone });
+    expect(asked.filter((c) => c.cmd === 'view_open')).toHaveLength(3);
+    expect(timers, 'a real answer is never asked again').toHaveLength(0);
+  });
 
   async function live(store: ViewsStore) {
     const stop = store.listen(window);

@@ -14,8 +14,8 @@
 //!
 //! Keys: the list holds them when it opens: ↑↓, ⏎ open, space Quick
 //! Look, v versions, r show in Finder, o open in the app (drawn by its
-//! app, docs/plugin-apps.md A7; `O`, his browser, comes with the hub's
-//! /d/ page), c copy, @ put it in a message,
+//! app, docs/plugin-apps.md A7), O in his browser (a PR on GitHub, a
+//! link as it is, else the hub's /d/ page), c copy, @ put it in a message,
 //! m move to… (artifacts_pick.rs), n new folder, p project, tab the
 //! folders, a archived, esc back. The tree's: ↑↓ the place (the list
 //! follows), →← open or shut a theme, ⏎ or tab back to the list. `/`
@@ -328,6 +328,23 @@ fn open_in_app(app: &mut App) {
     app.sb.call("app/open", serde_json::json!({"what": "artifact", "id": a.id}), crate::sb::rpc::Then::AppOpen);
 }
 
+/// `O`: in his browser: a PR on GitHub, a link as it is, else the hub's
+/// web host's page of it (`<pages url>/d/<id>`, A7).
+fn open_in_browser(app: &mut App) {
+    let Some(sc) = app.artifacts.as_ref() else { return };
+    let Some(a) = sel_row(sc) else { return };
+    let url = match (&a.pr, a.is_link()) {
+        (_, true) => a.target.clone(),
+        (Some(pr), false) => format!("https://github.com/{}/pull/{}", pr.repo, pr.number),
+        (None, false) => match app.sb.pages_url.as_deref() {
+            Some(base) => crate::views_tui::doc_web_url(base, &a.id),
+            None => return flash(app, bise_proto::words::views::tui_no_web.to_string()),
+        },
+    };
+    let ok = crate::links::open(&url);
+    flash(app, if ok { format!("opening {}", artifacts::short_target(&url)) } else { format!("could not open {}", url) });
+}
+
 /// `r`: the file in Finder (its folder elsewhere).
 fn reveal(app: &mut App) {
     let Some(sc) = app.artifacts.as_ref() else { return };
@@ -609,6 +626,7 @@ pub(crate) fn on_key(app: &mut App, k: &KeyEvent) -> bool {
         KeyCode::Char(' ') if sc.versions.is_none() => quick_look(app),
         KeyCode::Char('r') => reveal(app),
         KeyCode::Char('o') if !ctrl => open_in_app(app),
+        KeyCode::Char('O') if !ctrl => open_in_browser(app),
         KeyCode::Char('c') if !ctrl => copy(app),
         KeyCode::Char('@') => put_in_message(app),
         _ => {}

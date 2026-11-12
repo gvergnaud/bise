@@ -14,6 +14,8 @@ import { evict, MAX_LIVE } from './place';
 import type { DisplayMode, Download, Json, JsonObject } from './protocol';
 import { DOC_ERR, isDoc, refKey, VIEW_ERR, type AnyRef, type DocRef, type DocTarget, type DocWire, type OpenerPick, type ViewAsk, type ViewRef, type Wire } from './port';
 import { resourceOf, ungranted } from './resource';
+import { LOAD_GRACE_MS, LOAD_RETRY_MS } from '@/artifacts/grace';
+import { RPC } from './protocol';
 import { ViewSession, type DocSide, type Note, type Phase, type ViewResource } from './session';
 
 /** A card's height before its view says its own (css px), and the bounds of what it may say. */
@@ -104,6 +106,12 @@ export function clipsOf(el: HTMLElement): HTMLElement[] {
   return out;
 }
 
+/**
+ * view/open's answers about the document itself, said at once (gone, off, a refused handle, no
+ * view/open on this hub, expired): any other failure inside LOAD_GRACE_MS is a hub still starting.
+ */
+const REAL_ANSWERS: ReadonlySet<number> = new Set([DOC_ERR.gone, DOC_ERR.badHandle, DOC_ERR.noWrite, VIEW_ERR.pluginOff, VIEW_ERR.expired, RPC.notFound, RPC.invalid]);
+
 /** A document view's own part of its record: kept across its sessions while its tab is open. */
 interface DocRec {
   /** Open with's pick this time; none: the hub's (A2) */
@@ -117,6 +125,8 @@ interface DocRec {
   conflicted: { readonly text: string } | { readonly blob: string } | null;
   /** a save of his in this session answered saved */
   savedHere: boolean;
+  /** when its open (or his try again, a reopen) began: a failed view/open inside LOAD_GRACE_MS is asked again */
+  graceFrom: number;
   /** the notes its view was given last, and the ids it could not place */
   notes: readonly ViewNote[];
   detached: readonly string[];
@@ -189,7 +199,7 @@ export class ViewsStore {
     const k = refKey(ref);
     let r = this.recs.get(k);
     if (r === undefined) {
-      const doc: DocRec | null = isDoc(ref) ? { state: null, save: IDLE, conflicted: null, savedHere: false, notes: [], detached: [], lost: [], live: null } : null;
+      const doc: DocRec | null = isDoc(ref) ? { state: null, save: IDLE, conflicted: null, savedHere: false, graceFrom: this.env.now(), notes: [], detached: [], lost: [], live: null } : null;
       r = { ref, state: NONE, session: null, frame: null, height: DEFAULT_H, sizes: {}, seenAt: this.env.now(), messageAt: null, plugin: '', phase: 'proxy', note: 'none', asking: false, doc };
       this.recs.set(k, r);
     }
@@ -259,6 +269,14 @@ export class ViewsStore {
     const t = ref.target;
     const target: DocTarget = t.kind === 'artifact' && d.version !== undefined ? { kind: 'artifact', id: t.id, version: d.version } : t;
     void this.env.ask({ cmd: 'view_open', project: ref.project, target, ...(d.pick === undefined ? {} : { opener: d.pick }) }).then((a) => {
+      if ('error' in a && !REAL_ANSWERS.has(a.error.code) && this.env.now() - d.graceFrom < LOAD_GRACE_MS) {
+        // a hub or pages server still starting (the core down, no answer, a refusal that isn't
+        // about this document): still loading, asked again (artifact-loading's rule, apps-lead m_60748)
+        this.env.later(LOAD_RETRY_MS, () => {
+          if (this.recs.get(refKey(ref)) === r && r.asking && r.session === null) this.open(r, ref);
+        });
+        return;
+      }
       r.asking = false;
       if ('error' in a) {
         const reason = a.error.data !== null && typeof a.error.data === 'object' && !Array.isArray(a.error.data) && typeof a.error.data['reason'] === 'string' ? a.error.data['reason'] : undefined;
@@ -306,6 +324,8 @@ export class ViewsStore {
     const r = this.rec(ref);
     if (r.state.kind !== 'failed') return;
     r.state = NONE;
+    // a document loads again for a new grace
+    if (r.doc !== null) r.doc.graceFrom = this.env.now();
     this.ensure(ref);
   }
 
@@ -328,6 +348,7 @@ export class ViewsStore {
       if (change.version === null) delete d.version;
       else d.version = change.version;
     }
+    d.graceFrom = this.env.now();
     return this.teardown(refKey(ref)).then(() => {
       r.state = NONE;
       this.ensure(ref);
