@@ -136,6 +136,26 @@ fn a_folder_with_an_index_is_a_site_and_is_copied_whole() {
     assert_eq!(a.meta.kind, "site");
     let copy = state.join("artifacts").join(&a.meta.id).join(a.meta.versions[0].copy.as_ref().unwrap());
     assert!(copy.join("js/a.js").is_file());
+    // its first-level names, what A2 matches a folder rule on (architect m_62393), on the row too
+    assert_eq!((a.meta.versions[0].names.clone(), a.meta.versions[0].names_more), (vec!["index.html".to_string(), "js".into()], false));
+    let rows = s.rows(&nobody, "/");
+    assert_eq!(rows[0]["names"], json!(["index.html", "js"]));
+    // a version from before names (TODO(art-names-read)): its row reads them from the folder
+    let mut m = s.get(&a.meta.id).unwrap();
+    m.versions[0].names.clear();
+    s.save(&m).unwrap();
+    assert_eq!(s.rows(&nobody, "/")[0]["names"], json!(["index.html", "js"]));
+}
+
+#[test]
+fn a_folder_keeps_its_first_names_sorted_and_says_when_cut() {
+    let names = |v: &[&str]| folder_names(v.iter().map(|s| s.to_string()));
+    assert_eq!(names(&["js", ".git", "index.html", "", ".DS_Store", "js"]), (vec!["index.html".to_string(), "js".into()], false));
+    let many: Vec<String> = (0..crate::view_files::FOLDER_NAMES + 3).map(|i| format!("f{i:03}")).collect();
+    let (kept, more) = folder_names(many.iter().rev().cloned());
+    assert_eq!((kept.len(), more, kept[0].as_str(), kept[crate::view_files::FOLDER_NAMES - 1].clone()), (crate::view_files::FOLDER_NAMES, true, "f000", many[crate::view_files::FOLDER_NAMES - 1].clone()));
+    assert!(!folder_names((0..crate::view_files::FOLDER_NAMES).map(|i| format!("f{i}"))).1, "exactly the cap: whole");
+    assert_eq!(names_of(Path::new("/no/such/folder")), (vec![], false));
 }
 
 #[test]

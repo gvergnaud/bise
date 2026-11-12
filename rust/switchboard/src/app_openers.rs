@@ -10,8 +10,9 @@
 //!   hub's views code gets ([`AppOpeners::seen`], architect m_61469).
 //!   Nothing is persisted here: lost on a restart, built again.
 //! - A row's target ([`target_of`]) is read from the row alone, no disk:
-//!   its file's name, a page as `<id>.page` (A9), a site folder as a
-//!   folder holding an `index.html`; a link has no app.
+//!   its file's name, a page as `<id>.page` (A9), a folder as its
+//!   first-level names (the version's, artifacts::Version::names); a link
+//!   has no app.
 //! - `view/open` gathers again at the open: a row a stale list drew never
 //!   decides (architect m_60316 #4).
 
@@ -125,12 +126,15 @@ pub fn target_of(row: &Value) -> Option<Target> {
         return None;
     }
     let name = std::path::Path::new(target.trim_end_matches('/')).file_name()?.to_string_lossy().to_string();
-    // a site artifact is a folder that holds an index.html (artifacts.rs
-    // names it `site` by that); its other names are not read here
-    if s("kind") == "site" {
-        return Some(Target { name, kind: Kind::Folder(vec!["index.html".into()]), documents: None });
+    // a folder: its first-level names as the version kept them
+    // (artifacts::Version::names, architect m_62393); a cut list says so
+    let names: Vec<String> = row.get("names").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str).map(String::from).collect();
+    let more = row.get("names_more").and_then(Value::as_bool).unwrap_or(false);
+    match (names.is_empty(), more) {
+        (true, false) => Some(Target::file(&name)),
+        (_, false) => Some(Target { name, kind: Kind::Folder(names), documents: None }),
+        (_, true) => Some(Target { name, kind: Kind::FolderCut(names), documents: None }),
     }
-    Some(Target::file(&name))
 }
 
 #[cfg(test)]
@@ -143,8 +147,14 @@ mod tests {
         assert_eq!(target_of(&json!({"target": "/w/q3/plan.xlsx", "kind": "file"})), Some(Target::file("plan.xlsx")));
         assert_eq!(target_of(&json!({"id": "perf-notes", "by": "page", "target": "/st/pages/perf-notes/v2.html"})), Some(Target::file("perf-notes.page")));
         assert_eq!(
-            target_of(&json!({"target": "/w/site/", "kind": "site"})),
-            Some(Target { name: "site".into(), kind: Kind::Folder(vec!["index.html".into()]), documents: None })
+            target_of(&json!({"target": "/w/site/", "kind": "site", "names": ["app.js", "index.html"]})),
+            Some(Target { name: "site".into(), kind: Kind::Folder(vec!["app.js".into(), "index.html".into()]), documents: None })
+        );
+        // the kind is never read: a plain folder holding an index.html is the same target
+        assert_eq!(target_of(&json!({"target": "/w/site/", "kind": "folder", "names": ["index.html"]})), target_of(&json!({"target": "/w/site/", "kind": "site", "names": ["index.html"]})));
+        assert_eq!(
+            target_of(&json!({"target": "/w/big/", "kind": "site", "names": ["a.css"], "names_more": true})),
+            Some(Target { name: "big".into(), kind: Kind::FolderCut(vec!["a.css".into()]), documents: None })
         );
         assert_eq!(target_of(&json!({"target": "https://github.com/a/b/pull/1", "kind": "pr"})), None);
         assert_eq!(target_of(&json!({"target": ""})), None);

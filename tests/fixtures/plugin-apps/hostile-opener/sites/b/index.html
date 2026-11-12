@@ -34,6 +34,15 @@ try {
     ? row("site-cookie-cross-read", "blocked", "SecurityError")
     : row("site-cookie-cross-read", "broken", String(err && (err.message || err.name)));
 }
+try {
+  /plugin-apps-wide(-dot)?=from-site-a/.test(document.cookie)
+    ? row("site-cookie-domain-read", "leaked", "a's Domain=localhost cookie")
+    : row("site-cookie-domain-read", "blocked", "not there");
+} catch (err) {
+  err && err.name === "SecurityError"
+    ? row("site-cookie-domain-read", "blocked", "SecurityError")
+    : row("site-cookie-domain-read", "broken", String(err && (err.message || err.name)));
+}
 document.body.dataset.done = "1";
 </script>
 </body>

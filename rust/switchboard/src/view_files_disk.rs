@@ -33,7 +33,11 @@ pub fn resolve_artifact(store: &Store, id: &str, version: Option<u64>) -> Result
     let target = FileTarget::Artifact { id: m.id.clone(), version: v.v };
     let at = artifact_at(store, &m, v)?;
     let name = Path::new(&m.source).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-    let kind = if at.path.is_dir() { Kind::Folder { names: first_names(&at.path) } } else { Kind::File };
+    let kind = match crate::artifacts::names_of(&at.path) {
+        // a folder: its first-level names, the one rule a version keeps them by (artifacts::folder_names)
+        (names, more) if at.path.is_dir() => Kind::Folder { names, more },
+        _ => Kind::File,
+    };
     let older = m.current().is_some_and(|c| c.v != v.v);
     Ok(Resolved { target, name, kind, size: at.size, documents_of: None, older })
 }
@@ -66,14 +70,6 @@ pub fn may_write(b: &crate::view_files::Binding) -> Result<(), bise_proto::view_
     Ok(())
 }
 
-/// The first-level names of folder `dir` (A2's folder rules), sorted, at
-/// most [`crate::view_files::FOLDER_NAMES`].
-fn first_names(dir: &Path) -> Vec<String> {
-    let mut names: Vec<String> = std::fs::read_dir(dir).map(|rd| rd.flatten().map(|e| e.file_name().to_string_lossy().to_string()).collect()).unwrap_or_default();
-    names.sort();
-    names.truncate(crate::view_files::FOLDER_NAMES);
-    names
-}
 
 /// Where `target`'s bytes are now. `root`: `Home::bise_root()`.
 pub fn file_at(store: &Store, root: &Path, target: &FileTarget) -> Result<FileAt, ViewError> {

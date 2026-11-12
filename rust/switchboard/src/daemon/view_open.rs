@@ -53,7 +53,9 @@ fn bad(why: &str) -> RpcError {
 fn target_of(r: &Resolved) -> Target {
     let kind = match &r.kind {
         FileKind::File => Kind::File,
-        FileKind::Folder { names } => Kind::Folder(names.clone()),
+        // a cut list: a name past its last is unknown, never absent (architect m_62393)
+        FileKind::Folder { names, more: false } => Kind::Folder(names.clone()),
+        FileKind::Folder { names, more: true } => Kind::FolderCut(names.clone()),
     };
     Target { name: r.name.clone(), kind, documents: r.documents_of.clone().map(|p| (p, r.name.clone())) }
 }

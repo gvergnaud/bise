@@ -412,6 +412,11 @@ pub enum Kind {
     File,
     /// a folder, with the names it holds at its first level
     Folder(Vec<String>),
+    /// a folder whose list was cut (architect m_62393): its first
+    /// level's first names, sorted; a name sorting after the last of them
+    /// is unknown, never absent, so a folder rule naming it literally
+    /// (`*/index.html`) matches, and the open finds out
+    FolderCut(Vec<String>),
 }
 
 /// What [`pick`] opens.
@@ -550,15 +555,30 @@ fn specificity(key: &str) -> (bool, usize) {
 }
 
 /// The key of `entry` that matches `target` for `plugin`, the most
-/// specific one first.
-fn entry_match(plugin: &str, entry: &Entry, target: &Target) -> Option<String> {
-    let hit = |k: &&String| match (&target.kind, entry.folder, k.strip_prefix(DOCUMENTS)) {
-        (Kind::File, false, Some(body)) => target.documents.as_ref().is_some_and(|(p, rel)| p == plugin && matches(body, rel)),
-        (Kind::File, false, None) => matches(k, &target.name),
-        (Kind::Folder(names), true, None) => names.iter().any(|n| matches(k, &format!("{}/{}", target.name, n))),
-        _ => false,
+/// specific one first, with its specificity. A cut folder list's unknown
+/// name ([`past_the_cut`]) matches least specifically of all: any rule
+/// that matched a listed name goes before it.
+fn entry_match(plugin: &str, entry: &Entry, target: &Target) -> Option<(String, (bool, usize))> {
+    let listed = |names: &[String], k: &str| names.iter().any(|n| matches(k, &format!("{}/{}", target.name, n)));
+    let hit = |k: &String| match (&target.kind, entry.folder, k.strip_prefix(DOCUMENTS)) {
+        (Kind::File, false, Some(body)) => target.documents.as_ref().is_some_and(|(p, rel)| p == plugin && matches(body, rel)).then(|| specificity(k)),
+        (Kind::File, false, None) => matches(k, &target.name).then(|| specificity(k)),
+        (Kind::Folder(names), true, None) => listed(names, k).then(|| specificity(k)),
+        (Kind::FolderCut(names), true, None) if listed(names, k) => Some(specificity(k)),
+        (Kind::FolderCut(names), true, None) => past_the_cut(k, names).then_some((false, 0)),
+        _ => None,
     };
-    entry.keys.iter().filter(hit).max_by_key(|k| specificity(k)).cloned()
+    entry.keys.iter().filter_map(|k| hit(k).map(|spec| (k.clone(), spec))).max_by_key(|(_, spec)| *spec)
+}
+
+/// Whether folder rule `key` names one literal first-level name that a
+/// cut list (sorted, [`Kind::FolderCut`]) can't say is absent: it sorts
+/// after the list's last name. `*/index.html` with `[a.css … m.js]`: yes;
+/// with `[a.css … z.js]`: no, it would have been listed.
+fn past_the_cut(key: &str, names: &[String]) -> bool {
+    let Some((_, leaf)) = key.split_once('/') else { return false };
+    let literal = !leaf.is_empty() && !leaf.contains(['*', '?', '/', '[']);
+    literal && names.last().is_some_and(|last| leaf > last.as_str())
 }
 
 struct Candidate {
@@ -623,7 +643,7 @@ pub fn pick(target: &Target, openers: &Openers, picks: &Picks) -> Opened {
             let best = o
                 .entries
                 .iter()
-                .filter_map(|e| entry_match(&po.plugin, e, target).map(|k| (specificity(&k), e.rank, k, e)))
+                .filter_map(|e| entry_match(&po.plugin, e, target).map(|(k, spec)| (spec, e.rank, k, e)))
                 .max_by(|a, b| a.0.cmp(&b.0).then(b.1.cmp(&a.1)));
             if let Some((spec, rank, key, e)) = best {
                 // the type's own icon (a design-system name), else its app's
@@ -635,14 +655,14 @@ pub fn pick(target: &Target, openers: &Openers, picks: &Picks) -> Opened {
     }
     for bi in BUILTIN {
         let entry = Entry { keys: vec![bi.key.to_string()], title: bi.type_title.to_string(), rank: OpenRank::Owner, folder: bi.folder, icon: None };
-        if let Some(key) = entry_match(bi.plugin, &entry, target) {
+        if let Some((key, spec)) = entry_match(bi.plugin, &entry, target) {
             // its plugin opens this itself now (migrated, or both on a
             // branch): the plugin's own opener stands, listed once
             if cands.iter().any(|c| c.opener.plugin == bi.plugin) {
                 continue;
             }
             let opener = Opener { plugin: bi.plugin.into(), tool: bi.kind.into(), app: bi.app.into(), type_key: key.clone(), type_title: bi.type_title.into(), icon: Some(bi.icon.into()), builtin: true };
-            cands.push(Candidate { opener, rank: OpenRank::Owner, spec: specificity(&key), first_party: true });
+            cands.push(Candidate { opener, rank: OpenRank::Owner, spec, first_party: true });
         }
     }
     cands.sort_by(|a, b| {

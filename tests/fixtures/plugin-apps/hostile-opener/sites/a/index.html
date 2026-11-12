@@ -16,6 +16,10 @@ let detail;
 try {
   localStorage.setItem("plugin-apps-secret", "from-site-a");
   document.cookie = "plugin-apps-secret=from-site-a; SameSite=Strict";
+  // a cookie for every view host at once: Chromium refuses Domain=localhost from v-*.localhost
+  // (Electron 44, architect m_60439); site b's site-cookie-domain-read says if one got through
+  document.cookie = "plugin-apps-wide=from-site-a; domain=localhost; path=/";
+  document.cookie = "plugin-apps-wide-dot=from-site-a; domain=.localhost; path=/";
   detail = localStorage.getItem("plugin-apps-secret") === "from-site-a" ? "stored" : "not stored";
 } catch (err) { detail = "storage refused: " + (err && err.name); }
 li.dataset.result = detail === "stored" || detail.startsWith("storage refused: SecurityError") ? "ok" : "broken";

@@ -339,6 +339,16 @@ fn the_on_plugins_openers_are_gathered_static_then_servers() {
     assert_eq!(n(&pick(&note, &o, &Picks::new())).0, Some("fake-opener#fake".into()));
     let folder = Target { name: "box".into(), kind: Kind::Folder(vec!["fake.json".into()]), documents: None };
     assert_eq!(n(&pick(&folder, &o, &Picks::new())).0, Some("fake-opener#fake".into()));
+    // a cut list (architect m_62393): a literal name sorting past its last is unknown, never
+    // absent (the rule matches, the open finds out); one sorting before it would be listed
+    let cut = |names: &[&str]| Target { name: "box".into(), kind: Kind::FolderCut(names.iter().map(|s| s.to_string()).collect()), documents: None };
+    let unknown = n(&pick(&cut(&["a.css", "b.js"]), &o, &Picks::new()));
+    assert!(unknown.0.iter().chain(&unknown.1).any(|x| x == "fake-opener#fake"), "fake.json past b.js: unknown, a candidate: {unknown:?}");
+    // a rule matching a listed name goes before one whose name is unknown (index.html past fake.json)
+    assert_eq!(n(&pick(&cut(&["a.css", "fake.json"]), &o, &Picks::new())).0, Some("fake-opener#fake".into()), "a listed name before an unknown one");
+    assert_eq!(n(&pick(&cut(&["a.css", "zz.js"]), &o, &Picks::new())).0, None, "fake.json before zz.js and not listed: absent");
+    assert_eq!(n(&pick(&cut(&["a.css", "fake.json", "zz.js"]), &o, &Picks::new())).0, Some("fake-opener#fake".into()), "listed");
+    assert_eq!(n(&pick(&Target { name: "box".into(), kind: Kind::Folder(vec!["a.css".into()]), documents: None }, &o, &Picks::new())).0, None, "a whole list: absent");
     // fake-claim off: its types fall to the next candidate
     let (o, _) = Openers::gather(&fixtures(&["fake-claim"]), &servers);
     assert_eq!(n(&pick(&Target::file("a.fake"), &o, &Picks::new())), (Some("fake-opener#fake".into()), vec![]));

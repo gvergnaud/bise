@@ -92,6 +92,17 @@ pub struct Version {
     /// request. None: a file, another link, or no listener at the add.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub serve: Option<crate::artifacts_serve::Serve>,
+    /// A folder's first-level names ([`folder_names`]: sorted, hidden ones
+    /// out, at most [`crate::view_files::FOLDER_NAMES`]), read where the version is added: what
+    /// A2 matches a folder rule on (`*/index.html`, app_openers::target_of),
+    /// never a kind (docs/plugin-apps.md A2, architect m_62393). Empty: a
+    /// file, a link, or a version from before them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub names: Vec<String>,
+    /// The folder held more than [`crate::view_files::FOLDER_NAMES`]: a name missing from
+    /// `names` that sorts after its last is unknown, never absent.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub names_more: bool,
 }
 
 impl Version {
@@ -379,6 +390,39 @@ pub fn link_kind(url: &str) -> &'static str {
     "link"
 }
 
+/// A folder's first-level names as a version keeps them: sorted, hidden
+/// ones (`.git`, `.DS_Store`) out, the first
+/// [`crate::view_files::FOLDER_NAMES`]; true when
+/// there were more. Pure.
+pub fn folder_names(all: impl IntoIterator<Item = String>) -> (Vec<String>, bool) {
+    let mut names: Vec<String> = all.into_iter().filter(|n| !n.is_empty() && !n.starts_with('.')).collect();
+    names.sort();
+    names.dedup();
+    let more = names.len() > crate::view_files::FOLDER_NAMES;
+    names.truncate(crate::view_files::FOLDER_NAMES);
+    (names, more)
+}
+
+/// The first-level names of folder `p` ([`folder_names`]); none for a
+/// file or an unreadable folder.
+pub fn names_of(p: &Path) -> (Vec<String>, bool) {
+    match std::fs::read_dir(p) {
+        Ok(rd) if p.is_dir() => folder_names(rd.filter_map(Result::ok).map(|e| e.file_name().to_string_lossy().to_string())),
+        _ => (Vec::new(), false),
+    }
+}
+
+/// A version's names for its row: its own, else (a folder version added
+/// before [`Version::names`]) its folder's, read now.
+// TODO(art-names-read): goes in v2026.12.15, once every folder version
+// kept since was added with its names; a version from before reads them here.
+fn names_or_read(v: &Version) -> Vec<String> {
+    match v.names.is_empty() && !is_link(&v.target) {
+        true => names_of(Path::new(&v.target)).0,
+        false => v.names.clone(),
+    }
+}
+
 /// The kind of a file or folder.
 pub fn path_kind(p: &Path) -> &'static str {
     if p.is_dir() {
@@ -644,6 +688,7 @@ impl Store {
                 return Ok(Added { meta: page_meta(&p, self.pages_base().as_deref()), new_version: false, page: true, not_artifact: false, replaced: false, ..Added::none() });
             }
         }
+        let (names, names_more) = path.as_deref().map(names_of).unwrap_or_default();
         let (source, target, kind) = match (&path, &url) {
             (Some(p), _) => {
                 let s = p.to_string_lossy().to_string();
@@ -784,11 +829,11 @@ impl Store {
                 }
                 let r = rev(&last.revs);
                 last.revs.push(r);
-                *last = Version { at_ms: now, target, copy, no_copy, sig, sitting: a.sitting.clone().or(last.sitting.clone()), ..last.clone() };
+                *last = Version { at_ms: now, target, copy, no_copy, sig, sitting: a.sitting.clone().or(last.sitting.clone()), names, names_more, ..last.clone() };
             }
             _ => {
                 let revs = vec![rev(&[])];
-                meta.versions.push(Version { v, at_ms: now, target, copy, no_copy, sig, turn: a.turn.clone(), sitting: a.sitting.clone(), revs, serve: None });
+                meta.versions.push(Version { v, at_ms: now, target, copy, no_copy, sig, turn: a.turn.clone(), sitting: a.sitting.clone(), revs, serve: None, names, names_more });
             }
         }
         self.save(&meta)?;
@@ -951,6 +996,9 @@ impl Store {
             "id": m.id, "title": m.title, "kind": m.kind, "agent": agent, "by": m.by,
             "archived": archived, "archived_at": archived_at, "ts_ms": cur.at_ms, "created_ms": m.created_ms, "v": cur.v,
             "target": cur.target,
+            // a folder's first-level names, what A2 matches (app_openers::target_of)
+            "names": names_or_read(&cur),
+            "names_more": cur.names_more,
             "copy": cur.copy.as_ref().map(|c| dir.join(c).to_string_lossy().to_string()),
             "no_copy": cur.no_copy,
             "gone": gone,

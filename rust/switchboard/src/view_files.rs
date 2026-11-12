@@ -43,11 +43,12 @@ pub enum FileTarget {
 }
 
 /// A file or a folder, with a folder's first-level names (A2's folder
-/// rules), at most [`FOLDER_NAMES`].
+/// rules, `crate::artifacts::folder_names`), at most [`FOLDER_NAMES`];
+/// `more`: the list was cut (`bend_plugins::opens::Kind::FolderCut`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Kind {
     File,
-    Folder { names: Vec<String> },
+    Folder { names: Vec<String>, more: bool },
 }
 
 /// A `view/open` target (`bise_proto::files::OpenTarget`) as the hub
