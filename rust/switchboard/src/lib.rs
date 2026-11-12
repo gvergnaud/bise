@@ -34,6 +34,7 @@
 bise_home::test_home!();
 
 pub mod agents_md;
+pub mod app_openers;
 pub mod approvals;
 pub mod artifacts;
 pub mod artifacts_assets;

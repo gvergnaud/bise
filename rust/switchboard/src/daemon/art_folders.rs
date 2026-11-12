@@ -223,7 +223,7 @@ impl Shell {
                     let paths = crate::paths::Paths::for_workspace(&ws);
                     let rows = artifacts::rows_of(&paths.state, &ws.to_string_lossy(), &lib);
                     let base = Store::new(&paths.state).pages_base();
-                    let items = crate::proto_view::artifacts(&json!({"rows": rows}), |_| None, base.as_deref());
+                    let items = crate::proto_view::artifacts(&json!({"rows": rows}), |_| None, base.as_deref(), |_| Default::default());
                     LibraryProject { project: hub, name, items }
                 })
                 .filter(|p| !p.items.is_empty())

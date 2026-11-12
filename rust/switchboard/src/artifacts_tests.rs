@@ -374,7 +374,7 @@ fn the_typed_artifacts_carry_everything_the_older_rows_did() {
     add(&s, &root, "bise.dev/m/artifacts", Some("the artifacts mock"), 50).unwrap();
     let rows = s.rows(&|a: &str| Some((a.to_string(), a == "pricing-page")), work.to_str().unwrap());
     let ev = json!({"ev": "artifacts", "rows": rows, "new": s.new_count(25), "seen_ms": 25});
-    let items = crate::proto_view::artifacts(&ev, |_| None, None);
+    let items = crate::proto_view::artifacts(&ev, |_| None, None, |_| Default::default());
     assert_eq!(items.len(), rows.len());
     // absent, null, "", false and [] are the same: nothing to say
     let some = |v: Option<&Value>| v.filter(|v| !(v.is_null() || *v == "" || *v == false || v.as_array().is_some_and(Vec::is_empty))).cloned();
@@ -427,7 +427,7 @@ fn a_copied_file_is_framed_by_the_page_server_and_a_link_is_not() {
     page(&state, "gate-index", "gate index", &[(1, 40)], json!([]));
     let rows = s.rows(&|a: &str| Some((a.to_string(), false)), work.to_str().unwrap());
     let ev = json!({"ev": "artifacts", "rows": rows, "seen_ms": 0});
-    let items = crate::proto_view::artifacts(&ev, |_| None, Some("http://127.0.0.1:47123"));
+    let items = crate::proto_view::artifacts(&ev, |_| None, Some("http://127.0.0.1:47123"), |_| Default::default());
     let by_id = |id: &str| items.iter().find(|a| a.id == id).unwrap_or_else(|| panic!("{id} in {items:?}"));
     let file = by_id("the-report");
     assert_eq!(file.frame_url.as_deref(), Some("http://127.0.0.1:47123/a/the-report/view"), "a site: bise's viewer, the newest version");
@@ -437,7 +437,7 @@ fn a_copied_file_is_framed_by_the_page_server_and_a_link_is_not() {
     for a in items.iter().filter(|a| a.id != "the-report" && a.id != "the-notes") {
         assert_eq!(a.frame_url, None, "{} ({}) has no frame_url", a.id, a.by);
     }
-    let bare = crate::proto_view::artifacts(&ev, |_| None, None);
+    let bare = crate::proto_view::artifacts(&ev, |_| None, None, |_| Default::default());
     assert!(bare.iter().all(|a| a.frame_url.is_none()), "no page server, no frame_url");
 }
 

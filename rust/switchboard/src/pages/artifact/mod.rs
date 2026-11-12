@@ -122,7 +122,7 @@ mod tests {
 
         let rows = arts.rows(&|a: &str| Some((a.to_string(), false)), work.to_str().unwrap());
         let base = format!("http://127.0.0.1:{}", p.port);
-        let items = crate::proto_view::artifacts(&json!({"ev": "artifacts", "rows": rows, "seen_ms": 0}), |_| None, Some(&base));
+        let items = crate::proto_view::artifacts(&json!({"ev": "artifacts", "rows": rows, "seen_ms": 0}), |_| None, Some(&base), |_| Default::default());
         let frame = |id: &str| items.iter().find(|a| a.id == id).and_then(|a| a.frame_url.clone()).unwrap_or_default();
         assert_eq!(frame(&xlsx.id), format!("{base}/a/{}/view", xlsx.id), "the newest, with no version in it");
         for (name, kind) in [("deck", "pptx"), ("memo", "docx")] {

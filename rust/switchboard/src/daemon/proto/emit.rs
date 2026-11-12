@@ -211,7 +211,8 @@ impl Shell {
         // a copied file framed by the page server (ambient-lead m_19544,
         // architect m_19561): the window never frames file://
         let base = pages.as_ref().map(|p| p.base());
-        proto_view::artifacts(ev, page_url, base.as_deref())
+        let apps = &self.apps.openers;
+        proto_view::artifacts(ev, page_url, base.as_deref(), |row| apps.opened(row))
     }
 
     /// The hub's state changed (push_state, state_now): each typed event

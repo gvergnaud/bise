@@ -197,7 +197,7 @@ mod tests {
             .map(|i| serde_json::json!({"id": format!("a{i}"), "kind": "page", "title": format!("t{i}"), "agent": "perf", "v": 1, "ts_ms": 1_000 + i, "by": "agent", "target": format!("/w/a{i}.md")}))
             .collect();
         let ev = serde_json::json!({"ev": "artifacts", "rows": rows, "seen_ms": 1_030});
-        let typed = proto_view::artifacts(&ev, |_| None, None);
+        let typed = proto_view::artifacts(&ev, |_| None, None, |_| Default::default());
         let v = of(&snap(), "x-1", 1, 1, None, &mut Since::new(), &|_| None, typed.clone(), vec![], Growth::default(), Pulse::default());
         assert_eq!((v.artifacts.len(), v.artifacts_total), (VIEW_ARTIFACTS, 60));
         let mut want = typed;
@@ -218,7 +218,7 @@ mod tests {
         let row = serde_json::json!({"id": "notes", "kind": "file", "title": "notes", "agent": "perf", "v": 3, "ts_ms": 5, "by": "agent",
             "target": "/w/notes.md", "path": "/w/notes.md", "versions": [{"v": 1, "ts_ms": 1}, {"v": 2, "ts_ms": 3}, {"v": 3, "ts_ms": 5}]});
         let ev = serde_json::json!({"ev": "artifacts", "rows": [row], "seen_ms": 0});
-        let typed = proto_view::artifacts(&ev, |_| None, None);
+        let typed = proto_view::artifacts(&ev, |_| None, None, |_| Default::default());
         let v = of(&snap(), "x-1", 1, 1, None, &mut Since::new(), &|_| None, typed.clone(), vec![], Growth::default(), Pulse::default());
         assert_eq!(v.artifacts[0].path, typed[0].path, "the path stays");
         assert!(v.artifacts[0].versions.is_empty(), "no versions in the view");

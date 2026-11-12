@@ -353,7 +353,7 @@ impl Shell {
         let step = self.view_step();
         let ws = self.opts.paths.workspace.clone();
         std::thread::spawn(move || {
-            let read = || -> Result<(ViewFile, view_call::ResourceRead, Value, Vec<String>), RpcError> {
+            let read = || -> Result<(ViewFile, view_call::ResourceRead, Value, Vec<String>, Value), RpcError> {
                 let text = std::fs::read_to_string(&file).map_err(|_| ViewError::Expired.rpc("view/resource"))?;
                 let f = ViewFile::parse(&text).map_err(|e| e.rpc("view/resource"))?;
                 let (json_path, _) = bridge.map_err(|e| gone(&e))?;
@@ -366,14 +366,18 @@ impl Shell {
                 let tool = view_call::tool_of(&list, &f.tool);
                 // C8: what he granted this view (never asked: nothing)
                 let grant = bend_plugins::state::view_grant(&bend_plugins::state::grants(&bend_plugins::state::state_path()), &f.plugin, &f.uri).unwrap_or_default();
-                Ok((f, r, tool, grant))
+                Ok((f, r, tool, grant, list))
             };
             match read() {
                 Err(e) if via_own && is_gone(&e) => step(Box::new(move |sh: &mut Shell| sh.view_resource(p, dir, done, false))),
                 Err(e) => done(Err(e)),
-                Ok((f, r, tool, grant)) => {
+                Ok((f, r, tool, grant, list)) => {
                     let folder = static_folder(&f, &ws);
-                    step(Box::new(move |sh: &mut Shell| sh.view_resource_read(f, r, tool, grant, folder, done)))
+                    step(Box::new(move |sh: &mut Shell| {
+                        // its server's live tools: the rows' apps (A3)
+                        sh.apps_seen(&f.plugin, &f.server, &list);
+                        sh.view_resource_read(f, r, tool, grant, folder, done)
+                    }))
                 }
             }
         });

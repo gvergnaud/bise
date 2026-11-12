@@ -21,6 +21,7 @@
 mod accept;
 mod agent_req;
 mod answers;
+mod apps;
 mod art;
 mod art_folders;
 mod attach;
@@ -449,6 +450,9 @@ struct Shell {
     /// mcp-apps (C5): the views' limits, waiting calls, contexts and the
     /// hub's views bridge (daemon/views.rs).
     views: views::Views,
+    /// plugin-apps (A3): the apps that open the artifacts, on their rows
+    /// (daemon/apps.rs, crate::app_openers)
+    apps: apps::Apps,
     /// `sb land`'s line: one land at a time per target ref (dev-flow §5).
     lands: crate::land::Queue,
     /// The feature branches (dev-flow §5.1): the registry, their facts,
@@ -1810,6 +1814,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
             runner,
         ),
         views: views::Views::default(),
+        apps: apps::Apps::default(),
         lands: crate::land::Queue::default(),
         features: features::Features::load(&paths.state, &|n| paths.feature_diff(n)),
         prs: None,

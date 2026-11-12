@@ -83,6 +83,8 @@ pub(super) const JOBS: &[Job] = &[
     },
     Job { name: "starts", every: Every::Tick, first: First::Now, run: |s, at| s.check_starts(at.sent_ms) },
     Job { name: "plugins", every: Every::Ms(2_000), first: First::Now, run: |s, _| s.plugins_changed(false) },
+    // plugin-apps (A3): the rows' apps, read again off the loop (daemon/apps.rs)
+    Job { name: "apps", every: Every::Ms(5_000), first: First::Now, run: |s, _| s.apps_refresh() },
     Job { name: "switches", every: Every::Tick, first: First::Now, run: |s, _| s.switch_idle_repls() },
     // an installed hub looks at `current` (daemon/versions.rs)
     Job { name: "update", every: Every::Ms(30_000), first: First::Now, run: |s, _| s.announce_update() },

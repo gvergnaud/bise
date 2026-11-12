@@ -199,7 +199,7 @@ fn a_copied_file_is_served_at_its_frame_url() {
     let rows = arts.rows(&|a: &str| Some((a.to_string(), false)), work.to_str().unwrap());
     let ev = json!({"ev": "artifacts", "rows": rows, "seen_ms": 0});
     let base = format!("http://127.0.0.1:{}", p.port);
-    let items = crate::proto_view::artifacts(&ev, |_| None, Some(&base));
+    let items = crate::proto_view::artifacts(&ev, |_| None, Some(&base), |_| Default::default());
     let html = items.iter().find(|a| a.title.contains("proof")).expect("the html artifact");
     let url = html.frame_url.clone().expect("a copied .html file has a frame_url");
     // framed in bise's viewer (art-notes), which frames the copy, still in its sandbox
