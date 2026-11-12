@@ -962,3 +962,63 @@ fn a_documents_file_is_served_by_its_url_on_its_origin_only() {
     drop(stalled);
     let _ = std::fs::remove_dir_all(d);
 }
+
+/// A video artifact too big to copy (architect m_63226, after 6a1668b59
+/// left `served()` copies only): view/open's steps give it a handle (the
+/// target resolved as view/open resolves it, bound to a document session),
+/// `resources/url` gives its `/h/<token>`, and that url streams its own
+/// file: a Range gets 206 from it, a HEAD its whole length.
+#[test]
+fn a_video_too_big_to_copy_streams_from_its_own_file_by_its_url() {
+    use super::super::views::ViewSandbox;
+    use crate::view_files::{Binding, Opener};
+    use std::io::{Read, Seek, Write};
+    let (p, d) = pages();
+    let work = d.join("work");
+    std::fs::create_dir_all(&work).unwrap();
+    // sparse: past the copy cap, no 50 MB written
+    let video = work.join("demo.mp4");
+    let mut f = std::fs::File::create(&video).unwrap();
+    f.write_all(b"FAKEVIDEO").unwrap();
+    f.set_len(crate::artifacts::MAX_COPY + 1).unwrap();
+    f.seek(std::io::SeekFrom::Start(crate::artifacts::MAX_COPY - 3)).unwrap();
+    f.write_all(b"END!").unwrap();
+    drop(f);
+    let len = crate::artifacts::MAX_COPY + 1;
+    // the store the pages server reads (artifact::notes::arts: its state folder)
+    let store = super::super::artifact::notes::arts(&p);
+    let add = crate::artifacts::Add { target: video.to_string_lossy().to_string(), agent: "t1".into(), by: "t1".into(), cwd: work.to_string_lossy().to_string(), ..Default::default() };
+    let id = store.add(&add, 10).unwrap().meta.id;
+    let m = store.get(&id).unwrap();
+    assert_eq!((m.versions[0].copy.as_deref(), m.versions[0].no_copy.as_deref()), (None, Some(crate::artifacts::TOO_BIG)), "too big: no copy");
+    // view/open's steps (daemon/view_open.rs): resolve, bind to a session, mint
+    let target = bise_proto::files::OpenTarget::Artifact { id: id.clone(), version: None };
+    let r = crate::view_files_disk::resolve(&store, &p.bise_root, &target).unwrap();
+    assert_eq!((r.name.as_str(), r.size, r.older), ("demo.mp4", len, false));
+    let (doc, hash) = (crate::pages::new_token(), "0123456789abcdef");
+    let opener = Opener { plugin: "media".into(), server: "~views".into(), uri: "ui://media/preview".into() };
+    let handle = p.mint_handle(Binding::new(&doc, opener, r.target, r.older));
+    p.view_sandbox_as(hash, &doc, ViewSandbox::default());
+    let url = p.doc_url(&doc, &handle).unwrap();
+    let path = format!("/h/{}", url.rsplit_once("/h/").unwrap().1);
+    let p = std::sync::Arc::new(p);
+    let l = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let port = l.local_addr().unwrap().port();
+    serve(l, p.clone());
+    let own = format!("v-{hash}.localhost:{}", p.port);
+    let ask = |method: &str, extra: &str| {
+        let mut s = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+        s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        s.write_all(format!("{method} {path} HTTP/1.1\r\nHost: {own}\r\n{extra}Connection: close\r\n\r\n").as_bytes()).unwrap();
+        let mut out = Vec::new();
+        let _ = s.read_to_end(&mut out);
+        String::from_utf8_lossy(&out).to_string()
+    };
+    let r = ask("GET", "Range: bytes=0-3\r\n");
+    assert!(r.starts_with("HTTP/1.1 206") && r.contains(&format!("Content-Range: bytes 0-3/{len}")) && r.contains("Content-Type: video/mp4") && r.ends_with("\r\n\r\nFAKE"), "{r}");
+    let r = ask("GET", &format!("Range: bytes={}-\r\n", len - 4));
+    assert!(r.starts_with("HTTP/1.1 206") && r.contains(&format!("Content-Range: bytes {}-{}/{len}", len - 4, len - 1)) && r.ends_with("\r\n\r\nEND!"), "its end, a seek: {r}");
+    let r = ask("HEAD", "");
+    assert!(r.starts_with("HTTP/1.1 200") && r.contains(&format!("Content-Length: {len}\r\n")) && r.contains("Accept-Ranges: bytes") && r.ends_with("\r\n\r\n"), "{r}");
+    let _ = std::fs::remove_dir_all(d);
+}
