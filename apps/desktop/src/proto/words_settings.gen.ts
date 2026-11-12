@@ -2098,11 +2098,11 @@ export const settings = {
   plugins_why_stripe: "look up customers, payments and subscriptions",
   /** band: browse them */
   plugins_band_browse: "browse",
-  /** place: the tabs */
-  plugins_tab_installed: "installed",
-  /** place: the tabs */
-  plugins_tab_browse: "browse",
-  /** place: the tabs, which app opens which files (docs/plugin-apps.md A3, A6b) */
+  /** place: the head of the list's second part, what he can add (after the installed rows) */
+  plugins_not_installed: "not installed",
+  /** place: nothing installed and nothing to add */
+  plugins_nothing_installed: "nothing installed yet · add one with Add",
+  /** place: the File types section, which app opens which files (docs/plugin-apps.md A3, A6b) */
   plugins_tab_file_types: "File types",
   /** File types: the group's head */
   file_types_head: "which app opens what",
@@ -2132,7 +2132,7 @@ export const settings = {
   plugins_claim_use: (a: { app: string | number }): string => "Use " + String(a.app),
   /** the add sheet's opens row: a wide claim said in plain words, `every .json file` */
   plugins_claim_wide: (a: { ending: string | number }): string => "every " + String(a.ending) + " file",
-  /** place: the Mistral catalog's group in browse */
+  /** place: the Mistral catalog's group in the not-installed part */
   plugins_browse_mistral: "Mistral connectors",
   /** place: a row's tag, Mistral */
   plugins_tag_mistral: "Mistral",

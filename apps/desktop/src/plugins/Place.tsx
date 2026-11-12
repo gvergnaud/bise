@@ -2,17 +2,19 @@
 // bottom: its banner (ds PageBanner: 'Plugins', what it is, the core's counts, the room in its box:
 // bims' diorama of his plugins as office objects, Room.tsx, their icons on a floor without WebGL),
 // 'connect your tools' (Mistral's connectors not connected yet, most useful first, the MCP servers
-// found in other apps, a repo's own skills), then installed | browse (ds Filters, add at their
-// right) with the kind chips, and the list in sentence-case ds GroupLabels: one row per plugin, its
-// object as its icon, its tags, what it gives and its one control (a switch; 'always on'; connect /
-// log in where it waits on his account; a failed server's red line and details); a skill the search
-// found opens in its own tab (SkillTab.tsx). The search is in the list's row (ds ListBar: installed |
-// browse left, the search then add right; '/' and ⌘F focus it, app/searchkeys.ts). Adding goes
-// through add, the band and browse only. Every number is the core's (catalog::rows,
+// found in other apps, a repo's own skills), then one list (his m_62905: no installed | browse
+// tabs, so it never looks empty): the installed rows first, by kind, then 'Not installed' (Mistral's
+// connectors, each marketplace), in sentence-case ds GroupLabels. An installed row: its object as
+// its icon, its tags, what it gives and its one control (a switch; 'always on'; connect / log in
+// where it waits on his account; a failed server's red line and details); a not-installed row its
+// Connect / + add. A skill the search found opens in its own tab (SkillTab.tsx). The list's row
+// (ds ListBar): the kind chips left, the search then add right; the chips and the search filter
+// both parts ('/' and ⌘F focus it, app/searchkeys.ts). Add's browse and the band's browse scroll to
+// the not-installed head and tint it. Every number is the core's (catalog::rows,
 // catalog::summary); every change is the core's (plugin_set, plugin_connect, plugin_login,
 // plugin_add…), answered by `plugins` again. Owner: nm-pages-b (plug-desktop's before).
-import { useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { BannerWait, Button, Chip, Filters, GroupLabel, ListBar, ListSearch, PageBanner, sentenceCase, Toggle, tipAttrs } from '@/ds';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { BannerWait, Button, Chip, GroupLabel, ListBar, ListSearch, PageBanner, sentenceCase, Toggle, tipAttrs } from '@/ds';
 import { usePageSearchKeys } from '@/app/searchkeys';
 import { hero } from '@/proto/words_hero.gen';
 import { openTab } from '@/app/panel/tabs';
@@ -20,6 +22,7 @@ import { useBannerGutter } from '@/artifacts/hero/vignettes';
 import type { AppCmd, FileType, Plugin, PluginsSummary, ConnectorsProblem } from '@/proto';
 import { settings } from '@/proto/words.gen';
 import {
+  availableOf,
   bandCells,
   bandShows,
   bandWords,
@@ -29,7 +32,7 @@ import {
   groupWords,
   groupsOf,
   itemsOf,
-  kindCounts,
+  keyOf,
   kindWords,
   KINDS,
   lineOf,
@@ -38,6 +41,7 @@ import {
   titleOf,
   type Hit,
   type KindFilter,
+  type SourceGroup,
 } from './model';
 import { MonoTile, PluginIcon } from './PluginIcon';
 import { Room } from './Room';
@@ -77,24 +81,43 @@ export interface PlaceProps {
   fileTypes?: readonly FileType[];
 }
 
-type Tab = 'installed' | 'browse' | 'types';
-const TABS: readonly Tab[] = ['installed', 'browse', 'types'];
+/** Where browse lands: the not-installed part's head, or one of its sources' groups. */
+const NOT_INSTALLED = 'not-installed';
+
+/** How long the head browse landed on keeps its tint (designer m_62916: the eye lands). */
+const LIT_MS = 1000;
 
 export function PlaceView({ rows, summary, browse, problem, project, projectName, kind: kind0, ports, room, fileTypes = [] }: PlaceProps) {
-  const [tab, setTab] = useState<Tab>('installed');
   // /skills and /plugins mount it anew (the screen keys it by its kind)
   const [kind, setKind] = useState<KindFilter>(kind0 ?? 'all');
   const [q, setQ] = useState('');
+  // the head browse scrolls to, tinted for LIT_MS (NOT_INSTALLED or a source)
+  const [lit, setLit] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const gutter = useBannerGutter();
   const at = project === undefined ? {} : { project };
   const all = useMemo(() => rows ?? [], [rows]);
   const groups = useMemo(() => groupsOf(all, kind, q), [all, kind, q]);
-  const counts = useMemo(() => kindCounts(all), [all]);
-  const toBrowse = browse.reduce((n, b) => n + b.items.length, 0);
+  const avail = useMemo(() => availableOf(browse, all, kind, q), [browse, all, kind, q]);
+  // browse (the add menu's, the band's): every row back, then the eye lands on its head
+  const goTo = (to: string) => {
+    setKind('all');
+    setQ('');
+    setLit(to);
+  };
+  useEffect(() => {
+    if (lit === null) return undefined;
+    const list = listRef.current;
+    const head = list?.querySelector(`[data-jump="${lit}"]`) ?? list?.querySelector(`[data-jump="${NOT_INSTALLED}"]`);
+    const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    head?.scrollIntoView({ block: 'start', behavior: still ? 'auto' : 'smooth' });
+    const t = window.setTimeout(() => { setLit(null); }, LIT_MS);
+    return () => { window.clearTimeout(t); };
+  }, [lit]);
   // three sections at --gap-page (the banner, connect your tools, the list); inside the list, its
-  // filters (installed | browse, add at their right), the chips and the groups at --gap-block
-  // (ui-review #1, #2, #10); the search is in the list's row and filters the list
+  // row (the kind chips, the search and add at their right) and the groups at --gap-block
+  // (ui-review #1, #2, #10); the search is in the list's row and filters both parts
   usePageSearchKeys(searchRef);
   // its esc clears the words, a second esc leaves it (Artifacts' search, designer m_52674)
   const searchKey = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -116,80 +139,70 @@ export function PlaceView({ rows, summary, browse, problem, project, projectName
             <Band summary={summary} browse={browse.find((b) => b.source === 'mistral')?.items ?? []} projectName={projectName}
               onConnect={(id) => { ports.send({ cmd: 'plugin_connect', ...at, id }); }}
               onImport={() => { ports.add('import'); }}
-              onWorkspace={() => { setTab('installed'); setKind('all'); setQ(''); }}
-              onBrowse={() => { setTab('browse'); }} />
+              onWorkspace={() => { setKind('all'); setQ(''); }}
+              onBrowse={goTo} />
           )}
           {problem != null && <Problem problem={problem} onRefresh={() => { ports.send({ cmd: 'plugins_refresh', ...at }); }} />}
         </div>
       ) : null}
-      <div className="plg-sec" data-testid="plugins.list">
-        <ListBar inset testId="plugins.tabs.row"
+      <div className="plg-sec" ref={listRef} data-testid="plugins.list">
+        <ListBar inset testId="plugins.list.row"
           end={
             <>
               <ListSearch ref={searchRef} value={q} onChange={(e) => { setQ(e.currentTarget.value); }} onKeyDown={searchKey} onClear={() => { setQ(''); searchRef.current?.focus(); }} testId="plugins.search" />
-              <AddMenu summary={summary} onPick={(item) => { if (item === 'browse') setTab('browse'); else ports.add(item); }} />
+              <AddMenu summary={summary} onPick={(item) => { if (item === 'browse') goTo(NOT_INSTALLED); else ports.add(item); }} />
             </>
           }>
-          <Filters items={[
-            { id: 'installed', label: <TabWords words={sentenceCase(settings.plugins_tab_installed)} n={counts.all} /> },
-            { id: 'browse', label: <TabWords words={sentenceCase(settings.plugins_tab_browse)} n={toBrowse} /> },
-            { id: 'types', label: <TabWords words={settings.plugins_tab_file_types} n={fileTypes.length} /> },
-          ]}
-            on={tab} onPick={(id) => { setTab(TABS.find((t) => t === id) ?? 'installed'); }} testId="plugins.tabs" />
+          {/* the kind chips filter both parts; no counts (designer m_62916: installed and not
+              installed added up mean nothing to him) */}
+          <div className="plg-kinds" role="group" data-testid="plugins.kinds">
+            {KINDS.map((k) => (
+              <Chip key={k} onClick={() => { setKind(k); }} testId={`plugins.kind.${k}`} expanded={k === kind}>
+                {sentenceCase(kindWords(k))}
+              </Chip>
+            ))}
+          </div>
         </ListBar>
-        {tab === 'installed' ? (
+        {rows === null ? (
+          <div className="plg-empty" data-testid="plugins.loading">{settings.plugins_place_loading}</div>
+        ) : groups.length === 0 && avail.length === 0 ? (
+          // nothing at all to show: nothing installed nor to add, or nothing matches the chip and the words
+          <div className="plg-empty" data-testid="plugins.none">{kind === 'all' && q.trim() === '' ? settings.plugins_nothing_installed : settings.plugins_none_match}</div>
+        ) : (
           <>
-            <div className="plg-kinds" role="group" data-testid="plugins.kinds">
-              {KINDS.map((k) => (
-                <Chip key={k} onClick={() => { setKind(k); }} testId={`plugins.kind.${k}`} expanded={k === kind}>
-                  {sentenceCase(kindWords(k))}
-                  {k !== 'all' && <span className="plg-n">{counts[k]}</span>}
-                </Chip>
-              ))}
-            </div>
-            {rows === null ? (
-              <div className="plg-empty" data-testid="plugins.loading">{settings.plugins_place_loading}</div>
-            ) : groups.length === 0 ? (
-              <div className="plg-empty" data-testid="plugins.none">{settings.plugins_none_match}</div>
-            ) : (
-              groups.map((g) => (
-                <div key={g.kind} className="plg-group" data-testid={`plugins.group.${g.kind}`}>
-                  <GroupLabel count={g.hits.length}>{sentenceCase(groupWords(g.kind))}</GroupLabel>
-                  <div className="plg-list">
-                    {g.hits.map((h) => (
-                      <PlaceRow key={h.p.id === '' ? h.p.name : h.p.id} h={h} project={project}
-                        onOpen={() => {
-                          // a skill the search found opens in its own tab (page skill-panel, pick A)
-                          if (h.part?.kind === 'skill') openTab({ kind: 'skill', plugin: h.p.id === '' ? h.p.name : h.p.id, name: h.part.name });
-                          else ports.open(h.p.id === '' ? h.p.name : h.p.id);
-                        }}
-                        onSet={(on) => { ports.send({ cmd: 'plugin_set', ...at, name: h.p.id === '' ? h.p.name : h.p.id, on }); }}
-                        onConnect={(id) => { ports.send({ cmd: 'plugin_connect', ...at, id }); }}
-                        onLogin={(name) => { ports.send({ cmd: 'plugin_login', ...at, name }); }}
-                        onSetUp={ports.setUpComputer} />
-                    ))}
-                  </div>
+            {/* the installed part first, no head: its kind groups say it */}
+            {groups.map((g) => (
+              <div key={g.kind} className="plg-group" data-testid={`plugins.group.${g.kind}`}>
+                <GroupLabel count={g.hits.length}>{sentenceCase(groupWords(g.kind))}</GroupLabel>
+                <div className="plg-list">
+                  {g.hits.map((h) => (
+                    <PlaceRow key={keyOf(h.p)} h={h} project={project}
+                      onOpen={() => {
+                        // a skill the search found opens in its own tab (page skill-panel, pick A)
+                        if (h.part?.kind === 'skill') openTab({ kind: 'skill', plugin: keyOf(h.p), name: h.part.name });
+                        else ports.open(keyOf(h.p));
+                      }}
+                      onSet={(on) => { ports.send({ cmd: 'plugin_set', ...at, name: keyOf(h.p), on }); }}
+                      onConnect={(id) => { ports.send({ cmd: 'plugin_connect', ...at, id }); }}
+                      onLogin={(name) => { ports.send({ cmd: 'plugin_login', ...at, name }); }}
+                      onSetUp={ports.setUpComputer} />
+                  ))}
                 </div>
-              ))
+              </div>
+            ))}
+            {/* File types at the installed part's end (designer m_62919, via apps-lead m_62920): it is
+                about the apps he has; under All only (it isn't a kind), and while no search runs
+                (FileTypes has no query of its own yet: apps-gallery's next sync) */}
+            {kind === 'all' && q.trim() === '' && fileTypes.length > 0 && <FileTypes rows={fileTypes} send={ports.send} {...at} />}
+            {avail.length > 0 && (
+              <NotInstalled groups={avail} project={project} lit={lit}
+                onConnect={(id) => { ports.send({ cmd: 'plugin_connect', ...at, id }); }}
+                onOpen={ports.open} />
             )}
           </>
-        ) : tab === 'types' ? (
-          <FileTypes rows={fileTypes} send={ports.send} {...at} />
-        ) : (
-          <BrowseList browse={browse} q={q} project={project}
-            onConnect={(id) => { ports.send({ cmd: 'plugin_connect', ...at, id }); }}
-            onOpen={ports.open} />
         )}
       </div>
     </section>
-  );
-}
-
-function TabWords({ words, n }: { words: string; n: number }) {
-  return (
-    <>
-      {words} <span className="plg-n">{n}</span>
-    </>
   );
 }
 
@@ -284,7 +297,8 @@ export function Band({ summary, browse, projectName, onConnect, onImport, onWork
   onConnect: (id: string) => void;
   onImport: () => void;
   onWorkspace: () => void;
-  onBrowse: () => void;
+  /** browse: the list's not-installed group of that source ('mistral', a marketplace) */
+  onBrowse: (source: string) => void;
 }) {
   const mistral = itemsOf(summary, 'mistral')[0];
   const found = foundWords(itemsOf(summary, 'import')[0]);
@@ -324,7 +338,7 @@ export function Band({ summary, browse, projectName, onConnect, onImport, onWork
           })}
           {cells.more > 0 && (
             <div className="plg-card more">
-              <Button kind="ghost" onClick={onBrowse} testId="plugins.band.more">{sentenceCase(settings.plugins_band_more({ n: cells.more }))}</Button>
+              <Button kind="ghost" onClick={() => { onBrowse('mistral'); }} testId="plugins.band.more">{sentenceCase(settings.plugins_band_more({ n: cells.more }))}</Button>
             </div>
           )}
         </div>
@@ -344,7 +358,7 @@ export function Band({ summary, browse, projectName, onConnect, onImport, onWork
       {market.map((m, i) => (
         <div key={i} className="plg-band-line" data-testid="plugins.band.market">
           <span>{marketWords(market, m)}</span>
-          <Button size="sm" kind="ghost" onClick={onBrowse} testId="plugins.band.market.browse">{sentenceCase(settings.plugins_band_browse)}</Button>
+          <Button size="sm" kind="ghost" onClick={() => { onBrowse(m.source ?? NOT_INSTALLED); }} testId="plugins.band.market.browse">{sentenceCase(settings.plugins_band_browse)}</Button>
         </div>
       ))}
     </div>
@@ -362,29 +376,35 @@ function Problem({ problem, onRefresh }: { problem: ConnectorsProblem; onRefresh
   );
 }
 
-/** Browse: Mistral's connectors first, then each marketplace (page plugins §4). */
-function BrowseList({ browse, q, project, onConnect, onOpen }: {
-  browse: PlaceProps['browse'];
-  q: string;
+/**
+ * The list's second part, after the installed rows (his m_62905, designer m_62916): one head 'Not
+ * installed', then Mistral's connectors and each marketplace, each row its Connect / + add. The head
+ * browse lands on keeps the hover tint for LIT_MS.
+ */
+function NotInstalled({ groups, project, lit, onConnect, onOpen }: {
+  groups: readonly SourceGroup[];
   project: string | undefined;
+  /** the head browse landed on (NOT_INSTALLED or a source), tinted */
+  lit: string | null;
   onConnect: (id: string) => void;
   onOpen: (id: string) => void;
 }) {
-  const s = q.trim().toLowerCase();
-  const shown = browse
-    .map((b) => ({ ...b, items: b.items.filter((p) => s === '' || titleOf(p).toLowerCase().includes(s) || (p.what ?? '').toLowerCase().includes(s)) }))
-    .filter((b) => b.items.length > 0);
-  if (shown.length === 0) return <div className="plg-empty" data-testid="plugins.browse.empty">{s === '' ? settings.plugins_browse_empty : settings.plugins_none_match}</div>;
   return (
-    <>
-      {shown.map((b) => (
-        <div key={b.source} className="plg-group" data-testid={`plugins.browse.${b.source}`}>
-          <GroupLabel count={b.items.length}>{b.source === 'mistral' ? settings.plugins_browse_mistral : b.source}</GroupLabel>
+    <div className="plg-avail" data-testid="plugins.avail">
+      <div className={`plg-avail-head${lit === NOT_INSTALLED ? ' lit' : ''}`} data-jump={NOT_INSTALLED} data-testid="plugins.avail.head">
+        <GroupLabel>{sentenceCase(settings.plugins_not_installed)}</GroupLabel>
+      </div>
+      {groups.map((b) => (
+        <div key={b.source} className="plg-group" data-testid={`plugins.avail.${b.source}`}>
+          <div className={`plg-avail-label${lit === b.source ? ' lit' : ''}`} data-jump={b.source}>
+            <GroupLabel count={b.hits.length}>{b.source === 'mistral' ? settings.plugins_browse_mistral : b.source}</GroupLabel>
+          </div>
           <div className="plg-list">
-            {b.items.map((p) => {
-              const id = p.id === '' ? p.name : p.id;
+            {b.hits.map(({ p }) => {
+              const id = keyOf(p);
               return (
-                <div key={id} className="plg-row" role="button" tabIndex={0} onClick={(e) => { if (!onControl(e.target)) onOpen(id); }} data-testid={`plugins.browse.row.${id}`}>
+                <div key={id} className="plg-row" role="button" tabIndex={0} onClick={(e) => { if (!onControl(e.target)) onOpen(id); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && e.target === e.currentTarget) onOpen(id); }} data-testid={`plugins.avail.row.${id}`}>
                   <PluginIcon row={p} {...(project === undefined ? {} : { project })} />
                   <span className="plg-row-words">
                     <span className="plg-row-name">
@@ -397,11 +417,11 @@ function BrowseList({ browse, q, project, onConnect, onOpen }: {
                   </span>
                   <span className="plg-row-end">
                     {p.action === 'connect' || p.action === 'set_up' ? (
-                      <Button size="sm" state={p.login === 'pending' ? 'loading' : undefined} onClick={() => { onConnect(id); }} testId={`plugins.browse.row.${id}.connect`}>
+                      <Button size="sm" state={p.login === 'pending' ? 'loading' : undefined} onClick={() => { onConnect(id); }} testId={`plugins.avail.row.${id}.connect`}>
                         {sentenceCase(p.action === 'set_up' ? settings.plugins_set_up : settings.plugins_connect)}
                       </Button>
                     ) : (
-                      <Button size="sm" kind="ghost" onClick={() => { onOpen(id); }} testId={`plugins.browse.row.${id}.open`}>{sentenceCase(settings.plugins_browse_add_one)}</Button>
+                      <Button size="sm" kind="ghost" onClick={() => { onOpen(id); }} testId={`plugins.avail.row.${id}.open`}>{sentenceCase(settings.plugins_browse_add_one)}</Button>
                     )}
                   </span>
                 </div>
@@ -410,6 +430,6 @@ function BrowseList({ browse, q, project, onConnect, onOpen }: {
           </div>
         </div>
       ))}
-    </>
+    </div>
   );
 }

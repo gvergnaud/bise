@@ -65,6 +65,16 @@
 .plg-group { display: flex; flex-direction: column; gap: var(--gap-tight); }
 /* the group labels are ds GroupLabels (sentence case, never spaced capitals: x1b) */
 .plg-group > .b-glabel { margin-top: 0; }
+/* the list's second part (his m_62905, designer m_62916): one 'Not installed' head --gap-page under
+   the installed rows (none above it when nothing is installed), then its source groups */
+.plg-avail { display: flex; flex-direction: column; gap: var(--gap-block); }
+.plg-sec > .plg-group + .plg-avail { margin-top: calc(var(--gap-page) - var(--gap-block)); }
+.plg-avail-head .b-glabel, .plg-avail-label .b-glabel { margin-top: 0; }
+/* browse landed here: the hover tint for ~1 s so the eye lands (Place.tsx LIT_MS); no fade under
+   reduced motion */
+.plg-avail-head, .plg-avail-label { border-radius: var(--r-2); transition: background-color 300ms ease; }
+.plg-avail-head.lit, .plg-avail-label.lit { background: var(--c-hover); }
+@media (prefers-reduced-motion: reduce) { .plg-avail-head, .plg-avail-label { transition: none; } }
 .plg-list { border-radius: var(--r-3); background: var(--c-raised); box-shadow: inset 0 0 0 1px var(--c-line); overflow: hidden; }
 .plg-row { display: flex; align-items: center; gap: var(--gap-block); min-height: var(--s-12); padding: var(--s-2) var(--pad-card-x); box-sizing: border-box; border-top: 1px solid var(--c-line); font: var(--t-13) var(--font-ui); color: var(--c-text); outline: none; }
 .plg-row:first-child { border-top: 0; }

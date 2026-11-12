@@ -4142,6 +4142,11 @@
     "one": null,
     "text": "nothing matches"
   },
+  "settings.plugins_not_installed": {
+    "args": [],
+    "one": null,
+    "text": "not installed"
+  },
   "settings.plugins_not_logged_in": {
     "args": [],
     "one": null,
@@ -4151,6 +4156,11 @@
     "args": [],
     "one": null,
     "text": "not set up"
+  },
+  "settings.plugins_nothing_installed": {
+    "args": [],
+    "one": null,
+    "text": "nothing installed yet · add one with Add"
   },
   "settings.plugins_off_everywhere": {
     "args": [],
@@ -4577,20 +4587,10 @@
     "one": null,
     "text": "looking at it…"
   },
-  "settings.plugins_tab_browse": {
-    "args": [],
-    "one": null,
-    "text": "browse"
-  },
   "settings.plugins_tab_file_types": {
     "args": [],
     "one": null,
     "text": "File types"
-  },
-  "settings.plugins_tab_installed": {
-    "args": [],
-    "one": null,
-    "text": "installed"
   },
   "settings.plugins_tag_mcp": {
     "args": [],

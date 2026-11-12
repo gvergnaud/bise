@@ -2,7 +2,7 @@
 // The plugins place from props (Place.tsx, PluginPage.tsx, Add.tsx): the head's counts and the
 // band from the core's summary, a row's one control and what it sends, the kind filter, the
 // add sheet's secrets (sent once with the confirm, then dropped), a plugin's page and remove.
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AppCmd, Plugin, PluginsSummary } from '@/proto';
 import { core_ev } from '@/proto/fixtures.gen';
@@ -98,22 +98,67 @@ describe('the plugins place', () => {
     expect(ports.open).toHaveBeenCalledWith('blender');
   });
 
-  it('filters by kind (/skills opens on skills) and lists Browse apart', () => {
+  // his m_62905: no installed | browse tabs; one list, installed first, then 'Not installed'
+  const order = () => Array.from(screen.getByTestId('plugins.list').querySelectorAll('[data-testid^="plugins.group."], [data-testid="plugins.avail.head"], [data-testid^="plugins.avail.mistral"]')).map((e) => e.getAttribute('data-testid'));
+
+  it("one list: the installed rows first, then 'Not installed' with what he can add; the kind chips filter both (/skills opens on skills)", () => {
+    place();
+    expect(screen.queryByTestId('plugins.tabs')).toBeNull();
+    expect(order()).toEqual(['plugins.group.plugin', 'plugins.group.mistral', 'plugins.group.mcp', 'plugins.group.skills', 'plugins.avail.head', 'plugins.avail.mistral']);
+    expect(screen.getByTestId('plugins.avail.head').textContent).toBe(sentenceCase(settings.plugins_not_installed));
+    fireEvent.click(screen.getByTestId('plugins.avail.row.mistral:linear.connect'));
+    cleanup();
     place({ kind: 'skills' });
-    expect(screen.queryByTestId('plugins.group.plugin')).toBeNull();
-    expect(screen.getByTestId('plugins.group.skills')).toBeTruthy();
-    fireEvent.click(screen.getByTestId('plugins.kind.all'));
-    expect(screen.getByTestId('plugins.group.plugin')).toBeTruthy();
-    fireEvent.click(screen.getByTestId('plugins.tabs.browse'));
-    expect(screen.getByTestId('plugins.browse.row.mistral:linear')).toBeTruthy();
+    expect(order()).toEqual(['plugins.group.skills']);
+    fireEvent.click(screen.getByTestId('plugins.kind.mistral'));
+    expect(order()).toEqual(['plugins.group.mistral', 'plugins.avail.head', 'plugins.avail.mistral']);
   });
 
-  it("the search is at the right of installed | browse, before add, never in the window's bar (his m_52658); '/' from anywhere, esc clears then leaves", () => {
+  it('one search: an installed and a not-installed match both show', () => {
+    place();
+    fireEvent.change(screen.getByTestId('plugins.search.input'), { target: { value: 'linear' } });
+    expect(screen.getByTestId('plugins.row.linear')).toBeTruthy();
+    expect(screen.getByTestId('plugins.avail.row.mistral:linear')).toBeTruthy();
+    expect(screen.queryByTestId('plugins.row.blender')).toBeNull();
+    fireEvent.change(screen.getByTestId('plugins.search.input'), { target: { value: 'blender' } });
+    expect(screen.queryByTestId('plugins.avail')).toBeNull();
+  });
+
+  it("nothing installed: the list starts at 'Not installed'; nothing to add either: one plain line", () => {
+    place({ rows: [] });
+    expect(order()).toEqual(['plugins.avail.head', 'plugins.avail.mistral']);
+    cleanup();
+    place({ rows: [], browse: [] });
+    expect(screen.getByTestId('plugins.none').textContent).toBe(settings.plugins_nothing_installed);
+  });
+
+  it("add's browse lands on the 'Not installed' head with every row back, tinted for a moment", () => {
+    const seen: Element[] = [];
+    const before = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollIntoView');
+    Element.prototype.scrollIntoView = function (this: Element) { seen.push(this); };
+    vi.useFakeTimers();
+    try {
+      place({ kind: 'skills' });
+      fireEvent.click(screen.getByTestId('plugins.add'));
+      fireEvent.click(screen.getByTestId('plugins.add.browse'));
+      const head = screen.getByTestId('plugins.avail.head');
+      expect(seen).toEqual([head]);
+      expect(head.className).toContain('lit');
+      expect(screen.getByTestId('plugins.group.plugin')).toBeTruthy();
+      act(() => { vi.advanceTimersByTime(1000); });
+      expect(head.className).not.toContain('lit');
+    } finally {
+      vi.useRealTimers();
+      if (before !== undefined) Object.defineProperty(Element.prototype, 'scrollIntoView', before);
+    }
+  });
+
+  it("the search is at the right of the kind chips, before add, never in the window's bar (his m_52658); '/' from anywhere, esc clears then leaves", () => {
     render(<BarSlot />);
     place();
     expect(screen.getByTestId('app.bar.slot').childElementCount).toBe(0);
-    const bar = screen.getByTestId('plugins.tabs.row');
-    expect(bar.querySelector('.b-listbar-start [data-testid="plugins.tabs"]')).not.toBeNull();
+    const bar = screen.getByTestId('plugins.list.row');
+    expect(bar.querySelector('.b-listbar-start [data-testid="plugins.kinds"]')).not.toBeNull();
     const end = bar.querySelector('.b-listbar-end');
     expect(end?.firstElementChild?.getAttribute('data-testid')).toBe('plugins.search');
     const field = screen.getByTestId<HTMLInputElement>('plugins.search.input');
@@ -202,7 +247,7 @@ describe("a plugin's page", () => {
   });
 });
 
-describe("File types: the place's third group, where every pick is seen and reset (docs/plugin-apps.md A3)", () => {
+describe("File types: the installed part's last group, where every pick is seen and reset (docs/plugin-apps.md A3)", () => {
   const sheets = { plugin: 'sheets', tool: 'grid', app: 'Sheets', type: '*.xlsx', type_title: 'Excel workbook' };
   const grid = { plugin: 'grid', tool: 'open', app: 'Grid', type: '*.csv', type_title: 'CSV table' };
   const TYPES = [
@@ -212,7 +257,6 @@ describe("File types: the place's third group, where every pick is seen and rese
 
   it("one row per type: '.csv  Grid  your pick  Reset'; a pick and Reset send opener_set", () => {
     const { sent } = place({ fileTypes: TYPES });
-    fireEvent.click(screen.getByTestId('plugins.tabs.types'));
     expect(screen.getByTestId('plugins.types.row.*.xlsx.app').textContent).toBe('Sheets');
     expect(screen.getByTestId('plugins.types.row.*.xlsx.status').textContent).toBe(settings.file_type_default);
     expect(screen.queryByTestId('plugins.types.row.*.xlsx.reset')).toBeNull();
@@ -223,9 +267,17 @@ describe("File types: the place's third group, where every pick is seen and rese
     expect(sent).toEqual([{ cmd: 'opener_set', type: '*.csv', plugin: 'sheets', tool: 'grid' }, { cmd: 'opener_set', type: '*.csv' }]);
   });
 
-  it('no app opens anything yet: one plain line', () => {
+  it("sits after the installed groups, before 'Not installed', under All only (designer m_62919); none: no group", () => {
+    place({ fileTypes: TYPES });
+    const list = screen.getByTestId('plugins.list');
+    const at = (id: string) => Array.from(list.querySelectorAll('[data-testid]')).findIndex((e) => e.getAttribute('data-testid') === id);
+    expect(at('plugins.group.skills')).toBeLessThan(at('plugins.types'));
+    expect(at('plugins.types')).toBeLessThan(at('plugins.avail.head'));
+    fireEvent.click(screen.getByTestId('plugins.kind.plugin'));
+    expect(screen.queryByTestId('plugins.types')).toBeNull();
+    cleanup();
     place();
-    fireEvent.click(screen.getByTestId('plugins.tabs.types'));
-    expect(screen.getByTestId('plugins.types.empty').textContent).toBe(settings.file_types_empty);
+    expect(screen.queryByTestId('plugins.types')).toBeNull();
+    expect(screen.queryByTestId('plugins.types.empty')).toBeNull();
   });
 });

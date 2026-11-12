@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import type { Plugin, PluginPart, PluginsSummary } from '@/proto';
 import { core_ev } from '@/proto/fixtures.gen';
 import { settings } from '@/proto/words.gen';
-import { badgeOf, bandCells, bandWords, controlOf, gives, groupsOf, hitOf, kindCounts, leadOf, lineOf, newKey, removable, sideOf, waitsWords } from './model';
+import { availableOf, badgeOf, bandCells, bandWords, controlOf, gives, groupsOf, hitOf, leadOf, lineOf, newKey, removable, sideOf, waitsWords } from './model';
 import { isNew, markSeen, seenKey, type SeenStore } from './seen';
 
 const row = (id: string, more: Partial<Plugin> = {}): Plugin => ({ id, name: id, kind: 'plugin', scope: 'user', title: id, state: 'loaded', on: true, ...more });
@@ -72,7 +72,29 @@ describe('the list', () => {
       ['skills', ['skills:personal']],
     ]);
     expect(groupsOf(rows, 'skills', '').map((g) => g.kind)).toEqual(['skills']);
-    expect(kindCounts(rows)).toEqual({ all: 4, plugin: 1, mistral: 1, mcp: 1, skills: 1 });
+  });
+
+  // his m_62905: one list, installed first, then what he can add, under one search and one chip
+  const browse = [
+    { source: 'mistral', items: [row('mistral:linear', { kind: 'mistral', scope: 'mistral', title: 'Linear', state: 'available', on: false, what: 'issues and cycles' }), row('mistral:notion', { kind: 'mistral', scope: 'mistral', title: 'Notion', state: 'available', on: false }), row('mistral:slack', { kind: 'mistral', scope: 'mistral', title: 'Slack', state: 'available', on: false, what: 'channels and threads' })] },
+    { source: 'openai/plugins', items: [row('figma', { state: 'available', on: false, what: 'read your Figma issues' })] },
+    { source: 'empty/market', items: [] },
+  ];
+  const ids = (g: readonly { readonly hits: readonly { readonly p: Plugin }[] }[]) => g.map((x) => x.hits.map((h) => h.p.id));
+
+  it('the not-installed part: each source in the core order, a row he has already out, empty sources out', () => {
+    expect(availableOf(browse, rows, 'all', '').map((b) => [b.source, b.hits.map((h) => h.p.id)])).toEqual([
+      ['mistral', ['mistral:linear', 'mistral:slack']],
+      ['openai/plugins', ['figma']],
+    ]);
+    // a chip filters it like the installed part
+    expect(ids(availableOf(browse, rows, 'mistral', ''))).toEqual([['mistral:linear', 'mistral:slack']]);
+    expect(availableOf(browse, rows, 'skills', '')).toEqual([]);
+  });
+
+  it('one search: an installed and a not-installed match both come back', () => {
+    expect(ids(groupsOf(rows, 'all', 'issue'))).toEqual([['mistral:notion']]);
+    expect(ids(availableOf(browse, rows, 'all', 'issue'))).toEqual([['mistral:linear'], ['figma']]);
   });
 
   it('a search finds a tool inside a row and says which', () => {

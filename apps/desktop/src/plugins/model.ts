@@ -165,7 +165,7 @@ export interface Group {
   readonly hits: readonly Hit[];
 }
 
-/** The installed list, by kind in the list's order, filtered by kind and search; empty groups go. */
+/** The installed part, by kind in the list's order, filtered by kind and search; empty groups go. */
 export function groupsOf(rows: readonly Plugin[], kind: KindFilter, q: string): Group[] {
   const shown = rows.filter((p) => installed(p));
   return GROUPS.filter((g) => kind === 'all' || kind === g)
@@ -179,15 +179,32 @@ export function groupsOf(rows: readonly Plugin[], kind: KindFilter, q: string): 
     .filter((g) => g.hits.length > 0);
 }
 
-/** How many installed rows each kind has (the filter chips' numbers: a count of rows, no math on them). */
-export function kindCounts(rows: readonly Plugin[]): Record<KindFilter, number> {
-  const out: Record<KindFilter, number> = { all: 0, plugin: 0, mistral: 0, mcp: 0, skills: 0 };
-  for (const p of rows) {
-    if (!installed(p)) continue;
-    out.all += 1;
-    out[groupOf(p)] += 1;
-  }
-  return out;
+/** One group of the not-installed part: where it comes from ('mistral', a marketplace) and its rows. */
+export interface SourceGroup {
+  readonly source: string;
+  readonly hits: readonly Hit[];
+}
+
+/** A row's key: its id, else its name. */
+export const keyOf = (p: Plugin): string => (p.id === '' ? p.name : p.id);
+
+/**
+ * The not-installed part (his m_62905: one list, installed first, then what he can add): each
+ * source in the core's order (Mistral's connectors, then each marketplace), filtered by the same
+ * kind chip and search as the installed part; a row he has installed already and empty sources go.
+ */
+export function availableOf(browse: readonly { readonly source: string; readonly items: readonly Plugin[] }[], rows: readonly Plugin[], kind: KindFilter, q: string): SourceGroup[] {
+  const have = new Set(rows.filter(installed).map(keyOf));
+  return browse
+    .map((b) => ({
+      source: b.source,
+      hits: b.items.flatMap((p) => {
+        if (have.has(keyOf(p)) || (kind !== 'all' && groupOf(p) !== kind)) return [];
+        const h = hitOf(p, q);
+        return h === null ? [] : [h];
+      }),
+    }))
+    .filter((b) => b.hits.length > 0);
 }
 
 /** A group's head: 'plugins', 'Mistral connectors', 'MCP servers', 'skills'. */
