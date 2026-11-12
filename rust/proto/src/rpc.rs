@@ -154,6 +154,9 @@ pub const METHODS: &[MethodRow] = &[
     m("view/context", "view_context", None),
     // C8: a plugin's views, through the hub's views bridge
     m("plugin/views", "plugin_views", None),
+    // plugin-apps (docs/plugin-apps.md A4): a document view's session ends
+    // (his tab); client sockets only, as view/*
+    m("view/close", "view_close", None),
 ];
 
 /// The protocol's own methods (no [`HubCmd`]).

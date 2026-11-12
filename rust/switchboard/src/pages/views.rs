@@ -68,23 +68,32 @@ pub(super) struct ViewOrigin {
     pub(super) seq: u64,
 }
 
-/// Drop the least recently loaded origins past [`ORIGINS`].
-fn bound(m: &mut std::collections::HashMap<String, ViewOrigin>) {
+/// Drop the least recently loaded origins past [`ORIGINS`]: their
+/// sessions.
+fn bound(m: &mut std::collections::HashMap<String, ViewOrigin>) -> Vec<String> {
     if m.len() <= ORIGINS {
-        return;
+        return Vec::new();
     }
     let mut seqs: Vec<u64> = m.values().map(|o| o.seq).collect();
     seqs.sort_unstable();
     let cut = seqs[m.len() - ORIGINS];
-    m.retain(|_, o| o.seq >= cut);
+    let mut dropped = Vec::new();
+    m.retain(|_, o| {
+        let keep = o.seq >= cut;
+        if !keep {
+            dropped.append(&mut o.sessions);
+        }
+        keep
+    });
+    dropped
 }
 
 impl ViewOrigin {
-    /// `session` kept, the oldest past [`SESSIONS`] dropped.
-    fn add(&mut self, session: String) {
+    /// `session` kept, the oldest past [`SESSIONS`] dropped: them.
+    fn add(&mut self, session: String) -> Vec<String> {
         self.sessions.push(session);
         let over = self.sessions.len().saturating_sub(SESSIONS);
-        self.sessions.drain(..over);
+        self.sessions.drain(..over).collect()
     }
 }
 
@@ -125,15 +134,59 @@ impl Pages {
     /// random source, never written to a log): the session.
     pub fn view_sandbox(&self, hash: &str, s: ViewSandbox) -> String {
         let session = super::new_token();
+        self.view_sandbox_as(hash, &session, s);
+        session
+    }
+
+    /// [`Pages::view_sandbox`] with a session minted before (`view/open`
+    /// binds its handle to it before its opener runs). The sessions the
+    /// caps push out end here ([`Pages::sessions_end`]).
+    pub fn view_sandbox_as(&self, hash: &str, session: &str, s: ViewSandbox) {
+        let mut dropped = Vec::new();
         if let Ok(mut m) = self.views.lock() {
             let seq = m.values().map(|o| o.seq).max().unwrap_or(0) + 1;
             let o = m.entry(hash.to_string()).or_default();
             o.sandbox = s;
             o.seq = seq;
-            o.add(session.clone());
-            bound(&mut m);
+            dropped = o.add(session.to_string());
+            dropped.extend(bound(&mut m));
         }
-        session
+        self.sessions_end(&dropped);
+    }
+
+    /// A session ends before the caps push it out (a document's tab
+    /// closed, `view/close`): its proxy, its `/f/` and its handles answer
+    /// 404 or `bad-handle` from now.
+    pub fn view_session_end(&self, session: &str) {
+        if let Ok(mut m) = self.views.lock() {
+            for o in m.values_mut() {
+                o.sessions.retain(|s| s != session);
+            }
+        }
+        self.sessions_end(&[session.to_string()]);
+    }
+
+    /// The one place sessions end (the per-origin cap, the [`ORIGINS`]
+    /// bound, `view/close`): their handles and their URLs with them
+    /// (architect m_60434). Called with no other lock held.
+    fn sessions_end(&self, sessions: &[String]) {
+        if sessions.is_empty() {
+            return;
+        }
+        let mut f = self.files.lock().unwrap_or_else(|e| e.into_inner());
+        sessions.iter().for_each(|s| f.end(s));
+    }
+
+    /// A handle for `b` (a new 32 hex), on the table its session's end
+    /// clears: its `view-file://` uri.
+    pub fn mint_handle(&self, b: crate::view_files::Binding) -> String {
+        self.files.lock().unwrap_or_else(|e| e.into_inner()).mint(&super::new_token(), b)
+    }
+
+    /// The view a document session (`doc`) was opened with: its opener,
+    /// copied out (the lock is never held across I/O).
+    pub fn doc_opener(&self, doc: &str) -> Option<crate::view_files::Opener> {
+        self.files.lock().unwrap_or_else(|e| e.into_inner()).of_session(doc).map(|b| b.opener.clone())
     }
 
     /// bise's view kit (`kit/view/`) as a view's folder: what
@@ -336,9 +389,11 @@ mod tests {
     #[test]
     fn an_origin_keeps_its_last_sessions_only() {
         let mut o = ViewOrigin::default();
+        let mut dropped = Vec::new();
         for i in 0..SESSIONS + 3 {
-            o.add(format!("s{i}"));
+            dropped.extend(o.add(format!("s{i}")));
         }
+        assert_eq!(dropped, ["s0", "s1", "s2"], "the ones pushed out are said");
         assert_eq!(o.sessions.len(), SESSIONS);
         assert_eq!(o.sessions.first().map(String::as_str), Some("s3"), "the oldest went first");
         assert_eq!(o.sessions.last().map(String::as_str), Some(format!("s{}", SESSIONS + 2).as_str()));
@@ -349,8 +404,9 @@ mod tests {
     fn the_view_origins_kept_are_bounded_newest_first() {
         let mut m = std::collections::HashMap::new();
         for i in 0..ORIGINS as u64 + 5 {
-            m.insert(format!("{i:016x}"), ViewOrigin { seq: i + 1, ..Default::default() });
-            bound(&mut m);
+            m.insert(format!("{i:016x}"), ViewOrigin { seq: i + 1, sessions: vec![format!("s{i}")], ..Default::default() });
+            let dropped = bound(&mut m);
+            assert_eq!(dropped, if i < ORIGINS as u64 { vec![] } else { vec![format!("s{}", i - ORIGINS as u64)] }, "an origin's sessions go with it");
         }
         assert_eq!(m.len(), ORIGINS);
         assert!(!m.contains_key(&format!("{:016x}", 4)), "the least recently loaded went");

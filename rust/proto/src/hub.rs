@@ -1168,11 +1168,18 @@ pub enum HubCmd {
     ViewResource { project: Project, agent: String, call: String },
     /// a view's request to its own server (`view/call`): `method`
     /// `tools/call` or `resources/read`, `params` as the view sent them;
-    /// its answer is the server's result, or a view error
+    /// its answer is the server's result, or a view error. The view is an
+    /// agent's call's (`agent`, `call`) or a document's (`doc`, the session
+    /// `view/open` minted, docs/plugin-apps.md A4): one of the two, both or
+    /// neither refused (architect m_60316)
     ViewCall {
         project: Project,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
         agent: String,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
         call: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        doc: Option<String>,
         method: String,
         #[serde(default)]
         #[cfg_attr(feature = "ts", ts(type = "Record<string, unknown>"))]
@@ -1194,11 +1201,16 @@ pub enum HubCmd {
     },
     /// a view's `ui/update-model-context` (`view/context`): its content
     /// replaces this view's context, which joins his next send to the
-    /// agent once
+    /// agent once; a document's (`doc`): refused not-supported until a
+    /// document view has an agent to join (view/call's key rule)
     ViewContext {
         project: Project,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
         agent: String,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
         call: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        doc: Option<String>,
         #[serde(default)]
         #[cfg_attr(feature = "ts", ts(type = "Array<Record<string, unknown>>"))]
         content: Value,
@@ -1208,13 +1220,17 @@ pub enum HubCmd {
     /// (`<base>/<plugin>/~ui`); its answer is the bridge's
     /// `{views: [...]}` as is ([`crate::view_rpc::PluginViewsResult`])
     PluginViews { project: Project, plugin: String },
+    /// plugin-apps (docs/plugin-apps.md A4): a document view's tab closed,
+    /// unloaded or swapped to another app: its session (`doc`) and its
+    /// handles end. His only: a client socket's, never an agent's op
+    ViewClose { project: Project, doc: String },
     /// a tag this version doesn't know: answered with `error`
     #[serde(skip)]
     Unknown { tag: String, raw: Value },
 }
 
 impl HubCmd {
-    pub const TAGS: &'static [&'static str] = &["subscribe", "unsubscribe", "page", "find", "send", "answer", "close", "approvals", "remove_rule", "stop", "archive", "unarchive", "artifacts_seen", "tool_out", "log", "completion", "log_body", "queued_take", "queued_steer", "diff", "worktrees", "processes", "proc_out", "proc_follow", "proc_stop", "merged", "features", "prs", "pr_act", "pr_detail", "pr_check_log", "inbox_history", "scheduled", "scheduled_stop", "wake_stop", "models", "new", "rename", "model", "effort", "route_correct", "route_cancel", "follow", "slash", "guide", "branches", "scheduled_run", "artifacts_add", "artifacts_move", "artifacts_folders", "artifacts_library", "focus", "versions", "version_info", "version_switch", "version_rollback", "version_restart", "version_update", "bise_update", "release_plan", "release_run", "stop_hub", "page_voice", "usage", "pause", "resume", "view_resource", "view_call", "view_message", "view_context", "plugin_views", "app_open"];
+    pub const TAGS: &'static [&'static str] = &["subscribe", "unsubscribe", "page", "find", "send", "answer", "close", "approvals", "remove_rule", "stop", "archive", "unarchive", "artifacts_seen", "tool_out", "log", "completion", "log_body", "queued_take", "queued_steer", "diff", "worktrees", "processes", "proc_out", "proc_follow", "proc_stop", "merged", "features", "prs", "pr_act", "pr_detail", "pr_check_log", "inbox_history", "scheduled", "scheduled_stop", "wake_stop", "models", "new", "rename", "model", "effort", "route_correct", "route_cancel", "follow", "slash", "guide", "branches", "scheduled_run", "artifacts_add", "artifacts_move", "artifacts_folders", "artifacts_library", "focus", "versions", "version_info", "version_switch", "version_rollback", "version_restart", "version_update", "bise_update", "release_plan", "release_run", "stop_hub", "page_voice", "usage", "pause", "resume", "view_resource", "view_call", "view_message", "view_context", "plugin_views", "app_open", "view_close"];
 
     pub fn decode(line: &str) -> Result<HubCmd, String> {
         Self::from_value(parse(line)?)
@@ -1313,6 +1329,7 @@ impl HubCmd {
             | HubCmd::ViewCall { project, .. }
             | HubCmd::ViewMessage { project, .. }
             | HubCmd::ViewContext { project, .. }
+            | HubCmd::ViewClose { project, .. }
             | HubCmd::PluginViews { project, .. } => project,
             HubCmd::Completion(c) => &c.project,
             HubCmd::Unknown { .. } => return None,

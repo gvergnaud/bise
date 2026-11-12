@@ -922,3 +922,29 @@ fn a_gone_copy_is_the_viewers_404() {
     assert_eq!(gone.status, 404, "{}", text(&gone));
     let _ = std::fs::remove_dir_all(d);
 }
+
+/// A session ends in one place (architect m_60434): pushed out by its
+/// origin's cap, or closed (`view/close`), its handles go with it; the
+/// other sessions' stay.
+#[test]
+fn a_sessions_end_ends_its_handles() {
+    use crate::view_files::{Binding, FileTarget, Opener};
+    use super::super::views::{hash as vhash, ViewSandbox, SESSIONS};
+    let (p, d) = pages();
+    let h = vhash("sheets", "~views", "ui://sheets/views/grid");
+    let opener = Opener { plugin: "sheets".into(), server: "~views".into(), uri: "ui://sheets/views/grid".into() };
+    let bind = |s: &str| p.mint_handle(Binding::new(s, opener.clone(), FileTarget::Artifact { id: "q3".into(), version: 1 }, false));
+    let first = p.view_sandbox(&h, ViewSandbox::default());
+    let closed = p.view_sandbox(&h, ViewSandbox::default());
+    let (u_first, u_closed) = (bind(&first), bind(&closed));
+    assert_eq!(p.doc_opener(&first), Some(opener.clone()));
+    p.view_session_end(&closed);
+    assert_eq!(p.doc_opener(&closed), None, "view/close: its handles end");
+    assert!(p.files.lock().unwrap().get(&closed, &u_closed).is_err());
+    assert!(p.files.lock().unwrap().get(&first, &u_first).is_ok(), "another session's stay");
+    for _ in 0..SESSIONS {
+        p.view_sandbox(&h, ViewSandbox::default());
+    }
+    assert_eq!(p.doc_opener(&first), None, "pushed out by its origin's cap: its handles end");
+    let _ = std::fs::remove_dir_all(d);
+}

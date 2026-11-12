@@ -79,6 +79,7 @@ export const METHODS = {
   "view/message": { cmd: "view_message", result: null },
   "view/context": { cmd: "view_context", result: null },
   "plugin/views": { cmd: "plugin_views", result: null },
+  "view/close": { cmd: "view_close", result: null },
 } as const;
 
 export const NOTIFICATIONS = {

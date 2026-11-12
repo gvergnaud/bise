@@ -139,12 +139,19 @@ fn context_said(fx: &[crate::core::Effect], key: &ViewKey) -> Option<Result<(), 
 fn method_of(cmd: HubCmd) -> Option<(&'static str, Value)> {
     Some(match cmd {
         HubCmd::ViewResource { agent, call, .. } => ("view/resource", json!({"agent": agent, "call": call})),
-        HubCmd::ViewCall { agent, call, method, params, .. } => ("view/call", json!({"agent": agent, "call": call, "method": method, "params": params})),
+        HubCmd::ViewCall { agent, call, doc, method, params, .. } => ("view/call", json!({"agent": some(agent), "call": some(call), "doc": doc, "method": method, "params": params})),
         HubCmd::ViewMessage { agent, call, content, gesture_ms, .. } => ("view/message", json!({"agent": agent, "call": call, "content": content, "gesture_ms": gesture_ms})),
-        HubCmd::ViewContext { agent, call, content, .. } => ("view/context", json!({"agent": agent, "call": call, "content": content})),
+        HubCmd::ViewContext { agent, call, doc, content, .. } => ("view/context", json!({"agent": some(agent), "call": some(call), "doc": doc, "content": content})),
         HubCmd::PluginViews { plugin, .. } => ("plugin/views", json!({"plugin": plugin})),
+        HubCmd::ViewClose { doc, .. } => ("view/close", json!({"doc": doc})),
         _ => return None,
     })
+}
+
+/// A key the command left out (`""`) is absent, never an empty name
+/// ([`view_call::Key::of`] refuses a request with both or neither).
+fn some(s: String) -> Option<String> {
+    Some(s).filter(|s| !s.is_empty())
 }
 
 /// A server's JSON-RPC error, as the view gets it.
@@ -188,6 +195,12 @@ fn judge_call(file: &Path, bridge: Result<(PathBuf, bool), String>, method: &str
     let what = Ask::of(method, inner).what().to_string();
     let text = std::fs::read_to_string(file).map_err(|_| ViewError::Expired.rpc(&what))?;
     let f = ViewFile::parse(&text).map_err(|e| e.rpc(&what))?;
+    judge_on(f, bridge, method, inner, state)
+}
+
+/// A call of view `f` (an agent's call's views file, or a document's
+/// opener) judged on its server's tools through `bridge`.
+fn judge_on(f: ViewFile, bridge: Result<(PathBuf, bool), String>, method: &str, inner: &Value, state: &bend_plugins::model::StateV2) -> Result<(ViewFile, Route, Verdict), RpcError> {
     let (json_path, hubs) = bridge.map_err(|e| gone(&e))?;
     let base = wait_base(&json_path).ok_or_else(|| gone("no bridge"))?;
     let url = view_call::route_url(&base, &f.plugin, &f.server);
@@ -243,11 +256,14 @@ impl Shell {
 
     /// One view request (C5's methods), from hub.sock or `/api/view`.
     pub(crate) fn view_request(&mut self, method: &str, params: Value, done: ViewDone) {
-        if method == "plugin/views" {
-            return self.plugin_views(params, done);
+        match method {
+            "plugin/views" => return self.plugin_views(params, done),
+            "view/close" => return self.view_close(params, done),
+            _ => {}
         }
-        let p = match ViewParams::of(&params) {
-            Ok(p) => p,
+        let p = match view_call::Key::of(&params) {
+            Ok(view_call::Key::Call(p)) => p,
+            Ok(view_call::Key::Doc(doc)) => return self.doc_request(method, doc, params, done),
             Err(e) => return done(Err(e.rpc(method))),
         };
         let Some(dir) = self.dir_of(&p.agent) else { return done(Err(ViewError::Expired.rpc(method))) };
@@ -494,6 +510,65 @@ impl Shell {
             };
             done(r);
         });
+    }
+
+    // ---- document views (docs/plugin-apps.md A4) ----
+
+    /// A request of a document view (`{doc}`): its calls to its opener's
+    /// server; it has no agent, so no message nor context.
+    fn doc_request(&mut self, method: &str, doc: String, params: Value, done: ViewDone) {
+        match method {
+            "view/call" => self.doc_call(doc, params, done),
+            m => done(Err(ViewError::NotSupported.rpc(m))),
+        }
+    }
+
+    /// A document view's `tools/call` to its opener's server, on the
+    /// views bridge (never an agent's), judged as C5's: an app-only tool
+    /// runs; one the model sees too would need an agent's card, which a
+    /// document view has none of: refused.
+    fn doc_call(&mut self, doc: String, params: Value, done: ViewDone) {
+        let method = params.get("method").and_then(Value::as_str).unwrap_or("").to_string();
+        let inner = params.get("params").cloned().filter(Value::is_object).unwrap_or_else(|| json!({}));
+        let what = Ask::of(&method, &inner).what().to_string();
+        // the session's opener, copied out of the pages' table (its end is
+        // the pages server's, with the session)
+        let Some(d) = self.pg.pages.as_ref().and_then(|p| p.doc_opener(&doc)) else { return done(Err(ViewError::Expired.rpc(&what))) };
+        if method != "tools/call" {
+            return done(Err(ViewError::NotSupported.rpc(&what)));
+        }
+        let key = ViewKey::new("", &doc);
+        if !self.views.limits.call(&key, now_ms()) {
+            return done(Err(ViewError::RateLimited.rpc(&what)));
+        }
+        let f = ViewFile { plugin: d.plugin, server: d.server, uri: d.uri, ..Default::default() };
+        let (exe, dir, json, ws) = (self.opts.exe.clone(), self.opts.paths.views_bridge_dir(), self.opts.paths.views_bridge_json(), self.opts.paths.workspace.clone());
+        let bridge = self.views.bridge.ensure(&exe, &dir, &json, &ws, now_ms()).map(|p| (p, true));
+        let state_path = bend_plugins::state::state_path();
+        let step = self.view_step();
+        std::thread::spawn(move || {
+            let state = bend_plugins::state::read(&state_path);
+            match judge_on(f, bridge, &method, &inner, &state) {
+                Err(e) => done(Err(e)),
+                Ok((_, _, Verdict::Refused(e))) => done(Err(e.rpc(&what))),
+                Ok((_, _, Verdict::Ask)) => done(Err(ViewError::NotVisible.rpc(&what))),
+                Ok((_, route, Verdict::Free)) => step(Box::new(move |sh: &mut Shell| sh.view_forward(key, route, method, inner, done))),
+            }
+        });
+    }
+
+    /// `view/close {doc}`: his tab closed, unloaded or swapped app: the
+    /// session and its handles end, in the pages server's one place.
+    fn view_close(&mut self, params: Value, done: ViewDone) {
+        match view_call::Key::of(&params) {
+            Ok(view_call::Key::Doc(doc)) => {
+                if let Some(pages) = self.pg.pages.clone() {
+                    pages.view_session_end(&doc);
+                }
+                done(Ok(json!({})))
+            }
+            _ => done(Err(ViewError::Expired.rpc("view/close"))),
+        }
     }
 
     // ---- view/message, view/context ----

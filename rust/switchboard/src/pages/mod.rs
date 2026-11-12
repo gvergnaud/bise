@@ -104,6 +104,13 @@ pub struct Pages {
     /// each view origin's sandbox (views.rs): its hash → what
     /// `view/resource` registered; lost on a restart (the app asks again)
     views: Mutex<HashMap<String, views::ViewOrigin>>,
+    /// the handles of the views' sessions (docs/plugin-apps.md A4,
+    /// `crate::view_files`, apps-hub-files'): beside the sessions, ended
+    /// with them in one place (views.rs `sessions_end`). Never held across
+    /// I/O, nor with `views`: lock, copy the binding out, unlock, then
+    /// read, stat or send (architect m_60434): a range read of a video
+    /// holding it would stall the hub's loop at its next lookup.
+    pub(crate) files: Mutex<crate::view_files::Files>,
     /// the app's dev server, who may also frame a view (view_csp.rs): a
     /// hub run with `BISE_DEV` only
     pub view_dev: Option<&'static str>,
@@ -178,6 +185,7 @@ impl Pages {
             holds: crate::idle::Holds::default(),
             rows_memo: Mutex::default(),
             views: Mutex::new(HashMap::new()),
+            files: Mutex::default(),
             view_dev: view_csp::dev_ancestor(std::env::var("BISE_DEV").ok().as_deref()),
         }
     }

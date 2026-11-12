@@ -105,3 +105,5 @@
 {"cmd":"diff","project":"acme-1a2b3c4d","artifact":"cu-upload-diff","version":2,"req":7}
 {"cmd":"guide","project":"acme-1a2b3c4d","target":{"kind":"agent","name":"perf"}}
 {"cmd":"guide","project":"acme-1a2b3c4d","target":{"kind":"pr","url":"https://github.com/acme/app/pull/412"},"run":true}
+{"cmd":"view_call","project":"acme-1a2b3c4d","doc":"0123456789abcdef0123456789abcdef","method":"resources/read","params":{"uri":"view-file://00112233445566778899aabbccddeeff"}}
+{"cmd":"view_close","project":"acme-1a2b3c4d","doc":"0123456789abcdef0123456789abcdef"}
