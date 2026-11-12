@@ -140,20 +140,36 @@ fn forget(dir: &Path, id: &PluginId, var: &str) -> Result<(), SecretsError> {
 }
 
 /// The one rule for a `${NAME}` of `plugin`'s servers (URL, headers,
-/// env): the environment's value when non-empty, else the one he typed
-/// in ([`read`] of `dir`, once, at the first name the environment lacks;
-/// a locked keychain or no `dir` reads as none). The bridge, the logins
-/// and the remove all expand through it.
+/// env): what he set wins ([`read`] of `dir`, once; a locked keychain or
+/// no `dir` reads as none), the environment's value only when he set
+/// nothing (architect m_61817: an agent shell's var never beats what he
+/// typed). The bridge, the logins and the remove all expand through it.
 pub fn lookup(dir: Option<&Path>, plugin: &PluginId) -> impl Fn(&str) -> Option<String> {
+    declared(dir, plugin, &[])
+}
+
+/// [`lookup`] for a plugin's declared vars: `secret` names (its secret
+/// settings) come from his secrets only, never the env (architect
+/// m_61817). The setup checks and the services' env both read through
+/// it, so a check tests what will run.
+pub fn declared(dir: Option<&Path>, plugin: &PluginId, secret: &[String]) -> impl Fn(&str) -> Option<String> {
     let (id, dir) = (plugin.owner().clone(), dir.map(Path::to_path_buf));
+    let secret = secret.to_vec();
     let saved = std::cell::OnceCell::new();
     move |k: &str| {
-        std::env::var(k).ok().filter(|v| !v.is_empty()).or_else(|| {
-            saved
-                .get_or_init(|| dir.as_deref().and_then(|d| read(d, &id).ok()).unwrap_or_default())
-                .get(k)
-                .cloned()
-        })
+        let mine = saved.get_or_init(|| dir.as_deref().and_then(|d| read(d, &id).ok()).unwrap_or_default()).get(k).cloned();
+        pick(mine, || std::env::var(k).ok(), secret.iter().any(|s| s == k))
+    }
+}
+
+/// A var's value: his own when set, else the env's (never for a
+/// secret). Pure but for `env`.
+pub fn pick(mine: Option<String>, env: impl FnOnce() -> Option<String>, secret: bool) -> Option<String> {
+    let set = |v: Option<String>| v.filter(|v| !v.is_empty());
+    match set(mine) {
+        Some(v) => Some(v),
+        None if secret => None,
+        None => set(env()),
     }
 }
 
@@ -184,6 +200,19 @@ fn lock(path: &Path) -> std::io::Result<std::fs::File> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// architect m_61817: what he set wins; the env is a fallback only for
+    /// a non-secret var; a secret never comes from the env.
+    #[test]
+    fn his_value_wins_and_a_secret_never_comes_from_the_env() {
+        let env = || Some("from-shell".to_string());
+        assert_eq!(pick(Some("typed".into()), env, false).as_deref(), Some("typed"));
+        assert_eq!(pick(Some("typed".into()), env, true).as_deref(), Some("typed"));
+        assert_eq!(pick(None, env, false).as_deref(), Some("from-shell"));
+        assert_eq!(pick(None, env, true), None, "a secret he never gave");
+        assert_eq!(pick(Some(String::new()), env, false).as_deref(), Some("from-shell"), "an empty value is unset");
+        assert_eq!(pick(None, || Some(String::new()), false), None);
+    }
 
     fn dir(tag: &str) -> PathBuf {
         let d = std::env::temp_dir().join(format!("bp-secrets-{tag}-{}", std::process::id()));
