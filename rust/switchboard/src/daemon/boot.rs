@@ -57,16 +57,25 @@ impl Boot {
     /// The journal replay applied `done` of `total` events: progress,
     /// and a line at most every REPLAY_LINE_EVERY.
     pub(super) fn replayed(&self, done: usize, total: usize) {
+        self.moving(&boot::replay_step(done, total));
+    }
+
+    /// A long boot step moved (`step`: where it is, `n/N ...`): progress,
+    /// and a hub.log line at most every REPLAY_LINE_EVERY. A switcher of
+    /// any version reads such a line as progress (crate::boot::moved),
+    /// never a heartbeat (hub-loop: a boot from a photo said nothing for
+    /// 78 s at load 60 and the switch's 60 s wait killed it twice).
+    pub(super) fn moving(&self, step: &str) {
         let now = now_ms();
         {
             let mut last = self.replay_line_ms.lock().unwrap_or_else(|e| e.into_inner());
             if boot::replay_line_due(*last, now) {
                 *last = now;
-                log_line(&self.paths, &format!("boot: {}", boot::replay_step(done, total)));
+                log_line(&self.paths, &format!("boot: {}", step));
             }
         }
         if let Some(bw) = self.watch.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
-            bw.step(&boot::replay_step(done, total), now);
+            bw.step(step, now);
         }
     }
 

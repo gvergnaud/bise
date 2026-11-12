@@ -67,11 +67,13 @@ impl Hub {
     /// sb-core refuses, even halfway: a new state (`init`) and the full
     /// replay, as without one. sb-core dead or late on it: the error (the
     /// boot exits on it, a revival counts it).
-    pub fn rebuild(&mut self, events: &[Value], from: Option<(usize, Vec<String>)>, progress: &mut dyn FnMut(usize, usize)) -> Result<Rebuilt, CoreError> {
+    /// `restored(done, total)`: after each slice restored (a boot's
+    /// hub.log progress, hub-loop: 245 slices took ~78 s at load 60).
+    pub fn rebuild(&mut self, events: &[Value], from: Option<(usize, Vec<String>)>, progress: &mut dyn FnMut(usize, usize), restored: &mut dyn FnMut(usize, usize)) -> Result<Rebuilt, CoreError> {
         let Some((k, slices)) = from else {
             return Ok(Rebuilt { skipped: self.replay_with(events, progress)?, photo: Err("no photo".into()) });
         };
-        if let Err(why) = self.restore(&slices)? {
+        if let Err(why) = self.restore(&slices, restored)? {
             drop(slices);
             self.try_raw(&Link::Init(cl::Init { workspace: self.workspace.clone() }).to_value())?;
             return Ok(Rebuilt { skipped: self.replay_with(events, progress)?, photo: Err(why) });
@@ -87,8 +89,8 @@ impl Hub {
     /// The photo's slices into sb-core, the last first, each parsed as it
     /// goes (the hub never holds the whole photo parsed): Ok(Err(why))
     /// when a slice is not JSON or sb-core refuses one.
-    pub(super) fn restore(&mut self, slices: &[String]) -> Result<Result<(), String>, CoreError> {
-        for (i, text) in slices.iter().enumerate().rev() {
+    pub(crate) fn restore(&mut self, slices: &[String], restored: &mut dyn FnMut(usize, usize)) -> Result<Result<(), String>, CoreError> {
+        for (n, (i, text)) in slices.iter().enumerate().rev().enumerate() {
             let Ok(st) = serde_json::from_str::<Value>(text) else {
                 return Ok(Err(format!("the photo's slice {} of {} is not JSON", i + 1, slices.len())));
             };
@@ -101,6 +103,7 @@ impl Hub {
             if let Some(e) = out.get("error") {
                 return Ok(Err(format!("sb-core refused the photo's slice {} of {}: {}", i + 1, slices.len(), one_line(&e.to_string()))));
             }
+            restored(n + 1, slices.len());
         }
         Ok(Ok(()))
     }
@@ -169,7 +172,7 @@ impl Hub {
             .map(|a| (a.name.clone(), a.run))
             .collect();
         self.try_raw(&Link::Init(cl::Init { workspace: self.workspace.clone() }).to_value())?;
-        let rebuilt = self.rebuild(&events, from, &mut |_, _| {})?;
+        let rebuilt = self.rebuild(&events, from, &mut |_, _| {}, &mut |_, _| {})?;
         for (agent, run) in runs {
             self.try_raw(&force_run_input(&agent, run))?;
         }

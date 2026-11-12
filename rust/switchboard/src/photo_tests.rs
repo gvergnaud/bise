@@ -23,6 +23,33 @@ fn head(events: &[Value]) -> Head {
     Head { key: "k1".into(), mark: Mark::of(events) }
 }
 
+/// hub-loop: the mark made with no copy, in one pass, is the mark the
+/// photos on disk hold (the old way, written out here): another hash
+/// would turn every boot into a full replay of his 245k events.
+#[test]
+fn the_one_pass_mark_is_the_photos_mark() {
+    let evs = events();
+    let mut old = Mark::default();
+    for ev in &evs {
+        old.events += 1;
+        let mut b = old.prefix.to_le_bytes().to_vec();
+        b.extend_from_slice(ev.to_string().as_bytes());
+        old.prefix = fnv(&b);
+        if let Some(p) = ev["ws"]["path"].as_str() {
+            let mut b = old.paths.to_le_bytes().to_vec();
+            b.extend_from_slice(p.as_bytes());
+            old.paths = fnv(&b);
+        }
+    }
+    assert_eq!(Mark::of(&evs), old);
+    for k in 0..=evs.len() + 1 {
+        let (all, at) = Mark::of_and_at(&evs, k, &mut |_, _| {});
+        assert_eq!(all, old);
+        assert_eq!(at, Mark::of(&evs[..k.min(evs.len())]), "k {k}");
+        assert_eq!(usable_at(Some(&head(&evs[..k.min(evs.len())])), "k1", evs.len(), &at, false), usable(Some(&head(&evs[..k.min(evs.len())])), "k1", &evs, false));
+    }
+}
+
 #[test]
 fn a_photo_of_the_first_k_events_fits_the_journal_that_grew_since() {
     let evs = events();

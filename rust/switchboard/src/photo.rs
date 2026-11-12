@@ -48,7 +48,12 @@ pub const STOP_BUDGET_MS: u64 = 2000;
 /// FNV-1a, 64 bits: stable across Rust versions (a photo outlives the
 /// binary that wrote it), no new dependency. A check, not a secret.
 pub fn fnv(bytes: &[u8]) -> u64 {
-    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    fnv_on(0xcbf2_9ce4_8422_2325, bytes)
+}
+
+/// FNV-1a going on from `h` over `bytes`: fnv(a ++ b) == fnv_on(fnv(a), b),
+/// so a chained hash needs no copy of its parts.
+fn fnv_on(mut h: u64, bytes: &[u8]) -> u64 {
     for b in bytes {
         h ^= u64::from(*b);
         h = h.wrapping_mul(0x0100_0000_01b3);
@@ -75,22 +80,39 @@ impl Mark {
     /// One more journal event.
     pub fn push(&mut self, ev: &Value) {
         self.events += 1;
-        let mut b = self.prefix.to_le_bytes().to_vec();
-        b.extend_from_slice(ev.to_string().as_bytes());
-        self.prefix = fnv(&b);
+        // fnv(prefix's bytes ++ the event's text), with no copy of either
+        let h = fnv(&self.prefix.to_le_bytes());
+        self.prefix = fnv_on(h, ev.to_string().as_bytes());
         if let Some(p) = ev["ws"]["path"].as_str() {
-            let mut b = self.paths.to_le_bytes().to_vec();
-            b.extend_from_slice(p.as_bytes());
-            self.paths = fnv(&b);
+            self.paths = fnv_on(fnv(&self.paths.to_le_bytes()), p.as_bytes());
         }
     }
 
     pub fn of(events: &[Value]) -> Mark {
+        Mark::of_and_at(events, 0, &mut |_, _| {}).0
+    }
+
+    /// One pass over `events`: the mark of them all and the mark of the
+    /// first `k` (what a photo of k events must match); `progress(done,
+    /// total)` every 10 000 events (a boot's hub.log line: hub-loop, a
+    /// boot from a photo at load 60 said nothing for 78 s and failed the
+    /// switch's wait).
+    pub fn of_and_at(events: &[Value], k: usize, progress: &mut dyn FnMut(usize, usize)) -> (Mark, Mark) {
         let mut m = Mark::default();
-        for ev in events {
+        let mut at = Mark::default();
+        for (i, ev) in events.iter().enumerate() {
+            if i == k {
+                at = m.clone();
+            }
             m.push(ev);
+            if (i + 1) % 10_000 == 0 {
+                progress(i + 1, events.len());
+            }
         }
-        m
+        if k >= events.len() {
+            at = m.clone();
+        }
+        (m, at)
     }
 }
 
@@ -115,6 +137,14 @@ pub enum Use {
 /// journal holds, events 1..k and their paths the same, and no worktree
 /// migration this boot (it rewrote paths the photo holds).
 pub fn usable(head: Option<&Head>, key: &str, events: &[Value], migrated: bool) -> Use {
+    let k = head.map_or(0, |h| h.mark.events).min(events.len());
+    usable_at(head, key, events.len(), &Mark::of(&events[..k]), migrated)
+}
+
+/// [`usable`] with the mark of the journal's first k events (k the
+/// photo's count, capped at the journal's) already made: the boot makes
+/// it in its one pass ([`Mark::of_and_at`]).
+pub fn usable_at(head: Option<&Head>, key: &str, journal_len: usize, m: &Mark, migrated: bool) -> Use {
     let full = |why: &str| Use::Full { why: why.to_string() };
     let Some(h) = head else { return full("no photo") };
     if h.key != key {
@@ -124,10 +154,9 @@ pub fn usable(head: Option<&Head>, key: &str, events: &[Value], migrated: bool) 
         return full("worktrees moved this boot");
     }
     let k = h.mark.events;
-    if k == 0 || k > events.len() {
-        return full(&format!("the photo holds {} events, the journal {}", k, events.len()));
+    if k == 0 || k > journal_len {
+        return full(&format!("the photo holds {} events, the journal {}", k, journal_len));
     }
-    let m = Mark::of(&events[..k]);
     if m.prefix != h.mark.prefix {
         return full(&format!("the journal's first {} events are not the photo's", k));
     }
