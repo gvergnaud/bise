@@ -136,5 +136,10 @@
     ],
     "one": null,
     "text": "{n} waiting for you"
+  },
+  "common.your_mac": {
+    "args": [],
+    "one": null,
+    "text": "your Mac"
   }
 }

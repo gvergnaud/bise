@@ -14,13 +14,14 @@ import { useBannerGutter } from '@/artifacts/hero/vignettes';
 import { openTab } from '@/app/panel/tabs';
 import { usePanelState } from '@/app/panel/state';
 import { entityKey } from '@/shared/entity';
-import type { AppCmd, Plugin, PluginPart } from '@/proto';
+import type { AppCmd, FileType, Plugin, PluginPart } from '@/proto';
 import { settings } from '@/proto/words.gen';
 import { badgeOf, controlOf, gives, installed, isComputer, leadOf, needsLogin, needsSetting, removable, tagsOf, titleOf, toolsOf } from './model';
 import { ds } from '@/proto/words_ds.gen';
 import { PluginIcon } from './PluginIcon';
 import { ViewsGroup } from './ViewsGroup';
 import { SettingsGroup } from './SettingsGroup';
+import { opensWords } from './typerows';
 import { AccountsGroup } from './AccountsGroup';
 
 export interface PagePorts {
@@ -40,7 +41,7 @@ function whenWords(p: Plugin): string {
 
 const bise = (): Partial<BiseApi> | undefined => (window as { bise?: Partial<BiseApi> }).bise;
 
-export function PluginPage({ p, project, ports }: { p: Plugin; project?: string; ports: PagePorts }) {
+export function PluginPage({ p, project, ports, types = [] }: { p: Plugin; project?: string; ports: PagePorts; types?: readonly FileType[] }) {
   const id = p.id === '' ? p.name : p.id;
   const at = project === undefined ? {} : { project };
   const set = (name: string, on: boolean) => {
@@ -159,6 +160,7 @@ export function PluginPage({ p, project, ports }: { p: Plugin; project?: string;
       <div className="plg-about" data-testid={`${tid}.about`}>
         <GroupLabel>{sentenceCase(settings.plugins_about)}</GroupLabel>
         <dl className="plg-kv">
+          <AppLines p={p} types={types} />
           {p.path != null && (
             <>
               <dt>{settings.plugins_comes_from}</dt>
@@ -262,6 +264,33 @@ function ServerRow({ x, owner, onSet, onLogin }: { x: PluginPart; owner: boolean
             </span>
           ))}
         </div>
+      )}
+    </>
+  );
+}
+
+/** Its app's files in its about (docs/plugin-apps.md A3; designer's mocks block 5): what it opens,
+ *  the types another app opens now said after; what it makes. Nothing when it opens and makes none. */
+function AppLines({ p, types }: { p: Plugin; types: readonly FileType[] }) {
+  const opens = p.opens ?? [];
+  const makes = p.makes ?? [];
+  const w = opensWords(p.name, opens, types.map((t) => ({ ...t, others: t.others ?? [] })));
+  return (
+    <>
+      {opens.length > 0 && (
+        <>
+          <dt>{settings.plugins_opens}</dt>
+          <dd data-testid={`plugins.page.${p.name}.opens`}>
+            {w.list}
+            {w.elsewhere.map((x) => <span key={x} className="plg-dim plg-kv-sub">{x}</span>)}
+          </dd>
+        </>
+      )}
+      {makes.length > 0 && (
+        <>
+          <dt>{settings.plugins_makes}</dt>
+          <dd data-testid={`plugins.page.${p.name}.makes`}>{makes.map((m) => m.title).join(' · ')}</dd>
+        </>
       )}
     </>
   );

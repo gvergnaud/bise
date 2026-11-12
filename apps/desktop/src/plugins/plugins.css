@@ -205,3 +205,22 @@
 .plg-account-add { margin-top: var(--s-2); }
 .plg-account-name { width: 100%; box-sizing: border-box; } /* room for an email (ui-review m_58036 c) */
 .plg-steps { margin: 0; padding-left: var(--s-5); display: flex; flex-direction: column; gap: var(--s-2); font: var(--t-13) var(--font-ui); color: var(--c-text); }
+
+/* File types (FileTypes.tsx, designer's plugin-apps-mocks block 5): one row per type, the list's
+   rows' height and edges; the type in mono, its app button, a faint status (never the accent:
+   nothing here waits on him), Reset at the right on his picks */
+.plg-type { display: grid; grid-template-columns: minmax(var(--s-16), 1fr) minmax(0, 2fr) auto minmax(var(--s-16), auto); align-items: center; gap: var(--gap-block); min-height: var(--s-12); padding: var(--s-2) var(--pad-card-x); box-sizing: border-box; border-top: 1px solid var(--c-line); font: var(--t-13) var(--font-ui); color: var(--c-text); }
+.plg-type:first-child { border-top: 0; }
+.plg-type-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* an ending is mono; a type's title ('Website') stays a word in the UI font (designer m_60513) */
+.plg-type-name.end { font-family: var(--font-mono); }
+.plg-type-app { min-width: 0; }
+/* the menu's words start where a plain name's do: the trigger pulled left by its own padding (designer m_60513) */
+.plg-type-app .b-ptrig { margin-left: calc(-1 * var(--s-2)); }
+.plg-type-one { color: var(--c-text-2); }
+.plg-type-st { color: var(--c-text-3); }
+.plg-type-end { display: flex; justify-content: flex-end; }
+/* a plugin page's opens: a type another app opens now, on its own faint line (PluginPage AppLines) */
+.plg-kv-sub { display: block; }
+/* the add sheet: a type another app opens today, its line then Keep / Use (Add.tsx PreviewSheet) */
+.plg-claim { display: flex; align-items: center; justify-content: space-between; gap: var(--gap-block); font: var(--t-13) var(--font-ui); color: var(--c-text); }

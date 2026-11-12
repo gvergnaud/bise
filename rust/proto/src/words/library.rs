@@ -214,6 +214,19 @@ crate::words! { library:
     /// no result: clear the words
     clear_search = "clear the search";
 
+    // ---- the filter by app (contract A6b; designer's page plugin-apps-mocks, blocks 1-2): one
+    // tab per app that has something here, the most first, five at most, the rest under More
+    /// a card's line, its lead when no app opens it: `opens on your Mac · 3 d`
+    opens_mac = "opens on your Mac";
+    /// a card's type tip: its type and its app, `Excel workbook · opens in Sheets`
+    tip_opens(kind, app) = "{kind} · opens in {app}";
+    /// a card's type tip when no app opens it, `ZIP file · opens on your Mac`
+    tip_opens_mac(kind) = "{kind} · opens on your Mac";
+    /// a type no app names, by its ending: `ZIP file`
+    file_of(ending) = "{ending} file";
+    /// a folder no app opens, its type in the tip
+    folder_kind = "Folder";
+
     // ---- the kind chips (words, never a glyph), with their counts
     /// a kind chip
     kind_shots = "shots";

@@ -188,6 +188,16 @@ export const library = {
   nothing_matches: (a: { q: string | number }): string => "nothing matches “" + String(a.q) + "”.",
   /** no result: clear the words */
   clear_search: "clear the search",
+  /** a card's line, its lead when no app opens it: `opens on your Mac · 3 d` */
+  opens_mac: "opens on your Mac",
+  /** a card's type tip: its type and its app, `Excel workbook · opens in Sheets` */
+  tip_opens: (a: { kind: string | number; app: string | number }): string => String(a.kind) + " · opens in " + String(a.app),
+  /** a card's type tip when no app opens it, `ZIP file · opens on your Mac` */
+  tip_opens_mac: (a: { kind: string | number }): string => String(a.kind) + " · opens on your Mac",
+  /** a type no app names, by its ending: `ZIP file` */
+  file_of: (a: { ending: string | number }): string => String(a.ending) + " file",
+  /** a folder no app opens, its type in the tip */
+  folder_kind: "Folder",
   /** a kind chip */
   kind_shots: "shots",
   /** a kind chip */

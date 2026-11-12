@@ -6,11 +6,12 @@
 // the sheet's state drops them at its close), `cancel` sends `plugin_add_cancel`. Nothing runs
 // before his click. Owner: plug-desktop.
 import { useRef, useState } from 'react';
-import { Button, Caret, Field, PickerPop, sentenceCase, Sheet, TextArea } from '@/ds';
+import { Button, Caret, Field, Filters, PickerPop, sentenceCase, Sheet, TextArea } from '@/ds';
 import type { AppCmd, ImportFrom, PluginPreview, PluginsSummary, SecretValue } from '@/proto';
 import { settings } from '@/proto/words.gen';
 import { itemsOf } from './model';
 import { grantsOf, PreviewViews, ViewsStep } from './ViewsGroup';
+import { claimPicks, claimsView } from './typerows';
 import { askHub } from '@/views/port';
 import { useProjects } from '@/store';
 
@@ -110,6 +111,8 @@ export function AddSheet({ item, project, summary, preview, ports, onClose }: {
   const [secrets, setSecrets] = useState<Record<string, string>>({});
   // the views' ticks, by uri: granted once he adds it (C8), nothing ticked is nothing granted
   const [ticks, setTicks] = useState<Record<string, readonly string[]>>({});
+  // the types he gave to the new app ('Use Tables'); none ticked: every one stays with its app
+  const [used, setUsed] = useState<ReadonlySet<string>>(new Set());
   // step 2 (C8): once it runs, its server's views: its name and the uris ticked at step 1
   const [step2, setStep2] = useState<{ readonly plugin: string; readonly skip: readonly string[] } | null>(null);
   // the hub that runs it: this project's, else bise's own (its views bridge, hub/plugin_views)
@@ -124,6 +127,7 @@ export function AddSheet({ item, project, summary, preview, ports, onClose }: {
     setAsked(false);
     setSecrets({});
     setTicks({});
+    setUsed(new Set());
   };
   const close = () => {
     if (preview !== null) ports.send({ cmd: 'plugin_add_cancel', token: preview.token });
@@ -148,10 +152,12 @@ export function AddSheet({ item, project, summary, preview, ports, onClose }: {
     return (
       <PreviewSheet preview={preview.preview} values={secrets} onValue={(n, v) => { setSecrets({ ...secrets, [n]: v }); }}
         ticks={ticks} onTicks={(uri, perms) => { setTicks({ ...ticks, [uri]: perms }); }}
+        used={used} onUse={(type, use) => { const next = new Set(used); if (use) next.add(type); else next.delete(type); setUsed(next); }}
         onAdd={() => {
           const out: SecretValue[] = preview.preview.secrets?.flatMap((n) => (secrets[n] !== undefined && secrets[n] !== '' ? [{ name: n, value: secrets[n] }] : [])) ?? [];
           ports.send(out.length === 0 ? { cmd: 'plugin_add_confirm', token: preview.token } : { cmd: 'plugin_add_confirm', token: preview.token, secrets: out });
           for (const g of grantsOf(preview.preview.name, preview.preview.views ?? [], ticks, project)) ports.send(g);
+          for (const c of claimPicks(preview.preview.name, preview.preview.claims ?? [], used)) ports.send({ ...c, ...at });
           const runs = (preview.preview.runs ?? []).length > 0;
           const next = { plugin: preview.preview.name, skip: (preview.preview.views ?? []).flatMap((x) => (x.view == null ? [] : [x.view.uri])) };
           reset();
@@ -275,17 +281,21 @@ export function AddSheet({ item, project, summary, preview, ports, onClose }: {
 }
 
 /** What a plugin will run, before his click (page plugins §4: 'add LaTeX: what it runs'). */
-export function PreviewSheet({ preview, values, onValue, ticks = {}, onTicks = () => undefined, onAdd, onCancel }: {
+export function PreviewSheet({ preview, values, onValue, ticks = {}, onTicks = () => undefined, used = new Set(), onUse = () => undefined, onAdd, onCancel }: {
   preview: PluginPreview;
   values: Record<string, string>;
   onValue: (name: string, value: string) => void;
   /** the views' ticks by uri (C8) */
   ticks?: Readonly<Record<string, readonly string[]>>;
   onTicks?: (uri: string, perms: string[]) => void;
+  /** the types he gave to the new app (A3's claims: Keep by default) */
+  used?: ReadonlySet<string>;
+  onUse?: (type: string, use: boolean) => void;
   onAdd: () => void;
   onCancel: () => void;
 }) {
   const runs = preview.runs ?? [];
+  const claims = claimsView(preview.claims ?? []);
   const skills = preview.skills ?? [];
   const secrets = preview.secrets ?? [];
   return (
@@ -326,6 +336,21 @@ export function PreviewSheet({ preview, values, onValue, ticks = {}, onTicks = (
               </div>
             ))}
             <div className="plg-dim">{settings.plugins_secrets_where}</div>
+          </>
+        )}
+        {/* the files its app opens (docs/plugin-apps.md A3, designer's mocks block 6): every type, a
+            wide claim in plain words; a type another app has today: Keep (preselected) or Use */}
+        {claims.opens !== '' && (
+          <>
+            <label className="plg-label">{settings.plugins_opens}</label>
+            <div className="plg-dim" data-testid="plugins.preview.opens">{claims.opens}</div>
+            {claims.taken.map((t) => (
+              <div key={t.type} className="plg-claim" data-testid={`plugins.preview.claim.${t.type}`}>
+                <span>{t.line}</span>
+                <Filters label={t.line} on={used.has(t.type) ? 'use' : 'keep'} items={[{ id: 'keep', label: t.keep }, { id: 'use', label: t.use }]}
+                  onPick={(id) => { onUse(t.type, id === 'use'); }} testId={`plugins.preview.claim.${t.type}.pick`} />
+              </div>
+            ))}
           </>
         )}
         {/* MCP Apps: its views and what each may use, ticked here (C8, mcp-apps-host) */}

@@ -144,6 +144,13 @@
     "one": null,
     "text": "empty for now"
   },
+  "library.file_of": {
+    "args": [
+      "ending"
+    ],
+    "one": null,
+    "text": "{ending} file"
+  },
   "library.filters": {
     "args": [],
     "one": null,
@@ -158,6 +165,11 @@
     "args": [],
     "one": null,
     "text": "nothing here yet"
+  },
+  "library.folder_kind": {
+    "args": [],
+    "one": null,
+    "text": "Folder"
   },
   "library.folder_name": {
     "args": [],
@@ -484,6 +496,11 @@
     "one": null,
     "text": "video"
   },
+  "library.opens_mac": {
+    "args": [],
+    "one": null,
+    "text": "opens on your Mac"
+  },
   "library.picked": {
     "args": [
       "n"
@@ -687,6 +704,21 @@
     ],
     "one": null,
     "text": "new inside: {n} since you last looked"
+  },
+  "library.tip_opens": {
+    "args": [
+      "kind",
+      "app"
+    ],
+    "one": null,
+    "text": "{kind} · opens in {app}"
+  },
+  "library.tip_opens_mac": {
+    "args": [
+      "kind"
+    ],
+    "one": null,
+    "text": "{kind} · opens on your Mac"
   },
   "library.tip_pick": {
     "args": [],

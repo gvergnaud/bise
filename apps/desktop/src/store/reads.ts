@@ -10,6 +10,7 @@ import type {
   Artifact,
   Folder,
   Entry,
+  FileType,
   Found,
   IndexRow,
   Job,
@@ -182,6 +183,10 @@ export class StoreReads extends StoreBase {
   /** S29: forgets an agent's last still (its row unmounted: no image kept) */
   dropPeek(key: string): void {
     if (this.slices.get(`peek:${key}`) != null) this.put(`peek:${key}`, null);
+  }
+  /** which app opens what (the plugins event's file_types, docs/plugin-apps.md A3): File types' rows; none before the core sent them */
+  fileTypes(project?: string): readonly FileType[] {
+    return this.slice<readonly FileType[]>(`file_types:${project ?? ""}`, EMPTY);
   }
   /** a workspace's agent plugins (none: bise's home's); null until the core sent them */
   plugins(project?: string): readonly Plugin[] | null {
