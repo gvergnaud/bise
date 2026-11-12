@@ -69,6 +69,7 @@ echo "PASS mcp apps hostile"
 
 FAKE_PNPM = """#!/usr/bin/env bash
 echo "pnpm $*" >> "$FAKE_LOG"
+[ "$1" = build ] && [ -n "${FAKE_BUILD_RED:-}" ] && { echo "build failed"; exit 1; }
 [ "$1" = test:land ] && [ -n "${FAKE_LAND_RED:-}" ] && { echo "NEW reds (not in tests/known_reds.txt): keep"; exit 1; }
 exit 0
 """
@@ -246,6 +247,14 @@ def main():
         shutil.rmtree(cd(sha[:12]), ignore_errors=True)
         rc, o, _ = run(NIGHTLY_DESKTOP_FREE_GB="12")
         check(rc == 0 and not os.path.exists(cd(sha[:12])) and "12 GB free" in o, "low disk: removed\n" + o)
+
+        # at a release (desktop_tag: NIGHTLY_DESKTOP_LAND_SPECS=checks) the land step builds only:
+        # test:land's specs run in the release's desktop checks; a failed build is red
+        rc, o, calls = run(NIGHTLY_DESKTOP_LAND_SPECS="checks")
+        check(rc == 0 and [c for c in calls if c.startswith("pnpm")] == ["pnpm build"], "release land: the build only %s %s" % (calls, o))
+        check("STEP land: green (pnpm build; test:land's specs run in the release's desktop checks)" in o, "release land: why " + o)
+        rc, o, calls = run(NIGHTLY_DESKTOP_LAND_SPECS="checks", FAKE_BUILD_RED="1")
+        check(rc == 1 and facts()[0] == ["desktop/build"] and facts()[1].get("land") == "red", "release land: build red %s %s" % (facts(), o))
 
         # a candidate built before (another agent's) is kept
         rc, o, _ = run(FAKE_BUILT_BEFORE="1")
