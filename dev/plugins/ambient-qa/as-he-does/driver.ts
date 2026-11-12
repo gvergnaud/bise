@@ -130,14 +130,18 @@ const click = async (name: string, loc: Locator) => {
 // and its ⌘ digit ('harness⌘11 new artifact'), so never getByText on the row
 const projectRow = (name: string) => page.locator('[data-testid^="app.side.project."]')
   .filter({ has: page.locator('.nm', { hasText: new RegExp(`^${name}$`) }) }).first();
-// open a project's main as he does: its sidebar row. On a library page (artifacts) the sidebar
-// shows the library and '← Projects' (app.side.back) first: back to the projects, then the row
+// the sidebar's own back row when it shows something else than his projects, as he clicks it,
+// never the rail: on a library page '← Projects' (app.side.back: the projects view the library
+// was entered from, main m_62356), on settings '← Settings' (settings.nav.back: back where he was,
+// settings' own pages replace each other, so never another settings step). A back that leaves
+// the projects hidden is the next step's red.
+const BACK_ROW = '[data-testid="app.side.back"], [data-testid="settings.nav.back"]';
+// open a project's main as he does: its sidebar row, after the sidebar's back row when it shows
+// the library or settings' nav
 const openProject = async (name: string, label = `open ${name}`) => {
   const row = projectRow(name);
   if (!(await row.isVisible().catch(() => false))) {
-    // '← Projects' as he clicks it, never the rail: it goes to the projects view the library was
-    // entered from (main m_62356), so a back that stays in the library is this step's red
-    await page.locator('[data-testid="app.side.back"]').first().click({ timeout: 3000 }).catch(() => {});
+    await page.locator(BACK_ROW).first().click({ timeout: 3000 }).catch(() => {});
     await row.waitFor({ timeout: 5000 }).catch(() => {});
   }
   return click(label, row);
@@ -147,11 +151,11 @@ const openProject = async (name: string, label = `open ${name}`) => {
 const ART_CLOSE = '[data-testid="artifact.close"], [data-testid^="app.panel.tab.artifact:"][data-testid$=".close"]';
 // the project's shell: a panel tab since native-mac, the bottom panel before
 const TERM_SEL = '[data-testid="terminal.panel"], [data-testid^="app.panel.body.term:"]';
-// bise's row (⌘0), the same way: from a library page, '← Projects' first
+// bise's row (⌘0), the same way: from a library page or settings, the sidebar's back row first
 const openBise = async () => {
   const row = page.locator('[data-testid="app.side.bise"]').first();
   if (!(await row.isVisible().catch(() => false))) {
-    await page.locator('[data-testid="app.side.back"]').first().click({ timeout: 3000 }).catch(() => {});
+    await page.locator(BACK_ROW).first().click({ timeout: 3000 }).catch(() => {});
     await row.waitFor({ timeout: 5000 }).catch(() => {});
   }
   return click('bise', row);
@@ -956,14 +960,15 @@ if (mode === 'rows2') {
   const onBise = await holdCmd('cmd-held-bise');
   const ph = onBise.held?.projects ?? [];
   const digitsOk = ph.length > 0 && ph.slice(0, 9).every((p, i) => p.hint === `⌘${i + 1}` && !p.count);
-  step('hold ⌘ 400 ms on bise: digits on bise and the projects, ⌘[ on the back arrow, ⌘I on the inbox head; all gone on release',
-    !!onBise.held && quick?.n === 0 && onBise.held.bise === '⌘0' && digitsOk && onBise.held.back === '⌘[' && onBise.held.inbox === '⌘I' && onBise.released?.n === 0,
+  // the held keycaps say ⌘← ⌘→ since 9c52821cf (his m_58539, designer m_58552); ⌘[ ⌘] still work
+  step('hold ⌘ 400 ms on bise: digits on bise and the projects, ⌘← on the back arrow, ⌘I on the inbox head; all gone on release',
+    !!onBise.held && quick?.n === 0 && onBise.held.bise === '⌘0' && digitsOk && onBise.held.back === '⌘←' && onBise.held.inbox === '⌘I' && onBise.released?.n === 0,
     { quick_cmd_hints: quick?.n ?? null, ...onBise });
   // one place back (harness), so › has a place ahead: ⌘] under it; then ⌘] to bise again
   await page.keyboard.press('Meta+BracketLeft');
   await page.waitForTimeout(800);
   const behind = await holdCmd('cmd-held-forward');
-  step('hold ⌘ after ⌘[: ⌘] on the forward arrow, gone on release', behind.held?.forward === '⌘]' && behind.released?.n === 0, behind);
+  step('hold ⌘ after ⌘[: ⌘→ on the forward arrow, gone on release', behind.held?.forward === '⌘→' && behind.released?.n === 0, behind);
   await page.keyboard.press('Meta+BracketRight');
   await page.waitForTimeout(800);
   if (!(await page.locator('[data-testid="app.side.bise"][aria-current]').count())) await openBise();
