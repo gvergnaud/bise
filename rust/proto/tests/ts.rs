@@ -322,13 +322,14 @@ fn render_view_rules() -> String {
     writeln!(s).unwrap();
     writeln!(s, "/** A permission: its `allow=` feature, whether it is a spec `_meta.ui.permissions` key (midi is bise's `dev.bise/ui`), its tick's label, its words in a sentence. */").unwrap();
     writeln!(s, "export interface ViewPermRow {{").unwrap();
-    writeln!(s, "  readonly perm: ViewPerm;\n  readonly feature: string;\n  readonly spec: boolean;\n  readonly word: string;\n  readonly inSentence: string;").unwrap();
+    writeln!(s, "  readonly perm: ViewPerm;\n  readonly feature: string | null;\n  readonly spec: boolean;\n  readonly word: string;\n  readonly inSentence: string;").unwrap();
     writeln!(s, "}}").unwrap();
     writeln!(s).unwrap();
     writeln!(s, "/** Every permission, in the order an `allow=`, a declared list and a grant list them. */").unwrap();
     writeln!(s, "export const VIEW_PERMS: readonly ViewPermRow[] = [").unwrap();
     for p in ViewPerm::ALL {
-        writeln!(s, "  {{ perm: {:?}, feature: {:?}, spec: {}, word: views.{}, inSentence: views.{} }},", p.name(), p.feature(), p.spec(), p.word_key(), p.in_sentence_key()).unwrap();
+        let feature = p.feature().map_or("null".to_string(), |f| format!("{f:?}"));
+        writeln!(s, "  {{ perm: {:?}, feature: {feature}, spec: {}, word: views.{}, inSentence: views.{} }},", p.name(), p.spec(), p.word_key(), p.in_sentence_key()).unwrap();
     }
     writeln!(s, "];").unwrap();
     writeln!(s).unwrap();

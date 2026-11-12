@@ -6,12 +6,12 @@
 import { views } from './words_views.gen';
 
 /** One permission a view may hold. */
-export type ViewPerm = "camera" | "microphone" | "midi" | "clipboardWrite";
+export type ViewPerm = "camera" | "microphone" | "midi" | "clipboardWrite" | "write";
 
 /** A permission: its `allow=` feature, whether it is a spec `_meta.ui.permissions` key (midi is bise's `dev.bise/ui`), its tick's label, its words in a sentence. */
 export interface ViewPermRow {
   readonly perm: ViewPerm;
-  readonly feature: string;
+  readonly feature: string | null;
   readonly spec: boolean;
   readonly word: string;
   readonly inSentence: string;
@@ -23,6 +23,7 @@ export const VIEW_PERMS: readonly ViewPermRow[] = [
   { perm: "microphone", feature: "microphone", spec: true, word: views.perm_microphone, inSentence: views.missing_microphone },
   { perm: "midi", feature: "midi", spec: false, word: views.perm_midi, inSentence: views.missing_midi },
   { perm: "clipboardWrite", feature: "clipboard-write", spec: true, word: views.perm_clipboard, inSentence: views.missing_clipboard },
+  { perm: "write", feature: null, spec: false, word: views.perm_write, inSentence: views.missing_write },
 ];
 
 /** The spec's permission keys bise never grants. */

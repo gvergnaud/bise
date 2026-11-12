@@ -27,6 +27,8 @@ crate::words! { views:
     missing_midi = "MIDI";
     /// a missing permission in no_grant: the clipboard
     missing_clipboard = "the clipboard";
+    /// a missing permission in no_grant: saving the document it opened (docs/plugin-apps.md A1)
+    missing_write = "saving your file";
     /// two or more missing permissions: 'the camera and the microphone'
     list_and(head, last) = "{head} and {last}";
     /// the card's link that opens the view in the panel
@@ -57,6 +59,8 @@ crate::words! { views:
     perm_midi = "MIDI";
     /// the clipboardWrite permission's tick
     perm_clipboard = "copy to the clipboard";
+    /// the write permission's tick: an app may save the file it opened (docs/plugin-apps.md A1)
+    perm_write = "save your files";
     /// the add screen's label over its views
     preview_label = "views, and what each may use";
     /// the add screen's line under its views: only what he turns on is granted

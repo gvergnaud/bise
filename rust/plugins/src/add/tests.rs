@@ -144,7 +144,7 @@ fn a_built_in_of_the_same_name_is_said() {
     let (_t, ctx) = tmp("shadow");
     write(&ctx.builtin.clone().unwrap().join("docs/plugin.json"), &manifest("docs"));
     let s = stage(&mcp("docs", Some("npx docs-mcp"), None, &[]), &ctx).unwrap();
-    assert!(s.preview.notes.contains(&"it shadows the built-in docs".to_string()), "{:?}", s.preview.notes);
+    assert!(s.preview.notes.contains(&"it replaces bise's own docs part".to_string()), "{:?}", s.preview.notes);
 }
 
 #[test]
@@ -229,7 +229,7 @@ fn codex_with(ctx: &Ctx, name: &str, prompt: Option<Value>) -> (Vec<String>, res
     let dropped = s.preview.dropped.clone();
     install(s, ctx).unwrap();
     let state = StateV2 { enabled: vec![name.into()], ..StateV2::default() };
-    let r = resolve::resolve(&Roots { builtin: None, user: Some(ctx.user_root.clone()), workspace: None, data: ctx.data.clone(), state });
+    let r = resolve::resolve(&Roots { builtin: None, user: Some(ctx.user_root.clone()), workspace: None, data: ctx.data.clone(), documents: ctx.documents.clone(), state });
     let p = r.plugins.into_iter().find(|p| p.name == name).unwrap();
     let mine = r.diagnostics.into_iter().filter(|d| d.plugin == name).collect();
     (dropped, p, mine)

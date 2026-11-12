@@ -67,6 +67,10 @@ pub struct Make {
 /// An opener: a tool with a view and the files it opens.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OpenerDecl {
+    /// the server its tool lives on, in its plugin: a stdio or remote
+    /// server's id, or [`crate::views::SERVER`] for a static view (where
+    /// view/open routes its `tools/call` and reads its `ui://`)
+    pub server: String,
     /// its tool's name
     pub tool: String,
     /// its view (`ui://…`)
@@ -206,7 +210,8 @@ fn make_of(i: usize, v: &Value) -> Result<Make, String> {
 /// a warning for each part dropped. None (and no warning) for a tool
 /// that declares no file: no `file` entrypoint and no `dev.bise/ui`
 /// `files`. A tool that declares files but has no view: none, warned.
-pub fn parse(plugin: &str, tool: &Value) -> (Option<OpenerDecl>, Vec<Diagnostic>) {
+/// `server`: the server that listed it ([`OpenerDecl::server`]).
+pub fn parse(plugin: &str, server: &str, tool: &Value) -> (Option<OpenerDecl>, Vec<Diagnostic>) {
     let name = tool.get("name").and_then(Value::as_str).unwrap_or("");
     let meta = tool.get("_meta").cloned().unwrap_or(Value::Null);
     let file_eps: Vec<&Value> = meta
@@ -303,16 +308,16 @@ pub fn parse(plugin: &str, tool: &Value) -> (Option<OpenerDecl>, Vec<Diagnostic>
         return (None, diags);
     }
     let app = app.unwrap_or_else(|| plugin.to_string());
-    (Some(OpenerDecl { tool: name.to_string(), uri, app, entries, makes, write, isolate }), diags)
+    (Some(OpenerDecl { server: server.to_string(), tool: name.to_string(), uri, app, entries, makes, write, isolate }), diags)
 }
 
-/// A plugin's openers from its tools as `tools/list` lists them, at most
-/// [`MAX_OPENERS`], and the warnings.
-pub fn openers_of(plugin: &str, tools: &[Value]) -> (Vec<OpenerDecl>, Vec<Diagnostic>) {
+/// A plugin's openers from one server's tools as its `tools/list` lists
+/// them, at most [`MAX_OPENERS`], and the warnings.
+pub fn openers_of(plugin: &str, server: &str, tools: &[Value]) -> (Vec<OpenerDecl>, Vec<Diagnostic>) {
     let mut out = Vec::new();
     let mut diags = Vec::new();
     for t in tools {
-        let (o, d) = parse(plugin, t);
+        let (o, d) = parse(plugin, server, t);
         diags.extend(d);
         if let Some(o) = o {
             if out.len() == MAX_OPENERS {
@@ -345,6 +350,13 @@ pub fn plugin_rows(openers: &[OpenerDecl]) -> (Vec<PluginOpens>, Vec<PluginMake>
         }
     }
     (opens, makes)
+}
+
+/// The one rule for a plugin's documents folder (`${PLUGIN_DOCUMENTS}`,
+/// A6): it is made only for openers that make files or open types under
+/// `@documents/`; a plain server or view never gets one.
+pub fn uses_documents(openers: &[OpenerDecl]) -> bool {
+    openers.iter().any(|o| !o.makes.is_empty() || o.entries.iter().any(|e| e.keys.iter().any(|k| k.starts_with(DOCUMENTS))))
 }
 
 /// What is opened: a file or a folder (A2's target).
@@ -408,11 +420,11 @@ impl Openers {
         loaded.sort_by(|a, b| a.name.cmp(&b.name));
         for p in loaded {
             let statics: Vec<Value> = p.views.iter().map(crate::views::StaticView::tool).collect();
-            let mut list = openers_of(&p.name, &statics).0;
+            let mut list = openers_of(&p.name, crate::views::SERVER, &statics).0;
             let servers = p.servers.iter().map(|s| s.id.as_str()).chain(p.remotes.iter().map(|s| s.id.as_str()));
             for sv in servers {
                 let Some(tools) = server_tools.get(&(p.name.clone(), sv.to_string())) else { continue };
-                let (more, d) = openers_of(&p.name, tools);
+                let (more, d) = openers_of(&p.name, sv, tools);
                 diags.extend(d);
                 list.extend(more);
             }
@@ -425,6 +437,27 @@ impl Openers {
             }
         }
         (Openers { plugins }, diags)
+    }
+
+    /// An on plugin's opener by its tool's name (an [`Opener`]'s
+    /// `plugin` and `tool`): what view/open routes on. None when that
+    /// plugin is off or has no such opener now.
+    pub fn decl(&self, plugin: &str, tool: &str) -> Option<&OpenerDecl> {
+        self.plugins.iter().find(|p| p.plugin == plugin)?.openers.iter().find(|o| o.tool == tool)
+    }
+
+    /// The documents folders to make after a [`gather`](Self::gather):
+    /// each plugin whose openers (static or a server's) [`uses_documents`],
+    /// its resolved `documents_root`; pure, the hub makes them. A plugin
+    /// with no documents root (an invalid name) gives none.
+    pub fn documents_to_make(&self, res: &crate::resolve::Resolution) -> Vec<std::path::PathBuf> {
+        self.plugins
+            .iter()
+            .filter(|p| uses_documents(&p.openers))
+            .filter_map(|p| res.loaded().find(|r| r.name == p.plugin))
+            .map(|r| r.documents_root.clone())
+            .filter(|d| !d.as_os_str().is_empty())
+            .collect()
     }
 }
 

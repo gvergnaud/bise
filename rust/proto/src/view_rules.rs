@@ -35,6 +35,10 @@ pub enum ViewPerm {
     Microphone,
     Midi,
     ClipboardWrite,
+    /// the view may save the document it opened (docs/plugin-apps.md A1:
+    /// `_meta["dev.bise/ui"].write: true`); the hub checks it on every
+    /// write, never an `allow=` feature
+    Write,
 }
 
 /// The spec's permission keys bise never grants (a resource may declare
@@ -44,7 +48,7 @@ pub const SPEC_UNGRANTED: [&str; 1] = ["geolocation"];
 impl ViewPerm {
     /// Every permission, in the order an `allow=`, a declared list and a
     /// grant list them.
-    pub const ALL: [ViewPerm; 4] = [ViewPerm::Camera, ViewPerm::Microphone, ViewPerm::Midi, ViewPerm::ClipboardWrite];
+    pub const ALL: [ViewPerm; 5] = [ViewPerm::Camera, ViewPerm::Microphone, ViewPerm::Midi, ViewPerm::ClipboardWrite, ViewPerm::Write];
 
     /// Its name on the wire and in `_meta` (`clipboardWrite`).
     pub fn name(self) -> &'static str {
@@ -53,6 +57,7 @@ impl ViewPerm {
             ViewPerm::Microphone => "microphone",
             ViewPerm::Midi => "midi",
             ViewPerm::ClipboardWrite => "clipboardWrite",
+            ViewPerm::Write => "write",
         }
     }
 
@@ -62,20 +67,22 @@ impl ViewPerm {
     }
 
     /// The permission policy feature it delegates to the view's frame
-    /// (`allow="camera; clipboard-write"`).
-    pub fn feature(self) -> &'static str {
+    /// (`allow="camera; clipboard-write"`); none for `write`, which the
+    /// hub checks on each save and never reaches the frame.
+    pub fn feature(self) -> Option<&'static str> {
         match self {
-            ViewPerm::Camera => "camera",
-            ViewPerm::Microphone => "microphone",
-            ViewPerm::Midi => "midi",
-            ViewPerm::ClipboardWrite => "clipboard-write",
+            ViewPerm::Camera => Some("camera"),
+            ViewPerm::Microphone => Some("microphone"),
+            ViewPerm::Midi => Some("midi"),
+            ViewPerm::ClipboardWrite => Some("clipboard-write"),
+            ViewPerm::Write => None,
         }
     }
 
-    /// Is it one of the spec's `_meta.ui.permissions` keys? `midi` is
-    /// bise's own, under `_meta["dev.bise/ui"].permissions`.
+    /// Is it one of the spec's `_meta.ui.permissions` keys? `midi` and
+    /// `write` are bise's own, under `_meta["dev.bise/ui"]`.
     pub fn spec(self) -> bool {
-        self != ViewPerm::Midi
+        !matches!(self, ViewPerm::Midi | ViewPerm::Write)
     }
 
     /// Its tick's label (the plugins place, both clients): `camera`.
@@ -85,6 +92,7 @@ impl ViewPerm {
             ViewPerm::Microphone => views::perm_microphone,
             ViewPerm::Midi => views::perm_midi,
             ViewPerm::ClipboardWrite => views::perm_clipboard,
+            ViewPerm::Write => views::perm_write,
         }
     }
 
@@ -95,6 +103,7 @@ impl ViewPerm {
             ViewPerm::Microphone => views::missing_microphone,
             ViewPerm::Midi => views::missing_midi,
             ViewPerm::ClipboardWrite => views::missing_clipboard,
+            ViewPerm::Write => views::missing_write,
         }
     }
 
@@ -106,6 +115,7 @@ impl ViewPerm {
             ViewPerm::Microphone => "perm_microphone",
             ViewPerm::Midi => "perm_midi",
             ViewPerm::ClipboardWrite => "perm_clipboard",
+            ViewPerm::Write => "perm_write",
         }
     }
 
@@ -116,6 +126,7 @@ impl ViewPerm {
             ViewPerm::Microphone => "missing_microphone",
             ViewPerm::Midi => "missing_midi",
             ViewPerm::ClipboardWrite => "missing_clipboard",
+            ViewPerm::Write => "missing_write",
         }
     }
 }
@@ -140,6 +151,10 @@ pub fn perms_of(v: &Value) -> Vec<ViewPerm> {
 pub fn declared(meta: &Value) -> Vec<ViewPerm> {
     let mut names = perms_of(meta.pointer("/ui/permissions").unwrap_or(&Value::Null));
     names.extend(perms_of(meta.pointer("/dev.bise~1ui/permissions").unwrap_or(&Value::Null)));
+    // an opener that saves its document (docs/plugin-apps.md A1)
+    if meta.pointer("/dev.bise~1ui/write") == Some(&Value::Bool(true)) {
+        names.push(ViewPerm::Write);
+    }
     ViewPerm::ALL.into_iter().filter(|p| names.contains(p)).collect()
 }
 
@@ -157,7 +172,7 @@ pub fn known(names: &[String]) -> Vec<ViewPerm> {
 /// The `allow=` of a view's frame for `perms` (unknown names dropped):
 /// `camera; clipboard-write`, `` for none.
 pub fn allow(perms: &[String]) -> String {
-    known(perms).iter().map(|p| p.feature()).collect::<Vec<_>>().join("; ")
+    known(perms).iter().filter_map(|p| p.feature()).collect::<Vec<_>>().join("; ")
 }
 
 /// At most this many digits on each side of a call id: a u64's.
@@ -230,6 +245,13 @@ mod tests {
         let p = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
         assert_eq!(allow(&p(&["clipboardWrite", "camera", "geolocation", "midi; camera *"])), "camera; clipboard-write");
         assert_eq!(allow(&p(&["midi", "microphone", "camera", "clipboardWrite"])), "camera; microphone; midi; clipboard-write");
+        // write is granted like the others, and never reaches the frame
+        assert_eq!(allow(&p(&["write", "camera"])), "camera");
+        assert_eq!(allow(&p(&["write"])), "");
+        assert_eq!(ViewPerm::Write.feature(), None);
+        assert!(!ViewPerm::Write.spec());
+        assert_eq!(names(&declared(&serde_json::json!({"dev.bise/ui": {"write": true}}))), ["write"]);
+        assert!(declared(&serde_json::json!({"dev.bise/ui": {"write": "yes"}})).is_empty(), "only true asks for it");
         assert_eq!(allow(&[]), "");
     }
 

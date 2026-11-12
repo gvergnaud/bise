@@ -276,6 +276,11 @@ pub struct Plugin {
     pub scope: Scope,
     pub root: PathBuf,
     pub data_root: PathBuf,
+    /// his documents of its apps, `~/bise/Plugins/<name>/`
+    /// (`crate::documents_dir`): `${PLUGIN_DOCUMENTS}` and its servers'
+    /// `PLUGIN_DOCUMENTS`; made on a server's start only when its openers
+    /// use it ([`Plugin::uses_documents`])
+    pub documents_root: PathBuf,
     pub state: State,
     pub skills: Vec<Skill>,
     pub servers: Vec<StdioServer>,
@@ -326,6 +331,16 @@ impl Resolution {
 }
 
 impl Plugin {
+    /// Its apps keep documents of his (docs/plugin-apps.md A6): a static
+    /// opener makes a file or opens one under `@documents/`. Only then is
+    /// `~/bise/Plugins/<name>/` made at a server's start (architect
+    /// m_60008: no empty folder per server in his Finder); a server's
+    /// own openers make it themselves when they write there. Pure.
+    pub fn uses_documents(&self) -> bool {
+        let tools: Vec<_> = self.views.iter().map(crate::views::StaticView::tool).collect();
+        crate::opens::uses_documents(&crate::opens::openers_of(&self.name, crate::views::SERVER, &tools).0)
+    }
+
     /// The composer's `@` menu offers it for a turn (at-plugins, architect
     /// m_53238), the one rule both apps follow: on and loaded, with a
     /// skill on or tools to give (a server or a view). An off, shadowed or
@@ -350,6 +365,10 @@ pub struct Roots {
     pub workspace: Option<PathBuf>,
     /// where `${PLUGIN_DATA}` roots live (one folder per plugin name)
     pub data: PathBuf,
+    /// where `${PLUGIN_DOCUMENTS}` roots live, `~/bise/Plugins/`
+    /// (`Home::plugin_documents_root`; one folder per plugin name,
+    /// `crate::documents_dir_in`)
+    pub documents: PathBuf,
     /// the on/off state (`crate::state::read`): a plugin off is listed
     /// as disabled, its skills and servers off are listed, not loaded
     pub state: StateV2,
@@ -364,14 +383,22 @@ impl Roots {
             Ok(p) if !p.is_empty() => PathBuf::from(p),
             _ => home().join(".agents").join("plugins"),
         };
-        let data = bise_home::Home::from_env().plugin_data_dir();
+        let home = bise_home::Home::from_env();
         Roots {
             builtin: builtin_root(),
             user: Some(user),
             workspace: workspace.map(|w| w.join(".agents").join("plugins")),
-            data,
+            data: home.plugin_data_dir(),
+            documents: home.plugin_documents_root(),
             state: crate::state::read(&crate::state::state_path()),
         }
+    }
+
+    /// No plugin root, everything on, `data` and `documents` under `dir`
+    /// (tests): set the roots a test needs on it,
+    /// `Roots { user: Some(..), ..Roots::for_test(dir) }`.
+    pub fn for_test(dir: &Path) -> Roots {
+        Roots { builtin: None, user: None, workspace: None, data: dir.join("data"), documents: dir.join("documents"), state: StateV2::default() }
     }
 }
 
@@ -583,7 +610,7 @@ fn parse_settings(k: &str, v: &Value) -> Result<Vec<Setting>, String> {
         if !ok {
             return Err(format!("{} {:?} must be an env name: A-Z, 0-9 and _", at(i, "var"), var));
         }
-        if var == "PLUGIN_ROOT" || var == "PLUGIN_DATA" || var.starts_with("BISE_") {
+        if RESERVED_ENV.contains(&var.as_str()) || var.starts_with("BISE_") {
             return Err(format!("{} {:?} is bise's own", at(i, "var"), var));
         }
         if out.iter().any(|s| s.var == var) {
@@ -809,9 +836,25 @@ fn load_skills(p: &mut Plugin, out: &mut Vec<Diagnostic>) {
     }
 }
 
-fn expand(v: &str, root: &Path, data: &Path) -> String {
-    v.replace("${PLUGIN_ROOT}", &root.to_string_lossy())
-        .replace("${PLUGIN_DATA}", &data.to_string_lossy())
+/// A plugin's three folders a manifest names: `${PLUGIN_ROOT}` (its
+/// files), `${PLUGIN_DATA}` (its hidden state) and `${PLUGIN_DOCUMENTS}`
+/// (his documents of its apps, `~/bise/Plugins/<name>/`,
+/// docs/plugin-apps.md A6).
+#[derive(Clone, Copy)]
+struct Places<'a> {
+    root: &'a Path,
+    data: &'a Path,
+    docs: &'a Path,
+}
+
+/// The names bise sets for a plugin's processes: never a manifest's
+/// `env`, never a `dev.bise.settings` var.
+pub const RESERVED_ENV: [&str; 3] = ["PLUGIN_ROOT", "PLUGIN_DATA", "PLUGIN_DOCUMENTS"];
+
+fn expand(v: &str, at: Places) -> String {
+    v.replace("${PLUGIN_ROOT}", &at.root.to_string_lossy())
+        .replace("${PLUGIN_DATA}", &at.data.to_string_lossy())
+        .replace("${PLUGIN_DOCUMENTS}", &at.docs.to_string_lossy())
 }
 
 /// Lexical normalization (`.` and `..` segments) for paths that may
@@ -844,14 +887,14 @@ enum Parsed {
 
 /// A remote server: `url` (http or https, `${VAR}` allowed) and
 /// optional string `headers`.
-fn parse_http(id: &str, transport: Transport, o: &Map<String, Value>, root: &Path, data: &Path) -> Result<HttpServer, String> {
+fn parse_http(id: &str, transport: Transport, o: &Map<String, Value>, at: Places) -> Result<HttpServer, String> {
     for k in o.keys() {
         if !["type", "url", "headers", "oauth"].contains(&k.as_str()) && !Limits::KEYS.contains(&k.as_str()) {
             return Err(format!("unknown field {:?}", k));
         }
     }
     let raw = o.get("url").and_then(Value::as_str).filter(|s| !s.is_empty()).ok_or("\"url\" must be a non-empty string")?;
-    let url = expand(raw, root, data);
+    let url = expand(raw, at);
     let checked = if url.contains("${") { None } else { Some(crate::http::Url::parse(&url).map_err(|e| format!("\"url\": {}", e))?) };
     if checked.is_none() && !(url.starts_with("http://") || url.starts_with("https://") || url.starts_with("${")) {
         return Err("\"url\" must start with http:// or https://".into());
@@ -867,7 +910,7 @@ fn parse_http(id: &str, transport: Transport, o: &Map<String, Value>, root: &Pat
             if v.contains(['\r', '\n']) {
                 return Err(format!("header {} has a line break", k));
             }
-            headers.push((k.clone(), expand(v, root, data)));
+            headers.push((k.clone(), expand(v, at)));
         }
     }
     let oauth = o.get("oauth").map(crate::oauth::Config::parse).transpose()?;
@@ -875,7 +918,7 @@ fn parse_http(id: &str, transport: Transport, o: &Map<String, Value>, root: &Pat
     Ok(HttpServer { id: id.to_string(), transport, url, headers, oauth, limits })
 }
 
-fn parse_server(id: &str, v: &Value, root: &Path, data: &Path) -> Result<Parsed, String> {
+fn parse_server(id: &str, v: &Value, at: Places) -> Result<Parsed, String> {
     let o = v.as_object().ok_or("must be an object")?;
     // no "type": stdio with a command, http with a url (Claude Code's
     // and Cursor's files leave it out)
@@ -885,11 +928,11 @@ fn parse_server(id: &str, v: &Value, root: &Path, data: &Path) -> Result<Parsed,
         None => "stdio",
     };
     match ty {
-        "stdio" => parse_stdio(id, o, root, data).map(Parsed::Stdio),
+        "stdio" => parse_stdio(id, o, at).map(Parsed::Stdio),
         "http" | "streamable-http" | "streamable_http" | "streamableHttp" => {
-            parse_http(id, Transport::Streamable, o, root, data).map(Parsed::Http)
+            parse_http(id, Transport::Streamable, o, at).map(Parsed::Http)
         }
-        "sse" => parse_http(id, Transport::Sse, o, root, data).map(Parsed::Http),
+        "sse" => parse_http(id, Transport::Sse, o, at).map(Parsed::Http),
         t => Err(format!("unsupported:type {:?} (stdio, http, streamable-http or sse)", t)),
     }
 }
@@ -959,7 +1002,8 @@ pub fn node_major(version: &str) -> Option<u32> {
     version.trim().strip_prefix('v')?.split('.').next()?.parse().ok()
 }
 
-fn parse_stdio(id: &str, o: &Map<String, Value>, root: &Path, data: &Path) -> Result<StdioServer, String> {
+fn parse_stdio(id: &str, o: &Map<String, Value>, at: Places) -> Result<StdioServer, String> {
+    let (root, data, docs) = (at.root, at.data, at.docs);
     for k in o.keys() {
         if !["type", "command", "args", "env", "cwd"].contains(&k.as_str()) && !Limits::KEYS.contains(&k.as_str()) {
             return Err(format!("unknown field {:?}", k));
@@ -970,7 +1014,7 @@ fn parse_stdio(id: &str, o: &Map<String, Value>, root: &Path, data: &Path) -> Re
         .and_then(Value::as_str)
         .filter(|s| !s.is_empty())
         .ok_or("\"command\" must be a non-empty string")?;
-    let command = expand(raw, root, data);
+    let command = expand(raw, at);
     let command = if raw == NODE_COMMAND {
         node_exe().ok_or(NEEDS_NODE)?.to_string_lossy().into_owned()
     } else if let Some(rel) = raw.strip_prefix("./") {
@@ -993,7 +1037,7 @@ fn parse_stdio(id: &str, o: &Map<String, Value>, root: &Path, data: &Path) -> Re
         None => Vec::new(),
         Some(Value::Array(a)) => a
             .iter()
-            .map(|s| s.as_str().map(|s| expand(s, root, data)))
+            .map(|s| s.as_str().map(|s| expand(s, at)))
             .collect::<Option<Vec<_>>>()
             .ok_or("\"args\" must be an array of strings")?,
         Some(_) => return Err("\"args\" must be an array of strings".into()),
@@ -1002,11 +1046,11 @@ fn parse_stdio(id: &str, o: &Map<String, Value>, root: &Path, data: &Path) -> Re
     if let Some(e) = o.get("env") {
         let e = e.as_object().ok_or("\"env\" must be an object")?;
         for (k, v) in e {
-            if k == "PLUGIN_ROOT" || k == "PLUGIN_DATA" {
+            if RESERVED_ENV.contains(&k.as_str()) {
                 return Err(format!("\"env\" must not set {} (reserved)", k));
             }
             let v = v.as_str().ok_or(format!("env {} must be a string", k))?;
-            env.push((k.clone(), expand(v, root, data)));
+            env.push((k.clone(), expand(v, at)));
         }
     }
     let cwd = match o.get("cwd") {
@@ -1015,11 +1059,13 @@ fn parse_stdio(id: &str, o: &Map<String, Value>, root: &Path, data: &Path) -> Re
             let (base, p) = if let Some(rel) = c.strip_prefix("./") {
                 (root, root.join(rel))
             } else if c == "${PLUGIN_ROOT}" || c.starts_with("${PLUGIN_ROOT}/") {
-                (root, PathBuf::from(expand(c, root, data)))
+                (root, PathBuf::from(expand(c, at)))
             } else if c == "${PLUGIN_DATA}" || c.starts_with("${PLUGIN_DATA}/") {
-                (data, PathBuf::from(expand(c, root, data)))
+                (data, PathBuf::from(expand(c, at)))
+            } else if c == "${PLUGIN_DOCUMENTS}" || c.starts_with("${PLUGIN_DOCUMENTS}/") {
+                (docs, PathBuf::from(expand(c, at)))
             } else {
-                return Err("\"cwd\" must start with ./, ${PLUGIN_ROOT} or ${PLUGIN_DATA}".into());
+                return Err("\"cwd\" must start with ./, ${PLUGIN_ROOT}, ${PLUGIN_DATA} or ${PLUGIN_DOCUMENTS}".into());
             };
             if !contained(base, &p) {
                 return Err("\"cwd\" resolves outside its root".into());
@@ -1091,7 +1137,7 @@ fn load_mcp(p: &mut Plugin, out: &mut Vec<Diagnostic>) {
                 continue;
             }
         }
-        match parse_server(id, sv, &p.root, &data) {
+        match parse_server(id, sv, Places { root: &p.root, data: &data, docs: &p.documents_root }) {
             Ok(Parsed::Stdio(s)) => p.servers.push(s),
             Ok(Parsed::Http(s)) => p.remotes.push(s),
             Err(e) => match e.strip_prefix("unsupported:") {
@@ -1120,7 +1166,7 @@ fn load_views(p: &mut Plugin, vibe: bool, out: &mut Vec<Diagnostic>) {
         // its openers' bad entries, said once at load (docs/plugin-apps.md A1)
         let tools: Vec<_> = views.iter().map(crate::views::StaticView::tool).collect();
         out.extend(diags);
-        out.extend(crate::opens::openers_of(&p.name, &tools).1);
+        out.extend(crate::opens::openers_of(&p.name, crate::views::SERVER, &tools).1);
         p.views = views;
     }
 }
@@ -1197,7 +1243,8 @@ fn is_dot(p: &Path) -> bool {
     p.file_name().is_some_and(|n| n.to_string_lossy().starts_with('.'))
 }
 
-fn discover(root: &Path, scope: Scope, data: &Path, out: &mut Vec<Diagnostic>) -> Vec<Candidate> {
+fn discover(root: &Path, scope: Scope, roots: &Roots, out: &mut Vec<Diagnostic>) -> Vec<Candidate> {
+    let data = &roots.data;
     let rd = match std::fs::read_dir(root) {
         Ok(rd) => rd,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Vec::new(),
@@ -1225,6 +1272,7 @@ fn discover(root: &Path, scope: Scope, data: &Path, out: &mut Vec<Diagnostic>) -
             scope,
             root,
             data_root: PathBuf::new(),
+            documents_root: PathBuf::new(),
             state: State::Invalid,
             skills: Vec::new(),
             servers: Vec::new(),
@@ -1249,6 +1297,7 @@ fn discover(root: &Path, scope: Scope, data: &Path, out: &mut Vec<Diagnostic>) -
             Ok(m) => {
                 p.namespace = identifier(&m.name);
                 p.data_root = data.join(&m.name);
+                p.documents_root = crate::documents_dir_in(&roots.documents, &PluginId::plugin(&m.name)).unwrap_or_default();
                 p.name = m.name;
                 p.version = m.version;
                 p.description = m.description;
@@ -1314,7 +1363,7 @@ pub fn resolve(roots: &Roots) -> Resolution {
     let mut cands = Vec::new();
     for (root, scope) in [(&roots.builtin, Scope::BuiltIn), (&roots.user, Scope::User), (&roots.workspace, Scope::Workspace)] {
         if let Some(r) = root {
-            cands.extend(discover(r, scope, &roots.data, &mut diags));
+            cands.extend(discover(r, scope, roots, &mut diags));
         }
     }
     // same name twice in one root: both dropped

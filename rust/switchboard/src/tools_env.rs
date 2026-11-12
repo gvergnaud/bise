@@ -887,13 +887,7 @@ mod tests {
     #[test]
     fn the_built_in_office_plugins_are_noted_with_their_skill_names() {
         let builtin = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins");
-        let roots = bend_plugins::resolve::Roots {
-            builtin: Some(builtin),
-            user: None,
-            workspace: None,
-            data: std::env::temp_dir(),
-            state: Default::default(),
-        };
+        let roots = bend_plugins::resolve::Roots { builtin: Some(builtin), ..bend_plugins::resolve::Roots::for_test(&std::env::temp_dir()) };
         let note = plugins_note(&loaded_plugins_in(&roots)).unwrap();
         for (p, kind) in [("slides", "pptx"), ("sheets", "xlsx"), ("docs", "docx")] {
             let line = note.lines().find(|l| l.starts_with(&format!("- `{}`", p))).unwrap_or_else(|| panic!("{}", note));

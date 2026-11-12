@@ -44,6 +44,70 @@
 // the tests run on a temp HOME, never the user's (bise_home::test_home)
 bise_home::test_home!();
 
+/// A real plugin's documents, `~/bise/Plugins/<name>/` (docs/plugin-apps.md
+/// A6), given to its processes as `PLUGIN_DOCUMENTS`; its owner's for a
+/// part. None for what is not a folder's plugin (a connector, a skills
+/// folder) or a name that is not one safe path segment. With
+/// [`documents_dir_in`], the one user of `bise_home::plugin_app_dir_in`
+/// (a test holds it so).
+pub fn documents_dir(home: &bise_home::Home, id: &id::PluginId) -> Option<std::path::PathBuf> {
+    documents_dir_in(&home.plugin_documents_root(), id)
+}
+
+/// [`documents_dir`] under `root` (`resolve::Roots::documents`, which
+/// `Roots::standard` fills from his Home). Pure.
+pub fn documents_dir_in(root: &std::path::Path, id: &id::PluginId) -> Option<std::path::PathBuf> {
+    match id.owner() {
+        id::PluginId::Plugin { name } => bise_home::plugin_app_dir_in(root, name),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod documents_tests {
+    use super::*;
+
+    #[test]
+    fn a_plugins_documents_are_its_folder_under_the_bise_root() {
+        let home = bise_home::Home::at(std::env::temp_dir().join("docs-dir"));
+        let sheets = id::PluginId::plugin("sheets");
+        assert_eq!(documents_dir(&home, &sheets), Some(home.bise_root().join("Plugins").join("sheets")));
+        let part = id::PluginId::parse("sheets#tool:sheets/open").unwrap();
+        assert_eq!(documents_dir(&home, &part), documents_dir(&home, &sheets), "a part's are its owner's");
+        assert_eq!(documents_dir(&home, &id::PluginId::parse("mistral:gmail").unwrap()), None);
+        assert_eq!(documents_dir(&home, &id::PluginId::Plugin { name: "../x".into() }), None);
+        assert_eq!(documents_dir(&home, &id::PluginId::Plugin { name: ".hidden".into() }), None);
+    }
+
+    /// The Rust sources that spell `needle`, relative to rust/.
+    fn sources_with(needle: &str) -> Vec<String> {
+        let rust = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+        let mut hits = Vec::new();
+        let mut stack = vec![rust.clone()];
+        while let Some(d) = stack.pop() {
+            for e in std::fs::read_dir(&d).into_iter().flatten().flatten() {
+                let p = e.path();
+                let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                if p.is_dir() && name != "target" && !name.starts_with('.') {
+                    stack.push(p);
+                } else if name.ends_with(".rs") && std::fs::read_to_string(&p).unwrap_or_default().contains(needle) {
+                    hits.push(p.strip_prefix(&rust).unwrap_or(&p).display().to_string());
+                }
+            }
+        }
+        hits.sort();
+        hits
+    }
+
+    /// A plugin's documents folder is named in one place each side: the
+    /// rule in bise_home, its one user here, which passes a plugin's own
+    /// name (architect m_60008).
+    #[test]
+    fn the_documents_rule_is_called_from_here_only() {
+        assert_eq!(sources_with(&["plugin_app_dir_in", "("].concat()), ["home/src/lib.rs", "plugins/src/lib.rs"]);
+    }
+}
+
 pub mod add;
 pub mod bridge;
 pub mod catalog;

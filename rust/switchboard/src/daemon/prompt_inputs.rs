@@ -118,7 +118,7 @@ mod tests {
 
     fn fp(d: &Path) -> u64 {
         let state = bend_plugins::state::read(&d.join("plugins.json"));
-        let roots = Roots { builtin: None, user: Some(d.join("user")), workspace: None, data: d.join("data"), state };
+        let roots = Roots { user: Some(d.join("user")), state, ..Roots::for_test(d) };
         prompt_fingerprint(&resolve(&roots))
     }
 

@@ -124,7 +124,7 @@ pub fn remove(ctx: &Ctx, workspace: Option<&Path>, id: &PluginId) -> Result<(), 
 /// The plugin `name` of his plugins folder (an invalid one too: a broken
 /// plugin is removable).
 fn his(ctx: &Ctx, name: &str) -> Option<Plugin> {
-    let roots = Roots { builtin: None, user: Some(ctx.user_root.clone()), workspace: None, data: ctx.data.clone(), state: Default::default() };
+    let roots = Roots { builtin: None, user: Some(ctx.user_root.clone()), workspace: None, data: ctx.data.clone(), documents: ctx.documents.clone(), state: Default::default() };
     resolve::resolve(&roots).plugins.into_iter().find(|p| p.name == name && p.scope == Scope::User && p.root.starts_with(&ctx.user_root))
 }
 
@@ -135,7 +135,7 @@ fn workspace_root(workspace: Option<&Path>) -> Option<PathBuf> {
 
 /// Where else a plugin `name` is (built-in, the workspace's).
 fn elsewhere(ctx: &Ctx, workspace: Option<&Path>, name: &str) -> Option<Scope> {
-    let roots = Roots { builtin: ctx.builtin.clone(), user: None, workspace: workspace_root(workspace), data: ctx.data.clone(), state: Default::default() };
+    let roots = Roots { builtin: ctx.builtin.clone(), user: None, workspace: workspace_root(workspace), data: ctx.data.clone(), documents: ctx.documents.clone(), state: Default::default() };
     resolve::resolve(&roots).plugins.into_iter().find(|p| p.name == name).map(|p| p.scope)
 }
 
@@ -148,7 +148,7 @@ fn logins_to_drop(ctx: &Ctx, workspace: Option<&Path>, p: &Plugin) -> Vec<Target
         let env = secrets::lookup(t.env_dir.as_deref(), &PluginId::plugin(t.plugin.as_str()));
         remote::target(&t.server, &env).ok().map(|(u, _)| oauth::resource_of(&u))
     };
-    let roots = Roots { builtin: ctx.builtin.clone(), user: Some(ctx.user_root.clone()), workspace: workspace_root(workspace), data: ctx.data.clone(), state: Default::default() };
+    let roots = Roots { builtin: ctx.builtin.clone(), user: Some(ctx.user_root.clone()), workspace: workspace_root(workspace), data: ctx.data.clone(), documents: ctx.documents.clone(), state: Default::default() };
     let others: Vec<String> = resolve::resolve(&roots)
         .plugins
         .iter()

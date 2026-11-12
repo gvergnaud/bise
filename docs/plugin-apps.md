@@ -361,8 +361,12 @@ Owner: desktop `apps/desktop/src/views/` and `app/panel/`
 
 ## A6. Files and the root
 
-- `Home::bise_root()` = `~/bise` (visible); `Home::plugin_app_dir(&PluginId)`
-  = `<root>/Plugins/<name>/`, given to a plugin's processes as
+- `Home::bise_root()` = `~/bise` (visible);
+  `bend_plugins::documents_dir(&Home, &PluginId)` = `<root>/Plugins/<name>/`
+  (made only for a plugin whose openers make files or open `@documents/`
+  types: `opens::uses_documents`; a server's after its `tools/list`:
+  `Openers::documents_to_make`, the hub makes them), given to a plugin's
+  processes as
   `PLUGIN_DOCUMENTS` (a row in `bise_home::env::VARS`; expanded in
   manifests like `${PLUGIN_DATA}`). `PLUGIN_DATA` keeps its meaning (its
   hidden state and caches, `~/.bise/plugin-data/<name>/`): nothing

@@ -11,7 +11,7 @@ fn bise_names(src: &str) -> Vec<String> {
     while i < b.len() {
         if b[i] == b'"' {
             let rest = &src[i + 1..];
-            if ["SB_", "BEND_", "BISE_"].iter().any(|p| rest.starts_with(p)) {
+            if ["SB_", "BEND_", "BISE_", "PLUGIN_"].iter().any(|p| rest.starts_with(p)) {
                 let n = rest.bytes().take_while(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || *c == b'_').count();
                 let name = &rest[..n];
                 if rest[n..].starts_with('"') && !name.ends_with('_') {

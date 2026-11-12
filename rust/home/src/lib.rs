@@ -61,6 +61,15 @@ pub fn exe_home_dir(exe_dir: &Path) -> PathBuf {
 
 /// Moves the whole state (the bise layout, at this path).
 pub const BISE_HOME: &str = "BISE_HOME";
+
+/// A plugin's documents under `root` (a [`Home::plugin_documents_root`]):
+/// `<root>/<plugin>/`, `None` when `plugin` is not one safe path segment
+/// (empty, a `/`, a `\`, a NUL, a leading `.`, so `..` too). Pure: the one
+/// rule, whose one caller is `bend_plugins::documents_dir_in`.
+pub fn plugin_app_dir_in(root: &Path, plugin: &str) -> Option<PathBuf> {
+    let safe = !plugin.is_empty() && !plugin.starts_with('.') && !plugin.contains(['/', '\\', '\0']);
+    safe.then(|| root.join(plugin))
+}
 /// [`Home::dictation_dir`]'s name under the root (the sandbox denies it).
 pub const DICTATION_DIR: &str = "dictation";
 /// The stamp of the exported paths: `<HOME>\n<BISE_HOME>` they were computed for.
@@ -163,7 +172,7 @@ impl Home {
 
     /// His visible bise folder: `~/bise` (docs/plugin-apps.md A6), the
     /// home workspace where agents write, plugins' documents
-    /// ([`Home::plugin_app_dir`]), `taste.md` and `people.md`; shared-kb's
+    /// ([`Home::plugin_documents_root`]), `taste.md` and `people.md`; shared-kb's
     /// Finder domain shows its entries. `$BISE_HOME_WORKSPACE` in the tests
     /// (a throwaway folder, never his).
     pub fn bise_root(&self) -> PathBuf {
@@ -183,14 +192,12 @@ impl Home {
         self.bise_root().join("people.md")
     }
 
-    /// A plugin's documents, `<bise root>/Plugins/<plugin>/`, given to its
-    /// processes as `PLUGIN_DOCUMENTS` (docs/plugin-apps.md A6): `None`
-    /// when `plugin` is not one safe path segment (empty, a `/`, a NUL,
-    /// a leading `.`). Its one caller outside tests is
-    /// `bend_plugins::documents_dir`, which passes a plugin's own name.
-    pub fn plugin_app_dir(&self, plugin: &str) -> Option<PathBuf> {
-        let safe = !plugin.is_empty() && !plugin.starts_with('.') && !plugin.contains(['/', '\\', '\0']);
-        safe.then(|| self.bise_root().join("Plugins").join(plugin))
+    /// Where every plugin's documents live, `<bise root>/Plugins/`: the
+    /// plugin resolver's root for them (`bend_plugins::resolve::Roots`);
+    /// one plugin's folder is [`plugin_app_dir_in`] under it, given to its
+    /// processes as `PLUGIN_DOCUMENTS` (docs/plugin-apps.md A6).
+    pub fn plugin_documents_root(&self) -> PathBuf {
+        self.bise_root().join("Plugins")
     }
 
     /// `config.toml` (`$BEND_CONFIG`).

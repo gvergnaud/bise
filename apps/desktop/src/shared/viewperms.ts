@@ -38,9 +38,9 @@ export function permsOf(...vs: readonly unknown[]): ViewPerm[] {
   return NAMES.filter((p) => names.includes(p));
 }
 
-/** The `allow=` of a view's frame for these permissions: '' for none. Pure. */
+/** The `allow=` of a view's frame for these permissions: '' for none. A permission with no frame feature (`write`, which the hub checks on each save) never reaches it. Pure. */
 export function allowOf(perms: readonly ViewPerm[]): string {
   return VIEW_PERMS.filter((r) => perms.includes(r.perm))
-    .map((r) => r.feature)
+    .flatMap((r) => (r.feature === null ? [] : [r.feature]))
     .join('; ');
 }

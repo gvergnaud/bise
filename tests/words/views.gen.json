@@ -196,6 +196,11 @@
     "one": null,
     "text": "MIDI"
   },
+  "views.missing_write": {
+    "args": [],
+    "one": null,
+    "text": "saving your file"
+  },
   "views.no_grant": {
     "args": [
       "missing"
@@ -232,6 +237,11 @@
     "args": [],
     "one": null,
     "text": "MIDI"
+  },
+  "views.perm_write": {
+    "args": [],
+    "one": null,
+    "text": "save your files"
   },
   "views.preview_label": {
     "args": [],

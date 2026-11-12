@@ -372,6 +372,10 @@ struct Entry {
     spec: Spec,
     plugin_root: PathBuf,
     data_root: PathBuf,
+    /// `PLUGIN_DOCUMENTS` (docs/plugin-apps.md A6), made at start only
+    /// when `make_documents` (`resolve::Plugin::uses_documents`)
+    documents_root: PathBuf,
+    make_documents: bool,
     log: PathBuf,
     on_change: OnChange,
     secrets: Option<PathBuf>,
@@ -432,6 +436,8 @@ impl Entry {
             spec,
             plugin_root: p.root.clone(),
             data_root: p.data_root.clone(),
+            documents_root: p.documents_root.clone(),
+            make_documents: p.uses_documents(),
             on_change,
             secrets,
             env_dir,
@@ -504,9 +510,10 @@ impl Entry {
     fn start(&self) -> Result<Conn, Fail> {
         let env = env_lookup(&self.plugin_name, self.env_dir.as_deref());
         match &self.spec {
-            Spec::Stdio(s) => Client::start(s, &self.plugin_root, &self.data_root, &self.log, self.spec.startup_timeout(), Some(self.on_change.clone()), &env)
-                .map(Conn::Stdio)
-                .map_err(Fail::Other),
+            Spec::Stdio(s) => {
+                let dirs = crate::stdio::Dirs { root: &self.plugin_root, data: &self.data_root, documents: &self.documents_root, make_documents: self.make_documents };
+                Client::start(s, &dirs, &self.log, self.spec.startup_timeout(), Some(self.on_change.clone()), &env).map(Conn::Stdio).map_err(Fail::Other)
+            }
             Spec::Http(s) => Remote::start_with(s, &env, self.secrets.as_deref(), self.on_change.clone(), self.spec.startup_timeout()).map(Conn::Remote),
         }
     }

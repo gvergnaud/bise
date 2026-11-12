@@ -261,13 +261,7 @@ fn a_plugin_with_an_http_server_goes_through_the_bridge() {
     .unwrap();
     let dir = base.join("run/plugins");
     let status = base.join("status");
-    let roots = resolve::Roots {
-        builtin: None,
-        user: None,
-        workspace: Some(base.join("ws/.agents/plugins")),
-        data: base.join("data"),
-        state: Default::default(),
-    };
+    let roots = resolve::Roots { workspace: Some(base.join("ws/.agents/plugins")), ..resolve::Roots::for_test(&base) };
     let mut parent = Command::new("sleep").arg("60").spawn().unwrap();
     let opts = bridge::Opts { status_dir: Some(status.clone()), ..bridge::Opts::new(dir.clone(), Some(parent.id()), roots) };
     let srv = std::thread::spawn(move || bridge::serve(opts));

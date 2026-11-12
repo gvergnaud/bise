@@ -59,13 +59,13 @@ fn sheets_tool() -> serde_json::Value {
 
 #[test]
 fn the_contracts_opener_parses_whole() {
-    let (o, d) = parse("sheets", &sheets_tool());
+    let (o, d) = parse("sheets", "sheets", &sheets_tool());
     assert!(d.is_empty(), "{d:?}");
     let o = o.unwrap();
     assert_eq!((o.tool.as_str(), o.uri.as_str(), o.app.as_str(), o.write, o.isolate), ("open_sheet", "ui://sheets/grid", "Sheets", true, Isolate::View));
     let mut doc = sheets_tool();
     doc["_meta"]["dev.bise/ui"]["isolate"] = json!("document");
-    assert_eq!(parse("sites", &doc).0.unwrap().isolate, Isolate::Document);
+    assert_eq!(parse("sites", "sites", &doc).0.unwrap().isolate, Isolate::Document);
     let keys: Vec<_> = o.entries.iter().map(|e| (e.keys[0].as_str(), e.title.as_str(), e.rank, e.folder)).collect();
     assert_eq!(keys, [
         ("*.xlsx", "Excel workbook", OpenRank::Owner, false),
@@ -78,17 +78,17 @@ fn the_contracts_opener_parses_whole() {
 
 #[test]
 fn a_tool_without_files_is_no_opener_and_says_nothing() {
-    assert_eq!(parse("p", &tool("t", json!({"ui": {"resourceUri": "ui://p/v"}}))), (None, vec![]));
-    assert_eq!(parse("p", &json!({"name": "t"})), (None, vec![]));
+    assert_eq!(parse("p", "srv", &tool("t", json!({"ui": {"resourceUri": "ui://p/v"}}))), (None, vec![]));
+    assert_eq!(parse("p", "srv", &json!({"name": "t"})), (None, vec![]));
     // a url entrypoint is not a file one
     let url = tool("t", json!({"ui": {"resourceUri": "ui://p/v"}, "ai.mistral.vibe/ui": {"entrypoints": [{"type": "url"}]}}));
-    assert_eq!(parse("p", &url), (None, vec![]));
+    assert_eq!(parse("p", "srv", &url), (None, vec![]));
 }
 
 #[test]
 fn vibes_extensions_alone_make_entries() {
     let t = tool("open", json!({"ui": {"resourceUri": "ui://p/v"}, "ai.mistral.vibe/ui": {"entrypoints": [{"type": "file", "extensions": [".FAKE", ".json", "fake", ".*"], "title": "Claim"}]}}));
-    let (o, d) = parse("p", &t);
+    let (o, d) = parse("p", "srv", &t);
     let o = o.unwrap();
     assert_eq!(o.app, "Claim");
     assert_eq!(o.entries.iter().map(|e| (e.keys[0].as_str(), e.title.as_str())).collect::<Vec<_>>(), [("*.fake", "FAKE file"), ("*.json", "JSON file")]);
@@ -118,7 +118,7 @@ fn a_bad_entry_is_dropped_and_the_rest_loads() {
             "isolate": "tab"
         }
     }));
-    let (o, d) = parse("p", &t);
+    let (o, d) = parse("p", "srv", &t);
     let o = o.unwrap();
     assert_eq!(o.entries.iter().map(|e| e.keys[0].as_str()).collect::<Vec<_>>(), ["*.ok"]);
     assert_eq!(o.makes.iter().map(|m| m.ending.as_str()).collect::<Vec<_>>(), [".ok"]);
@@ -130,7 +130,7 @@ fn a_bad_entry_is_dropped_and_the_rest_loads() {
 #[test]
 fn files_without_a_view_are_refused() {
     let t = tool("open", json!({"dev.bise/ui": {"files": [{"match": ["*.x"], "title": "X"}]}}));
-    let (o, d) = parse("p", &t);
+    let (o, d) = parse("p", "srv", &t);
     assert_eq!(o, None);
     assert_eq!(d.len(), 1);
 }
@@ -138,14 +138,14 @@ fn files_without_a_view_are_refused() {
 #[test]
 fn the_caps_hold() {
     let files: Vec<_> = (0..MAX_ENTRIES + 3).map(|i| json!({"match": [format!("*.e{i}")], "title": "E"})).collect();
-    let (o, d) = parse("p", &tool("open", json!({"ui": {"resourceUri": "ui://p/v"}, "dev.bise/ui": {"files": files}})));
+    let (o, d) = parse("p", "srv", &tool("open", json!({"ui": {"resourceUri": "ui://p/v"}, "dev.bise/ui": {"files": files}})));
     assert_eq!(o.unwrap().entries.len(), MAX_ENTRIES);
     assert_eq!(d.len(), 1);
     let globs: Vec<_> = (0..MAX_GLOBS + 1).map(|i| format!("*.g{i}")).collect();
-    let (o, _) = parse("p", &tool("open", json!({"ui": {"resourceUri": "ui://p/v"}, "dev.bise/ui": {"files": [{"match": globs, "title": "G"}]}})));
+    let (o, _) = parse("p", "srv", &tool("open", json!({"ui": {"resourceUri": "ui://p/v"}, "dev.bise/ui": {"files": [{"match": globs, "title": "G"}]}})));
     assert_eq!(o, None, "its one entry dropped: no opener");
     let tools: Vec<_> = (0..MAX_OPENERS + 2).map(|i| tool(&format!("t{i}"), json!({"ui": {"resourceUri": format!("ui://p/{i}")}, "dev.bise/ui": {"files": [{"match": ["*.x"], "title": "X"}]}}))).collect();
-    let (list, d) = openers_of("p", &tools);
+    let (list, d) = openers_of("p", "srv", &tools);
     assert_eq!(list.len(), MAX_OPENERS);
     assert_eq!(d.len(), 1);
 }
@@ -157,7 +157,7 @@ fn the_fixtures_openers_parse_from_their_view_json() {
         let (views, vd) = crate::views::load(plugin, &root.join(plugin));
         assert!(vd.is_empty(), "{vd:?}");
         let v = crate::views::Virtual { plugin: plugin.into(), namespace: plugin.into(), opt_in: false, views };
-        let (list, d) = openers_of(plugin, &v.tools());
+        let (list, d) = openers_of(plugin, crate::views::SERVER, &v.tools());
         assert!(d.is_empty(), "{plugin}: {d:?}");
         assert_eq!(list.len(), 1, "{plugin}");
         assert_eq!((list[0].entries.len(), list[0].makes.len(), list[0].write), (n_entries, makes, write), "{plugin}");
@@ -167,6 +167,7 @@ fn the_fixtures_openers_parse_from_their_view_json() {
 /// An opener of `plugin` with `entries` (key, rank, folder).
 fn op(tool: &str, app: &str, entries: &[(&str, OpenRank, bool)]) -> OpenerDecl {
     OpenerDecl {
+        server: crate::views::SERVER.into(),
         tool: tool.into(),
         uri: format!("ui://x/{tool}"),
         app: app.into(),
@@ -301,7 +302,7 @@ fn the_row_says_the_matched_type() {
 fn fixtures(off: &[&str]) -> crate::resolve::Resolution {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/plugin-apps");
     let state = crate::model::StateV2 { disabled: off.iter().map(|s| s.to_string()).collect(), ..Default::default() };
-    crate::resolve::resolve(&crate::resolve::Roots { builtin: None, user: Some(root), workspace: None, data: std::env::temp_dir().join("opens-gather-data"), state })
+    crate::resolve::resolve(&crate::resolve::Roots { user: Some(root), state, ..crate::resolve::Roots::for_test(&std::env::temp_dir().join("opens-gather")) })
 }
 
 #[test]
@@ -317,6 +318,11 @@ fn the_on_plugins_openers_are_gathered_static_then_servers() {
     let got: Vec<_> = o.plugins.iter().map(|p| (p.plugin.as_str(), p.openers.iter().map(|x| x.tool.as_str()).collect::<Vec<_>>())).collect();
     assert!(o.plugins.iter().all(|p| !p.first_party), "his folder's plugins are not bise's own");
     assert_eq!(got, [("fake-claim", vec!["claim"]), ("fake-opener", vec!["fake", "open_fake2"]), ("hostile-opener", vec!["hostile"])]);
+    // each opener knows its server: view/open routes on it
+    assert_eq!(o.decl("fake-opener", "fake").map(|d| d.server.as_str()), Some(crate::views::SERVER));
+    assert_eq!(o.decl("fake-opener", "open_fake2").map(|d| d.server.as_str()), Some("fake-opener"));
+    assert_eq!(o.decl("fake-opener", "claim"), None, "a tool of another plugin");
+    assert_eq!(o.decl("gone", "x"), None);
     // fake-opener owns *.fake; fake-claim's Vibe extension is a default
     let n = |x: &Opened| names(x);
     assert_eq!(n(&pick(&Target::file("a.fake"), &o, &Picks::new())), (Some("fake-opener#fake".into()), vec!["fake-claim#claim".into()]));
@@ -333,6 +339,42 @@ fn the_on_plugins_openers_are_gathered_static_then_servers() {
     let (o, _) = Openers::gather(&fixtures(&["fake-claim"]), &servers);
     assert_eq!(n(&pick(&Target::file("a.fake"), &o, &Picks::new())), (Some("fake-opener#fake".into()), vec![]));
     assert_eq!(n(&pick(&Target::file("a.json"), &o, &Picks::new())), (None, vec![]));
+}
+
+#[test]
+fn only_openers_that_use_documents_get_a_documents_folder() {
+    // the fixtures: fake-opener's static view makes files and opens @documents/*.note
+    let res = fixtures(&[]);
+    let (o, _) = Openers::gather(&res, &ServerTools::new());
+    let docs = std::env::temp_dir().join("opens-gather").join("documents");
+    assert_eq!(o.documents_to_make(&res), [docs.join("fake-opener")]);
+    assert!(!uses_documents(&[]));
+
+    // a server opener that makes files gets one after gather; a plain server never
+    let dir = std::env::temp_dir().join(format!("opens-documents-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    for name in ["maker", "plain"] {
+        let p = dir.join("user").join(name);
+        std::fs::create_dir_all(&p).unwrap();
+        std::fs::write(p.join("plugin.json"), json!({"$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json", "name": name, "version": "0.1.0"}).to_string()).unwrap();
+        std::fs::write(p.join("mcp.json"), json!({"mcpServers": {"srv": {"type": "stdio", "command": "true"}}}).to_string()).unwrap();
+    }
+    let res = crate::resolve::resolve(&crate::resolve::Roots { user: Some(dir.join("user")), ..crate::resolve::Roots::for_test(&dir) });
+    let maker = tool("new_board", json!({
+        "ui": {"resourceUri": "ui://maker/board"},
+        "dev.bise/ui": {"files": [{"match": ["*.board"], "title": "Board"}], "makes": [{"ending": ".board", "title": "Board"}]}
+    }));
+    let servers: ServerTools = [
+        (("maker".to_string(), "srv".to_string()), vec![maker]),
+        (("plain".to_string(), "srv".to_string()), vec![json!({"name": "search"})]),
+    ]
+    .into_iter()
+    .collect();
+    assert_eq!(Openers::gather(&res, &ServerTools::new()).0.documents_to_make(&res), Vec::<std::path::PathBuf>::new(), "before tools/list: none");
+    let (o, d) = Openers::gather(&res, &servers);
+    assert!(d.is_empty(), "{d:?}");
+    assert_eq!(o.documents_to_make(&res), [dir.join("documents").join("maker")]);
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]

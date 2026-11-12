@@ -224,7 +224,7 @@ mod tests {
             format!(r#"{{"$schema":"{}","name":"{name}","extensions":{{"dev.bise":{{"settings":[{ext}]}}}}}}"#, crate::resolve::PLUGIN_SCHEMA),
         )
         .unwrap();
-        let roots = crate::resolve::Roots { builtin: Some(t.clone()), user: None, workspace: None, data: t.join(".data"), state: Default::default() };
+        let roots = crate::resolve::Roots { builtin: Some(t.clone()), data: t.join(".data"), ..crate::resolve::Roots::for_test(&t) };
         let p = crate::resolve::resolve(&roots).plugins.into_iter().find(|p| p.name == name).unwrap();
         let _ = std::fs::remove_dir_all(&t);
         p

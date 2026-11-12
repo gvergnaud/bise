@@ -153,6 +153,13 @@ pub fn view_grant(grants: &Grants, plugin: &str, uri: &str) -> Option<Vec<String
     grants.get(&PluginId::plugin(plugin).part(PartKind::View, None, uri)).cloned()
 }
 
+/// Whether view `uri` of plugin `plugin` holds `perm`: the hub's check
+/// on every write (`ViewPerm::Write`, docs/plugin-apps.md A4), read from
+/// the grants as they are now. Never asked: no. Pure.
+pub fn view_allows(grants: &Grants, plugin: &str, uri: &str, perm: view_rules::ViewPerm) -> bool {
+    view_grant(grants, plugin, uri).is_some_and(|g| g.iter().any(|n| n == perm.name()))
+}
+
 /// Set view `id`'s grant to `perms` (unknown ones dropped). Returns
 /// whether the file changed.
 pub fn grant(path: &Path, id: &PluginId, perms: &[String]) -> std::io::Result<bool> {

@@ -1,8 +1,8 @@
 //! Every bise environment variable, and the environment of each bise
 //! child process (issue 11).
 //!
-//! [`VARS`] lists every `SB_*`, `BEND_*` and `BISE_*` name the Rust code
-//! reads or sets, with its [`Kind`]:
+//! [`VARS`] lists every `SB_*`, `BEND_*`, `BISE_*` and `PLUGIN_*` name the
+//! Rust code reads or sets, with its [`Kind`]:
 //!
 //! - **user**: the user may set it (`BISE_HOME`, `BISE_ASCII`, a model);
 //!   it passes to every child.
@@ -215,6 +215,11 @@ pub const VARS: &[Var] = &[
     // not bise's names, read by bise: the usage counts' gate (bise_usage::sharing_allowed)
     user("CI", "set (not 0/false): a CI run, no usage counts"),
     user("DO_NOT_TRACK", "1: no usage counts, nothing sent (the consoledonottrack.com convention; BISE_TELEMETRY=0 too)"),
+    // a plugin server's own folders (Agent Plugins' names): bise sets them
+    // for that process only (bend_plugins::stdio)
+    internal("PLUGIN_DATA", "a plugin's hidden state and caches, ~/.bise/plugin-data/<name>/, for its server"),
+    internal("PLUGIN_DOCUMENTS", "a plugin's documents, ~/bise/Plugins/<name>/ (bend_plugins::documents_dir), for its server (docs/plugin-apps.md A6)"),
+    internal("PLUGIN_ROOT", "a plugin's installed folder, for its server"),
     internal("SB_AGENT", "an agent's name, for its sb"),
     test_input("SB_BENCH_JOURNAL", "a journal to bench (an ignored test)"),
     test_input("SB_BENCH_LINES", "the transcript bench's line count"),

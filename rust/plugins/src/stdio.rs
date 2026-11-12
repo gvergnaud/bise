@@ -43,6 +43,16 @@ fn send(stdin: &Mutex<ChildStdin>, v: &Value) -> std::io::Result<()> {
     w.flush()
 }
 
+/// A plugin's folders its server gets: `PLUGIN_ROOT`, `PLUGIN_DATA`
+/// (made at start) and `PLUGIN_DOCUMENTS` (always set; made at start only
+/// when `make_documents`, docs/plugin-apps.md A6).
+pub struct Dirs<'a> {
+    pub root: &'a Path,
+    pub data: &'a Path,
+    pub documents: &'a Path,
+    pub make_documents: bool,
+}
+
 impl Client {
     /// Spawn the server and run the handshake (`initialize`,
     /// `notifications/initialized`). stderr is appended to `log`. A
@@ -51,8 +61,7 @@ impl Client {
     /// value and no default is an error naming it, never a value.
     pub fn start(
         s: &StdioServer,
-        plugin_root: &Path,
-        data_root: &Path,
+        dirs: &Dirs,
         log: &Path,
         timeout: Duration,
         on_change: Option<crate::remote::OnChange>,
@@ -63,7 +72,10 @@ impl Client {
             let v = crate::resolve::expand_env(v, vars).map_err(|e| format!("env {} uses {}, which is not set", k, e.trim_end_matches(" is not set")))?;
             env.push((k, v));
         }
-        let _ = std::fs::create_dir_all(data_root);
+        let _ = std::fs::create_dir_all(dirs.data);
+        if dirs.make_documents {
+            let _ = std::fs::create_dir_all(dirs.documents);
+        }
         let err = std::fs::OpenOptions::new()
             .create(true)
             .append(true)
@@ -73,8 +85,9 @@ impl Client {
         let mut cmd = Command::new(&s.command);
         cmd.args(&s.args)
             .current_dir(&s.cwd)
-            .env("PLUGIN_ROOT", plugin_root)
-            .env("PLUGIN_DATA", data_root)
+            .env("PLUGIN_ROOT", dirs.root)
+            .env("PLUGIN_DATA", dirs.data)
+            .env("PLUGIN_DOCUMENTS", dirs.documents)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(err);
