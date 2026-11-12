@@ -78,6 +78,15 @@ fn bise_root_never_leaves_a_throwaway_home() {
     }
     // desktop_try's world: a fake HOME, BISE_HOME = <fake>/.bise
     assert_eq!(home_of(&[("HOME", "/f/home"), ("BISE_HOME", "/f/home/.bise")]).bise_root(), p("/f/home/bise"));
+    // architect m_61867: an agent's shell holds the hub's export (his
+    // ~/bise); a try it starts with a throwaway BISE_HOME never takes it
+    let inherited = [("HOME", "/h"), ("BISE_HOME", "/t/try"), ("BISE_HOME_WORKSPACE", "/h/bise")];
+    assert_eq!(home_of(&inherited).bise_root(), p("/t/try/bise"));
+    // an export stamped for another home is dropped
+    let shell = home_of(&[("HOME", "/h"), ("BISE_HOME_WORKSPACE", "/w/ws")]).exports();
+    let mut env: Vec<(&str, &str)> = shell.iter().map(|(k, v)| (*k, v.as_str())).collect();
+    env.push(("HOME", "/t"));
+    assert_eq!(home_of(&env).bise_root(), p("/t/bise"));
 }
 
 #[test]
@@ -145,6 +154,7 @@ fn another_homes_default_is_not_an_override() {
         ("BEND_RUN_DIR", "/u/.bise/run"),
         ("SB_VERSIONS_DIR", "/u/.bise/dev/versions"),
         ("SB_BUILD_DIR", "/u/.bise/dev/build"),
+        ("BISE_HOME_WORKSPACE", "/u/bise"),
     ];
     let mut pairs = vec![("HOME", ts.as_str())];
     pairs.extend(inherited);
@@ -158,6 +168,20 @@ fn another_homes_default_is_not_an_override() {
     let kept = home_of(&[("HOME", &ts), ("BEND_PLUGINS_STATE", &own), ("BEND_CONFIG", "/u/cfg/config.toml")]);
     assert_eq!(kept.plugins_state(), PathBuf::from(&own));
     assert_eq!(kept.config_file(), PathBuf::from("/u/cfg/config.toml"));
+}
+
+#[test]
+fn a_throwaway_bise_home_never_takes_his_own_bise_defaults() {
+    // kb-fileprovider m_59512: BISE_HOME=<throwaway> with his shell's
+    // exports (no stamp): the plugin services ran on ~/.bise/plugin-data
+    let t = tmp("throwaway-home");
+    let ts = t.to_string_lossy().to_string();
+    let h = home_of(&[("HOME", "/u"), ("BISE_HOME", &ts), ("BEND_PLUGINS_DATA", "/u/.bise/plugin-data"), ("BEND_RUN_DIR", "/u/.bise/run")]);
+    assert_eq!(h.plugin_data_dir(), t.join("plugin-data"));
+    assert_eq!(h.run_dir(), t.join("run"));
+    // another path stays his override
+    let kept = home_of(&[("HOME", "/u"), ("BISE_HOME", &ts), ("BEND_PLUGINS_DATA", "/elsewhere/pd")]);
+    assert_eq!(kept.plugin_data_dir(), PathBuf::from("/elsewhere/pd"));
 }
 
 #[test]

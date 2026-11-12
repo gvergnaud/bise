@@ -160,11 +160,13 @@ pub const VARS: &[Var] = &[
     test("BISE_GITHUB_API", "the GitHub API base (tests: a stub server)"),
     user("BISE_HOME", "where bise keeps its state (~/.bise)"),
     // a test's: a hub started by the CLI or the ambient core keeps it, or
-    // its home check takes the real $HOME/bise (amb-core m_8700); the hub
-    // sets it for its agents itself
-    test("BISE_HOME_WORKSPACE", "bise's home workspace (tests); a hub passes it to its agents"),
+    // its home check takes the real $HOME/bise (amb-core m_8700). A Home
+    // path var (Home::bise_root): every child gets it from Home::exports,
+    // with its stamp, so an inherited one is dropped like the others
+    test("BISE_HOME_WORKSPACE", "bise's home workspace (tests; a Home path, exported with its stamp)"),
     user("BISE_HYPERLINKS", "terminal hyperlinks on or off"),
     user("BISE_IDLE_EXIT", "how long a hub without a UI waits before it quits"),
+    test_input("BISE_MARKS_BENCH", "a file to bench the marks walk on (an ignored test)"),
     test("BISE_MISTRAL_URL", "Mistral's API base for the connectors' catalog, connect and gateway calls (a fake Mistral in tests)"),
     user("BISE_MODEL", "the main model"),
     internal("BISE_MODELS_FILE", "the merged model catalog, for the REPLs"),

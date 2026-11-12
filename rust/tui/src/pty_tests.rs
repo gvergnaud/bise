@@ -54,9 +54,12 @@ fn the_shell_gets_his_settings_and_nothing_of_bise_or_a_test_run() {
     for (k, v) in [("PATH", "/usr/bin:/bin"), ("HOME", "/h"), ("LANG", "fr_FR.UTF-8"), ("EDITOR", "nvim"), ("BISE_HOME", "/h/.bise"), ("MISTRAL_API_KEY", "k")] {
         assert_eq!(get(k).as_deref(), Some(v), "lost {k}");
     }
-    for k in ["SB_SOCKET", "BISE_APP_ROOT", "BEND_SESSION_FILE", "BISE_OWNERS", "BISE_TEST_HOME", "SB_STATE_DIR", "BISE_HOME_WORKSPACE"] {
+    for k in ["SB_SOCKET", "BISE_APP_ROOT", "BEND_SESSION_FILE", "BISE_OWNERS", "BISE_TEST_HOME", "SB_STATE_DIR"] {
         assert_eq!(get(k), None, "{k} reached his shell");
     }
+    // a Home path (Home::bise_root), exported with its stamp like BEND_CONFIG
+    assert_eq!(get("BISE_HOME_WORKSPACE").as_deref(), Some("/t/ws"));
+    assert!(get("BISE_EXPORTS_FOR").is_some());
     assert_eq!(get("TERM").as_deref(), Some("xterm-256color"));
     assert_eq!(get("COLORTERM").as_deref(), Some("truecolor"));
 }

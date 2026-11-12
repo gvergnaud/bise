@@ -300,10 +300,6 @@ impl Shell {
                 ("SB_SOCKET", self.opts.paths.agent_socket().into()),
                 ("BEND_WIRE_LOG", adir.join("wire.log").into()),
                 ("SB_AGENT", a.name.clone().into()),
-                // the hub's home workspace (taste.md, people.md): an agent's
-                // `~/bise` is its shell's HOME, not this hub's when the home
-                // is elsewhere (a QA hub, amb-tools m_6141)
-                ("BISE_HOME_WORKSPACE", bise_home::Home::from_env().bise_root().into()),
                 // which model: config.toml `model`, or `agent_model` (BISE-142)
                 ("BISE_ROLE", (if a.is_main { "main" } else { "agent" }).into()),
                 // its own model and effort, over both (BISE-135: /model)

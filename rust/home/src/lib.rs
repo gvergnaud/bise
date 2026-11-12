@@ -10,6 +10,8 @@
 //! `.env`, `prefs.json`, `sessions/`, `hubs/<name>-<hash>/`, `images/`,
 //! `crashes/`, `plugins.json`, `plugin-data/`, `cache/` (indexes),
 //! `run/` (0700), `drafts/`, `usage/` (the usage counts), `dev/{versions,build}`.
+//! His visible folder, the home workspace: `~/bise`, `<root>/bise` under an
+//! explicit `$BISE_HOME` ([`Home::bise_root`]).
 //!
 //! Each path keeps its env override (`BEND_CONFIG`, `BEND_SESSIONS_DIR`,
 //! ...). The harness exports them all at its start ([`Home::exports`]),
@@ -67,7 +69,7 @@ pub const DICTATION_DIR: &str = "dictation";
 pub const EXPORTS_FOR: &str = "BISE_EXPORTS_FOR";
 
 /// The env overrides of single paths, in the order they are exported.
-pub const PATH_VARS: [&str; 8] = [
+pub const PATH_VARS: [&str; 9] = [
     "BEND_CONFIG",
     "BEND_SESSIONS_DIR",
     "BEND_IMAGE_DIR",
@@ -76,6 +78,7 @@ pub const PATH_VARS: [&str; 8] = [
     "BEND_RUN_DIR",
     "SB_VERSIONS_DIR",
     "SB_BUILD_DIR",
+    "BISE_HOME_WORKSPACE",
 ];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -86,8 +89,6 @@ pub struct Home {
     root: PathBuf,
     /// The single-path overrides from the environment that apply.
     over: BTreeMap<&'static str, PathBuf>,
-    /// `$BISE_HOME_WORKSPACE` (a test setting): [`Home::bise_root`].
-    workspace: Option<PathBuf>,
 }
 
 /// An environment lookup: the real one, or a map in tests. Empty = unset.
@@ -116,8 +117,7 @@ impl Home {
         } else {
             PATH_VARS.iter().filter_map(|k| get(k).map(|v| (*k, PathBuf::from(v)))).collect()
         };
-        let workspace = get("BISE_HOME_WORKSPACE").map(PathBuf::from);
-        let mut h = Home { user, root, over, workspace };
+        let mut h = Home { user, root, over };
         h.drop_foreign_defaults();
         h
     }
@@ -131,18 +131,22 @@ impl Home {
             return;
         }
         let user = self.user.to_string_lossy().into_owned();
+        // with $BISE_HOME at another root, the user's own ~/.bise defaults
+        // are foreign too: a throwaway home's plugin services ran on his
+        // real plugin data (kb-fileprovider m_59512)
+        let explicit = self.explicit();
         self.over.retain(|k, v| {
             let v = v.to_string_lossy();
             !default_suffixes(k)
                 .iter()
-                .any(|suffix| v.strip_suffix(suffix.as_str()).is_some_and(|home| !home.is_empty() && home != user))
+                .any(|suffix| v.strip_suffix(suffix.as_str()).is_some_and(|home| !home.is_empty() && (home != user || explicit)))
         });
     }
 
     /// A home at `root` (tests, tools).
     pub fn at(root: impl Into<PathBuf>) -> Home {
         let root = root.into();
-        Home { user: root.clone(), root, over: BTreeMap::new(), workspace: None }
+        Home { user: root.clone(), root, over: BTreeMap::new() }
     }
 
     fn or(&self, var: &str, default: PathBuf) -> PathBuf {
@@ -158,15 +162,12 @@ impl Home {
     /// workspace where agents write (docs/ambient-pages.md §5.1, a plain
     /// folder without git), plugins' documents, taste.md and people.md;
     /// shared-kb's Finder domain shows its entries. `$BISE_HOME_WORKSPACE`
-    /// when set (the tests), else `<root>/bise` under an explicit root (a
-    /// throwaway `$BISE_HOME` never reaches his real ~/bise), else
-    /// `$HOME/bise`.
+    /// when set (the tests; a path var, exported with its stamp), else
+    /// `<root>/bise` under an explicit root (a throwaway `$BISE_HOME` never
+    /// reaches his real ~/bise), else `$HOME/bise`.
     pub fn bise_root(&self) -> PathBuf {
-        match &self.workspace {
-            Some(ws) => ws.clone(),
-            None if self.explicit() => self.root.join("bise"),
-            None => self.user.join("bise"),
-        }
+        let default = if self.explicit() { self.root.join("bise") } else { self.user.join("bise") };
+        self.or("BISE_HOME_WORKSPACE", default)
     }
 
     /// `$HOME` (else `/tmp`): the user's own dirs (`~/.agents`, `~/.vibe`).
@@ -451,6 +452,7 @@ impl Home {
             ("BEND_RUN_DIR", s(self.run_dir())),
             ("SB_VERSIONS_DIR", s(self.versions_dir())),
             ("SB_BUILD_DIR", s(self.build_dir())),
+            ("BISE_HOME_WORKSPACE", s(self.bise_root())),
         ];
         // an explicit home only: ~/.bise is the default
         let bise = self.explicit().then(|| s(self.root.clone()));
@@ -481,7 +483,7 @@ fn stamp_of(home: Option<&str>, bise: Option<&str>, root: &Path) -> String {
 fn default_suffixes(var: &str) -> Vec<String> {
     const PROBE: &str = "/bise-probe-home";
     let user = PathBuf::from(PROBE);
-    let probe = Home { root: user.join(".bise"), user, over: BTreeMap::new(), workspace: None };
+    let probe = Home { root: user.join(".bise"), user, over: BTreeMap::new() };
     probe
         .exports()
         .into_iter()
