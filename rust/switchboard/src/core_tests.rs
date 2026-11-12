@@ -931,6 +931,16 @@ fn clean_claims_end_and_a_new_edit_claims_again() {
     assert_eq!(of(&others(&t, "a"), "b"), vec!["tests/k.txt".to_string()]);
 }
 
+/// land-decide: only main's land job decides (its --add <file> takes a
+/// file other agents changed too); a task's never does.
+#[test]
+fn only_mains_land_job_decides() {
+    let mut t = T::new();
+    t.spawn_task("a");
+    assert!(t.hub.land_job(MAIN, true, "m", vec![]).unwrap().decides);
+    assert!(!t.hub.land_job("a", true, "m", vec![]).unwrap().decides);
+}
+
 /// disk-hygiene (hub/disk.bend): main hears once when the disk goes under
 /// 40 GB, not while it hovers under 45, and again after it climbed back.
 #[test]

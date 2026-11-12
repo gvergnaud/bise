@@ -201,6 +201,11 @@ the shared tree"), made a command so no agent has to get it right alone:
    not claim: refused, says `.gitignore` or `--add`), so `git status`
    there is clean after; a shared worktree follows the shared rule
    (issue 12, `land_pick.rs`).
+5. A file two agents changed is refused to both ("main decides"). Main
+   decides by naming that exact file: `sb land --add <file>` from main
+   lands it (a folder `--add` or main's own edits never do); the answer
+   names each such file and its agents, and each of them hears it in
+   its thread (land-decide).
 
 **From a worktree** (bigger change, one agent or several):
 

@@ -5,6 +5,9 @@
 //! the claims over there go to sb-core ([`claims_clean`]). A land that
 //! moved the trunk starts bise.toml's `[land] after` job from this
 //! thread, as main's process ([`crate::land_after`]: the tip check).
+//! land-decide: a land where main took other agents' files on its word
+//! names them in its answer and tells each of those agents (bise's
+//! message, `IHubMsg`: an entry in its thread, it doesn't wake it).
 //!
 //! land-wait: one land per place at a time (`land_queue::Queue::claim`):
 //! a second is refused at once. The `sb` waits for its land
@@ -116,9 +119,14 @@ impl Shell {
                     if let Some(e) = &o.push_error {
                         text = format!("{} ({})", text, e);
                     }
-                    let note = crate::land::left_out_note(&o.left_out);
-                    if !note.is_empty() {
-                        text = format!("{}. {}", text, note);
+                    for note in [crate::land::left_out_note(&o.left_out), crate::land_pick::decided_note(&o.decided)] {
+                        if !note.is_empty() {
+                            text = format!("{}. {}", text, note);
+                        }
+                    }
+                    // land-decide: each agent whose files main took hears it (bise's entry, no wake)
+                    for (to, text) in crate::land_pick::decided_tells(&o.decided, &o.target, &o.sha) {
+                        let _ = tx.send(Msg::input(Input::HubMsg { to, text }));
                     }
                     (json!({"ok": true, "text": text.clone()}), Feed::info(text))
                 }
