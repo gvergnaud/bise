@@ -405,14 +405,28 @@ fn to_prune(installed: &[release::Installed], keep: usize, current: Option<&Path
         .collect()
 }
 
-fn prune(inst: &Install) {
+/// What a prune removes: nothing under an explicit root (a try's throwaway
+/// `BISE_HOME`): its install shares his `~/.local/share/bise/versions`,
+/// write-once dirs it may add to, but its `current` is not his, so it never
+/// judges what his hubs still need (architect m_62738). Else [`to_prune`].
+fn prune_dirs(explicit: bool, inst: &Install, ps: &str, leased: &dyn Fn(&Path) -> bool) -> Vec<PathBuf> {
+    if explicit {
+        return Vec::new();
+    }
+    to_prune(&inst.installed(), KEEP, inst.current().as_deref(), ps, leased)
+}
+
+fn prune(inst: &Install, home: &bise_home::Home) {
+    if home.explicit() {
+        eprintln!("{} update: no prune of {} under an explicit BISE_HOME: its versions may be another home's", now(), inst.versions_dir().display());
+        return;
+    }
     let ps = Command::new("ps")
         .args(["-axo", "command="])
         .output()
         .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
         .unwrap_or_default();
-    let current = inst.current();
-    for d in to_prune(&inst.installed(), KEEP, current.as_deref(), &ps, &release::in_use) {
+    for d in prune_dirs(false, inst, &ps, &release::in_use) {
         let _ = std::fs::remove_dir_all(d);
     }
 }
@@ -510,7 +524,7 @@ fn run(mode: Mode, say: &dyn Fn(String)) -> Result<(), String> {
     say(format!("downloading {} {} for {}…", rel.version, rel.id, target));
     install_release(&inst, &rel, &base)?;
     flip(&inst, &rel.id)?;
-    prune(&inst);
+    prune(&inst, &home);
     say(format!(
         "{} updated to {} ({}). a bise already running moves to it when you run {} again in its folder, or /restart in it (the agents keep running).",
         cmd, rel.id, rel.version, cmd
@@ -784,6 +798,12 @@ mod tests {
         let all = inst.installed();
         let dirs: Vec<PathBuf> = all.iter().map(|i| i.dir.clone()).collect();
         assert!(dirs.contains(&versions.join("root-8b00ed2b0123")) && dirs.contains(&versions.join("root")), "{dirs:?}");
+        // an explicit BISE_HOME (a try's) prunes nothing in the shared versions; the default home
+        // prunes as today (architect m_62738)
+        let today = to_prune(&all, KEEP, Some(&versions.join("v4")), "", &release::in_use);
+        assert!(!today.is_empty(), "the fixture has something to prune past KEEP");
+        assert_eq!(prune_dirs(true, &inst, "", &release::in_use), Vec::<PathBuf>::new());
+        assert_eq!(prune_dirs(false, &inst, "", &release::in_use), today);
         // past KEEP=2: both roots go
         let gone = to_prune(&all, 2, Some(&versions.join("v4")), "", &release::in_use);
         assert_eq!(gone.len(), 2, "{gone:?}");

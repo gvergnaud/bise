@@ -156,7 +156,7 @@ impl Home {
     }
 
     /// `$BISE_HOME` (or [`Home::at`]) chose the root, not `~/.bise`.
-    fn explicit(&self) -> bool {
+    pub fn explicit(&self) -> bool {
         self.root != self.user.join(".bise")
     }
 
