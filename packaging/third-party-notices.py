@@ -169,7 +169,7 @@ MANUAL = [
         dict(name="micromark-util-subtokenize 2.1.0", license="MIT", url="https://github.com/micromark/micromark",
              files=['office-md/micromark-util-subtokenize.LICENSE']),
     ]),
-    ("office/dist/office-sheet.js: the office viewer's xlsx grid, Univer and what it bundles (office/sdk/src/view/sheet.ts, xlsx-univer; built, never committed)", [
+    ("plugins/sheets/ai.mistral.vibe/views/grid/office-sheet.js: Sheets' xlsx grid, Univer and what it bundles (plugins/sheets/src/sheet.ts, xlsx-univer; built, never committed)", [
         dict(name="@flatten-js/interval-tree 1.1.3", license="MIT", url="https://github.com/alexbol99/flatten-interval-tree",
              files=['office-sheet/flatten-js__interval-tree.LICENSE']),
         dict(name="@floating-ui/core 1.8.0", license="MIT", url="https://github.com/floating-ui/floating-ui",

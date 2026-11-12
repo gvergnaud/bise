@@ -1,9 +1,9 @@
-//! bise's viewer of an xlsx artifact (office-artifacts plan
+//! bise's viewer of an image, pdf, video or site artifact (office-artifacts plan
 //! §4): `/a/<id>/view` (the newest version; the side panel keeps this src
 //! across versions) and `/a/<id>/<v>/view` (an older one). The server
 //! sends a small HTML shell; `kit/office/viewer.js` fetches the copy's bytes
 //! from `/a/<id>/<v>/<file>` (pages::site::copy_href) and draws them with a
-//! renderer per format (`kit/office/sheet.js`) on the office
+//! renderer per format (`kit/office/image.js`, `pdf.js`, `video.js`, `site.js`) on the office
 //! SDK's bundles (`/kit/office/office.js`).
 //!
 //! Which artifacts get the viewer is pages::site's one rule (served +

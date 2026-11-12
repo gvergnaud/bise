@@ -1,16 +1,18 @@
 /// <reference lib="dom" />
-// The viewer's xlsx grid, office/dist/office-sheet.js (page xlsx-univer,
-// architect m_37322): Univer (Apache-2.0, open-source packages only, no
-// Univer Pro) on a snapshot the SDK made (src/sheets/univer.ts). Built,
-// never committed (scripts/bins.sh office-sheet), loaded only by
-// kit/office/sheet.js when an xlsx is shown. Its stylesheet is in it as
-// text, put in the page once (one file to serve under the viewer's CSP).
+// Sheets' grid, office-sheet.js in its view's folder (page xlsx-univer,
+// architect m_37322, m_60401): Univer (Apache-2.0, open-source packages
+// only, no Univer Pro) on a snapshot the SDK made
+// (office/sdk/src/sheets/univer.ts). Built by office/sdk/build.ts with its
+// lockfile, never committed (scripts/bins.sh office-sheet places it), loaded
+// only by Sheets' book.js. Its stylesheet is in it as text, put in the
+// page once (one file to serve under the view's CSP).
 //
-// What it gives sheet.js: the grid in a container, the grid's snapshot
+// What it gives book.js: the grid in a container, the grid's snapshot
 // now (Univer's own save, for editsBetween), a call after each change the
 // user made (a typed value, a resize, a paste, an undo), his selection,
-// the light or dark look. The ribbon, the context menus and the sheet
-// menus are off: the viewer edits values, formulas and sizes, no more.
+// the light or dark look, read only when the document is (an older
+// version, no write grant). The ribbon, the context menus and the sheet
+// menus are off: Sheets edits values, formulas and sizes, no more.
 
 import { CommandType, LocaleType, LogLevel, mergeLocales, Univer, type IWorkbookData } from "@univerjs/core";
 import { FUniver } from "@univerjs/core/facade";
@@ -19,7 +21,7 @@ import { UniverSheetsCorePreset } from "@univerjs/preset-sheets-core";
 import enUS from "@univerjs/preset-sheets-core/locales/en-US";
 // @ts-expect-error esbuild's text loader (build.ts): the stylesheet as a string
 import css from "@univerjs/preset-sheets-core/lib/index.css";
-import type { UWorkbook } from "../sheets/univer.ts";
+import type { UWorkbook } from "../../../office/sdk/src/sheets/univer.ts";
 
 export type GridPlace = { sheet: string; range: string | null };
 
@@ -71,7 +73,7 @@ function style(): void {
 }
 
 /** The grid of `data` in `el` (which must have a size). */
-export function mountGrid(el: HTMLElement, data: UWorkbook, opts: { dark: boolean }): Grid {
+export function mountGrid(el: HTMLElement, data: UWorkbook, opts: { dark: boolean; readOnly?: boolean }): Grid {
   style();
   const univer = new Univer({
     theme,
@@ -96,6 +98,8 @@ export function mountGrid(el: HTMLElement, data: UWorkbook, opts: { dark: boolea
   const api = FUniver.newAPI(univer);
   // the cells keep the file's own font and sizes (designer m_37490): only the chrome is ours
   const book = api.createWorkbook({ ...(data as unknown as Partial<IWorkbookData>), locale: LocaleType.EN_US });
+  // a document he can't save (an older version, no write grant): Univer's viewer mode, no edit
+  if (opts.readOnly) void book.getWorkbookPermission().setReadOnly();
   // the headers' font: once the grid's render unit exists (it may come a frame later); a
   // header in Univer's face is a look, never a reason to fail the grid
   const header = { headerStyle: { fontFamily: FONT, fontSize: 11 } } as never;

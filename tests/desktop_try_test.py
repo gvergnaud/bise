@@ -168,11 +168,11 @@ def root_ships_what_a_version_dir_has():
     for what in ("cp -R plugins /r/root-abc.tmp/plugins", "cp -R office/dist /r/root-abc.tmp/office/dist",
                  "cp -R kit /r/root-abc.tmp/kit", "cp -R prompts /r/root-abc.tmp/prompts"):
         check(what in s, "root_script: %s" % what)
-    # the xlsx grid (never committed, so not in office/dist): from bins.sh, as versions.sh does
+    # the xlsx grid (never committed): from bins.sh into Sheets' view folder, as versions.sh does
     # (xlsx-fix: the app's roots 29c2d5aa6 and 824c1ca54 had no office-sheet.js, the viewer's
     # import of it a 404), and a failed build stops the root
     check("scripts/bins.sh path --src \"$PWD\" office-sheet)\" || { " in s
-          and "cp \"$g\" /r/root-abc.tmp/office/dist/office-sheet.js" in s, "root_script: the xlsx grid: %s" % s)
+          and "cp \"$g\" /r/root-abc.tmp/plugins/sheets/ai.mistral.vibe/views/grid/office-sheet.js" in s, "root_script: the xlsx grid: %s" % s)
     check("scripts/runtime_check.sh /r/root-abc.tmp\nrm -rf /r/root-abc && mv" in s, "root_script: checked whole before the rename: %s" % s)
 
 

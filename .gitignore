@@ -24,10 +24,10 @@ target/
 # Logs
 logs/
 
-# the viewer's xlsx grid (Univer, ~7 MB): built by scripts/bins.sh office-sheet
-# from office/sdk, never committed (architect m_37322)
-/office/dist/office-sheet.js
-/office/dist/office-sheet.js.key
+# Sheets' xlsx grid (Univer, ~7 MB): built by scripts/bins.sh office-sheet from
+# plugins/sheets/src with office/sdk's lockfile, never committed (architect m_37322, m_60401)
+/plugins/sheets/ai.mistral.vibe/views/grid/office-sheet.js
+/plugins/sheets/ai.mistral.vibe/views/grid/office-sheet.js.key
 
 # Dependencies
 node_modules/

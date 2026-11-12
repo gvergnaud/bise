@@ -1,0 +1,41 @@
+/* Sheets (plugins/sheets, docs/plugin-apps.md A5): Univer's grid on the host's tokens (the spec's
+   CSS variables and html[data-theme], apps/desktop/src/views/context.ts); the fallbacks are bise's
+   light theme, the dark ones under data-theme="dark", for a view opened alone. The save state is
+   the tab head's facts line (A6b), never drawn here; what is his (a note's mark) is the kit's
+   (~kit/view/view.css), here a box over its cells. */
+
+:root {
+  --g-ground: var(--color-background-primary, #f2ede2);
+  --g-ink: var(--color-text-primary, #1d1a17);
+  --g-dim: var(--color-text-secondary, #5a5349);
+  --g-faint: var(--color-text-tertiary, #8a8174);
+  --g-line: var(--color-border-secondary, #1d1a171c);
+  --g-danger: var(--color-text-danger, #b3261e);
+  --g-ui: var(--font-sans, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif);
+  --g-kicker: var(--font-text-sm-size, 12px);
+  /* the grid's dark gridlines read --line (plugins/sheets/src/sheet.ts) */
+  --line: var(--g-line);
+}
+:root[data-theme="dark"] {
+  --g-ground: var(--color-background-primary, #171513);
+  --g-ink: var(--color-text-primary, #ece6da);
+  --g-dim: var(--color-text-secondary, #b8b0a3);
+  --g-faint: var(--color-text-tertiary, #8a8276);
+  --g-line: var(--color-border-secondary, #ece6da1c);
+}
+
+html, body { margin: 0; height: 100%; background: var(--g-ground); color: var(--g-ink); }
+body { font: var(--g-kicker) / 1.4 var(--g-ui); }
+#grid { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.g-state { margin: 24px; color: var(--g-dim); font-size: var(--font-text-md-size, 13px); }
+.g-state[data-state="failed"] { color: var(--g-danger); }
+.g-foot { flex: none; border-top: 1px solid var(--g-line); padding: 6px 12px; color: var(--g-faint); font-size: var(--g-kicker); }
+.g-foot p { margin: 2px 0; }
+.g-view { flex: 1; min-height: 0; display: flex; }
+
+/* the grid: the chrome (formula bar, sheet tabs: Univer's DOM) in the app's sans, digits in
+   columns; the cell editor keeps the cell's own font */
+.g-sheet { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
+.g-univer { flex: 1; min-height: 0; position: relative; font-family: var(--g-ui); font-variant-numeric: tabular-nums; }
+/* a note's box over its cells (book.js places it as the grid moves) */
+.g-cell-mark { position: fixed; pointer-events: none; z-index: 5; }

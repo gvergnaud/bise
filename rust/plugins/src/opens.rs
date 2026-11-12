@@ -621,7 +621,6 @@ const fn b(key: &'static str, plugin: &'static str, app: &'static str, type_titl
 /// bise's own types not migrated yet (docs/plugin-apps.md A3, migration
 /// table): each step deletes its rows with its `viewer_kind` arms.
 pub const BUILTIN: &[Builtin] = &[
-    b("*.xlsx", "sheets", "Sheets", "Excel workbook", "xlsx", "sheet"),
     b("*.html", "sites", "Sites", "Web page", "site", "page"),
     b("*.htm", "sites", "Sites", "Web page", "site", "page"),
     Builtin { key: "*/index.html", plugin: "sites", app: "Sites", type_title: "Website", kind: "site", folder: true, icon: "page" },

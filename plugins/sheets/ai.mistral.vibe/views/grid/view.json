@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "name": "grid",
+  "description": "Open an Excel workbook or a CSV table in Sheets: the grid, where he types values and formulas and resizes columns and rows; his edits save themselves.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "file": {
+        "type": "object",
+        "properties": { "name": { "type": "string" }, "resourceUri": { "type": "string" } },
+        "required": ["name", "resourceUri"]
+      }
+    },
+    "required": ["file"]
+  },
+  "ui": {
+    "csp": { "connectDomains": [], "resourceDomains": [], "frameDomains": [], "baseUriDomains": [] },
+    "permissions": {}
+  },
+  "_meta": {
+    "ai.mistral.vibe/ui": {
+      "entrypoints": [
+        { "type": "file", "extensions": [".xlsx", ".csv"], "title": "Sheets" }
+      ]
+    },
+    "dev.bise/ui": {
+      "files": [
+        { "match": ["*.xlsx"], "title": "Excel workbook", "rank": "owner" },
+        { "match": ["*.csv"], "title": "CSV table", "rank": "default" }
+      ],
+      "write": true
+    }
+  }
+}

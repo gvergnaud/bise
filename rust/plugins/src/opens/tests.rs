@@ -255,21 +255,21 @@ fn which_app_opens_a_file() {
             (None, vec![])),
         ("an off plugin: not in the openers", Target::file("a.fake"), openers(vec![("zeta", op("open", "Z", &[("*.fake", D, false)]))]), Picks::new(),
             (Some("zeta#open"), vec![])),
-        ("built in until its step lands", Target::file("plan.xlsx"), Openers::default(), Picks::new(),
-            (Some("sheets#xlsx"), vec![])),
+        ("an xlsx has no built-in row: Sheets' own opener opens it (step 4)", Target::file("plan.xlsx"), Openers::default(), Picks::new(),
+            (None, vec![])),
         // a tie never falls to the alphabet against bise's own (architect m_60451)
-        ("aardvark's owner *.xlsx loses to the built-in", Target::file("plan.xlsx"),
-            openers(vec![("aardvark", op("open", "Aardvark", &[("*.xlsx", W, false)]))]), Picks::new(),
-            (Some("sheets#xlsx"), vec!["aardvark#open"])),
-        ("zeta's owner *.xlsx loses to the built-in", Target::file("plan.xlsx"),
-            openers(vec![("zeta", op("open", "Zeta", &[("*.xlsx", W, false)]))]), Picks::new(),
-            (Some("sheets#xlsx"), vec!["zeta#open"])),
-        ("aardvark wins with his pick", Target::file("plan.xlsx"),
-            openers(vec![("aardvark", op("open", "Aardvark", &[("*.xlsx", W, false)]))]), picked(&[("*.xlsx", "aardvark", "open")]),
-            (Some("aardvark#open"), vec!["sheets#xlsx"])),
-        ("zeta wins with his pick", Target::file("plan.xlsx"),
-            openers(vec![("zeta", op("open", "Zeta", &[("*.xlsx", W, false)]))]), picked(&[("*.xlsx", "zeta", "open")]),
-            (Some("zeta#open"), vec!["sheets#xlsx"])),
+        ("aardvark's owner *.page loses to the built-in", Target::file("plan.page"),
+            openers(vec![("aardvark", op("open", "Aardvark", &[("*.page", W, false)]))]), Picks::new(),
+            (Some("pages#page"), vec!["aardvark#open"])),
+        ("zeta's owner *.page loses to the built-in", Target::file("plan.page"),
+            openers(vec![("zeta", op("open", "Zeta", &[("*.page", W, false)]))]), Picks::new(),
+            (Some("pages#page"), vec!["zeta#open"])),
+        ("aardvark wins with his pick", Target::file("plan.page"),
+            openers(vec![("aardvark", op("open", "Aardvark", &[("*.page", W, false)]))]), picked(&[("*.page", "aardvark", "open")]),
+            (Some("aardvark#open"), vec!["pages#page"])),
+        ("zeta wins with his pick", Target::file("plan.page"),
+            openers(vec![("zeta", op("open", "Zeta", &[("*.page", W, false)]))]), picked(&[("*.page", "zeta", "open")]),
+            (Some("zeta#open"), vec!["pages#page"])),
         ("a bundled plugin wins a tie over a third party", Target::file("plan.xlsx"),
             openers_fp(vec![("aardvark", op("open", "A", &[("*.xlsx", W, false)])), ("sheets", op("open_sheet", "Sheets", &[("*.xlsx", W, false)]))], &["sheets"]), Picks::new(),
             (Some("sheets#open_sheet"), vec!["aardvark#open"])),
@@ -281,9 +281,9 @@ fn which_app_opens_a_file() {
             (None, vec![])),
         ("a bise page by its name", Target::file("plugin-apps.page"), Openers::default(), Picks::new(),
             (Some("pages#page"), vec![])),
-        ("a plugin's default entry stays behind a built-in", Target::file("plan.xlsx"),
-            openers(vec![("abc", op("open", "Abc", &[("*.xlsx", D, false)]))]), Picks::new(),
-            (Some("sheets#xlsx"), vec!["abc#open"])),
+        ("a plugin's default entry stays behind a built-in", Target::file("plan.page"),
+            openers(vec![("abc", op("open", "Abc", &[("*.page", D, false)]))]), Picks::new(),
+            (Some("pages#page"), vec!["abc#open"])),
         ("a built-in site folder", folder("site", &["index.html"]), Openers::default(), Picks::new(),
             (Some("sites#site"), vec![])),
     ];
@@ -409,8 +409,6 @@ fn every_builtin_key_is_canonical() {
     // the icon goes on the built-in opener, a design-system name
     let page = pick(&Target::file("a.page"), &Openers::default(), &Picks::new()).opener.unwrap();
     assert_eq!((page.icon.as_deref(), page.builtin), (Some("page"), true));
-    let xlsx = pick(&Target::file("a.xlsx"), &Openers::default(), &Picks::new()).opener.unwrap();
-    assert_eq!(xlsx.icon.as_deref(), Some("sheet"));
 }
 
 fn with_bise(extra: serde_json::Value) -> serde_json::Value {

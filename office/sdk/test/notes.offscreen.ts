@@ -1,5 +1,5 @@
 // The notes on an artifact, off-screen (art-notes; office-artifacts §5, §9b): the viewer of a
-// sheet and a site served by a fake page server (the routes of
+// a site served by a fake page server (the routes of
 // pages/artifact/{view,notes}.rs, the shell's tags as view.rs writes them, fake notes), drawn by
 // a headless Chrome driven over CDP: the marks (sent, draft, ✓ on the answering version), the
 // `note` button on a selection, the browser's list, a note typed and sent (the POSTs the server
@@ -30,7 +30,6 @@ const CHROME = process.env.CHROME || "/Applications/Google Chrome.app/Contents/M
 const fixture = (f: string) => readFileSync(join(root, "office", "fixtures", f));
 type Art = { kind: string; name: string; bytes: Buffer };
 const ARTS: Record<string, Art> = {
-  "q3-xlsx": { kind: "xlsx", name: "q3.xlsx", bytes: fixture("tiny.xlsx") },
   // a site with its own script (it rewrites nothing, it counts clicks), and one whose own meta CSP
   // keeps every script out, ours too (architect m_24172)
   "site-html": { kind: "site", name: "site.html", bytes: Buffer.from(`<!doctype html><html><head><meta charset="utf-8"><title>launch</title><style>body{font:16px/1.5 Georgia,serif;margin:32px;max-width:640px}</style></head><body><h1 id="title">Launch plan</h1><p id="intro">We open the waitlist on Monday and send the first invites on Thursday.</p><p>Pricing stays at twelve euros a month for the first year.</p><ul><li>press kit</li><li>demo video</li></ul><script>let n=0;document.addEventListener("click",()=>{n++})</script></body></html>`) },
@@ -205,41 +204,12 @@ async function dragOver(frameOffsetExpr: string, part: string, sel: string) {
 const results = [];
 const ok = (what: string) => { results.push(what); console.log(`ok · ${what}`); };
 try {
-  // ---- read the drawn ids, then seed the notes the hub would serve
-  await open("/a/q3-xlsx/view", 1100, false);
-  await until("document.querySelector('td[data-ref]')", "the grid");
-  const sheet = await evalText("biseOffice.view.place().sheet");
+  // ---- seed the notes the hub would serve
   const n = (id: string, status: string, at: Record<string, unknown>, text: string, extra = {}): Note => ({ id, status, at, text, version: 1, kind: "note", at_ms: 1, ...extra });
-  NOTES["q3-xlsx"] = [n("n1", "sent", { kind: "cell", sheet, range: "A2:B3" }, "these look low"), n("n2", "done", { kind: "cell", sheet, range: "A1" }, "say Q3", { done_in: VERSION })];
   NOTES["site-html"] = [n("n1", "sent", { kind: "block", block: "#intro", quote: "open the waitlist" }, "say which Monday"), n("n2", "done", { kind: "block", block: "body>p:nth-of-type(2)", quote: "twelve euros" }, "fifteen?", { done_in: VERSION }), n("n3", "sent", { kind: "block", block: "#gone", quote: "a sentence no longer there" }, "lost one")];
   NOTES["strict-html"] = [];
 
   // ---- the marks, each kind, in the browser (the list beside the drawing)
-  await open("/a/q3-xlsx/view", 1100, false);
-  await until("document.querySelector('td[data-mark]')", "a cell's mark");
-  assert.equal(await evaluate("document.querySelectorAll('td[data-mark=\"sent\"]').length"), 4, "A2:B3 marked sent");
-  assert.equal(await evaluate("document.querySelector('td[data-ref=\"A1\"]').dataset.mark"), "done", "✓ on the answering version");
-  assert.equal(await evaluate("document.querySelector('.office-notes .head').textContent"), await evaluate("BiseNotes.core.NW.listTitle('q3.xlsx', 2)"), "notes.js's own words");
-  ok("sheet: a range sent, a cell ✓ in the version that answered it, the list");
-
-  // ---- the desktop's door: the frame named bise-app posts the anchor to its parent
-  await open("/app?id=q3-xlsx", 1100, false);
-  await until("document.querySelector('iframe').contentDocument?.querySelector('td[data-ref=\"B4\"]')", "the framed grid");
-  await evaluate("window.got = []; window.addEventListener('message', (e) => window.got.push(e.data))");
-  const fd = frameDoc(true);
-  await clickOn(fd, 'td[data-ref="A3"]');
-  await clickOn(fd, 'td[data-ref="B4"]', "{ shiftKey: true }");
-  await until(`${fd}.querySelector('.office-note-btn')`, "the button in the frame");
-  assert.equal(await evaluate(`${fd}.querySelector('.office-note-btn').textContent`), "type to ask about it · ⌘C copy");
-  assert.equal(await evaluate(`!!${fd}.querySelector('.office-notes')`), false, "no list in the app: the composer is the maker's");
-  await shot("sheet-app-button-1100-light");
-  // typing adds it, as on a thread's quote (designer m_24098)
-  await evaluate(`${fd}.dispatchEvent(new KeyboardEvent('keydown', { key: 'w', bubbles: true }))`);
-  await until("window.got.length > 0", "the parent got it");
-  const got = await evalObj("window.got[0]", "the frame's message");
-  assert.deepEqual(Object.keys(got).sort(), ["anchor", "artifact", "bise", "key", "quote", "version"], "the four facts, its tag and his first character");
-  assert.deepEqual({ ...got, quote: undefined }, { bise: "anchor", artifact: "q3-xlsx", version: VERSION, anchor: { kind: "cell", sheet, range: "A3:B4" }, quote: undefined, key: "w" });
-  ok(`desktop door: the frame posted ${JSON.stringify(got.anchor)} with "${got.quote}"`);
 
   // ---- a site: its marks drawn in its own frame, a lost one moved, a selection noted and sent
   await open("/a/site-html/view", 1100, false);

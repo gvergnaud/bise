@@ -2,9 +2,9 @@
 // bise kit · the office viewer (office-artifacts plan §4): the shell the page server sends at
 // /a/<id>/view and /a/<id>/<v>/view (rust/switchboard/src/pages/artifact/view.rs) carries the
 // file's facts on main#bise-office; this fetches the copy's bytes and draws them with the
-// renderer of its kind (sheet.js; site.js for a site, art-notes; a picture, a pdf or a video opens
+// renderer of its kind (site.js for a site, art-notes; a picture, a pdf or a video opens
 // in Preview, plugins/media; a .md file or a docx in Writer, plugins/docs; a pptx in Slides,
-// plugins/slides), on the office SDK's bundle
+// plugins/slides; an xlsx or a csv in Sheets, plugins/sheets), on the office SDK's bundle
 // (/kit/office/office.js, office/dist in the app root). No inline script: the viewer's CSP
 // refuses one (architect m_23781).
 //
@@ -15,7 +15,7 @@
 //
 // window.biseOffice: { info, view, show(bytes) } for the swap in place (art-live's swap.js)
 // and the notes layer (art-notes): show() draws new bytes and keeps the user's place.
-const RENDERERS = { xlsx: "./sheet.js", site: "./site.js" };
+const RENDERERS = { site: "./site.js" };
 // (the shell always has it and writes each of these: pages/artifact/view.rs)
 const main = document.getElementById("bise-office");
 const info = {

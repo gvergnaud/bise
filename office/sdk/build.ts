@@ -5,7 +5,8 @@
 // src/ (one lockfile: this folder's node_modules as esbuild's nodePaths), into the plugin's view
 // folder: plugins/docs/src/markdown.ts and docx.ts into Writer's office-md.js (micromark + GFM)
 // and office-view.js (docx-preview); plugins/media/src/pdfjs.ts and pdf-worker.ts into
-// Preview's pdfjs.js and pdf.worker.js (pdf.js).
+// Preview's pdfjs.js and pdf.worker.js (pdf.js); plugins/sheets/src/sheet.ts into Sheets'
+// office-sheet.js (Univer; built, never committed: scripts/bins.sh places it).
 // Committed (cargo and nix never run pnpm); shipped in the app root
 // (scripts/versions.sh), where the page server and bise office run read it.
 // Beside each committed bundle, its types: <bundle>.d.ts re-exports its entry's
@@ -102,10 +103,10 @@ const hyphenation: Plugin = {
   },
 };
 
-// office-sheet.js: Univer, the viewer's xlsx grid (page xlsx-univer), browser only, loaded by
-//   kit/office/sheet.js alone; its stylesheet inside as text. NOT committed (architect m_37322:
-//   ~6.8 MB per rebuild in a public history): built by scripts/bins.sh office-sheet into
-//   office/dist (git-ignored), keyed by its inputs; --check leaves it to tests/office_check.sh.
+// office-sheet.js: Univer, Sheets' grid (page xlsx-univer), browser only, loaded by its book.js
+//   alone; its stylesheet inside as text. NOT committed (architect m_37322: ~6.8 MB per rebuild
+//   in a public history): built by scripts/bins.sh office-sheet into Sheets' view folder
+//   (git-ignored), keyed by its inputs; --check leaves it to tests/office_check.sh.
 //   Fails past 8 MB.
 type Bundle = {
   file: string;
@@ -146,7 +147,8 @@ const bundles: Bundle[] = [
   { file: "pdf.worker.js", entry: join("..", "..", "plugins", "media", "src", "pdf-worker.ts"), dir: PREVIEW, platform: "browser", minify: true, max: 1.5 * 1024 * 1024 },
   {
     file: "office-sheet.js",
-    entry: join("src", "view", "sheet.ts"),
+    entry: join("..", "..", "plugins", "sheets", "src", "sheet.ts"),
+    dir: join("plugins", "sheets", "ai.mistral.vibe", "views", "grid"),
     platform: "browser",
     minify: true,
     built: true,

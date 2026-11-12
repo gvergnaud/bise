@@ -34,8 +34,9 @@ fi
 # (a fresh tree, the tip gate's, has none): from bins.sh's cache, a copy on a hit
 "$root/scripts/bins.sh" office-sheet || { echo "FAIL office_check: scripts/bins.sh office-sheet failed"; exit 1; }
 want="$("$root/scripts/bins.sh" key office-sheet 2>/dev/null)"
-have="$(cat "$root/office/dist/office-sheet.js.key" 2>/dev/null)"
-if [ -z "$want" ] || [ ! -f "$root/office/dist/office-sheet.js" ] || [ "$want" != "$have" ]; then
-  echo "FAIL office_check: office/dist/office-sheet.js is missing or stale for its sources: run scripts/bins.sh office-sheet"; exit 1
+grid="plugins/sheets/ai.mistral.vibe/views/grid/office-sheet.js"
+have="$(cat "$root/$grid.key" 2>/dev/null)"
+if [ -z "$want" ] || [ ! -f "$root/$grid" ] || [ "$want" != "$have" ]; then
+  echo "FAIL office_check: $grid is missing or stale for its sources: run scripts/bins.sh office-sheet"; exit 1
 fi
 cd "$sdk" && pnpm -s check

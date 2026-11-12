@@ -856,10 +856,11 @@ fn a_view_calls_bound_outlasts_its_card() {
 fn a_gone_copy_is_the_viewers_404() {
     let (p, d) = pages();
     std::fs::create_dir_all(d.join("work")).unwrap();
-    // an xlsx: the kind bise's viewer still draws (a pdf opens in Preview, plugins/media)
-    std::fs::write(d.join("work/q3.xlsx"), "PK").unwrap();
+    // an html page: the kind bise's viewer still draws (an xlsx opens in Sheets, plugins/sheets;
+    // a pdf in Preview, plugins/media)
+    std::fs::write(d.join("work/q3.html"), "<p>q3</p>").unwrap();
     let arts = crate::artifacts::Store::new(&d);
-    let add = crate::artifacts::Add { target: "q3.xlsx".into(), agent: "perf".into(), by: "perf".into(), cwd: d.join("work").to_string_lossy().to_string(), ..Default::default() };
+    let add = crate::artifacts::Add { target: "q3.html".into(), agent: "perf".into(), by: "perf".into(), cwd: d.join("work").to_string_lossy().to_string(), ..Default::default() };
     let id = arts.add(&add, 10).unwrap().meta.id;
     assert_eq!(get(&p, &format!("/a/{id}/view")).status, 200);
     std::fs::remove_dir_all(d.join("artifacts").join(&id)).unwrap();

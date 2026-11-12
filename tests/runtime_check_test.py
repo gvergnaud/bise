@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""scripts/runtime_check.sh: a runtime whose viewer loads the xlsx grid must carry
-office/dist/office-sheet.js (xlsx-fix: the app's roots and versions/9552c21a8 shipped
+"""scripts/runtime_check.sh: a runtime whose viewer (or Sheets' view) loads the xlsx grid must
+carry office-sheet.js beside it (xlsx-fix: the app's roots and versions/9552c21a8 shipped
 without it, the viewer's import a 404), and every build that ships one runs the check.
 Temp dirs only; < 1 s.
 
@@ -57,6 +57,19 @@ d = root(grid=False)
 put(d, "office/dist/office-sheet.js", "")
 rc, _ = run(d)
 check(rc == 1, "an empty grid bundle is no grid")
+
+# Sheets' grid in its view folder (architect m_60401): the view loads it, the runtime carries it
+GRID = "plugins/sheets/ai.mistral.vibe/views/grid"
+def sheets(grid=True):
+    d = root(grid_import=False, grid=False)
+    put(d, GRID + "/book.js", 'import("./office-sheet.js")')
+    if grid:
+        put(d, GRID + "/office-sheet.js")
+    return d
+rc, _ = run(sheets())
+check(rc == 0, "Sheets' view with its grid passes")
+rc, err = run(sheets(grid=False))
+check(rc == 1 and GRID + "/office-sheet.js" in err, "Sheets' view without its grid fails and says so: %r" % err)
 
 # every build that ships a runtime runs it on what it made
 for rel, needle in (("scripts/versions.sh", 'scripts/runtime_check.sh" "$tmp"'),

@@ -100,7 +100,7 @@ build_from() {
   # again, loudly, by bin_path below (it compiles the missing one alone)
   local want=(repl-live bend-jsrt) pf
   if [ -f "$src/bend/hub/main.bend" ] || [ -f "$src/hub/main.bend" ]; then want+=(sb-core); fi
-  if [ -f "$src/office/sdk/src/view/sheet.ts" ]; then want+=(office-sheet); fi
+  if [ -f "$src/plugins/sheets/src/sheet.ts" ] || [ -f "$src/office/sdk/src/view/sheet.ts" ]; then want+=(office-sheet); fi
   "$REPO/scripts/bins.sh" prefetch --src "$src" "${want[@]}" $BINS_ALSO &
   pf=$!
 
@@ -179,9 +179,15 @@ build_from() {
   # <app root>/office/dist/office.js; the page server serves office.js to
   # the viewer at /kit/office/ and to the views at ~kit/office/v1/ (docs/office.md)
   if [ -d "$src/office/dist" ]; then mkdir -p "$tmp/office"; cp -R "$src/office/dist" "$tmp/office/dist"; fi
-  # and the xlsx grid (Univer), built, never committed: bins.sh's cache (xlsx-univer)
-  if [ -f "$src/office/sdk/src/view/sheet.ts" ]; then
-    local grid; grid="$("$REPO/scripts/bins.sh" path --src "$src" office-sheet)" || { say "bins.sh path office-sheet failed"; exit 1; }
+  # and the xlsx grid (Univer), built, never committed: bins.sh's cache (xlsx-univer), in
+  # Sheets' view folder (plugins/ copied above); an older source tree kept it in office/dist
+  local grid
+  if [ -f "$src/plugins/sheets/src/sheet.ts" ]; then
+    grid="$("$REPO/scripts/bins.sh" path --src "$src" office-sheet)" || { say "bins.sh path office-sheet failed"; exit 1; }
+    cp "$grid" "$tmp/plugins/sheets/ai.mistral.vibe/views/grid/office-sheet.js"
+    rm -f "$tmp/plugins/sheets/ai.mistral.vibe/views/grid/office-sheet.js.key"
+  elif [ -f "$src/office/sdk/src/view/sheet.ts" ]; then
+    grid="$("$REPO/scripts/bins.sh" path --src "$src" office-sheet)" || { say "bins.sh path office-sheet failed"; exit 1; }
     cp "$grid" "$tmp/office/dist/office-sheet.js"; rm -f "$tmp/office/dist/office-sheet.js.key"
   fi
   if [ -d "$src/computer-use/extension" ]; then

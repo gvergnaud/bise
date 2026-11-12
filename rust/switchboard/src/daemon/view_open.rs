@@ -204,7 +204,7 @@ mod tests {
     fn meta(by: &str, versions: &[(u64, Option<&str>)]) -> Meta {
         let versions = versions
             .iter()
-            .map(|&(v, copy)| Version { v, at_ms: v * 10, target: format!("/w/q3-v{v}.xlsx"), copy: copy.map(str::to_string), ..Default::default() })
+            .map(|&(v, copy)| Version { v, at_ms: v * 10, target: format!("/w/q3-v{v}.html"), copy: copy.map(str::to_string), ..Default::default() })
             .collect();
         Meta { id: "q3".into(), by: by.into(), versions, ..Default::default() }
     }
@@ -212,7 +212,7 @@ mod tests {
     #[test]
     fn an_artifact_opens_in_the_frame_its_row_draws_today() {
         let base = "http://127.0.0.1:4";
-        let m = meta("t1", &[(1, Some("v1/q3.xlsx")), (2, Some("v2/q3.xlsx"))]);
+        let m = meta("t1", &[(1, Some("v1/q3.html")), (2, Some("v2/q3.html"))]);
         assert_eq!(frame_of(&m, None, base).as_deref(), Some("http://127.0.0.1:4/a/q3/view"), "the newest");
         assert_eq!(frame_of(&m, Some(2), base).as_deref(), Some("http://127.0.0.1:4/a/q3/view"));
         assert_eq!(frame_of(&m, Some(1), base).as_deref(), Some("http://127.0.0.1:4/a/q3/1/view"), "an older version");

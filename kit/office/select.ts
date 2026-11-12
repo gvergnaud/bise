@@ -1,8 +1,8 @@
 // bise kit · notes on an artifact in its viewer (office-artifacts plan §5, §9b; architect m_23874):
-// the selection layer and the marks, over every renderer (sheet.js,
-// site.js: a site draws its marks in its own frame through view.marks; a renderer may place its
-// notes itself through view.where, and say `bise:office-selection` when its selection moves with
-// no mouseup). One store (pages/artifact/notes.rs), two doors:
+// the selection layer and the marks, over every renderer (site.js: a site draws its marks in
+// its own frame through view.marks; a renderer may place its notes itself through view.where,
+// and say `bise:office-selection` when its selection moves with no mouseup). One store
+// (pages/artifact/notes.rs), two doors:
 //
 // - in the desktop's side panel (the frame's name is `bise-app`, art-desktop m_23900) a
 //   selection's `note` button posts {bise: FRAME.anchor, artifact, version, anchor, quote} to the
@@ -18,7 +18,7 @@
 // They are drawn again on each version (swap.js's `bise:office-drawn`), from /a/<id>/notes and
 // the artifact's SSE (`notes`); a note whose part is gone is `moved` in the list.
 //
-// Pure helpers (exported for office/sdk/test/viewer.test.ts): inRange, markOf, quoteOf, message.
+// Pure helpers (exported for office/sdk/test/viewer.test.ts): markOf, quoteOf, message.
 
 import { FRAME } from "/kit/office/frame.js";
 
@@ -34,25 +34,9 @@ const W = {
   moved: N ? N.NW.moved : "moved",
   doneIn: (v: number | string) => `✓ done in v${v}`,
   empty: {
-    xlsx: "no notes yet. select cells, then note.",
     site: "no notes yet. select some text, then note.",
   },
 };
-
-/** `B4` inside `B4:D9` (refs as the grid writes them). */
-export function inRange(ref: string | null | undefined, range: string | null | undefined) {
-  const p = (r: string | null | undefined) => {
-    const m = /^\$?([A-Z]{1,3})\$?(\d+)$/i.exec(r || "");
-    if (!m) return null;
-    let col = 0;
-    for (const ch of m[1].toUpperCase()) col = col * 26 + (ch.charCodeAt(0) - 64);
-    return { col, row: Number(m[2]) };
-  };
-  const [a, b = a] = String(range || "").split(":");
-  const c = p(ref), x = p(a), y = p(b);
-  if (!c || !x || !y) return false;
-  return c.col >= Math.min(x.col, y.col) && c.col <= Math.max(x.col, y.col) && c.row >= Math.min(x.row, y.row) && c.row <= Math.max(x.row, y.row);
-}
 
 /** What a note's mark is in version `v`: `draft`, `sent`, `done` (✓, the answering version),
  * or null (no mark: answered in an older version, or not his yet). */
@@ -116,13 +100,6 @@ function mount() {
     const q = (sel: string) => [...s.querySelectorAll<HTMLElement>(sel)];
     const esc = (v: unknown) => CSS.escape(String(v));
     switch (a.kind) {
-      case "cell": {
-        const tabs = q(".office-tabs button");
-        const tab = tabs.find((b) => b.textContent === a.sheet);
-        const shown = office!.view && office!.view.place && office!.view.place().sheet === a.sheet;
-        const els = shown ? q("td[data-ref]").filter((td) => inRange(td.dataset.ref, a.range)) : tab ? [tab] : [];
-        return { els, found: !!tab || !!shown };
-      }
       default:
         return { els: [], found: false };
     }
@@ -217,7 +194,7 @@ function mount() {
     const s = stage();
     if (!s) return null;
     if (office!.view && office!.view.box) return office!.view.box();
-    const parts = [...s.querySelectorAll("td.sel, .office-box")];
+    const parts = [...s.querySelectorAll(".office-box")];
     const r = parts.length ? parts.map((e) => e.getBoundingClientRect()) : [];
     const sel = window.getSelection();
     if (!r.length && sel && sel.rangeCount && !sel.isCollapsed) r.push(sel.getRangeAt(0).getBoundingClientRect());
@@ -228,7 +205,6 @@ function mount() {
     const s = stage();
     if (!s || !a) return "";
     if (office!.view && office!.view.quote) return quoteOf(office!.view.quote());
-    if (a.kind === "cell") return quoteOf([...s.querySelectorAll("td.sel")].map((td) => td.textContent).filter(Boolean).join(" "));
     return "";
   }
   // a mouseup, or a renderer's bise:office-selection (its target: the main)

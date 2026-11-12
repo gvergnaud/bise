@@ -7,7 +7,6 @@
     "moduleDetection": "auto",
     "allowImportingTsExtensions": true,
     "paths": {
-      "/kit/office/office-sheet.js": ["./office-sheet.d.ts"],
       "/kit/office/office*": ["../../office/dist/office*"],
       "/kit/office/*": ["./*"]
     },

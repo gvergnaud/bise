@@ -1,4 +1,4 @@
-/* bise kit · the office viewer (kit/office/viewer.js): the frame around an xlsx in
+/* bise kit · the office viewer (kit/office/viewer.js): the frame around an image, a pdf, a video or a site in
    the side panel (55% column) or a tab. Colors, fonts and spaces from tokens.css only; what the
    file itself says (a cell's fill, a slide's colors, the doc's styles) is set by the renderers.
    A selection, a picked tab or slide is ink; the accent is only for what is his (a note's mark,
@@ -18,24 +18,9 @@ body { font: var(--text-ui) / 1.4 var(--font-ui); }
 .office-foot { flex: none; border-top: 1px solid var(--line); padding: 6px 12px; color: var(--kick); font-size: var(--text-kicker); }
 .office-foot p { margin: 2px 0; }
 
-/* xlsx: Univer's grid (kit/office/sheet.js, office-sheet.js) and the save strip above it */
-.office-sheet { flex-direction: column; position: relative; }
-.office-univer { flex: 1; min-height: 0; position: relative; }
-/* the chrome (formula bar, sheet tabs: Univer's DOM) in the app's sans, digits in columns; the
-   cell editor keeps the cell's own font */
-.office-univer { font-family: var(--font-ui); font-variant-numeric: tabular-nums; }
-/* the save's words sit in the grid's foot, right of the sheet tabs: no shift of the grid */
-.office-save { position: absolute; right: 12px; bottom: 0; height: 36px; z-index: 6; display: flex; align-items: center; gap: 8px; font-size: var(--text-kicker); color: var(--dim); pointer-events: none; }
-.office-save button { pointer-events: auto; }
-.office-save[data-state="conflict"] .words, .office-save[data-state="failed"] .words { color: var(--ink); }
-.office-save button { font: inherit; color: var(--ink); background: none; border: 0; padding: 2px 4px; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
-.office-cell-mark { position: fixed; pointer-events: none; z-index: 5; }
-
 /* live edits (swap.js, designer m_23868, m_24118): the 28 px strip with the hub's words in
    text-2 (green is only the change mark), what a save changed outlined and tinted in --term-ok
    for 2 s, a --term-ok dot on changed thumbs and tabs until seen */
 .office-live { order: -1; flex: none; height: 28px; line-height: 28px; margin: 0; padding: 0 12px; border-bottom: 1px solid var(--line); color: var(--dim); font-size: var(--text-kicker); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .office-live .back { margin-left: 16px; color: var(--dim); text-decoration: none; }
 .office-live .back:hover { text-decoration: underline; }
-.office-changed { outline: 2px solid var(--term-ok) !important; outline-offset: -2px; background-image: linear-gradient(color-mix(in srgb, var(--term-ok) 14%, transparent), color-mix(in srgb, var(--term-ok) 14%, transparent)); transition: outline-color 300ms ease-out; }
-.office-tabs button.office-unseen::after { content: ""; display: inline-block; width: 6px; height: 6px; margin-left: 4px; border-radius: 50%; background: var(--term-ok); vertical-align: middle; }

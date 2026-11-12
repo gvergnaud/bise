@@ -1,0 +1,25 @@
+{
+  "//": "Sheets' view (ai.mistral.vibe/views/grid/): ES modules that import each other, @bise/view (./~kit/view/view.js) and the office SDK (./~kit/office/v1/office.js), both served by the hub beside the view (rootDirs maps them to kit/view-root, types only), and the grid's bundle (office-sheet.js, typed from src/sheet.ts). Emitted next to their .ts by scripts/ts_emit.ts and committed (cargo and the release never run node). src/ holds the grid bundle's entry, built by office/sdk/build.ts with its node_modules (architect m_60401: one lockfile; paths says the same to tsc). typescript is office/sdk's.",
+  "//paths": "office/sdk's node_modules for src/sheet.ts's packages (one lockfile); tsc maps a path without a package's exports, so its two subpath imports are named to their types",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "rootDirs": ["ai.mistral.vibe/views/grid", "../../kit/view-root"],
+    "paths": {
+      "@univerjs/core/facade": ["../../office/sdk/node_modules/@univerjs/core/lib/types/facade/index.d.ts"],
+      "@univerjs/preset-sheets-core/locales/*": ["../../office/sdk/node_modules/@univerjs/preset-sheets-core/lib/types/locales/*.d.ts"],
+      "*": ["../../office/sdk/node_modules/*"]
+    },
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": [],
+    "strict": true,
+    "alwaysStrict": false,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "//erasable": "no erasableSyntaxOnly here: the office SDK's types (~kit/office/v1) re-export office/sdk's sources, which use parameter properties, so they join this program; ts_emit's transpile keeps the view's own files to their types-only diff",
+  "include": ["ai.mistral.vibe/views/grid/*.ts", "../../office/sdk/src/sheets/exceljs.d.ts"]
+}

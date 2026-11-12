@@ -166,8 +166,10 @@ mod tests {
     #[test]
     fn the_builtin_types_open_with_no_plugin() {
         let a = AppOpeners::default();
-        let o = a.opened(&json!({"target": "/w/plan.xlsx", "kind": "file"}));
-        assert!(o.opener.as_ref().is_some_and(|o| o.builtin && o.type_key == "*.xlsx"), "{o:?}");
+        let o = a.opened(&json!({"target": "/w/plan.page", "kind": "file"}));
+        assert!(o.opener.as_ref().is_some_and(|o| o.builtin && o.type_key == "*.page"), "{o:?}");
+        // an xlsx is Sheets' (plugins/sheets, step 4): no built-in row left
+        assert_eq!(a.opened(&json!({"target": "/w/plan.xlsx", "kind": "file"})), Opened::default());
         assert_eq!(a.opened(&json!({"target": "/w/a.zip", "kind": "file"})), Opened::default());
         assert_eq!(a.opened(&json!({"target": "https://x.dev", "kind": "link"})), Opened::default());
     }
