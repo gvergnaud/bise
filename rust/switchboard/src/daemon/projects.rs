@@ -39,7 +39,7 @@ impl Projects {
     /// `daemon::run`, so the registration costs run no line of its own.
     pub(super) fn boot(home: &bise_home::Home, paths: &Paths) -> Projects {
         if bise_home::env::test_setting("SB_STATE_DIR").is_none() {
-            let home_ws = crate::paths::home_workspace();
+            let home_ws = bise_home::Home::from_env().bise_root();
             if bise_home::projects::canonical(&paths.workspace) != bise_home::projects::canonical(&home_ws) {
                 match bise_home::projects::add_path(home, &home_ws, &paths.workspace, None, now_ms()) {
                     Ok(bise_home::projects::Added::New(p)) => log_line(paths, &format!("projects: added as {}", p.name)),

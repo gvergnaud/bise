@@ -145,7 +145,7 @@ impl Shell {
     pub(super) fn start_here(&mut self, paths: &crate::paths::Paths) {
         use crate::first_run;
         let Some(pages) = self.pg.pages.clone() else { return };
-        let Some(html) = first_run::due(&paths.state, &paths.workspace, &crate::paths::home_workspace(), &self.opts.app_root) else {
+        let Some(html) = first_run::due(&paths.state, &paths.workspace, &bise_home::Home::from_env().bise_root(), &self.opts.app_root) else {
             return;
         };
         let p = crate::pages::store::Publish {
@@ -261,10 +261,10 @@ impl Shell {
                 // --taste: the rules of ~/bise/taste.md now (the frame says
                 // 'following your taste · N rules'); no file: nothing
                 let taste = r.taste.then(|| {
-                    std::fs::read_to_string(crate::paths::home_workspace().join("taste.md")).ok().map(|t| crate::pages::store::taste_rules(&t))
+                    std::fs::read_to_string(bise_home::Home::from_env().bise_root().join("taste.md")).ok().map(|t| crate::pages::store::taste_rules(&t))
                 });
                 if taste == Some(None) {
-                    return json!({"ok": false, "error": format!("--taste: no {} (read it, or publish without --taste)", crate::paths::home_workspace().join("taste.md").display())});
+                    return json!({"ok": false, "error": format!("--taste: no {} (read it, or publish without --taste)", bise_home::Home::from_env().bise_root().join("taste.md").display())});
                 }
                 let p = crate::pages::store::Publish {
                     taste: taste.flatten(),

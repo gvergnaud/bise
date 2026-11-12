@@ -10,7 +10,7 @@ pub fn core(args: &[String]) -> std::io::Result<i32> {
     // bise's home is the window's first row: on a fresh install its
     // folder (~/bise) is made here, never reported gone (amb-tools m_9345)
     if let Err(e) = switchboard::paths::ensure_home_workspace() {
-        eprintln!("ambient-core: cannot create {}: {}", switchboard::paths::home_workspace().display(), e);
+        eprintln!("ambient-core: cannot create {}: {}", bise_home::Home::from_env().bise_root().display(), e);
     }
     let paths = switchboard::paths::Paths::for_workspace(&ambient_workspace(args, true));
     let workspace = paths.workspace.to_string_lossy().to_string();
@@ -130,7 +130,7 @@ fn ambient_workspace(args: &[String], core: bool) -> std::path::PathBuf {
     match switchboard::paths::ensure_home_workspace() {
         Ok(d) => d,
         Err(e) => {
-            let d = switchboard::paths::home_workspace();
+            let d = bise_home::Home::from_env().bise_root();
             eprintln!("bise ambient: cannot create {}: {}", d.display(), e);
             std::process::exit(1);
         }
@@ -277,7 +277,7 @@ fn ambient_projects(how: Connector) -> (bend_tui::ambient::ConnectFor, bend_tui:
         ambient_connector(switchboard::paths::Paths::for_workspace(path), how.clone(), false)
     });
     let facts = bend_tui::ambient::ProjectFacts {
-        rows: Box::new(|| bise_home::projects::list(&bise_home::Home::from_env(), &switchboard::paths::home_workspace())),
+        rows: Box::new(|| bise_home::projects::list(&bise_home::Home::from_env(), &bise_home::Home::from_env().bise_root())),
         view: Box::new(|id| bend_tui::ambient::projects::read_view(&bise_home::Home::from_env().hub_dir(id))),
         running: Box::new(|path| {
             let pid = std::fs::read_to_string(switchboard::paths::Paths::for_workspace(path).pid_file()).ok();

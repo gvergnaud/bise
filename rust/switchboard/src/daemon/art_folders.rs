@@ -61,7 +61,7 @@ fn op_of(op: FolderOp) -> library::Op {
 
 /// The registry's rows but this hub's: (hub id, name, workspace).
 fn other_projects(home: &bise_home::Home, own: &str) -> Vec<(String, String, PathBuf)> {
-    bise_home::projects::list(home, &crate::paths::home_workspace())
+    bise_home::projects::list(home, &bise_home::Home::from_env().bise_root())
         .into_iter()
         .filter(|r| r.id != own && r.path.is_dir())
         .map(|r| (r.id, r.name, r.path))
@@ -113,7 +113,7 @@ impl Shell {
         let target = match to.filter(|t| !t.is_empty() && *t != own) {
             None => None,
             Some(t) => {
-                let rows = bise_home::projects::list(&self.opts.home, &crate::paths::home_workspace());
+                let rows = bise_home::projects::list(&self.opts.home, &bise_home::Home::from_env().bise_root());
                 match bise_home::projects::target(&rows, &t, &own) {
                     Ok(hub) => Some(hub),
                     Err(e) => return self.proto_error(id, tag, &e),

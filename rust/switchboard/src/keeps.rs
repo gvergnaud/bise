@@ -21,7 +21,7 @@ pub fn file(name: &str) -> Result<PathBuf, String> {
     if name != TASTE && name != PEOPLE {
         return Err(format!("{name}: bise keeps only {TASTE} and {PEOPLE}"));
     }
-    let p = crate::paths::home_workspace().join(name);
+    let p = bise_home::Home::from_env().bise_root().join(name);
     match std::fs::symlink_metadata(&p) {
         Ok(m) if !m.file_type().is_file() => Err(format!("{} is not a plain file: not touched", p.display())),
         _ => Ok(p),

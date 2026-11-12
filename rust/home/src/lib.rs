@@ -86,6 +86,8 @@ pub struct Home {
     root: PathBuf,
     /// The single-path overrides from the environment that apply.
     over: BTreeMap<&'static str, PathBuf>,
+    /// `$BISE_HOME_WORKSPACE` (a test setting): [`Home::bise_root`].
+    workspace: Option<PathBuf>,
 }
 
 /// An environment lookup: the real one, or a map in tests. Empty = unset.
@@ -114,7 +116,8 @@ impl Home {
         } else {
             PATH_VARS.iter().filter_map(|k| get(k).map(|v| (*k, PathBuf::from(v)))).collect()
         };
-        let mut h = Home { user, root, over };
+        let workspace = get("BISE_HOME_WORKSPACE").map(PathBuf::from);
+        let mut h = Home { user, root, over, workspace };
         h.drop_foreign_defaults();
         h
     }
@@ -139,7 +142,7 @@ impl Home {
     /// A home at `root` (tests, tools).
     pub fn at(root: impl Into<PathBuf>) -> Home {
         let root = root.into();
-        Home { user: root.clone(), root, over: BTreeMap::new() }
+        Home { user: root.clone(), root, over: BTreeMap::new(), workspace: None }
     }
 
     fn or(&self, var: &str, default: PathBuf) -> PathBuf {
@@ -149,6 +152,21 @@ impl Home {
     /// `$BISE_HOME` (or [`Home::at`]) chose the root, not `~/.bise`.
     fn explicit(&self) -> bool {
         self.root != self.user.join(".bise")
+    }
+
+    /// His visible bise folder: ~/bise (docs/plugin-apps.md A6), the home
+    /// workspace where agents write (docs/ambient-pages.md §5.1, a plain
+    /// folder without git), plugins' documents, taste.md and people.md;
+    /// shared-kb's Finder domain shows its entries. `$BISE_HOME_WORKSPACE`
+    /// when set (the tests), else `<root>/bise` under an explicit root (a
+    /// throwaway `$BISE_HOME` never reaches his real ~/bise), else
+    /// `$HOME/bise`.
+    pub fn bise_root(&self) -> PathBuf {
+        match &self.workspace {
+            Some(ws) => ws.clone(),
+            None if self.explicit() => self.root.join("bise"),
+            None => self.user.join("bise"),
+        }
     }
 
     /// `$HOME` (else `/tmp`): the user's own dirs (`~/.agents`, `~/.vibe`).
@@ -463,7 +481,7 @@ fn stamp_of(home: Option<&str>, bise: Option<&str>, root: &Path) -> String {
 fn default_suffixes(var: &str) -> Vec<String> {
     const PROBE: &str = "/bise-probe-home";
     let user = PathBuf::from(PROBE);
-    let probe = Home { root: user.join(".bise"), user, over: BTreeMap::new() };
+    let probe = Home { root: user.join(".bise"), user, over: BTreeMap::new(), workspace: None };
     probe
         .exports()
         .into_iter()

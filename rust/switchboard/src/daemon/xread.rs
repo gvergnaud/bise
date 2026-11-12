@@ -66,7 +66,7 @@ struct Proj {
 /// The project `p` (a name or a hub id) through the registry, never this
 /// hub itself.
 fn project(home: &bise_home::Home, p: &str, own: &str) -> Result<Proj, String> {
-    let rows = bise_home::projects::list(home, &crate::paths::home_workspace());
+    let rows = bise_home::projects::list(home, &bise_home::Home::from_env().bise_root());
     let id = bise_home::projects::target(&rows, p, own)?;
     let name = rows.iter().find(|r| r.id == id).map(|r| r.name.clone()).unwrap_or_else(|| id.clone());
     if !plain(&name) {
@@ -77,7 +77,7 @@ fn project(home: &bise_home::Home, p: &str, own: &str) -> Result<Proj, String> {
 
 /// Every registered project but this hub.
 fn projects(home: &bise_home::Home, own: &str) -> Vec<Proj> {
-    let rows = bise_home::projects::list(home, &crate::paths::home_workspace());
+    let rows = bise_home::projects::list(home, &bise_home::Home::from_env().bise_root());
     rows.iter()
         .filter(|r| r.id != own && plain(&r.name))
         .map(|r| Proj { name: r.name.clone(), state: home.hub_dir(&r.id) })

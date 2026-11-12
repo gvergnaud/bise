@@ -303,7 +303,7 @@ impl Shell {
                 // the hub's home workspace (taste.md, people.md): an agent's
                 // `~/bise` is its shell's HOME, not this hub's when the home
                 // is elsewhere (a QA hub, amb-tools m_6141)
-                ("BISE_HOME_WORKSPACE", crate::paths::home_workspace().into()),
+                ("BISE_HOME_WORKSPACE", bise_home::Home::from_env().bise_root().into()),
                 // which model: config.toml `model`, or `agent_model` (BISE-142)
                 ("BISE_ROLE", (if a.is_main { "main" } else { "agent" }).into()),
                 // its own model and effort, over both (BISE-135: /model)

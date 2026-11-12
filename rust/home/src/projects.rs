@@ -68,21 +68,10 @@ pub fn canonical(p: &Path) -> PathBuf {
     std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf())
 }
 
-/// The home workspace (docs/ambient-pages.md §5.1): `~/bise`, a plain
-/// folder without git for non-code work; `$BISE_HOME_WORKSPACE` when set
-/// (the tests: a throwaway folder, never the user's). The one rule: the
-/// hub (switchboard::paths), the TUI and the ambient core call it.
-pub fn home_workspace() -> PathBuf {
-    if let Some(d) = crate::env::test_setting("BISE_HOME_WORKSPACE") {
-        return PathBuf::from(d);
-    }
-    let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
-    home.join("bise")
-}
-
-/// `ws` is the home workspace: its hub's main is bise (bise desktop S2).
+/// `ws` is the home workspace ([`Home::bise_root`]): its hub's main is
+/// bise (bise desktop S2).
 pub fn is_home(ws: &Path) -> bool {
-    canonical(ws) == canonical(&home_workspace())
+    canonical(ws) == canonical(&Home::from_env().bise_root())
 }
 
 /// Whether `ws` is in the projects registry (the desktop app writes it

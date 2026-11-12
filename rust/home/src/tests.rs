@@ -61,6 +61,25 @@ fn bise_home_moves_everything() {
     }
 }
 
+// architect m_61822: a try with a throwaway BISE_HOME used his real ~/bise as
+// the home hub's workspace
+#[test]
+fn bise_root_never_leaves_a_throwaway_home() {
+    let p = |s: &str| PathBuf::from(s);
+    // a throwaway BISE_HOME: its own bise, never $HOME/bise
+    assert_eq!(home_of(&[("HOME", "/h"), ("BISE_HOME", "/t/try")]).bise_root(), p("/t/try/bise"));
+    // BISE_HOME at its default place, or unset: $HOME/bise
+    assert_eq!(home_of(&[("HOME", "/h"), ("BISE_HOME", "/h/.bise")]).bise_root(), p("/h/bise"));
+    assert_eq!(home_of(&[("HOME", "/h")]).bise_root(), p("/h/bise"));
+    // BISE_HOME_WORKSPACE wins over both
+    for env in [&[("HOME", "/h"), ("BISE_HOME", "/t/try")][..], &[("HOME", "/h"), ("BISE_HOME", "/h/.bise")][..]] {
+        let env = [env, &[("BISE_HOME_WORKSPACE", "/w/ws")][..]].concat();
+        assert_eq!(home_of(&env).bise_root(), p("/w/ws"), "{env:?}");
+    }
+    // desktop_try's world: a fake HOME, BISE_HOME = <fake>/.bise
+    assert_eq!(home_of(&[("HOME", "/f/home"), ("BISE_HOME", "/f/home/.bise")]).bise_root(), p("/f/home/bise"));
+}
+
 #[test]
 fn no_home_falls_back_to_tmp() {
     let h = home_of(&[]);

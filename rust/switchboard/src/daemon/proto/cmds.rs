@@ -53,7 +53,7 @@ impl Shell {
         if to == "bise" {
             return Ok(None);
         }
-        let rows = bise_home::projects::list(&self.opts.home, &crate::paths::home_workspace());
+        let rows = bise_home::projects::list(&self.opts.home, &bise_home::Home::from_env().bise_root());
         let hub = bise_home::projects::target(&rows, to, &self.project())?;
         let name = rows.iter().find(|r| r.id == hub).map_or_else(|| hub.clone(), |r| r.name.clone());
         Ok(Some((hub, name)))
