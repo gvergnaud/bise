@@ -24,6 +24,9 @@
 //! they carry no list at all (`env -i`); a child with another agent's
 //! tags, or with an empty list, is not. The hub itself and its ancestors
 //! are never killed (a hub an agent relaunched carries that agent's tag).
+//!
+//! At its start the hub also kills the REPLs an earlier hub left that it
+//! did not adopt (`stray_repls`, by their own tag): one session, one REPL.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -129,6 +132,43 @@ pub fn select(procs: &[Proc], hub: &str, want: &Want, sessions: &BTreeSet<u32>, 
         }
     }
     out.iter().filter_map(|p| by_pid.get(p).map(|x| (*x).clone())).collect()
+}
+
+/// The REPLs an earlier hub of this workspace left and this one did not
+/// adopt, pure: a process that runs a REPL binary (`repl-live`,
+/// `repl-scripted`), whose own tag (the last of its list: a REPL of a hub
+/// an agent started carries that agent's tag first) is this `hub`'s,
+/// spawned before `boot_ms`, and is none of the `adopted` pids. A start a
+/// hub's stop cut short (spawned, its `repl.json` not written yet) is
+/// one: adopted by no hub, it ran on as a second REPL of its agent's
+/// session once the next hub started the agent again.
+pub fn stray_repls(procs: &[Proc], hub: &str, adopted: &BTreeSet<u32>, boot_ms: u64) -> Vec<Proc> {
+    let is_repl = |c: &str| {
+        c.split_whitespace()
+            .next()
+            .and_then(|b| Path::new(b).file_name())
+            .is_some_and(|n| n.to_string_lossy().starts_with("repl-"))
+    };
+    procs
+        .iter()
+        .filter(|p| !p.zombie && !adopted.contains(&p.pid) && is_repl(&p.command))
+        .filter(|p| {
+            p.owners
+                .as_deref()
+                .and_then(|o| split(o).last())
+                .and_then(parse_tag)
+                .is_some_and(|t| t.hub == hub && t.ms < boot_ms)
+        })
+        .cloned()
+        .collect()
+}
+
+/// The strays (`stray_repls`) killed: SIGTERM, up to `grace`, SIGKILL.
+/// Returns the processes it signalled.
+pub fn reap_strays(hub: &str, adopted: &BTreeSet<u32>, boot_ms: u64, grace: Duration) -> Vec<Proc> {
+    let hit = stray_repls(&snapshot(), hub, adopted, boot_ms);
+    stop(&hit, grace);
+    hit
 }
 
 extern "C" {
@@ -277,10 +317,17 @@ fn signal(p: &Proc, sig: i32) {
 pub fn reap(hub: &str, want: &Want, sessions: &BTreeSet<u32>, grace: Duration) -> Vec<Proc> {
     let me = std::process::id();
     let hit = select(&snapshot(), hub, want, sessions, me);
+    stop(&hit, grace);
+    hit
+}
+
+/// SIGTERM to each of `hit`, up to `grace` for them to go, then SIGKILL
+/// to the ones still there (same pid, same start time).
+fn stop(hit: &[Proc], grace: Duration) {
     if hit.is_empty() {
-        return hit;
+        return;
     }
-    for p in &hit {
+    for p in hit {
         signal(p, SIGTERM);
     }
     let t0 = Instant::now();
@@ -302,7 +349,6 @@ pub fn reap(hub: &str, want: &Want, sessions: &BTreeSet<u32>, grace: Duration) -
             break;
         }
     }
-    hit
 }
 
 /// One line for the hub log: `3 (1234 sleep, 1240 bise, ...)`.
@@ -468,6 +514,36 @@ mod tests {
         procs[1].zombie = true;
         procs[1].owners = None;
         assert_eq!(pids(select(&procs, h, &want, &sids, 100)), vec![201, 204]);
+    }
+
+    /// A REPL an earlier hub spawned and this one did not adopt is a
+    /// stray (the 11:01 rollback left kb-plugin's 14502 so); never an
+    /// adopted one, one this hub spawned, another hub's, nor a REPL of a
+    /// test hub one of our agents runs (our tag first, its hub's last).
+    #[test]
+    fn stray_repls_are_the_unadopted_repls_of_earlier_hubs() {
+        let repl = |pid: u32, owners: &str| {
+            let mut x = p(pid, 1, Some(owners));
+            x.command = "/v/a74d417da/repl-live".into();
+            x
+        };
+        let mut not_repl = p(106, 1, Some("aa.t1.10"));
+        not_repl.command = "/bin/sleep 100".into();
+        let mut dead = repl(107, "aa.t1.10");
+        dead.zombie = true;
+        let procs = vec![
+            repl(101, "aa.t1.10"),          // adopted
+            repl(102, "aa.t1.20"),          // the cut start: a stray
+            repl(103, "aa.t2.200"),         // spawned by this hub
+            repl(104, "zz.t1.10"),          // another workspace's
+            repl(105, "aa.t1.10,tt.x.20"),  // a test hub's, run by t1
+            not_repl,
+            dead,
+        ];
+        let adopted: BTreeSet<u32> = [101].into();
+        assert_eq!(pids(stray_repls(&procs, "aa", &adopted, 100)), vec![102]);
+        // nothing adopted (no repl.json anywhere): every earlier one
+        assert_eq!(pids(stray_repls(&procs, "aa", &BTreeSet::new(), 100)), vec![101, 102]);
     }
 
 }

@@ -9,7 +9,7 @@
 //! probation (a death always does).
 
 use super::{
-    adopt, adoptable, busy_at, free_port, hash_keys, kill_pid, log_line, plugins_fingerprint,
+    adopt, adoptable, busy_at, free_port, hash_keys, port_free, kill_pid, log_line, plugins_fingerprint,
     prompt_is_stale, skill_roots, skills_fingerprint, stall_for_tests, supervise, write_logged, Msg, PromptInputs,
     Shell, PROMPT_PLUGINS_FILE,
 };
@@ -265,7 +265,11 @@ impl Shell {
         write_logged(&self.opts.paths, &adir.join("wire.log"), "");
         write_logged(&self.opts.paths, &adir.join("wire.offset"), "0");
         let _ = std::fs::remove_file(adir.join("repl.json"));
-        let port = match port.map(Ok).unwrap_or_else(free_port) {
+        // a switch's reload keeps its port, while it is free: the old
+        // REPL (adopted, not our child) may hold it a while yet, and a new
+        // one that cannot listen dies at startup (exit 48, EADDRINUSE) and
+        // fails the switch (the 11:01 rollback)
+        let port = match port.filter(|p| port_free(*p)).map(Ok).unwrap_or_else(free_port) {
             Ok(p) => p,
             Err(e) => {
                 let reason = format!("no free port: {}", e);

@@ -588,6 +588,11 @@ fn free_port() -> std::io::Result<u16> {
     Ok(l.local_addr()?.port())
 }
 
+/// No process listens on `port` now: a REPL can take it.
+fn port_free(port: u16) -> bool {
+    TcpListener::bind(("127.0.0.1", port)).is_ok()
+}
+
 impl Shell {
     /// Save how far each wire log was processed: the next hub adopts
     /// the REPLs from there.
@@ -1623,33 +1628,24 @@ fn write_role(paths: &Paths, adir: &Path, line: &str, key: &str) {
     }
 }
 
-fn kill_stale_repls(sh: &Shell) {
+/// The REPLs an earlier hub left that this one did not adopt
+/// (`procs::stray_repls`: by their tag, not by a `repl.pid` a cut start
+/// never wrote) are killed off the loop: one session, one REPL. `boot_ms`:
+/// before this hub spawned any.
+fn kill_stale_repls(sh: &Shell, boot_ms: u64) {
     for a in sh.hub.st.agents.values() {
-        if sh.pids.contains_key(&a.dir) {
-            // adopted at boot, or just spawned
-            continue;
+        if !sh.pids.contains_key(&a.dir) {
+            let _ = std::fs::remove_file(sh.opts.paths.agent_dir(&a.dir).join("repl.pid"));
         }
-        let f = sh.opts.paths.agent_dir(&a.dir).join("repl.pid");
-        let Ok(pid) = std::fs::read_to_string(&f) else {
-            continue;
-        };
-        let pid = pid.trim().to_string();
-        let cmdline = Command::new("ps")
-            .args(["-p", &pid, "-o", "command="])
-            .output()
-            .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
-            .unwrap_or_default();
-        if cmdline.contains("repl-live") {
-            log_line(
-                &sh.opts.paths,
-                &format!("killing a stale REPL of {} (pid {})", a.name, pid),
-            );
-            if let Ok(pid) = pid.parse() {
-                crate::procs::terminate(pid);
-            }
-        }
-        let _ = std::fs::remove_file(&f);
     }
+    let adopted: BTreeSet<u32> = sh.pids.values().map(|(_, p)| *p).collect();
+    let (hub, paths) = (sh.proc_hub.clone(), sh.opts.paths.clone());
+    std::thread::spawn(move || {
+        let hit = crate::procs::reap_strays(&hub, &adopted, boot_ms, crate::procs::STOP_GRACE);
+        if !hit.is_empty() {
+            log_line(&paths, &format!("stale REPLs of earlier hubs killed: {}", crate::procs::describe(&hit)));
+        }
+    });
 }
 
 pub fn run(opts: Opts) -> std::io::Result<()> {
@@ -1830,6 +1826,9 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
     sh.detect_flow();
     sh.ask_commit_style();
     sh.booting = true;
+    // before any REPL of this hub: what started earlier and is not
+    // adopted below is a stray (kill_stale_repls)
+    let boot_ms = now_ms();
     sh.step(Input::Boot);
     sh.booting = false;
     // mcp-apps: a views bridge an older hub left (its view cards closed
@@ -1841,7 +1840,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
         let (tx, (dir, claims)) = (sh.tx.clone(), sh.hub.shared_claims());
         std::thread::spawn(move || land::claims_clean(&tx, &dir, &claims));
     }
-    kill_stale_repls(&sh);
+    kill_stale_repls(&sh, boot_ms);
     sh.migrate_the_rest();
     sh.archived = sh.archived_dirs();
     sh.sweep_worktrees(None);
