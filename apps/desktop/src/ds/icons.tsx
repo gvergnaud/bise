@@ -16,7 +16,7 @@ export interface KindSource {
   readonly target?: string | null;
   readonly url?: string | null;
   /** the app that opens it, as the hub picked it (bend_plugins::opens): its icon wins */
-  readonly opener?: { readonly icon?: string | null; readonly builtin?: boolean } | null;
+  readonly opener?: { readonly icon?: string | null } | null;
 }
 
 // the words an artifact's kind says when it is no file (an agent's `--kind`, a PR, a link)
@@ -48,14 +48,15 @@ export function extOf(a: KindSource): string {
 }
 
 /**
- * The icon of an artifact: its app's (docs/plugin-apps.md A6b: a bise type's ds icon from
- * bend_plugins::opens' table; a plugin's own app draws as a file until its icon route serves),
- * else its kind word (a PR, a page, a link...), else a link for a url, else a file. Nothing here
- * reads a file's ending: the hub matched it once. Pure.
+ * The icon of an artifact: its app's (docs/plugin-apps.md A6b): the type's own icon, a ds name its
+ * app declares (A1's files[].icon, or bend_plugins::opens' table for bise's types), else the app's
+ * own (`/icon/<plugin>`, drawn as a file until its route serves); else its kind word (a PR, a page,
+ * a link...), else a link for a url, else a file. Nothing here reads a file's ending: the hub
+ * matched it once. Pure.
  */
 export function iconKindOf(a: KindSource): IconKind {
   const o = a.opener;
-  if (o != null) return o.builtin === true && isIconKind(o.icon) ? o.icon : "file";
+  if (o != null) return isIconKind(o.icon) ? o.icon : "file";
   const word = WORD[a.kind.toLowerCase()];
   if (word !== undefined) return word;
   return /^https?:\/\//iu.test(a.url ?? "") ? "link" : "file";

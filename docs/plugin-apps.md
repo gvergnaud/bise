@@ -66,7 +66,14 @@ An opener is a tool whose `_meta` has a view and a file entrypoint:
   strings, lowercase compare), `title`. Any other `type` is ignored here.
 - `dev.bise/ui.files[]` (bise's): `match` (1-16 globs), `title` (the
   type's name, 40 chars), `rank` (`owner` | `default` | `option`; default
-  `default`), `folder` (the match names a folder by what it holds).
+  `default`), `folder` (the match names a folder by what it holds),
+  `icon` (the type's own icon, a design-system name, one of
+  `opens::TYPE_ICONS`: image, video, audio, doc, sheet, deck, page, 3d;
+  another value: a warning, the icon dropped, the entry kept; none: the
+  app's `icon`). The row's opener carries the matched entry's icon, else
+  the app's `/icon/<plugin>`; the window draws a design-system name as
+  its monochrome line icon (designer m_62222). A plugin's own file per
+  type comes later, checked monochrome where the hub reads it.
   Globs: `*` and `**` and `?`, on the file's name, or on its path
   relative to a folder for a folder rule (`*/index.html`: a folder
   holding an index.html), or relative to the plugin's documents

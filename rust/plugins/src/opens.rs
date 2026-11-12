@@ -50,6 +50,9 @@ pub struct Entry {
     pub rank: OpenRank,
     /// its patterns name a folder by what it holds (`*/index.html`)
     pub folder: bool,
+    /// the type's own icon (A1's `files[].icon`): a design-system name,
+    /// one of [`TYPE_ICONS`]; none: the app's
+    pub icon: Option<String>,
 }
 
 /// One kind of file an opener makes (A1's `makes[]`).
@@ -170,8 +173,9 @@ fn title_of(v: Option<&Value>, what: &str) -> Result<String, String> {
 
 /// One `files[]` entry, checked: its globs canonical and shaped for
 /// what it names (a name; a folder's `<folder>/<child>`; a path under
-/// `@documents/`).
-fn file_entry(i: usize, v: &Value) -> Result<Entry, String> {
+/// `@documents/`). A bad `icon` drops the icon alone: its warning comes
+/// back beside the entry.
+fn file_entry(i: usize, v: &Value) -> Result<(Entry, Option<String>), String> {
     let at = format!("files[{i}]");
     let o = v.as_object().ok_or(format!("{at} must be an object"))?;
     let folder = match o.get("folder") {
@@ -203,7 +207,12 @@ fn file_entry(i: usize, v: &Value) -> Result<Entry, String> {
             keys.push(key);
         }
     }
-    Ok(Entry { keys, title: title_of(o.get("title"), &at)?, rank, folder })
+    let (icon, warn) = match o.get("icon") {
+        None => (None, None),
+        Some(Value::String(n)) if TYPE_ICONS.contains(&n.as_str()) => (Some(n.clone()), None),
+        Some(v) => (None, Some(format!("{at}.icon {v} must be one of {}; dropped", TYPE_ICONS.join(", ")))),
+    };
+    Ok((Entry { keys, title: title_of(o.get("title"), &at)?, rank, folder, icon }, warn))
 }
 
 fn make_of(i: usize, v: &Value) -> Result<Make, String> {
@@ -255,7 +264,10 @@ pub fn parse(plugin: &str, server: &str, tool: &Value) -> (Option<OpenerDecl>, V
         Some(Value::Array(list)) => {
             for (i, v) in list.iter().enumerate() {
                 match file_entry(i, v) {
-                    Ok(e) => entries.push(e),
+                    Ok((e, warn)) => {
+                        diags.extend(warn.map(|w| invalid(plugin, name, w)));
+                        entries.push(e);
+                    }
                     Err(why) => diags.push(invalid(plugin, name, format!("{why}; dropped"))),
                 }
             }
@@ -281,7 +293,7 @@ pub fn parse(plugin: &str, server: &str, tool: &Value) -> (Option<OpenerDecl>, V
             };
             if !entries.iter().any(|en| en.keys.contains(&key)) {
                 let title = format!("{} file", key.trim_start_matches("*.").to_uppercase());
-                entries.push(Entry { keys: vec![key], title, rank: OpenRank::Default, folder: false });
+                entries.push(Entry { keys: vec![key], title, rank: OpenRank::Default, folder: false, icon: None });
             }
         }
     }
@@ -577,6 +589,11 @@ pub struct Builtin {
 /// The design-system icons a built-in type may carry (A6b).
 pub const BUILTIN_ICONS: [&str; 6] = ["image", "video", "doc", "sheet", "deck", "page"];
 
+/// The design-system icons a type may declare as its own (A1's
+/// `files[].icon`, A6b): the window's monochrome line icons (ds
+/// `IconKind`, pinned by apps/desktop/src/ds/icons.test.tsx).
+pub const TYPE_ICONS: [&str; 8] = ["image", "video", "audio", "doc", "sheet", "deck", "page", "3d"];
+
 const fn b(key: &'static str, plugin: &'static str, app: &'static str, type_title: &'static str, kind: &'static str, icon: &'static str) -> Builtin {
     Builtin { key, plugin, app, type_title, kind, folder: false, icon }
 }
@@ -620,16 +637,18 @@ pub fn pick(target: &Target, openers: &Openers, picks: &Picks) -> Opened {
             let best = o
                 .entries
                 .iter()
-                .filter_map(|e| entry_match(&po.plugin, e, target).map(|k| (specificity(&k), e.rank, k, &e.title)))
+                .filter_map(|e| entry_match(&po.plugin, e, target).map(|k| (specificity(&k), e.rank, k, e)))
                 .max_by(|a, b| a.0.cmp(&b.0).then(b.1.cmp(&a.1)));
-            if let Some((spec, rank, key, title)) = best {
-                let opener = Opener { plugin: po.plugin.clone(), tool: o.tool.clone(), app: o.app.clone(), type_key: key, type_title: title.clone(), icon: po.icon.as_ref().map(|_| format!("{ICON_ROUTE}{}", po.plugin)), builtin: false };
+            if let Some((spec, rank, key, e)) = best {
+                // the type's own icon (a design-system name), else its app's
+                let icon = e.icon.clone().or_else(|| po.icon.as_ref().map(|_| format!("{ICON_ROUTE}{}", po.plugin)));
+                let opener = Opener { plugin: po.plugin.clone(), tool: o.tool.clone(), app: o.app.clone(), type_key: key, type_title: e.title.clone(), icon, builtin: false };
                 cands.push(Candidate { opener, rank, spec, first_party: po.first_party });
             }
         }
     }
     for bi in BUILTIN {
-        let entry = Entry { keys: vec![bi.key.to_string()], title: bi.type_title.to_string(), rank: OpenRank::Owner, folder: bi.folder };
+        let entry = Entry { keys: vec![bi.key.to_string()], title: bi.type_title.to_string(), rank: OpenRank::Owner, folder: bi.folder, icon: None };
         if let Some(key) = entry_match(bi.plugin, &entry, target) {
             // its plugin opens this itself now (migrated, or both on a
             // branch): the plugin's own opener stands, listed once

@@ -171,7 +171,7 @@ fn op(tool: &str, app: &str, entries: &[(&str, OpenRank, bool)]) -> OpenerDecl {
         tool: tool.into(),
         uri: format!("ui://x/{tool}"),
         app: app.into(),
-        entries: entries.iter().map(|(k, r, f)| Entry { keys: vec![k.to_string()], title: format!("{k} file"), rank: *r, folder: *f }).collect(),
+        entries: entries.iter().map(|(k, r, f)| Entry { keys: vec![k.to_string()], title: format!("{k} file"), rank: *r, folder: *f, icon: None }).collect(),
         makes: vec![],
         write: false,
         isolate: Isolate::View,
@@ -443,4 +443,32 @@ fn a_plugins_icon_is_its_first_openers_served_by_the_hub() {
     let opened = pick(&Target::file("a.fake"), &o, &Picks::new());
     assert_eq!(opened.opener.unwrap().icon.as_deref(), Some("/icon/fake-opener"));
     assert_eq!(opened.others[0].icon, None, "fake-claim has none: the window's own");
+}
+
+#[test]
+fn a_type_may_declare_its_own_icon_a_design_system_name() {
+    let entry = |icon: Value| tool("open", json!({"ui": {"resourceUri": "ui://p/v"}, "dev.bise/ui": {"files": [{"match": ["*.x"], "title": "X", "icon": icon}]}}));
+    let (o, d) = parse("p", "srv", &entry(json!("video")));
+    assert_eq!((o.unwrap().entries[0].icon.as_deref(), d), (Some("video"), vec![]));
+    for bad in [json!("spreadsheet"), json!("./x.svg"), json!("/icon/p"), json!(3)] {
+        let (o, d) = parse("p", "srv", &entry(bad.clone()));
+        let e = &o.unwrap().entries;
+        assert_eq!((e.len(), e[0].icon.as_deref()), (1, None), "{bad}: the icon dropped, the type stays");
+        assert_eq!(d.len(), 1, "{bad}: warned");
+    }
+    // every icon a built-in carries is one a type may declare (BUILTIN's rows move to their apps)
+    assert!(BUILTIN_ICONS.iter().all(|i| TYPE_ICONS.contains(i)));
+}
+
+#[test]
+fn a_rows_icon_is_its_types_own_else_its_apps() {
+    let mut o = op("open", "Preview", &[("*.png", OpenRank::Owner, false), ("*.raw", OpenRank::Owner, false)]);
+    o.entries[0].icon = Some("image".into());
+    let mut list = openers(vec![("media", o)]);
+    list.plugins[0].icon = Some(std::path::PathBuf::from("/p/media/icon.svg"));
+    let icon = |list: &Openers, name: &str| pick(&Target::file(name), list, &Picks::new()).opener.unwrap().icon;
+    assert_eq!(icon(&list, "a.png").as_deref(), Some("image"));
+    assert_eq!(icon(&list, "a.raw").as_deref(), Some("/icon/media"));
+    list.plugins[0].icon = None;
+    assert_eq!(icon(&list, "a.raw"), None, "no icon of its own, none for its app: the window's");
 }
