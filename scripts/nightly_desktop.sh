@@ -225,6 +225,8 @@ if [ -n "$made" ] && [ -d "$made" ]; then
   else
     { grep -vxF "$made" "$built" 2>/dev/null; echo "$made"; } > "$built.tmp" && mv "$built.tmp" "$built"
     note "kept the night's candidate $made (a rerun opens it: scripts/desktop_rerun.py $out)"
+    # the typed field disk_reclaim.py reads to keep it (architect m_61530: never the prose above)
+    echo "kept_candidate=$(basename "$made")" >> "$sum"
   fi
   # the older ones the nightly built, newest last in cands.txt
   if [ -f "$built" ]; then

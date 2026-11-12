@@ -18,7 +18,9 @@
 #   HEAVY_TRIM_GB (4) a green-marked target's own bytes past which it is
 #   trimmed; HEAVY_OWN_CAP_GB (10) a job's own targets' own bytes past which they
 #   are trimmed at its admission, measured at most every HEAVY_OWN_GAP_MIN (10);
-#   HEAVY_TMP_CAP_GB (2) an agent tmp's size printed once. A job gets, beside
+#   HEAVY_CAND_KEEP_H (24) the age past which a desktop candidate in ~/.bise/dev/build/
+#   desktop-cand goes (never the newest, one a nightly kept, one in use: disk_reclaim.py's
+#   reclaimable()); HEAVY_TMP_CAP_GB (2) an agent tmp's size printed once. A job gets, beside
 #   HEAVY_SLOT, HEAVY_CPUS: the cpus over the heavy jobs running at its start,
 #   itself included (vitest's workers, apps/desktop/src/test-workers.ts); tests:
 #   HEAVY_RECLAIM_ROOTS, HEAVY_RECLAIM_KEEP, HEAVY_TMP_ROOTS,

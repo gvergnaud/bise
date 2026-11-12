@@ -410,6 +410,31 @@ with tempfile.TemporaryDirectory() as home:
                                   env=dict(env, CARGO_TARGET_DIR=""), capture_output=True, text=True).stdout.split()
     check(kd("cargo-warm") == ["rust/target", "target", "../target"] and "apps/desktop/out" in kd("desktop") and kd("other") == [],
           "kind_dirs: cargo -> its targets, desktop -> its out/ and caches, other -> none (the free-drop row)")
+    # ~/.bise/dev/build's idle piles: disk_reclaim.reclaimable(), pure (architect m_61530)
+    sys.path.insert(0, os.path.join(HERE, "..", "scripts"))
+    import disk_reclaim as dr
+    old = {"exec_known": True, "exec_live": False, "lock_held": False, "newest": False, "nightly_kept": False,
+           "age_h": 30, "keep_h": 24}
+    rows = [(("cand", "a" * 12), old, "delete"),
+            (("cand", "a" * 12), dict(old, newest=True), "keep"),
+            (("cand", "a" * 12), dict(old, nightly_kept=True), "keep"),
+            (("cand", "a" * 12), dict(old, lock_held=True), "keep"),
+            (("cand", "a" * 12), dict(old, exec_live=True), "keep"),
+            (("cand", "a" * 12), dict(old, exec_known=False), "keep"),
+            (("cand", "a" * 12), dict(old, age_h=10), "keep")]
+    cache = {"exec_known": True, "exec_live": False, "lock_held": False, "cargo_held": False,
+             "idle_min": 40, "idle_h": 6, "min_idle_min": 30, "low": False}
+    rows += [(("cache", "target-jsrt"), cache, "keep"),
+             (("cache", "target-jsrt"), dict(cache, low=True), "delete"),
+             (("cache", "target-jsrt"), dict(cache, low=True, lock_held=True), "keep"),
+             (("cache", "target-jsrt"), dict(cache, low=True, cargo_held=True), "keep"),
+             (("cache", "target-jsrt"), dict(cache, idle_min=400), "delete"),
+             (("cache", "target-jsrt"), dict(cache, low=True, idle_min=20), "keep")]
+    rows += [(("other", n), dict(old, exec_known=True), "keep") for n in ("desktop-try", "ambient", "desktop", "cache")]
+    bad = [(e, f, want, dr.reclaimable(e, f)) for e, f, want in rows if dr.reclaimable(e, f)[0] != want]
+    check(not bad, "reclaimable: an old candidate goes; the newest, a nightly-kept one, a held lock, a live process, "
+          "an unread process table, a young one stay; a cache goes idle 6 h or low + 30 min, never locked; "
+          "desktop-try/ambient/desktop/cache always stay: %r" % bad)
     # 'desktop' (a quick gate whose heavy steps are desktop/office only, architect m_60481): its own
     # reserve the flat 2; what a RUNNING one may still write, flat 2 under 10 measured runs, then
     # their p90 (measured_gb), like the other kinds

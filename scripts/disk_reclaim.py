@@ -783,6 +783,132 @@ def want_trim(ts, root_of, done, now, want, log):
             yield t, r
 
 
+# ~/.bise/dev/build's idle piles (main m_61527, architect m_61530): the desktop candidates
+# (desktop-cand/<sha12>: a try's .app built for one sha) and versions.sh's caches (target-jsrt,
+# target-commits). Everything else there stays: desktop-try (the try's live bise runs from its
+# prev/), ambient, desktop, cache, target, and desktop-cand/work (its target is a reclaim root).
+DEV_CACHES = ("target-jsrt", "target-commits")
+SHA12 = __import__("re").compile(r"^[0-9a-f]{12}$")
+
+
+def reclaimable(entry, facts):
+    """Whether an entry of ~/.bise/dev/build goes, pure (architect m_61530). entry: (kind, name),
+    kind 'cand' (desktop-cand/<sha12>), 'cache' (DEV_CACHES) or 'other'. facts: exec_known (the
+    process table was read), exec_live (a live process runs from it), lock_held (desktop-cand's
+    work.lock, or target-jsrt.lock), cargo_held (one of its cargo locks), and for a cand: newest,
+    nightly_kept, age_h, keep_h; for a cache: idle_min, idle_h, min_idle_min, low. Returns
+    ('keep', why) or ('delete', rule)."""
+    kind, name = entry
+    if kind not in ("cand", "cache"):
+        return ("keep", "protected: %s" % name)
+    if not facts.get("exec_known"):
+        return ("keep", "the process table could not be read")
+    if facts.get("exec_live"):
+        return ("keep", "a live process runs from it")
+    if facts.get("lock_held"):
+        return ("keep", "its build lock is held")
+    if kind == "cand":
+        if facts.get("newest"):
+            return ("keep", "the newest candidate")
+        if facts.get("nightly_kept"):
+            return ("keep", "a nightly kept it (kept_candidate=)")
+        if facts.get("age_h", 0) < facts.get("keep_h", 24):
+            return ("keep", "younger than HEAVY_CAND_KEEP_H")
+        return ("delete", "cand-old")
+    if facts.get("cargo_held"):
+        return ("keep", "cargo runs there")
+    if facts.get("idle_min", 0) >= facts.get("idle_h", 6) * 60:
+        return ("delete", "dev-idle")
+    if facts.get("low") and facts.get("idle_min", 0) >= facts.get("min_idle_min", 30):
+        return ("delete", "dev-low")
+    return ("keep", "used recently")
+
+
+def nightly_kept(run, now, window_h=48):
+    """The sha12s the nightlies of the last window_h hours kept: their summary.txt's
+    'kept_candidate=<sha12>' line (a typed field, never the prose)."""
+    out = set()
+    for s in __import__("glob").glob(os.path.join(run, "nightly", "*", "summary.txt")):
+        try:
+            if now - os.stat(s).st_mtime > window_h * 3600:
+                continue
+            for line in open(s):
+                if line.startswith("kept_candidate="):
+                    out.add(line.split("=", 1)[1].strip())
+        except OSError:
+            pass
+    return out
+
+
+def _flock_held(path):
+    try:
+        fd = os.open(path, os.O_RDWR)
+    except OSError:
+        return False
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return False
+    except OSError:
+        return True
+    finally:
+        os.close(fd)
+
+
+def dev_build_facts(dev, run, now, free_gb, want_gb, min_idle_min):
+    """[(path, entry, facts)] for ~/.bise/dev/build's candidates and caches: the I/O, gathered
+    once, for reclaimable()."""
+    exes = running_exes()
+    live = lambda p: exes is not None and any(e.startswith(p.rstrip("/") + "/") for e in exes)  # noqa: E731
+    out = []
+    cand = os.path.join(dev, "desktop-cand")
+    cands = [os.path.join(cand, n) for n in (os.listdir(cand) if os.path.isdir(cand) else []) if SHA12.match(n)]
+    newest = max(cands, key=mtime) if cands else None
+    kept_ = nightly_kept(run, now)
+    work_held = _flock_held(os.path.join(cand, "work.lock"))
+    keep_h = float(os.environ.get("HEAVY_CAND_KEEP_H", 24))
+    for p in cands:
+        out.append((p, ("cand", os.path.basename(p)),
+                    {"exec_known": exes is not None, "exec_live": live(p), "lock_held": work_held,
+                     "newest": p == newest, "nightly_kept": os.path.basename(p) in kept_,
+                     "age_h": (now - (mtime(p) or now)) / 3600, "keep_h": keep_h}))
+    for n in DEV_CACHES:
+        p = os.path.join(dev, n)
+        if not os.path.isdir(p):
+            continue
+        fds = lock_all(p)
+        if fds is not None:
+            for f in fds:
+                os.close(f)
+        out.append((p, ("cache", n),
+                    {"exec_known": exes is not None, "exec_live": live(p),
+                     "lock_held": _flock_held(p + ".lock"), "cargo_held": fds is None,
+                     "idle_min": (now - last_used(p)) / 60, "idle_h": float(os.environ.get("HEAVY_IDLE_TARGET_H", 6)),
+                     "min_idle_min": min_idle_min, "low": free_gb < want_gb}))
+    return out
+
+
+def dev_build_pass(dev, run, now, want_gb, min_idle_min, log, dry_run=False):
+    """Delete what reclaimable() says of ~/.bise/dev/build; one reclaim.log line per delete
+    (path, rule, GB). Yields (path, rule, GB)."""
+    for p, entry, facts in dev_build_facts(dev, run, now, free_kb() / (GB / 1024), want_gb, min_idle_min):
+        act, why = reclaimable(entry, facts)
+        if act != "delete":
+            continue
+        if dry_run:
+            print("would delete %s (%s)" % (p, why))
+            continue
+        before = free_kb()
+        away = gone_dir(p)
+        try:
+            os.rename(p, away)
+        except OSError:
+            continue
+        shutil.rmtree(away, ignore_errors=True)
+        gb = max(0, free_kb() - before) / (GB / 1024)
+        _log(log, p, gb, why)
+        yield p, why, gb
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--want", type=float, default=0, help="GB free to reach (0: idle ones only)")
@@ -874,6 +1000,12 @@ def main():
                 print("disk_reclaim: dropped %s's incremental dirs (%.1f GB)" % (t, gb))
     if not a.dry_run:
         log_tmps(run, now)
+    # ~/.bise/dev/build's old candidates and idle caches (reclaimable(), architect m_61530)
+    dev = os.environ.get("HEAVY_DEV_BUILD", os.path.expanduser("~/.bise/dev/build"))
+    for p, why, gb in dev_build_pass(dev, run, now, a.want, a.min_idle_min, log, a.dry_run):
+        freed += gb
+        n += 1
+        print("disk_reclaim: deleted %s (%s, %.1f GB)" % (p, why, gb))
     todo = plan(ts, free_kb() / (GB / 1024), a.want, now, a.idle_h, a.min_idle_min, {t for t, _, _ in ts if stray(t)})
     for t, reason in todo:
         if t in trimmed or not os.path.isdir(t):
