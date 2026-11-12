@@ -3,39 +3,34 @@
 // sheet, deck, image, video, audio, 3D, file, link, plus a PR and a release (their tiles). No
 // Unicode kind glyph anywhere (▦ ▭ ♪ ◇ are missing from the fonts or of ambiguous width). One play
 // triangle (PlayIcon), the same on every video. The kind is never in words on a card: the icon, or
-// the extension on hover. iconKindOf and extOf are pure; the icons are a pure render. Owner: art-folders.
+// the extension on hover. A file's icon is its app's (the row's opener), never its ending's.
+// iconKindOf and extOf are pure; the icons are a pure render. Owner: art-folders.
 
 /** What an icon can draw. */
 export type IconKind = "page" | "doc" | "sheet" | "deck" | "image" | "video" | "audio" | "3d" | "file" | "link" | "pr" | "release";
 
-/** What iconKindOf reads of an artifact: its kind word and where it is (any of them). */
+/** What iconKindOf reads of an artifact: its app (the hub's, A3), its kind word and where it is. */
 export interface KindSource {
   readonly kind: string;
   readonly path?: string | null;
   readonly target?: string | null;
   readonly url?: string | null;
+  /** the app that opens it, as the hub picked it (bend_plugins::opens): its icon wins */
+  readonly opener?: { readonly icon?: string | null; readonly builtin?: boolean } | null;
 }
 
-const EXT: Readonly<Record<string, IconKind>> = {
-  ...Object.fromEntries(["png", "jpg", "jpeg", "gif", "webp", "svg", "heic", "avif", "bmp", "tif", "tiff"].map((e) => [e, "image"])),
-  ...Object.fromEntries(["mp4", "mov", "webm", "m4v", "mkv", "avi"].map((e) => [e, "video"])),
-  ...Object.fromEntries(["mp3", "m4a", "wav", "aac", "ogg", "flac", "aiff"].map((e) => [e, "audio"])),
-  ...Object.fromEntries(["glb", "gltf", "obj", "fbx", "stl", "blend", "usdz", "3dm"].map((e) => [e, "3d"])),
-  ...Object.fromEntries(["xlsx", "xls", "csv", "tsv", "numbers", "ods"].map((e) => [e, "sheet"])),
-  ...Object.fromEntries(["pptx", "ppt", "key", "odp"].map((e) => [e, "deck"])),
-  ...Object.fromEntries(["md", "txt", "pdf", "docx", "doc", "rtf", "pages", "odt"].map((e) => [e, "doc"])),
-  ...Object.fromEntries(["html", "htm"].map((e) => [e, "page"])),
-};
-
+// the words an artifact's kind says when it is no file (an agent's `--kind`, a PR, a link)
 const WORD: Readonly<Record<string, IconKind>> = {
   page: "page", site: "page",
   link: "link", url: "link",
   pr: "pr", release: "release",
-  image: "image", shot: "image", shots: "image", png: "image",
+  image: "image", shot: "image", shots: "image",
   video: "video", audio: "audio", sound: "audio",
   "3d": "3d", model: "3d",
   doc: "doc", sheet: "sheet", deck: "deck", slides: "deck",
 };
+
+const isIconKind = (s: string | null | undefined): s is IconKind => s != null && Object.hasOwn(LINES, s);
 
 /** The extension of what it points at, lowercase, '' none: 'png', 'xlsx' (the card's hover corner). Pure. */
 export function extOf(a: KindSource): string {
@@ -52,17 +47,18 @@ export function extOf(a: KindSource): string {
   return "";
 }
 
-/** The icon of an artifact: its kind word when it says one (PR, page, link...), else its extension, else a file. Pure. */
+/**
+ * The icon of an artifact: its app's (docs/plugin-apps.md A6b: a bise type's ds icon from
+ * bend_plugins::opens' table; a plugin's own app draws as a file until its icon route serves),
+ * else its kind word (a PR, a page, a link...), else a link for a url, else a file. Nothing here
+ * reads a file's ending: the hub matched it once. Pure.
+ */
 export function iconKindOf(a: KindSource): IconKind {
+  const o = a.opener;
+  if (o != null) return o.builtin === true && isIconKind(o.icon) ? o.icon : "file";
   const word = WORD[a.kind.toLowerCase()];
-  const ext = EXT[extOf(a)];
-  // a 'page' or a 'file' that is an image, a sheet...: the extension says more
-  if (word === undefined || ((word === "page" || word === "link") && ext !== undefined && ext !== "page")) {
-    if (ext !== undefined) return ext;
-    if (word !== undefined) return word;
-    return /^https?:\/\//iu.test(a.url ?? "") ? "link" : "file";
-  }
-  return word;
+  if (word !== undefined) return word;
+  return /^https?:\/\//iu.test(a.url ?? "") ? "link" : "file";
 }
 
 /** The lines of each icon on a 16 px grid. */

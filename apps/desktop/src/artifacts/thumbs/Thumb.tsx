@@ -70,15 +70,6 @@ function Answer({ a, item, fade }: { a: ThumbAnswer; item: Item; fade: boolean }
       </span>
     );
   }
-  // a sound: its line icon and its length (the extension is the card's, on hover)
-  if (secs !== null && iconKindOf(item.a) === 'audio') {
-    return (
-      <span className="th th-tile" data-thumb="none">
-        <KindIcon kind="audio" size={24} />
-        <span className="th-w">{secs}</span>
-      </span>
-    );
-  }
   return (
     <span className="th th-tile" data-thumb="none">
       <span className="th-ext">{a.none.ext === '' ? '?' : a.none.ext}</span>

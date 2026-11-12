@@ -5,21 +5,22 @@ import { extOf, iconKindOf, KindIcon, PlayIcon, type IconKind } from './icons';
 import { AppIcon } from './icons-app';
 
 describe('iconKindOf', () => {
+  const sheets = { icon: 'sheet', builtin: true };
   const cases: [Parameters<typeof iconKindOf>[0], IconKind][] = [
-    [{ kind: 'page', url: 'http://127.0.0.1:47438/p/x' }, 'page'],
-    [{ kind: 'file', path: '/a/b/shot.PNG' }, 'image'],
+    // a file: its app's icon, as the hub picked it (bise's types: a ds name; never its ending)
+    [{ kind: 'file', path: '/a/budget.xlsx', opener: sheets }, 'sheet'],
+    [{ kind: 'shots', path: '/a/b.png', opener: { icon: 'image', builtin: true } }, 'image'],
+    [{ kind: 'page', url: 'http://127.0.0.1:47438/p/x', opener: { icon: 'page', builtin: true } }, 'page'],
+    // a plugin's own app (its /icon/<plugin> route), an unknown ds name: a file
+    [{ kind: 'file', path: '/a/q.fake', opener: { icon: '/icon/fake-opener' } }, 'file'],
+    [{ kind: 'file', path: '/a/q.xlsx', opener: { icon: 'spreadsheet', builtin: true } }, 'file'],
+    // no app: the ending says nothing, the kind word does
+    [{ kind: 'file', path: '/a/budget.xlsx' }, 'file'],
+    [{ kind: 'file', path: '/a/appart.glb' }, 'file'],
     [{ kind: 'shots', path: '/a/b' }, 'image'],
-    [{ kind: 'file', path: '/a/budget.xlsx' }, 'sheet'],
-    [{ kind: 'file', path: '/a/pitch.pptx' }, 'deck'],
-    [{ kind: 'file', path: '/a/notes.md' }, 'doc'],
-    [{ kind: 'file', path: '/a/offre.pdf' }, 'doc'],
-    [{ kind: 'file', path: '/a/poof.mp4' }, 'video'],
-    [{ kind: 'file', path: '/a/voice.m4a' }, 'audio'],
-    [{ kind: 'file', path: '/a/appart.glb' }, '3d'],
-    [{ kind: 'file', path: '/a/bise.dmg' }, 'file'],
-    [{ kind: 'file', path: '/a/dir/' }, 'file'],
+    [{ kind: 'slides' }, 'deck'],
     [{ kind: 'link', url: 'https://drive.google.com/x' }, 'link'],
-    [{ kind: 'link', url: 'https://example.com/report.pdf' }, 'doc'],
+    [{ kind: 'link', url: 'https://example.com/report.pdf' }, 'link'],
     [{ kind: 'pr', url: 'https://github.com/a/b/pull/3' }, 'pr'],
     [{ kind: 'release', url: 'https://github.com/a/b/releases/tag/v1' }, 'release'],
     [{ kind: 'site', target: '/w/site/index.html' }, 'page'],

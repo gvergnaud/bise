@@ -58,7 +58,6 @@ rust/switchboard/src/pages/site.rs | 10 | step 5 | viewer_kind, office_kind, VID
 # ---- thumbs: thumbnails, icons and previews from the opener (A6b, apps-thumbs)
 apps/desktop/src/main/thumbs/prune.ts | 1 | thumbs | the cache's .png files, rewritten with the cache per version
 apps/desktop/src/artifacts/thumbs/plan.ts | 3 | thumbs | the card's plan by kind
-apps/desktop/src/ds/icons.tsx | 7 | thumbs | iconKindOf: the icon from the opener
 apps/desktop/src/search/rank.ts | 2 | thumbs | spotlight's glyph by kind
 apps/desktop/src/thread/peek/peek.ts | 2 | thumbs | the peek's preview by kind: the app's view or Quick Look
 apps/desktop/src/inbox/about.ts | 1 | thumbs | the inbox card's icon by kind
