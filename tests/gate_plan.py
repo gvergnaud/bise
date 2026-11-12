@@ -137,7 +137,9 @@ SELFTESTS = [
     # read, a .rs, a desktop .ts/.tsx or a words .gen.json (4ff9ec771: two reads dropped in desktop TS
     # only, the Rust test that held the rule never ran in that quick; architect m_58405)
     ("words_read_check", "python3 -B tests/words_read_check.py",
-     ("*.rs", "apps/desktop/src/*.ts", "apps/desktop/src/*.tsx", "tests/words/*.gen.json", "tests/words_read_check.py")),
+     ("*.rs", "apps/desktop/src/*.ts", "apps/desktop/src/*.tsx", "tests/words/*.gen.json", "tests/words_read_check.py",
+      # the kit and the plugins' views read words too (architect m_61995)
+      "kit/*.ts", "kit/*.js", "plugins/*.ts", "plugins/*.js", "plugins/*.mjs")),
     # every tracked .py compiles (~1 s, in memory; its SKIP says what not): an e2e file runs only
     # after the land, so a SyntaxError in one reached main's tip unseen (22cbd23c2; main m_59170)
     ("py_compile_check", "python3 -B tests/py_compile_check.py", ("*.py",)),

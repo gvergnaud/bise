@@ -147,15 +147,15 @@
     switch (a.kind) {
       case "block": return has(a.quote) ? q(a.quote) : `block ${a.block}`;
       case "cell": return `${sheetRef(a.sheet)}!${a.range}`;
-      case "slide": return a.rect ? `slide ${a.slide} · a box` : `slide ${a.slide}`;
+      case "slide": return a.rect ? `slide ${a.slide} · an area` : `slide ${a.slide}`;
       case "shape": return has(a.quote) ? `slide ${a.slide} · ${q(a.quote)}` : `slide ${a.slide} · a shape`;
       case "para": return has(a.quote) ? q(a.quote) : "a paragraph";
       case "region":
         // a pdf passage is said by its words (pdf-notes)
         if (has(a.quote)) return a.page != null ? `page ${a.page} · ${q(a.quote)}` : q(a.quote);
-        return a.page != null ? `page ${a.page} · a box` : "a box";
+        return a.page != null ? `page ${a.page} · an area` : "an area";
       case "text": return `line ${a.line}`;
-      case "time": return a.rect ? `${clock(a.t)} · a box` : clock(a.t);
+      case "time": return a.rect ? `${clock(a.t)} · an area` : clock(a.t);
       // a plugin's view: its key is opaque; its label names the place, his words what is there
       case "view":
         if (has(a.label)) return has(a.quote) ? `${short(a.label, 60)} · ${q(a.quote)}` : short(a.label, 60);

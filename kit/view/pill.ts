@@ -4,12 +4,8 @@
 // `take` or `key`); then it says `added to your message` and goes. Escape, or a new selection
 // with no place, takes it away. Placed through CSSOM (the view's CSP has no inline style).
 import { pillAt } from "./core.js";
-
-// ---- the words (art-notes'; designer signs them)
-export const PW = {
-  ask: "type to ask about it",
-  added: "added to your message",
-};
+// the words: bise_proto::words::viewkit (designer signs them there)
+import { viewkit } from "./words.gen.js";
 
 export type Pill = {
   /** show it under `at` (an element or a box), or hide it (null) */
@@ -22,7 +18,7 @@ export function pill(doc: Document, onTake: () => void): Pill {
   const btn = doc.createElement("button");
   btn.type = "button";
   btn.className = "bv-pill";
-  btn.textContent = PW.ask;
+  btn.textContent = viewkit.ask;
   // a mousedown on it keeps the view's own selection
   btn.addEventListener("mousedown", (e) => e.preventDefault());
   btn.addEventListener("click", () => onTake());
@@ -36,14 +32,14 @@ export function pill(doc: Document, onTake: () => void): Pill {
       if (!at) return btn.remove();
       const r = "getBoundingClientRect" in at ? at.getBoundingClientRect() : at;
       const p = pillAt(r, win.innerWidth, win.innerHeight);
-      btn.textContent = PW.ask;
+      btn.textContent = viewkit.ask;
       btn.style.left = `${p.left}px`;
       btn.style.top = `${p.top}px`;
       if (!btn.isConnected) doc.body.append(btn);
     },
     asked() {
       if (!btn.isConnected) return;
-      btn.textContent = PW.added;
+      btn.textContent = viewkit.added;
       gone = setTimeout(() => btn.remove(), 1200);
     },
   };

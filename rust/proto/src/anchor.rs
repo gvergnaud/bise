@@ -104,7 +104,7 @@ pub enum Anchor {
     /// m_59942): its opaque `key` (1..=512 bytes) and the words he saw
     /// selected (one line, at most [`QUOTE_MAX`] characters, no control
     /// characters: cleaned on read), and its own short name for the place
-    /// (`label`: `page 2 · a box`, `0:12`; at most [`LABEL_MAX`]
+    /// (`label`: `page 2 · an area`, `0:12`; at most [`LABEL_MAX`]
     /// characters, cleaned the same way; display only: the place is the
     /// key alone, architect m_60509)
     View {
@@ -153,7 +153,33 @@ fn view_quote<'de, D: serde::Deserializer<'de>>(d: D) -> Result<String, D::Error
 }
 
 fn view_label<'de, D: serde::Deserializer<'de>>(d: D) -> Result<String, D::Error> {
-    Ok(short(&one_line(&String::deserialize(d)?), LABEL_MAX))
+    Ok(clean_label(&String::deserialize(d)?))
+}
+
+/// A view's label as bise keeps it: one line, at most [`LABEL_MAX`]
+/// characters, cut at a word with `…` (designer m_61894: whole or
+/// dropped, never half a word; the full one is the view's own tip).
+pub fn clean_label(s: &str) -> String {
+    let one = one_line(s);
+    if one.chars().count() <= LABEL_MAX {
+        return one;
+    }
+    let mut out = String::new();
+    for w in one.split(' ') {
+        let next = if out.is_empty() { w.chars().count() } else { out.chars().count() + 1 + w.chars().count() };
+        if next > LABEL_MAX - 1 {
+            break;
+        }
+        if !out.is_empty() {
+            out.push(' ');
+        }
+        out.push_str(w);
+    }
+    // one word longer than the label: its first characters
+    if out.is_empty() {
+        out = one.chars().take(LABEL_MAX - 1).collect();
+    }
+    format!("{out}…")
 }
 
 /// The most characters a view's label keeps.
@@ -198,9 +224,10 @@ impl Eq for Anchor {}
 
 /// What a chip and a note's line call an anchor (designer signs the
 /// words, designer m_24098: never a machine id): `Q3!B4:D9`, `slide 2`,
-/// `slide 2 · a box`, `slide 2 · "Revenue"`, `slide 2 · a shape`,
-/// `"net revenue…"` (a paragraph by its words), `page 1 · a box`,
-/// `page 1 · "net revenue…"` (a pdf passage), `line 40`, `0:12`, `0:12 · a box`. Both apps draw it from this rule (fixture anchor_label.json).
+/// `slide 2 · an area`, `slide 2 · "Revenue"`, `slide 2 · a shape`,
+/// `"net revenue…"` (a paragraph by its words), `page 1 · an area`,
+/// `page 1 · "net revenue…"` (a pdf passage), `line 40`, `0:12`, `0:12 · an area`
+/// (designer m_61894: 'an area', the words of bise_proto::words::viewkit). Both apps draw it from this rule (fixture anchor_label.json).
 pub fn label(a: &Anchor) -> String {
     let quoted = |q: &str| format!("\"{}\"", short(q, 40));
     match a {
@@ -208,21 +235,21 @@ pub fn label(a: &Anchor) -> String {
         Anchor::Block { quote, .. } => quoted(quote),
         Anchor::Cell { sheet, range } => format!("{}!{range}", sheet_ref(sheet)),
         Anchor::Slide { slide, rect: None } => format!("slide {slide}"),
-        Anchor::Slide { slide, rect: Some(_) } => format!("slide {slide} · a box"),
+        Anchor::Slide { slide, rect: Some(_) } => format!("slide {slide} · an area"),
         Anchor::Shape { slide, quote, .. } if !quote.trim().is_empty() => format!("slide {slide} · {}", quoted(quote)),
         Anchor::Shape { slide, .. } => format!("slide {slide} · a shape"),
         Anchor::Para { quote, .. } if !quote.trim().is_empty() => quoted(quote),
         Anchor::Para { .. } => "a paragraph".into(),
         Anchor::Region { page: Some(p), quote, .. } if !quote.trim().is_empty() => format!("page {p} · {}", quoted(quote)),
         Anchor::Region { page: None, quote, .. } if !quote.trim().is_empty() => quoted(quote),
-        Anchor::Region { page: Some(p), .. } => format!("page {p} · a box"),
-        Anchor::Region { page: None, .. } => "a box".into(),
+        Anchor::Region { page: Some(p), .. } => format!("page {p} · an area"),
+        Anchor::Region { page: None, .. } => "an area".into(),
         Anchor::Text { line, .. } => format!("line {line}"),
         Anchor::Time { t, rect: None } => clock(*t),
-        Anchor::Time { t, rect: Some(_) } => format!("{} · a box", clock(*t)),
+        Anchor::Time { t, rect: Some(_) } => format!("{} · an area", clock(*t)),
         // a view names its place itself (`label`), his words say what is there
         Anchor::View { quote, label, .. } => {
-            let (q, l) = (clean_quote(quote), short(&one_line(label), LABEL_MAX));
+            let (q, l) = (clean_quote(quote), clean_label(label));
             match (l.is_empty(), q.is_empty()) {
                 (false, false) => format!("{l} · {}", quoted(&q)),
                 (false, true) => l,
@@ -409,13 +436,17 @@ mod tests {
     /// place, cleaned and cut on read like quote; display only.
     #[test]
     fn a_view_label_is_cleaned_and_said_before_the_quote() {
-        let Anchor::View { label: l, .. } = read(json!({"kind": "view", "key": "b1", "label": "page 2\n·\u{0007} a box"})) else { panic!() };
-        assert_eq!(l, "page 2 · a box");
+        let Anchor::View { label: l, .. } = read(json!({"kind": "view", "key": "b1", "label": "page 2\n·\u{0007} an area"})) else { panic!() };
+        assert_eq!(l, "page 2 · an area");
         let Anchor::View { label: l, .. } = read(json!({"kind": "view", "key": "b1", "label": "x".repeat(LABEL_MAX + 9)})) else { panic!() };
         assert_eq!(l.chars().count(), LABEL_MAX);
+        // designer m_61894: a long label is cut at a word, never half of one
+        let long = "the quarterly revenue table of the northern region and its notes";
+        assert_eq!(clean_label(long), "the quarterly revenue table of the northern region and its…");
+        assert!(clean_label(long).chars().count() <= LABEL_MAX);
         let v = |quote: &str, label: &str| Anchor::View { key: "b1".into(), quote: quote.into(), label: label.into() };
         assert_eq!(super::label(&v("net revenue", "page 2")), "page 2 · \"net revenue\"");
-        assert_eq!(super::label(&v("", "0:12 · a box")), "0:12 · a box");
+        assert_eq!(super::label(&v("", "0:12 · an area")), "0:12 · an area");
         assert_eq!(super::label(&v("net revenue", "")), "\"net revenue\"");
     }
 
@@ -447,7 +478,7 @@ mod tests {
     /// the same place (the label is display only).
     #[test]
     fn a_view_label_never_changes_the_place() {
-        let a = read(json!({"kind": "view", "key": "box:1", "label": "page 2 · a box"}));
+        let a = read(json!({"kind": "view", "key": "box:1", "label": "page 2 · an area"}));
         let b = read(json!({"kind": "view", "key": "box:1", "label": "page 3"}));
         assert_eq!(as_view_key(&a), as_view_key(&b));
     }

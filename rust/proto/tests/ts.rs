@@ -422,6 +422,25 @@ fn the_sdk_anchor_type_is_fresh() {
     assert!(have == want, "office/sdk/src/anchor.gen.ts is stale; run {BLESS}=1 cargo test -p bise-proto --features ts --test ts");
 }
 
+/// @bise/view's words (bise_proto::words::viewkit), for the kit itself:
+/// a view's sandbox never reads apps/desktop (architect m_60509 (3): one
+/// catalog, designer signs once). `scripts/ts_emit.ts` makes its `.js`.
+fn kit_view_words() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../kit/view/words.gen.ts")
+}
+
+#[test]
+fn the_kit_view_words_are_fresh() {
+    let want = render_all().remove("words_viewkit.gen.ts").expect("the viewkit area is rendered");
+    let p = kit_view_words();
+    if std::env::var_os(BLESS).is_some_and(|v| v == "1") {
+        std::fs::write(&p, &want).unwrap_or_else(|e| panic!("{}: {e}", p.display()));
+        return;
+    }
+    let have = std::fs::read_to_string(&p).unwrap_or_default();
+    assert!(have == want, "kit/view/words.gen.ts is stale; run {BLESS}=1 cargo test -p bise-proto --features ts --test ts");
+}
+
 #[test]
 fn omitted_fields_are_optional_and_ids_are_numbers() {
     let cfg = Config::new().with_large_int("number");

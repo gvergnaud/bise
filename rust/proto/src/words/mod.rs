@@ -52,6 +52,7 @@ pub mod settings;
 pub mod side;
 pub mod thread;
 pub mod views;
+pub mod viewkit;
 
 /// One word of the catalog.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -89,6 +90,7 @@ pub const ALL: &[(&str, &[Word])] = &[
     ("side", side::WORDS),
     ("thread", thread::WORDS),
     ("views", views::WORDS),
+    ("viewkit", viewkit::WORDS),
 ];
 
 /// The words of an area split into submodules, as one list (architect

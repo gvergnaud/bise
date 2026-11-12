@@ -32,6 +32,12 @@ import { Bridge, M, PROTOCOL_VERSION } from "./rpc.js";
 import { mountNotes } from "./notes.js";
 import { pill } from "./pill.js";
 export { RpcError } from "./rpc.js";
+/** The words a view draws or names in a note's label (`viewkit.page({n: 2})`: 'page 2'),
+ * bise_proto::words::viewkit's: designer signs them there, never a literal in a plugin. Read
+ * them as `viewkit.<name>`, never through an alias: tests/words_read_check.py counts that read,
+ * and a view adds its place words to the area in the land that reads them (architect m_61995). */
+export { viewkit } from "./words.gen.js";
+export { clock } from "./core.js";
 const isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 /** window.parent, answering only messages from it. */
 function windowPort() {

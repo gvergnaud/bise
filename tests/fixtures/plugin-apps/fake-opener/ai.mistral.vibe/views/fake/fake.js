@@ -21,12 +21,21 @@ function lines(text) {
     return li;
   }));
   layer.redraw();
+  count();
+}
+
+// the host sends his notes right after view/open, often before the read draws the lines: keep
+// the last ones and count again each time the lines change (apps-host m_62027)
+let last = [];
+function count() {
+  const placed = last.filter((n) => $("lines").querySelector(`li[data-anchor="${CSS.escape(n.anchor)}"]`)).length;
+  $("notes").textContent = `${last.length} notes · ${last.length - placed} detached`;
 }
 
 const layer = view.notes.mount({ place: (anchor) => $("lines").querySelector(`li[data-anchor="${CSS.escape(anchor)}"]`) });
 view.notes.on((notes) => {
-  const placed = notes.filter((n) => $("lines").querySelector(`li[data-anchor="${CSS.escape(n.anchor)}"]`)).length;
-  $("notes").textContent = `${notes.length} notes · ${notes.length - placed} detached`;
+  last = notes;
+  count();
 });
 
 if (!doc) say("no file");

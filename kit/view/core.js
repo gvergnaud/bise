@@ -7,6 +7,14 @@
 // A view's anchor is its own opaque string (1..=512 bytes, bise_proto::anchor's `view {key}`);
 // the hub never reads it, so only the view can tell a note it can't place (`detached`, listed,
 // never dropped).
+/** A moment as a player says it: `0:12`, `12:05`, `1:02:05` (whole seconds; bise_proto::anchor::clock),
+ * for a label like `words.moment_box({t: clock(12.5)})`. */
+export function clock(t) {
+    const s = Number.isFinite(t) && t > 0 ? Math.floor(t) : 0;
+    const two = (n) => String(n).padStart(2, "0");
+    const h = Math.floor(s / 3600);
+    return h ? `${h}:${two(Math.floor(s / 60) % 60)}:${two(s % 60)}` : `${Math.floor(s / 60)}:${two(s % 60)}`;
+}
 /** The longest anchor a view may give, in UTF-8 bytes (bise_proto::anchor::VIEW_KEY_MAX). */
 export const ANCHOR_MAX = 512;
 /** The most characters a quote keeps (bise_proto::anchor::QUOTE_MAX). */
@@ -148,10 +156,20 @@ export function typed(e) {
 }
 /** The most characters a place's label keeps (bise_proto::anchor::LABEL_MAX). */
 export const LABEL_MAX = 60;
-/** A view's own short name for a place (`page 2 · a box`, `0:12`): one line, 60 characters. */
+/** A view's own short name for a place (`page 2 · an area`, `0:12`): one line, at most 60
+ * characters, cut at a word with `…` (designer m_61894; bise_proto::anchor::clean_label). */
 export function labelOf(text) {
     const one = String(text || "").replace(/[\s\u0000-\u001f\u007f]+/g, " ").trim();
-    return [...one].length > LABEL_MAX ? `${[...one].slice(0, LABEL_MAX - 1).join("")}…` : one;
+    if ([...one].length <= LABEL_MAX)
+        return one;
+    let out = "";
+    for (const w of one.split(" ")) {
+        const next = out ? [...out].length + 1 + [...w].length : [...w].length;
+        if (next > LABEL_MAX - 1)
+            break;
+        out = out ? `${out} ${w}` : w;
+    }
+    return `${out || [...one].slice(0, LABEL_MAX - 1).join("")}…`;
 }
 /** dev.bise/selection's params: an anchor, its quote and its label (display only: the place is
  * the anchor alone), or null (nothing selected), and how he asked about it, if he did. A bad

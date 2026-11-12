@@ -602,5 +602,5 @@ export const anchor: readonly Anchor[] = [
   {"kind":"time","rect":{"h":5.5,"w":30.0,"x":10.0,"y":20.0},"t":0.0},
   {"key":"card:42","kind":"view"},
   {"key":"row/7","kind":"view","quote":"net revenue grew"},
-  {"key":"t:12.5","kind":"view","label":"0:12 · a box"},
+  {"key":"t:12.5","kind":"view","label":"0:12 · an area"},
 ];

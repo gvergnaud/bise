@@ -33,6 +33,12 @@ import { pill } from "./pill.js";
 
 export type { Doc, Read, Saved, Note, Range } from "./core.js";
 export { RpcError } from "./rpc.js";
+/** The words a view draws or names in a note's label (`viewkit.page({n: 2})`: 'page 2'),
+ * bise_proto::words::viewkit's: designer signs them there, never a literal in a plugin. Read
+ * them as `viewkit.<name>`, never through an alias: tests/words_read_check.py counts that read,
+ * and a view adds its place words to the area in the land that reads them (architect m_61995). */
+export { viewkit } from "./words.gen.js";
+export { clock } from "./core.js";
 
 /** Where the kit talks to its host: window.parent by default; the checks give a fake one. */
 export type Port = {

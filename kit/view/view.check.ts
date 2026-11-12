@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import * as core from "./core.ts";
 import { Bridge, M, RpcError } from "./rpc.ts";
-import { connect, isGone, type Port } from "./view.js";
+import { connect, isGone, viewkit, type Port } from "./view.js";
 import { CHANGED, MARK, mountNotes } from "./notes.js";
 
 const laws: [string, () => void | Promise<void>][] = [];
@@ -65,8 +65,12 @@ law("an anchor: 1 to 512 bytes; a quote: one clean line of 200 characters at mos
   assert.deepEqual(core.selectionParams("row:7", " net revenue ", { key: "w" }), { anchor: "row:7", text: "net revenue", key: "w" });
   assert.deepEqual(core.selectionParams("row:7", "x", { take: true }), { anchor: "row:7", text: "x", take: true });
   // a label names the place (display only), one line of 60 characters
-  assert.deepEqual(core.selectionParams("b1", "net", null, " page 2\n· a box "), { anchor: "b1", text: "net", label: "page 2 · a box" });
+  assert.deepEqual(core.selectionParams("b1", "net", null, " page 2\n· an area "), { anchor: "b1", text: "net", label: "page 2 · an area" });
   assert.equal([...core.labelOf("x".repeat(80))].length, 60);
+  // a long label is cut at a word, as bise_proto::anchor::clean_label cuts it
+  assert.equal(core.labelOf("the quarterly revenue table of the northern region and its notes"), "the quarterly revenue table of the northern region and its…");
+  // a moment's words as bise_proto::anchor::clock says them
+  assert.deepEqual([core.clock(0), core.clock(12.9), core.clock(725), core.clock(3725.4), core.clock(-3), core.clock(NaN)], ["0:00", "0:12", "12:05", "1:02:05", "0:00", "0:00"]);
   // links: http(s) and mailto only; a url answer needs its url
   assert.equal(core.linkOf("https://bise.dev"), "https://bise.dev");
   assert.equal(core.linkOf("mailto:a@b.c"), "mailto:a@b.c");
@@ -232,9 +236,9 @@ law("the document's url on its handle; a link opened through the host, http(s) o
 law("a label goes with the selection and with his ask", async () => {
   const h = fakeHost();
   const view = await connect({ name: "fake", port: h.port, inputMs: 200 });
-  view.onSelection("box:1", "net revenue", { label: "page 2 · a box" });
+  view.onSelection("box:1", "net revenue", { label: "page 2 · an area" });
   const sel = h.sent.filter((m) => m.method === M.selection).map((m) => m.params);
-  assert.deepEqual(sel, [{ anchor: "box:1", text: "net revenue", label: "page 2 · a box" }]);
+  assert.deepEqual(sel, [{ anchor: "box:1", text: "net revenue", label: "page 2 · an area" }]);
 });
 
 law("saves go one at a time, in their seq's order", async () => {
