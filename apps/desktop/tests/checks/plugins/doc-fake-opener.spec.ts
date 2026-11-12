@@ -6,10 +6,10 @@
 // with the real sandbox proxy read from the Rust source, the view's folder and bise's view kit at
 // /f/<session>/, the CSP view_csp.rs writes for a view with its own files). fake-opener's own view
 // (tests/fixtures/plugin-apps/fake-opener, on @bise/view) runs in it unchanged.
-// Passes when: the view shows the file's name and its lines from resources/read on the handle; on
-// the hub's artifact_notes the tab asks view/notes again and they reach the view (dev.bise/notes):
-// '2 notes · 1 detached' (one on line:1, one on a line the file hasn't), and the tab lists the one
-// it couldn't place under its head; his save goes as
+// Passes when: the view shows the file's name and its lines from resources/read on the handle; the
+// tab's notes reach it (dev.bise/notes): '2 notes · 1 detached' (one on line:1, one on a line the
+// file hasn't), the tab lists the one it couldn't place under its head, and on the hub's
+// artifact_notes the tab asks view/notes again ('3 notes · 1 detached'); his save goes as
 // ai.mistral.vibe/resources/write {uri: handle, ifMatch: the read's etag, text, seq 1} and the
 // head says 'Fake · v3 · saved <time>'; the row then naming v4 saved by him reads as his, never a
 // newer version over his own work. Shot: doc-fake-opener.png. Owner: apps-host.
@@ -75,6 +75,9 @@ async function viewServer(): Promise<{ server: Server; origin: string }> {
   return { server, origin };
 }
 
+const NOTE1 = { id: 'n1', anchor: { kind: 'view', key: 'line:1' }, text: 'why alpha?', status: 'sent', version: 3 };
+const NOTE2 = { id: 'n2', anchor: { kind: 'view', key: 'line:9' }, text: 'and this?', quote: 'omega', status: 'sent', version: 2 };
+
 const opened = (origin: string) => ({
   kind: 'view',
   doc: SID,
@@ -130,9 +133,10 @@ test('plugins/doc-fake-opener: a document opens, reads and saves through its app
   const s = await launchDesktop({ core, route: `artifacts/${P}/${ID}`, size: '1400x900' });
   try {
     const { page } = s;
-    // the hub's answers, in the order the tab asks: view/open, the view's read (its first notes:
-    // none; fake-opener counts what it placed when notes come, so they come once its lines are drawn)
+    // the hub's answers, in the order the tab asks: view/open, its notes (they reach the view before
+    // its read: it counts them again once its lines are drawn, apps-viewkit c7a335c54), the view's read
     await core.result('view_open', undefined, opened(v.origin));
+    await core.result('view_notes', undefined, { notes: [NOTE1, NOTE2], detached: [] });
     await core.result('view_call', undefined, { contents: [{ uri: HANDLE, text: TEXT, _meta: { etag: 'e3', writable: true, size: TEXT.length } }] });
     await core.release();
 
@@ -145,20 +149,15 @@ test('plugins/doc-fake-opener: a document opens, reads and saves through its app
     const asked = (x: unknown): Record<string, unknown> => x as Record<string, unknown>;
     const read = asked(await core.waitCmd((x) => asked(x)['cmd'] === 'view_call' && asked(x)['method'] === 'resources/read'));
     expect(read).toMatchObject({ project: P, doc: SID, params: { uri: HANDLE } });
-    // notes written meanwhile (the hub's artifact_notes): the tab asks view/notes again, the view
-    // places one, the other has no line in this version: the tab lists it
-    await core.result('view_notes', undefined, {
-      notes: [
-        { id: 'n1', anchor: { kind: 'view', key: 'line:1' }, text: 'why alpha?', status: 'sent', version: 3 },
-        { id: 'n2', anchor: { kind: 'view', key: 'line:9' }, text: 'and this?', quote: 'omega', status: 'sent', version: 2 },
-      ],
-      detached: [],
-    });
-    await core.send({ ev: 'artifact_notes', project: P, artifact: ID } as unknown as Parameters<FakeCore['send']>[0]);
+    // notes: the view places one, the other has no line in this version: the tab lists it
     await expect(frame.getByTestId('notes')).toHaveText('2 notes · 1 detached');
     await expect(page.getByTestId('app.panel.doc.detached')).toContainText(views.doc_detached({ n: 1 }));
     await expect(page.getByTestId('app.panel.doc.detached')).toContainText('and this?');
     await expect(page.getByTestId('app.panel.doc.line')).toHaveText('Fake · v3');
+    // a note written meanwhile (the hub's artifact_notes): the tab asks view/notes again
+    await core.result('view_notes', undefined, { notes: [NOTE1, NOTE2, { id: 'n3', anchor: { kind: 'view', key: 'line:2' }, text: 'beta?', status: 'draft', version: 3 }], detached: [] });
+    await core.send({ ev: 'artifact_notes', project: P, artifact: ID } as unknown as Parameters<FakeCore['send']>[0]);
+    await expect(frame.getByTestId('notes')).toHaveText('3 notes · 1 detached');
 
     // save: his edit goes with the read's etag, the head says saved
     await core.result('view_call', undefined, { outcome: 'saved', etag: 'e4' });

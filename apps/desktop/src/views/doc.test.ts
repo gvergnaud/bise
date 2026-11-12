@@ -41,6 +41,11 @@ describe('view/open', () => {
     expect(o.res.proxy).toBe(`${ORIGIN}/mcp-app?s=${DOC}`);
   });
 
+  it("F1's answer as the hub sends it (a39c701fe): DocumentFacts' latest and versions, the resource flattened", () => {
+    const o = docOpenOf(opened({ document: { name: 'q3.fake', type: 'Fake document', version: 3, size: 12, writable: true, latest: 4, versions: [{ n: 3, at_ms: 1 }, { n: 4, at_ms: 2 }] } }));
+    expect(o?.kind === 'view' ? o.document : null).toEqual({ name: 'q3.fake', type: 'Fake document', version: 3, size: 12, writable: true });
+  });
+
   it('a built-in page is its frame, on the pages server only', () => {
     expect(docOpenOf({ kind: 'frame', frame: 'http://127.0.0.1:47123/a/x/view' })).toEqual({ kind: 'frame', url: 'http://127.0.0.1:47123/a/x/view' });
     expect(docOpenOf({ kind: 'frame', frame: 'https://evil.example/a' })).toBe(null);
