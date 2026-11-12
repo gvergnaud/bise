@@ -142,6 +142,12 @@ reclaim() {
   [ -e "$s" ] && [ $(( now - $(stat -f %m "$s" 2>/dev/null || echo 0) )) -lt "$gap" ] && return 0
   touch "$s"
   local r="${HEAVY_RECLAIM:-/usr/bin/python3 $HOME/.bise/run/disk_reclaim.py}"
+  # the idle pass (want 0) runs at the background QoS (taskpolicy -b: the lowest CPU priority, its
+  # disk I/O throttled): nothing waits on it. On 11-12 one ran 1h07 at load 110-142 (two reclones,
+  # three target deletions: millions of file ops that fseventsd, mds and the endpoint agent also
+  # read), and the load fell from 78 to 37 the minute it ended (main m_62979). A want pass (a job
+  # waits for that disk) keeps its priority.
+  [ "$1" = 0 ] && [ -z "${HEAVY_RECLAIM:-}" ] && [ -x /usr/sbin/taskpolicy ] && r="/usr/sbin/taskpolicy -b $r"
   # fds 3-9 closed: a job's slot lock (lockf's fd, 3; 3-6 for --alone) must
   # not outlive the job in a reclaim that runs on
   # reclaim.mark (touched at its start and end) and reclaim.running (while it
