@@ -42,14 +42,6 @@ pub enum FileTarget {
     RootFile { path: PathBuf },
 }
 
-/// What `view/open` asks for (A4): an artifact (its newest version when
-/// `version` is none) or a row `folder/list` gave.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum OpenTarget {
-    Artifact { id: String, version: Option<u64> },
-    Entry(String),
-}
-
 /// A file or a folder, with a folder's first-level names (A2's folder
 /// rules), at most [`FOLDER_NAMES`].
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -58,7 +50,8 @@ pub enum Kind {
     Folder { names: Vec<String> },
 }
 
-/// An [`OpenTarget`] as the hub resolved it: what the matcher reads (name,
+/// A `view/open` target (`bise_proto::files::OpenTarget`) as the hub
+/// resolved it: what the matcher reads (name,
 /// kind, the plugin whose documents hold it) and what a handle binds.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Resolved {

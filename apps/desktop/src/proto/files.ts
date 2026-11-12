@@ -53,3 +53,55 @@ export type Make = { plugin: string, ending: string, };
  * `file/new`'s answer: the artifact it added (by `you`) and its row's id.
  */
 export type FileNewResult = { artifact: string, entry: string, };
+
+/**
+ * What `view/open` opens (A4; architect m_60316): an artifact (its newest
+ * version when `version` is none) or a row `folder/list` gave. The one
+ * wire type: a path string, a missing `kind` or an unknown field is
+ * refused; a kind this version doesn't know reads as `Unknown`, which the
+ * hub refuses as a bad request.
+ */
+export type OpenTarget = { "kind": "artifact", id: string, version?: number, } | { "kind": "entry", id: string, };
+
+/**
+ * One row of the home hub's id table (`files/ids`, architect m_60046,
+ * m_60075; kb-fileprovider m_60060): a tracked path of `~/bise`, the
+ * exact bytes on disk relative to the root, `/`-joined, never
+ * Unicode-normalised.
+ */
+export type IdEntry = { 
+/**
+ * `e:<n>`
+ */
+id: string, path: string, kind: FileKind, size: number, mtime_ms: number, ino: number, };
+
+/**
+ * `files/ids/subscribe`'s answer and every `files_ids` event after it,
+ * from the home hub only: at subscribe the whole table (`full`), then its
+ * changes. `seq` grows by one per event: a gap means subscribe again.
+ */
+export type FilesIds = { full: boolean, seq: number, 
+/**
+ * the canonical `Home::bise_root()` (in the full answer only)
+ */
+root: string, 
+/**
+ * `full`: every entry; else the new, moved and changed ones
+ */
+entries: Array<IdEntry>, 
+/**
+ * the ids gone (never in a `full` one)
+ */
+deleted: Array<string>, };
+
+/**
+ * `files/mint`'s answer: the path's id (the one it has, else a new one,
+ * its `files_ids` delta sent to every subscriber).
+ */
+export type FilesMintResult = { id: string, };
+
+/**
+ * `view/copy`'s answer (A6b Keep mine as a copy, architect m_60222): the
+ * artifact it added.
+ */
+export type ViewCopyResult = { artifact: string, };
