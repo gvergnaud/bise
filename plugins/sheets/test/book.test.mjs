@@ -102,6 +102,9 @@ test("a column resized and a cell typed save once after the pause, on the etag h
   gesture((s) => (s.rowData[0] = { h: 40 }));
   await fire();
   assert.equal(writes[1].ifMatch, "e2");
+  const o2 = (await sheets.open(writes[1].data)).inspect();
+  assert.equal(o2.nodes[0].props.heights[1], 40, "the height he dragged");
+  assert.equal(o2.nodes[0].props.widths[1], 180, "the width of the save before, still there");
 
   // an agent's version came in: conflict; his next edits still go, on the same etag
   answer = async () => ({ outcome: "conflict", etag: "e9" });

@@ -328,7 +328,7 @@ pub fn record_edit(pages: &Pages, id: &str, title: &str, v: u64, now: u64) -> Op
 
 /// The maker's message for his edits (designer signs the words).
 pub fn edit_parts(id: &str, title: &str, url: &str, v: u64) -> Vec<Part> {
-    vec![Part::Text { text: format!("I edited \"{title}\" in the viewer (artifact {id} v{v}, {url}): v{v} has my changes (values, formulas, column widths, row heights). Read it before you change the file again.") }]
+    vec![Part::Text { text: format!("I edited \"{title}\" in the viewer (artifact {id} v{v}, {url}): v{v} has my changes. Read it before you change the file again.") }]
 }
 
 #[cfg(test)]

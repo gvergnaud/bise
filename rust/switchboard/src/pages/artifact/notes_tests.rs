@@ -268,3 +268,13 @@ fn the_door_checks_the_artifact_then_adds_the_hint() {
     assert!(s.text.contains("\n{\"kind\":\"cell\""), "{}", s.text);
     assert!(s.text.ends_with(&format!("why?{}", parts::NOTES_HINT)), "{}", s.text);
 }
+
+/// His edit's message says that he edited it and which version holds his edits, never a
+/// kind of change it doesn't know (it named widths and heights on a values-only save, and
+/// main chased a lost save that never was: sheets-widths, m_63324).
+#[test]
+fn his_edit_message_says_only_what_the_hub_knows() {
+    let ps = edit_parts("q3", "Q3", "http://h/a/q3/view", 2);
+    let [Part::Text { text }] = ps.as_slice() else { panic!("one text part: {ps:?}") };
+    assert_eq!(text, "I edited \"Q3\" in the viewer (artifact q3 v2, http://h/a/q3/view): v2 has my changes. Read it before you change the file again.");
+}
