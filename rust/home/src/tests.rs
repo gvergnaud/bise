@@ -155,6 +155,8 @@ fn another_homes_default_is_not_an_override() {
         ("SB_VERSIONS_DIR", "/u/.bise/dev/versions"),
         ("SB_BUILD_DIR", "/u/.bise/dev/build"),
         ("BISE_HOME_WORKSPACE", "/u/bise"),
+        ("BEND_MCP_SECRETS", "/u/.bise/secrets/mcp-oauth"),
+        ("BEND_MCP_STATUS", "/u/.bise/mcp-status"),
     ];
     let mut pairs = vec![("HOME", ts.as_str())];
     pairs.extend(inherited);
@@ -171,17 +173,39 @@ fn another_homes_default_is_not_an_override() {
 }
 
 #[test]
-fn a_throwaway_bise_home_never_takes_his_own_bise_defaults() {
-    // kb-fileprovider m_59512: BISE_HOME=<throwaway> with his shell's
-    // exports (no stamp): the plugin services ran on ~/.bise/plugin-data
-    let t = tmp("throwaway-home");
+fn a_throwaway_bise_home_takes_none_of_his_bise_defaults() {
+    // one row per PATH_VARS var (architect m_61817): under an explicit
+    // BISE_HOME, his own default inherited from an agent's shell (no
+    // stamp) is dropped (kb-fileprovider m_59512: the plugin services ran
+    // on ~/.bise/plugin-data); above all his MCP OAuth tokens and ~/bise
+    let t = tmp("throwaway-rows");
     let ts = t.to_string_lossy().to_string();
-    let h = home_of(&[("HOME", "/u"), ("BISE_HOME", &ts), ("BEND_PLUGINS_DATA", "/u/.bise/plugin-data"), ("BEND_RUN_DIR", "/u/.bise/run")]);
-    assert_eq!(h.plugin_data_dir(), t.join("plugin-data"));
-    assert_eq!(h.run_dir(), t.join("run"));
-    // another path stays his override
-    let kept = home_of(&[("HOME", "/u"), ("BISE_HOME", &ts), ("BEND_PLUGINS_DATA", "/elsewhere/pd")]);
-    assert_eq!(kept.plugin_data_dir(), PathBuf::from("/elsewhere/pd"));
+    let theirs = Home::at(&t);
+    let his = home_of(&[("HOME", "/u")]);
+    type PathOf = fn(&Home) -> PathBuf;
+    let rows: Vec<(&str, PathOf)> = vec![
+        ("BEND_CONFIG", Home::config_file),
+        ("BEND_SESSIONS_DIR", Home::sessions_dir),
+        ("BEND_IMAGE_DIR", Home::images_dir),
+        ("BEND_PLUGINS_STATE", Home::plugins_state),
+        ("BEND_PLUGINS_DATA", Home::plugin_data_dir),
+        ("BEND_RUN_DIR", Home::run_dir),
+        ("SB_VERSIONS_DIR", Home::versions_dir),
+        ("SB_BUILD_DIR", Home::build_dir),
+        ("BISE_HOME_WORKSPACE", Home::bise_root),
+        ("BEND_MCP_SECRETS", Home::mcp_oauth_dir),
+        ("BEND_MCP_STATUS", Home::mcp_status_dir),
+    ];
+    assert_eq!(rows.iter().map(|r| r.0).collect::<Vec<_>>(), PATH_VARS.to_vec(), "a row per var");
+    for (var, path) in rows {
+        let his_default = path(&his).to_string_lossy().to_string();
+        assert!(his_default.starts_with("/u/"), "{var}: {his_default}");
+        let h = home_of(&[("HOME", "/u"), ("BISE_HOME", &ts), (var, &his_default)]);
+        assert_eq!(path(&h), path(&theirs), "{var}");
+        // another path he set stays his override
+        let kept = home_of(&[("HOME", "/u"), ("BISE_HOME", &ts), (var, "/elsewhere/x")]);
+        assert_eq!(path(&kept), PathBuf::from("/elsewhere/x"), "{var}");
+    }
 }
 
 #[test]

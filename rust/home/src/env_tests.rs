@@ -228,3 +228,32 @@ fn only_the_voice_fake_knobs_reach_an_off_screen_core() {
     assert_eq!(flagged, ["BISE_AMBIENT_FAKE_VOICE", "BISE_VOICE_FAKE_HEARD", "BISE_VOICE_FAKE_HEARD_MS"]);
     assert!(VARS.iter().filter(|v| v.offscreen_core).all(|v| v.kind == Kind::Test && !v.kept_in_tests));
 }
+
+/// A path variable is read through Home only (architect m_61817): a read
+/// around it skips the rule that drops his ~/.bise defaults under a
+/// throwaway BISE_HOME (BEND_MCP_SECRETS read his OAuth tokens so).
+#[test]
+fn a_path_variable_is_read_through_home_only() {
+    let rust = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let mut files = Vec::new();
+    rust_sources(&rust, &mut files);
+    // bend-jsrt: its own workspace without bise_home; its env is the
+    // runtime's, which Home::export set already
+    let allowed = ["home/", "jsrt/"];
+    let mut around = Vec::new();
+    for f in &files {
+        let rel = f.strip_prefix(&rust).unwrap_or(f).to_string_lossy().into_owned();
+        if allowed.iter().any(|a| rel.starts_with(a)) {
+            continue;
+        }
+        let src = std::fs::read_to_string(f).unwrap_or_default();
+        for v in crate::PATH_VARS {
+            // a read, not a test's set_var/remove_var
+            let read = |r: &str| src.match_indices(r).any(|(i, _)| !src[..i].ends_with(|c: char| c == '_' || c.is_alphanumeric()));
+            if read(&format!("var(\"{v}\")")) || read(&format!("var_os(\"{v}\")")) {
+                around.push(format!("{v} ({rel})"));
+            }
+        }
+    }
+    assert!(around.is_empty(), "read around Home: {}; use bise_home::Home::from_env()", around.join(", "));
+}

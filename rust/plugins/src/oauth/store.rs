@@ -11,13 +11,10 @@ use serde_json::{json, Map, Value};
 use super::{form, loopback, post, Config};
 use crate::http::Url;
 
-/// `$BEND_MCP_SECRETS`, else `<bise home>/secrets/mcp-oauth`.
+/// `$BEND_MCP_SECRETS`, else `<bise home>/secrets/mcp-oauth`, through
+/// Home (a try's home never takes his: architect m_61817).
 pub fn store_dir() -> PathBuf {
-    std::env::var("BEND_MCP_SECRETS")
-        .ok()
-        .filter(|s| !s.is_empty())
-        .map(PathBuf::from)
-        .unwrap_or_else(|| bise_home::Home::from_env().secrets_dir().join("mcp-oauth"))
+    bise_home::Home::from_env().mcp_oauth_dir()
 }
 
 /// The canonical server URL: the resource the tokens are for (no
