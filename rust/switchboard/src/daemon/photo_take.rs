@@ -62,12 +62,6 @@ fn pick(dir: &Path, key: Option<&str>, events: &[Value], migrated: bool) -> (Opt
 /// The boot's rebuild: from the photo when one fits, else every event.
 /// A full replay takes a photo at once (the next boot starts from it).
 /// sb-core dead or late on the replay: the error, the hub does not start.
-/// No photo at all (no key): the loop budget's tests' shell.
-#[cfg(test)]
-pub(super) fn off(dir: PathBuf) -> Photos {
-    Photos { dir, key: None, mark: Mark::of(&[]), last_event: 0, last_photo: 0, last_events: 0, last_took: 0, wait: photo::Wait::default(), quiet: false }
-}
-
 pub(super) fn boot(hub: &mut Hub, paths: &Paths, core_bin: &Path, events: &[Value], migrated: bool, watch: &super::boot::Boot) -> Result<Photos, crate::core::CoreError> {
     let dir = paths.state.join("photo");
     photo::clean(&dir);
