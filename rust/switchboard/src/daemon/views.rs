@@ -147,6 +147,10 @@ fn method_of(cmd: HubCmd) -> Option<(&'static str, Value)> {
         HubCmd::ViewNotes { doc, .. } => ("view/notes", json!({"doc": doc})),
         HubCmd::ViewOpen { project, target, opener } => ("view/open", json!({"project": project, "target": target, "opener": opener})),
         HubCmd::ViewCopy { doc, text, blob, .. } => ("view/copy", json!({"doc": doc, "text": text, "blob": blob})),
+        HubCmd::FolderList { folder, hidden, .. } => ("folder/list", json!({"folder": folder, "hidden": hidden})),
+        HubCmd::FileNew { make, library_folder, in_folder, .. } => ("file/new", json!({"make": make, "library_folder": library_folder, "in": in_folder})),
+        HubCmd::FilesIdsSubscribe { .. } => ("files/ids/subscribe", json!({})),
+        HubCmd::FilesMint { path, .. } => ("files/mint", json!({"path": path})),
         _ => return None,
     })
 }
@@ -280,6 +284,9 @@ impl Shell {
                 let doc = params.get("doc").and_then(Value::as_str).unwrap_or("").to_string();
                 return self.view_copy(doc, params, done);
             }
+            // the wire is in (kb-fileprovider builds on it); the home hub's
+            // table, folder/list and file/new serve them in the next commit
+            "folder/list" | "file/new" | "files/ids/subscribe" | "files/mint" => return done(Err(ViewError::NotSupported.rpc(method))),
             _ => {}
         }
         let p = match view_call::Key::of(&params) {

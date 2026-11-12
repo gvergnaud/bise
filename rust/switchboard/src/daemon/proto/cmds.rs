@@ -605,7 +605,11 @@ impl Shell {
             | HubCmd::ViewClose { .. }
             | HubCmd::ViewNotes { .. }
             | HubCmd::ViewOpen { .. }
-            | HubCmd::ViewCopy { .. } => {}
+            | HubCmd::ViewCopy { .. }
+            | HubCmd::FolderList { .. }
+            | HubCmd::FileNew { .. }
+            | HubCmd::FilesIdsSubscribe { .. }
+            | HubCmd::FilesMint { .. } => {}
             HubCmd::Unknown { .. } => {}
         }
     }

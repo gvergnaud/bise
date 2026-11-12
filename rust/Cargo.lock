@@ -1859,6 +1859,7 @@ dependencies = [
  "bise-catalog",
  "bise-computer-use",
  "bise-home",
+ "bise-ids",
  "bise-peer",
  "bise-proto",
  "bise-secrets",

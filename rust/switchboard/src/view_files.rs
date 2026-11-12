@@ -24,8 +24,6 @@ use std::path::PathBuf;
 
 /// A handle's scheme (Vibe's Plugins v2 RFC §7).
 pub const SCHEME: &str = "view-file://";
-/// A folder's first-level names given to the matcher's folder rules (A2).
-pub const FOLDER_NAMES: usize = 64;
 /// At most this many live handles (a backstop: sessions end with their
 /// tab and with the pages server's caps; past it the oldest goes).
 pub const HANDLES: usize = 4096;
@@ -43,12 +41,12 @@ pub enum FileTarget {
 }
 
 /// A file or a folder, with a folder's first-level names (A2's folder
-/// rules, `crate::artifacts::folder_names`), at most [`FOLDER_NAMES`];
-/// `more`: the list was cut (`bend_plugins::opens::Kind::FolderCut`).
+/// rules, `crate::artifacts::folder_names`); a cut list's `more` reads as
+/// `bend_plugins::opens::Kind::FolderCut`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Kind {
     File,
-    Folder { names: Vec<String>, more: bool },
+    Folder { names: bise_proto::files::Names },
 }
 
 /// A `view/open` target (`bise_proto::files::OpenTarget`) as the hub

@@ -25,6 +25,9 @@ export const TAGS = {
   artifacts_moved: true,
   // plugin-apps A5: an artifact's notes were written; its document tabs ask view/notes again
   artifact_notes: true,
+  // plugin-apps A6 ids: the home hub's id table changed (files/ids/subscribe's connections only:
+  // the Finder edge in the core, never this window)
+  files_ids: true,
   library: true,
   scheduled: true,
   worktrees: true,

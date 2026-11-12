@@ -48,6 +48,45 @@ pub struct FolderRow {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub artifact: Option<EntryArtifact>,
+    /// the app that opens it (A2's pick, as an artifact row's); none: no
+    /// app, it opens on his Mac (a folder: none)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub opener: Option<crate::rows::Opener>,
+    /// every app that can (Open with…), the pick first
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub openers: Vec<crate::rows::Opener>,
+    /// a folder's first-level names, for its card (a file: none)
+    #[serde(flatten)]
+    pub names: Names,
+}
+
+/// A folder's first-level names (A2's folder rule; apps-sites' version
+/// names too, architect m_62668): sorted, hidden ones out, at most
+/// [`Names::MAX`], and `names_more` when the folder has more, so a cut
+/// list never reads as the whole one. Flattened where it is used.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Names {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub names: Vec<String>,
+    #[serde(default, rename = "names_more", skip_serializing_if = "std::ops::Not::not")]
+    #[cfg_attr(feature = "ts", ts(rename = "names_more"))]
+    pub more: bool,
+}
+
+impl Names {
+    pub const MAX: usize = 64;
+
+    /// The one way to build it: `all` a folder's names as read, `hidden`
+    /// the rule of a name left out (`bise_ids::skipped`).
+    pub fn of(all: impl IntoIterator<Item = String>, hidden: impl Fn(&str) -> bool) -> Names {
+        let mut names: Vec<String> = all.into_iter().filter(|n| !hidden(n)).collect();
+        names.sort();
+        let more = names.len() > Self::MAX;
+        names.truncate(Self::MAX);
+        Names { names, more }
+    }
 }
 
 /// A folder on the way from the root to the listed one.
@@ -167,10 +206,27 @@ mod tests {
 
     #[test]
     fn a_row_reads_as_the_contract_says() {
-        let r = FolderRow { id: "e:7".into(), name: "a.xlsx".into(), kind: FileKind::File, size: 3, mtime: 9, artifact: Some(EntryArtifact { project: "p".into(), id: "q3".into() }) };
+        let r = FolderRow { id: "e:7".into(), name: "a.xlsx".into(), kind: FileKind::File, size: 3, mtime: 9, artifact: Some(EntryArtifact { project: "p".into(), id: "q3".into() }), ..Default::default() };
         assert_eq!(serde_json::to_value(&r).unwrap(), json!({"id": "e:7", "name": "a.xlsx", "kind": "file", "size": 3, "mtime": 9, "artifact": {"project": "p", "id": "q3"}}));
-        let folder: FolderRow = serde_json::from_value(json!({"id": "e:1", "name": "x", "kind": "folder", "size": 0, "mtime": 0})).unwrap();
-        assert_eq!((folder.kind, folder.artifact), (FileKind::Folder, None));
+        let folder: FolderRow = serde_json::from_value(json!({"id": "e:1", "name": "x", "kind": "folder", "size": 0, "mtime": 0, "names": ["a.md"], "names_more": true})).unwrap();
+        assert_eq!((folder.kind, folder.artifact, folder.opener), (FileKind::Folder, None, None));
+        assert_eq!(folder.names, Names { names: vec!["a.md".into()], more: true });
+    }
+
+    /// architect m_62668: sorted, hidden out, at most MAX, and a cut list
+    /// says so.
+    #[test]
+    fn a_folders_names_are_cut_and_say_so() {
+        let hidden = |n: &str| n.starts_with('.');
+        let few = Names::of(["b.md", ".DS_Store", "a.md"].map(String::from), hidden);
+        assert_eq!(few, Names { names: vec!["a.md".into(), "b.md".into()], more: false });
+        assert_eq!(serde_json::to_value(&few).unwrap(), json!({"names": ["a.md", "b.md"]}));
+        let exact = Names::of((0..Names::MAX).map(|i| format!("{i:03}")), hidden);
+        assert_eq!((exact.names.len(), exact.more), (Names::MAX, false));
+        let many = Names::of((0..Names::MAX + 1).rev().map(|i| format!("{i:03}")), hidden);
+        assert_eq!((many.names.len(), many.more, many.names[0].as_str()), (Names::MAX, true, "000"));
+        assert_eq!(serde_json::to_value(&many).unwrap()["names_more"], json!(true));
+        assert_eq!(serde_json::to_value(Names::default()).unwrap(), json!({}));
     }
 
     /// architect m_60316: one tagged type; a path is never a target.

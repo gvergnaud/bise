@@ -2,6 +2,8 @@
 // BISE_PROTO_BLESS=1 cargo test -p bise-proto --features ts --test ts
 // ids, positions and *_ms are numbers (u64 in Rust, safe below 2^53).
 
+import type { Opener } from './rows';
+
 /**
  * A row of `~/bise`: a file or a folder.
  */
@@ -29,7 +31,16 @@ size: number,
 /**
  * its last change, ms since the epoch
  */
-mtime: number, artifact?: EntryArtifact, };
+mtime: number, artifact?: EntryArtifact, 
+/**
+ * the app that opens it (A2's pick, as an artifact row's); none: no
+ * app, it opens on his Mac (a folder: none)
+ */
+opener?: Opener, 
+/**
+ * every app that can (Open with…), the pick first
+ */
+openers?: Array<Opener>, names?: Array<string>, names_more?: boolean, };
 
 /**
  * A folder on the way from the root to the listed one.
