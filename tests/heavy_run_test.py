@@ -650,6 +650,39 @@ with tempfile.TemporaryDirectory() as home:
     r = subprocess.run([HEAVY, "quiet", "as-he-does", "--", "true"], env=envl, capture_output=True, text=True, timeout=30)
     q = [l.split("\t") for l in lines() if l.startswith("quiet\t")]
     check(r.returncode == 0 and q and q[-1][1] == "as-he-does", "one heavy.log line a window: %r" % q[-1:])
+    check("timing-bound part done" in r.stderr, "a window says the timing-bound part is done: %r" % r.stderr[-200:])
+    # a release pass's lanes (plan A step 7, architect m_63312, marketing m_63313): a window of lane A
+    # holds pass-timing.lock, marked with its lane, and says nothing of the pass's end
+    pready = os.path.join(home, "pass-ready")
+    pa = subprocess.Popen([HEAVY, "quiet", "tip-e2e", "--", "sh", "-c", 'touch "$0"; sleep 30', pready],
+                          env=dict(envl, HEAVY_PASS_LANE="A"), start_new_session=True, stderr=subprocess.PIPE, text=True)
+    check(wait_for(lambda: os.path.exists(pready), 10, "lane A's window"), "lane A's window runs its command")
+    check(open(os.path.join(qdir, "pass-timing.lock")).read().startswith("A tip-e2e since "), "the pass lock names lane A")
+    # lane B's next heavy step waits for it, on slot 6 too; lane A's own step does not wait
+    ok, err = admits(5, "quiet=- cpu=0 agents=0 low=0", "lane B under lane A's window", extra={"HEAVY_PASS_LANE": "B", "HEAVY_NO_LANE": ""},
+                     args=("--prio",))
+    check(not ok and "lane B waits: lane A runs a timing-bound step (tip-e2e)" in err, "lane B waits for lane A's window: %r" % err[-200:])
+    r = subprocess.run([HEAVY, "--prio", "sh", "-c", 'echo "$HEAVY_SLOT"'], env=dict(envl, HEAVY_NO_LANE="", HEAVY_PASS_LANE="A"),
+                       capture_output=True, text=True, timeout=30)
+    check(r.returncode == 0 and r.stdout.startswith("heavy5.lock"), "lane A's own step runs in its window: %r %r" % (r.stdout, r.stderr[-200:]))
+    os.killpg(pa.pid, 9)
+    pa.wait()
+    # the window gone (a killed wrapper frees it), lane B goes, in slot 6 while slot 5 is held
+    s5lock = os.path.join(run, "heavy5.lock")
+    s5 = subprocess.Popen(["/usr/bin/lockf", "-k", s5lock, "sleep", "30"], start_new_session=True)
+    check(wait_for(lambda: subprocess.run(["/usr/bin/lockf", "-k", "-t", "0", s5lock, "true"], capture_output=True).returncode != 0,
+                   10, "slot 5 held"), "slot 5 held by another job")
+    r = subprocess.run([HEAVY, "--prio", "sh", "-c", 'echo "$HEAVY_SLOT"'], env=dict(envl, HEAVY_NO_LANE="", HEAVY_PASS_LANE="B"),
+                       capture_output=True, text=True, timeout=30)
+    check(r.returncode == 0 and r.stdout.startswith("heavy6.lock"), "lane B takes slot 6 beside slot 5: %r %r" % (r.stdout, r.stderr[-200:]))
+    r = subprocess.run([HEAVY, "--prio", "sh", "-c", 'echo "$HEAVY_SLOT"'], env=dict(envl, HEAVY_NO_LANE=""),
+                       capture_output=True, text=True, timeout=30)
+    check(r.returncode == 0 and not r.stdout.startswith("heavy6.lock"), "a plain --prio never takes slot 6: %r" % r.stdout)
+    os.killpg(s5.pid, 9)
+    s5.wait()
+    r = subprocess.run([HEAVY, "quiet", "desktop-checks", "--", "true"], env=dict(envl, HEAVY_PASS_LANE="B"), capture_output=True, text=True, timeout=30)
+    check(r.returncode == 0 and "timing-bound part done" not in r.stderr and "(lane B) closed" in r.stderr,
+          "a pass lane's window leaves the 'done' line to release_cut.sh: %r" % r.stderr[-200:])
     # the time limit: a job over HEAVY_MAX_MIN is stopped, rc=124
     r = subprocess.run([HEAVY, "sh", "-c", "sleep 60 & wait"], env=dict(envr, HEAVY_MAX_MIN="1", HEAVY_MAX_SEC="2"),
                        capture_output=True, text=True, timeout=40)

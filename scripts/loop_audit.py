@@ -592,7 +592,7 @@ def audit(h, hub, since):
     rep["heavy"] = {"jobs": len(hv), "wait_p50": med(starts), "wait_p90": pct(starts, 0.9), "wait_max": max(starts or [0]),
                     # the release lane (heavy5.lock, --prio only): each job by command, so a use that
                     # is no release shows the next day (review-gates m_35984)
-                    "lane": [{"cmd": x["cmd"], "cwd": x["cwd"], "start": x["start"]} for x in hv if x["slot"] == "heavy5.lock"]}
+                    "lane": [{"cmd": x["cmd"], "cwd": x["cwd"], "start": x["start"]} for x in hv if x["slot"] in ("heavy5.lock", "heavy6.lock")]}
     rep["reds"] = reds
     rep["adhoc"] = adhoc
     rep["flow"] = flow_section(h, hub, since, ss)

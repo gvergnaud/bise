@@ -41,6 +41,7 @@ echo "lockf: $HOME/.bise/run/heavy.lock: already locked"
 [ -n "${FAKE_SLOT_AT:-}" ] && echo "$FAKE_SLOT_AT" >"$NIGHTLY_NOW"
 [ "${1:-}" = --alone ] && { echo "heavy-run: both slots"; shift; }
 [ "${1:-}" = --land ] && { echo "heavy-run: rank 1, a land check"; shift; }
+[ "${1:-}" = --prio ] && { echo "heavy-run: rank 0, the release lane${HEAVY_PASS_LANE:+, pass lane $HEAVY_PASS_LANE}"; shift; }
 [ -n "${HEAVY_MAX_MIN:-}" ] && echo "heavy-run: max ${HEAVY_MAX_MIN} min"
 [ -n "${HEAVY_DEADLINE:-}" ] && echo "heavy-run: deadline $HEAVY_DEADLINE"
 # still queued at the deadline: heavy-run's own words, exit 75, no job
@@ -407,6 +408,22 @@ def main():
         check("STEP desktop-checks: none (a tip run" in log and "STEP core-record: none (a tip run" in log and "covmap checks" not in log,
               "tip: no desktop checks nor core-record (the nightly runs them): %r" % log)
         check("heavy-run: max 120 min" in log, "tip: a wall cap of 120 min (TIP_MAX_MIN): %r" % log)
+        # --tip --sha <sha> (a release pass's lane A, plan A step 7): that sha, pinned, though main
+        # moved on; in the release lane; tried already (tip-last): it runs again
+        git(repo, "commit", "-q", "--allow-empty", "-m", "after the pin")
+        before = set(f for f in os.listdir(out) if f.startswith("tip-") and f.endswith(".log"))
+        p = subprocess.run(["bash", os.path.join(repo, "scripts", "nightly_gate.sh"), "--tip", "--sha", full],
+                           env=dict(env0, HEAVY_PASS_LANE="A"), capture_output=True, text=True, timeout=60)
+        new = sorted(set(f for f in os.listdir(out) if f.startswith("tip-") and f.endswith(".log")) - before)
+        log = open(os.path.join(out, new[-1])).read() if new else ""
+        started = [l.split()[-1] for l in log.splitlines() if l.startswith("START ")]
+        check(p.returncode == 0 and started and full.startswith(started[0]) and short() != started[0],
+              "--tip --sha: the pinned sha ran, not main's tip: rc %s, %r %r" % (p.returncode, log[-400:], p.stderr[-200:]))
+        check("heavy-run: rank 0, the release lane, pass lane A" in log, "--tip --sha: in the release lane, its pass lane: %r" % log[-400:])
+        check(open(os.path.join(out, "tip-last")).read().split()[:2] == [full, "green"], "--tip --sha: tip-last names the pinned sha")
+        p = subprocess.run(["bash", os.path.join(repo, "scripts", "nightly_gate.sh"), "--tip", "--sha", "no-such-sha"],
+                           env=env0, capture_output=True, text=True, timeout=60)
+        check(p.returncode == 2 and "no commit 'no-such-sha'" in p.stderr, "--tip --sha: a bad sha, rc 2: %r" % p.stderr)
         # a night that never started (review-gates m_37144: the job disabled at 01:00): from 07:00 the
         # tip gate finds no log for the day and says why, once, in last and red
         today = os.path.join(out, datetime.date.today().isoformat() + ".log")

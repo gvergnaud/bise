@@ -436,8 +436,9 @@ def admit_facts(run):
     jobs = heavy_jobs(os.path.join(run, "reserve"))
     rows = running_procs() or []
     q = quiet_held(os.path.join(run, "quiet"))
-    agents = sum(1 for s, _, r in jobs if s != "heavy5.lock" and r in (0, 1, 2))
-    low = sum(1 for s, _, r in jobs if s != "heavy5.lock" and r == 3)
+    release = ("heavy5.lock", "heavy6.lock")  # the release lane and a release pass's second lane
+    agents = sum(1 for s, _, r in jobs if s not in release and r in (0, 1, 2))
+    low = sum(1 for s, _, r in jobs if s not in release and r == 3)
     return "quiet=%s cpu=%d agents=%d low=%d" % (",".join(q) or "-", int(tree_cpu(rows, [p for _, p, _ in jobs])), agents, low)
 
 

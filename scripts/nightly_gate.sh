@@ -164,6 +164,8 @@ if [ "${1:-}" = --in-slot ]; then
   cd / || exit 1
   if late; then echo "LATE the slots came at $(date -r "$(now)" +%H:%M), past the night's end $(date -r "$NIGHTLY_END" +%H:%M): nothing ran"; exit 3; fi
   tip="$(git -C "$main_tree" rev-parse --verify -q main)" || { echo "NOSTART no branch main in $main_tree"; exit 1; }
+  # a release pass's pinned sha (--tip --sha), not main's newest tip
+  if [ -n "${TIP_SHA:-}" ]; then tip="$(git -C "$main_tree" rev-parse --verify -q "$TIP_SHA^{commit}")" || { echo "NOSTART no commit $TIP_SHA in $main_tree"; exit 1; }; fi
   if [ ! -e "$wt/.git" ]; then
     rm -rf "$wt"; git -C "$main_tree" worktree prune
     mkdir -p "$tree" && echo nightly >"$tree/owner" && git -C "$main_tree" worktree add -q --detach "$wt" "$tip" \
@@ -297,7 +299,7 @@ if [ "${1:-}" = --in-slot ]; then
   # heavy-run's release lane (heavy5.lock, --prio) runs beside an --alone job: a timing red of this
   # night may come from its load (review-gates m_35984); heavy.log says whether one ran meanwhile
   if awk -F'\t' -v t0="$slot_t0" -v now="$(date +%s)" '
-      $4 != "heavy5.lock" { next }
+      $4 != "heavy5.lock" && $4 != "heavy6.lock" { next }
       $3 == "-" { open[$1 FS $2] = $2; next }
       { delete open[$1 FS $2]; if ($2 <= now && $3 >= t0) busy = 1 }
       END { for (k in open) if (open[k] <= now) busy = 1; exit !busy }' "${HEAVY_LOG:-$HOME/.bise/run/heavy.log}" 2>/dev/null; then
@@ -324,18 +326,34 @@ if [ "${1:-}" = --tip ]; then
   # main's tip as a land check (fast-loop, review-gates m_36198): once per sha, queued in
   # heavy-run's rank 1 whatever the load; the next move of main or tick tries again
   bh="${BISE_HOME:-$HOME/.bise}"
-  tip="$(git -C "$main_tree" rev-parse --verify -q main)" || exit 0
-  grep -q "^$tip	" "$bh/gate/green-shas.tsv" 2>/dev/null && exit 0
-  [ "$(cut -d' ' -f1 "$out/tip-last" 2>/dev/null)" = "$tip" ] && exit 0
-  # one tip run at a time, waiting ones included (lockf -t 0: a second one exits 75; the one in
-  # line tests main's newest tip when its slot comes)
-  [ -n "${TIP_LOCKED:-}" ] || TIP_LOCKED=1 exec /usr/bin/lockf -t 0 "$out/tip.lock" /bin/bash "$here/scripts/nightly_gate.sh" --tip
+  # --tip --sha <sha>: a release pass's lane A (scripts/release_cut.sh pass, release-speed plan A
+  # step 7): that sha, pinned, whatever main's tip is; green already: nothing to run; tried and
+  # red: run again (a cut retries); it waits for a tip run in line, then runs in the release lane
+  # (--prio, HEAVY_PASS_LANE from release_cut.sh)
+  pin=""
+  if [ "${2:-}" = --sha ]; then
+    pin="$(git -C "$main_tree" rev-parse --verify -q "${3:-}^{commit}")" || { echo "nightly_gate.sh --tip --sha: no commit '${3:-}'" >&2; exit 2; }
+  fi
+  if [ -n "$pin" ]; then
+    tip="$pin"
+    grep -q "^$tip	" "$bh/gate/green-shas.tsv" 2>/dev/null && { echo "green already: $tip"; exit 0; }
+    [ -n "${TIP_LOCKED:-}" ] || TIP_LOCKED=1 exec /usr/bin/lockf "$out/tip.lock" /bin/bash "$here/scripts/nightly_gate.sh" --tip --sha "$pin"
+  else
+    tip="$(git -C "$main_tree" rev-parse --verify -q main)" || exit 0
+    grep -q "^$tip	" "$bh/gate/green-shas.tsv" 2>/dev/null && exit 0
+    [ "$(cut -d' ' -f1 "$out/tip-last" 2>/dev/null)" = "$tip" ] && exit 0
+    # one tip run at a time, waiting ones included (lockf -t 0: a second one exits 75; the one in
+    # line tests main's newest tip when its slot comes)
+    [ -n "${TIP_LOCKED:-}" ] || TIP_LOCKED=1 exec /usr/bin/lockf -t 0 "$out/tip.lock" /bin/bash "$here/scripts/nightly_gate.sh" --tip
+  fi
   log="$out/tip-$(date +%Y%m%d-%H%M%S).log" s=$SECONDS
-  echo "QUEUED $(date): main $tip, a land check in heavy-run's queue" >"$log"
-  # one heavy slot, ranked as a land check: an agent's heavy job may take the others
+  echo "QUEUED $(date): ${pin:+pinned }$tip, a land check in heavy-run's queue" >"$log"
+  # one heavy slot, ranked as a land check: an agent's heavy job may take the others; a pinned
+  # sha (a release pass) in the release lane instead
   # its wall cap (main m_37136: the 04:31 run held a slot 5 h): TIP_MAX_MIN (120) min, then
   # heavy-run stops it (rc 124, an infra state, no tip-red)
-  TIP_RUN=1 HEAVY_MAX_MIN="${TIP_MAX_MIN:-120}" "${NIGHTLY_HEAVY_RUN:-$HOME/.bise/run/heavy-run}" --land /bin/bash "$here/scripts/nightly_gate.sh" --in-slot >>"$log" 2>&1
+  lane=--land; [ -n "$pin" ] && lane=--prio
+  TIP_SHA="$pin" TIP_RUN=1 HEAVY_MAX_MIN="${TIP_MAX_MIN:-120}" "${NIGHTLY_HEAVY_RUN:-$HOME/.bise/run/heavy-run}" $lane /bin/bash "$here/scripts/nightly_gate.sh" --in-slot >>"$log" 2>&1
   rc=$?
   sha="$(awk '/^START /{print $NF; exit}' "$log")"
   if [ -z "$sha" ]; then state=infra; sha="$tip"

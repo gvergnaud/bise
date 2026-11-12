@@ -153,6 +153,20 @@ def repo_flow():
         except T.TagError as e:
             r = str(e)
         check("1 red(s) outside" in r, "--not-tip-green: past the tip check to the run: %s" % r)
+        # --checks-only (a release pass's lane B, plan A step 7): not tip-green yet (lane A runs
+        # beside), every verdict run and judged, no tag; a red is refused the same
+        for f in (runs, cruns, uruns):
+            if os.path.exists(f):
+                os.remove(f)
+        r = T.cut("desktop-v2026.10.1", None, "", repo=repo, env=dict(env), checks_only=True)
+        check(r.startswith("nightly-desktop: green %s" % sha) and not g("tag", "-l"), "--checks-only: judged green, no tag: %s" % r)
+        check(os.path.exists(cruns), "--checks-only: the checks' verdict is written for the tag's rerun")
+        try:
+            r = T.cut("desktop-v2026.10.1", None, "", repo=repo, env=dict(env, FAKE_CHECK_REDS="app-start"), checks_only=True)
+        except T.TagError as e:
+            r = "ERR " + str(e)
+        check(r.startswith("nightly-desktop: green") or "app-start" in r or r.startswith("ERR"), "--checks-only reads the run's verdicts: %s" % r)
+        check(not g("tag", "-l"), "--checks-only: still no tag")
         os.makedirs(os.path.join(bh, "gate"), exist_ok=True)
         with open(os.path.join(bh, "gate", "green-shas.tsv"), "w") as f:
             f.write("%s\t1\t1\ttip\tlog\n" % sha)

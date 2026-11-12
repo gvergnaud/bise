@@ -49,6 +49,12 @@
 #     charge plus la machine »): only a --prio job takes it, and a --prio job
 #     tries it first, so a release's verdict never waits for the agents' 4
 #     slots and never takes one of them while the lane is free.
+#   slot 6 = ~/.bise/run/heavy6.lock, the release pass's second lane (release-speed plan A step
+#     7, architect m_63312, marketing m_63313): only a --prio job with HEAVY_PASS_LANE=A|B takes
+#     it, which only scripts/release_cut.sh pass sets (lane A the tip gate, lane B the app side);
+#     a plain --prio never does. Such a job waits while the OTHER lane runs a timing-bound step
+#     (its quiet window holds ~/.bise/run/quiet/pass-timing.lock, one at a time across both lanes),
+#     so no build of one lane starts under the other's timing; one already running goes on.
 # The queue (flow-time, 2026-10-20): each waiting job holds a ticket,
 # ~/.bise/run/queue/<rank>-<submitted>-<pid>; a job takes a free slot only
 # when fewer live tickets are ahead of it than slots are free, so jobs start
@@ -90,13 +96,25 @@ if [ "${1:-}" = quiet ]; then
   [ $# -ge 4 ] && [ "$3" = -- ] && [[ "$2" =~ ^[a-z0-9-]+$ ]] || { echo "usage: heavy-run quiet <what> -- <command...>" >&2; return 2; }
   local what="$2" qd="$HOME/.bise/run/quiet" t0 rc held; shift 3
   mkdir -p "$qd"; t0=$(date +%s)
+  local pass="${HEAVY_PASS_LANE:-}" pre=()
+  case "$pass" in A|B) ;; *) pass="" ;; esac
+  # a release pass's lane (slot 6 in the header): one timing-bound step at a time across both
+  # lanes, waited for; its marker names the lane, which the other lane's admission reads
+  if [ -n "$pass" ]; then
+    pre=(/usr/bin/lockf -k "$qd/pass-timing.lock" /bin/bash -c 'printf "%s %s since %s\n" "$1" "$2" "$(date "+%F %T")" >"$3"; shift 3; "$@"' _ "$pass" "$what" "$qd/pass-timing.lock")
+  fi
   # the marker's line is for the logs only: admission tries a shared flock, never reads it
-  /usr/bin/lockf -k "$qd/$what.lock" /bin/bash -c 'printf "%s since %s\n" "$1" "$(date "+%F %T")" >"$2"; shift 2; "$@"' \
+  ${pre[@]+"${pre[@]}"} /usr/bin/lockf -k "$qd/$what.lock" /bin/bash -c 'printf "%s since %s\n" "$1" "$(date "+%F %T")" >"$2"; shift 2; "$@"' \
     _ "$what" "$qd/$what.lock" "$@"; rc=$?
   held=$(ls "$HOME/.bise/run/queue" 2>/dev/null | grep -vc '^0-')
   printf "quiet\t%s\t%s\t%s\t%s\t%s\n" "$what" "$t0" "$(date +%s)" "$(( ($(date +%s) - t0) / 60 ))" "$held" >>"$HOME/.bise/run/heavy.log"
-  # the moment main may lift a hold (marketing m_62928: lifted too early on 11-12)
-  echo "heavy-run: timing-bound part done: quiet window '$what' closed after $(( ($(date +%s) - t0) / 60 )) min (rc $rc)" >&2
+  # the moment main may lift a hold (marketing m_62928: lifted too early on 11-12); in a release
+  # pass, release_cut.sh says it once, after the pass's last window (marketing m_63313 d)
+  if [ -n "$pass" ]; then
+    echo "heavy-run: quiet window '$what' (lane $pass) closed after $(( ($(date +%s) - t0) / 60 )) min (rc $rc)" >&2
+  else
+    echo "heavy-run: timing-bound part done: quiet window '$what' closed after $(( ($(date +%s) - t0) / 60 )) min (rc $rc)" >&2
+  fi
   return $rc
 fi
 # no heavy-run inside a heavy job (gate-reds, main m_33473): a job holding a
@@ -125,8 +143,12 @@ S2="$D/heavy2.lock"
 S3="$D/heavy3.lock"
 S4="$D/heavy4.lock"
 S5="$D/heavy5.lock"
+S6="$D/heavy6.lock"
 Q="$D/queue"
-mkdir -p "$D" "$Q" && touch "$S1" "$S2" "$S3" "$S4" "$S5"
+mkdir -p "$D" "$Q" && touch "$S1" "$S2" "$S3" "$S4" "$S5" "$S6"
+# a release pass's lane (A|B, release_cut.sh pass; the header's slot 6), else none
+PASS_LANE="${HEAVY_PASS_LANE:-}"
+case "$PASS_LANE" in A|B) ;; *) PASS_LANE="" ;; esac
 
 # the disk (disk-guard, 2026-10-20: agents' builds filled it, macOS hit
 # 'critical low disk' and killed the app and every Chrome tab at 17:48). A
@@ -441,7 +463,7 @@ fact() { echo "$2" | tr ' ' '\n' | sed -n "s/^$1=//p"; }
 # a timing red in a night with it may come from the lane's load
 lane_during() {
   awk -F'\t' -v t0="$1" -v now="$(date +%s)" '
-    $4 != "heavy5.lock" { next }
+    $4 != "heavy5.lock" && $4 != "heavy6.lock" { next }
     $3 == "-" { open[$1 FS $2] = $2; next }
     { delete open[$1 FS $2]; if ($2 <= now && $3 >= t0) busy = 1 }
     END { for (k in open) if (open[k] <= now) busy = 1; if (busy) print "busy" }' "$2" 2>/dev/null
@@ -774,6 +796,8 @@ while :; do
   if [ -n "${HEAVY_SLOTS:-}" ]; then slots=$(echo "$S1 $S2 $S3 $S4" | cut -d' ' -f1-"$HEAVY_SLOTS"); fi
   # the release lane: --prio alone, first (HEAVY_NO_LANE=1: none, tests)
   [ "$PRIO" = 1 ] && [ -z "${HEAVY_NO_LANE:-}" ] && slots="$S5 $slots"
+  # a release pass's lane: slot 6 too (the header's slot 6)
+  [ "$PRIO" = 1 ] && [ -n "$PASS_LANE" ] && [ -z "${HEAVY_NO_LANE:-}" ] && slots="$S5 $S6 ${slots#"$S5 "}"
   if [ "$ALONE" = 1 ]; then
     # its turn (nobody ahead): the 4 slots at once when all are free, never
     # one by one (a slot it took waited idle for the others); lockf -t 0 each:
@@ -799,6 +823,15 @@ while :; do
        && [ "$(cargo_running)" -ge "$(cargo_max)" ]; then
       held=1; free=""
       [ -n "${cargowait:-}" ] || { echo "heavy-run: a slot is free but $(cargo_max) cargo jobs run already (HEAVY_CARGO_MAX), waiting" >&2; cargowait=1; }
+    fi
+    # a release pass's lane waits while the other lane runs a timing-bound step (pass-timing.lock
+    # held, its marker '<lane> <what> since ...'); its own lane's window never holds it
+    if [ -n "$free" ] && [ -n "$PASS_LANE" ] && ! /usr/bin/lockf -k -t 0 "$D/quiet/pass-timing.lock" /usr/bin/true 2>/dev/null; then
+      pl=$(cut -d' ' -f1-2 "$D/quiet/pass-timing.lock" 2>/dev/null)
+      if [ -n "$pl" ] && [ "${pl%% *}" != "$PASS_LANE" ]; then
+        held=quiet; free=""
+        [ "${loadwait:-}" = pass ] || { echo "heavy-run: lane $PASS_LANE waits: lane ${pl%% *} runs a timing-bound step (${pl#* })" >&2; loadwait=pass; }
+      fi
     fi
     # the admission (fast-loop, main m_63076 m_63082, architect m_63083 m_63085 m_63105; the
     # header's (1)-(4)). --prio (the release lane) is exempt from all of it.

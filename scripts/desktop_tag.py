@@ -259,7 +259,11 @@ def check(tag, repo=REPO):
     say("%s: annotated, %s" % (tag, line))
 
 
-def cut(tag, sha, notes, repo=REPO, env=None, why=None):
+def cut(tag, sha, notes, repo=REPO, env=None, why=None, checks_only=False):
+    """The tag on `sha` when its verdicts let it through. checks_only (--checks-only): a release
+    pass's lane B (scripts/release_cut.sh pass, release-speed plan A step 7): every verdict run or
+    read and judged, beside the tip gate (lane A), but no tip-green check and no tag: the pass
+    runs this again once lane A is green, which reads the same verdicts and tags."""
     env = dict(os.environ if env is None else env)
     if not TAG_RE.match(tag):
         raise TagError("a desktop tag is desktop-vYYYY.M.N (got %r)" % tag)
@@ -271,10 +275,14 @@ def cut(tag, sha, notes, repo=REPO, env=None, why=None):
         raise TagError("check out %s, clean, first: the end-to-end runs this checkout" % sha[:12])
     bh = env.get("BISE_HOME") or os.path.join(os.path.expanduser("~"), ".bise")
     # tip-green first (main m_36204): never hours of end-to-end on a sha no release may take
-    ok, tg = tip_green.verdict(tip_green.green_shas(os.path.join(bh, "gate", "green-shas.tsv")), sha, why)
-    say(tg)
-    if not ok:
-        raise TagError(tg)
+    # in a release pass the tip gate runs beside (lane A): checked just before the tag instead
+    if checks_only:
+        say("the app side of %s (a release pass's lane B): tip-green is checked just before the tag" % sha[:12])
+    else:
+        ok, tg = tip_green.verdict(tip_green.green_shas(os.path.join(bh, "gate", "green-shas.tsv")), sha, why)
+        say(tg)
+        if not ok:
+            raise TagError(tg)
     tsv = os.path.join(bh, "run", "nightly", "desktop-runs.tsv")
     run = last_run(read(tsv), sha)
     if run is None:
@@ -312,6 +320,9 @@ def cut(tag, sha, notes, repo=REPO, env=None, why=None):
     if ckind != "green":
         kind, owned = "owned-reds", owned + cowned
     line = mark_line(kind, owned, sha, run["when"])
+    if checks_only:
+        say("the app side of %s passes: %s (no tag: --checks-only)" % (sha[:12], line))
+        return line
     r = subprocess.run(["git", "-C", repo, "tag", "-a", tag, sha, "-F", "-"], input=message(notes, line), capture_output=True, text=True)
     if r.returncode != 0:
         raise TagError("git tag: %s" % r.stderr.strip())
@@ -339,9 +350,12 @@ def main(argv):
                 raise TagError("--not-tip-green \"<why>\"")
             why = args[i + 1]
             del args[i:i + 2]
+        checks_only = "--checks-only" in args
+        if checks_only:
+            args.remove("--checks-only")
         if not 1 <= len(args) <= 2 or args[0].startswith("-"):
-            raise TagError("usage: desktop_tag.py <desktop-vYYYY.M.N> [<sha>] [--notes-file <f>] [--not-tip-green \"<why>\"] | check <tag>")
-        cut(args[0], args[1] if len(args) == 2 else None, notes, why=why)
+            raise TagError("usage: desktop_tag.py <desktop-vYYYY.M.N> [<sha>] [--notes-file <f>] [--not-tip-green \"<why>\"] [--checks-only] | check <tag>")
+        cut(args[0], args[1] if len(args) == 2 else None, notes, why=why, checks_only=checks_only)
         return 0
     except (TagError, ValueError) as e:
         say(str(e))
