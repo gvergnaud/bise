@@ -14,6 +14,7 @@ export const HELPER_EV_TAGS: ReadonlySet<HelperEv['ev']> = new Set([
   'perms',
   'quiet',
   'shot',
+  'thumb',
   'error',
 ]);
 

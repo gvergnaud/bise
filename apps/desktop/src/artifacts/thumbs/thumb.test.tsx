@@ -69,17 +69,15 @@ describe('<Thumb />', () => {
     expect(asked).toEqual([]);
   });
 
-  it("draws a md from its text, and a file with no picture as its extension and size, a video's length", async () => {
-    answers['doc'] = { text: '# Delta review\n\n38 non-merge commits.' };
+  it("draws a file's picture (Quick Look's, a md's too), a file with no picture as its extension and size, a video's length", async () => {
+    answers['doc'] = { img: 'data:image/png;base64,AAAA' };
     answers['glb'] = { none: { ext: 'glb', bytes: 12_400_000 } };
     answers['clip'] = { img: 'data:image/png;base64,AAAA', secs: 4.2 };
     const doc = render(<Thumb item={item(art('doc', 'doc', { path: '/w/review.md' }))} visible />);
     const glb = render(<Thumb item={item(art('glb', 'file', { path: '/w/flat.glb' }))} visible />);
     const clip = render(<Thumb item={item(art('clip', 'video', { path: '/w/clip.mp4' }))} visible />);
     await flush();
-    expect(kindOf(doc.container)).toBe('text');
-    expect(doc.container.querySelector('.th-h')?.textContent).toBe('Delta review');
-    expect(doc.container.querySelector('.th-l')?.textContent).toBe('38 non-merge commits.');
+    expect(kindOf(doc.container)).toBe('img');
     expect(kindOf(glb.container)).toBe('none');
     expect(glb.container.textContent).toBe('glb12.4 MB');
     expect(clip.container.querySelector('.th-play')?.textContent).toBe('0:04');

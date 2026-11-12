@@ -25,7 +25,8 @@ SDK="$(xcrun --show-sdk-path)"
 SOURCES=("$HERE"/src/*.swift)
 FLAGS=(-swift-version 5 -target "$ARCH-apple-macos$TARGET" -sdk "$SDK"
        -framework AppKit -framework ScreenCaptureKit -framework AVFoundation
-       -framework ApplicationServices -framework CoreAudio -framework CoreMediaIO)
+       -framework ApplicationServices -framework CoreAudio -framework CoreMediaIO
+       -framework QuickLookThumbnailing)
 
 case "${1:-}" in
   --check)

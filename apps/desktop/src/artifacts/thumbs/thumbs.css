@@ -36,31 +36,6 @@
 @media (prefers-reduced-motion: reduce) {
   .th-img > img.in { transition: none; }
 }
-/* a md or txt drawn from its text, in the theme's own colors (sharp in both) */
-.th-text {
-  flex-direction: column;
-  padding: var(--s-3) var(--s-4);
-  background: var(--c-solid);
-  color: var(--c-text-2);
-  font-size: var(--t-11);
-  line-height: var(--lh-ui);
-}
-.th-h {
-  color: var(--c-text);
-  font-size: var(--t-13);
-  font-weight: 600;
-  margin-bottom: var(--s-1);
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-}
-.th-l {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  flex: none;
-}
 /* a PR, a release, a link, a folder, a file with no picture: a line icon or its extension, and its words */
 .th-tile {
   flex-direction: column;

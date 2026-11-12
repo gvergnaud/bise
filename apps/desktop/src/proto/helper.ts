@@ -30,7 +30,12 @@ path?: string | null, app?: string | null, title?: string | null,
 /**
  * an excluded app or a private window
  */
-skipped?: boolean, } | { "ev": "error", id?: string | null, message: string, };
+skipped?: boolean, } | { "ev": "thumb", id: string, ok?: boolean, 
+/**
+ * its length (a video's, a sound's), in ms, when AVFoundation
+ * reads one
+ */
+ms?: number | null, } | { "ev": "error", id?: string | null, message: string, };
 
 export type Responsible = { pid: number, path: string, };
 
@@ -54,4 +59,4 @@ export type PermAction = "ask" | "open";
 /**
  * What Electron's main asks the helper.
  */
-export type HelperCmd = { "cmd": "config", exclude: Array<string>, right_option: boolean, quote?: boolean, } | { "cmd": "route", open: boolean, } | { "cmd": "own_mic", open: boolean, } | { "cmd": "read_context", id: string, } | { "cmd": "perm", perm: Perm, action: PermAction, } | { "cmd": "shot", id: string, dir: string, } | { "cmd": "quit" };
+export type HelperCmd = { "cmd": "config", exclude: Array<string>, right_option: boolean, quote?: boolean, } | { "cmd": "route", open: boolean, } | { "cmd": "own_mic", open: boolean, } | { "cmd": "read_context", id: string, } | { "cmd": "perm", perm: Perm, action: PermAction, } | { "cmd": "shot", id: string, dir: string, } | { "cmd": "thumb", id: string, path: string, out: string, px: number, } | { "cmd": "quit" };

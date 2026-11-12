@@ -102,6 +102,13 @@ final class Helper {
                 let r = await Shot.take(into: dir, skip: skip)
                 self?.send(Lines.shot(id: id, path: r?.path, app: r?.app, title: r?.title, skipped: r?.skipped ?? false))
             }
+        case .thumb(let id, let path, let out, let px):
+            Task { @MainActor [weak self] in
+                async let ok = Thumb.picture(of: path, into: out, px: px)
+                async let ms = Thumb.length(of: path)
+                let (o, m) = await (ok, ms)
+                self?.send(Lines.thumb(id: id, ok: o, ms: m))
+            }
         case .quit:
             Log.say("quit")
             exit(0)

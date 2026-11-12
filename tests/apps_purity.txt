@@ -55,11 +55,8 @@ apps/desktop/src/artifacts/frameNote.test.ts | 3 | step 5 | reads kit/office/fra
 rust/switchboard/src/pages/site.rs | 10 | step 5 | viewer_kind, office_kind, VIDEO_EXTS and the sites' list: each step deletes its arms
 
 # ---- thumbs: thumbnails, icons and previews from the opener (A6b, apps-thumbs)
-apps/desktop/src/main/thumbs/make.ts | 5 | thumbs | LOOKS, the text excerpt, the image and timed arms: Quick Look, else the app's view
-apps/desktop/src/main/thumbs/media.ts | 2 | thumbs | a video's and a sound's length by container
 apps/desktop/src/main/thumbs/prune.ts | 1 | thumbs | the cache's .png files, rewritten with the cache per version
 apps/desktop/src/artifacts/thumbs/plan.ts | 3 | thumbs | the card's plan by kind
-apps/desktop/src/artifacts/thumbs/Thumb.tsx | 1 | thumbs | a markdown excerpt drawn in the card
 apps/desktop/src/ds/icons.tsx | 7 | thumbs | iconKindOf: the icon from the opener
 apps/desktop/src/search/rank.ts | 2 | thumbs | spotlight's glyph by kind
 apps/desktop/src/thread/peek/peek.ts | 2 | thumbs | the peek's preview by kind: the app's view or Quick Look

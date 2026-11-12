@@ -514,6 +514,9 @@ export const helper_ev: readonly HelperEv[] = [
   {"ev":"shot","id":"s3"},
   {"ev":"error","id":"s4","message":"shot: no dir"},
   {"ev":"error","message":"not JSON: expected value at line 1 column 1"},
+  {"ev":"thumb","id":"t1","ok":true},
+  {"ev":"thumb","id":"t2","ms":61500,"ok":true},
+  {"ev":"thumb","id":"t3"},
 ];
 
 /** rust/proto/fixtures/helper_cmd.jsonl */
@@ -531,6 +534,7 @@ export const helper_cmd: readonly HelperCmd[] = [
   {"cmd":"quit"},
   {"cmd":"config","exclude":["com.agilebits.onepassword7"],"quote":true,"right_option":true},
   {"cmd":"config","exclude":[],"quote":true,"right_option":false},
+  {"cmd":"thumb","id":"t1","out":"/Users/u/.bise/cache/thumbs/.ql-t1.png","path":"/Users/u/.bise/artifacts/p/a1/v2/plan.xlsx","px":480},
 ];
 
 /** rust/proto/fixtures/pty_ev.jsonl */

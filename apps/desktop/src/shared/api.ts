@@ -545,13 +545,12 @@ export interface ThumbReq {
 }
 
 /**
- * window.bise.thumb's answer: a picture (a data URL, PNG), a text file's first 4 KB, the facts of
- * a file with no picture (its extension and size), or a folder's file count; `secs`: a video's or
- * a sound's length, when its header says it.
+ * window.bise.thumb's answer: a picture (a data URL, PNG), the facts of a file with no picture
+ * (its extension and size), or a folder's file count; `secs`: a video's or a sound's length, when
+ * the helper read one.
  */
 export type ThumbAnswer =
   | { readonly img: string; readonly secs?: number }
-  | { readonly text: string }
   | { readonly none: { readonly ext: string; readonly bytes: number }; readonly secs?: number }
   | { readonly files: number };
 

@@ -26,3 +26,6 @@
 {"ev":"shot","id":"s3"}
 {"ev":"error","id":"s4","message":"shot: no dir"}
 {"ev":"error","message":"not JSON: expected value at line 1 column 1"}
+{"ev":"thumb","id":"t1","ok":true}
+{"ev":"thumb","id":"t2","ok":true,"ms":61500}
+{"ev":"thumb","id":"t3"}

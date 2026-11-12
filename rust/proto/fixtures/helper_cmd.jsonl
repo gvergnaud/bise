@@ -11,3 +11,4 @@
 {"cmd":"quit"}
 {"cmd":"config","exclude":["com.agilebits.onepassword7"],"right_option":true,"quote":true}
 {"cmd":"config","exclude":[],"right_option":false,"quote":true}
+{"cmd":"thumb","id":"t1","path":"/Users/u/.bise/artifacts/p/a1/v2/plan.xlsx","out":"/Users/u/.bise/cache/thumbs/.ql-t1.png","px":480}

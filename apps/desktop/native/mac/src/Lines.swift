@@ -17,6 +17,7 @@ enum HelperCmd: Equatable {
     case readContext(id: String)
     case perm(String, ask: Bool)           // accessibility | mic | screen; ask, else open
     case shot(id: String, dir: String)
+    case thumb(id: String, path: String, out: String, px: Int)
     case quit
     case unknown(String)                   // a newer app's command: said back as an error, never fatal
 }
@@ -61,6 +62,12 @@ enum Lines {
             guard let id = str("id") else { return bad("id") }
             guard let dir = str("dir"), !dir.isEmpty else { return bad("dir") }
             return .success(.shot(id: id, dir: dir))
+        case "thumb":
+            guard let id = str("id") else { return bad("id") }
+            guard let path = str("path"), path.hasPrefix("/") else { return bad("path") }
+            guard let out = str("out"), out.hasPrefix("/") else { return bad("out") }
+            guard let px = (o["px"] as? NSNumber)?.intValue, px > 0, px <= 4096 else { return bad("px") }
+            return .success(.thumb(id: id, path: path, out: out, px: px))
         case "quit":
             return .success(.quit)
         default:
@@ -119,6 +126,14 @@ enum Lines {
         if let v = app { e["app"] = v }
         if let v = title, !v.isEmpty { e["title"] = v }
         if skipped { e["skipped"] = true }
+        return e
+    }
+
+    // Quick Look's picture written at the command's out (ok), its length in ms when it has one
+    static func thumb(id: String, ok: Bool, ms: Int?) -> [String: Any] {
+        var e: [String: Any] = ["ev": "thumb", "id": id]
+        if ok { e["ok"] = true }
+        if let ms { e["ms"] = ms }
         return e
     }
 

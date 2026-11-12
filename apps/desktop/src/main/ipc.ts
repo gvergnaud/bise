@@ -24,6 +24,7 @@ import { readSkill, skillPaths } from './skillfile';
 import { onCoreEvent } from './core/ipc';
 import { thumbsDir } from './thumbs/cache';
 import { thumb, type ThumbEnv } from './thumbs/make';
+import type { Looks } from './helper/look';
 import { viewPermissionIn } from './viewframes';
 
 // the page's async clipboard API (navigator.clipboard): its permissions
@@ -174,7 +175,7 @@ export function installIpc(testMode: boolean): void {
   ipcMain.handle(IPC.fileFacts, (_e, raw: unknown): FileFacts | null => fileFacts(raw));
   // art-thumbs: an artifact card's picture, kept per version in bise's thumbs cache (thumbs/make.ts); its
   // reads behind the realpath fence (architect m_39772: a symlink in a project can't reach out)
-  const thumbEnv: ThumbEnv = { root: thumbsDir, lookable: (raw) => realLookable(raw, [homedir(), ...roots]), quickLook: !testMode && !isOffscreen(process.env, testMode) };
+  const thumbEnv: ThumbEnv = { root: thumbsDir, lookable: (raw) => realLookable(raw, [homedir(), ...roots]), look: () => (looks === null ? null : (p, out, px) => looks?.look(p, out, px) ?? Promise.resolve(null)) };
   ipcMain.handle(IPC.thumb, (_e, raw: unknown, want: unknown): Promise<ThumbAnswer | null> => thumb(thumbEnv, raw, want));
   ipcMain.handle(IPC.pickFolder, (e): Promise<string | null> => pickFolder(BrowserWindow.fromWebContents(e.sender), testMode));
   ipcMain.handle(IPC.pickFiles, (e): Promise<readonly string[]> => pickFiles(BrowserWindow.fromWebContents(e.sender), testMode));
@@ -236,6 +237,14 @@ export async function openFile(raw: unknown, opts: unknown, testMode: boolean): 
   if (plan.how === 'editor') await shell.openExternal(plan.url);
   else shell.showItemInFolder(plan.path);
   return true;
+}
+
+// the helper's Quick Look thumbnails (helper/look.ts), once it runs: none in a test or off-screen run
+let looks: Looks | null = null;
+
+/** The helper's Quick Look asks, from its start (index.ts). */
+export function setLooks(l: Looks | null): void {
+  looks = l;
 }
 
 /** His home and project folders: where quickLook and showInFinder may look (reveal.ts). */
