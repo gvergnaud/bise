@@ -55,6 +55,8 @@ export interface DocLive {
   readonly document: DocInfo;
   readonly opener: OpenerInfo;
   readonly save: Save;
+  /** a save of his in this session made a version: the row's newest by 'you' is his, not a newer one */
+  readonly savedHere: boolean;
   /** the notes with no place in its view (A5): the view's dev.bise/detached, then the hub's own; listed by the tab, never lost */
   readonly detached: readonly DetachedNote[];
 }
@@ -113,6 +115,8 @@ interface DocRec {
   save: Save;
   /** the body of the write a conflict refused, for 'keep mine as a copy' */
   conflicted: { readonly text: string } | { readonly blob: string } | null;
+  /** a save of his in this session answered saved */
+  savedHere: boolean;
   /** the notes its view was given last, and the ids it could not place */
   notes: readonly ViewNote[];
   detached: readonly string[];
@@ -185,7 +189,7 @@ export class ViewsStore {
     const k = refKey(ref);
     let r = this.recs.get(k);
     if (r === undefined) {
-      const doc: DocRec | null = isDoc(ref) ? { state: null, save: IDLE, conflicted: null, notes: [], detached: [], lost: [], live: null } : null;
+      const doc: DocRec | null = isDoc(ref) ? { state: null, save: IDLE, conflicted: null, savedHere: false, notes: [], detached: [], lost: [], live: null } : null;
       r = { ref, state: NONE, session: null, frame: null, height: DEFAULT_H, sizes: {}, seenAt: this.env.now(), messageAt: null, plugin: '', phase: 'proxy', note: 'none', asking: false, doc };
       this.recs.set(k, r);
     }
@@ -277,6 +281,7 @@ export class ViewsStore {
       d.live = { wire, document: o.document, opener: o.opener, ...(o.changed === undefined ? {} : { changed: o.changed }) };
       d.save = IDLE;
       d.conflicted = null;
+      d.savedHere = false;
       d.detached = [];
       d.lost = [];
       this.start(r, o.res, o.ungranted, wire);
@@ -416,6 +421,7 @@ export class ViewsStore {
       },
       onSaved: (a, params) => {
         d.save = saveOf(a, this.env.now(), DOC_ERR.noWrite);
+        if (d.save.kind === 'saved') d.savedHere = true;
         d.conflicted = d.save.kind === 'conflict' ? copyBody(params) : null;
         this.refresh(r);
       },
@@ -483,7 +489,7 @@ export class ViewsStore {
       tool: str(res?.tool ?? null, 'title') || str(res?.tool ?? null, 'name'),
       plugin: r.plugin,
       messageAt: r.messageAt,
-      ...(live == null || r.doc === null ? {} : { doc: { document: live.document, opener: live.opener, save: r.doc.save, detached: [...r.doc.notes.filter((n) => r.doc?.detached.includes(n.id) === true), ...r.doc.lost] } }),
+      ...(live == null || r.doc === null ? {} : { doc: { document: live.document, opener: live.opener, save: r.doc.save, savedHere: r.doc.savedHere, detached: [...r.doc.notes.filter((n) => r.doc?.detached.includes(n.id) === true), ...r.doc.lost] } }),
     };
   }
 

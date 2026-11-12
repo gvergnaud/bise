@@ -130,7 +130,7 @@ export function DocumentTab({ docRef, tabId, store, title, rowApp, row, turnOn }
           </ul>
         </div>
       )}
-      {state.kind === 'frame' ? (
+      {line.kind === 'page' ? (
         <div className="pn-page">
           {t.kind === 'artifact' ? (
             <ArtifactOpen
@@ -144,7 +144,7 @@ export function DocumentTab({ docRef, tabId, store, title, rowApp, row, turnOn }
               }}
             />
           ) : (
-            <iframe className="art-paper" src={state.url} title={name} />
+            state.kind === 'frame' && <iframe className="art-paper" src={state.url} title={name} />
           )}
         </div>
       ) : (

@@ -8,6 +8,7 @@ import type { SavedBy } from '@/proto/rows';
 import type { Save } from '@/views/doc';
 import type { ViewState } from '@/views/store';
 import { DOC_ERR, VIEW_ERR } from '@/views/port';
+import { RPC } from '@/views/protocol';
 
 /** What the tab knows of its artifact's row (none: a ~/bise file). */
 export interface RowFacts {
@@ -44,6 +45,8 @@ export function docLine(state: ViewState, row: RowFacts | undefined, rowApp: str
   if (row?.gone === true) return { kind: 'gone' };
   switch (state.kind) {
     case 'failed':
+      // a hub that doesn't know view/open yet (method not found): today's page draws it (F0, apps-lead m_62087)
+      if (state.code === RPC.notFound) return { kind: 'page' };
       if (state.code === DOC_ERR.gone) return { kind: 'gone' };
       if (state.code === VIEW_ERR.pluginOff) return { kind: 'off', app: rowApp };
       return { kind: 'failed' };
@@ -60,7 +63,10 @@ export function docLine(state: ViewState, row: RowFacts | undefined, rowApp: str
   const d = state.doc;
   if (d === undefined) return { kind: 'loading' };
   const app = d.opener.app;
-  const version = d.document.version;
+  // his own save made the row's newest (by 'you'): the tab shows it, no 'newer' line over his own work
+  // (the write's answer has no version, A4)
+  const mine = d.savedHere && row?.by?.kind === 'you' && d.document.version !== undefined && d.document.version < row.newest;
+  const version = mine ? row.newest : d.document.version;
   if (d.save.kind === 'conflict') return { kind: 'conflict', app, ...(version === undefined ? {} : { version }) };
   const newest = row?.newest;
   if (version !== undefined && newest !== undefined && version < newest) {

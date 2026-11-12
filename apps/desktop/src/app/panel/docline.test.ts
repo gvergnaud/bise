@@ -8,7 +8,7 @@ import { views } from '@/proto/words_views.gen';
 import { factsWords, newerAct, whoWord } from './Document';
 import { docLine } from './docline';
 
-function live(version: number | undefined, save: Save = { kind: 'idle' }, writable = true): ViewState {
+function live(version: number | undefined, save: Save = { kind: 'idle' }, writable = true, savedHere = false): ViewState {
   return {
     kind: 'live',
     phase: 'live',
@@ -20,7 +20,7 @@ function live(version: number | undefined, save: Save = { kind: 'idle' }, writab
     tool: 'open_fake',
     plugin: '',
     messageAt: null,
-    doc: { document: { name: 'q3.fake', type: 'Fake', size: 1, writable, ...(version === undefined ? {} : { version }) }, opener: { plugin: 'fake-opener', tool: 'open_fake', app: 'Fake' }, save, detached: [] },
+    doc: { document: { name: 'q3.fake', type: 'Fake', size: 1, writable, ...(version === undefined ? {} : { version }) }, opener: { plugin: 'fake-opener', tool: 'open_fake', app: 'Fake' }, save, savedHere, detached: [] },
   };
 }
 
@@ -62,10 +62,23 @@ describe('docLine', () => {
     expect(newerAct(live(4, { kind: 'idle' }, false), row, true)).toBeNull();
   });
 
+  it('his own save made the newest: its facts on that version, never a newer line over his own work', () => {
+    const saved = { kind: 'saved', at: 1 } as const;
+    const mine = { newest: 4, gone: false, by: { kind: 'you' } } as const;
+    expect(docLine(live(3, saved, true, true), mine, 'Fake', true)).toEqual({ kind: 'facts', app: 'Fake', version: 4, save: saved, readOnly: false });
+    expect(docLine(live(3, { kind: 'idle' }, true, false), mine, 'Fake', true), 'not saved here: another window of his').toMatchObject({ kind: 'newer', by: { kind: 'you' } });
+    expect(docLine(live(3, saved, true, true), { newest: 4, gone: false, by: { kind: 'agent', name: 'perf' } }, 'Fake', true), 'an agent saved after him').toMatchObject({ kind: 'newer' });
+  });
+
   it("who saved it: 'You', the agent, else someone", () => {
     expect(whoWord({ kind: 'you' })).toBe(views.doc_you);
     expect(whoWord({ kind: 'agent', name: 'perf' })).toBe('perf');
     expect(whoWord({ kind: 'unknown' })).toBe(views.doc_someone);
+  });
+
+  it("a hub without view/open (method not found): today's page draws it, no failed line (F0)", () => {
+    expect(docLine({ kind: 'failed', message: 'unknown method: view/open', code: -32601 }, ROW, 'Sheets')).toEqual({ kind: 'page' });
+    expect(docLine({ kind: 'failed', message: 'unknown method: view/open', code: -32601 }, { newest: 3, gone: true }, 'Sheets'), 'gone still wins').toEqual({ kind: 'gone' });
   });
 
   it('loading until the view says its document; a built-in page draws its own', () => {
