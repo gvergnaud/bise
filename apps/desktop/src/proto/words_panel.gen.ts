@@ -484,6 +484,8 @@ export const panel = {
   art_find_next: "next match",
   /** its × button (esc) */
   art_find_close: "close find",
+  /** an artifact's page while its server is asked and starts (artifact-loading, his m_60703): the panel's loading line, never the 'doesn't answer' error before loading really failed */
+  art_loading: "loading the page…",
   /** an artifact whose file is gone (the pages server's 404; designer m_52746): an older version's, a newer one exists */
   art_file_gone_version: "this version's file is gone.",
   /** the newest (or only) version's file is gone */

@@ -172,3 +172,13 @@
    under the line (designer m_52811) */
 .art-file-gone .b-empty { align-items: center; text-align: center; }
 .art-file-gone .b-empty .act { margin-top: var(--s-3); }
+
+/* the sections (SectionRows.tsx; designer m_60689): the quiet rows under For you, the back row over a list */
+.art-quiet { display: flex; gap: var(--s-4); padding: var(--s-4) 0 var(--s-2); }
+.art-quiet-row { flex: none; padding: var(--s-1) 0; border: 0; background: none; font: var(--t-12) var(--font-ui); color: var(--c-text-3); }
+.art-quiet-row:hover { color: var(--c-text-2); text-decoration: underline; text-underline-offset: 3px; }
+.art-quiet-row:focus-visible, .art-back-row:focus-visible { outline: 2px solid var(--c-text); outline-offset: 2px; border-radius: 3px; }
+.art-back { display: flex; align-items: baseline; gap: var(--s-3); padding: var(--s-2) 0 var(--s-3); }
+.art-back-row { flex: none; padding: 0; border: 0; background: none; font: var(--t-12) var(--font-ui); color: var(--c-text-2); }
+.art-back-row:hover { color: var(--c-text); }
+.art-back-n { font: var(--t-12) var(--font-ui); color: var(--c-text-3); }

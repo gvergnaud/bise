@@ -1,0 +1,5 @@
+/* An artifact's page not answering yet (artifact-loading, his m_60703; reach.ts LOAD_GRACE_MS):
+   Open.tsx PageDown's loading state, on .art-down's paper: a skeleton line and a quiet line, never
+   the 'doesn't answer' error before loading really failed. */
+.art-loading .b-skel { width: 160px; }
+.art-loading-line { font: var(--t-13) var(--font-ui); color: var(--c-text-3); }
