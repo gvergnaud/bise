@@ -93,10 +93,13 @@ function answer(cmd: Cmd): Ev[] {
     // its thread and entry lines, the newest `limit`, oldest first
     case 'marks': {
       const t = transcripts.find((ev) => same(ev, cmd));
-      type His = { pos: number; kind?: string; text?: string; at_ms?: number };
+      type His = { pos: number; kind?: string; text?: string; at_ms?: number; parts?: { kind: string; text?: string }[] };
       const from = (t?.entries ?? of(['thread', 'entry']).flatMap((ev) => ev.entries ?? (ev.entry === undefined ? [] : [ev.entry]))) as His[];
       const his = [...new Map(from.filter((e) => e.kind === 'you').map((e) => [e.pos, e])).values()].sort((a, b) => a.pos - b.pos);
-      const marks = his.slice(-(cmd.limit ?? 20)).map((e) => ({ pos: e.pos, at_ms: e.at_ms ?? 0, text: (e.text ?? '').split(/\s+/).filter(Boolean).join(' ').slice(0, 200) }));
+      // as the hub's mark_of: his parts (a paste's text emptied) and his words from them, never a marker
+      const said = (e: His): string => (e.parts === undefined ? (e.text ?? '') : e.parts.map((p) => (p.kind === 'text' ? (p.text ?? '') : '')).join(''));
+      const lean = (e: His) => (e.parts === undefined ? {} : { parts: e.parts.map((p) => (p.kind === 'paste' ? { ...p, text: '' } : p)) });
+      const marks = his.slice(-(cmd.limit ?? 20)).map((e) => ({ pos: e.pos, at_ms: e.at_ms ?? 0, text: said(e).split(/\s+/).filter(Boolean).join(' ').slice(0, 200), ...lean(e) }));
       return [{ ev: 'thread_marks', project: cmd.project, agent: cmd.agent, marks, upto: Math.max(0, ...from.map((e) => e.pos)) }];
     }
     // a PR tab's Changes (pr-artifacts): the world's agent diff, answered by its req (the hub's

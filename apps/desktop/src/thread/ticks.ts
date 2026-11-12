@@ -2,15 +2,18 @@
 // his last MARKS. The hub says where his last ones are (`thread/marks`, store.subscribeThread: the
 // view holds only the thread's tail); his messages that came since, and any the view holds, join
 // them by pos. Which one he is in, and the bubble's time. Pure. Owner: msg-dots.
-import type { Entry } from '@/proto';
+import type { Entry, Part } from '@/proto';
 import { MARKS, type ThreadMarks } from '@/store';
 import { whenOf } from './entry';
+import { drawnParts, partsGist } from './parts';
 
-/** One tick: his message's entry pos, its words cut short, when he sent it. */
+/** One tick: his message's entry pos, its words cut short (never a marker), when he sent it, and
+ *  his message as parts (the bubble draws them as his thread does; none: his words alone). */
 export interface Dot {
   readonly pos: number;
   readonly text: string;
   readonly at: number;
+  readonly parts: readonly Part[];
 }
 
 /** A mark's words at most (chars), as the hub's `thread::marks::TEXT_MAX`. */
@@ -33,8 +36,16 @@ export function shortWords(text: string): string {
  */
 export function dotsOf(marks: ThreadMarks | null, held: readonly (Entry | undefined)[], n: number = MARKS): readonly Dot[] {
   const by = new Map<number, Dot>();
-  for (const m of marks?.marks ?? []) by.set(m.pos, { pos: m.pos, text: m.text, at: m.at_ms });
-  for (const e of held) if (e?.kind === 'you') by.set(e.pos, { pos: e.pos, text: shortWords(e.text), at: e.at_ms });
+  for (const m of marks?.marks ?? []) by.set(m.pos, { pos: m.pos, text: m.text, at: m.at_ms, parts: m.parts ?? [] });
+  // a held one of his: its parts, as his bubble in the thread, and their words; with none, the hub's
+  // mark's words (the model's text has his images as markers), the text only with neither
+  for (const e of held) {
+    if (e?.kind !== 'you') continue;
+    const parts = drawnParts(e.parts);
+    const mark = by.get(e.pos);
+    const text = parts !== null ? shortWords(partsGist(parts)) : (mark?.text ?? shortWords(e.text));
+    by.set(e.pos, { pos: e.pos, text, at: e.at_ms, parts: parts ?? mark?.parts ?? [] });
+  }
   const all = [...by.values()].sort((a, b) => a.pos - b.pos);
   return all.slice(Math.max(0, all.length - n));
 }

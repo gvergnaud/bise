@@ -16,6 +16,7 @@ import type { CoreCmd } from '@/shared/api';
 import { Store, StoreProvider, threadKey } from '@/store';
 import { COL_PAD } from './column';
 import { length, rule } from './css-box.testkit';
+import { hub_ev } from '@/proto/fixtures.gen';
 import { MsgDots, tintEntry } from './MsgDots';
 import { blockOf, type ThreadListHandle } from './ThreadList';
 
@@ -99,6 +100,37 @@ describe('his ticks (msg-dots)', () => {
     expect(v.queryByTestId('thread.dot.tip')).toBeNull();
   });
 
+  // msg-rail-fix (his m_63243 (3)): the bubble showed '<image name="[Image #1]" path=…>'. The hub's
+  // own wire line (fixtures hub_ev.jsonl: a mark with a text, an image, a file and a paste)
+  // Mutation: DotTip drawing `dot.text` from the entry's model text (shortWords(e.text)) turns the
+  // held case red; DotTip without PartChips turns the chips' asserts red.
+  it('the bubble draws his message as his thread does: his words, then the chips of his image, file and paste; never a tag', () => {
+    vi.useFakeTimers();
+    const wire = hub_ev.find((e) => e.ev === 'thread_marks' && e.marks.some((m) => (m.parts?.length ?? 0) > 0));
+    if (wire?.ev !== 'thread_marks') throw new Error('no marks fixture with parts');
+    const { store, v } = world();
+    act(() => {
+      store.apply({ ...wire, project: P, agent: 'main', marks: [...wire.marks.map((m) => ({ ...m, pos: 2995 })), { pos: 2996, at_ms: now, text: 'and the cold one', parts: [{ kind: 'text', text: 'and the cold one' }] }], upto: 2999 });
+      // and one of his the view holds, with an image (its model text carries the marker)
+      store.apply({ ev: 'entry', project: P, agent: 'main', entry: { pos: 3000, at_ms: now, kind: 'you', text: 'see <image name="[Image #1]" path="/u/b.png" mime="image/png" b64="/h/images/cd.b64">', parts: [{ kind: 'text', text: 'see ' }, { kind: 'image', name: '[Image #1]', source: '/u/b.png', mime: 'image/png', b64_file: '/h/images/cd.b64' }] } });
+    });
+    for (const [pos, words, chips] of [
+      [2995, 'look at and ▤ 3', ['thread.dot.tip.paste.3', 'thread.dot.tip.image.1', 'thread.dot.tip.file.1']],
+      [3000, 'see', ['thread.dot.tip.image.1']],
+    ] as const) {
+      fireEvent.pointerEnter(v.getByTestId(`thread.dot.${String(pos)}`));
+      act(() => {
+        vi.advanceTimersByTime(160);
+      });
+      const tip = v.getByTestId('thread.dot.tip');
+      expect(tip.textContent).not.toMatch(/<image|<file|<pasted|path=|\[Image #/u);
+      expect(tip.querySelector('.th-dot-words')?.textContent).toMatch(new RegExp(`^${words} · [\\w ]*\\d\\d:\\d\\d$`, 'u'));
+      for (const c of chips) expect(v.getByTestId(c)).toBeTruthy();
+      expect(v.getByTestId(`thread.dot.${String(pos)}`).getAttribute('aria-label')).not.toMatch(/</u);
+      fireEvent.pointerLeave(v.getByTestId(`thread.dot.${String(pos)}`));
+    }
+  });
+
   it('↑/↓ move between the ticks', () => {
     const { v } = world();
     v.getByTestId('thread.dot.2000').focus();
@@ -139,6 +171,32 @@ describe('his ticks (msg-dots)', () => {
   });
 });
 
+// msg-rail-fix (his m_63243 (2)): at rest every tick the same, the one he is in only ink; the
+// hovered or focused one alone grows. Mutation: `width: 16px` back on `.th-dot[data-current]::before`.
+describe('every tick the same at rest', () => {
+  const dotsCss = readFileSync(join(__dirname, 'msgdots.css'), 'utf8');
+  /** Every rule whose selector names a tick's ::before, with its width when it sets one. */
+  const widths = [...dotsCss.replace(/\/\*[\s\S]*?\*\//gu, '').matchAll(/([^{}]+)\{([^}]*)\}/gu)].flatMap(([, sels = '', body = '']) =>
+    sels
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.startsWith('.th-dot') && s.endsWith('::before'))
+      .map((s) => ({ sel: s, width: /(?:^|;)\s*width:\s*([^;]+)/u.exec(body)?.[1]?.trim() })),
+  );
+  it('only a hover or a focus changes a tick\'s length', () => {
+    expect(widths.find((w) => w.sel === '.th-dot::before')?.width).toBe('8px');
+    const grown = widths.filter((w) => w.width !== undefined && w.sel !== '.th-dot::before').map((w) => w.sel);
+    expect(grown.length).toBeGreaterThan(0);
+    for (const s of grown) expect(s).toMatch(/:hover::before$|:focus-visible::before$/u);
+  });
+  it('the one he is in is marked, not grown', () => {
+    const { v } = world();
+    const cur = v.getAllByRole('button').filter((b) => b.dataset.current !== undefined);
+    expect(cur).toHaveLength(1);
+    expect(widths.filter((w) => w.sel.includes('[data-current]')).every((w) => w.width === undefined)).toBe(true);
+  });
+});
+
 describe('the strip never covers the text (msg-dots)', () => {
   const threadCss = readFileSync(join(__dirname, 'thread.css'), 'utf8');
   const dotsCss = readFileSync(join(__dirname, 'msgdots.css'), 'utf8');
@@ -165,10 +223,11 @@ describe('the strip never covers the text (msg-dots)', () => {
       const left = length(strip.get('left') ?? '', w, v);
       const width = length(strip.get('width') ?? '', w, v);
       const textX = length(v['--th-col-x'] ?? '', w, v);
-      expect(left).toBeGreaterThanOrEqual(0);
+      // next to the sidebar, the thread's left edge (his m_63243 (1)); never over the text
+      expect(left).toBe(0);
       expect(left + width).toBeLessThanOrEqual(textX + 0.5);
-      // a tick grown to 16 stays in it
-      expect(16).toBeLessThanOrEqual(width);
+      // a tick grown to 16, after its 8 px off the edge, stays in it
+      expect(length(rule(dotsCss, '.th-dot').get('padding-left') ?? '', w, { ...v, '--s-2': '8px' }) + 16).toBeLessThanOrEqual(width);
       // the bubble: from the strip's right, never wider than the text's column
       const tip = rule(dotsCss, '.th-dot-tip');
       const tipLeft = left + length(tip.get('left') ?? '', w, v);

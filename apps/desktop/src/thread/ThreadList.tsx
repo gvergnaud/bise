@@ -9,8 +9,10 @@
 //   page in front (firstItemIndex goes down), far rows the store trimmed
 //   (it goes up; trim.ts, told the row he reads by onRead), a window's gap
 //   filled above him; the row is held at its y by its key (thread-perf);
-// - a jump of his (⌘F's match, his answer far back) wins over that hold; a reveal of a row not
-//   listed yet (⌘F's match in a fold that opens for it) waits for it, HOLD_MS at most;
+// - a jump of his (⌘F's match, his answer far back, a tick of his) wins over that hold; a reveal
+//   follows its row by key each frame (reveal.ts: an older page in front or a trim meanwhile moves
+//   its index) and ends once the row sat at its place, then steady keeps it there; a reveal of a
+//   row not listed yet (⌘F's match in a fold that opens for it) waits for it, HOLD_MS at most;
 // - a row he opens or closes keeps its y, or the part of it marked data-hold around his press (a
 //   part that changes its own height: the thread's view card going to the panel and back);
 // - at the bottom it follows new rows; scrolled up, it stays where he is;
@@ -20,6 +22,7 @@ import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso';
 import { keep } from '@/app/keep';
 import './thread.css';
 import { Press } from '@/ds';
+import { revealStep } from './reveal';
 
 // the list's own end, inside the scroller (designer's composer-strip A): the 12 px the bottom fade
 // lies on at the end, so it never fades the last row (thread.css .th-list-end)
@@ -368,7 +371,7 @@ export function ThreadList({ keys, row, more, before, onOlder, head, tail, cue, 
   const settling = useRef(false);
   const revealGen = useRef(0);
   // a reveal asked before its row was listed (find-scroll: ⌘F's match in a fold that opens for it)
-  const waiting = useRef<{ key: string; until: number; shown?: () => void } | undefined>(undefined);
+  const waiting = useRef<{ key: string; until: number; shown?: () => void; top?: number } | undefined>(undefined);
   const self = useRef<ThreadListHandle | null>(null);
   const setStick = useCallback((on: boolean) => {
     stick.current = on;
@@ -495,7 +498,9 @@ export function ThreadList({ keys, row, more, before, onOlder, head, tail, cue, 
     // rows came or went before the row he read at the last scroll (an older page in front, a gap
     // filled above, far rows trimmed): hold it. Rows added at the end move nothing
     const r = reading.current;
-    if (stick.current || r === undefined) return;
+    // a reveal places the list itself (by its row's key): a hold of the row read before would pull
+    // it back (msg-rail-fix: the older page that came in front while a tick's message went up)
+    if (stick.current || r === undefined || settling.current) return;
     const at = r.key === undefined ? -1 : keys.indexOf(r.key);
     const index = at < 0 ? r.index : next.index + at;
     if (index === r.index && next.index === before) return;
@@ -665,9 +670,8 @@ export function ThreadList({ keys, row, more, before, onOlder, head, tail, cue, 
       },
       reveal(key, shown, top) {
         const i = keys.indexOf(key);
-        const align = top === undefined ? ({ index: i, align: 'center' } as const) : ({ index: i, align: 'start', offset: -top } as const);
         // not a row yet (⌘F's match in a fold that opens for it, find-scroll): revealed when it comes
-        waiting.current = i < 0 ? { key, until: Date.now() + HOLD_MS, ...(shown === undefined ? {} : { shown }) } : undefined;
+        waiting.current = i < 0 ? { key, until: Date.now() + HOLD_MS, ...(shown === undefined ? {} : { shown }), ...(top === undefined ? {} : { top }) } : undefined;
         if (i < 0) return;
         // a jump of his (⌘F's match, his answer far back) wins over the row held still: the window
         // that came in front for it would hold the row he read before (the keys' hold)
@@ -682,18 +686,21 @@ export function ThreadList({ keys, row, more, before, onOlder, head, tail, cue, 
         }
         // he reads up there now: no growth takes the list back to its end
         setStick(false);
-        virtuoso.current?.scrollToIndex(align);
+        const align = (at: number) => (top === undefined ? ({ index: at, align: 'center' } as const) : ({ index: at, align: 'start', offset: -top } as const));
+        virtuoso.current?.scrollToIndex(align(i));
         // Virtuoso lands on its estimated sizes (far off in a long thread of unmeasured rows): once
-        // the row is drawn, its centre is nudged to the view's over the next frames, until it shows
-        // whole, he moves the list, a newer reveal takes over, or HOLD_FRAMES. Frames, not ms: under
-        // load (or off-screen) frames come late, and a 1.5 s deadline gave up before the row was
-        // drawn, the list left at Virtuoso's estimate (history-perf's '⏎ to the oldest hit', land-reds);
-        // and an older reveal's settle went on beside the newer one, centring a row by its stale
-        // index. `shown` waits for the row drawn and whole: a fixed delay missed it under load
-        // (inbox-open's flash), the row not drawn yet
+        // the row is drawn, it is nudged to its place over the next frames (reveal.ts revealStep),
+        // until it sat there STILL_FRAMES, he moves the list, a newer reveal takes over, or
+        // HOLD_FRAMES. The row by its key, read again each frame: an older page in front, a trim
+        // or a gap filled move its index meanwhile (msg-rail-fix: a tick's click landed a page off).
+        // Frames, not ms: under load (or off-screen) frames come late, and a 1.5 s deadline gave up
+        // before the row was drawn (history-perf's '⏎ to the oldest hit', land-reds); an older
+        // reveal's settle stops (revealGen). `shown` waits for the row drawn and at its place: a
+        // fixed delay missed it under load (inbox-open's flash)
         revealGen.current += 1;
         const gen = revealGen.current;
         let frames = 0;
+        let sat = 0;
         let lastTop: number | undefined;
         moved.current = false;
         revealUntil.current = Date.now() + HOLD_MS;
@@ -705,39 +712,54 @@ export function ThreadList({ keys, row, more, before, onOlder, head, tail, cue, 
           told = true;
           shown?.();
         };
+        const end = (): void => {
+          settling.current = false;
+          // the jump is over: from now on steady keeps the row where the reveal put it (an image
+          // decoded above it, a row measured at last)
+          jumpUntil.current = 0;
+          still.current = undefined;
+          measure();
+        };
         const settle = () => {
           if (revealGen.current !== gen) return;
           const box = scroller.current;
-          const r = box?.querySelector<HTMLElement>(`[data-item-index="${String(firstIndex.current + i)}"]`) ?? null;
           frames += 1;
-          if (moved.current || frames > HOLD_FRAMES) {
+          if (box === null || moved.current || frames > HOLD_FRAMES) {
             settling.current = false;
-            if (r !== null) tell();
+            if (box?.querySelector(`[data-item-index="${String(firstIndex.current + keysNow.current.indexOf(key))}"]`) != null) tell();
             return;
           }
-          if (box === null || r === null) {
-            // Virtuoso's scrollToIndex can stall (find-walk-red: a window replaced, then a new one
-            // in front, its sizes by index still the old ones: the list stayed at the latest rows,
-            // scrollTop unmoved for all HOLD_FRAMES): then a viewport at a time toward the row
-            const at0 = box?.scrollTop;
-            if (box !== null && r === null && at0 === lastTop) {
-              const at = [...box.querySelectorAll<HTMLElement>('[data-item-index]')].map((x) => Number(x.dataset.itemIndex));
-              const step = box.clientHeight * 0.8;
-              if (at.length > 0) box.scrollTop += firstIndex.current + i < Math.min(...at) ? -step : step;
-            } else virtuoso.current?.scrollToIndex(align);
-            lastTop = at0;
-          } else {
-            const b = (top === undefined ? r : blockOf(r)).getBoundingClientRect();
-            const v = box.getBoundingClientRect();
-            const d = top === undefined ? b.top + b.height / 2 - (v.top + v.height / 2) : b.top - (v.top + top);
-            // at its top place, or whole in the view and centred: a row taller than the view only
-            // ever gets its top there
-            if (Math.abs(d) < 2 && (top !== undefined || rowWhole(b, v))) {
-              settling.current = false;
-              tell();
-              return;
-            }
-            box.scrollTop += top === undefined && b.height > v.height ? b.top - v.top : d;
+          // this frame's keys and firstItemIndex, never the reveal's own (reveal.ts)
+          const rowAt = (item: number): HTMLElement | null => box.querySelector<HTMLElement>(`[data-item-index="${String(item)}"]`);
+          const move = revealStep({
+            key,
+            keys: keysNow.current,
+            first: firstIndex.current,
+            box: (item) => {
+              const r = rowAt(item);
+              return r === null ? null : (top === undefined ? r : blockOf(r)).getBoundingClientRect();
+            },
+            view: box.getBoundingClientRect(),
+            drawn: [...box.querySelectorAll<HTMLElement>('[data-item-index]')].map((x) => Number(x.dataset.itemIndex)),
+            scrollTop: box.scrollTop,
+            lastTop,
+            still: sat,
+            ...(top === undefined ? {} : { top }),
+          });
+          lastTop = move.kind === 'index' || move.kind === 'by' ? move.seek : undefined;
+          if (move.kind === 'gone') {
+            settling.current = false;
+            return;
+          }
+          if (move.kind === 'done') {
+            tell();
+            end();
+            return;
+          }
+          if (move.kind === 'index') virtuoso.current?.scrollToIndex(align(move.at));
+          else {
+            sat = move.still;
+            if (move.px !== 0) box.scrollTop += move.px;
           }
           requestAnimationFrame(settle);
         };
@@ -748,14 +770,14 @@ export function ThreadList({ keys, row, more, before, onOlder, head, tail, cue, 
         holdRow(null);
       },
     }),
-    [keys, next.index, toEnd, holdRow, setStick],
+    [keys, next.index, toEnd, holdRow, setStick, measure],
   );
   // a reveal that waits for its row: done once the row is listed (within HOLD_MS)
   useLayoutEffect(() => {
     const w = waiting.current;
     if (w === undefined || !keys.includes(w.key)) return;
     waiting.current = undefined;
-    if (Date.now() <= w.until) self.current?.reveal(w.key, w.shown);
+    if (Date.now() <= w.until) self.current?.reveal(w.key, w.shown, w.top);
   }, [keys]);
 
   return (

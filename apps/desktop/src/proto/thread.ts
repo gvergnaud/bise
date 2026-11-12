@@ -454,6 +454,19 @@ end?: RetryEnd | null, };
 export type FindHit = { pos: number, n: number, };
 
 /**
- * One message of his: its entry's pos, when he sent it, his words cut short.
+ * One message of his: its entry's pos, when he sent it, his words cut
+ * short, and his message as typed parts, lean ([`lean`]).
  */
-export type Mark = { pos: number, at_ms: number, text: string, };
+export type Mark = { pos: number, at_ms: number, 
+/**
+ * his words only, on one line ([`short`]): never a marker or a tag
+ * (msg-rail-fix: the bubble showed `<image name=… path=…>`)
+ */
+text: string, 
+/**
+ * his message as the thread draws it (the desktop's bubble uses the
+ * thread's own renderer): his words cut to [`TEXT_MAX`], his chips
+ * (images, files, pastes with their text emptied); none from an
+ * older hub
+ */
+parts?: Array<Part>, };

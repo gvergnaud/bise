@@ -1,10 +1,11 @@
-/* His ticks beside a thread (msg-dots, designer m_60490): in the column's left room (the
-   --pad-column before the text's edge, --th-col-x), centred on the list's height. A tick is 8 long,
-   1.5 thick, 8 apart; the one he is in and the one hovered are 16 and ink, grown rightward (never
-   past the text's edge: the strip is the 24 px pad). Tokens only: faint at rest, ink when current. */
+/* His ticks beside a thread (msg-dots, designer m_60490): at the thread's left edge, next to the
+   sidebar (his m_63243 (1)), a --pad-column wide strip (never past the text's edge: --th-col-x is
+   at least that pad), centred on the list's height. A tick is 8 long, 1.5 thick, 8 apart, all the
+   same at rest (his m_63243 (2)): the one he is in only ink; the one hovered or focused 16 and ink,
+   grown rightward. Tokens only. */
 .th-dots {
   position: absolute;
-  left: calc(var(--th-col-x, var(--pad-column)) - var(--pad-column));
+  left: 0;
   top: 50%;
   transform: translateY(-50%);
   width: var(--pad-column);
@@ -15,13 +16,15 @@
 .th-dots[hidden] {
   display: none;
 }
-/* each tick's button: the whole 24 px wide row is its hit area, the tick its ::before */
+/* each tick's button: the whole 24 px wide row is its hit area, the tick its ::before, 8 px off the
+   sidebar's edge */
 .th-dot {
   display: flex;
   align-items: center;
   flex: 0 0 8px;
   height: 8px;
   width: 100%;
+  padding-left: var(--s-2);
 }
 /* the tick, centred on its 8 px row */
 .th-dot::before {
@@ -33,7 +36,9 @@
   background: var(--c-text-3);
   transition: width 120ms var(--ease-out), background-color 120ms var(--ease-out);
 }
-.th-dot[data-current]::before,
+.th-dot[data-current]::before {
+  background: var(--c-ink);
+}
 .th-dot:hover::before,
 .th-dot:focus-visible::before {
   width: 16px;

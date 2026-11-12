@@ -1,16 +1,21 @@
-// His ticks beside a thread (msg-dots, his ask m_60465, designer m_60490): a very thin strip in the
-// column's left room (--pad-column), one tick per message of his, his last 20 (msgdots.ts). A
-// click brings that message's top 16 px under the list's top, its page read when the view doesn't
-// hold it (useFindGo: store.jumpTo, never the whole thread), and tints it once; a hover (or focus)
-// shows his words cut short and their time in a bubble right of the strip; ↑/↓ move between the
-// ticks. The tick he is in (his last message above the list's top third) is long and ink. Fewer
+// His ticks beside a thread (msg-dots, his ask m_60465, designer m_60490): a very thin strip at the
+// thread's left edge, next to the sidebar (msg-rail-fix, his m_63243), one tick per message of his,
+// his last 20 (ticks.ts). A click brings that message's block 16 px under the list's top (the
+// list's reveal follows it by key: reveal.ts), its page read when the view doesn't hold it
+// (useFindGo: store.jumpTo, never the whole thread), and tints it once; a hover (or focus) shows his
+// message in a bubble right of the strip as his thread draws it (his words, then his chips: never
+// the model's text and its markers) and its time; ↑/↓ move between the ticks. At rest every tick
+// is the same; the one he is in (his last message above the list's top third) is only ink. Fewer
 // ticks than fit in the list's height: the newest that fit; under two: no strip. Owner: msg-dots.
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
 import { Press } from '@/ds';
 import { useStore, useThreadMarks, useThreadOrder } from '@/store';
 import type { ThreadListHandle } from './ThreadList';
 import { useFindGo, type GoHow } from './useFindGo';
-import { currentDot, dotsOf, dotWhen, stepDot, type Dot } from './ticks';
+import { currentDot, dotsOf, dotWhen, shortWords, stepDot, type Dot } from './ticks';
+import { youView } from './parts';
+import { PartChips } from './YouBody';
+import type { RowCtx } from './rows';
 import './msgdots.css';
 
 /** A tick's row (px): 8 apart (designer's 4 px grid). */
@@ -49,8 +54,37 @@ function readingPos(list: HTMLElement): number | null {
   return pos;
 }
 
+/** The bubble's words: his parts' words as his bubble in the thread has them (an image's label is its
+ *  chip, never in the words), on one line; no parts: the hub's words for it. Pure. */
+export function tipWords(dot: Dot): string {
+  return dot.parts.length === 0 ? dot.text : shortWords(youView(dot.parts).words);
+}
+
+/**
+ * The bubble (msg-rail-fix, his m_63243 (3)): his message as his thread draws it, never the model's
+ * text: his words cut to three lines and their time, then the chips of what he attached (images,
+ * files, pastes), the thread's own (PartChips). Over the list, never pressed (pointer-events none).
+ */
+function DotTip({ dot, ctx, top, now }: { dot: Dot; ctx: RowCtx; top: number; now: number }) {
+  const words = tipWords(dot);
+  const view = dot.parts.length === 0 ? null : youView(dot.parts);
+  return (
+    <div className="th-dot-tip" role="tooltip" data-testid="thread.dot.tip" style={{ top }}>
+      <span className="th-dot-words">
+        {words}
+        {dot.at > 0 && <span className="th-dot-when">{`${words === '' ? '' : ' · '}${dotWhen(dot.at, now)}`}</span>}
+      </span>
+      {view !== null && <PartChips view={view} ctx={ctx} id="thread.dot.tip" />}
+    </div>
+  );
+}
+
+const noop = (): void => undefined;
+
 export const MsgDots = memo(function MsgDots({ tkey, project, agent, listRef }: { tkey: string; project: string; agent: string; listRef: RefObject<ThreadListHandle | null> }) {
   const store = useStore();
+  // the bubble's chips are the thread's (PartChips); it is never pressed, its links go nowhere
+  const ctx = useMemo<RowCtx>(() => ({ tkey, project, agent, bise: false, onLink: noop, onArtifact: noop }), [tkey, project, agent]);
   const marks = useThreadMarks(tkey);
   const view = useThreadOrder(tkey);
   const all = useMemo(() => dotsOf(marks, view.order.map((p) => store.entry(tkey, p))), [marks, view, store, tkey]);
@@ -95,14 +129,15 @@ export const MsgDots = memo(function MsgDots({ tkey, project, agent, listRef }: 
   const how = useMemo<GoHow>(() => ({ top: DOT_TOP, shown: tintEntry }), []);
   const go = useFindGo(store, project, agent, listRef, how);
   // the bubble: the tick hovered or focused, 150 ms after
-  const [tip, setTip] = useState<number | null>(null);
+  // (and the time it opened: its 'yesterday 16:43' reads the clock there, never in a render)
+  const [tip, setTip] = useState<{ pos: number; now: number } | null>(null);
   const timer = useRef(0);
   const show = useCallback((pos: number | null) => {
     window.clearTimeout(timer.current);
     if (pos === null) setTip(null);
     else
       timer.current = window.setTimeout(() => {
-        setTip(pos);
+        setTip({ pos, now: Date.now() });
       }, BUBBLE_IN_MS);
   }, []);
   useEffect(
@@ -121,7 +156,7 @@ export const MsgDots = memo(function MsgDots({ tkey, project, agent, listRef }: 
     [dots],
   );
   if (dots.length < 2) return <div ref={root} className="th-dots" hidden data-testid="thread.dots" />;
-  const tipDot: Dot | undefined = dots.find((d) => d.pos === tip);
+  const tipDot: Dot | undefined = dots.find((d) => d.pos === tip?.pos);
   const tipAt = tipDot === undefined ? -1 : dots.indexOf(tipDot);
   const tabbable = current ?? dots[dots.length - 1]?.pos;
   return (
@@ -156,12 +191,7 @@ export const MsgDots = memo(function MsgDots({ tkey, project, agent, listRef }: 
         />
       ))}
       {tipDot !== undefined && (
-        <div className="th-dot-tip" role="tooltip" data-testid="thread.dot.tip" style={{ top: tipAt * DOT_ROW + DOT_ROW / 2 }}>
-          <span className="th-dot-words">
-            {tipDot.text}
-            {tipDot.at > 0 && <span className="th-dot-when">{` · ${dotWhen(tipDot.at, Date.now())}`}</span>}
-          </span>
-        </div>
+        <DotTip dot={tipDot} ctx={ctx} top={tipAt * DOT_ROW + DOT_ROW / 2} now={tip?.now ?? 0} />
       )}
     </div>
   );

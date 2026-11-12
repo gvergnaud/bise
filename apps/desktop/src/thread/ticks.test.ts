@@ -16,7 +16,17 @@ describe('dotsOf', () => {
     expect(dots.map((d) => d.pos).slice(-3)).toEqual([200, 210, 220]);
     expect(dots[0]?.pos).toBe(30);
     expect(dots.at(-1)?.text).toBe('two words');
-    expect(dots.find((d) => d.pos === 200)?.text).toBe('again');
+    expect(dots.find((d) => d.pos === 200)?.text).toBe('m19');
+  });
+  // msg-rail-fix (his m_63243 (3)): a held one's words from its parts, never its model text's markers
+  it("a held one of his: its parts and their words; with none, the hub's mark's words", () => {
+    const img = { kind: 'image' as const, name: '[Image #1]', source: '/u/a.png', mime: 'image/png', b64_file: '' };
+    const marker = 'see <image name="[Image #1]" path="/u/a.png" mime="image/png" b64="">';
+    const held: Entry = { ...you(20, marker), parts: [{ kind: 'text', text: 'see ' }, img] };
+    const marks = { marks: [{ pos: 10, at_ms: 1, text: 'see', parts: [{ kind: 'text' as const, text: 'see ' }, img] }], upto: 15 };
+    const dots = dotsOf(marks, [you(10, marker), held]);
+    expect(dots.map((d) => d.text)).toEqual(['see', 'see ▣ [Image #1]']);
+    expect(dots.map((d) => d.parts.length)).toEqual([2, 2]);
   });
   it('no marks yet: his held messages alone; none: empty', () => {
     expect(dotsOf(null, [you(3, 'a'), agent(4), undefined]).map((d) => d.pos)).toEqual([3]);
