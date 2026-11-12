@@ -6,6 +6,7 @@ import type { ReactNode } from 'react';
 import { AppIcon, KindIcon, iconKindOf } from '@/ds';
 import { panel } from '@/proto/words_panel.gen';
 import { pages } from '@/proto/words_pages.gen';
+import { views } from '@/proto/words_views.gen';
 import { aheadOf as aheadOfAgent } from '@/review/model';
 import { useAllArtifacts } from '@/artifacts';
 import { useAllProcesses } from '@/running';
@@ -78,6 +79,11 @@ function lookOf(tab: Tab, projects: ReturnType<typeof useProjects>, arts: Return
     }
     case 'plugin':
       return { title: e.id, icon: <AppIcon name="plugins" size={14} /> };
+    case 'file': {
+      // a ~/bise file: its name once its view said it (its row id is no name)
+      const s = viewsStore.state({ project: e.project, target: { kind: 'entry', id: e.entry } });
+      return { title: s.kind === 'live' && s.doc !== undefined ? s.doc.document.name : views.doc_tab, icon: <AppIcon name="file" size={14} /> };
+    }
     case 'view':
       // an MCP App's view: its tool's name (src/views/Tab.tsx viewTitle)
       return { title: viewTitle(e, viewsStore), icon: <AppIcon name="plugins" size={14} /> };

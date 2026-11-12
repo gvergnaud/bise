@@ -8,7 +8,7 @@
 // session ends with view/close when it unloads, its app is swapped or its tab closes. One store per
 // window (`views`); a test makes its own with fakes. Owner: apps-host.
 import type { ViewPerm } from '@/shared/viewperms';
-import { copiedOf, copyBody, docContext, docOpenOf, IDLE, notesOf, saveOf, type DocInfo, type OpenerInfo, type Save, type Selection, type ViewNote } from './doc';
+import { copiedOf, copyBody, docContext, docOpenOf, IDLE, notesOf, saveOf, type DocInfo, type OpenerInfo, type Save, type Selection, type ViewNote, type Changed } from './doc';
 import type { ContextIn } from './context';
 import { evict, MAX_LIVE } from './place';
 import type { DisplayMode, Download, Json, JsonObject } from './protocol';
@@ -117,7 +117,7 @@ interface DocRec {
   notes: readonly ViewNote[];
   detached: readonly string[];
   /** the live session's wire key and facts */
-  live: { readonly wire: DocWire; readonly document: DocInfo; readonly opener: OpenerInfo } | null;
+  live: { readonly wire: DocWire; readonly document: DocInfo; readonly opener: OpenerInfo; readonly changed?: Changed } | null;
 }
 
 /** One view the store knows. */
@@ -272,7 +272,7 @@ export class ViewsStore {
         return;
       }
       const wire: DocWire = { project: ref.project, doc: o.doc };
-      d.live = { wire, document: o.document, opener: o.opener };
+      d.live = { wire, document: o.document, opener: o.opener, ...(o.changed === undefined ? {} : { changed: o.changed }) };
       d.save = IDLE;
       d.conflicted = null;
       d.detached = [];
@@ -324,6 +324,13 @@ export class ViewsStore {
       r.state = NONE;
       this.ensure(ref);
     });
+  }
+
+  /** A document's tab follows its newest version: neither its target nor his pick names one. */
+  follows(ref: DocRef): boolean {
+    const t = ref.target;
+    if (t.kind === 'artifact' && t.version !== undefined) return false;
+    return this.recs.get(docKeyOf(ref))?.doc?.version === undefined;
   }
 
   /** A document's tab closed: its session ends (view/close) and the store forgets it, its state too. */
@@ -473,7 +480,10 @@ export class ViewsStore {
     const mode = this.modeOf(r.ref);
     const size = (mode === 'fullscreen' ? r.sizes.tab : r.sizes.thread) ?? { w: 0, h: 0 };
     const live = r.doc?.live;
-    const doc = live == null || r.doc === null ? {} : { document: docContext(live.document), ...(r.doc.state === null ? {} : { viewState: r.doc.state }) };
+    const doc =
+      live == null || r.doc === null
+        ? {}
+        : { document: docContext(live.document), ...(r.doc.state === null ? {} : { viewState: r.doc.state }), ...(live.changed === undefined ? {} : { changed: { from: live.changed.from, to: live.changed.to, anchors: [...live.changed.anchors] } }) };
     return { ...this.env.base(), mode, width: size.w, height: mode === 'inline' ? MAX_H : size.h, tool: r.session?.res.tool ?? null, ...doc };
   }
 

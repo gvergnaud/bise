@@ -5,6 +5,13 @@
     "one": null,
     "text": "Agent"
   },
+  "menus.always_open": {
+    "args": [
+      "ending"
+    ],
+    "one": null,
+    "text": "Always open {ending} with"
+  },
   "menus.archive": {
     "args": [],
     "one": null,
@@ -151,6 +158,11 @@
     "args": [],
     "one": null,
     "text": "Open in"
+  },
+  "menus.open_with": {
+    "args": [],
+    "one": null,
+    "text": "Open with"
   },
   "menus.pin": {
     "args": [],

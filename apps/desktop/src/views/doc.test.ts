@@ -63,6 +63,7 @@ describe('selection', () => {
     expect(selectionOf({ anchor: 'r:1', take: true })).toEqual({ anchor: 'r:1', take: true });
     expect(selectionOf({ anchor: 'r:1' })).toEqual({ anchor: 'r:1' });
     expect(selectionOf({ anchor: 'r:1', key: 'w', take: true }), 'never both').toEqual({ anchor: 'r:1', key: 'w' });
+    expect(selectionOf({ anchor: 'b1', take: true, label: ' page 2 · a box ' }), 'its label, trimmed').toEqual({ anchor: 'b1', take: true, label: 'page 2 · a box' });
   });
 
   it('drops a key that is not one printable character, and an anchor past 512 bytes', () => {

@@ -102,6 +102,8 @@ export function themeNow(root: HTMLElement = document.documentElement): 'light' 
 
 /** Where a document's view gets its state back (the RFC's ai.mistral.vibe/viewState, A5). */
 export const VIEW_STATE_KEY = 'ai.mistral.vibe/viewState';
+/** Where a document's view reads what changed since he last looked (A5). */
+export const CHANGED_KEY = 'dev.bise/changed';
 
 /** What a context is made of. */
 export interface ContextIn {
@@ -117,6 +119,8 @@ export interface ContextIn {
   /** a document's view (docs/plugin-apps.md A5): the document, and its state kept by the host */
   readonly document?: JsonObject;
   readonly viewState?: Json;
+  /** what changed since he last looked (`dev.bise/changed`, A5) */
+  readonly changed?: JsonObject;
 }
 
 /** The spec's HostContext. Pure. */
@@ -133,6 +137,7 @@ export function hostContext(c: ContextIn): JsonObject {
     ...(c.tool === null ? {} : { toolInfo: { tool: c.tool } }),
     ...(c.document === undefined ? {} : { document: c.document }),
     ...(c.viewState === undefined ? {} : { [VIEW_STATE_KEY]: c.viewState }),
+    ...(c.changed === undefined ? {} : { [CHANGED_KEY]: c.changed }),
   };
 }
 

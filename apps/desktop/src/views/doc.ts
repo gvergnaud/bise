@@ -26,6 +26,8 @@ export const MAX_VIEW_STATE = 64 * 1024;
 export const MAX_ANCHOR = 512;
 /** A selection's quote at most, in characters (the composer's chip reads it). */
 export const MAX_QUOTE = 2048;
+/** A selection's label at most, in characters. */
+export const MAX_LABEL = 120;
 
 /** The document as the view's host context says it (A5). */
 export interface DocInfo {
@@ -44,6 +46,19 @@ export interface OpenerInfo {
   readonly app: string;
 }
 
+/** What changed since he last looked (view/open's `changed`, A5): from a version to this one, the view's anchors that changed. */
+export interface Changed {
+  readonly from: number;
+  readonly to: number;
+  readonly anchors: readonly string[];
+}
+
+/** view/open's `changed`, or undefined when absent or off. Pure. */
+export function changedOf(v: Json | undefined): Changed | undefined {
+  if (!isObj(v) || !nat(v['from']) || !nat(v['to']) || !Array.isArray(v['anchors'])) return undefined;
+  return { from: v['from'], to: v['to'], anchors: v['anchors'].filter((a): a is string => typeof a === 'string') };
+}
+
 /** view/open's answer: a view in the sandbox, or a built-in page's frame (architect m_59941: framed as it is). */
 export type DocOpen =
   | {
@@ -54,6 +69,8 @@ export type DocOpen =
       readonly document: DocInfo;
       readonly opener: OpenerInfo;
       readonly ungranted: readonly ViewPerm[];
+      /** what changed since he last looked (the hub's, architect m_60734): the view marks its anchors */
+      readonly changed?: Changed;
     }
   | { readonly kind: 'frame'; readonly url: string };
 
@@ -105,7 +122,8 @@ export function docOpenOf(r: Json): DocOpen | null {
   const tool = str(op, 'tool');
   const app = str(op, 'app');
   if (plugin === null || tool === null || app === null) return null;
-  return { kind: 'view', res, doc, handle, document, opener: { plugin, tool, app }, ungranted: ungranted(r) };
+  const changed = changedOf(r['changed']);
+  return { kind: 'view', res, doc, handle, document, opener: { plugin, tool, app }, ungranted: ungranted(r), ...(changed === undefined ? {} : { changed }) };
 }
 
 /** The host context's document part (A5). Pure. */
@@ -138,6 +156,8 @@ export interface Selection {
   readonly text?: string;
   readonly key?: string;
   readonly take?: true;
+  /** where it is, in words, for the composer's chip ('page 2 · a box'): display only */
+  readonly label?: string;
 }
 
 const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
@@ -154,7 +174,8 @@ export function selectionOf(p: JsonObject): Selection | null {
   const text = typeof p['text'] === 'string' && p['text'] !== '' ? p['text'].slice(0, MAX_QUOTE) : undefined;
   const key = typedKey(p['key']) ? p['key'] : undefined;
   const take = key === undefined && a !== null && p['take'] === true;
-  return { anchor: a, ...(text === undefined ? {} : { text }), ...(key === undefined || a === null ? {} : { key }), ...(take ? { take: true as const } : {}) };
+  const label = typeof p['label'] === 'string' && p['label'].trim() !== '' ? p['label'].trim().slice(0, MAX_LABEL) : undefined;
+  return { anchor: a, ...(text === undefined ? {} : { text }), ...(key === undefined || a === null ? {} : { key }), ...(take ? { take: true as const } : {}), ...(label === undefined ? {} : { label }) };
 }
 
 /** A note as a view gets it (A5): its anchor is the view's own string. */

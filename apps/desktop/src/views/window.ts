@@ -4,6 +4,7 @@
 import { entityKey, type Entity } from '@/shared/entity';
 import { closeTab, openTab } from '@/app/panel/tabs';
 import { panelState } from '@/app/panel/state';
+import { takeSelection } from '@/app/panel/docselect';
 import { readTokens, styleVariables, themeNow } from './context';
 import type { Download } from './protocol';
 import { askHub, isDoc, type DocRef, type ViewRef } from './port';
@@ -14,10 +15,10 @@ export function viewEntity(r: ViewRef): Extract<Entity, { kind: 'view' }> {
   return { kind: 'view', project: r.project, agent: r.agent, call: r.call };
 }
 
-/** A document as the thing its tab shows: an artifact; a ~/bise file (its row id) has no tab yet (apps-gallery's folder tabs). */
-export function docEntity(r: DocRef): Extract<Entity, { kind: 'artifact' }> | null {
+/** A document as the thing its tab shows: an artifact, or a ~/bise file by its row id. */
+export function docEntity(r: DocRef): Extract<Entity, { kind: 'artifact' | 'file' }> {
   const t = r.target;
-  return t.kind === 'artifact' ? { kind: 'artifact', project: r.project, id: t.id } : null;
+  return t.kind === 'artifact' ? { kind: 'artifact', project: r.project, id: t.id } : { kind: 'file', project: r.project, entry: t.id };
 }
 
 /** A file from a view, saved where he says (the browser's own download: Electron asks where). */
@@ -51,9 +52,7 @@ export const viewsStore = new ViewsStore({
   gesture: async (key) => (await (window as Partial<Window>).bise?.views?.gesture(key)) === true,
   panel: {
     has: (r) => {
-      const e = isDoc(r) ? docEntity(r) : viewEntity(r);
-      if (e === null) return false;
-      const id = entityKey(e);
+      const id = entityKey(isDoc(r) ? docEntity(r) : viewEntity(r));
       return panelState.get().tabs.list.some((t) => t.id === id);
     },
     open: (r) => {
@@ -67,9 +66,9 @@ export const viewsStore = new ViewsStore({
   onCopied: (project, id) => {
     openTab({ kind: 'artifact', project, id });
   },
-  // his ask about a selection reaches the composer once bise_proto::anchor has its `view {key}`
-  // kind (apps-viewkit's, contract A5): until then a document's selection goes nowhere
-  onSelection: () => undefined,
+  // his ask about a selection in a document's view: the composer about that artifact, anchored
+  // `view {key, quote?, label?}` (contract A5, app/panel/docselect.ts)
+  onSelection: takeSelection,
   watch: (f) => panelState.subscribe(f),
   now: () => Date.now(),
   later: (ms, f) => {

@@ -2,6 +2,7 @@
 // out of store.ts so the web host (web.ts, no React) never bundles React. Owner: mcp-apps-host.
 import { useCallback, useSyncExternalStore } from 'react';
 import { useCoreEvent, type Ev } from '@/store';
+import { openTab } from '@/app/panel/tabs';
 import type { AnyRef, ViewRef } from './port';
 import type { ViewState, ViewsStore } from './store';
 
@@ -27,12 +28,27 @@ export function viewOpenOf(ev: Ev): ViewRef | null {
   return agent === '' || call === '' ? null : { project: ev.project, agent, call };
 }
 
-/** On the hub's `app_open` for a view, its panel tab opens (main/index.ts brings the window forward). */
+/**
+ * The hub's one-shot `app_open` for an artifact (the TUI's `o` in /artifacts, docs/plugin-apps.md
+ * A7): that artifact, null for anything else. Pure.
+ */
+export function artifactOpenOf(ev: Ev): { readonly project: string; readonly id: string } | null {
+  if (ev.ev !== 'app_open' || ev.what !== 'artifact') return null;
+  const id = ev.id ?? '';
+  return id === '' ? null : { project: ev.project, id };
+}
+
+/**
+ * On the hub's `app_open` for a view, its panel tab opens; for an artifact, its tab, drawn by its app
+ * when its row names one (main/index.ts brings the window forward).
+ */
 export function useViewOpen(store: ViewsStore): void {
   const on = useCallback(
     (ev: Ev) => {
       const r = viewOpenOf(ev);
       if (r !== null) store.fullscreen(r);
+      const a = artifactOpenOf(ev);
+      if (a !== null) openTab({ kind: 'artifact', project: a.project, id: a.id });
     },
     [store],
   );

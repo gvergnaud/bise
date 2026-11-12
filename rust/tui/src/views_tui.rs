@@ -10,6 +10,10 @@
 //! - `browser ↗` / `b`: `<pages url>/v/<agent>/<call>`, the hub's web host,
 //!   in his browser.
 //!
+//! An artifact's `o` and `O` (the artifacts screen, docs/plugin-apps.md
+//! A7) go the same ways: `app/open` (what `artifact`), or the web host's
+//! document page `<pages url>/d/<id>`.
+//!
 //! The words are the catalog's (`words::views::tui_*`); the pure parts
 //! (lines, urls, the list) have their tests in views_tui_tests.rs.
 

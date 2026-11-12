@@ -74,6 +74,10 @@ export const menus = {
   quick_look: "Quick Look",
   /** its file selected in a Finder window */
   show_in_finder: "Show in Finder",
+  /** a document's Open with submenu (docs/plugin-apps.md A6b): the apps that open it */
+  open_with: "Open with",
+  /** Open with's last row: the pick kept for every file of this type ('Always open .xlsx with') */
+  always_open: (a: { ending: string | number }): string => "Always open " + String(a.ending) + " with",
   /** a process's page in his browser */
   open_browser: "Open in Browser",
   /** a process: stop it */

@@ -23,6 +23,7 @@ import { keepSheet } from '@/agents/sheet';
 import { openChange } from '@/review/openChange';
 import { menuOf, type Act, type MenuFacts } from './registry';
 import { runAct, type MenuFx } from './run';
+import { viewsStore } from '@/views/window';
 
 /** What the facts are read from: the store's rows, and the app's own view state. */
 export interface FactReads {
@@ -62,6 +63,7 @@ export function factsOf(e: Entity, r: FactReads): MenuFacts {
     }
     case 'skill':
     case 'view':
+    case 'file':
       return { e };
     default:
       return { e };
@@ -128,6 +130,14 @@ function fxOf(store: Store, router: Router | null): MenuFx {
       router?.go({ screen: 'agents', project: e.project });
     },
     openTab,
+    // Open with: the document's tab (opened, or brought to the front) swaps its app (views store)
+    setOpener: (project, type, pick) => {
+      store.command({ cmd: 'opener_set', project, type, ...pick });
+    },
+    openWith: (project, id, pick) => {
+      openTab({ kind: 'artifact', project, id });
+      void viewsStore.reopen({ project, target: { kind: 'artifact', id } }, { pick });
+    },
     openChange: (project, agent) => {
       openChange(store, router, project, { agent });
     },
