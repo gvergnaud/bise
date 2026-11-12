@@ -135,8 +135,9 @@ const projectRow = (name: string) => page.locator('[data-testid^="app.side.proje
 const openProject = async (name: string, label = `open ${name}`) => {
   const row = projectRow(name);
   if (!(await row.isVisible().catch(() => false))) {
-    await page.locator('[data-testid="app.side.back"]').first().click({ timeout: 3000 })
-      .catch(() => page.locator('[data-testid="app.rail.bise"]').first().click({ timeout: 3000 }).catch(() => {}));
+    // '← Projects' as he clicks it, never the rail: it goes to the projects view the library was
+    // entered from (main m_62356), so a back that stays in the library is this step's red
+    await page.locator('[data-testid="app.side.back"]').first().click({ timeout: 3000 }).catch(() => {});
     await row.waitFor({ timeout: 5000 }).catch(() => {});
   }
   return click(label, row);

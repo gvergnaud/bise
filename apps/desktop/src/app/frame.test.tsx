@@ -455,6 +455,24 @@ describe('the sidebar', () => {
     expect(v.getByTestId('app.side.back')).toBeTruthy();
     expect(v.queryByTestId('app.side.list')).toBeNull();
   });
+
+  it("'← Projects' goes to the project the library was entered from, never by history (main m_62356)", () => {
+    const from: Route = { screen: 'thread', project: ACME, agent: 'main' };
+    const { v, router } = frame(from, [agent('main')]);
+    act(() => { router.go({ screen: 'artifacts', project: '' }); });
+    // an artifact opened then closed in the panel: two history steps on the library's route
+    act(() => { router.mark(null, { tabs: ['a1'] }, { opened: 'a1' }); });
+    act(() => { router.mark({ tabs: ['a1'] }, null, { closed: 'a1' }); });
+    fireEvent.click(v.getByTestId('app.side.back'));
+    expect(router.get()).toEqual(from);
+    expect(v.getByTestId(`app.side.project.${ACME}`)).toBeTruthy();
+  });
+
+  it("'← Projects' on a library opened first (a deep link): bise", () => {
+    const { v, router } = frame({ screen: 'artifacts', project: '' }, [agent('main')]);
+    fireEvent.click(v.getByTestId('app.side.back'));
+    expect(router.get()).toEqual({ screen: 'bise' });
+  });
 });
 
 describe('spring-loaded projects (his m_47378, designer m_47386)', () => {

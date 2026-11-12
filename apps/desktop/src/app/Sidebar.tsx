@@ -33,7 +33,8 @@ import { useEntityMenu } from './menus/use';
 import { useEntityAction } from './menus/actions';
 import { MAIN, projectOf } from './route';
 import { useRoute, useRouter } from './router';
-import { sideShows } from './sideshows';
+import { projectsBack, sideShows } from './sideshows';
+import type { Route } from './route';
 import { useKeptScroll } from './keep';
 import { useModHeld } from './held';
 import { LiveBiseMark } from './Marks';
@@ -253,6 +254,11 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
   // artifact open in a panel keeps his projects (sideshows.ts)
   const shows = sideShows(route);
   const library = shows === 'library';
+  // the projects view the library was entered from: '← Projects' goes back to it (projectsBack)
+  const entered = useRef<Route | null>(null);
+  useEffect(() => {
+    if (shows === 'projects') entered.current = route;
+  }, [route, shows]);
   return (
     <aside className="app-side" data-testid="app.sidebar" data-library={library || undefined}>
       {/* on settings the sidebar is the settings nav alone (designer m_44447) */}
@@ -274,15 +280,16 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
       )}
       {/* the swap is a crossfade (app.css .app-s-swap): a new key fades the other list in */}
       <div className="app-s-swap" key={shows}>
-        {shows === 'library' ? <LibraryList /> : shows === 'settings' ? <SettingsNav /> : <ProjectList />}
+        {shows === 'library' ? <LibraryList entered={entered} /> : shows === 'settings' ? <SettingsNav /> : <ProjectList />}
       </div>
     </aside>
   );
 }
 
-/** d2: '← Projects' back (esc and ⌘[ too: router's back), then the library (nm-pages-a's ArtLibrary);
- *  ⌘ held, its rows' ⌘1-9 as the projects' (keys.ts opens them; rail-keys). */
-function LibraryList() {
+/** d2: '← Projects' to the projects view the library was entered from (sideshows.ts projectsBack,
+ *  never by history: main m_62356), then the library (nm-pages-a's ArtLibrary); ⌘ held, its rows'
+ *  ⌘1-9 as the projects' (keys.ts opens them; rail-keys). */
+function LibraryList({ entered }: { entered: { readonly current: Route | null } }) {
   const router = useRouter();
   const cmd = useModHeld('Meta');
   return (
@@ -292,8 +299,7 @@ function LibraryList() {
         icon="back"
         name={frame.projects}
         onClick={() => {
-          if (router.canBack()) router.back();
-          else router.go({ screen: 'bise' });
+          router.go(projectsBack(entered.current));
         }}
         testId="app.side.back"
       />
