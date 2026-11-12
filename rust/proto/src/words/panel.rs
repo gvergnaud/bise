@@ -138,6 +138,10 @@ crate::words! { panel:
     prtab_gitlab = "GitLab";
     /// the link out, always in its head
     prtab_open_on(forge) = "Open on {forge} ↗";
+    /// the tip of the PR's size at its line's end, its lines ('+123 −81'; designer m_62857)
+    prtab_stat_lines(n, del) = one "{n} line added, {del} removed" | "{n} lines added, {del} removed";
+    /// the same tip, its files, after a ' · '
+    prtab_stat_files(n) = one "{n} file" | "{n} files";
     /// its head's branch line
     prtab_branches(head, base) = "{head} → {base}";
     /// its head's last push

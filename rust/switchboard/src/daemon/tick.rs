@@ -117,6 +117,9 @@ pub(super) const JOBS: &[Job] = &[
             s.art_opens_flush(true);
         },
     },
+    // agents' files 3 months after their task: at the start, then daily,
+    // on its own thread (crate::artifacts_retention, daemon/art.rs)
+    Job { name: "artifact retention", every: Every::Ms(86_400_000), first: First::Now, run: |s, _| s.art_retention_sweep() },
     Job { name: "disk", every: Every::Tick, first: First::Now, run: |s, _| s.disk_check() },
     // computer use (design §7.3): each stop, one line in main's feed
     Job {

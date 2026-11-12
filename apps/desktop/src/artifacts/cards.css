@@ -57,6 +57,11 @@
 
 .art-card-tt { display: flex; align-items: center; gap: var(--card-room); min-width: 0; margin-top: var(--s-2); font-weight: 500; line-height: 18px; }
 .art-card-t1 { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* an expired file (artifacts_retention, designer m_62289): no picture, its type icon in text-3, its name text-2 */
+.art-card-xi { display: flex; align-items: center; justify-content: center; color: var(--c-text-3); }
+.art-card-t1.expired { color: var(--c-text-2); font-weight: 400; }
+.art-card-thr { color: var(--c-text-2); }
+.art-card-thr:hover { color: var(--c-ink); }
 .art-card-mt { display: block; margin-top: calc(var(--s-1) / 2); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font: var(--t-12) var(--font-ui); line-height: 16px; color: var(--c-text-3); }
 
 /* the list behind ☰: 48 px picture, name, made by, kind, when */

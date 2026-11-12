@@ -33,6 +33,11 @@ describe('thumbs plan', () => {
     expect(planOf(item(a))).toMatchObject({ how: 'file', src: '/s/a/f/v1/plan.pdf' });
   });
 
+  it('makes no picture of an expired file: its copies are deleted, its file may be gone (artifacts_retention)', () => {
+    const a = art('f', 'doc', { path: '/w/plan.pdf', expired: true, versions: [{ v: 1, at_ms: 1, copy: '/s/a/f/v1/plan.pdf' }] });
+    expect(fileOf(a)).toBeNull();
+  });
+
   it('keys the cache per version, and a new target under the same number changes the sig', () => {
     const a = art('f', 'image', { path: '/w/a.png', version: 2, target: '/w/a.png' });
     const p = planOf(item(a));

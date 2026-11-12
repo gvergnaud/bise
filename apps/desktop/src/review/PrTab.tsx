@@ -168,8 +168,8 @@ const SQ_GAP = 2;
 
 /**
  * The PR's size at the line's end, as GitHub shows it (his m_62199): '+438 −151' and five squares
- * for the added and removed shares (diffstat.ts), over the whole diff the guide reads. Nothing
- * until that diff comes.
+ * for the added and removed shares (diffstat.ts), over the whole diff the guide reads; its tip says
+ * it in words with its files (designer m_62857). Nothing until that diff comes.
  */
 function Stat({ project, url }: { project: string; url: string }) {
   const diff = usePrDiff(project, url);
@@ -177,7 +177,8 @@ function Stat({ project, url }: { project: string; url: string }) {
   if (st === null) return null;
   const w = SQUARES * SQ + (SQUARES - 1) * SQ_GAP;
   return (
-    <span className="prt-stat" data-testid="prtab.stat">
+    <span className="prt-stat" data-testid="prtab.stat"
+      {...tipAttrs(`${panel.prtab_stat_lines({ n: st.add, del: st.del })} · ${panel.prtab_stat_files({ n: st.files })}`)}>
       <span className="prt-add">+{st.add}</span>
       <span className="prt-del">−{st.del}</span>
       <svg className="prt-sq" width={w} height={SQ} viewBox={`0 0 ${String(w)} ${String(SQ)}`} aria-hidden data-testid="prtab.stat.squares">

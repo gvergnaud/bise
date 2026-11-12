@@ -644,6 +644,9 @@ done
 run="$gpre$$"
 rm -rf "$run"; mkdir -p "$run" && proc_start $$ >"$run/.owner" && echo "$root" >"$run/.root" || { echo "gate: cannot write $run"; exit 1; }
 echo "gate $mode (pid $$): stop it with tests/gate.sh stop, never pkill (it matches every agent's gate)"
+# heavy-run let this gate in over its load ceiling (its lane ran nothing, the load wasn't heavy-run's:
+# architect m_63105): said first, so a red of it is read as load first
+[ -n "${HEAVY_NOTE:-}" ] && echo "note: heavy-run $HEAVY_NOTE: a timing red here is load first"
 export TMPDIR="$run" BISE_GATE_RUN=$$ BISE_GATE_START="$(cat "$run/.owner")"
 # every quick/full/rerun keeps its output in <gate dir>/logs/ for 7 days,
 # whatever the caller did with it (a task's tmp goes at its drop, a green
@@ -1210,4 +1213,4 @@ if [ $bend_changed = 1 ]; then
   wait "$proof_pid"; cat "$out/proof.res"; [ "$(cat "$out/proof.rc")" = 0 ] || exit 1
 fi
 mark_idle
-echo "GATE quick GREEN ($((SECONDS - t0))s):${pkgs:- no Rust tests}$([ $bend_changed = 1 ] && echo ' + PROOF') (full: gate.sh full)"
+echo "GATE quick GREEN ($((SECONDS - t0))s):${pkgs:- no Rust tests}$([ $bend_changed = 1 ] && echo ' + PROOF') (full: gate.sh full)${HEAVY_NOTE:+ [heavy-run: $HEAVY_NOTE]}"

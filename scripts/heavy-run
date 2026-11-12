@@ -9,7 +9,22 @@
 # (mac-budget, 2026-10-21; docs/loop-speed.md §10.7): a disk reserve per
 # job and the reclaim of idle cargo targets (scripts/disk_reclaim.py,
 # --install puts it next to this file), a time limit per job (rc 124),
-# threads per slot, and a start held while the load is over 2 x cores.
+# threads per slot, and the admission below (a quiet window, a load ceiling, a
+# floor per lane, a bar on our own jobs' CPU).
+# heavy-run quiet <what> -- <command...>: the release's automatic quiet window (main m_63082,
+# architect m_63085): while <command> runs (a timing-bound step: the tip gate's e2e/tmux, as-he-
+# does, the desktop checks), it holds an exclusive flock on ~/.bise/run/quiet/<what>.lock, and no
+# job starts but the release lane's (--prio), floors included. A killed wrapper frees its lock by
+# itself. One line per window in heavy.log: quiet <what> <start> <end> <min> <tickets held>.
+# Admission, for a job outside the release lane, each poll: (1) a quiet window open: wait;
+# (2) the Mac's 1-min load at or over HEAVY_LOAD_CEILING (2 x the cores): wait, floors included;
+# (3) its lane's floor: a lane with none of its jobs running starts its first one (the agents'
+# lane, ranks 1-2; the low lane, rank 3, while fewer than 2 agent jobs run); (4) else the bar:
+# our running jobs' CPU (their process trees by ppid, one ps snapshot: disk_reclaim.py --admit)
+# under HEAVY_JOBS_CPU (75 % of the cores, in % of one core: 900 on 12) and HEAVY_START_GAP (20) s
+# after the last start. Before (until 11-12) the bar was the whole Mac's load, which agents'
+# REPLs, hubs and light gates held over 2 x cores for hours: 147 min of waits on 11-12 came with
+# 0-1 jobs of ours running (fast-loop, main m_63076, architect m_63083).
 # Its knobs and disk_reclaim.py's, script-only (not in bise_home's VARS):
 #   HEAVY_DISK_WAIT_GB (10) the floor a job waits for; HEAVY_DISK_STOP_GB (5)
 #   a running job stops; HEAVY_RECLAIM_UNDER_GB (20) a running job's reclaim
@@ -70,6 +85,17 @@ if [ "${1:-}" = --install ]; then
   cp "$src" "${dst%/*}/disk_reclaim.py.new.$$" && mv -f "${dst%/*}/disk_reclaim.py.new.$$" "${dst%/*}/disk_reclaim.py" \
     && echo "installed ${dst%/*}/disk_reclaim.py"
   return $?
+fi
+if [ "${1:-}" = quiet ]; then
+  [ $# -ge 4 ] && [ "$3" = -- ] && [[ "$2" =~ ^[a-z0-9-]+$ ]] || { echo "usage: heavy-run quiet <what> -- <command...>" >&2; return 2; }
+  local what="$2" qd="$HOME/.bise/run/quiet" t0 rc held; shift 3
+  mkdir -p "$qd"; t0=$(date +%s)
+  # the marker's line is for the logs only: admission tries a shared flock, never reads it
+  /usr/bin/lockf -k "$qd/$what.lock" /bin/bash -c 'printf "%s since %s\n" "$1" "$(date "+%F %T")" >"$2"; shift 2; "$@"' \
+    _ "$what" "$qd/$what.lock" "$@"; rc=$?
+  held=$(ls "$HOME/.bise/run/queue" 2>/dev/null | grep -vc '^0-')
+  printf "quiet\t%s\t%s\t%s\t%s\t%s\n" "$what" "$t0" "$(date +%s)" "$(( ($(date +%s) - t0) / 60 ))" "$held" >>"$HOME/.bise/run/heavy.log"
+  return $rc
 fi
 # no heavy-run inside a heavy job (gate-reds, main m_33473): a job holding a
 # slot that asks for one again waits on the others, and a --alone job holding
@@ -142,6 +168,12 @@ reclaim() {
   [ -e "$s" ] && [ $(( now - $(stat -f %m "$s" 2>/dev/null || echo 0) )) -lt "$gap" ] && return 0
   touch "$s"
   local r="${HEAVY_RECLAIM:-/usr/bin/python3 $HOME/.bise/run/disk_reclaim.py}"
+  # the idle pass (want 0) runs at the background QoS (taskpolicy -b: the lowest CPU priority, its
+  # disk I/O throttled): nothing waits on it. On 11-12 one ran 1h07 at load 110-142 (two reclones,
+  # three target deletions: millions of file ops that fseventsd, mds and the endpoint agent also
+  # read), and the load fell from 78 to 37 the minute it ended (main m_62979). A want pass (a job
+  # waits for that disk) keeps its priority.
+  [ "$1" = 0 ] && [ -z "${HEAVY_RECLAIM:-}" ] && [ -x /usr/sbin/taskpolicy ] && r="/usr/sbin/taskpolicy -b $r"
   # fds 3-9 closed: a job's slot lock (lockf's fd, 3; 3-6 for --alone) must
   # not outlive the job in a reclaim that runs on
   # reclaim.mark (touched at its start and end) and reclaim.running (while it
@@ -392,6 +424,15 @@ load1() {
   if [ -n "${HEAVY_LOAD_FILE:-}" ]; then cat "$HEAVY_LOAD_FILE" 2>/dev/null; return; fi
   /usr/sbin/sysctl -n vm.loadavg 2>/dev/null | awk '{print int($2)}'
 }
+# the admission's facts, one line 'quiet=<what|-> cpu=<%> agents=<n> low=<n>': disk_reclaim.py
+# --admit beside this file (one ps snapshot, the quiet locks, the reserve files);
+# HEAVY_ADMIT_FILE (tests): that file's line instead. None (it failed): no quiet, no CPU read
+admit_facts() {
+  if [ -n "${HEAVY_ADMIT_FILE:-}" ]; then cat "$HEAVY_ADMIT_FILE" 2>/dev/null; return; fi
+  /usr/bin/python3 "$(cd "$(dirname "$0")" && pwd)/disk_reclaim.py" --admit 2>/dev/null
+}
+# a field of that line: fact <name> <line>
+fact() { echo "$2" | tr ' ' '\n' | sed -n "s/^$1=//p"; }
 # whether a release-lane job (heavy5.lock) ran at any time from epoch $1 to
 # now, read from heavy.log ($2): an --alone job's end line says so
 # ('lane=busy'), since --alone never takes the lane (review-gates m_35984):
@@ -549,12 +590,12 @@ export HEAVY_MAX; HEAVY_MAX=$(max_min "$([ "$ALONE" = 1 ] && echo --alone)" "$@"
 export HEAVY_SUBMIT="${HEAVY_SUBMIT:-$(date +%s)}"
 JOB='export HEAVY_SLOT="${2##*/} $$"; rm -f "$1"; L="$HOME/.bise/run/heavy.log"
 c=$(printf "%s " "${@:4}" | tr "\n\t\r" "   " | cut -c1-160); t0=$(date +%s)
-printf "%s\t%s\t-\t%s\t%s\t%s\twaited=%s\n" "$HEAVY_SUBMIT" "$t0" "${2##*/}" "$PWD" "$c" "${HEAVY_WAITED:-}" >>"$L" 2>/dev/null
+printf "%s\t%s\t-\t%s\t%s\t%s\twaited=%s%s\n" "$HEAVY_SUBMIT" "$t0" "${2##*/}" "$PWD" "$c" "${HEAVY_WAITED:-}" "${HEAVY_NOTE:+	$HEAVY_NOTE}" >>"$L" 2>/dev/null
 touch "$HOME/.bise/run/last-start"
 rv="$HOME/.bise/run/reserve/${2##*/}.$$"; mkdir -p "${rv%/*}"; k0=$(free_kb)
 others=$(ls "${rv%/*}" 2>/dev/null | grep -vc "^${rv##*/}\$")
 export HEAVY_CPUS=$(( $(/usr/sbin/sysctl -n hw.ncpu 2>/dev/null || echo 8) / (others + 1) ))
-printf "%s\t%s\t%s\t%s\t%s\n" "$HEAVY_RESERVE" "$PWD" "$k0" "$c" "$([ -n "${HEAVY_RESERVE_GB:-}" ] && echo - || echo "$HEAVY_KIND")" >"$rv"
+printf "%s\t%s\t%s\t%s\t%s\t%s\n" "$HEAVY_RESERVE" "$PWD" "$k0" "$c" "$([ -n "${HEAVY_RESERVE_GB:-}" ] && echo - || echo "$HEAVY_KIND")" "${HEAVY_RANK:-2}" >"$rv"
 mnf="$HOME/.bise/run/disk-min.$$"; echo "$k0" >"$mnf"
 r=$(git rev-parse --show-toplevel 2>/dev/null) || r=$PWD
 for f in "$r"/target/RECLAIMED.txt "$r"/*/target/RECLAIMED.txt "$r"/*/*/target/RECLAIMED.txt; do
@@ -633,6 +674,7 @@ case " $* " in *"gate.sh full"*|*"gate.sh rerun"*|*"test:land"*|*"nightly_gate.s
 [ "$LAND" = 1 ] && rank=1
 [ "$LOW" = 1 ] && rank=3
 [ "$PRIO" = 1 ] && rank=0
+export HEAVY_RANK=$rank
 [ "$ALONE" = 1 ] && while on_battery; do sleep 60; done
 T="$Q/$rank-$HEAVY_SUBMIT-$$"
 # the ticket holds its own time (a reused pid started after it is no
@@ -684,12 +726,12 @@ own_cap() {
   return 0
 }
 own_cap
-wd=0 ws=0 wl=0 wb=0 why="" prev=$(date +%s)
+wd=0 ws=0 wl=0 wb=0 wq=0 why="" prev=$(date +%s)
 tally() {
   local now; now=$(date +%s)
-  case "$why" in disk) wd=$((wd + now - prev)) ;; slot) ws=$((ws + now - prev)) ;; load) wl=$((wl + now - prev)) ;; batt) wb=$((wb + now - prev)) ;; esac
+  case "$why" in disk) wd=$((wd + now - prev)) ;; slot) ws=$((ws + now - prev)) ;; load) wl=$((wl + now - prev)) ;; batt) wb=$((wb + now - prev)) ;; quiet) wq=$((wq + now - prev)) ;; esac
   prev=$now; why=""
-  export HEAVY_WAITED="disk:$wd slot:$ws load:$wl batt:$wb"
+  export HEAVY_WAITED="disk:$wd slot:$ws load:$wl batt:$wb quiet:$wq"
 }
 # lockf -t 0 exits 75 (EX_TEMPFAIL) when the slot is taken.
 while :; do
@@ -756,22 +798,39 @@ while :; do
       held=1; free=""
       [ -n "${cargowait:-}" ] || { echo "heavy-run: a slot is free but $(cargo_max) cargo jobs run already (HEAVY_CARGO_MAX), waiting" >&2; cargowait=1; }
     fi
-    # the load (mac-budget): while a heavy job runs, another one starts only
-    # under HEAVY_LOAD_MAX (2 x the cores) and HEAVY_START_GAP (20) s after
-    # the last start, so the 1-min load has seen it (at 10:20 on 2026-10-21
-    # the queue started at once and the load hit 113). --prio is exempt.
-    if [ -n "$free" ] && [ "$PRIO" = 0 ] && [ "$(echo $free | wc -w)" -lt "$(echo $slots | wc -w)" ]; then
-      lmax="${HEAVY_LOAD_MAX:-$(( 2 * $(/usr/sbin/sysctl -n hw.ncpu 2>/dev/null || echo 8) ))}"
+    # the admission (fast-loop, main m_63076 m_63082, architect m_63083 m_63085 m_63105; the
+    # header's (1)-(4)). --prio (the release lane) is exempt from all of it.
+    if [ -n "$free" ] && [ "$PRIO" = 0 ]; then
+      ceil="${HEAVY_LOAD_CEILING:-$(( 2 * $(/usr/sbin/sysctl -n hw.ncpu 2>/dev/null || echo 8) ))}"
+      bar="${HEAVY_JOBS_CPU:-$(( 75 * $(/usr/sbin/sysctl -n hw.ncpu 2>/dev/null || echo 8) ))}"
+      facts=$(admit_facts); qw=$(fact quiet "$facts"); jc=$(num "$(fact cpu "$facts")")
+      na=$(num "$(fact agents "$facts")"); nl=$(num "$(fact low "$facts")"); ld=$(num "$(load1)")
       ls_=$(stat -f %m "$D/last-start" 2>/dev/null || echo 0)
-      # never starved by the load itself: after HEAVY_LOAD_WAIT_MAX (600) s
-      # held by it, the job goes in its turn (the load that is not heavy-run's,
-      # 50-90 at 13:30 on 2026-10-21 with no rustc running, would hold it
-      # forever)
-      if [ $(( $(date +%s) - ${loadsince:-$(date +%s)} )) -lt "${HEAVY_LOAD_WAIT_MAX:-600}" ] \
-         && { [ "$(load1)" -ge "$lmax" ] 2>/dev/null || [ $(( $(date +%s) - ls_ )) -lt "${HEAVY_START_GAP:-20}" ]; }; then
-        held=1; loadsince=${loadsince:-$(date +%s)}
-        [ -n "${loadwait:-}" ] || { echo "heavy-run: a slot is free but the machine is busy (load $(load1), the limit $lmax while a heavy job runs), waiting (${HEAVY_LOAD_WAIT_MAX:-600} s at most)" >&2; loadwait=1; }
-        free=""
+      floor=""
+      if [ -n "$facts" ]; then
+        { [ "$rank" = 3 ] && [ "$nl" = 0 ] && [ "$na" -lt 2 ]; } || { [ "$rank" != 3 ] && [ "$na" = 0 ]; } && floor=1
+      fi
+      hold="" over=""
+      if [ -n "$qw" ] && [ "$qw" != - ]; then
+        hold=quiet; msg="the release runs a timing-bound step ($qw): its quiet window"
+      elif [ "$ld" -ge "$ceil" ]; then
+        # over the ceiling: a lane's floor still goes when the load isn't ours (our jobs under
+        # half the bar); a runaway of ours holds everyone
+        if [ -n "$floor" ] && [ $(( jc * 2 )) -lt "$bar" ]; then over="admitted over ceiling, load $ld, ours ${jc}%"
+        else hold=load; msg="the machine is busy (load $ld, the ceiling $ceil; ours ${jc}%)"; fi
+      elif [ -n "$floor" ]; then
+        :  # the lane's floor: its first job goes
+      elif [ "$jc" -ge "$bar" ]; then
+        hold=load; msg="our running jobs use ${jc}% CPU, the bar $bar%"
+      elif [ $(( $(date +%s) - ls_ )) -lt "${HEAVY_START_GAP:-20}" ]; then
+        hold=load; msg="a job started under ${HEAVY_START_GAP:-20} s ago"
+      fi
+      export HEAVY_NOTE="$over"
+      if [ -n "$hold" ]; then
+        held=$hold; free=""
+        [ "${loadwait:-}" = "$hold" ] || { echo "heavy-run: a slot is free but $msg: waiting" >&2; loadwait=$hold; }
+      elif [ -n "$over" ]; then
+        echo "heavy-run: $over (its lane runs nothing, the load isn't ours)" >&2
       fi
     fi
     if [ -n "$free" ] && [ "$(ahead)" -lt "$(echo $free | wc -w)" ]; then
@@ -786,7 +845,7 @@ while :; do
   [ -n "${waited:-}" ] || { h=$(holders); echo "heavy-run: every heavy slot is busy or promised to an earlier job, waiting (rank $rank)${h:+; held by: $h}" >&2; waited=1; }
   # held by the load: poll every 5 s, not 2 (each round spawns ~10
   # processes per waiter: 6 waiters made ~45 spawns/s at load 120)
-  if [ -n "$held" ]; then why=load; sleep 5; else why=slot; sleep 2; fi
+  if [ "$held" = quiet ]; then why=quiet; sleep 5; elif [ -n "$held" ]; then why=load; sleep 5; else why=slot; sleep 2; fi
 done
 }
 heavy_run "$@"; exit $?

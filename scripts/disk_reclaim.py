@@ -183,8 +183,14 @@ def _self_test():
     assert shared_of("gitdir: /u/lab/harness/.git/worktrees/harness6/") == "/u/lab/harness"
     assert shared_of("gitdir: ../.git/modules/vendor/x") is None, "a submodule: no shared tree"
     assert shared_of("gitdir: /.git/worktrees/x") is None and shared_of("") is None and shared_of("ref: x") is None
-    assert exec_holders("/s/rust/target", [(7, "/s/rust/target/debug/bise"), (8, "/s/rust/target2/x"),
-                                           (9, "/usr/bin/cargo")]) == [7], "a process runs from it"
+    assert exec_holders("/s/rust/target", [(7, 1, 0.0, "/s/rust/target/debug/bise"), (8, 1, 0.0, "/s/rust/target2/x"),
+                                           (9, 1, 0.0, "/usr/bin/cargo")]) == [7], "a process runs from it"
+    # our jobs' CPU: each job's tree by ppid, a setsid'd child included, each process once
+    ps = [(10, 1, 5.0, "bash"), (11, 10, 300.0, "cargo"), (12, 11, 90.0, "rustc"), (13, 10, 200.0, "electron"),
+          (20, 1, 1.0, "bash"), (21, 20, 50.0, "node"), (30, 1, 400.0, "bise")]
+    assert tree_cpu(ps, [10]) == 595.0, "a job's whole tree, its setsid'd electron too"
+    assert tree_cpu(ps, [10, 20, 11]) == 646.0, "two jobs, a pid listed twice counted once"
+    assert tree_cpu(ps, [99]) == 0 and tree_cpu([], [10]) == 0, "no such job: 0"
     import tempfile
     with tempfile.TemporaryDirectory() as d:
         build = os.path.join(d, "state", "build")
@@ -339,23 +345,100 @@ def shared_trees():
 
 
 def exec_holders(t, procs):
-    """The pids of the processes exec'd from t, pure. procs: [(pid, exe path)]."""
+    """The pids of the processes exec'd from t, pure. procs: running_procs()'s rows."""
     pre = t.rstrip("/") + "/"
-    return [p for p, e in procs if e.startswith(pre)]
+    return [r[0] for r in procs if r[-1].startswith(pre)]
 
 
 def running_procs():
-    """[(pid, exe path as exec'd)] of the running processes; None when ps fails."""
+    """[(pid, ppid, %cpu, exe path as exec'd)] of the running processes, one ps snapshot; None
+    when ps fails."""
     try:
-        out = subprocess.run(["ps", "-Ao", "pid=,comm="], capture_output=True, text=True, timeout=20).stdout
+        out = subprocess.run(["ps", "-Ao", "pid=,ppid=,%cpu=,comm="], capture_output=True, text=True, timeout=20).stdout
     except (OSError, subprocess.SubprocessError):
         return None
     rows = []
     for line in out.splitlines():
-        pid, _, exe = line.strip().partition(" ")
-        if pid.isdigit() and exe.strip():
-            rows.append((int(pid), exe.strip()))
+        p = line.split(None, 3)
+        if len(p) == 4 and p[0].isdigit() and p[1].isdigit():
+            try:
+                rows.append((int(p[0]), int(p[1]), float(p[2]), p[3].strip()))
+            except ValueError:
+                continue
     return rows
+
+
+def tree_cpu(rows, roots):
+    """The %CPU of the process trees under `roots` (pids), each process once, pure. rows:
+    running_procs()'s. A tree by ppid, not by process group: electron, pnpm and some test
+    runners setsid their children, and a pgid sum missed the heaviest part (architect m_63083)."""
+    kids = {}
+    for pid, ppid, _, _ in rows:
+        kids.setdefault(ppid, []).append(pid)
+    cpu = {pid: c for pid, _, c, _ in rows}
+    seen, todo = set(), [r for r in roots if r in cpu]
+    while todo:
+        p = todo.pop()
+        if p in seen:
+            continue
+        seen.add(p)
+        todo += kids.get(p, [])
+    return sum(cpu[p] for p in seen)
+
+
+def heavy_jobs(reserve_dir):
+    """The running heavy-run jobs: [(slot, pid, rank)] from <reserve>/<slot>.<pid> (field 6 the
+    rank; an older file without it: 2), a dead pid's skipped."""
+    out = []
+    for f in _files(reserve_dir):
+        slot, _, pid = f.rpartition(".")
+        if not pid.isdigit():
+            continue
+        try:
+            os.kill(int(pid), 0)
+        except OSError:
+            continue
+        try:
+            fields = open(os.path.join(reserve_dir, f)).readline().rstrip("\n").split("\t")
+        except OSError:
+            continue
+        rank = fields[5] if len(fields) > 5 and fields[5].isdigit() else "2"
+        out.append((slot, int(pid), int(rank)))
+    return out
+
+
+def quiet_held(qdir):
+    """The release's quiet windows open now (heavy-run quiet <what>): each <what>.lock in qdir
+    whose exclusive flock a live wrapper holds (a shared non-blocking lock fails). A killed
+    wrapper's lock is free: no window (architect m_63085)."""
+    held = []
+    for f in _files(qdir):
+        if not f.endswith(".lock"):
+            continue
+        try:
+            fd = os.open(os.path.join(qdir, f), os.O_RDONLY)
+        except OSError:
+            continue
+        try:
+            fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        except OSError:
+            held.append(f[:-len(".lock")])
+        finally:
+            os.close(fd)
+    return held
+
+
+def admit_facts(run):
+    """heavy-run's admission facts, one line: 'quiet=<what,...|-> cpu=<our jobs' %CPU>
+    agents=<n> low=<n>': the open quiet windows, the CPU of the running jobs' trees (one ps
+    snapshot), and the running jobs of the agents' lane (ranks 1-2, not the release slot) and of
+    the low lane (rank 3)."""
+    jobs = heavy_jobs(os.path.join(run, "reserve"))
+    rows = running_procs() or []
+    q = quiet_held(os.path.join(run, "quiet"))
+    agents = sum(1 for s, _, r in jobs if s != "heavy5.lock" and r in (0, 1, 2))
+    low = sum(1 for s, _, r in jobs if s != "heavy5.lock" and r == 3)
+    return "quiet=%s cpu=%d agents=%d low=%d" % (",".join(q) or "-", int(tree_cpu(rows, [p for _, p, _ in jobs])), agents, low)
 
 
 def stray(t):
@@ -993,6 +1076,7 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--self-test", action="store_true")
     ap.add_argument("--own", metavar="CWD", help="the own-cap of the job that starts in CWD (heavy-run)")
+    ap.add_argument("--admit", action="store_true", help="heavy-run's admission facts: quiet windows, our jobs' CPU, lanes")
     ap.add_argument("--grown", nargs="+", metavar="T0 TREE [DIR]",
                     help="KB a job grew its dirs (relative to TREE; none: its cargo targets) since T0 (heavy-run)")
     a = ap.parse_args()
@@ -1004,6 +1088,13 @@ def main():
             print(grown_kb(a.grown[1], float(a.grown[0]), a.grown[2:] or None))
         except Exception as e:  # never a failed job: no number, heavy-run writes no row
             print("disk_reclaim --grown: %s: %s" % (type(e).__name__, e), file=sys.stderr)
+            return 1
+        return 0
+    if a.admit:
+        try:
+            print(admit_facts(os.path.expanduser("~/.bise/run")))
+        except Exception as e:  # never a failed admission: no line, heavy-run then reads none
+            print("disk_reclaim --admit: %s: %s" % (type(e).__name__, e), file=sys.stderr)
             return 1
         return 0
     if a.own:

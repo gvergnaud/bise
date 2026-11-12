@@ -203,6 +203,10 @@ export class StoreReads extends StoreBase {
   artifactsCame(project: string): boolean {
     return this.facts.artifacts[project] !== undefined;
   }
+  /** the bytes of the copies bise keeps of the project's agents' files (kept 3 months after their task); none from an older hub */
+  agentsBytes(project: string): number | undefined {
+    return this.slice<number | undefined>(`artifacts:bytes:${project}`, undefined);
+  }
   /** the library's folders, shared by every project (the newest artifacts event's); none until a hub said */
   folders(): readonly Folder[] {
     return this.slice<readonly Folder[]>("library:folders", EMPTY);

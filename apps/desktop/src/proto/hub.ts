@@ -57,7 +57,13 @@ cmds: Array<string>,
  * a hub newer than the app reads the app's update channel at once
  * (desktop-dist, architect m_25198)
  */
-built?: string | null, } | { "ev": "agents", project: string, agents: Array<Agent>, places?: Array<Place>, archived?: Array<ArchivedAgent> | null, } | { "ev": "cards", project: string, cards: Array<Card>, others?: Array<Card>, } | { "ev": "thread", project: string, agent: string, entries: Array<Entry>, before: number | null, more: boolean, cached?: boolean, } | { "ev": "thread_hits", project: string, agent: string, rid: number, needle: string, hits: Array<FindHit>, upto: number, } | { "ev": "thread_marks", project: string, agent: string, marks: Array<Mark>, upto: number, } | { "ev": "entry", project: string, agent: string, entry: Entry, } | { "ev": "typing", project: string, agent: string, text: string, } | { "ev": "partial", project: string, agent: string, call: string, off: number, text: string, } | { "ev": "artifacts", project: string, items: Array<Artifact>, seen_ms?: number | null, folders?: Array<Folder>, } | { "ev": "artifacts_moved", project: string, moved: Array<ArtifactMoved>, } | { "ev": "artifact_notes", project: string, artifact: string, } | { "ev": "files_ids", project: string, full: boolean, seq: number, 
+built?: string | null, } | { "ev": "agents", project: string, agents: Array<Agent>, places?: Array<Place>, archived?: Array<ArchivedAgent> | null, } | { "ev": "cards", project: string, cards: Array<Card>, others?: Array<Card>, } | { "ev": "thread", project: string, agent: string, entries: Array<Entry>, before: number | null, more: boolean, cached?: boolean, } | { "ev": "thread_hits", project: string, agent: string, rid: number, needle: string, hits: Array<FindHit>, upto: number, } | { "ev": "thread_marks", project: string, agent: string, marks: Array<Mark>, upto: number, } | { "ev": "entry", project: string, agent: string, entry: Entry, } | { "ev": "typing", project: string, agent: string, text: string, } | { "ev": "partial", project: string, agent: string, call: string, off: number, text: string, } | { "ev": "artifacts", project: string, items: Array<Artifact>, seen_ms?: number | null, folders?: Array<Folder>, 
+/**
+ * the bytes of the copies bise keeps of agents' files for the
+ * agents (kept 3 months after their task, artifacts_retention):
+ * the From agents place's foot line; none from an older hub
+ */
+agents_bytes?: number | null, } | { "ev": "artifacts_moved", project: string, moved: Array<ArtifactMoved>, } | { "ev": "artifact_notes", project: string, artifact: string, } | { "ev": "files_ids", project: string, full: boolean, seq: number, 
 /**
  * the canonical `Home::bise_root()` (in the full answer only)
  */

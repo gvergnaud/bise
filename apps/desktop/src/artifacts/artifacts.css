@@ -177,6 +177,8 @@
 .art-file-gone .b-empty .act { margin-top: var(--s-3); }
 
 /* the sections (SectionRows.tsx; designer m_60689): the quiet rows under For you, the back row over a list */
+/* From agents' foot line (designer m_62438): quiet, text-3 */
+.art-agents-foot { margin: 0; padding: var(--s-4) 0 var(--s-2); font: var(--t-12) var(--font-ui); color: var(--c-text-3); }
 .art-quiet { display: flex; gap: var(--s-4); padding: var(--s-4) 0 var(--s-2); }
 .art-quiet-row { flex: none; padding: var(--s-1) 0; border: 0; background: none; font: var(--t-12) var(--font-ui); color: var(--c-text-3); }
 .art-quiet-row:hover { color: var(--c-text-2); text-decoration: underline; text-underline-offset: 3px; }

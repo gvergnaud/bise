@@ -44,6 +44,9 @@ pub(super) struct ArtView {
     /// The pages with something waiting on him (the page rows'
     /// `waiting`/`asking`): they stay open work (artifacts::join_sections).
     pub(super) waiting: std::collections::BTreeSet<String>,
+    /// The bytes of the agents' files' copies (artifacts_retention): the
+    /// From agents place's foot line.
+    pub(super) agents_bytes: u64,
 }
 
 /// An agent as `art_who` reads it, copied for the builder's thread.
@@ -83,6 +86,7 @@ impl ArtJob {
             rows: store.rows_from(&all, &who, &self.workspace),
             new: store.new_count_from(&all, self.now),
             seen_ms: store.seen_ms(self.now),
+            agents_bytes: crate::artifacts_retention::agents_bytes(&store, &stored, &store.marks()),
             stored: stored.into_iter().map(|m| (m.id.clone(), m)).collect(),
             waiting: self.pages.map(|p| p.list_rows().into_iter().filter(|r| r.waiting > 0 || r.asking).map(|r| r.id).collect()).unwrap_or_default(),
         }

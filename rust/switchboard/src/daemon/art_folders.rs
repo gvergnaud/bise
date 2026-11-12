@@ -291,8 +291,8 @@ impl Shell {
     /// names, its id, else a path `theme/task` (or a theme) made by that
     /// agent. None asked: its task's folder (`task_folder`), a new
     /// artifact only.
-    pub(super) fn art_folder(&mut self, agent: &str, asked: Option<&str>) -> Result<Option<artifacts::Filed>, String> {
-        let Some(asked) = asked.map(str::trim).filter(|a| !a.is_empty()) else { return Ok(self.task_folder(agent).map(artifacts::Filed::Default)) };
+    pub(super) fn art_folder(&mut self, agent: &str, asked: Option<&str>, for_you: bool) -> Result<Option<artifacts::Filed>, String> {
+        let Some(asked) = asked.map(str::trim).filter(|a| !a.is_empty()) else { return Ok(self.task_folder(agent, for_you).map(artifacts::Filed::Default)) };
         Ok(Some(artifacts::Filed::Asked(self.agent_folder(agent, asked)?)))
     }
 
@@ -300,12 +300,21 @@ impl Shell {
     /// made by main at its first add, then the one its last artifact is
     /// in (artifacts_filing, pure). None: unfiled; a library it cannot
     /// write files nothing rather than fail the add.
-    fn task_folder(&mut self, agent: &str) -> Option<String> {
-        use crate::artifacts_filing::{filing, Filing};
-        let brief = self.hub.st.agents.get(agent).and_then(|a| a.brief.folder.clone())?;
-        let last = self.art_store().stored().into_iter().filter(|m| m.agent == agent && m.by == agent).max_by_key(|m| m.created_ms).map(|m| m.folder);
+    fn task_folder(&mut self, agent: &str, for_you: bool) -> Option<String> {
+        use crate::artifacts_filing::{derived_folder, filing, Filing};
+        let a = self.hub.st.agents.get(agent)?;
+        // the brief's folder, else its lead's theme or its own (architect m_62392)
+        let path = a.brief.folder.clone().or_else(|| derived_folder(agent, a.parent.as_deref()))?;
+        // its last artifact for him: what carries the folder on (an agents' one never makes it)
+        let last = self
+            .art_store()
+            .stored()
+            .into_iter()
+            .filter(|m| m.agent == agent && m.by == agent && m.audience() == crate::artifacts_marks::Audience::You)
+            .max_by_key(|m| m.created_ms)
+            .map(|m| m.folder);
         let lib = self.art_library();
-        match filing(Some(&brief), last.as_ref().map(|f| f.as_deref()), |id| library::resolve(&lib, id).map(|f| f.id.clone())) {
+        match filing(Some(&path), last.as_ref().map(|f| f.as_deref()), for_you, |id| library::resolve(&lib, id).map(|f| f.id.clone())) {
             Filing::Use(id) => Some(id),
             Filing::Ensure(path) => library::update(&self.opts.home, false, |l| library::make_path(l, &path, crate::model::MAIN)).ok(),
             Filing::Unfiled => None,

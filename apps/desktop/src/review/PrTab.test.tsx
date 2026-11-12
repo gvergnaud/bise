@@ -138,6 +138,8 @@ describe('a PR tab', () => {
     const stat = v.getByTestId('prtab.stat');
     expect(v.getByTestId('prtab.line').contains(stat)).toBe(true);
     expect([stat.querySelector('.prt-add')?.textContent, stat.querySelector('.prt-del')?.textContent]).toEqual(['+438', '−151']);
+    // the compact mark explains itself (designer m_62857)
+    expect(stat.getAttribute('data-tip')).toBe(`${panel.prtab_stat_lines({ n: 438, del: 151 })} · ${panel.prtab_stat_files({ n: 2 })}`);
     const squares = [...v.getByTestId('prtab.stat.squares').querySelectorAll('rect')].map((r) => r.getAttribute('class'));
     expect(squares).toEqual(['prt-sq-add', 'prt-sq-add', 'prt-sq-add', 'prt-sq-del', 'prt-sq-none']);
   });

@@ -9,13 +9,9 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{json, Value};
 
-/// `$BEND_MCP_STATUS`, else `<bise home>/mcp-status`.
+/// `$BEND_MCP_STATUS`, else `<bise home>/mcp-status`, through Home.
 pub fn dir() -> PathBuf {
-    std::env::var("BEND_MCP_STATUS")
-        .ok()
-        .filter(|s| !s.is_empty())
-        .map(PathBuf::from)
-        .unwrap_or_else(|| bise_home::Home::from_env().root().join("mcp-status"))
+    bise_home::Home::from_env().mcp_status_dir()
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

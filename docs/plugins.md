@@ -342,7 +342,7 @@ tests use temp dirs.
      params (`stdio::init_params`), and an HMAC-SHA256 (a per-home salt,
      `Home::mcp_tools_salt()`, 0600, made on first use) of the env the
      server starts with: each declared env value resolved as the start
-     does (`secrets::lookup`: the env, then his typed-in secrets) and the
+     does (`secrets::lookup`: his typed-in value, then the env) and the
      inherited env minus `bise_home::env`'s internal and test names, the
      per-agent temp names (`env::PER_CHILD_NAMES`) and the bridge's
      `/bin/sh` names (`tools_cache::SHELL_NAMES`). A token or a

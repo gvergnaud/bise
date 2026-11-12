@@ -115,16 +115,28 @@ crate::words! { library:
     sect_open = "Open work";
     /// what ended with its task or its PR (the quiet row, `Done · 199 ▸`)
     sect_done = "Done";
-    /// what agents trade (the quiet row, `Between agents · 1 234 ▸`)
-    sect_agents = "Between agents";
+    /// what agents trade (the quiet row, `From agents · 1 234 ▸`; his
+    /// q-library pick names it From agents, designer m_62289)
+    sect_agents = "From agents";
     /// the Done row's tip
     sect_done_tip = "what ended with its task or its pull request. nothing is deleted";
-    /// the Between agents row's tip
-    sect_agents_tip = "what agents trade: shots, gates, briefs. nothing is deleted";
-    /// the back row over Done or Between agents (⌘← too)
+    /// the From agents row's tip: their files keep their copies 3 months
+    /// after their task (artifacts_retention), the rows stay
+    sect_agents_tip = "what agents trade: shots, gates, briefs. kept 3 months after their task, the rows stay";
+    /// the back row over Done or From agents (⌘← too)
     back_for_you = "← For you";
     /// a card an agent kept: its line, `kept by perf`
     kept_by(agent) = "kept by {agent}";
+    /// an agent's file 3 months after its task (artifacts_retention): its
+    /// card's line, before the link to its thread (designer m_62289)
+    file_expired = "file expired";
+    /// the expired card's link: `perf's thread ›`
+    expired_thread(agent) = "{agent}'s thread ›";
+    /// the From agents place's foot line (designer m_62438): the copies'
+    /// size, `Agents' files · 1.3 GB · kept 3 months after their task`
+    agents_files(size) = "Agents' files · {size} · kept 3 months after their task";
+    /// the expired card's tip
+    expired_tip = "bise kept its copy 3 months after its task ended. the row stays";
     /// the ◆ mark's tip on a card he kept
     kept_tip_you = "you kept it · Let go";
     /// the ◆ mark's tip on a card an agent kept, `perf kept it · Let go`

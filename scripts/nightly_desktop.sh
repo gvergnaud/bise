@@ -11,7 +11,10 @@
 #              its red: desktop/tray-badge)
 #   quick      every quick as-he-does row (no QUICK_ROWS), the first run (fresh home, the model
 #              step) and one fake-voice ctrl+r take: cand.sh with AS_HE_DOES_ONLY=quick
-#   land       apps/desktop pnpm build + pnpm test:land
+#   land       apps/desktop pnpm build + pnpm test:land; at a release (NIGHTLY_DESKTOP_LAND_SPECS=checks,
+#              set by scripts/desktop_tag.py) the build only: test:land's 3 specs are desktop checks
+#              too, and desktop_tag runs every desktop check on that sha and judges them (release-speed
+#              plan A step 4, architect m_62929: 1.7 min a pass, the same specs twice)
 #   mcp-apps   tests/mcp_apps_hostile_e2e.py (this tree's bise built first): the hostile MCP App
 #              through a throwaway hub's web host in Chromium, every probe blocked (docs/mcp-apps.md
 #              C6, risk 1; owner mcp-apps). Its red, desktop/mcp-apps-hostile, is a leak:
@@ -56,6 +59,7 @@ dmg_sh="${NIGHTLY_DESKTOP_DMG:-$here/scripts/desktop-dmg.sh}"
 badge_sh="${NIGHTLY_DESKTOP_BADGE:-$here/scripts/tray_badge_check.sh}"
 cand_sh="${NIGHTLY_DESKTOP_CAND:-$here/dev/plugins/ambient-qa/as-he-does/cand.sh}"
 pnpm="${NIGHTLY_DESKTOP_PNPM:-pnpm}"
+land_specs="${NIGHTLY_DESKTOP_LAND_SPECS:-run}"
 sum="$out/summary.txt"
 : >"$sum"
 reds=()
@@ -168,6 +172,12 @@ for s in "${steps[@]}"; do
       if [ $s = quick ]; then as_he_does quick AS_HE_DOES_ONLY=quick AS_HE_DOES_FIRSTRUN=1 AS_HE_DOES_FAKE_VOICE=1
       else as_he_does full; fi ;;
     land)
+      if [ "$land_specs" = checks ]; then
+        { deps && ( cd "$here/apps/desktop" && "$pnpm" build ); } >"$out/land.log" 2>&1; rc=$?
+        if [ $rc = 0 ]; then record land green "pnpm build; test:land's specs run in the release's desktop checks"
+        else reds+=("desktop/build"); record land red "pnpm build exit $rc, $out/land.log"; fi
+        continue
+      fi
       { deps && ( cd "$here/apps/desktop" && "$pnpm" build && "$pnpm" test:land ); } >"$out/land.log" 2>&1; rc=$?
       if [ $rc = 0 ]; then record land green
       else

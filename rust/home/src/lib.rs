@@ -78,7 +78,7 @@ pub const DICTATION_DIR: &str = "dictation";
 pub const EXPORTS_FOR: &str = "BISE_EXPORTS_FOR";
 
 /// The env overrides of single paths, in the order they are exported.
-pub const PATH_VARS: [&str; 9] = [
+pub const PATH_VARS: [&str; 11] = [
     "BEND_CONFIG",
     "BEND_SESSIONS_DIR",
     "BEND_IMAGE_DIR",
@@ -88,6 +88,8 @@ pub const PATH_VARS: [&str; 9] = [
     "SB_VERSIONS_DIR",
     "SB_BUILD_DIR",
     "BISE_HOME_WORKSPACE",
+    "BEND_MCP_SECRETS",
+    "BEND_MCP_STATUS",
 ];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -163,7 +165,7 @@ impl Home {
     }
 
     /// `$BISE_HOME` (or [`Home::at`]) chose the root, not `~/.bise`.
-    fn explicit(&self) -> bool {
+    pub fn explicit(&self) -> bool {
         self.root != self.user.join(".bise")
     }
 
@@ -220,6 +222,17 @@ impl Home {
     /// `secrets/`: the MCP logins (`mcp-oauth/`), kept by bise_secrets.
     pub fn secrets_dir(&self) -> PathBuf {
         self.root.join("secrets")
+    }
+
+    /// The MCP servers' OAuth tokens (`$BEND_MCP_SECRETS`): a try's home
+    /// never reads his (architect m_61817).
+    pub fn mcp_oauth_dir(&self) -> PathBuf {
+        self.or("BEND_MCP_SECRETS", self.secrets_dir().join("mcp-oauth"))
+    }
+
+    /// The MCP servers' status files (`$BEND_MCP_STATUS`).
+    pub fn mcp_status_dir(&self) -> PathBuf {
+        self.or("BEND_MCP_STATUS", self.root.join("mcp-status"))
     }
 
     /// Where a key the user pastes goes: `<root>/.env`.
@@ -487,6 +500,8 @@ impl Home {
             ("SB_VERSIONS_DIR", s(self.versions_dir())),
             ("SB_BUILD_DIR", s(self.build_dir())),
             ("BISE_HOME_WORKSPACE", s(self.bise_root())),
+            ("BEND_MCP_SECRETS", s(self.mcp_oauth_dir())),
+            ("BEND_MCP_STATUS", s(self.mcp_status_dir())),
         ];
         // an explicit home only: ~/.bise is the default
         let bise = self.explicit().then(|| s(self.root.clone()));

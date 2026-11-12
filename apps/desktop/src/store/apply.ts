@@ -76,6 +76,8 @@ export function applyTyped(s: Store, ev: Ev): void {
       // the library's folders, one list for every project (~/.bise/library/folders.json): each hub
       // sends it with its artifacts, the newest wins (artifacts/folders.ts)
       if (ev.folders !== undefined) s.put("library:folders", ev.folders);
+      // the bytes of the agents' files' copies (artifacts_retention): From agents' foot line
+      if (ev.agents_bytes != null) s.put(`artifacts:bytes:${ev.project}`, ev.agents_bytes);
       return;
     case "folders":
     case "library_folders":

@@ -146,6 +146,11 @@ pub enum HubEv {
         seen_ms: Option<u64>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         folders: Vec<Folder>,
+        /// the bytes of the copies bise keeps of agents' files for the
+        /// agents (kept 3 months after their task, artifacts_retention):
+        /// the From agents place's foot line; none from an older hub
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        agents_bytes: Option<u64>,
     },
     /// the answer to `artifacts_move`: each artifact moved and its folder
     /// before (his undo)

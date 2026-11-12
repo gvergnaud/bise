@@ -42,6 +42,7 @@ pub mod artifacts_filing;
 pub mod artifacts_filter;
 pub mod artifacts_marks;
 pub mod artifacts_probe;
+pub mod artifacts_retention;
 pub mod artifacts_save;
 pub mod artifacts_serve;
 pub mod artifacts_storage;

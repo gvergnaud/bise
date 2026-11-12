@@ -83,3 +83,28 @@ export function splitSectionPath(p: string): { view: SectionView; rest: string }
   }
   return { view: 'you', rest: p };
 }
+
+/**
+ * From agents' foot line (designer m_62438): the bytes of the agents' files' copies in these
+ * projects, each its hub's count (`agents_bytes`); none when no hub said one (an older hub). Pure.
+ */
+/** The foot line's size: '512 B', '2.1 KB', '14.0 MB', '1.3 GB' (log/model's shortBytes stops at MB: the TUI's). Pure. */
+export function sizeWords(n: number): string {
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'] as const;
+  let v = n;
+  let u = 0;
+  while (v >= 1024 && u < units.length - 1) {
+    v /= 1024;
+    u += 1;
+  }
+  return u === 0 ? `${String(n)} B` : `${v.toFixed(1)} ${units[u] ?? 'TB'}`;
+}
+
+export function bytesIn(projects: readonly string[], read: (project: string) => number | undefined): number | undefined {
+  let sum: number | undefined;
+  for (const p of projects) {
+    const n = read(p);
+    if (n !== undefined) sum = (sum ?? 0) + n;
+  }
+  return sum;
+}

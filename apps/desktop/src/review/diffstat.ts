@@ -12,6 +12,8 @@ export type Square = 'add' | 'del' | 'none';
 export interface DiffStat {
   readonly add: number;
   readonly del: number;
+  /** how many files it changes (its tip's '· 12 files', designer m_62857) */
+  readonly files: number;
   readonly squares: readonly Square[];
 }
 
@@ -23,5 +25,5 @@ export function diffStat(files: readonly { readonly add: number; readonly del: n
   const green = total === 0 ? 0 : Math.floor((SQUARES * add) / total);
   const red = total === 0 ? 0 : Math.floor((SQUARES * del) / total);
   const squares = Array.from({ length: SQUARES }, (_, i): Square => (i < green ? 'add' : i < green + red ? 'del' : 'none'));
-  return { add, del, squares };
+  return { add, del, files: files.length, squares };
 }
