@@ -2102,8 +2102,6 @@ export const settings = {
   plugins_not_installed: "not installed",
   /** place: nothing installed and nothing to add */
   plugins_nothing_installed: "nothing installed yet · add one with Add",
-  /** place: the File types section, which app opens which files (docs/plugin-apps.md A3, A6b) */
-  plugins_tab_file_types: "File types",
   /** File types: the group's head */
   file_types_head: "which app opens what",
   /** File types: the app bise picks for a type */
