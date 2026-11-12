@@ -8,6 +8,7 @@ import { useListKeys } from '@/app/listkeys';
 import { tipAttrs } from '@/ds';
 import { byDay, glyphOf, keyOf, kindWords, madeBy, revealPathOf, splitArchived, timeOf, type Item } from './model';
 import { isNew, lineTip, listKind, listName, topOf, whenOf, whoOf, type Card } from './gallery';
+import { appWord } from './apps';
 import { library } from '@/proto/words_library.gen';
 import { onCardClick, type PickHow } from './Card';
 import { Thumb } from './thumbs';
@@ -189,7 +190,9 @@ export const ListRow = memo(function ListRow({ card, on, picked, now, visible, o
         {it.a.pr != null && <span className="art-lr-pr"><PrWords a={it.a} fit testId={`${testId}.pr`} /></span>}
       </span>
       <span className="art-lr-a" {...tipAttrs(lineTip(card))}>{whoOf(it.a)}</span>
-      <span className="art-lr-a">{listKind(card)}</span>
+      {/* its app ('Sheets'; no app: 'your Mac', File types' word, which fits the column); a PR, a
+          link or a stack: its kind (designer m_61626, m_61645) */}
+      <span className="art-lr-a" data-testid={`${testId}.app`}>{card.kind === 'one' ? appWord(it.a) ?? listKind(card) : listKind(card)}</span>
       <span className="art-lw">{whenOf(it.a.at_ms, now)}</span>
     </div>
   );

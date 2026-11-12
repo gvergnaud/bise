@@ -174,6 +174,17 @@ async function show(e: Entity, store: Store, router: Router | null, at: PopupAt 
   if (id !== null) runAct(id as Act, factsOf(e, readsOf(store)), fxOf(store, router));
 }
 
+/**
+ * Runs one of the registry's acts on `e` with the same effects as its native menu: a screen that
+ * draws its own menu (the gallery's ⋯, with its keys) and lists some of the registry's items (Open
+ * with) runs his pick here, never a second copy of what it does.
+ */
+export function useRunAct(): (e: Entity, act: Act) => void {
+  const store = useStore();
+  const router = useContext(RouterContext);
+  return useMemo(() => (e: Entity, act: Act) => { runAct(act, factsOf(e, readsOf(store)), fxOf(store, router)); }, [store, router]);
+}
+
 /** `e`'s menu: onContextMenu for a right click on its row or tab, open() for its '…'. */
 export function useEntityMenu(e: Entity): EntityMenu {
   const store = useStore();

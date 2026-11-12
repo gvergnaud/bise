@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { common } from '@/proto/words_common.gen';
 import { library } from '@/proto/words_library.gen';
-import { appCompletions, appOf, appTabs, endingOf, inApps, leadOf, opensTip, pickApp, PRS, type AppRow, type AppTag } from './apps';
+import { appCompletions, appOf, appTabs, appWord, endingOf, inApps, leadOf, opensTip, pickApp, PRS, type AppRow, type AppTag } from './apps';
 
 const sheets = { plugin: 'sheets', app: 'Sheets', type_title: 'Excel workbook' };
 const boards = { plugin: 'boards', app: 'Boards', type_title: 'Board' };
@@ -93,6 +93,12 @@ describe("a card's lead word and its type tip", () => {
     expect(leadOf(zip)).toBe(library.opens_mac);
     expect(opensTip(zip)).toBe(library.tip_opens_mac({ kind: library.file_of({ ending: 'ZIP' }) }));
     expect(opensTip(row(), 'site/')).toBe(library.tip_opens_mac({ kind: library.folder_kind }));
+  });
+
+  it("the list's app column: the app, 'your Mac' when none (the card's line keeps 'opens on your Mac'), a PR's or a link's kind", () => {
+    expect(appWord(row({ opener: sheets, path: '/p/q3.xlsx' }))).toBe('Sheets');
+    expect(appWord(row({ path: '/p/logs.zip' }))).toBe(common.your_mac);
+    expect(appWord(row({ url: 'https://example.com' }))).toBeNull();
   });
 
   it('a PR and a link keep their own marks: no lead, no type tip', () => {

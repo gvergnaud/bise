@@ -26,6 +26,14 @@ export interface AppRow {
   readonly pr?: unknown;
   /** the file on disk, its ending when no app names its type */
   readonly path?: string | null;
+  /** what the agent pointed at (a file row with no path says its file here or in its url) */
+  readonly target?: string | null;
+}
+
+/** The row's file name, for its ending: its path, else its target, else a url that is no web address. Pure. */
+export function fileNameOf(a: AppRow): string {
+  for (const x of [a.path, a.target, a.url]) if (x != null && x !== '' && !/^(https?:|mailto:)/iu.test(x)) return x;
+  return '';
 }
 
 /** The app a row follows in the filter: an app, bise's review (PRs), a link (his browser), none (his Mac). */
@@ -120,11 +128,28 @@ export function appCompletions(tabs: readonly AppTab[], typed: string): AppTab[]
   return tabs.filter((x) => at(x) >= 0).sort((x, y) => Number(at(x) !== 0) - Number(at(y) !== 0) || y.n - x.n || x.word.localeCompare(y.word));
 }
 
-/** A card's lead word, before its who and when: 'Sheets'; no app: 'opens on your Mac'; a PR or a link: none (their own marks say it). Pure. */
+/**
+ * A card's lead word, before its who and when: 'Sheets'; whatever no app opens: 'opens on your
+ * Mac' (one rule, path or not: designer m_61626); a PR or a link: none (their own marks say it). Pure.
+ */
 export function leadOf(a: AppRow): string | null {
   const t = appOf(a);
   if (t.id === PRS.id || t.id === LINKS.id) return null;
   return t.id === MAC.id ? library.opens_mac : t.word;
+}
+
+/** The lead says his Mac opens it (the line then drops who made it: the mocks' 'opens on your Mac · 3 d'). Pure. */
+export const onMac = (a: AppRow): boolean => leadOf(a) === library.opens_mac;
+
+/**
+ * The ☰ list's app column: the app ('Sheets'), 'your Mac' when no app opens it (File types' word,
+ * which fits the column; the card's line keeps 'opens on your Mac': designer m_61645); a PR or a
+ * link: null (the list says its kind). Pure.
+ */
+export function appWord(a: AppRow): string | null {
+  const lead = leadOf(a);
+  if (lead === null) return null;
+  return onMac(a) ? common.your_mac : lead;
 }
 
 /** The ending of a name, as a type's word: 'logs.zip' → 'ZIP', a folder or no ending → null. Pure. */
@@ -141,11 +166,12 @@ export function endingOf(name: string): string | null {
  * on your Mac', a folder: 'Folder · opens on your Mac'; a PR or a link: null (their marks keep
  * theirs). `name`: the file's name when the row has no path (a folder row of ~/bise). Pure.
  */
-export function opensTip(a: AppRow, name = a.path ?? ''): string | null {
+export function opensTip(a: AppRow, name = fileNameOf(a)): string | null {
   const t = appOf(a);
   if (t.id === PRS.id || t.id === LINKS.id) return null;
   const o = a.opener ?? null;
   if (o !== null) return library.tip_opens({ kind: o.type_title, app: o.app });
+  if (name === '') return null;
   const ending = endingOf(name);
   return library.tip_opens_mac({ kind: ending === null ? library.folder_kind : library.file_of({ ending }) });
 }

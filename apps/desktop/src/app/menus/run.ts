@@ -162,7 +162,8 @@ export function runAct(act: Act, f: MenuFacts, fx: MenuFx): void {
       if (p !== undefined) fx.showInFinder(p);
       return;
     }
-    case 'open-editor': {
+    case 'open-editor':
+    case 'open-mac': {
       const p = pathOf(f);
       if (p !== undefined) fx.openPath(p);
       return;

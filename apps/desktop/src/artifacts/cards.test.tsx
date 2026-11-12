@@ -18,15 +18,17 @@ const TURN = at(0, 14, 0);
 type A = Artifact;
 const art = (id: string, extra: Partial<A> = {}): A => ({ id, kind: 'file', title: id, agent: 'amb-home', version: 1, at_ms: at(0, 14, 2), url: '', new: false, ...extra });
 const item = (a: A): Item => ({ project: 'h-1', projectName: 'harness', a });
+// the hub's opener for a png (bise's own type until its step lands: docs/plugin-apps.md A3)
+const PREVIEW = { plugin: 'media', tool: 'open_media', app: 'Preview', type: '*.png', type_title: 'PNG image', builtin: true };
 const shot = (n: number, words: string) =>
-  item(art(`s${String(n)}`, { kind: 'shot', title: `agent view step 2 · ${words}`, turn: TURN, path: `/x/s${String(n)}.png`, at_ms: at(0, 14, 2) + 100 - n }));
+  item(art(`s${String(n)}`, { kind: 'shot', title: `agent view step 2 · ${words}`, turn: TURN, path: `/x/s${String(n)}.png`, opener: PREVIEW, at_ms: at(0, 14, 2) + 100 - n }));
 
 const ITEMS: Item[] = [
   item(art('hero', { kind: 'page', title: 'page hero shots', new: true, at_ms: at(0, 18, 40), url: 'http://127.0.0.1:1/p/hero' })),
   shot(1, 'dark · 1400'), shot(2, 'dark · 800'), shot(3, 'light · 1400'), shot(4, 'light · 800'),
-  item(art('target', { agent: 'agent-target', title: 'agent-target shots', path: '/x/t.png', at_ms: at(0, 9, 12) })),
+  item(art('target', { agent: 'agent-target', title: 'agent-target shots', path: '/x/t.png', opener: PREVIEW, at_ms: at(0, 9, 12) })),
   item(art('pr', { kind: 'pr', title: 'Pattern<…> in type errors', url: 'https://github.com/gvergnaud/ts-pattern/pull/384', at_ms: at(0, 8, 0) })),
-  item(art('folds', { agent: 'amb-win', title: 'open folds, dark', path: '/x/f.png', at_ms: at(9, 11, 0) })),
+  item(art('folds', { agent: 'amb-win', title: 'open folds, dark', path: '/x/f.png', opener: PREVIEW, at_ms: at(9, 11, 0) })),
 ];
 
 /** The screen's part of the seam (Screen.tsx, art-folders): the keys, the picks, the open stack. */
@@ -65,15 +67,24 @@ describe('the gallery, as he sees it', () => {
     expect(grid.dataset['cols']).toBe('4'); // happy-dom's window is 1024 wide
     expect(screen.getByTestId('grid.day.2026-10-22').textContent).toBe('today');
     expect(screen.getByTestId('grid.day.2026-10-13').textContent).toBe('tue 13 oct');
-    // the folder's own agent: the time alone; another agent: its name first; an older day: its date
-    expect(screen.getByTestId(`grid.card.${STACK}.line`).textContent).toBe('14:02');
-    expect(screen.getByTestId('grid.card.h-1/target.line').textContent).toBe('agent-target · 09:12');
-    expect(screen.getByTestId('grid.card.h-1/folds.line').textContent).toBe('amb-win · oct 13');
+    // its app first (docs/plugin-apps.md A6b); then the folder's own agent: the time alone; another
+    // agent: its name first; an older day: its date
+    expect(screen.getByTestId(`grid.card.${STACK}.line`).textContent).toBe('Preview · amb-home · 14:02');
+    expect(screen.getByTestId('grid.card.h-1/target.line').textContent).toBe('Preview · agent-target · 09:12');
+    expect(screen.getByTestId('grid.card.h-1/folds.line').textContent).toBe('Preview · amb-win · oct 13');
     // the project never in words: in the line's tip
     expect(screen.getByTestId('grid.card.h-1/target.line').getAttribute('data-tip')).toBe('made by agent-target in harness');
     // the kind never in words on a card: the extension mark only (shown on hover by its css)
     expect(within(card('h-1/target')).queryByText('image')).toBeNull();
     expect(screen.getByTestId('grid.card.h-1/target.ext').textContent).toBe('png');
+    // the ending's tip: its type and its app
+    expect(screen.getByTestId('grid.card.h-1/target.ext').getAttribute('data-tip')).toBe(library.tip_opens({ kind: 'PNG image', app: 'Preview' }));
+  });
+
+  it("a file no app opens says so before the click, without who made it: 'opens on your Mac · 14:02'", () => {
+    render(<Gallery items={[item(art('zip', { title: 'CI logs', path: '/x/logs.zip' }))]} />);
+    expect(screen.getByTestId('grid.card.h-1/zip.line').textContent).toBe(`${library.opens_mac} · 14:02`);
+    expect(screen.getByTestId('grid.card.h-1/zip.ext').getAttribute('data-tip')).toBe(library.tip_opens_mac({ kind: library.file_of({ ending: 'ZIP' }) }));
   });
 
   it('a stack: one card, its count and its tip; new: the pink chip; a PR: ↗ and its domain, no extension', () => {
@@ -159,7 +170,7 @@ describe('the gallery, as he sees it', () => {
     const row = (k: string) => screen.getByTestId(`grid.row.${k}`);
     expect(row(STACK).textContent).toContain('agent view step 2 · 4 shots');
     expect(row(STACK).textContent).toContain('shots');
-    expect(row('h-1/target').textContent).toContain('image');
+    expect(screen.getByTestId('grid.row.h-1/target.app').textContent).toBe('Preview');
     expect(row('h-1/hero').className).toContain(' on');
     fireEvent.keyDown(screen.getByTestId('screen'), { key: 'ArrowDown' });
     expect(row(STACK).className).toContain(' on');

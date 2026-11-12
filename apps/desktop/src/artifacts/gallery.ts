@@ -9,6 +9,7 @@ import type { Artifact } from '@/proto';
 import { extOf } from '@/ds';
 import { library } from '@/proto/words_library.gen';
 import { dayOf, dayWords, kindOf, leaves, timeOf, type Item } from './model';
+import { leadOf, onMac } from './apps';
 
 /** The turn that made an artifact's current version (art-store m_39731: its start, ms); none for his adds and old rows. */
 const turnOf = (a: Artifact): number | null => a.turn ?? null;
@@ -120,13 +121,24 @@ export function whenOf(ms: number, now: number): string {
 export const whoOf = (a: Artifact): string => (a.by === 'you' ? library.you : a.agent);
 
 /**
- * The line under a card (density rule 1): in a task's folder, the time alone (another agent's work:
- * its name first); in recent or a theme, the folder and the time; in unfiled and in search, who
- * made it and the time. Pure.
+ * The line under a card: its app, who made it, when ('Sheets · perf · oct 4'); a PR or a link (no
+ * app) as the place says it (density rule 1): in a task's folder, the time alone (another agent's
+ * work: its name first); in recent or a theme, the folder and the time; in unfiled and in search,
+ * who made it and the time. Pure.
  */
 export function lineOf(c: Card, place: Place, now: number): string {
   const top = topOf(c);
   const when = whenOf(atOf(c), now);
+  const lead = leadOf(top.a);
+  // a card leads with its app, then who made it (docs/plugin-apps.md A6b, designer m_61626):
+  // 'Sheets · perf · oct 4'; what no app opens says so, without who ('opens on your Mac · 3 d');
+  // a PR or a link keeps the place's line
+  if (lead === null) return placeLine(top, place, when);
+  return onMac(top.a) ? `${lead} · ${when}` : `${lead} · ${whoOf(top.a)} · ${when}`;
+}
+
+/** The line as the place says it, before its app: who and when, the folder and when, or when alone. Pure. */
+function placeLine(top: Item, place: Place, when: string): string {
   const with_ = (what: string) => (what === '' ? when : `${what} · ${when}`);
   switch (place.kind) {
     case 'folder':
@@ -194,11 +206,6 @@ const isPicture = (it: Item): boolean => kindOf(it.a.kind) === 'shots' || IMAGES
 /** A stack's count: '16 shots saved in one turn'. Pure. */
 export function countTip(s: Stack): string {
   return library.tip_stack({ n: s.items.length, what: stackWhat(s) });
-}
-
-/** The extension's tip on a card's corner: its kind in words, 'sheet · xlsx', 'image' (designer m_40806). Pure. */
-export function extTip(it: Item): string {
-  return listKind(oneOf(it));
 }
 
 /** A link's domain, for its '↗ github.com' mark: '' when it has none. Pure. */

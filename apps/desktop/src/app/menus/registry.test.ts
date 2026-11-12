@@ -119,9 +119,21 @@ describe('the other things', () => {
     expect(menuOf({ e: { kind: 'project', project: P }, row: undefined })).toEqual([]);
   });
 
+  it("Open with: the apps (the hub's pick first), 'your Mac' for a file, then Always open; a file no app opens: 'your Mac' alone (docs/plugin-apps.md A6b)", () => {
+    const e = { kind: 'artifact', project: P, id: 'a1' } as const;
+    const sheets = { plugin: 'sheets', tool: 'open_sheet', app: 'Sheets', type: '*.xlsx', type_title: 'Excel workbook' };
+    const grid = { ...sheets, plugin: 'grid', tool: 'open', app: 'Grid' };
+    const withApps = actsOf(menuOf({ e, row: artifact({ kind: 'file', path: '/w/acme/q3.xlsx', opener: sheets, openers: [grid] }) }));
+    expect(withApps.slice(1, 6)).toEqual(['open-with:0', 'open-with:1', 'open-mac', 'always-open:0', 'always-open:1']);
+    expect(actsOf(menuOf({ e, row: artifact({ kind: 'file', path: '/w/acme/logs.zip' }) }))).toContain('open-mac');
+    // nothing on disk (a page, a gone file): no 'your Mac'
+    expect(actsOf(menuOf({ e, row: artifact() }))).not.toContain('open-mac');
+  });
+
   it('an artifact: its file items only with a file there', () => {
     const e = { kind: 'artifact', project: P, id: 'a1' } as const;
-    expect(actsOf(menuOf({ e, row: artifact({ path: '/w/acme/notes.md' }) }))).toEqual(['pin', 'move-right', 'new-window', 'quick-look', 'show-in-finder', 'copy-link', 'copy-path']);
+    // a file no app opens: Open with › your Mac (never a dead click)
+    expect(actsOf(menuOf({ e, row: artifact({ path: '/w/acme/notes.md' }) }))).toEqual(['pin', 'open-mac', 'move-right', 'new-window', 'quick-look', 'show-in-finder', 'copy-link', 'copy-path']);
     expect(actsOf(menuOf({ e, row: artifact({ path: '/w/acme/notes.md', gone: true }) }))).toEqual(['pin', 'move-right', 'new-window', 'copy-link']);
     // pinned (pins.ts, his m_49100): Unpin in Pin's place
     expect(actsOf(menuOf({ e, row: artifact({ path: '/w/acme/notes.md' }), pinned: true }))[0]).toBe('unpin');

@@ -47,7 +47,9 @@ import { chipWord } from './folders';
 import { FoldCrumb, useNarrow } from './Fold';
 import { sayCrumbSearch } from './crumb';
 import { MovePicker } from './MovePicker';
-import { atOf, CardMenu, FolderMenu, MergePicker, type CardAct, type FolderAct, type MenuAt } from './Menus';
+import { atOf, CardMenu, FolderMenu, MergePicker, OpenWithPicker, openWithGroups, type CardAct, type FolderAct, type MenuAt } from './Menus';
+import { openWithSub } from '@/app/menus/registry';
+import { useRunAct } from '@/app/menus/use';
 import { ProjectScope, scopeRows } from './Scope';
 import { SearchResults } from './Search';
 import { Toolbar } from './Toolbar';
@@ -74,6 +76,8 @@ const readRecent = (): string[] => {
 type Over =
   | { readonly k: 'move'; readonly keys: readonly string[]; readonly at: MenuAt }
   | { readonly k: 'card'; readonly key: string; readonly at: MenuAt }
+  /** Open with, from a card's ⋯ (docs/plugin-apps.md A6b) */
+  | { readonly k: 'with'; readonly key: string; readonly at: MenuAt }
   | { readonly k: 'folder'; readonly id: string; readonly at: MenuAt }
   | { readonly k: 'merge'; readonly id: string; readonly at: MenuAt }
   | { readonly k: 'delete'; readonly id: string }
@@ -357,6 +361,12 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
     } else if (act === 'merge') setOver({ k: 'merge', id, at: at_ });
     else setOver({ k: 'delete', id });
   };
+  // Open with: the artifact menu's own list and its acts (app/menus: one owner), drawn as the gallery's picker
+  const runAct = useRunAct();
+  const withGroupsOf = (key: string) => {
+    const it = itemOfKey(key);
+    return it === undefined ? [] : openWithGroups(openWithSub(it.a));
+  };
   const doCard = (key: string, act: CardAct) => {
     const it = itemOfKey(key);
     if (it === undefined) return;
@@ -366,6 +376,7 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
       case 'look': look(it); return;
       case 'put': for (const x of itemsOfKeys(keys)) putIt(x); return;
       case 'move': setOver({ k: 'move', keys, at: boxOf(key) }); return;
+      case 'with': setOver({ k: 'with', key, at: boxOf(key) }); return;
       default:
         // versions, copy, finder, archive: the card's own keys (List.tsx rowKey)
         setSel(key);
@@ -624,7 +635,13 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
       )}
       {over?.k === 'card' && (
         <CardMenu at={over.at} several={picked.has(over.key) ? picked.size : 1} finder={(() => { const it = itemOfKey(over.key); return it !== undefined && revealPathOf(it.a) !== null; })()}
+          openWith={withGroupsOf(over.key).length > 0}
           onAct={(a) => { doCard(over.key, a); }} onClose={() => { setOver((o) => (o?.k === 'card' ? null : o)); }} testId="artifacts.menu" />
+      )}
+      {over?.k === 'with' && (
+        <OpenWithPicker at={over.at} groups={withGroupsOf(over.key)}
+          onPick={(act) => { const it = itemOfKey(over.key); if (it !== undefined) runAct({ kind: 'artifact', project: it.project, id: it.a.id }, act as never); }}
+          onClose={() => { setOver((o) => (o?.k === 'with' ? null : o)); }} testId="artifacts.with" />
       )}
       {over?.k === 'folder' && (
         <FolderMenu at={over.at} isTheme={(lib.byId.get(over.id)?.parent ?? null) === null}

@@ -12,6 +12,7 @@
 // Owner: nm-menus.
 import type { Agent, Artifact, Opener, Proc, ProjectRow, ScheduledTask } from '../../proto';
 import { menus } from '../../proto/words_menus.gen';
+import { common } from '../../proto/words_common.gen';
 import type { PopupItem } from '../../shared/api';
 import type { Entity } from '../../shared/entity';
 
@@ -42,6 +43,8 @@ export type Act =
   | 'close-others'
   | 'move-bottom'
   | 'change-model'
+  /** Open with › your Mac: the file in his Mac's own app for it (docs/plugin-apps.md A6b) */
+  | 'open-mac'
   /** Open with › an app (its place in openersOf: the row's opener, then its others) */
   | `open-with:${number}`
   /** Open with › Always open .xlsx with › an app: his pick for the type */
@@ -96,6 +99,7 @@ export const ICONS: Record<Act, string> = {
   'open-browser': 'safari',
   'quick-look': 'eye',
   'show-in-finder': 'folder',
+  'open-mac': '',
   stop: 'stop.circle',
   archive: 'archivebox',
   restore: 'arrow.uturn.backward',
@@ -216,16 +220,18 @@ export function endingOf(o: Opener): string {
 }
 
 /**
- * Open with (docs/plugin-apps.md A6b): the apps, the one that opens it now ticked, then 'Always open
- * .xlsx with ›' and the same apps; none when nothing opens it. Pure.
+ * Open with (docs/plugin-apps.md A6b): the apps, the one that opens it now ticked, then 'your Mac'
+ * for a file (his Mac's own app for it), then 'Always open .xlsx with ›' and the same apps. A file
+ * no app opens: 'your Mac' alone (never a dead click); nothing to open: none. Pure.
  */
-function openWithSub(a: Artifact): PopupItem[] {
+export function openWithSub(a: Artifact): PopupItem[] {
   const all = openersOf(a);
   const first = all[0];
-  if (first === undefined) return [];
+  const mac = when(present(a.path) && a.gone !== true, item('open-mac', common.your_mac));
+  if (first === undefined) return mac.length === 0 ? [] : sub(menus.open_with, OPEN_IN_ICON, mac);
   const apps: PopupItem[] = all.map((o, i) => ({ id: `open-with:${String(i)}`, label: o.app, ...(i === 0 && a.opener != null ? { checked: true } : {}) }));
   const always: PopupItem[] = all.map((o, i) => ({ id: `always-open:${String(i)}`, label: o.app }));
-  return sub(menus.open_with, OPEN_IN_ICON, [...apps, { type: 'separator' }, ...sub(menus.always_open({ ending: endingOf(first) }), '', always)]);
+  return sub(menus.open_with, OPEN_IN_ICON, [...apps, ...mac, { type: 'separator' }, ...sub(menus.always_open({ ending: endingOf(first) }), '', always)]);
 }
 
 function artifactMenu(a: Artifact, pinned: boolean): PopupItem[] {
