@@ -80,9 +80,11 @@ function lookOf(tab: Tab, projects: ReturnType<typeof useProjects>, arts: Return
     case 'plugin':
       return { title: e.id, icon: <AppIcon name="plugins" size={14} /> };
     case 'file': {
-      // a ~/bise file: its name once its view said it (its row id is no name)
+      // a ~/bise file: its name once its view said it, before that the name its opener knew (a
+      // folder tab's row, apps-gallery m_63102); its row id is no name
       const s = viewsStore.state({ project: e.project, target: { kind: 'entry', id: e.entry } });
-      return { title: s.kind === 'live' && s.doc !== undefined ? s.doc.document.name : views.doc_tab, icon: <AppIcon name="file" size={14} /> };
+      const name = s.kind === 'live' && s.doc !== undefined ? s.doc.document.name : (e.name ?? '');
+      return { title: name === '' ? views.doc_tab : name, icon: <AppIcon name="file" size={14} /> };
     }
     case 'view':
       // an MCP App's view: its tool's name (src/views/Tab.tsx viewTitle)

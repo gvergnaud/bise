@@ -52,7 +52,7 @@ export type Entity =
    * a file of ~/bise that is no artifact, by the id folder/list gave its row (docs/plugin-apps.md
    * A6; never a path), opened in its document tab by its app (src/views)
    */
-  | { readonly kind: 'file'; readonly project: string; readonly entry: string }
+  | { readonly kind: 'file'; readonly project: string; readonly entry: string; readonly name?: string }
   /** an MCP App's view: the agent's tool call that showed it (its C2 call id), in its panel tab (src/views) */
   | { readonly kind: 'view'; readonly project: string; readonly agent: string; readonly call: string }
   /** a tab of the panel itself (its own menu: close, close others, move...) */

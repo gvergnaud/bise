@@ -81,7 +81,7 @@ export function ThingTab({ e, tabId }: { e: Exclude<Entity, { kind: 'tab' }>; ta
       return <OfficeTab project={e.project} />;
     case 'file':
       // a ~/bise file that is no artifact, drawn by its app (docs/plugin-apps.md A6)
-      return <DocumentTab docRef={{ project: e.project, target: { kind: 'entry', id: e.entry } }} tabId={tabId} store={viewsStore} title="" rowApp="" />;
+      return <DocumentTab docRef={{ project: e.project, target: { kind: 'entry', id: e.entry } }} tabId={tabId} store={viewsStore} title={e.name ?? ''} rowApp="" />;
     case 'view':
       // an MCP App's view, fullscreen: the layer puts its one frame over this tab (src/views)
       return <ViewTab project={e.project} agent={e.agent} call={e.call} store={viewsStore} />;
