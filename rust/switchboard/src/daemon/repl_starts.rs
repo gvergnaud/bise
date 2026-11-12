@@ -9,10 +9,11 @@
 //! probation (a death always does).
 
 use super::{
-    adopt, adoptable, busy_at, free_port, hash_keys, port_free, kill_pid, log_line, plugins_fingerprint,
+    adopt, left_repl, busy_at, free_port, hash_keys, port_free, kill_pid, log_line, plugins_fingerprint,
     prompt_is_stale, skill_roots, skills_fingerprint, stall_for_tests, supervise, write_logged, Msg, PromptInputs,
     Shell, PROMPT_PLUGINS_FILE,
 };
+use super::repl::Left;
 use crate::repl_start::{admit, Cand, Kind};
 use crate::util::now_ms;
 use std::path::PathBuf;
@@ -217,7 +218,17 @@ impl Shell {
         self.next_gen += 1;
         self.gens.insert(dir.clone(), gen);
         if self.booting && resume {
-            if let Some(r) = adoptable(&adir) {
+            let left = left_repl(&adir);
+            if let Left::TooNew { pid, say } = left {
+                // it would never read a word from this hub: its session
+                // goes on in a fresh REPL of this hub's version
+                log_line(
+                    &self.opts.paths,
+                    &format!("the REPL of {} (pid {}) speaks say-port {}, this hub {}: stopped, a fresh one resumes its session", a.name, pid, say, super::repl::SAY_PROTO),
+                );
+                kill_pid(pid);
+            }
+            if let Left::Adopt(r) = left {
                 log_line(&self.opts.paths, &format!("adopting the REPL of {} (pid {}, port {})", a.name, r.pid, r.port));
                 self.pids.insert(dir.clone(), (gen, r.pid));
                 if !self.reload_id.is_empty() {

@@ -194,6 +194,70 @@ pub fn exe_of(root: &Path) -> Option<PathBuf> {
         .find(|p| p.exists())
 }
 
+/// A version dir a hub can move to: it holds the agents' REPL (a switch
+/// checks it before it moves, a start before it takes `good`).
+pub fn has_runtime(root: &Path) -> bool {
+    root.join("repl-live").exists()
+}
+
+/// Where a client starts a workspace's hub when none runs.
+#[derive(Debug, PartialEq)]
+pub enum StartRoot {
+    /// the client's own root, as before
+    Client,
+    /// the workspace's dev `good` version
+    Good(PathBuf),
+    /// a dev `good` that misses a piece: no start, never a silent
+    /// fallback to the client's root (the words name the piece)
+    Broken(String),
+}
+
+/// The pieces a hub runs from, in a version dir: its bise, its sb-core
+/// (the REPL is [`has_runtime`]'s).
+const HUB_PIECES: [&str; 2] = [EXE, "sb-core"];
+
+/// Where a client starts a workspace's hub when none runs (client::open,
+/// every client: the app's core, the terminal), pure: the workspace's
+/// `good` version (the last one past probation, `state`'s) when it is a
+/// dev build (`fields`: its VERSION's, release::is_dev_build: a hub
+/// someone switched to a build on purpose), holds a REPL (`has`) and is
+/// not the `client`'s own root. A released `good`, none, or a dir with no
+/// REPL (pruned): the client's root, as before; a released `good` never
+/// pins a hub (an app update moves it through the switcher, and a fresh
+/// start from the app's new root is the way out of a bad one). A dev
+/// `good` that misses its bise or sb-core is Broken. At 10:52 the app
+/// restarted the harness hub on its own root-9c7 instead of main's
+/// a74d417da, dropping main's hub fixes.
+pub fn start_root_of(
+    state: &Value,
+    client: &Path,
+    has: &dyn Fn(&Path) -> bool,
+    fields: &dyn Fn(&Path) -> std::collections::BTreeMap<String, String>,
+) -> StartRoot {
+    let Some(good) = state.get("good").and_then(Value::as_str).map(PathBuf::from) else { return StartRoot::Client };
+    if good == client || !bise_home::release::is_dev_build(&fields(&good)) || !has(&good.join("repl-live")) {
+        return StartRoot::Client;
+    }
+    match HUB_PIECES.iter().map(|p| good.join(p)).find(|p| !has(p)) {
+        Some(missing) => StartRoot::Broken(format!(
+            "the workspace's last good version {} has no {}: rebuild it (scripts/versions.sh) or switch the hub to another",
+            id_of(&good),
+            missing.display()
+        )),
+        None => StartRoot::Good(good),
+    }
+}
+
+/// [`start_root_of`] for this workspace and machine (paths canonical).
+pub fn start_root(paths: &Paths, client: &Path) -> StartRoot {
+    let canon = |p: &Path| p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
+    let mut st = read_state(paths);
+    if let Some(g) = st.get("good").and_then(Value::as_str).map(|g| canon(Path::new(g))) {
+        st["good"] = json!(g.to_string_lossy());
+    }
+    start_root_of(&st, &canon(client), &|p| p.exists(), &|r| bise_home::release::read_version(r))
+}
+
 /// `root/bise sbd`, detached (its own process group), like
 /// `client::start_hub`; the child handle tells a hub that died at once.
 /// `same`: the version running now (a restart, a reload): when `root`
@@ -609,7 +673,7 @@ pub fn run(paths: &Paths, to: &Path, period: Duration, restart: bool, reload: bo
 
 fn run_locked(paths: &Paths, to: &Path, period: Duration, restart: bool, reload: bool) -> i32 {
     let to = to.canonicalize().unwrap_or_else(|_| to.to_path_buf());
-    if !to.join("repl-live").exists() {
+    if !has_runtime(&to) {
         notice(
             paths,
             "warn",
@@ -860,6 +924,42 @@ fn clip_answer(a: &str) -> String {
 
 #[cfg(test)]
 mod state_tests {
+    /// A hub with no hub running starts from the workspace's dev `good`
+    /// (main m_62421: 10:52, the app restarted the harness hub on its
+    /// own root-9c7 over main's a74d417da); a released `good`, none or a
+    /// pruned one: the client's root; a dev one missing a piece: refused.
+    #[test]
+    fn a_hub_starts_from_a_dev_good_only() {
+        use super::{start_root_of, StartRoot};
+        use serde_json::json;
+        use std::collections::BTreeMap;
+        use std::path::{Path, PathBuf};
+        let app = Path::new("/v/root-new");
+        let fields = |r: &Path| -> BTreeMap<String, String> {
+            let mut m: BTreeMap<String, String> = [("id".to_string(), r.display().to_string())].into();
+            if r.starts_with("/dev") {
+                m.insert("repo".into(), "/src/bise".into());
+            }
+            m
+        };
+        let whole = |p: &Path| !p.starts_with("/dev/gone");
+        let good = |g: &str| json!({"good": g, "current": "/v/root-new"});
+        // dev good: the hub starts there
+        assert_eq!(start_root_of(&good("/dev/a74d417da"), app, &whole, &fields), StartRoot::Good(PathBuf::from("/dev/a74d417da")));
+        // released good after an app update (root-old, the app on root-new): the client's root
+        assert_eq!(start_root_of(&good("/v/root-old"), app, &whole, &fields), StartRoot::Client);
+        // no good, no versions.json
+        assert_eq!(start_root_of(&json!({}), app, &whole, &fields), StartRoot::Client);
+        // the client's own root
+        assert_eq!(start_root_of(&good("/v/root-new"), app, &whole, &fields), StartRoot::Client);
+        // a pruned dev good (no REPL): the client's root
+        assert_eq!(start_root_of(&good("/dev/gone/x"), app, &whole, &fields), StartRoot::Client);
+        // a dev good with its REPL but no sb-core: refused, never a silent fallback
+        let no_core = |p: &Path| !p.ends_with("sb-core");
+        let StartRoot::Broken(why) = start_root_of(&good("/dev/a74d417da"), app, &no_core, &fields) else { panic!("not refused") };
+        assert!(why.contains("sb-core"), "{why}");
+    }
+
     /// The probation fails a switch whose answering hub runs another root
     /// (update-safety: an older client's start passed for the new version).
     #[test]

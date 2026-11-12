@@ -62,6 +62,12 @@ pub fn read_version(root: &Path) -> BTreeMap<String, String> {
     std::fs::read_to_string(root.join("VERSION")).map(|t| version_fields(&t)).unwrap_or_default()
 }
 
+/// VERSION's fields are a dev build's: `versions.sh` writes the source
+/// tree it built (`repo=`); a release's never does.
+pub fn is_dev_build(fields: &BTreeMap<String, String>) -> bool {
+    fields.contains_key("repo")
+}
+
 /// One installed version.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Installed {
@@ -84,7 +90,7 @@ impl Install {
     pub fn of_root(root: &Path) -> Option<Install> {
         let root = root.canonicalize().ok()?;
         let v = read_version(&root);
-        if v.is_empty() || v.contains_key("repo") {
+        if v.is_empty() || is_dev_build(&v) {
             return None;
         }
         let versions = root.parent()?;
@@ -231,7 +237,7 @@ pub fn root_kind(root: &Path) -> RootKind {
     let canon = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
     let release = {
         let v = read_version(&canon);
-        !v.is_empty() && !v.contains_key("repo")
+        !v.is_empty() && !is_dev_build(&v)
     };
     kind_of_path(&canon.to_string_lossy(), release)
 }

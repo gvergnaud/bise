@@ -107,3 +107,16 @@ fn a_held_port_is_not_free() {
     drop(l);
     assert!(port_free(port));
 }
+
+/// A hub never adopts a REPL whose say port opens in a newer way than
+/// its own: 11:02, a pre-hello hub adopted four hello-only REPLs and
+/// their messages sat unread for 2.5 h. Same or older (no `say`: a
+/// REPL from before the field): adopted as before.
+#[test]
+fn a_repl_of_a_newer_say_port_is_too_new() {
+    let say = repl::SAY_PROTO;
+    assert_eq!(repl::too_new(&json!({"pid": 1, "say": say + 1})), Some(say + 1));
+    assert_eq!(repl::too_new(&json!({"pid": 1, "say": say})), None);
+    assert_eq!(repl::too_new(&json!({"pid": 1, "token": "t"})), None);
+    assert_eq!(repl::too_new(&json!({"pid": 1})), None);
+}

@@ -88,7 +88,7 @@ mod xread;
 
 use history::transcript_page;
 use lines::transcript_len;
-use repl::{adopt, adoptable, busy_at, kill_pid, supervise};
+use repl::{adopt, busy_at, kill_pid, left_repl, supervise};
 use skills::{skill_roots, skills_fingerprint};
 use versions::version_allowed;
 use crate::core::{AgentReq, ClientId, Effect, Hub, Input, Token};

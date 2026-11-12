@@ -1,5 +1,6 @@
 //! The REPL processes of the agents: spawn one and supervise it, adopt
-//! one a previous hub left running, and pump its wire log to the shell
+//! one a previous hub left running (never one whose say port opens in a
+//! newer way: `SAY_PROTO`), and pump its wire log to the shell
 //! (as `Msg`s). Each runs on its own thread; only messages go back.
 
 use super::{log_line, Msg};
@@ -66,11 +67,48 @@ fn is_repl(pid: u32) -> bool {
     bise_peer::table::exe(pid).is_some_and(|p| p.to_string_lossy().contains("repl-"))
 }
 
-/// A REPL a previous hub left running, when it can be adopted: its
-/// `repl.json` names a live REPL process, and it writes a wire log.
-pub(super) fn adoptable(adir: &Path) -> Option<ReplInfo> {
-    let v: Value =
-        serde_json::from_str(&std::fs::read_to_string(adir.join("repl.json")).ok()?).ok()?;
+/// The say port's opening this hub speaks: 1, `hello <token>` first
+/// (say-port, ab8d72986). Bump it with any change to how a connection to
+/// a REPL opens: a hub never adopts a REPL of a higher one (`too_new`).
+pub(super) const SAY_PROTO: u64 = 1;
+
+/// The say-port protocol `repl.json` gives its REPL when it is newer than
+/// this hub's, pure. A REPL that a later hub started and an older one
+/// adopted never reads a word from it: 11:02, the rollback hub on
+/// root-9c7 (no hello) adopted architect's a74d417da REPL, which waited
+/// for its hello for 2.5 h while sb-core counted it busy.
+pub(super) fn too_new(v: &Value) -> Option<u64> {
+    v.get("say").and_then(Value::as_u64).filter(|s| *s > SAY_PROTO)
+}
+
+/// What a hub does at its start with the REPL a previous hub left.
+pub(super) enum Left {
+    /// adopt it
+    Adopt(ReplInfo),
+    /// a live REPL this hub cannot speak to (`too_new`): stop it, start a
+    /// fresh one on the same session
+    TooNew { pid: u32, say: u64 },
+    /// none, or dead
+    Gone,
+}
+
+/// The REPL a previous hub left: adoptable when its `repl.json` names a
+/// live REPL process that writes a wire log and speaks this hub's
+/// say-port protocol.
+pub(super) fn left_repl(adir: &Path) -> Left {
+    let Ok(text) = std::fs::read_to_string(adir.join("repl.json")) else { return Left::Gone };
+    let Ok(v) = serde_json::from_str::<Value>(&text) else { return Left::Gone };
+    let Some(r) = repl_info(&v) else { return Left::Gone };
+    if !(adir.join("wire.log").exists() && pid_alive(r.pid) && is_repl(r.pid)) {
+        return Left::Gone;
+    }
+    match too_new(&v) {
+        Some(say) => Left::TooNew { pid: r.pid, say },
+        None => Left::Adopt(r),
+    }
+}
+
+fn repl_info(v: &Value) -> Option<ReplInfo> {
     let r = ReplInfo {
         pid: v.get("pid")?.as_u64()? as u32,
         port: v.get("port")?.as_u64()? as u16,
@@ -79,7 +117,7 @@ pub(super) fn adoptable(adir: &Path) -> Option<ReplInfo> {
         interrupt: v.get("interrupt")?.as_str()?.to_string(),
         token: v.get("token").and_then(|t| t.as_str()).map(str::to_string),
     };
-    (adir.join("wire.log").exists() && pid_alive(r.pid) && is_repl(r.pid)).then_some(r)
+    Some(r)
 }
 
 /// Was a turn running at `offset` of the wire log? (the last
@@ -335,7 +373,7 @@ pub(super) fn supervise(
     write_repl_json(
         &adir.join("repl.json"),
         &json!({"pid": child.id(), "port": port, "steer": steer, "interrupt": interrupt,
-               "bin": bin.to_string_lossy(), "sock": "agent", "token": token}),
+               "bin": bin.to_string_lossy(), "sock": "agent", "token": token, "say": SAY_PROTO}),
     );
     let _ = tx.send(Msg::ReplConnected {
         dir: dir.clone(),
