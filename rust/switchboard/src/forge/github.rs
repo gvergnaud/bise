@@ -628,6 +628,11 @@ impl GitHub {
         parse_detail(&self.gh_within(&["pr", "view", url, "--json", DETAIL_FIELDS], Some(wait))?)
     }
 
+    /// A PR's diff text (`gh pr diff <url>`), against its base.
+    pub fn pr_diff(&self, url: &str) -> Result<String, ForgeError> {
+        self.gh(&["pr", "diff", url, "--color", "never"])
+    }
+
     /// Check `name`'s last log lines, from its Actions run (`details`
     /// its link, [`run_of`]); None: not a run the hub can read. gh
     /// stopped after `wait`.
@@ -994,6 +999,41 @@ mod tests {
     /// The hung fake is found by its own path in the process table,
     /// never by a pid it writes: under load the wait can end before the
     /// shell runs its first line, and that gh must be gone too.
+    /// pr-view-gh (architect m_64570): gh runs only through [`GitHub`]
+    /// (found on a PATH with his login shell's: the app started from the
+    /// Dock has a bare one). A `Command::new` of a bare "gh" anywhere in
+    /// rust/ is red, but for the exceptions named with their reason.
+    #[test]
+    fn gh_runs_only_through_the_forge() {
+        let allowed = [
+            // the TUI runs in his terminal: his shell's own PATH
+            "tui/src/sb/tune.rs",
+            // a test that only asks whether this machine has a gh
+            "switchboard/src/approvals/sandbox_tests.rs",
+        ];
+        let needle = concat!("Command::new(", "\"gh\")");
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap().to_path_buf();
+        let mut bad = Vec::new();
+        let mut todo = vec![root.clone()];
+        while let Some(dir) = todo.pop() {
+            for e in std::fs::read_dir(&dir).unwrap().flatten() {
+                let p = e.path();
+                let name = e.file_name().to_string_lossy().into_owned();
+                if p.is_dir() {
+                    if !["target", "vendor", "node_modules"].contains(&name.as_str()) && !name.starts_with('.') {
+                        todo.push(p);
+                    }
+                } else if name.ends_with(".rs") {
+                    let rel = p.strip_prefix(&root).unwrap().to_string_lossy().replace('\\', "/");
+                    if !allowed.contains(&rel.as_str()) && std::fs::read_to_string(&p).is_ok_and(|t| t.contains(needle)) {
+                        bad.push(rel);
+                    }
+                }
+            }
+        }
+        assert!(bad.is_empty(), "gh spawned outside forge::github (use GitHub::find on the agents' PATH): {bad:?}");
+    }
+
     #[cfg(unix)]
     #[test]
     fn a_hung_gh_is_stopped_at_its_wait() {

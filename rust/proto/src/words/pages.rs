@@ -158,6 +158,10 @@ crate::words! { pages:
     review_loading_diff(title) = "loading {title}…";
     /// the hub refused the diff (no such agent, git failed): the title over its words
     review_failed = "couldn't load these changes";
+    /// a PR's diff needs the GitHub CLI and the hub found none: what to do, and the PATH it looked in
+    review_gh_missing(path) = "the GitHub CLI (gh) isn't installed or wasn't found: brew install gh (looked in {path})";
+    /// a PR's diff: gh runs but has no GitHub login
+    review_gh_signed_out = "the GitHub CLI (gh) isn't signed in: run gh auth login in a terminal";
     /// a refused diff's action: ask it again
     review_retry = "Try again";
     /// the review's action when the agent has an open PR: its page in the browser

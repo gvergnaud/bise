@@ -734,8 +734,12 @@ impl Shell {
         let result = self.hub.st.agents.get(&agent).filter(|_| mine).and_then(|a| a.last_report.as_ref()).and_then(|r| r.result.clone());
         let req = d.req.map_or(Value::Null, |r| json!(r));
         let how = self.base_how();
+        let paths = self.opts.paths.clone();
         move || {
-            let mut ev = diff_answer(ask, &shared, &how, req);
+            // a PR's gh is looked for where the agents find theirs (his
+            // login PATH kept by the hub), never the app's bare PATH
+            let gh_path = if matches!(ask, Ask::Pr(..)) { crate::tools_env::hub_agent_path(&paths) } else { String::new() };
+            let mut ev = diff_answer(ask, &shared, &how, req, &gh_path);
             // a binary file's size, read here (the mapper stays pure):
             // its file in the agent's checkout, when it is still there
             for f in ev.get_mut("files").and_then(Value::as_array_mut).into_iter().flatten() {
@@ -949,8 +953,9 @@ fn artifact_ask(store: &crate::artifacts::Store, id: &str, version: Option<u64>)
 }
 
 /// The `diff` event answering `ask` (git runs in `shared` or the
-/// agent's own folder, never in one that is gone).
-fn diff_answer(ask: Ask, shared: &Path, how: &BaseHow, req: Value) -> Value {
+/// agent's own folder, never in one that is gone); a PR's gh is found
+/// on `gh_path`.
+fn diff_answer(ask: Ask, shared: &Path, how: &BaseHow, req: Value, gh_path: &str) -> Value {
     let shared = shared.to_path_buf();
     // where the agent's work started (PR flow: origin's copy), and where
     // lands go (a land's title)
@@ -1045,7 +1050,7 @@ fn diff_answer(ask: Ask, shared: &Path, how: &BaseHow, req: Value) -> Value {
                 Some(l) => {
                     ev["title"] = json!(format!("PR #{}", l.number));
                     ev["pr"] = json!(l.number);
-                    diff::pr(&l.url, local.as_ref())
+                    diff::pr(&l.url, local.as_ref(), gh_path)
                 }
                 None => Err("this PR isn't on this project's forge".into()),
             }
@@ -1185,10 +1190,10 @@ mod tests {
             }
             (ev["files"].clone(), ev["stat"].clone())
         };
-        let read = diff_answer(artifact_ask(&store, &id, None), &shared, &BaseHow::default(), json!(1));
+        let read = diff_answer(artifact_ask(&store, &id, None), &shared, &BaseHow::default(), json!(1), "");
         assert_eq!((read["title"].clone(), read["artifact"].clone(), read["version"].clone()), (json!("cu at abc1234"), json!("cu-diff"), json!(1)));
         assert_eq!(read["error"], Value::Null);
-        let branch = diff_answer(Ask::Branch("cu".into()), &shared, &BaseHow::default(), json!(1));
+        let branch = diff_answer(Ask::Branch("cu".into()), &shared, &BaseHow::default(), json!(1), "");
         assert_eq!(strip(read), strip(branch.clone()));
         assert_eq!(branch["files"][0]["hunks"][0]["lines"], json!([" one", "+two"]));
         // the next ready: a next version, the first still read
@@ -1201,10 +1206,10 @@ mod tests {
         crate::feature::write_diff(&shared, "cu", &file).unwrap();
         let next = store.add(&crate::feature::diff_artifact("cu", "def5678", &file), 2).unwrap().meta;
         assert_eq!((next.id.as_str(), next.title.as_str(), next.versions.len()), ("cu-diff", "cu at def5678", 2));
-        assert_eq!(diff_answer(artifact_ask(&store, "cu-diff", None), &shared, &BaseHow::default(), json!(1))["files"].as_array().unwrap().len(), 2);
-        assert_eq!(diff_answer(artifact_ask(&store, "cu-diff", Some(1)), &shared, &BaseHow::default(), json!(1))["files"].as_array().unwrap().len(), 1);
-        assert_eq!(diff_answer(artifact_ask(&store, "cu-diff", Some(9)), &shared, &BaseHow::default(), json!(1))["error"], "cu-diff has no version 9");
-        assert_eq!(diff_answer(artifact_ask(&store, "nope", None), &shared, &BaseHow::default(), json!(1))["error"], "no artifact nope");
+        assert_eq!(diff_answer(artifact_ask(&store, "cu-diff", None), &shared, &BaseHow::default(), json!(1), "")["files"].as_array().unwrap().len(), 2);
+        assert_eq!(diff_answer(artifact_ask(&store, "cu-diff", Some(1)), &shared, &BaseHow::default(), json!(1), "")["files"].as_array().unwrap().len(), 1);
+        assert_eq!(diff_answer(artifact_ask(&store, "cu-diff", Some(9)), &shared, &BaseHow::default(), json!(1), "")["error"], "cu-diff has no version 9");
+        assert_eq!(diff_answer(artifact_ask(&store, "nope", None), &shared, &BaseHow::default(), json!(1), "")["error"], "no artifact nope");
         let _ = std::fs::remove_dir_all(shared.parent().unwrap());
     }
 
@@ -1212,7 +1217,7 @@ mod tests {
     fn a_gone_worktree_shows_its_branch_vs_main() {
         let (shared, wt) = gone("branch");
         for archived in [true, false] {
-            let ev = diff_answer(agent(&wt, Some("sb/t1"), archived), &shared, &BaseHow::default(), json!(1));
+            let ev = diff_answer(agent(&wt, Some("sb/t1"), archived), &shared, &BaseHow::default(), json!(1), "");
             no_git_fatal(&ev);
             assert_eq!(ev["title"], "t1 vs main");
             assert_eq!(ev["error"], Value::Null);
@@ -1227,16 +1232,16 @@ mod tests {
     fn a_gone_worktree_without_its_branch_says_so_in_one_line() {
         let (shared, wt) = gone("nobranch");
         sh(&shared, &["branch", "-q", "-D", "sb/t1"]);
-        let ev = diff_answer(agent(&wt, Some("sb/t1"), true), &shared, &BaseHow::default(), json!(1));
+        let ev = diff_answer(agent(&wt, Some("sb/t1"), true), &shared, &BaseHow::default(), json!(1), "");
         no_git_fatal(&ev);
         assert_eq!(ev["note"], "t1 is archived and its folder is gone");
         assert_eq!(ev["gone"], true);
         assert_eq!(ev["error"], Value::Null);
         assert_eq!(ev["files"], json!([]));
-        let ev = diff_answer(agent(&wt, None, false), &shared, &BaseHow::default(), json!(1));
+        let ev = diff_answer(agent(&wt, None, false), &shared, &BaseHow::default(), json!(1), "");
         assert_eq!(ev["note"], "t1's folder is gone");
         // the same folder seen as a shared-folder agent's: never git in it
-        let ev = diff_answer(Ask::Agent("t1".into(), Where::Shared { dir: wt.clone(), files: vec!["a.txt".into()] }, None, false), &shared, &BaseHow::default(), json!(1));
+        let ev = diff_answer(Ask::Agent("t1".into(), Where::Shared { dir: wt.clone(), files: vec!["a.txt".into()] }, None, false), &shared, &BaseHow::default(), json!(1), "");
         no_git_fatal(&ev);
         let _ = std::fs::remove_dir_all(shared.parent().unwrap());
     }
@@ -1270,9 +1275,9 @@ mod tests {
     #[test]
     fn other_git_errors_read_as_one_line() {
         let (shared, _) = gone("errors");
-        let ev = diff_answer(Ask::Branch("sb/nope".into()), &shared, &BaseHow::default(), json!(1));
+        let ev = diff_answer(Ask::Branch("sb/nope".into()), &shared, &BaseHow::default(), json!(1), "");
         assert_eq!(ev["note"], "there's no branch named sb/nope.");
-        let ev = diff_answer(Ask::Range("abc1234..def5678".into(), String::new()), &shared, &BaseHow::default(), json!(1));
+        let ev = diff_answer(Ask::Range("abc1234..def5678".into(), String::new()), &shared, &BaseHow::default(), json!(1), "");
         let e = ev["error"].as_str().unwrap();
         assert!(e.starts_with("git couldn't read this diff: ") && !e.contains('\n') && !e.contains("fatal"), "{e}");
         let _ = std::fs::remove_dir_all(shared.parent().unwrap());

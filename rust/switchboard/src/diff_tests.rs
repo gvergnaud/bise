@@ -227,7 +227,7 @@ fn a_pr_reads_its_place_only_at_the_prs_head() {
     let head = git(&d, &["rev-parse", "HEAD"]).unwrap().trim().to_string();
     let local = PrLocal { dir: d.clone(), base: "main".into(), head: head.clone() };
     assert!(local.at_head());
-    let (files, root) = pr("https://github.com/o/r/pull/7", Some(&local)).unwrap();
+    let (files, root) = pr("https://github.com/o/r/pull/7", Some(&local), "").unwrap();
     assert_eq!((files.iter().map(|f| f.path.as_str()).collect::<Vec<_>>(), root), (vec!["mine.txt"], Some(d.clone())));
     // a commit since the push: not the PR any more
     std::fs::write(d.join("later.txt"), "l\n").unwrap();
@@ -237,6 +237,62 @@ fn a_pr_reads_its_place_only_at_the_prs_head() {
     // no base known: never a guess
     assert!(!PrLocal { base: String::new(), ..local.clone() }.at_head());
     assert!(!PrLocal { dir: d.join("gone"), ..local }.at_head());
+}
+
+/// A fake `gh` in its own dir under `root`, its script `body`.
+#[cfg(unix)]
+fn fake_gh(root: &Path, dir: &str, body: &str) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let d = root.join(dir);
+    std::fs::create_dir_all(&d).unwrap();
+    let p = d.join("gh");
+    std::fs::write(&p, format!("#!/bin/sh\n{body}\n")).unwrap();
+    std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+    d
+}
+
+/// pr-view-gh: the app started from the Dock has a bare PATH, his gh
+/// lives in his login shell's (/opt/homebrew/bin): a PR's diff finds it
+/// there, through the login PATH the hub keeps for its agents; never
+/// gh's raw `No such file or directory`.
+#[cfg(unix)]
+#[test]
+fn a_prs_diff_finds_gh_on_the_kept_login_path() {
+    let d = std::env::temp_dir().join(format!("sb-diff-gh-login-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    let brew = fake_gh(&d, "brew-bin", &format!("[ \"$1 $2 $3\" = 'pr diff https://github.com/o/r/pull/7' ] || exit 9\ncat <<'EOF'\n{SAMPLE}EOF"));
+    let paths = crate::paths::Paths { workspace: d.join("ws"), state: d.join("hub"), worktrees: d.join("wt"), run: d.join("run") };
+    std::fs::create_dir_all(&paths.state).unwrap();
+    // a probe once read his login PATH; this hub's probe failed: the kept one
+    crate::tools_env::agent_path_for(&paths, "", Some(&brew.to_string_lossy()));
+    let path = crate::tools_env::agent_path_for(&paths, "/usr/bin:/bin", None);
+    let (files, root) = pr("https://github.com/o/r/pull/7", None, &path).unwrap();
+    assert_eq!(files, parse(SAMPLE));
+    assert!(!files.is_empty());
+    assert_eq!(root, None);
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+/// No gh on that PATH: what it is, what to do, where it looked. A gh
+/// that runs but has no login: `gh auth login`. Any other failure:
+/// gh's one line, never its whole output.
+#[cfg(unix)]
+#[test]
+fn a_missing_or_signed_out_gh_says_what_to_do() {
+    use bise_proto::words::pages;
+    let d = std::env::temp_dir().join(format!("sb-diff-gh-words-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(d.join("empty")).unwrap();
+    let url = "https://github.com/o/r/pull/7";
+    let none = format!("{}:/nonexistent/bin", d.join("empty").display());
+    let err = pr(url, None, &none).unwrap_err();
+    assert_eq!(err, pages::review_gh_missing(&none));
+    assert!(err.contains("brew install gh") && err.contains(&none), "{err}");
+    let out = fake_gh(&d, "out", "echo 'To get started with GitHub CLI, please run:  gh auth login' >&2\nexit 4");
+    assert_eq!(pr(url, None, &out.to_string_lossy()).unwrap_err(), pages::review_gh_signed_out);
+    let gone = fake_gh(&d, "gone", "echo 'no pull requests found for branch \"x\"' >&2\necho more >&2\nexit 1");
+    assert_eq!(pr(url, None, &gone.to_string_lossy()).unwrap_err(), format!("gh couldn't read {url}: no pull requests found for branch \"x\""));
+    let _ = std::fs::remove_dir_all(&d);
 }
 
 /// pr-changes-blank: one answer keeps whole files while they fit the

@@ -5,7 +5,6 @@
 
 use serde_json::{json, Value};
 use std::path::Path;
-use std::process::Command;
 
 /// A file's lines past this are cut (`"cut": true`).
 pub const MAX_FILE_LINES: usize = 5000;
@@ -320,21 +319,27 @@ pub fn range(dir: &Path, r: &str) -> Result<(Vec<File>, usize), String> {
 
 /// A PR by its link, against its base: the place's checkout when it is
 /// at the PR's head (`git diff origin/<base>...<head>`, its folder for
-/// the files), else the forge's (`gh pr diff <url>`).
-pub fn pr(url: &str, local: Option<&PrLocal>) -> Result<(Vec<File>, Option<std::path::PathBuf>), String> {
+/// the files), else the forge's (`gh pr diff <url>`, the gh found on
+/// `path`: the agents' PATH, his login shell's included, so the app
+/// started from the Dock finds /opt/homebrew/bin's gh). No gh there, or
+/// one not signed in: the words that say what to do.
+pub fn pr(url: &str, local: Option<&PrLocal>, path: &str) -> Result<(Vec<File>, Option<std::path::PathBuf>), String> {
+    use crate::forge::{github::GitHub, ForgeError};
+    use bise_proto::words::pages;
     if let Some(l) = local.filter(|l| l.at_head()) {
         let range = format!("origin/{}...{}", l.base, l.head);
         if let Ok(text) = git(&l.dir, &diff_args(&[range.as_str()])) {
             return Ok((parse(&text), Some(l.dir.clone())));
         }
     }
-    let out = Command::new("gh").args(["pr", "diff", url, "--color", "never"]).output().map_err(|e| format!("gh: {}", e))?;
-    if !out.status.success() {
-        let why = String::from_utf8_lossy(&out.stderr);
-        let why = why.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or("it failed");
-        return Err(format!("gh couldn't read {}: {}", url, why));
+    let missing = || pages::review_gh_missing(path);
+    let gh = GitHub::find(path).ok_or_else(missing)?;
+    match gh.pr_diff(url) {
+        Ok(text) => Ok((parse(&text), None)),
+        Err(ForgeError::Missing) => Err(missing()),
+        Err(ForgeError::Auth(_)) => Err(pages::review_gh_signed_out.into()),
+        Err(e) => Err(format!("gh couldn't read {}: {}", url, e.describe())),
     }
-    Ok((parse(&String::from_utf8_lossy(&out.stdout)), None))
 }
 
 /// A place that has a PR checked out: its folder, the PR's base and

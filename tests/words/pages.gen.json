@@ -252,6 +252,18 @@
     "one": null,
     "text": "top level"
   },
+  "pages.review_gh_missing": {
+    "args": [
+      "path"
+    ],
+    "one": null,
+    "text": "the GitHub CLI (gh) isn't installed or wasn't found: brew install gh (looked in {path})"
+  },
+  "pages.review_gh_signed_out": {
+    "args": [],
+    "one": null,
+    "text": "the GitHub CLI (gh) isn't signed in: run gh auth login in a terminal"
+  },
   "pages.review_guide_failed": {
     "args": [],
     "one": null,

@@ -111,9 +111,14 @@ fn curl(url: &str, to: &Path, headers: &[String]) -> Result<(), String> {
     Ok(())
 }
 
-/// `gh release download` of the asset (the CLI's own login).
+/// `gh release download` of the asset (the CLI's own login). The
+/// background check runs with the Dock's bare PATH: gh is looked for on
+/// it, his login shell's PATH and the standard dirs (pr-view-gh).
 fn gh_download(a: &release::GithubAsset, to: &Path) -> Result<(), String> {
-    let mut c = Command::new("gh");
+    use switchboard::tools_env;
+    let path = tools_env::join_path(&[&std::env::var("PATH").unwrap_or_default(), tools_env::login_path().unwrap_or(""), &tools_env::host_std_dirs()]);
+    let gh = switchboard::forge::github::GitHub::find(&path).ok_or("gh: not installed")?;
+    let mut c = Command::new(&gh.gh);
     c.args(["release", "download"]);
     if let Some(t) = &a.tag {
         c.arg(t);
