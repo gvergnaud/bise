@@ -246,10 +246,10 @@ impl Shell {
             }
             Some(Ok(ws)) => ws,
         };
-        let bise_proto::sb::Artifact::List { words, agent, mut agents, since, archived, .. } = r else { return };
+        let bise_proto::sb::Artifact::List { words, agent, mut agents, apps, since, archived, .. } = r else { return };
         // TODO(artifacts-list-agent): an older sb's one --agent, goes in a later release
         agents.extend(agent);
-        let f = match crate::artifacts_filter::of_list(&words, agents, since) {
+        let f = match crate::artifacts_filter::of_list(&words, agents, apps, since) {
             Ok(f) => f,
             Err(e) => {
                 write_json(&mut stream, &json!({"ok": false, "error": e}));
@@ -257,8 +257,10 @@ impl Shell {
             }
         };
         let state = crate::paths::Paths::for_workspace(&ws).state;
+        // its rows' apps are this hub's (architect m_63490), a copy the thread owns
+        let keys = self.apps.openers.app_keys();
         std::thread::spawn(move || {
-            let text = Store::new(&state).list_text(&f, archived, now_ms(), &crate::artifacts_filter::local_offset_min);
+            let text = Store::new(&state).list_text(&f, archived, now_ms(), &crate::artifacts_filter::local_offset_min, &|m| keys.of(m));
             write_json(&mut stream, &json!({"ok": true, "text": text}));
         });
     }

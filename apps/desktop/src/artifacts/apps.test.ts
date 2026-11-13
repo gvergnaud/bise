@@ -11,8 +11,8 @@ const many = (t: AppTag, n: number): AppTag[] => Array.from({ length: n }, () =>
 const words = (tabs: readonly { word: string; n: number }[]) => tabs.map((t) => `${t.word} ${String(t.n)}`);
 
 describe('which app a row follows (the hub picked it, A2: the window never matches)', () => {
-  it("its opener's app, keyed by plugin and app", () => {
-    expect(appOf(row({ opener: sheets, path: '/p/pricing.xlsx' }))).toEqual({ id: 'app:sheets/Sheets', word: 'Sheets' });
+  it("its opener's app, keyed by its plugin (a stable key, never the word: architect m_63490)", () => {
+    expect(appOf(row({ opener: sheets, path: '/p/pricing.xlsx' }))).toEqual({ id: 'sheets', word: 'Sheets' });
   });
 
   it("a PR is bise's review whatever its opener; a link his browser; nothing else his Mac", () => {
@@ -23,12 +23,12 @@ describe('which app a row follows (the hub picked it, A2: the window never match
 });
 
 describe('the filter: one tab per app here, the most first, five at most, the rest under More', () => {
-  const writer = tag('app:docs/Writer', 'Writer');
-  const sh = tag('app:sheets/Sheets', 'Sheets');
-  const bo = tag('app:boards/Boards', 'Boards');
-  const pv = tag('app:media/Preview', 'Preview');
-  const sl = tag('app:slides/Slides', 'Slides');
-  const si = tag('app:sites/Sites', 'Sites');
+  const writer = tag('docs', 'Writer');
+  const sh = tag('sheets', 'Sheets');
+  const bo = tag('boards', 'Boards');
+  const pv = tag('media', 'Preview');
+  const sl = tag('slides', 'Slides');
+  const si = tag('sites', 'Sites');
 
   it("the mocks' row: Writer 5 · Sheets 4 · Pull requests 3 · Boards 2, no zero counts", () => {
     const { tabs, more } = appTabs([...many(writer, 5), ...many(sh, 4), ...many(PRS, 3), ...many(bo, 2)]);
@@ -55,18 +55,18 @@ describe('the filter: one tab per app here, the most first, five at most, the re
 
   it('the picked apps keep their rows, OR inside the dimension; none picked keeps every row', () => {
     const rows = [row({ opener: sheets }), row({ opener: boards }), row({ opener: sheets }), row({ path: '/p/x.zip' })];
-    expect(inApps(rows, appOf, new Set(['app:sheets/Sheets']))).toHaveLength(2);
-    expect(inApps(rows, appOf, new Set(['app:sheets/Sheets', 'app:boards/Boards']))).toHaveLength(3);
+    expect(inApps(rows, appOf, new Set(['sheets']))).toHaveLength(2);
+    expect(inApps(rows, appOf, new Set(['sheets', 'boards']))).toHaveLength(3);
     expect(inApps(rows, appOf, new Set())).toHaveLength(4);
   });
 
   it('a click shows one app alone (again: all), ⌘-click adds or takes one off', () => {
-    const one = pickApp(new Set(), 'app:sheets/Sheets', false);
-    expect([...one]).toEqual(['app:sheets/Sheets']);
-    expect([...pickApp(one, 'app:sheets/Sheets', false)]).toEqual([]);
-    const two = pickApp(one, 'app:boards/Boards', true);
-    expect([...two]).toEqual(['app:sheets/Sheets', 'app:boards/Boards']);
-    expect([...pickApp(two, 'app:sheets/Sheets', true)]).toEqual(['app:boards/Boards']);
+    const one = pickApp(new Set(), 'sheets', false);
+    expect([...one]).toEqual(['sheets']);
+    expect([...pickApp(one, 'sheets', false)]).toEqual([]);
+    const two = pickApp(one, 'boards', true);
+    expect([...two]).toEqual(['sheets', 'boards']);
+    expect([...pickApp(two, 'sheets', true)]).toEqual(['boards']);
     expect([...pickApp(two, 'all', false)]).toEqual([]);
   });
 

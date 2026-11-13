@@ -336,8 +336,8 @@ fn inspect(rest: &[String]) -> Result<Inspect, String> {
 
 /// `sb artifact add|keep|unkeep|move|folders|list|archive|unarchive`.
 fn artifact(rest: &[String]) -> Result<Artifact, String> {
-    let usage = "usage: sb artifact add <path or link> [--title \"<t>\"] [--kind <k>] [--folder <name|theme/task>] [--for-you] | sb artifact keep|unkeep <id>... | sb artifact move <id>... <folder> | --unfiled | sb artifact folders | sb artifact list [<words>] [--agent <a>]... [--since last|today|week|older] [--project <p>] [--archived] | sb artifact archive|unarchive <id>... | --agent <a> | --before <YYYY-MM-DD[THH:MM]> | --kind <k>";
-    let (pos, o) = parse_args(rest, &["title", "kind", "agent", "before", "folder"], &["archived", "unfiled", "for-you"])?;
+    let usage = "usage: sb artifact add <path or link> [--title \"<t>\"] [--kind <k>] [--folder <name|theme/task>] [--for-you] | sb artifact keep|unkeep <id>... | sb artifact move <id>... <folder> | --unfiled | sb artifact folders | sb artifact list [<words>] [--agent <a>]... [--app <app>]... [--since last|today|week|older] [--project <p>] [--archived] | sb artifact archive|unarchive <id>... | --agent <a> | --before <YYYY-MM-DD[THH:MM]> | --kind <k>";
+    let (pos, o) = parse_args(rest, &["title", "kind", "agent", "app", "before", "folder"], &["archived", "unfiled", "for-you"])?;
     let opt = |k: &str| o.contains_key(k).then(|| str_of(&o, k));
     let agent = || opt("agent").map(|a| a.trim_start_matches('@').to_string());
     Ok(match pos.first().map(String::as_str) {
@@ -370,7 +370,9 @@ fn artifact(rest: &[String]) -> Result<Artifact, String> {
                 None => None,
             };
             let agents = super::list_of(o.get("agent")).into_iter().map(|a| a.trim_start_matches('@').to_string()).collect();
-            Artifact::List { words: pos[1..].join(" "), agent: None, agents, project: opt("project"), since, archived: o.contains_key("archived") }
+            // --app: a key or an app's word, any of them (the hub reads it, artifacts_filter app_key_for)
+            let apps = super::list_of(o.get("app"));
+            Artifact::List { words: pos[1..].join(" "), agent: None, agents, apps, project: opt("project"), since, archived: o.contains_key("archived") }
         }
         Some(d @ ("archive" | "unarchive")) => {
             if pos.len() == 1 && !["agent", "kind", "before"].iter().any(|k| o.contains_key(*k)) {

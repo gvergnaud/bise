@@ -600,7 +600,7 @@ pub enum Artifact {
     },
     /// `sb artifact folders`: the library's folders, one line each
     Folders,
-    /// `sb artifact list [<words>] [--agent <a>]... [--project <p>] [--since <when>] [--archived]`
+    /// `sb artifact list [<words>] [--agent <a>]... [--app <app>]... [--project <p>] [--since <when>] [--archived]`
     List {
         #[serde(default)]
         words: String,
@@ -614,6 +614,10 @@ pub enum Artifact {
         /// `--project`: another registered project's store, by name or id
         #[serde(default, skip_serializing_if = "Option::is_none")]
         project: Option<String>,
+        /// `--app`, repeatable: any of them, a stable key (the opener's
+        /// plugin, `prs`, `links`, `mac`) or an app's word (artifacts_filter)
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        apps: Vec<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         since: Option<When>,
         #[serde(default)]

@@ -436,11 +436,14 @@ impl Shell {
                     Err(e) => json!({"ok": false, "error": e}),
                 }
             }
-            Artifact::List { words, agent, mut agents, project: _, since, archived } => {
+            Artifact::List { words, agent, mut agents, apps, project: _, since, archived } => {
                 // TODO(artifacts-list-agent): an older sb's one --agent, goes in a later release
                 agents.extend(agent);
-                match crate::artifacts_filter::of_list(&words, agents, since) {
-                    Ok(f) => json!({"ok": true, "text": store.list_text(&f, archived, now_ms(), &crate::artifacts_filter::local_offset_min)}),
+                match crate::artifacts_filter::of_list(&words, agents, apps, since) {
+                    Ok(f) => {
+                        let keys = self.apps.openers.app_keys();
+                        json!({"ok": true, "text": store.list_text(&f, archived, now_ms(), &crate::artifacts_filter::local_offset_min, &|m| keys.of(m))})
+                    }
                     Err(e) => json!({"ok": false, "error": e}),
                 }
             }

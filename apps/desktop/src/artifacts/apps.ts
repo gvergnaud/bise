@@ -38,7 +38,7 @@ export function fileNameOf(a: AppRow): string {
 
 /** The app a row follows in the filter: an app, bise's review (PRs), a link (his browser), none (his Mac). */
 export interface AppTag {
-  /** 'app:<plugin>/<app>', 'prs', 'links', 'mac' */
+  /** the `app:` key: the opener's plugin, 'prs', 'links', 'mac' */
   readonly id: string;
   readonly word: string;
 }
@@ -51,13 +51,32 @@ function sentence(w: string): string {
   return w === '' ? w : `${(w[0] ?? '').toUpperCase()}${w.slice(1)}`;
 }
 
-/** The app a row follows: its opener's app, else a PR's review, a link's browser, his Mac. Pure. */
+/**
+ * The app a row follows: its opener's app, else a PR's review, a link's browser, his Mac. Its id
+ * is the `app:` key, stable (architect m_63490): the opener's plugin, else `prs`, `links`, `mac`,
+ * never a word a rewording changes; the hub's `sb artifact list --app` keys the same
+ * (artifacts_filter.rs app_key_of, both on tests/fixtures/artifacts-filter.json). Pure.
+ */
 export function appOf(a: AppRow): AppTag {
   if (a.pr != null) return PRS;
   const o = a.opener ?? null;
-  if (o !== null) return { id: `app:${o.plugin}/${o.app}`, word: o.app };
+  if (o !== null) return { id: o.plugin, word: o.app };
   return isLink(a) ? LINKS : MAC;
 }
+
+/**
+ * What he typed after `app:` as a key: a key itself, or the word of one of `tags` ('your mac' →
+ * `mac`, 'sheets' → the Sheets plugin's), any case; none: what he typed, lowercased. The hub
+ * reads it the same (artifacts_filter.rs app_key_for). Pure.
+ */
+export function appKeyFor(typed: string, tags: Iterable<AppTag>): string {
+  const t = typed.trim().toLowerCase();
+  const all = [...tags];
+  return (all.find((x) => x.id.toLowerCase() === t) ?? all.find((x) => x.word.toLowerCase() === t))?.id ?? t;
+}
+
+/** The fixed tags (no opener), for appKeyFor: `app:"pull requests"`, `app:"your mac"`. */
+export const FIXED_TAGS: readonly AppTag[] = [PRS, LINKS, MAC];
 
 /** A link: no file, a web or mail address (its marks say where it opens). Pure. */
 const isLink = (a: AppRow): boolean => (a.path ?? '') === '' && /^(https?:\/\/|mailto:)/iu.test(a.url ?? '');
@@ -103,8 +122,8 @@ export function appTabs(tags: readonly AppTag[], keep: readonly AppTag[] = [], m
   return { tabs, more };
 }
 
-/** A tag's key in the `app:` token (filters.ts appKeyOf): its word lowercased, `pull requests`. Pure. */
-export const keyOfTag = (t: AppTag): string => t.word.toLowerCase();
+/** A tag's key in the `app:` token (filters.ts appKeyOf): its id, `prs`. Pure. */
+export const keyOfTag = (t: AppTag): string => t.id;
 
 /**
  * The bar's app tabs by the `app:` token's keys (filters.ts): `rows` the ones every other filter

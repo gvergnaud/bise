@@ -1,4 +1,4 @@
-//! The artifacts' filter, `sb artifact list --since --agent <words>`: the
+//! The artifacts' filter, `sb artifact list --since --agent --app <words>`: the
 //! same rule as the gallery's filter bar (apps/desktop/src/artifacts/
 //! filters.ts; his pick 'A + jetons' on page artifacts-signal, designer's
 //! artifacts-filters-options v4, architect m_61786). Pure.
@@ -12,6 +12,10 @@
 //! - by: a typed field of the row, never a display name: an agent is its
 //!   `agent`; `you` is what he added himself (`by` = `you`).
 //! - words: every word in its title, agent, kind or id.
+//! - app: a stable key, never a word (architect m_63490): the opener's
+//!   plugin the hub picked for the row (A2, app_openers::AppKeys), else
+//!   `prs`, `links`, `mac`; what he types is a key or an app's word, read
+//!   as its key ([`app_key_for`], the desktop's apps.ts appKeyFor).
 //!
 //! Both sides test against one table, tests/fixtures/artifacts-filter.json
 //! (rows + the typed filter + now + offset -> ids); the query string's
@@ -26,6 +30,41 @@ pub struct Filter {
     pub since: Option<When>,
     pub by: Vec<String>,
     pub words: Vec<String>,
+    /// `--app`, repeatable: any of them, each a key or an app's word
+    /// ([`app_key_for`])
+    pub apps: Vec<String>,
+}
+
+/// The `app:` keys of a row with no opener (the desktop's apps.ts
+/// FIXED_TAGS): a PR is bise's review, a link his browser, the rest his
+/// Mac. Stable ids, never words (architect m_63490).
+pub const APP_PRS: &str = "prs";
+pub const APP_LINKS: &str = "links";
+pub const APP_MAC: &str = "mac";
+
+/// A row's app as `app:` reads it: its stable key (the opener's plugin,
+/// else [`APP_PRS`], [`APP_LINKS`], [`APP_MAC`]) and its word, for what
+/// he types. The desktop's apps.ts appOf, the same rule. Pure.
+pub fn app_of(pr: bool, opener: Option<(&str, &str)>, link: bool) -> (String, String) {
+    use bise_proto::words::{common, library};
+    let (k, w) = match (pr, opener, link) {
+        (true, _, _) => (APP_PRS, library::kind_prs),
+        (false, Some((plugin, app)), _) => (plugin, app),
+        (false, None, true) => (APP_LINKS, library::kind_links),
+        (false, None, false) => (APP_MAC, common::your_mac),
+    };
+    (k.to_string(), w.to_string())
+}
+
+/// What he typed after `app:` as a key: a key of `tags` (key, word), or
+/// the word of one ('your mac' → `mac`), any case; none: what he typed,
+/// lowercased. The desktop's apps.ts appKeyFor. Pure.
+pub fn app_key_for(typed: &str, tags: &[(&str, &str)]) -> String {
+    let t = typed.trim().to_lowercase();
+    tags.iter()
+        .find(|(k, _)| k.to_lowercase() == t)
+        .or_else(|| tags.iter().find(|(_, w)| w.to_lowercase() == t))
+        .map_or(t, |(k, _)| k.to_string())
 }
 
 /// What the filter reads of a row.
@@ -41,6 +80,9 @@ pub struct Row<'a> {
     pub new: bool,
     /// its last touch (ms): newest version, his open, a note
     pub touched_ms: u64,
+    /// its app's key and word ([`app_of`])
+    pub app: &'a str,
+    pub app_word: &'a str,
 }
 
 const DAY_MS: i64 = 86_400_000;
@@ -68,21 +110,23 @@ pub fn keeps(f: &Filter, row: &Row, now: u64, tz: &dyn Fn(u64) -> i32) -> bool {
     let by = f.by.is_empty() || f.by.iter().any(|b| if b == "you" { row.by == "you" } else { row.agent == b });
     let hay = format!("{} {} {} {}", row.title, row.agent, row.kind, row.id).to_lowercase();
     let words = f.words.iter().all(|w| hay.contains(&w.to_lowercase()));
-    when && by && words
+    let app = f.apps.is_empty() || f.apps.iter().any(|a| app_key_for(a, &[(row.app, row.app_word)]) == row.app);
+    when && by && words && app
 }
 
 /// The CLI's words for an unknown `--since` (a newer sb's value).
 pub const SINCE_WORDS: &str = "--since takes last, today, week or older";
 
 /// The typed filter of `sb artifact list`: its words, its agents (`@`
-/// dropped, empty ones out), its since; an unknown since refused, never
-/// read as no filter.
-pub fn of_list(words: &str, agents: Vec<String>, since: Option<When>) -> Result<Filter, String> {
+/// dropped, empty ones out), its apps (empty ones out), its since; an
+/// unknown since refused, never read as no filter.
+pub fn of_list(words: &str, agents: Vec<String>, apps: Vec<String>, since: Option<When>) -> Result<Filter, String> {
     if since == Some(When::Unknown) {
         return Err(SINCE_WORDS.into());
     }
     let by = agents.into_iter().map(|a| a.trim().trim_start_matches('@').to_string()).filter(|a| !a.is_empty()).collect();
-    Ok(Filter { since, by, words: words.split_whitespace().map(String::from).collect() })
+    let apps = apps.into_iter().map(|a| a.trim().to_string()).filter(|a| !a.is_empty()).collect();
+    Ok(Filter { since, by, words: words.split_whitespace().map(String::from).collect(), apps })
 }
 
 /// The machine's offset east of UTC (minutes) at `ms`, what the hub

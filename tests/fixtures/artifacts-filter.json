@@ -702,6 +702,47 @@
    "want": [
     "after-midnight"
    ]
+  },
+  {
+   "name": "app: a stable key (the opener's plugin, prs, links, mac), OR inside, AND across; a word reads as its key, any case",
+   "now": 1794405600000,
+   "offset_min": 60,
+   "rows": [
+    {"id": "q3", "title": "q3", "agent": "perf", "kind": "sheet", "by": "perf", "new": false, "touched_ms": 1794400000000, "app": "office", "app_word": "Sheets"},
+    {"id": "budget", "title": "budget", "agent": "main", "kind": "sheet", "by": "main", "new": false, "touched_ms": 1794400000000, "app": "office", "app_word": "Sheets"},
+    {"id": "deck", "title": "deck", "agent": "perf", "kind": "doc", "by": "perf", "new": false, "touched_ms": 1794400000000, "app": "media", "app_word": "Preview"},
+    {"id": "logs", "title": "logs", "agent": "main", "kind": "doc", "by": "main", "new": false, "touched_ms": 1794400000000},
+    {"id": "pr-1", "title": "pr", "agent": "perf", "kind": "pr", "by": "perf", "new": false, "touched_ms": 1794400000000, "app": "prs"},
+    {"id": "site", "title": "site", "agent": "perf", "kind": "link", "by": "perf", "new": false, "touched_ms": 1794400000000, "app": "links"}
+   ],
+   "filter": {
+    "apps": ["SHEETS", "media", "mac", "prs"]
+   },
+   "want": [
+    "q3",
+    "budget",
+    "deck",
+    "logs",
+    "pr-1"
+   ]
+  },
+  {
+   "name": "app and by: AND across dimensions",
+   "now": 1794405600000,
+   "offset_min": 60,
+   "rows": [
+    {"id": "q3", "title": "q3", "agent": "perf", "kind": "sheet", "by": "perf", "new": false, "touched_ms": 1794400000000, "app": "office", "app_word": "Sheets"},
+    {"id": "budget", "title": "budget", "agent": "main", "kind": "sheet", "by": "main", "new": false, "touched_ms": 1794400000000, "app": "office", "app_word": "Sheets"},
+    {"id": "site", "title": "site", "agent": "main", "kind": "link", "by": "main", "new": false, "touched_ms": 1794400000000, "app": "links"}
+   ],
+   "filter": {
+    "apps": ["office", "links"],
+    "by": ["main"]
+   },
+   "want": [
+    "budget",
+    "site"
+   ]
   }
  ]
 }

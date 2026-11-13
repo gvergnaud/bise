@@ -28,20 +28,23 @@ const items: Item[] = [
 const ids = (xs: readonly Item[]) => xs.map((x) => x.a.id);
 
 describe('the app: token, one dimension of the bar', () => {
-  it("keys an item by its app's word, lowercased: the hub's opener, a PR's review, his Mac", () => {
-    expect(items.map(appKeyOf)).toEqual(['sheets', 'sheets', 'preview', common.your_mac.toLowerCase(), library.kind_prs.toLowerCase()]);
+  it("keys an item by a stable key, never a word: the opener's plugin, a PR's review, his Mac (architect m_63490)", () => {
+    expect(items.map(appKeyOf)).toEqual(['sheets', 'sheets', 'media', 'mac', 'prs']);
   });
 
-  it('OR inside (two apps), AND across (by:), quoted values, any case', () => {
+  it('OR inside (two apps), AND across (by:), quoted values, any case; a word reads as its key', () => {
     expect(ids(applyFilters(items, parseFilters('app:sheets'), ctx))).toEqual(['q3', 'budget']);
     expect(ids(applyFilters(items, parseFilters('app:Sheets app:preview'), ctx))).toEqual(['q3', 'budget', 'deck']);
+    expect(ids(applyFilters(items, parseFilters('app:media'), ctx))).toEqual(['deck']);
     expect(ids(applyFilters(items, parseFilters('app:sheets by:main'), ctx))).toEqual(['budget']);
-    expect(ids(applyFilters(items, parseFilters('app:"your mac"'), ctx))).toEqual(['logs']);
+    expect(ids(applyFilters(items, parseFilters(`app:"${common.your_mac}"`), ctx))).toEqual(['logs']);
+    expect(ids(applyFilters(items, parseFilters('app:mac'), ctx))).toEqual(['logs']);
+    expect(ids(applyFilters(items, parseFilters(`app:"${library.kind_prs}"`), ctx))).toEqual(['pr-1']);
   });
 
   it('faceted: the app counts apply every other filter, never the app one', () => {
     const f = parseFilters('app:sheets by:main');
-    expect(facetOf(items, f, ctx, 'app')).toEqual([{ key: 'sheets', n: 1 }, { key: 'your mac', n: 1 }]);
+    expect(facetOf(items, f, ctx, 'app')).toEqual([{ key: 'mac', n: 1 }, { key: 'sheets', n: 1 }]);
   });
 
   it('a tab writes the token: a click alone, ⌘-click toggles, All takes it out', () => {
@@ -65,9 +68,9 @@ describe('the tabs', () => {
     const { tabs } = appTabsOf(items.map((x) => x.a), new Set(['writer']), false);
     expect(tabs.map((t) => [t.id, t.word, t.n])).toEqual([
       ['sheets', 'Sheets', 2],
-      ['preview', 'Preview', 1],
-      [library.kind_prs.toLowerCase(), library.kind_prs, 1],
-      ['your mac', common.your_mac, 1],
+      ['media', 'Preview', 1],
+      ['prs', library.kind_prs, 1],
+      ['mac', common.your_mac, 1],
       ['writer', 'writer', 0],
     ]);
   });

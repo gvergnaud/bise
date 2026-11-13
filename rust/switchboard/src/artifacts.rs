@@ -1152,17 +1152,22 @@ impl Store {
     }
 
     /// What `sb artifact list` prints: one line each, newest first,
-    /// filtered by `f` (artifacts_filter: words, agents, since, local days
-    /// by `tz`, each time's offset); the archived ones only with `archived`
+    /// filtered by `f` (artifacts_filter: words, agents, apps, since, local
+    /// days by `tz`, each time's offset; a row's app key and word by `app`,
+    /// app_openers::AppKeys::of); the archived ones only with `archived`
     /// (else a last line counts them).
-    pub fn list_text(&self, f: &crate::artifacts_filter::Filter, archived: bool, now: u64, tz: &dyn Fn(u64) -> i32) -> String {
+    pub fn list_text(&self, f: &crate::artifacts_filter::Filter, archived: bool, now: u64, tz: &dyn Fn(u64) -> i32, app: &dyn Fn(&Meta) -> (String, String)) -> String {
         let put_away = self.archived();
         let marks = self.marks();
         let seen = self.seen_ms(now);
         let keeps = |m: &Meta| {
             let at = m.current().map_or(m.created_ms, |v| v.at_ms);
             let note = (m.by == "page").then(|| self.page_note_ms(&m.id)).flatten();
+            // only read when --app asks (an opener pick per row)
+            let (app_key, app_word) = if f.apps.is_empty() { Default::default() } else { app(m) };
             let row = crate::artifacts_filter::Row {
+                app: &app_key,
+                app_word: &app_word,
                 id: &m.id,
                 title: &m.title,
                 agent: &m.agent,

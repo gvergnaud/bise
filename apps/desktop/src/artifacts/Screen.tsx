@@ -45,7 +45,7 @@ import {
 import { AudienceToggle, audienceView, HiddenRow, type Audience } from './Audience';
 import { SLOTS, slotOf } from './slots';
 import { FolderColumn, type Editing } from './Column';
-import { appTabsOf, keyOfTag, PRS } from './apps';
+import { appKeyFor, appOf, appTabsOf, FIXED_TAGS, keyOfTag, PRS } from './apps';
 import { FoldCrumb, useNarrow } from './Fold';
 import { sayCrumbSearch } from './crumb';
 import { MovePicker } from './MovePicker';
@@ -267,7 +267,9 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
   const inView = viewOf(here);
   // the app tabs (apps.ts, docs/plugin-apps.md A6b, his pick A): the `app:` token's keys, OR inside;
   // their counts faceted (every other filter applied, the app one left out)
-  const appsPicked = [...(parsed.keys.get('app') ?? [])];
+  // a typed word read as its key (apps.ts appKeyFor: app:"your mac" is the mac tab)
+  const scopeTags = [...FIXED_TAGS, ...inScope.map((it) => appOf(it.a))];
+  const appsPicked = [...new Set([...(parsed.keys.get('app') ?? [])].map((k) => appKeyFor(k, scopeTags)))];
   const scopedNoApp = applyFilters(inScope, parsed, fctx, 'app');
   const inViewNoApp = viewOf(searching ? searchItems(lib, scopedNoApp, parsed.words) : itemsAt(lib, scopedNoApp, atNow));
   const appTabs = appTabsOf(inViewNoApp.map((it) => it.a), new Set(appsPicked), anyPr);

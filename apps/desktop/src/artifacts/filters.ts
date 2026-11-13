@@ -12,7 +12,7 @@
 //
 // The rule is the hub's too: rust/switchboard/src/artifacts_filter.rs (`sb artifact list --since
 // --agent`), both tested on tests/fixtures/artifacts-filter.json. Pure. Owner: artifacts-keep.
-import { appCompletions, appOf } from './apps';
+import { appCompletions, appKeyFor, appOf } from './apps';
 import type { Item } from './model';
 import { touchedOf } from './sections';
 
@@ -79,15 +79,19 @@ const by: Dimension = {
 
 /**
  * The app an item follows for `app:` (apps-gallery, apps.ts appOf: the hub's opener on its row, A2;
- * a PR's review, a link's browser, his Mac), by its word lowercased: `sheets`, `pull requests`,
- * `your mac`. The app tabs write the same token.
+ * a PR's review, a link's browser, his Mac), by its stable key: the opener's plugin, `prs`,
+ * `links`, `mac` (architect m_63490). The app tabs write the same token; a typed word reads as its
+ * key against the row's own tag (apps.ts appKeyFor): `app:"your mac"` is `app:mac`.
  */
-export const appKeyOf = (it: Item): string => appOf(it.a).word.toLowerCase();
+export const appKeyOf = (it: Item): string => appOf(it.a).id;
 
 const app: Dimension = {
   token: 'app',
   parse: (v) => (v === '' ? null : v),
-  match: (it, keys) => keys.has(appKeyOf(it)),
+  match: (it, keys) => {
+    const t = appOf(it.a);
+    return [...keys].some((k) => appKeyFor(k, [t]) === t.id);
+  },
   keysOf: (it) => [appKeyOf(it)],
 };
 

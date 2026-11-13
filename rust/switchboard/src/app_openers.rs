@@ -77,6 +77,13 @@ impl AppOpeners {
         target_of(row).map(|t| opens::pick(&t, &self.openers, &self.picks)).unwrap_or_default()
     }
 
+    /// What `sb artifact list --app` reads of each row: this hub's
+    /// openers and picks now, a copy a thread can own (another project's
+    /// store is listed off the loop with them).
+    pub fn app_keys(&self) -> AppKeys {
+        AppKeys { openers: self.openers.clone(), picks: self.picks.clone() }
+    }
+
     /// The openers, for `view/open`'s check that his pick is a candidate.
     pub fn openers(&self) -> &Openers {
         &self.openers
@@ -100,6 +107,30 @@ impl AppOpeners {
     /// The plugins' app icons now (`/icon/<plugin>`, pages/icon.rs).
     pub fn icons(&self) -> crate::pages::icon::Icons {
         crate::pages::icon::icons_of(&self.openers, &self.res)
+    }
+}
+
+/// The openers and picks at one time ([`AppOpeners::app_keys`]): each
+/// store row's app key and word for `sb artifact list --app`, the rule
+/// the window reads on the row's opener (artifacts_filter::app_of).
+#[derive(Clone, Debug, Default)]
+pub struct AppKeys {
+    openers: Openers,
+    picks: Picks,
+}
+
+impl AppKeys {
+    /// A store row's app: its key (the opener's plugin, else `prs`,
+    /// `links`, `mac`) and its word.
+    pub fn of(&self, m: &crate::artifacts::Meta) -> (String, String) {
+        let cur = m.current().cloned().unwrap_or_default();
+        let row = serde_json::json!({
+            "id": m.id, "kind": m.kind, "by": m.by, "target": cur.target,
+            "names": cur.names.names, "names_more": cur.names.more,
+        });
+        let opener = target_of(&row).and_then(|t| opens::pick(&t, &self.openers, &self.picks).opener);
+        let pr = crate::forge::pr_link(&cur.target).is_some();
+        crate::artifacts_filter::app_of(pr, opener.as_ref().map(|o| (o.plugin.as_str(), o.app.as_str())), crate::artifacts::is_link(&cur.target))
     }
 }
 

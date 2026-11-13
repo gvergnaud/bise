@@ -6,8 +6,8 @@ use serde_json::json;
 
 /// `sb artifact list <words> [--agent <a>]` as the store reads it, days at UTC.
 fn list(s: &Store, words: &str, agent: Option<&str>, archived: bool, now: u64) -> String {
-    let f = crate::artifacts_filter::of_list(words, agent.into_iter().map(String::from).collect(), None).unwrap();
-    s.list_text(&f, archived, now, &|_| 0)
+    let f = crate::artifacts_filter::of_list(words, agent.into_iter().map(String::from).collect(), vec![], None).unwrap();
+    s.list_text(&f, archived, now, &|_| 0, &|_| Default::default())
 }
 
 fn tmp(name: &str) -> PathBuf {

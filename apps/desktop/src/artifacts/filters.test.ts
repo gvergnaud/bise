@@ -17,6 +17,9 @@ interface Row {
   by: string;
   new: boolean;
   touched_ms: number;
+  /** its app's key (an opener's plugin, `prs`, `links`; none: his Mac) and an opener's word */
+  app?: string;
+  app_word?: string;
 }
 interface Case {
   name: string;
@@ -24,19 +27,27 @@ interface Case {
   offset_min: number;
   tz?: number[][];
   rows: Row[];
-  filter: { since?: string; by?: string[]; words?: string[] };
+  filter: { since?: string; by?: string[]; words?: string[]; apps?: string[] };
   want: string[];
 }
+
+/** The row's app as the hub sends it: a PR's state, a link's address, else its opener; none: his Mac. */
+const appFields = (r: Row): Partial<Artifact> => {
+  if (r.app === 'prs') return { pr: { number: 1 } as never, url: 'https://github.com/a/b/pull/1' };
+  if (r.app === 'links') return { url: 'https://example.com' };
+  if (r.app === undefined || r.app === 'mac') return {};
+  return { opener: { plugin: r.app, tool: 'open', app: r.app_word ?? r.app, type: '*.x', type_title: 'X' } };
+};
 
 const item = (r: Row): Item => ({
   project: 'p',
   projectName: 'p',
-  a: { id: r.id, kind: r.kind, title: r.title, agent: r.agent, by: r.by, new: r.new, touched_ms: r.touched_ms, version: 1, at_ms: r.touched_ms, url: '' } satisfies Artifact,
+  a: { id: r.id, kind: r.kind, title: r.title, agent: r.agent, by: r.by, new: r.new, touched_ms: r.touched_ms, version: 1, at_ms: r.touched_ms, url: '', ...appFields(r) } satisfies Artifact,
 });
 
 /** The typed filter of a case as the field would say it. */
 const queryOf = (f: Case['filter']): string =>
-  [...(f.since === undefined ? [] : [`since:${f.since}`]), ...(f.by ?? []).map((b) => `by:${b}`), ...(f.words ?? [])].join(' ');
+  [...(f.since === undefined ? [] : [`since:${f.since}`]), ...(f.by ?? []).map((b) => `by:${b}`), ...(f.apps ?? []).map((a) => `app:"${a}"`), ...(f.words ?? [])].join(' ');
 
 /** The case's zone: its step table, else its one offset. */
 const tzOf = (c: Case) => (ms: number): number => {
