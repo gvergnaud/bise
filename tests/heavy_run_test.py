@@ -57,6 +57,11 @@ def held(slot):
 with tempfile.TemporaryDirectory() as home:
     # plenty of faked free space: the real disk's never makes a job wait here
     open(os.path.join(home, "plenty_kb"), "w").write(str(500 * 1048576))
+    # hermetic: none of the release pass it may sit in (lane A gives HEAVY_PASS_LANE and its gate's
+    # GATE_QUIET...): with them the quiet and slot-6 cases took the pass's ways (11.11's lane A red,
+    # marketing m_63931). From os.environ itself, so the children started with env=None too
+    for k in ("HEAVY_PASS_LANE", "GATE_QUIET", "GATE_REUSE_FROM", "GATE_ALL"):
+        os.environ.pop(k, None)
     # on AC as far as heavy-run knows (HEAVY_ON_BATTERY=0): the --alone cases run on battery too
     env = dict(os.environ, HOME=home, HEAVY_SLOTS="1", HEAVY_FREE_KB_FILE=os.path.join(home, "plenty_kb"), HEAVY_ON_BATTERY="0",
                # the machine's real load never holds a job here (the load cases fake it)
