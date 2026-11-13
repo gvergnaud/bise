@@ -103,8 +103,8 @@ const SID = '0123456789abcdef0123456789abcdef';
 const HANDLE = 'view-file://fedcba9876543210fedcba9876543210';
 const HASH = '0123456789abcdef';
 // view_csp.rs for a document view with its own files, nothing declared ('self' for its files, and
-// for its document's /h/ url: img, media, connect; architect m_60354)
-const CSP = "default-src 'none'; script-src 'unsafe-inline' 'self'; style-src 'unsafe-inline' 'self'; img-src data: blob: 'self'; media-src data: blob: 'self'; font-src data: 'self'; connect-src 'self'; frame-src blob:; base-uri 'self'";
+// for its document's /h/ url: img, media, connect, frame; architect m_60354)
+const CSP = "default-src 'none'; script-src 'unsafe-inline' 'self'; style-src 'unsafe-inline' 'self'; img-src data: blob: 'self'; media-src data: blob: 'self'; font-src data: 'self'; connect-src 'self'; frame-src blob: 'self'; base-uri 'self'";
 const TYPES: Record<string, string> = { '.css': 'text/css', '.js': 'text/javascript', '.html': 'text/html; charset=utf-8' };
 
 /** Preview's origin on the pages server: its proxy, its folder and the kit under its session. */

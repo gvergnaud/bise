@@ -29,7 +29,11 @@ const MAX_PER_LIST: usize = 32;
 /// without it the floor is as it was, `base-uri` included. `doc`: a
 /// document view's session (`view/open`, A4): its file's url
 /// (`/h/<token>`, `resources/url`) is on its own origin, so `'self'`
-/// joins img, media and connect, for that view only.
+/// joins img, media, connect and frame (the Sites view frames its site),
+/// for that view only. `'self'` stays tight by the origin rule: a view's
+/// origin answers only its proxy, its `/f/` files and the `/h/` tokens
+/// `Pages::file_of_url` binds to that session's origin, never another
+/// document's (architect m_64294).
 pub fn csp(declared: &Value, pages_port: u16, dev: Option<&str>, own_files: bool, doc: bool) -> String {
     build(declared, pages_port, dev, if own_files { Own::Files } else { Own::Nothing }, doc)
 }
@@ -90,9 +94,10 @@ fn build(declared: &Value, pages_port: u16, dev: Option<&str>, own_of: Own, doc:
         format!("connect-src {}", or_none(&connect)),
         // blob: the view's own frame (views.rs): a blob url carries the
         // view's origin, so Electron's permission handler knows who asks
-        // (a srcdoc frame asks as `about:srcdoc`); a site's page may frame
-        // its own pages
-        format!("frame-src {}", with(if page { "blob: 'self'" } else { "blob:" }, &frame)),
+        // (a srcdoc frame asks as `about:srcdoc`); a document view frames
+        // its file's url (`/h/<token>/`, its own origin: the Sites view
+        // frames its site) and a site's page may frame its own pages
+        format!("frame-src {}", with(if page || doc { "blob: 'self'" } else { "blob:" }, &frame)),
         format!("base-uri {}", or_none(&base)),
         "form-action 'none'".to_string(),
         // who may frame the proxy (views.rs): the app (file:), the web host
@@ -320,7 +325,10 @@ mod tests {
         assert_eq!(directive(&on, "media-src"), "media-src data: blob: 'self' https://cdn.example");
         assert_eq!(directive(&on, "connect-src"), "connect-src 'self' https://api.example");
         assert_eq!(directive(&csp(&json!({}), PORT, None, false, true), "connect-src"), "connect-src 'self'");
-        for d in ["default-src", "script-src", "style-src", "font-src", "frame-src", "base-uri", "form-action", "frame-ancestors"] {
+        // its file's url may be framed (the Sites view frames its site's /h/<token>/)
+        assert_eq!(directive(&on, "frame-src"), "frame-src blob: 'self'");
+        assert_eq!(directive(&off, "frame-src"), "frame-src blob:");
+        for d in ["default-src", "script-src", "style-src", "font-src", "base-uri", "form-action", "frame-ancestors"] {
             assert_eq!(directive(&on, d), directive(&off, d), "{d} moves for a document");
         }
         assert_eq!(directive(&csp(&declared, PORT, None, true, true), "img-src"), "img-src data: blob: 'self' https://cdn.example", "one 'self' with a folder too");
@@ -349,6 +357,9 @@ mod tests {
         }
         assert!(!page.contains("sandbox"), "the proxy's frame keeps its own: {page}");
         assert_eq!(directive(&document_page_csp(&json!({}), PORT, None), "connect-src"), "connect-src 'self'");
+        // the Sites view frames its site's /h/<token>/ on its own origin:
+        // `frame-src blob:` alone drew nothing in the packed app (11.11)
+        assert_eq!(directive(&csp(&declared, PORT, None, true, true), "frame-src"), "frame-src blob: 'self'", "a document view frames its file's url");
         let view = csp(&declared, PORT, None, true, false);
         for d in ["media-src", "connect-src", "frame-src"] {
             assert!(!directive(&view, d).contains("'self'"), "{d} stays a view's: {view}");

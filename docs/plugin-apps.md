@@ -327,7 +327,9 @@ floor plus declared origins, permissions granted at the add.
   on img, media, font and connect, and the view CSP's own
   `frame-ancestors` list (every ancestor is checked: the Sites view, the
   proxy, the desktop or the web host), no `sandbox` (the proxy's outer
-  sandbox still holds). The Sites view frames the site same-origin and
+  sandbox still holds). The Sites view frames the site same-origin (a
+  document view's CSP has `frame-src blob: 'self'`; with `blob:` alone
+  the packed 11.11 candidate drew nothing) and
   reads its DOM for block anchors and links (`ui/open-link` outside);
   a site's scripts can do what that view can (read its document, a
   selection, viewState): no write, no server, no `ui/message`. The

@@ -982,6 +982,15 @@ fn a_documents_file_is_served_by_its_url_on_its_origin_only() {
     assert!(ask("GET", &small_path, &other, "").starts_with("HTTP/1.1 404"), "another view's origin");
     assert!(ask("GET", &small_path, &format!("127.0.0.1:{}", p.port), "").starts_with("HTTP/1.1 404"), "the main host: no /h/ there");
     assert!(ask("GET", &format!("/h/{}", "0".repeat(32)), &own, "").starts_with("HTTP/1.1 404"), "an unknown token");
+    // a document view's frame-src has 'self' (view_csp, the Sites view frames its site): another
+    // session's /h/ token asked on this origin is still refused, so 'self' reaches no other file
+    let (doc2, hash2) = (crate::pages::new_token(), "fedcba9876543210");
+    let theirs = p.mint_handle(Binding::new(&doc2, opener.clone(), FileTarget::RootFile { path: root.join("notes.txt") }, false));
+    p.view_sandbox_as(hash2, &doc2, ViewSandbox::default());
+    let their_url = p.doc_url(&doc2, &theirs).unwrap();
+    let their_path = format!("/h/{}", their_url.rsplit_once("/h/").unwrap().1);
+    assert!(ask("GET", &their_path, &other, "").starts_with("HTTP/1.1 200"), "on its own origin it is served");
+    assert!(ask("GET", &their_path, &own, "").starts_with("HTTP/1.1 404"), "another session's token on this origin");
     assert!(ask("POST", &small_path, &own, "Content-Length: 0\r\n").starts_with("HTTP/1.1 405"));
     // a reader that never reads: its sender blocks on the socket, with no lock held
     let stalled = open("GET", &big_path, &own, "");

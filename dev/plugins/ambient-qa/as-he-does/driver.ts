@@ -149,6 +149,9 @@ const openProject = async (name: string, label = `open ${name}`) => {
 // an open artifact's ✕: its panel tab's close since native-mac (app.panel.tab.artifact:<p>/<id>.close,
 // 'Close tab · ⌘W'), the artifact head's own before
 const ART_CLOSE = '[data-testid="artifact.close"], [data-testid^="app.panel.tab.artifact:"][data-testid$=".close"]';
+// an open artifact's page: bise's own frame (artifact.page), or a plugin view's tab since Sites part 2
+// (9d2806845: an html artifact opens in plugins/sites' view, app.panel.view; 11.11's 4 reds read it as shut)
+const ART_PAGE = '[data-testid="artifact.page"], [data-testid="app.panel.view"]';
 // the project's shell: a panel tab since native-mac, the bottom panel before
 const TERM_SEL = '[data-testid="terminal.panel"], [data-testid^="app.panel.body.term:"]';
 // bise's row (⌘0), the same way: from a library page or settings, the sidebar's back row first
@@ -380,7 +383,7 @@ if (mode === 'first' || mode === 'smoke') {
 // restart's check), ctrl+r from the thread starts dictation's line (no mic under the knob), esc ends it.
 // an open artifact's 3-column view folds the left bar under 1200 px: close it before the next pass
 const closeArtifact = async () => {
-  const pg = page.locator('[data-testid="artifact.page"]').first();
+  const pg = page.locator(ART_PAGE).first();
   if (!(await pg.count().catch(() => 0))) return;
   await page.locator(ART_CLOSE).first().click({ timeout: 3000 }).catch(() => page.keyboard.press('Escape'));
   await pg.waitFor({ state: 'detached', timeout: 5000 }).catch(() => {});
@@ -490,7 +493,7 @@ if (mode === 'cut') {
   const item = (await recent.isVisible().catch(() => false)) ? recent
     : page.locator('[data-testid="artifacts.screen"] [data-row]').filter({ hasText: 'proof-html' }).first();
   const opened = await click('select proof-html', item);
-  if (opened && !(await page.locator('[data-testid="artifact.page"]').first().waitFor({ timeout: 3000 }).then(() => true, () => false))) await page.keyboard.press('Enter');
+  if (opened && !(await page.locator(ART_PAGE).first().waitFor({ timeout: 3000 }).then(() => true, () => false))) await page.keyboard.press('Enter');
   const frame = page.locator('[data-testid="artifact.page"] iframe, iframe').first();
   const fr = opened ? await frame.waitFor({ timeout: 15000 }).then(() => true, () => false) : false;
   let green = 0;
@@ -672,7 +675,7 @@ if (mode === 'rows2') {
     return click(name, r);
   };
   const opened = await fromSide('proof-html from the right side');
-  const pageEl = page.locator('[data-testid="artifact.page"]').first();
+  const pageEl = page.locator(ART_PAGE).first();
   const drawn = opened && await pageEl.waitFor({ timeout: 15000 }).then(() => true, () => false);
   let green = 0;
   if (drawn) {
@@ -696,11 +699,12 @@ if (mode === 'rows2') {
     // (native-mac: the places rail sits left of the sidebar, so the sidebar starts at ~56 px)
     const rail = !!side && side.width > 0 && side.left < 80 && (!main || side.right <= main.left + 2);
     // native-mac: the artifact opens in the panel's tab, right of the thread (no 3-column view)
-    const pg = document.querySelector('[data-testid="artifact.page"]');
+    // (ART_PAGE: bise's frame or a plugin view's tab; an evaluate sees no outer const)
+    const pg = document.querySelector('[data-testid="artifact.page"], [data-testid="app.panel.view"]');
     const inPanel = !!pg?.closest('[data-testid="app.panel"]');
     const pr = pg?.getBoundingClientRect();
     const right = !!pr && !!main && pr.left >= main.right - 2;
-    return { rail, rail_w: side ? Math.round(side.width) : null, thread: vis('[data-testid="app.main"]'), page: vis('[data-testid="artifact.page"]'), in_panel: inPanel, right_of_thread: right };
+    return { rail, rail_w: side ? Math.round(side.width) : null, thread: vis('[data-testid="app.main"]'), page: vis('[data-testid="artifact.page"], [data-testid="app.panel.view"]'), in_panel: inPanel, right_of_thread: right };
   });
   await shot('artifact-from-side');
   step('an artifact from the right side: in the panel beside the thread, its page drawn (green pixels)', drawn && green > 0.3 && cols.rail && cols.thread && cols.page && cols.in_panel && cols.right_of_thread, { opened, drawn, green: Math.round(green * 100) / 100, cols });
@@ -1340,14 +1344,14 @@ if (mode === 'rows2') {
   if (made && archived) {
     await expand();
     await click(`${MAKER}'s artifact from the right side`, makerArt);
-    let open = await page.locator('[data-testid="artifact.page"]').first().waitFor({ timeout: 15000 }).then(() => true, () => false);
+    let open = await page.locator(ART_PAGE).first().waitFor({ timeout: 15000 }).then(() => true, () => false);
     if (open && await openFloat(1, 'agents')) {
       const fold = page.locator('[data-testid="app.flyout.agents.archived"]').first();
       if ((await fold.getAttribute('aria-expanded').catch(() => null)) === 'false') await fold.click({ timeout: 2000 }).catch(() => {});
       const old = page.locator('[data-testid="app.flyout.agents.archived.rows"] [data-row]').filter({ hasText: MAKER }).first();
       await click(`${MAKER}'s archived row in the agents float`, old);
       await page.locator(`[data-testid="thread.screen"][data-agent="${MAKER}"]`).first().waitFor({ timeout: 8000 }).catch(() => {});
-      open = await page.locator('[data-testid="artifact.page"]').first().isVisible().catch(() => false);
+      open = await page.locator(ART_PAGE).first().isVisible().catch(() => false);
     }
     // two widths (native-lead m_47958): at >= 1176 the panel sits beside the thread, so restore
     // stays inside its column, left of the panel, never under it (1440); under 1176 the panel is a
@@ -1363,7 +1367,7 @@ if (mode === 'rows2') {
       return {
         agent: document.querySelector('[data-testid="thread.screen"]')?.getAttribute('data-agent') ?? null,
         head: b('[data-testid="thread.archived"]'), column_right: b('[data-testid="app.main"]')?.right ?? null,
-        art: b('[data-testid="artifact.page"]'), restore: b('[data-testid="thread.restore"]'), restore_text: restore?.textContent?.trim() ?? null,
+        art: b('[data-testid="artifact.page"], [data-testid="app.panel.view"]'), restore: b('[data-testid="thread.restore"]'), restore_text: restore?.textContent?.trim() ?? null,
         restore_cut: restore ? restore.scrollWidth > restore.clientWidth : null, clickable: !!restore && !!hit && restore.contains(hit), width: window.innerWidth,
       };
     }).catch(() => null);
@@ -1374,14 +1378,14 @@ if (mode === 'rows2') {
     await shot('archived-maker-1440');
     await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1100, height: vh2, deviceScaleFactor: 0, mobile: false }).catch(() => {});
     await page.waitForTimeout(800);
-    const sheet = { art_open: await page.locator('[data-testid="artifact.page"]').first().isVisible().catch(() => false) };
+    const sheet = { art_open: await page.locator(ART_PAGE).first().isVisible().catch(() => false) };
     // esc from the window, the focus in no field and not in the page's frame (a click on the
     // thread under the sheet lands in the artifact's frame); else the sheet's ✕ (its tab's close)
     await page.evaluate(() => { (document.activeElement as HTMLElement | null)?.blur?.(); }).catch(() => {});
     await page.keyboard.press('Escape');
-    const byEsc = await page.locator('[data-testid="artifact.page"]').first().waitFor({ state: 'detached', timeout: 5000 }).then(() => true, () => false);
+    const byEsc = await page.locator(ART_PAGE).first().waitFor({ state: 'detached', timeout: 5000 }).then(() => true, () => false);
     const byX = byEsc ? null : await page.locator(ART_CLOSE).first().click({ timeout: 3000 })
-      .then(() => page.locator('[data-testid="artifact.page"]').first().waitFor({ state: 'detached', timeout: 5000 })).then(() => true, () => false);
+      .then(() => page.locator(ART_PAGE).first().waitFor({ state: 'detached', timeout: 5000 })).then(() => true, () => false);
     const closedAt1100 = byEsc || byX === true;
     Object.assign(sheet, { by_esc: byEsc, by_x: byX });
     // escape.ts's step 7/8 must run with nothing in focus too (native-lead m_48021: a bug today,
