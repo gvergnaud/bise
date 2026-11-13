@@ -11,8 +11,8 @@
 //   (PINCH_FORWARD; useFrameNote.ts)
 // - room: {room}, how far the zoomed page can still pan each way, null at fit, window -> frame
 //   (useFrameNote.ts; PINCH_FORWARD takes it only from its parent)
-// - storage: {local}, a site copy's localStorage, site frame -> bise's viewer (kit/storage.js ->
-//   kit/office/site.js -> the hub; web-storage). The viewer takes it: the window never reads it.
+// - storage: {local}, a site copy's localStorage, site frame -> its parent (kit/storage.js). The
+//   window never reads it: Sites (plugins/sites) seeds a page's storage through its view.
 // - find: {q, at, seq}, ⌘F's needle and the current match (-1: none), window -> frame, and a
 //   frame -> its own frames (main/findagent.ts FIND_AGENT, artifacts/FindBar.tsx)
 // - found: {seq, n}, how many matches the frame and its own frames hold, frame -> parent (FIND_AGENT)

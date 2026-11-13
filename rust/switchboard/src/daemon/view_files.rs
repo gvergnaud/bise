@@ -17,6 +17,8 @@
 //!   artifact's: `crate::artifacts_save::decide`, one version per sitting,
 //!   the sitting the doc; a root file's: its `ifMatch` against the hash
 //!   cached for its size and mtime, so a stat), the rename, the version;
+//! - `dev.bise/storage/seed`: a site's kept localStorage, once (shim
+//!   site-storage-seed);
 //! - `view/copy`: the bytes beside the file as `<name> (copy).<ext>` (a
 //!   free name from the words catalog, never over a file), added as his
 //!   artifact.
@@ -41,6 +43,10 @@ use std::sync::Arc;
 pub(super) const READ: &str = "resources/read";
 pub(super) const URL: &str = "resources/url";
 pub(super) const WRITE: &str = "ai.mistral.vibe/resources/write";
+/// A site's kept localStorage, once, for its own origin's real one (A5,
+/// architect m_60421).
+// TODO(site-storage-seed): goes in v2026.12.15 with artifacts_storage
+pub(super) const SEED: &str = "dev.bise/storage/seed";
 const COPY: &str = "view/copy";
 
 /// Where a document view's `view/call` method goes: the hub's own file
@@ -56,7 +62,7 @@ pub(super) enum DocRoute {
 
 pub(super) fn doc_route(method: &str) -> DocRoute {
     match method {
-        READ | URL | WRITE => DocRoute::File,
+        READ | URL | WRITE | SEED => DocRoute::File,
         "tools/call" => DocRoute::Tool,
         _ => DocRoute::Unknown,
     }
@@ -155,6 +161,7 @@ impl Shell {
             READ => doc_read(pages, b, uri, &inner, done),
             URL => done(pages.doc_url(&doc, &uri).map(|url| json!({"url": url})).map_err(|e| e.rpc(method))),
             WRITE => self.doc_write(pages, doc, b, uri, &inner, done),
+            SEED => doc_seed(pages, b, done),
             m => done(Err(ViewError::NotSupported.rpc(m))),
         }
     }
@@ -292,6 +299,20 @@ impl Shell {
 }
 
 /// A read, on its own thread.
+/// `dev.bise/storage/seed {uri}`: the handle's artifact's kept
+/// localStorage, once ([`crate::artifacts_storage::seed`], under the
+/// pages lock, off the loop); `{local: null}` for anything else.
+// TODO(site-storage-seed): goes in v2026.12.15 with artifacts_storage
+fn doc_seed(pages: Arc<Pages>, b: Binding, done: ViewDone) {
+    std::thread::spawn(move || {
+        let local = match &b.target {
+            FileTarget::Artifact { id, .. } => pages.locked(|_| crate::artifacts_storage::seed(&arts(&pages), id)),
+            FileTarget::RootFile { .. } => None,
+        };
+        done(Ok(json!({"local": local})))
+    });
+}
+
 fn doc_read(pages: Arc<Pages>, b: Binding, uri: String, p: &Value, done: ViewDone) {
     let range = p.get("range").map(|r| Range { offset: r.get("offset").and_then(Value::as_u64).unwrap_or(0), length: r.get("length").and_then(Value::as_u64).unwrap_or(0) });
     let writable = disk::may_write(&b).is_ok();

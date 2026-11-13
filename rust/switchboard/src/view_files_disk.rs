@@ -199,6 +199,43 @@ pub fn free_name(dir: &Path, stem: &str, ending: &str, first: Option<&str>, nth:
     Err(std::io::Error::other("no free name"))
 }
 
+/// A file inside a folder document by its relative path (a site's
+/// `/h/<token>/<rel>`, docs/plugin-apps.md A5, architect m_60421): `rel`
+/// split on `/`, no `..`, `.` or empty part but a trailing `/`; its
+/// realpath under `dir`'s (a symlink out: [`ViewError::BadHandle`]); a
+/// folder gives its `index.html`; nothing there: [`ViewError::Gone`].
+/// Read only, no listing.
+pub fn in_folder(dir: &Path, rel: &str) -> Result<FileAt, ViewError> {
+    let parts: Vec<&str> = rel.trim_end_matches('/').split('/').filter(|p| !p.is_empty() || rel.is_empty()).collect();
+    if !rel_ok(rel, &parts) {
+        return Err(ViewError::BadHandle);
+    }
+    let base = dir.canonicalize().map_err(|_| ViewError::Gone)?;
+    let mut at = base.join(parts.join("/"));
+    if at.is_dir() {
+        at = at.join("index.html");
+    }
+    let real = at.canonicalize().map_err(|_| ViewError::Gone)?;
+    if !real.starts_with(&base) {
+        return Err(ViewError::BadHandle);
+    }
+    let meta = std::fs::metadata(&real).map_err(|_| ViewError::Gone)?;
+    if !meta.is_file() {
+        return Err(ViewError::Gone);
+    }
+    let mtime = meta.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map_or(0, |d| d.as_millis());
+    Ok(FileAt { mime: mime(&real).to_string(), path: real, size: meta.len(), etag: format!("{:x}-{mtime:x}", meta.len()) })
+}
+
+/// Whether `rel` (and its `parts`) may name a file in a folder: not rooted,
+/// no empty part but a trailing `/`, no `..`, `.` or `\`.
+fn rel_ok(rel: &str, parts: &[&str]) -> bool {
+    let rooted = rel.starts_with('/');
+    let empty_inside = !rel.is_empty() && rel.split('/').rev().skip(1).any(str::is_empty);
+    let escapes = parts.iter().any(|p| matches!(*p, ".." | ".") || p.contains('\\'));
+    !(rooted || empty_inside || escapes)
+}
+
 /// Whether a read of `mime` answers `text` (else a base64 `blob`).
 pub fn is_text(mime: &str) -> bool {
     mime.starts_with("text/") || mime == "application/json" || mime == "image/svg+xml"
@@ -213,6 +250,34 @@ mod tests {
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d.canonicalize().unwrap()
+    }
+
+    /// A site's files by their relative path (A5, architect m_60421):
+    /// under its folder only, a folder its index.html, no listing.
+    #[test]
+    fn a_folder_document_serves_its_own_files_only() {
+        let d = tmp("folder");
+        let (site, out) = (d.join("site"), d.join("out"));
+        std::fs::create_dir_all(site.join("js")).unwrap();
+        std::fs::create_dir_all(site.join("docs")).unwrap();
+        std::fs::create_dir_all(&out).unwrap();
+        std::fs::write(site.join("index.html"), b"<h1>").unwrap();
+        std::fs::write(site.join("js/app.js"), b"x").unwrap();
+        std::fs::write(site.join("docs/index.html"), b"<p>").unwrap();
+        std::fs::write(out.join("secret.txt"), b"no").unwrap();
+        std::os::unix::fs::symlink(out.join("secret.txt"), site.join("leak.txt")).unwrap();
+        let name = |r: &str| in_folder(&site, r).map(|f| f.path.strip_prefix(site.canonicalize().unwrap()).unwrap().to_string_lossy().to_string());
+        assert_eq!(name(""), Ok("index.html".into()), "the folder: its index.html");
+        assert_eq!(name("js/app.js"), Ok("js/app.js".into()));
+        assert_eq!(name("docs/"), Ok("docs/index.html".into()));
+        assert_eq!(name("docs"), Ok("docs/index.html".into()));
+        assert_eq!(in_folder(&site, "js/app.js").unwrap().mime, "text/javascript");
+        for bad in ["../out/secret.txt", "js/../../out/secret.txt", "/etc/passwd", "js//app.js", "./index.html", "leak.txt"] {
+            assert_eq!(in_folder(&site, bad).err(), Some(ViewError::BadHandle), "{bad}");
+        }
+        assert_eq!(in_folder(&site, "js/").err(), Some(ViewError::Gone), "a folder without an index: no listing");
+        assert_eq!(in_folder(&site, "nope.css").err(), Some(ViewError::Gone));
+        let _ = std::fs::remove_dir_all(&d);
     }
 
     #[test]

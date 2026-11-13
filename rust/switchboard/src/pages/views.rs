@@ -45,6 +45,10 @@ pub struct ViewSandbox {
     /// its own files on disk (a static view's folder): served at
     /// `/f/<session>/`, `'self'` in its CSP, the proxy's `<base>`
     pub folder: Option<ViewFolder>,
+    /// one document's own origin (`isolate: "document"`, A5): its html
+    /// at `/h/` runs as a page (view_csp::document_page_csp); any other
+    /// origin's `/h/` html is data, sandboxed
+    pub isolated: bool,
 }
 
 /// At most this many proxy sessions per view origin: an older tab of
@@ -163,18 +167,22 @@ pub fn view_host(host: &str, port: u16) -> Option<&str> {
 }
 
 /// Where a document's file is served by its url (`resources/url`, A4):
-/// `/h/<token>` on its session's view origin.
+/// `/h/<token>` on its session's view origin, and a folder document's
+/// files under it, `/h/<token>/<rel>` (a site, A5).
 pub const DOC_FILE_PREFIX: &str = "/h/";
 
 /// A document file's own CSP: it is data the view fetches or plays,
 /// never a page (opened alone, nothing in it runs).
 pub const DOC_FILE_CSP: &str = "default-src 'none'; sandbox";
 
-/// The token of a `/h/<token>` path (`pages::new_token`'s 32 lowercase
-/// hex), else None.
-pub fn doc_file_token(path: &str) -> Option<&str> {
-    let t = path.strip_prefix(DOC_FILE_PREFIX)?;
-    (t.len() == 32 && t.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))).then_some(t)
+/// The token of a `/h/<token>[/<rel>]` path (`pages::new_token`'s 32
+/// lowercase hex) and the rest after it (`""` for the document itself,
+/// a folder document's file else: view_files_disk::in_folder checks it),
+/// else None. A query is not part of the path.
+pub fn doc_file_path(path: &str) -> Option<(&str, &str)> {
+    let rest = path.split(['?', '#']).next()?.strip_prefix(DOC_FILE_PREFIX)?;
+    let (t, rel) = rest.split_once('/').unwrap_or((rest, ""));
+    (t.len() == 32 && t.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))).then_some((t, rel))
 }
 
 
@@ -263,7 +271,7 @@ impl Pages {
 
     /// The sandbox of view origin `hash` for a proxy load with `session`:
     /// one `view/resource` made it (among the last [`SESSIONS`]), else none.
-    fn sandbox_of(&self, hash: &str, session: Option<&str>) -> Option<ViewSandbox> {
+    pub(super) fn sandbox_of(&self, hash: &str, session: Option<&str>) -> Option<ViewSandbox> {
         let m = self.views.lock().ok()?;
         let o = m.get(hash)?;
         let s = session.filter(|s| !s.is_empty())?;

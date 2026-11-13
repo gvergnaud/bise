@@ -138,6 +138,18 @@ export function retryable(err) {
 }
 // ---- selection
 /** An anchor a view may give: a string of 1..=512 UTF-8 bytes. */
+/** A `dev.bise/storage/seed` answer's map: its string values only; null when none.
+ * TODO(site-storage-seed): goes in v2026.12.15 */
+export function keptOf(result) {
+    const local = result !== null && typeof result === "object" ? result["local"] : null;
+    if (local === null || typeof local !== "object" || Array.isArray(local))
+        return null;
+    const out = {};
+    for (const [k, v] of Object.entries(local))
+        if (typeof v === "string")
+            out[k] = v;
+    return Object.keys(out).length ? out : null;
+}
 export function anchorOk(a) {
     return typeof a === "string" && a.length > 0 && utf8(a) <= ANCHOR_MAX;
 }

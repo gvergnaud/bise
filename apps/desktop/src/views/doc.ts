@@ -21,6 +21,9 @@ export const DOC = {
   notes: 'dev.bise/notes',
   /** view → host: the ids of the notes it could not place (replace each time) */
   detached: 'dev.bise/detached',
+  /** view → hub: a site's old kept localStorage, once (A5, architect m_60421).
+   * TODO(site-storage-seed): goes in v2026.12.15 */
+  seed: 'dev.bise/storage/seed',
 } as const;
 
 /** A view's state at most (A5: the RFC's 64 KiB of JSON per instance), in UTF-8 bytes of its JSON. */

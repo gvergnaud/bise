@@ -311,8 +311,7 @@ pub struct ArtifactVersion {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub copy: Option<String>,
     /// where a window frames this version (the row's rule,
-    /// pages::site::frame_href: `/a/<id>/view` for the newest office file,
-    /// `/a/<id>/<v>/view` for an older one, else its copy's link); none
+    /// pages::site::copy_href: its copy's link, `/a/<id>/<v>/<file>`); none
     /// with no copy served or no page server (architect m_23970)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub frame_url: Option<String>,

@@ -31,6 +31,36 @@ const MAX_PER_LIST: usize = 32;
 /// (`/h/<token>`, `resources/url`) is on its own origin, so `'self'`
 /// joins img, media and connect, for that view only.
 pub fn csp(declared: &Value, pages_port: u16, dev: Option<&str>, own_files: bool, doc: bool) -> String {
+    build(declared, pages_port, dev, if own_files { Own::Files } else { Own::Nothing }, doc)
+}
+
+/// The CSP of a document's own html page on an isolated view origin
+/// (`isolate: "document"`, docs/plugin-apps.md A5, architect m_60421): a
+/// site's page served at `/h/<token>/<rel>`, framed by its view. A
+/// document view's floor and declared origins with `'self'` on script,
+/// style, img, media, font, connect, frame and base-uri (that origin holds
+/// only this document and its view's own files), `'unsafe-inline'` scripts
+/// and styles as a view's; the view's own `frame-ancestors` list (every
+/// ancestor is checked: the view, the proxy, the app or the web host); no
+/// `sandbox` (the proxy's frame keeps its own).
+pub fn document_page_csp(declared: &Value, pages_port: u16, dev: Option<&str>) -> String {
+    build(declared, pages_port, dev, Own::DocumentPage, true)
+}
+
+/// What a view's origin serves of its own, beyond the floor.
+#[derive(Clone, Copy, PartialEq)]
+enum Own {
+    /// nothing: an inline view
+    Nothing,
+    /// its folder's files (view_folder.rs)
+    Files,
+    /// a document's page with its own scripts and requests (a site)
+    DocumentPage,
+}
+
+fn build(declared: &Value, pages_port: u16, dev: Option<&str>, own_of: Own, doc: bool) -> String {
+    let own_files = own_of != Own::Nothing;
+    let page = own_of == Own::DocumentPage;
     let list = |key: &str| origins(declared.get(key), pages_port);
     let connect = list("connectDomains");
     let resource = list("resourceDomains");
@@ -60,8 +90,9 @@ pub fn csp(declared: &Value, pages_port: u16, dev: Option<&str>, own_files: bool
         format!("connect-src {}", or_none(&connect)),
         // blob: the view's own frame (views.rs): a blob url carries the
         // view's origin, so Electron's permission handler knows who asks
-        // (a srcdoc frame asks as `about:srcdoc`)
-        format!("frame-src {}", with("blob:", &frame)),
+        // (a srcdoc frame asks as `about:srcdoc`); a site's page may frame
+        // its own pages
+        format!("frame-src {}", with(if page { "blob: 'self'" } else { "blob:" }, &frame)),
         format!("base-uri {}", or_none(&base)),
         "form-action 'none'".to_string(),
         // who may frame the proxy (views.rs): the app (file:), the web host
@@ -293,6 +324,35 @@ mod tests {
             assert_eq!(directive(&on, d), directive(&off, d), "{d} moves for a document");
         }
         assert_eq!(directive(&csp(&declared, PORT, None, true, true), "img-src"), "img-src data: blob: 'self' https://cdn.example", "one 'self' with a folder too");
+    }
+
+    /// A site's page on its document's origin (A5, architect m_60421):
+    /// 'self' where its own files and requests go, the view's
+    /// frame-ancestors exactly, never a sandbox; a view's CSP is unchanged.
+    #[test]
+    fn a_document_page_gets_self_and_the_views_ancestors() {
+        let declared = json!({"resourceDomains": ["https://fonts.googleapis.com"], "connectDomains": ["https://api.example"]});
+        let page = document_page_csp(&declared, PORT, None);
+        assert_eq!(directive(&page, "script-src"), "script-src 'unsafe-inline' 'self' https://fonts.googleapis.com");
+        assert_eq!(directive(&page, "style-src"), "style-src 'unsafe-inline' 'self' https://fonts.googleapis.com");
+        assert_eq!(directive(&page, "img-src"), "img-src data: blob: 'self' https://fonts.googleapis.com");
+        assert_eq!(directive(&page, "media-src"), "media-src data: blob: 'self' https://fonts.googleapis.com");
+        assert_eq!(directive(&page, "font-src"), "font-src data: 'self' https://fonts.googleapis.com");
+        assert_eq!(directive(&page, "connect-src"), "connect-src 'self' https://api.example");
+        assert_eq!(directive(&page, "frame-src"), "frame-src blob: 'self'");
+        assert_eq!(directive(&page, "base-uri"), "base-uri 'self'");
+        assert_eq!(directive(&page, "form-action"), "form-action 'none'");
+        assert_eq!(directive(&page, "default-src"), "default-src 'none'");
+        for dev in [None, Some(DEV_ORIGIN)] {
+            let view = csp(&declared, PORT, dev, true, true);
+            assert_eq!(directive(&document_page_csp(&declared, PORT, dev), "frame-ancestors"), directive(&view, "frame-ancestors"), "every ancestor: the view's list");
+        }
+        assert!(!page.contains("sandbox"), "the proxy's frame keeps its own: {page}");
+        assert_eq!(directive(&document_page_csp(&json!({}), PORT, None), "connect-src"), "connect-src 'self'");
+        let view = csp(&declared, PORT, None, true, false);
+        for d in ["media-src", "connect-src", "frame-src"] {
+            assert!(!directive(&view, d).contains("'self'"), "{d} stays a view's: {view}");
+        }
     }
 
     #[test]

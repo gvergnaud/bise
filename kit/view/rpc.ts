@@ -18,6 +18,9 @@ export const M = {
   viewState: "ai.mistral.vibe/viewState",
   selection: "dev.bise/selection",
   detached: "dev.bise/detached",
+  // a site's old kept localStorage, once (docs/plugin-apps.md A5, architect m_60421)
+  // TODO(site-storage-seed): goes in v2026.12.15
+  storageSeed: "dev.bise/storage/seed",
   // host -> view
   toolInput: "ui/notifications/tool-input",
   toolResult: "ui/notifications/tool-result",

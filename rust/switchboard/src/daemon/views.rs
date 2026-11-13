@@ -424,7 +424,7 @@ impl Shell {
         };
         let permissions = view_call::granted(&r.declared, &grant);
         let hash = crate::pages::views::hash(&f.plugin, &f.server, &f.uri);
-        let session = pages.view_sandbox(&hash, crate::pages::views::ViewSandbox { csp: r.csp.clone(), perms: permissions.clone(), folder });
+        let session = pages.view_sandbox(&hash, crate::pages::views::ViewSandbox { csp: r.csp.clone(), perms: permissions.clone(), folder, isolated: false });
         let origin = crate::pages::views::origin(&f.plugin, &f.server, &f.uri, pages.port);
         let res = ViewResource {
             proxy: Some(crate::pages::views::proxy_url(&origin, &session)),
@@ -700,7 +700,7 @@ mod tests {
     #[test]
     fn a_doc_views_methods_route_and_the_hosts_copy_is_unknown() {
         use super::super::view_files::{doc_route, DocRoute};
-        for m in ["resources/read", "resources/url", "ai.mistral.vibe/resources/write"] {
+        for m in ["resources/read", "resources/url", "ai.mistral.vibe/resources/write", "dev.bise/storage/seed"] {
             assert_eq!(doc_route(m), DocRoute::File, "{m}");
         }
         assert_eq!(doc_route("tools/call"), DocRoute::Tool);

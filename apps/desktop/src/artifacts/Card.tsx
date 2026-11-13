@@ -147,7 +147,7 @@ export const ArtCard = memo(function ArtCard({ card, line, on, picked, many, vis
         <span className={`art-card-t1${it.a.expired === true ? ' expired' : ''}`} {...tipAttrs(name)}>{name}</span>
         {isNew(card) && <span className="art-new" data-testid={`${testId}.new`} {...tipAttrs(library.tip_new)}>{panel.new_chip}</span>}
       </span>
-      <span className="art-card-mt" data-testid={`${testId}.line`} {...tipAttrs(lineTip(card))}>{line}</span>
+      <span className="art-card-mt" data-testid={`${testId}.line`} {...tipAttrs(lineTip(card), undefined, 'below')}>{line}</span>
     </div>
   );
 });

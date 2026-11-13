@@ -12,10 +12,10 @@
 // localStorage is kept by the hub (web-storage, architect m_46151): the server puts the kept map
 // just before this script, an inert `<script type="application/json" id="bise-storage">`
 // (site.rs `seed_block`), read here once at load; each write (coalesced, one per task) posts the
-// whole map to the parent, `{bise: "site-storage", local}`, and bise's viewer (office/site.js,
-// the copy's one framer) sends it to the hub (POST /api/a/<id>/storage). So his picks come back
-// on a reload, a new panel, an app restart, in any browser. A copy opened alone in a tab has no
-// parent: its writes stay in memory for that load. sessionStorage is in memory, per load.
+// whole map to the parent, `{bise: "site-storage", local}`. The copy's old framer that sent it
+// to the hub is gone: a web page opens in Sites (plugins/sites) now, on its own origin, where the
+// kept map seeds its real localStorage once (docs/plugin-apps.md A5). A copy opened alone in a tab
+// has no parent: its writes stay in memory for that load. sessionStorage is in memory, per load.
 //
 // Not covered, still throwing in the sandbox: indexedDB, document.cookie, caches, and anything
 // else tied to an origin. A page that needs those still stops where it reads them, as it would

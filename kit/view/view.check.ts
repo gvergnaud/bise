@@ -38,6 +38,12 @@ law("a read: text or bytes, with its etag; no etag, no read", () => {
   for (const bad of [{ offset: -1, length: 5 }, { offset: 0, length: 0 }, { offset: 0.5, length: 1 }, { offset: 0, length: core.READ_MAX + 1 }]) assert.throws(() => core.readParams("u", bad), RangeError);
 });
 
+// TODO(site-storage-seed): goes in v2026.12.15
+law("a seed answer keeps its string values only, null when none", () => {
+  assert.deepEqual(core.keptOf({ local: { done: "3", n: 4, o: {} } }), { done: "3" });
+  for (const r of [null, {}, { local: null }, { local: [] }, { local: { n: 1 } }, "x"]) assert.equal(core.keptOf(r), null, JSON.stringify(r));
+});
+
 law("base64 both ways, a big file by chunks", () => {
   const big = new Uint8Array(200_000).map((_, i) => (i * 7) & 255);
   assert.deepEqual(core.bytesOf(core.base64Of(big)), big);

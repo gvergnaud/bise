@@ -3,49 +3,35 @@
 //! office-viewer). server.rs calls [`route`] once, before its `/a/<id>/<v>/<file>`
 //! arm; what is not ours falls through to it.
 //!
-//! - `GET /a/<id>/view`, `GET /a/<id>/<v>/view`: bise's viewer of an image,
-//!   pdf, video or site ([`view`]), the newest version or version `v`;
+//! - `GET /a/<id>/view`, `GET /a/<id>/<v>/view`: the old viewer's urls
+//!   (gone with step 5), a 301 to the document's page `/d/<id>`
+//!   (view_web.rs), for the links he already has;
 //! - `GET /a/<id>/events`: the stream of its saves ([`events`]; server.rs
 //!   runs it, as `/p/<id>/events`);
-//! - `GET /kit/office/office.js`: the office SDK's bundle, read from
-//!   `office/dist` in the app root (one copy, never
-//!   in `kit/`, architect m_23781); the renderers beside them
-//!   (`kit/office/*.js`) are kit files. Univer's grid, `office-sheet.js`, is
-//!   Sheets' own file (plugins/sheets, architect m_60401);
 //! - `GET /a/<id>/live[/<path>]`: the door of a local site bise serves
 //!   again ([`live`], site-revive): its server, bise's copy, or the hub
 //!   starts it again;
 //! - `GET /a/<id>/notes`, `POST /api/a/<id>/notes|send`: the notes on an
 //!   artifact ([`notes`]; the POSTs through [`post`], server.rs's `/api`
 //!   arm, after its token and origin checks);
-//! - `POST /api/a/<id>/storage`: a site's localStorage, kept for every
-//!   version ([`storage`], web-storage).
 
 pub mod events;
 pub mod live;
 pub mod notes;
-pub mod storage;
-pub mod view;
 
 use super::server::Response;
 use super::store::valid_id;
 use super::Pages;
 
-/// The bundles the viewer loads, from `Pages::office_dir`.
-const BUNDLES: &[&str] = &["office.js"];
-
 /// The response for `segs` (the path's segments), or None: not an
 /// artifact route of this module.
 pub fn route(pages: &Pages, segs: &[&str]) -> Option<Response> {
     Some(match segs {
-        ["kit", "office", f] if BUNDLES.contains(f) => bundle(pages, f),
-        ["a", id, "view"] if valid_id(id) => view::serve(pages, id, None),
+        // the old viewer's urls, already in his threads, notes and pages: a
+        // permanent redirect to the document's place (architect m_63317)
+        ["a", id, "view"] | ["a", id, _, "view"] if valid_id(id) => Response::moved(&format!("/d/{id}")),
         ["a", id, "notes"] if valid_id(id) => notes::get(pages, id),
         ["a", id, "live", rest @ ..] if valid_id(id) => live::serve(pages, id, rest),
-        ["a", id, v, "view"] if valid_id(id) => match v.parse() {
-            Ok(n) => view::serve(pages, id, Some(n)),
-            Err(_) => Response::missing(&format!("no such version: a/{id}/{v}/view")),
-        },
         _ => return None,
     })
 }
@@ -56,16 +42,8 @@ pub fn post(pages: &Pages, segs: &[&str], body: &[u8]) -> Option<Response> {
     Some(match segs {
         ["api", "a", id, "notes"] if valid_id(id) => notes::post_notes(pages, id, body),
         ["api", "a", id, "send"] if valid_id(id) => notes::post_send(pages, id),
-        ["api", "a", id, "storage"] if valid_id(id) => storage::post(pages, id, body),
         _ => return None,
     })
-}
-
-fn bundle(pages: &Pages, f: &str) -> Response {
-    match std::fs::read(pages.office_dir.join(f)) {
-        Ok(body) => Response { status: 200, ctype: "text/javascript; charset=utf-8", body, csp: super::server::CSP.into(), location: None, etag: None },
-        Err(_) => Response::missing(&format!("no such file: kit/office/{f} (office/dist in the app root)")),
-    }
 }
 
 #[cfg(test)]
@@ -87,20 +65,15 @@ mod tests {
         std::fs::read(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../office/fixtures").join(name)).unwrap()
     }
 
-    /// office-artifacts plan §4: a site artifact's row is framed at
-    /// `/a/<id>/view`, which serves the viewer's shell under its CSP,
-    /// pointing at the copy, which is served too; an older version at
-    /// `/a/<id>/<v>/view`; anything else there is a 404 in words. An xlsx
-    /// opens in Sheets (plugins/sheets, docs/plugin-apps.md step 4): its row
-    /// frames its copy, served as itself.
+    /// Every type opens in its plugin's view (docs/plugin-apps.md steps
+    /// 1-5): an xlsx in Sheets, a web page in Sites; each row frames its
+    /// copy, served as itself, and bise's old viewer routes are gone.
     #[test]
-    fn a_site_artifact_opens_in_the_viewer() {
+    fn an_artifact_row_frames_its_copy() {
         let d = std::env::temp_dir().join(format!("sb-office-view-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         let work = d.join("work");
         std::fs::create_dir_all(work.join("dist")).unwrap();
-        std::fs::create_dir_all(d.join("office/dist")).unwrap();
-        std::fs::write(d.join("office/dist/office.js"), "export const sheets = {};").unwrap();
         let p = Pages::new(&d, 47123, &d);
         let arts = crate::artifacts::Store::new(&d);
         let add = |file: &str, at: u64| {
@@ -120,39 +93,24 @@ mod tests {
         let frame = |id: &str| items.iter().find(|a| a.id == id).and_then(|a| a.frame_url.clone()).unwrap_or_default();
         assert_eq!(frame(&xlsx.id), format!("{base}/a/{}/2/q3.xlsx", xlsx.id), "its copy: Sheets opens it");
         let html = items.iter().find(|a| a.title.starts_with("r.html")).unwrap();
-        assert_eq!(frame(&html.id), format!("{base}/a/{}/view", html.id), "a site in the viewer too (art-notes)");
-        let site = text(&get(&p, &format!("/a/{}/view", html.id)));
-        assert!(site.contains("data-kind=\"site\"") && site.contains(&format!("data-file=\"/a/{}/1/framed/r.html\"", html.id)), "{site}");
-        // the framed copy gets the selection script, the plain one never (architect m_24172)
-        // and both the storage shim first (architect m_25527)
-        assert!(text(&get(&p, &format!("/a/{}/1/framed/r.html", html.id))).ends_with("<h1>r</h1><script src=\"/kit/site-select.js\"></script>"));
+        // a web page opens in Sites (plugins/sites, docs/plugin-apps.md step 5): its copy framed
+        // as itself, the storage shim first (architect m_25527), never a selection script
+        assert_eq!(frame(&html.id), format!("{base}/a/{}/1/r.html", html.id), "not in the viewer");
         assert_eq!(text(&get(&p, &format!("/a/{}/1/r.html", html.id))), format!("{}<h1>r</h1>", crate::pages::site::STORAGE_TAG));
+        assert_eq!(get(&p, &format!("/a/{}/1/framed/r.html", html.id)).status, 404, "no framed path any more");
 
         let bytes = get(&p, &format!("/a/{}/2/q3.xlsx", xlsx.id));
         assert_eq!((bytes.status, bytes.ctype), (200, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
         assert!(bytes.body.starts_with(b"PK"), "the copy's bytes");
 
-        let r = get(&p, &format!("/a/{}/view", html.id));
-        assert_eq!((r.status, &*r.csp), (200, view::VIEW_CSP));
-        assert!(text(&r).contains("data-version=\"1\" data-latest=\"1\" data-follows"), "{}", text(&r));
-
-        for (path, why) in [
-            (format!("/a/{}/9/view", html.id), "no such version"),
-            (format!("/a/{}/x/view", html.id), "no such version"),
-            ("/a/nope/view".to_string(), "no such artifact"),
-            
-        ] {
+        // the viewer shell went with step 5: its links he already has move for good to the
+        // document's page (architect m_63317); no /kit/office/ bundle
+        for path in [format!("/a/{}/view", html.id), format!("/a/{}/1/view", html.id)] {
             let r = get(&p, &path);
-            assert_eq!((r.status, r.ctype), (404, "text/plain; charset=utf-8"), "{path}");
-            assert!(text(&r).starts_with(why), "{path}: {}", text(&r));
+            assert_eq!((r.status, r.location.as_deref()), (301, Some(format!("/d/{}", html.id).as_str())), "{path}");
         }
-
-        let js = get(&p, "/kit/office/office.js");
-        assert_eq!((js.status, js.ctype, text(&js).as_str()), (200, "text/javascript; charset=utf-8", "export const sheets = {};"), "from office/dist in the app root");
-        std::fs::remove_file(d.join("office/dist/office.js")).unwrap();
-        let none = get(&p, "/kit/office/office.js");
-        assert_eq!(none.status, 404, "a bundle not shipped says so");
-        assert!(text(&none).contains("office/dist"));
+        assert_eq!(get(&p, "/a/No_Id/view").status, 404, "a bad id is no redirect");
+        assert_eq!(get(&p, "/kit/office/office.js").status, 404);
         let _ = std::fs::remove_dir_all(d);
     }
 }

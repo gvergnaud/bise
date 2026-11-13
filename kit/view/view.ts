@@ -71,6 +71,9 @@ export type View = {
   url(): Promise<string>;
   /** open an http(s) or mailto link in his browser, on his click (ui/open-link) */
   openLink(url: string): Promise<void>;
+  /** the localStorage bise kept for this document before it had its own origin, once (then
+   * null): a site writes it into its real one (A5). TODO(site-storage-seed): goes in v2026.12.15 */
+  seededStorage(): Promise<Record<string, string> | null>;
   /** his selection moved: its anchor (null: nothing selected), the words he sees, where it is
    * (`at`: the kit shows its "type to ask about it" pill there; none: no pill) and the place's
    * short name (`label`: `page 2 · a box`, display only) */
@@ -219,6 +222,12 @@ export async function connect(opts: Options): Promise<View> {
     },
     async openLink(url) {
       await bridge.request(M.openLink, { url: core.linkOf(url) });
+    },
+    // TODO(site-storage-seed): goes in v2026.12.15
+    async seededStorage() {
+      const d = doc();
+      if (!d) return null;
+      return core.keptOf(await bridge.request(M.storageSeed, { uri: d.uri }));
     },
     save(data, o) {
       const d = doc();

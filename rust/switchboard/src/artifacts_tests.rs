@@ -433,9 +433,8 @@ fn the_typed_artifacts_carry_everything_the_older_rows_did() {
 }
 
 /// ambient-lead m_19544, architect m_19561: a copied file's row is framed
-/// by the page server (site::frame_href): a copied html file is a site in
-/// bise's viewer (`/a/<id>/view`, art-notes 3836f3d8d), a file the viewer
-/// doesn't draw at its own link (site::copy_href); a link and a bise page
+/// by the page server at its own link (site::copy_href; every type opens in
+/// its plugin's view, docs/plugin-apps.md steps 1-5); a link and a bise page
 /// get no frame_url, and none without a server. `url` keeps its meaning
 /// (the terminal opens it).
 #[test]
@@ -457,10 +456,10 @@ fn a_copied_file_is_framed_by_the_page_server_and_a_link_is_not() {
     let items = crate::proto_view::artifacts(&ev, |_| None, Some("http://127.0.0.1:47123"), |_| Default::default());
     let by_id = |id: &str| items.iter().find(|a| a.id == id).unwrap_or_else(|| panic!("{id} in {items:?}"));
     let file = by_id("the-report");
-    assert_eq!(file.frame_url.as_deref(), Some("http://127.0.0.1:47123/a/the-report/view"), "a site: bise's viewer, the newest version");
+    assert_eq!(file.frame_url.as_deref(), Some("http://127.0.0.1:47123/a/the-report/2/report.html"), "a web page: its newest copy's link (Sites opens it)");
     assert_eq!(file.url, file.copy.clone().unwrap(), "url keeps its meaning");
     let plain = by_id("the-notes");
-    assert_eq!(plain.frame_url.as_deref(), Some("http://127.0.0.1:47123/a/the-notes/1/notes.txt"), "a file the viewer doesn't draw: its own link");
+    assert_eq!(plain.frame_url.as_deref(), Some("http://127.0.0.1:47123/a/the-notes/1/notes.txt"), "a plain file: its own link");
     for a in items.iter().filter(|a| a.id != "the-report" && a.id != "the-notes") {
         assert_eq!(a.frame_url, None, "{} ({}) has no frame_url", a.id, a.by);
     }

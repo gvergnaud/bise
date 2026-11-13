@@ -232,6 +232,13 @@ export class ViewSession {
         const a = await this.env.ask({ cmd: 'view_call', ...this.wire, method, params });
         return 'error' in a ? error(id, a.error) : result(id, a.result);
       }
+      // a site's old kept localStorage, once: the hub answers its document's own map (A5)
+      // TODO(site-storage-seed): goes in v2026.12.15
+      case DOC.seed: {
+        if (this.env.doc === undefined) return error(id, { code: RPC.notFound, message: `${method} is not supported` });
+        const a = await this.env.ask({ cmd: 'view_call', ...this.wire, method, params });
+        return 'error' in a ? error(id, a.error) : result(id, a.result);
+      }
       case DOC.viewState: {
         const doc = this.env.doc;
         if (doc === undefined) return error(id, { code: RPC.notFound, message: `${method} is not supported` });

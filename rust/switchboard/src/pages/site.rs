@@ -66,8 +66,8 @@ pub fn items(pages: &[PageMeta], arts: &[ArtMeta]) -> Vec<Item> {
         let Some(cur) = a.current() else { continue };
         // a copy first: framed from it (the typed row's frame_url rule, serves_copy)
         let (href, outside) = if let Some(copy) = cur.copy.as_ref().filter(|c| serves_copy(&a.by, c)) {
-            // in bise's viewer, where his notes go (art-notes)
-            (frame_href(&a.id, cur.v, copy, true), false)
+            // framed as itself (a web page opens in Sites, plugins/sites)
+            (copy_href(&a.id, cur.v, copy), false)
         } else if crate::artifacts_serve::has_door(cur) {
             // a local site bise starts again: its door (artifacts_serve)
             (crate::artifacts_serve::live_href(&a.id), true)
@@ -110,29 +110,6 @@ pub fn href_name(name: &str) -> String {
         .collect()
 }
 
-/// Where bise's viewer frames a site's copy (kit/office/site.js):
-/// `/a/<id>/<v>/framed/<file>`, the copy as at [`copy_href`] with the
-/// notes' selection script in each html page ([`framed`], architect
-/// m_24172). A site's own relative links stay under `framed/`.
-pub fn framed_href(id: &str, v: u64, copy: &str) -> String {
-    format!("/a/{}/{}/framed/{}", id, v, href_name(&file_of(copy)))
-}
-
-/// The one rule for "does this request get the selection script?": a path
-/// under a copy (`rest`, after `/a/<id>/<v>/`) that starts with `framed`
-/// asks for it (the viewer's frame and the site's own links in it); the
-/// plain copy (a tab, a download, an older client) never does. The flag,
-/// and the path of the file without it.
-pub fn framed<'a>(rest: &'a [&'a str]) -> (bool, &'a [&'a str]) {
-    match rest.split_first() {
-        Some((&"framed", tail)) => (true, tail),
-        _ => (false, rest),
-    }
-}
-
-/// The tag a framed html page gets (kit/site-select.js).
-pub const SELECT_TAG: &str = "<script src=\"/kit/site-select.js\"></script>";
-
 /// The tag every html page served under [`ARTIFACT_CSP`] gets, first
 /// (kit/storage.js): an in-memory localStorage/sessionStorage where the
 /// opaque origin forbids them, so a page that reads one at its top level
@@ -156,25 +133,20 @@ pub fn seed_block(kept: &crate::artifacts_storage::Kept) -> String {
 }
 
 /// The one rule for what an html page of a copy gets (architect m_24172,
-/// m_25527, m_46151): [`seed_block`] of `kept` then [`STORAGE_TAG`] always,
-/// before the page's own scripts (just inside its `<head>`, else its
-/// `<html>`, else after its doctype, else at its start); [`SELECT_TAG`]
-/// before its last `</body>` (or at its end) only on the `framed` path.
-/// The kept copy never changes; the rest of the bytes as they are.
-pub fn tagged(html: &[u8], framed: bool, kept: &crate::artifacts_storage::Kept) -> Vec<u8> {
+/// m_25527, m_46151): [`seed_block`] of `kept` then [`STORAGE_TAG`], before
+/// the page's own scripts (just inside its `<head>`, else its `<html>`,
+/// else after its doctype, else at its start). The kept copy never
+/// changes; the rest of the bytes as they are. A site opened in Sites
+/// (plugins/sites) is served on its own origin at `/h/`, untouched.
+pub fn tagged(html: &[u8], kept: &crate::artifacts_storage::Kept) -> Vec<u8> {
     let lower: Vec<u8> = html.iter().map(u8::to_ascii_lowercase).collect();
     let first = after_open(&lower, b"<head").or_else(|| after_open(&lower, b"<html")).or_else(|| after_open(&lower, b"<!doctype")).unwrap_or(0);
-    let end = if framed { lower.windows(7).rposition(|w| w == b"</body>").unwrap_or(html.len()).max(first) } else { html.len() };
     let seed = seed_block(kept);
-    let mut out = Vec::with_capacity(html.len() + seed.len() + STORAGE_TAG.len() + SELECT_TAG.len());
+    let mut out = Vec::with_capacity(html.len() + seed.len() + STORAGE_TAG.len());
     out.extend_from_slice(&html[..first]);
     out.extend_from_slice(seed.as_bytes());
     out.extend_from_slice(STORAGE_TAG.as_bytes());
-    out.extend_from_slice(&html[first..end]);
-    if framed {
-        out.extend_from_slice(SELECT_TAG.as_bytes());
-    }
-    out.extend_from_slice(&html[end..]);
+    out.extend_from_slice(&html[first..]);
     out
 }
 
@@ -207,47 +179,12 @@ pub fn serves_copy(by: &str, copy: &str) -> bool {
 /// What the page server serves for a version of an artifact added `by`
 /// with that `copy`: its copy when it serves one ([`serves_copy`]); else
 /// nothing (a link, a bise page, a file too big to copy). The one rule for
-/// the server's route (`artifact_target`), the viewer's shell
-/// (artifact/view.rs) and the typed row's `frame_url`
+/// the server's route (`artifact_target`) and the typed row's `frame_url`
 /// (proto_view::artifacts). A file bise kept no copy of is read by its app
 /// through a handle, from its own file while its sig holds
 /// (view_files_disk, docs/plugin-apps.md A4), never here.
 pub fn served<'a>(by: &str, copy: Option<&'a str>) -> Option<&'a str> {
     copy.filter(|c| serves_copy(by, c))
-}
-
-/// Where an artifact's copy is framed (the typed row's `frame_url`,
-/// proto_view::artifacts): what bise's viewer draws ([`viewer_kind`]: a
-/// site; pages/artifact/view.rs), at
-/// `/a/<id>/view` for the newest version (the
-/// frame keeps that src when a new one lands) or `/a/<id>/<v>/view` for an
-/// older one; any other copy at [`copy_href`]. Only for a copy that
-/// [`serves_copy`].
-pub fn frame_href(id: &str, v: u64, copy: &str, newest: bool) -> String {
-    match (viewer_kind(copy), newest) {
-        (Some(_), true) => format!("/a/{id}/view"),
-        (Some(_), false) => format!("/a/{id}/{v}/view"),
-        (None, _) => copy_href(id, v, copy),
-    }
-}
-
-/// What bise's viewer draws a copy as (pages/artifact/view.rs): a site
-/// (`site`: a folder or an html file, still served sandboxed at
-/// [`copy_href`], framed inside the viewer so notes can sit on its blocks;
-/// art-notes). None: framed as itself, or opened by its app
-/// (docs/plugin-apps.md steps 1-4: markdown and docx in Writer,
-/// plugins/docs; pptx in Slides, plugins/slides; xlsx and csv in Sheets,
-/// plugins/sheets; images, pdfs and videos in Preview, plugins/media).
-pub fn viewer_kind(copy: &str) -> Option<&'static str> {
-    let file = file_of(copy);
-    let ext = file.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
-    match () {
-        _ if copy.is_empty() => None,
-        // a site: a folder (its index.html) or a copied html file, framed
-        // as itself inside the viewer (kit/office/site.js), notes on its blocks
-        _ if file.is_empty() || ext == "html" || ext == "htm" => Some("site"),
-        _ => None,
-    }
 }
 
 /// The file a copy opens on: a copied file's name (`v2/plan.html` →
@@ -290,7 +227,7 @@ pub fn sidebar(items: &[Item], home: &str) -> String {
 }
 
 /// The file a request under version `v`'s copy names (`rest`, after
-/// `/a/<id>/<v>/` and [`framed`]), `base` the copy (`<id>/v<n>/<name>`):
+/// `/a/<id>/<v>/`), `base` the copy (`<id>/v<n>/<name>`):
 /// a folder's file (none: its index.html); a copied file by its name (or
 /// none), or a file it links kept beside it (artifacts_assets). The one
 /// rule for both: inside the version's folder, no `..`, hidden name or
@@ -337,7 +274,7 @@ pub fn ctype(path: &str) -> Option<&'static str> {
         "webp" => "image/webp",
         "woff2" => "font/woff2",
         "txt" | "md" => "text/plain; charset=utf-8",
-        // the bytes bise's viewer fetches (frame_href); a browser downloads them
+        // the bytes a plugin's view reads (Writer, Slides, Sheets); a browser downloads them
         "xlsx" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "pptx" => "application/vnd.openxmlformats-officedocument.presentationml.presentation",
         "docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -356,29 +293,12 @@ mod tests {
     use super::*;
     use crate::artifacts::Version as ArtVersion;
 
-    /// bend_plugins::opens::BUILTIN and [`viewer_kind`]'s arms name the
-    /// same types (docs/plugin-apps.md A3, architect m_59941): each
-    /// migration step deletes both in one change, or this goes red.
+    /// The viewer shell is gone (docs/plugin-apps.md steps 1-5): the one
+    /// built-in type left is a bise page, framed at its own /p/<id> (step 6).
     #[test]
-    fn builtin_openers_and_viewer_kinds_name_the_same_types() {
+    fn a_bise_page_is_the_last_builtin_type() {
         use bend_plugins::opens::BUILTIN;
-        // every row draws as its kind today; a page (`<id>.page`, A9) is
-        // framed at its own /p/<id>, not by the viewer
-        for b in BUILTIN.iter().filter(|b| b.kind != "page") {
-            let sample = if b.folder { "site/".to_string() } else { format!("v1/x{}", b.key.trim_start_matches('*')) };
-            assert_eq!(viewer_kind(&sample), Some(b.kind), "{b:?}");
-        }
-        // every ending the viewer draws has its row
-        let ends = ["html", "htm"];
-        for e in ends {
-            let kind = viewer_kind(&format!("v1/x.{e}")).unwrap_or_else(|| panic!("the viewer draws .{e}"));
-            assert!(BUILTIN.iter().any(|b| !b.folder && b.key == format!("*.{e}") && b.kind == kind), ".{e} ({kind}) has no BUILTIN row");
-        }
-        assert!(BUILTIN.iter().any(|b| b.folder && b.kind == "site"), "a site folder has its row");
-        assert_eq!(BUILTIN.iter().filter(|b| b.kind == "page").map(|b| b.key).collect::<Vec<_>>(), ["*.page"], "a page has its row");
-        assert_eq!(viewer_kind("v1/x.page"), None);
-        // and nothing else: an ending outside both lists draws nothing
-        assert_eq!(viewer_kind("v1/x.zip"), None);
+        assert_eq!(BUILTIN.iter().map(|b| (b.key, b.kind, b.folder)).collect::<Vec<_>>(), [("*.page", "page", false)]);
     }
     use crate::artifacts_storage::Kept;
     use crate::pages::store::Version;
@@ -418,8 +338,8 @@ mod tests {
         ];
         let it = items(&pages, &arts);
         let hrefs: Vec<&str> = it.iter().map(|i| i.href.as_str()).collect();
-        // a local site opens in bise's viewer, where his notes go (art-notes)
-        assert_eq!(hrefs, vec!["https://bise.dev/m/timers", "/p/plan", "/a/mock/view", "/p/arch", "/a/folder-site/view"]);
+        // a local site's copy at its own link (Sites opens it, plugins/sites)
+        assert_eq!(hrefs, vec!["https://bise.dev/m/timers", "/p/plan", "/a/mock/1/mock.html", "/p/arch", "/a/folder-site/1/"]);
         assert!(it[0].outside && !it[1].outside);
         assert_eq!((it[1].kind, it[1].version.as_str()), ("page", "v2"));
     }
@@ -469,34 +389,23 @@ mod tests {
         assert!(!ARTIFACT_CSP.contains("frame-ancestors"), "the desktop's file:// renderer frames it");
     }
 
-    /// What bise's viewer frames (a site, an image, a pdf, a video), the
-    /// newest at a url with no version (a new version never reloads the
-    /// frame); an office file opens in its plugin's view (Writer, Slides,
-    /// Sheets: docs/plugin-apps.md steps 3 and 4), so its copy is served and
-    /// framed as itself, by the same rule (serves_copy).
+    /// Every type opens in its plugin's view (docs/plugin-apps.md steps
+    /// 1-5: Preview, Writer, Slides, Sheets, Sites), so a served copy is
+    /// framed as itself at its own link, by one rule (serves_copy).
     #[test]
-    fn the_viewer_frames_its_kinds_and_an_office_file_is_its_copy() {
+    fn a_served_copy_is_framed_as_itself() {
         for copy in ["v2/q3.xlsx", "v1/memo.docx", "v2/Deck.PPTX"] {
-            assert_eq!(viewer_kind(copy), None, "{copy}");
             assert!(serves_copy("office-lead", copy), "{copy}: its bytes are served");
-            assert_eq!(frame_href("q3", 2, copy, true), copy_href("q3", 2, copy), "{copy}");
         }
-        // a site in the viewer too (art-notes: notes on its blocks); its copy keeps its own link
-        assert_eq!(frame_href("r", 3, "v3/r.html", true), "/a/r/view");
-        assert_eq!((viewer_kind("v3/r.html"), viewer_kind("v1/site"), viewer_kind("v1/a.HTM"), viewer_kind("v1/notes.txt"), viewer_kind("")), (Some("site"), Some("site"), Some("site"), None, None));
-        assert_eq!(copy_href("r", 3, "v3/r.html"), "/a/r/3/r.html");
-        assert_eq!((framed_href("r", 3, "v3/r.html"), framed_href("f", 1, "v1/site")), ("/a/r/3/framed/r.html".to_string(), "/a/f/1/framed/".to_string()));
-        assert_eq!((viewer_kind("v1/q3.xlsx"), viewer_kind("v1/a.csv")), (None, None));
+        // a web page or a site folder opens in Sites (plugins/sites, step 5); its copy keeps its own link
+        assert_eq!((copy_href("r", 3, "v3/r.html"), copy_href("f", 1, "v1/site")), ("/a/r/3/r.html".to_string(), "/a/f/1/".to_string()));
         // images, pdfs and videos open in their app (plugins/media's Preview), their copy at its
         // own href, a video's by its ranges (media.rs)
         for f in ["v1/shot.PNG", "v2/report.pdf", "v1/film.mp4", "v1/a.MOV", "v1/loop.gif"] {
-            assert_eq!(viewer_kind(f), None, "{f}");
             assert!(serves_copy("main", f), "{f}");
         }
-        assert_eq!(frame_href("s", 1, "v1/shot.png", true), "/a/s/1/shot.png");
-        // a markdown file opens in Writer (plugins/docs, docs/plugin-apps.md step 1), framed as
-        // itself here (its copy text/plain); a .txt too
-        assert_eq!((viewer_kind("v3/learnings.md"), viewer_kind("v1/A.Markdown"), viewer_kind("v1/notes.txt")), (None, None, None));
+        assert_eq!(copy_href("s", 1, "v1/shot.png"), "/a/s/1/shot.png");
+        // a markdown file opens in Writer (plugins/docs, step 1), its copy text/plain; a .txt too
         assert!(serves_copy("learnings", "v3/learnings.md") && ctype("v3/learnings.md") == Some("text/plain; charset=utf-8"));
         for f in ["v1/film.mp4", "v1/a.MOV", "v1/b.webm", "v1/c.m4v"] {
             assert!(ctype(f).is_some_and(|c| c.starts_with("video/")), "{f}: a video copy is sent by its ranges");
@@ -505,9 +414,6 @@ mod tests {
         assert!(!serves_copy("x", "v1/a.xls"), "an old binary format is not sent");
     }
 
-    /// architect m_24172: the selection script only for the viewer's frame
-    /// (and the site's own links in it), never the plain copy; the bytes
-    /// otherwise as they are.
     /// The server frames a copy only: a file too big to copy (a long video)
     /// opens in its app, read through a handle from its own file
     /// (docs/plugin-apps.md A4), never at a page server url.
@@ -519,36 +425,22 @@ mod tests {
         assert_eq!(served("page", Some("v1/q3.xlsx")), None, "a bise page is served at /p/");
     }
 
-    #[test]
-    fn only_the_framed_path_gets_the_selection_script() {
-        assert_eq!(framed(&["framed", "docs", "a.html"]), (true, &["docs", "a.html"][..]));
-        assert_eq!(framed(&["r.html"]), (false, &["r.html"][..]));
-        assert_eq!(framed(&[]), (false, &[][..]));
-        assert_eq!(framed(&["docs", "framed"]), (false, &["docs", "framed"][..]), "only at the start");
-        // the last </body> (one in a script's string comes before it)
-        let two = b"<script>'</body>'</script></body>";
-        assert!(String::from_utf8(tagged(two, true, &Kept::new())).unwrap().ends_with(&format!("{SELECT_TAG}</body>")));
-    }
-
     /// architect m_25527: the one table of what an html copy gets. The
-    /// storage tag first on both paths, before the page's own scripts
-    /// (never before the doctype: quirks mode); the selection tag only
-    /// framed, before the last </body>.
+    /// storage tag first, before the page's own scripts (never before the
+    /// doctype: quirks mode).
     #[test]
-    fn an_html_copy_gets_storage_first_and_selection_only_framed() {
-        let (s, x) = (STORAGE_TAG, SELECT_TAG);
-        let cases: [(&str, bool, String); 8] = [
-            ("<!doctype html><html><HEAD><script>localStorage</script></head><body><p>hi</p></BODY></html>", false, format!("<!doctype html><html><HEAD>{s}<script>localStorage</script></head><body><p>hi</p></BODY></html>")),
-            ("<!doctype html><html><HEAD><script>localStorage</script></head><body><p>hi</p></BODY></html>", true, format!("<!doctype html><html><HEAD>{s}<script>localStorage</script></head><body><p>hi</p>{x}</BODY></html>")),
-            ("<html lang=\"en\"><head data-x><title>t</title>", false, format!("<html lang=\"en\"><head data-x>{s}<title>t</title>")),
-            ("<html><body><header>h</header>", false, format!("<html>{s}<body><header>h</header>")),
-            ("<!DOCTYPE html>\n<script>a()</script>", false, format!("<!DOCTYPE html>{s}\n<script>a()</script>")),
-            ("<p>no body", false, format!("{s}<p>no body")),
-            ("<p>no body", true, format!("{s}<p>no body{x}")),
-            ("", true, format!("{s}{x}")),
+    fn an_html_copy_gets_storage_first() {
+        let s = STORAGE_TAG;
+        let cases: [(&str, String); 6] = [
+            ("<!doctype html><html><HEAD><script>localStorage</script></head><body><p>hi</p></BODY></html>", format!("<!doctype html><html><HEAD>{s}<script>localStorage</script></head><body><p>hi</p></BODY></html>")),
+            ("<html lang=\"en\"><head data-x><title>t</title>", format!("<html lang=\"en\"><head data-x>{s}<title>t</title>")),
+            ("<html><body><header>h</header>", format!("<html>{s}<body><header>h</header>")),
+            ("<!DOCTYPE html>\n<script>a()</script>", format!("<!DOCTYPE html>{s}\n<script>a()</script>")),
+            ("<p>no body", format!("{s}<p>no body")),
+            ("", s.to_string()),
         ];
-        for (page, framed, want) in cases {
-            assert_eq!(String::from_utf8(tagged(page.as_bytes(), framed, &Kept::new())).unwrap(), want, "{page} framed={framed}");
+        for (page, want) in cases {
+            assert_eq!(String::from_utf8(tagged(page.as_bytes(), &Kept::new())).unwrap(), want, "{page}");
         }
     }
 
@@ -557,7 +449,7 @@ mod tests {
     #[test]
     fn a_kept_storage_goes_in_inert_before_the_storage_tag() {
         let kept = Kept::from([("rent".to_string(), "</script><script>alert(1)</script>".to_string())]);
-        let out = String::from_utf8(tagged(b"<html><head><script>localStorage</script></head>", false, &kept)).unwrap();
+        let out = String::from_utf8(tagged(b"<html><head><script>localStorage</script></head>", &kept)).unwrap();
         let block = seed_block(&kept);
         assert_eq!(out, format!("<html><head>{block}{STORAGE_TAG}<script>localStorage</script></head>"));
         assert!(block.starts_with("<script type=\"application/json\" id=\"bise-storage\">"));

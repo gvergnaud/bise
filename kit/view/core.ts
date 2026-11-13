@@ -172,6 +172,16 @@ export function retryable(err: unknown): boolean {
 // ---- selection
 
 /** An anchor a view may give: a string of 1..=512 UTF-8 bytes. */
+/** A `dev.bise/storage/seed` answer's map: its string values only; null when none.
+ * TODO(site-storage-seed): goes in v2026.12.15 */
+export function keptOf(result: unknown): Record<string, string> | null {
+  const local = result !== null && typeof result === "object" ? (result as Record<string, unknown>)["local"] : null;
+  if (local === null || typeof local !== "object" || Array.isArray(local)) return null;
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(local as Record<string, unknown>)) if (typeof v === "string") out[k] = v;
+  return Object.keys(out).length ? out : null;
+}
+
 export function anchorOk(a: unknown): a is string {
   return typeof a === "string" && a.length > 0 && utf8(a) <= ANCHOR_MAX;
 }

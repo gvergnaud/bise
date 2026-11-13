@@ -170,6 +170,13 @@ export async function connect(opts) {
         async openLink(url) {
             await bridge.request(M.openLink, { url: core.linkOf(url) });
         },
+        // TODO(site-storage-seed): goes in v2026.12.15
+        async seededStorage() {
+            const d = doc();
+            if (!d)
+                return null;
+            return core.keptOf(await bridge.request(M.storageSeed, { uri: d.uri }));
+        },
         save(data, o) {
             const d = doc();
             if (!d)

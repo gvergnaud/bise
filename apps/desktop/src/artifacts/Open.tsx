@@ -137,8 +137,8 @@ export function frameSrc(
   theme: 'light' | 'dark' | null,
 ): string | null {
   const local = a.frame_url ?? '';
-  // the newest version of an xlsx, pptx or docx: bise's viewer at /a/<id>/view, the src the frame
-  // keeps while new versions land (pages::site::frame_href); never built here (architect m_23970)
+  // the newest version: the hub's own url for it (its copy's link, pages::site::copy_href); never
+  // built here (architect m_23970)
   if (shown === a.version && local !== '') return themedUrl(local, theme);
   // an older version: the hub's own url for it (ArtifactVersion.frame_url, art-live 929ead94f)
   const older = shown === a.version ? '' : (a.versions?.find((x) => x.v === shown)?.frame_url ?? '');
@@ -615,10 +615,9 @@ export function ArtifactOpen({ project, id, onClose, composer = true, lead, bare
         {/* the page follows his theme: opened with ?theme=<his pref>, the kit wears it (kit.js puts
             it on <html data-theme>); with no pref, the system's. A browser-only kind never gets
             here from a list (leave.ts opens his browser): no 'opens in your browser' panel (designer m_21714) */}
-        {/* the src stays /a/<id>/view while new versions land: the viewer swaps in place, never a
-            reload (plan §6). Its name tells the viewer it sits in the app: a selection comes here
-            (useFrameNote) for the maker's composer, not the frame's own note. A page may go full
-            screen from its own button: allow it */}
+        {/* Its name tells the page it sits in the app: a selection comes here (useFrameNote) for
+            the maker's composer, not the frame's own note. A page may go full screen from its own
+            button: allow it */}
         {/* a .diff or .patch: its files and hunks, the review's own view (try-diff-open), never a blank frame */}
         {src === null && isDiff(a) && <DiffArtifact project={project} a={a} version={shown} onEscape={close} />}
         {/* a file with nothing to frame (no copy kept, no viewer for it): says why, never a blank body */}

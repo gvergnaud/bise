@@ -1,0 +1,14 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "sites",
+  "version": "0.1.0",
+  "description": "Sites: open a web page or a site folder an agent made in bise, each on its own origin with its own storage, and note on its blocks.",
+  "homepage": "https://bise.dev",
+  "license": "Apache-2.0",
+  "extensions": {
+    "ai.mistral.vibe": { "schemaVersion": 1 },
+    "dev.bise": {
+      "tagline": "web pages and sites, with your notes on them"
+    }
+  }
+}

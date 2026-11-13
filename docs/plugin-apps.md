@@ -302,9 +302,10 @@ floor plus declared origins, permissions granted at the add.
 - **Folder-documents with their own scripts** (sites, step 5; architect
   m_60421): their own origin per document, never opaque. plugins/sites'
   view declares `isolate: "document"`; the site's files are served on
-  that origin at `/h/<session>/<handle id>/<rel>` (A4's `resources/url`
-  on a folder copy: read only, realpath under the copy, a folder rel
-  gives its index.html, no listing); an html there gets the view CSP's
+  that origin at `/h/<token>/<rel>` (A4's `resources/url` on a folder
+  copy, `views::doc_file_path`: read only, realpath under the copy
+  (`view_files_disk::in_folder`), a folder rel gives its index.html, no
+  listing); an html there gets `view_csp::document_page_csp`: the view CSP's
   floor with `'self'` and `'unsafe-inline'` on script and style, `'self'`
   on img, media, font and connect, and the view CSP's own
   `frame-ancestors` list (every ancestor is checked: the Sites view, the
@@ -314,10 +315,14 @@ floor plus declared origins, permissions granted at the add.
   a site's scripts can do what that view can (read its document, a
   selection, viewState): no write, no server, no `ui/message`. The
   browser keeps its storage (localStorage, indexedDB, cookies), so
-  kit/storage.js, site-select.js and artifacts_storage go; a kept
-  storage.json is seeded once into the real localStorage at the first
-  open (a host-only method, the doc's own map; a shim in
-  tests/shims.txt, removed one release after). Probes, permanent rows of
+  kit/office/site.js, site-select.js, the `framed/` copy and the storage
+  POST go; a kept storage.json is seeded once into the real localStorage
+  at the first open (`dev.bise/storage/seed`, a host-only method on the
+  open doc: its own map, then marked seeded; `@bise/view`'s
+  `seededStorage()` writes the keys the page lacks; the shim
+  `site-storage-seed` in tests/shims.txt, removed one release after, with
+  artifacts_storage's read and seed). kit/storage.js stays while a copy
+  opens in a browser tab (`copy_href`), in memory there. Probes, permanent rows of
   hostile-opener: two sites can't read each other's localStorage,
   indexedDB or cookies, `Domain=localhost` cookies included (Electron 44
   refuses them from `v-*.localhost`: host-only cookies only, m_60437).
@@ -629,7 +634,7 @@ the artifact the `doc`'s handle names, never from an id the view sends.
 | 2 | pdf, video | media ("Preview") | the pdf and video arms, pdf.js, video.js, `STREAMED_KINDS` |
 | 3 | docx, pptx | docs, slides | their arms, docx.js, slides.js |
 | 4 | xlsx, csv | sheets | `office_kind`, sheet.js, `/a/<id>/view`, viewer.js, save.rs moved under A4's write |
-| 5 | sites | sites | `site` arm, kit/office/site.js, site-select.js, storage.js, artifacts_storage (after its seed shim), `/a/<id>/<v>/framed/` (A5, m_60421) |
+| 5 | sites | sites | `site` arm and BUILTIN rows, kit/office/site.js, site-select.js, the storage POST, `/a/<id>/<v>/framed/` (A5, m_60421); later: storage.js (with `copy_href`), artifacts_storage (after its seed shim) |
 | 6 | bise pages | pages | all the way (Gabriel's q-pages, m_60010): a Pages app in the sandbox through A9; the token, `/api/p/*`, `/p/*`'s html (a redirect), BUILTIN, `viewer_kind`, the purity allowlist |
 
 Pinned (architect m_59941): a test that `bend_plugins::opens::BUILTIN`'s

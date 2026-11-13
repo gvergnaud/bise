@@ -9,8 +9,8 @@
 //   (both pinned by rust/proto/fixtures/anchor_label.json, kit/office/check.mjs);
 // - `same(a, b)`, `KINDS`: one anchor equal to another, the kinds this version knows.
 //
-// Pure: no DOM. Where an office anchor is drawn is each viewer's (kit/office/select.js); an
-// image's, a pdf's or a video's is Preview's (plugins/media, its pdftext.ts).
+// Pure: no DOM. Where an anchor is drawn is its plugin's view's (Writer, Slides, Sheets, Sites;
+// an image's, a pdf's or a video's is Preview's, plugins/media, its pdftext.ts).
 (function (root: typeof globalThis) {
   "use strict";
 

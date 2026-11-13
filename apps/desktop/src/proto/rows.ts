@@ -1096,8 +1096,7 @@ status?: Pr | null, };
 export type ArtifactVersion = { v: number, at_ms: number, note?: string | null, target?: string, copy?: string | null, 
 /**
  * where a window frames this version (the row's rule,
- * pages::site::frame_href: `/a/<id>/view` for the newest office file,
- * `/a/<id>/<v>/view` for an older one, else its copy's link); none
+ * pages::site::copy_href: its copy's link, `/a/<id>/<v>/<file>`); none
  * with no copy served or no page server (architect m_23970)
  */
 frame_url?: string | null, 

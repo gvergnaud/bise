@@ -13,8 +13,8 @@
 //! - [`pick`]: which app opens a target, and the others (Open with);
 //! - [`BUILTIN`]: bise's own types not migrated yet, candidates like any
 //!   opener (`builtin: true` on the row), each row deleted by its
-//!   migration step with its `viewer_kind` arm (a test in
-//!   switchboard's pages/site.rs pins them together).
+//!   migration step (the viewer shell and its `viewer_kind` went with
+//!   step 5; only a bise page is left).
 
 use bise_proto::rows::{OpenRank, Opener, PluginMake, PluginOpens};
 use serde_json::Value;
@@ -598,7 +598,7 @@ pub struct Builtin {
     pub plugin: &'static str,
     pub app: &'static str,
     pub type_title: &'static str,
-    /// today's viewer kind (`pages::site::viewer_kind`), its tool's name
+    /// its kind today (`page`: framed at `/p/<id>`), its tool's name
     pub kind: &'static str,
     pub folder: bool,
     /// its design-system icon (one of [`BUILTIN_ICONS`]), its opener's
@@ -619,11 +619,9 @@ const fn b(key: &'static str, plugin: &'static str, app: &'static str, type_titl
 }
 
 /// bise's own types not migrated yet (docs/plugin-apps.md A3, migration
-/// table): each step deletes its rows with its `viewer_kind` arms.
+/// table): each step deletes its rows. Steps 1-5 are done (Preview, Writer,
+/// Slides, Sheets, Sites); a bise page is the last, step 6.
 pub const BUILTIN: &[Builtin] = &[
-    b("*.html", "sites", "Sites", "Web page", "site", "page"),
-    b("*.htm", "sites", "Sites", "Web page", "site", "page"),
-    Builtin { key: "*/index.html", plugin: "sites", app: "Sites", type_title: "Website", kind: "site", folder: true, icon: "page" },
     // a bise page: the hub names a page artifact `<id>.page` for A2 (A9,
     // architect m_60436); today's frame is its `/p/<id>`
     b("*.page", "pages", "Pages", "bise page", "page", "page"),

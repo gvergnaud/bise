@@ -284,8 +284,8 @@ fn which_app_opens_a_file() {
         ("a plugin's default entry stays behind a built-in", Target::file("plan.page"),
             openers(vec![("abc", op("open", "Abc", &[("*.page", D, false)]))]), Picks::new(),
             (Some("pages#page"), vec!["abc#open"])),
-        ("a built-in site folder", folder("site", &["index.html"]), Openers::default(), Picks::new(),
-            (Some("sites#site"), vec![])),
+        ("a site folder has no built-in row since step 5: Sites' view opens it", folder("site", &["index.html"]), Openers::default(), Picks::new(),
+            (None, vec![])),
     ];
     for (why, target, openers, picks, (want, want_others)) in cases {
         let got = pick(&target, &openers, &picks);

@@ -132,7 +132,7 @@ declare var AmbPearl: {
 // ---- notes.js: the note layer (the console's look: BiseNotes.live)
 /** a voice note's phase and its words (SSE voice, relayed by kit.js) */
 type BiseVoice = { phase?: string; text?: string };
-/** The words of notes.js that the artifact viewer's list reuses (kit/office/select.js). */
+/** The words of notes.js (the artifact viewer's list reused them until its shell went, step 5). */
 type NotesWords = {
   moved: string; say: Record<string, string>; placeholder: string; send: string; failed: string; done: string; sentTag: string; remove: string;
   sent(agent: string): string; listTitle(page: string, n: number): string; sendBar(n: number, agent: string): string;

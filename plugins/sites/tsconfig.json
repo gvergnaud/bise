@@ -1,0 +1,19 @@
+{
+  "//": "Sites' view (ai.mistral.vibe/views/site/): ES modules that import each other and @bise/view (./~kit/view/view.js, served by the hub beside the view: rootDirs maps it to kit/view-root, types only) by relative URL. Emitted next to their .ts by scripts/ts_emit.ts and committed (cargo and the release never run node). typescript is office/sdk's.",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "allowImportingTsExtensions": true,
+    "rootDirs": ["ai.mistral.vibe/views/site", "../../kit/view-root"],
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": [],
+    "strict": true,
+    "alwaysStrict": false,
+    "erasableSyntaxOnly": true,
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "include": ["ai.mistral.vibe/views/site/*.ts"]
+}

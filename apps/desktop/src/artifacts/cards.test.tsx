@@ -74,6 +74,8 @@ describe('the gallery, as he sees it', () => {
     expect(screen.getByTestId('grid.card.h-1/folds.line').textContent).toBe('Preview · amb-win · oct 13');
     // the project never in words: in the line's tip
     expect(screen.getByTestId('grid.card.h-1/target.line').getAttribute('data-tip')).toBe('made by agent-target in harness');
+    // under the line, never over the card's title (designer m_63458)
+    expect(screen.getByTestId('grid.card.h-1/target.line').getAttribute('data-tip-side')).toBe('below');
     // the kind never in words on a card: the extension mark only (shown on hover by its css)
     expect(within(card('h-1/target')).queryByText('image')).toBeNull();
     expect(screen.getByTestId('grid.card.h-1/target.ext').textContent).toBe('png');

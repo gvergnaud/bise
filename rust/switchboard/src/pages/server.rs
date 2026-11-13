@@ -115,6 +115,7 @@ pub struct Response {
 fn reason(status: u16) -> &'static str {
     match status {
         200 => "OK",
+        301 => "Moved Permanently",
         302 => "Found",
         304 => "Not Modified",
         502 => "Bad Gateway",
@@ -149,6 +150,11 @@ impl Response {
     /// A 302 to `to` (a local site's door: its server, or bise's copy).
     pub(crate) fn redirect(to: &str) -> Response {
         Response { status: 302, ctype: "text/plain; charset=utf-8", body: Vec::new(), csp: CSP.into(), location: Some(to.to_string()), etag: None }
+    }
+    /// A 301 to `to`: an old url's new place for good (`/a/<id>/view` →
+    /// `/d/<id>`, artifact/mod.rs), which a browser may remember.
+    pub(crate) fn moved(to: &str) -> Response {
+        Response { status: 301, ..Response::redirect(to) }
     }
     /// A page that says why (a local site's door when it could not open it).
     pub(crate) fn page(status: u16, html: String) -> Response {
@@ -213,15 +219,15 @@ fn handle(stream: TcpStream, pages: &Pages) {
     // a document's file by its url (resources/url, A4): only on its
     // session's view origin, GET or HEAD, byte ranges, never logged
     let view = req.header("host").and_then(|h| super::views::view_host(h, pages.port));
-    if let Some((hash, token)) = view.zip(super::views::doc_file_token(&req.path)) {
+    if let Some((hash, (token, rel))) = view.zip(super::views::doc_file_path(&req.path)) {
         if !matches!(req.method.as_str(), "GET" | "HEAD") {
             let _ = w.write_all(&Response::err(405, "GET or HEAD only").bytes());
             return;
         }
         // the table is read and let go before the file is (doc_files.rs)
-        if let Some(f) = pages.file_of_url(token, hash) {
+        if let Some((f, csp)) = pages.file_of_url(token, hash, rel) {
             let _ = w.set_write_timeout(Some(Duration::from_secs(30)));
-            if super::media::send(&mut w, &f.path, &f.mime, super::views::DOC_FILE_CSP, req.header("range"), req.method == "HEAD") {
+            if super::media::send(&mut w, &f.path, &f.mime, &csp, req.header("range"), req.method == "HEAD") {
                 return;
             }
         }
@@ -408,10 +414,9 @@ fn home(pages: &Pages) -> String {
     shell(pages, "for you", head, "id=\"bise-home\" data-home", &format!("{aside}{inner}"))
 }
 
-/// The file `/a/<id>/<v>/<rest>` names in bise's copy (site::served), its content type and
-/// whether it is the viewer's frame of a site (site::framed); Err: the 404
-/// in words. One rule for [`artifact_file`] and a video's ranges (media.rs).
-fn artifact_target(pages: &Pages, id: &str, v: &str, rest: &[&str]) -> Result<(std::path::PathBuf, &'static str, bool), Response> {
+/// The file `/a/<id>/<v>/<rest>` names in bise's copy (site::served) and its content type;
+/// Err: the 404 in words. One rule for [`artifact_file`] and a video's ranges (media.rs).
+fn artifact_target(pages: &Pages, id: &str, v: &str, rest: &[&str]) -> Result<(std::path::PathBuf, &'static str), Response> {
     let state = pages.store.dir.parent().unwrap_or(&pages.store.dir);
     let store = crate::artifacts::Store::new(state);
     // what is missing, by its place under /a/ (never a path on his machine)
@@ -420,14 +425,11 @@ fn artifact_target(pages: &Pages, id: &str, v: &str, rest: &[&str]) -> Result<(s
     let Some(ver) = v.parse::<u64>().ok().and_then(|n| m.versions.iter().find(|x| x.v == n)) else { return Err(Response::missing(&format!("no such version: {at}"))) };
     let Some(copy) = super::site::served(&m.by, ver.copy.as_deref()) else { return Err(Response::missing(&format!("no copy of it: {at}"))) };
     let base = state.join("artifacts").join(&m.id).join(copy);
-    // the viewer's frame of a site (and its own links): the selection
-    // script in its html (site::framed, architect m_24172)
-    let (select, rest) = super::site::framed(rest);
     let rest: Vec<&str> = rest.iter().copied().filter(|s| !s.is_empty()).collect();
     // a folder's file, or a copied file and the files it links beside it
     let Some(path) = super::site::copy_file(&base, &rest) else { return Err(Response::missing(&format!("no such file: {at}"))) };
     let Some(ctype) = super::site::ctype(&path.to_string_lossy()) else { return Err(Response::missing(&format!("not served: {at}"))) };
-    Ok((path, ctype, select))
+    Ok((path, ctype))
 }
 
 /// A video copy (`GET` or `HEAD /a/<id>/<v>/<file>`, a `video/` type),
@@ -441,7 +443,7 @@ fn media(pages: &Pages, req: &Request) -> Option<(std::path::PathBuf, &'static s
     if !valid_id(id) {
         return None;
     }
-    let (path, ctype, _) = artifact_target(pages, id, v, rest).ok()?;
+    let (path, ctype) = artifact_target(pages, id, v, rest).ok()?;
     ctype.starts_with("video/").then_some((path, ctype))
 }
 
@@ -450,7 +452,7 @@ fn media(pages: &Pages, req: &Request) -> Option<(std::path::PathBuf, &'static s
 /// (site::serves_copy, the same rule as the typed row's frame_url) and
 /// the files an html file links kept beside it (site::copy_file).
 fn artifact_file(pages: &Pages, id: &str, v: &str, rest: &[&str]) -> Response {
-    let (path, ctype, select) = match artifact_target(pages, id, v, rest) {
+    let (path, ctype) = match artifact_target(pages, id, v, rest) {
         Ok(t) => t,
         Err(r) => return r,
     };
@@ -459,7 +461,7 @@ fn artifact_file(pages: &Pages, id: &str, v: &str, rest: &[&str]) -> Response {
         Ok(body) if ctype.starts_with("text/html") => {
             // its kept localStorage, every version's (artifacts_storage, web-storage)
             let kept = crate::artifacts_storage::read(&super::artifact::notes::arts(pages), id);
-            Response { status: 200, ctype, body: super::site::tagged(&body, select, &kept), csp: super::site::ARTIFACT_CSP.into(), location: None, etag: None }
+            Response { status: 200, ctype, body: super::site::tagged(&body, &kept), csp: super::site::ARTIFACT_CSP.into(), location: None, etag: None }
         }
         Ok(body) => Response { status: 200, ctype, body, csp: super::site::ARTIFACT_CSP.into(), location: None, etag: None },
         Err(_) => Response::missing(&format!("no such file: {at}")),

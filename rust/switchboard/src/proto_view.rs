@@ -426,9 +426,9 @@ pub fn cards(snap: &Snapshot, project: &str, now: u64, user_kind: fn(&str) -> bo
 /// the store gave it (the terminal's /artifacts reads it all).
 /// `frame_base`: the page server's base (`http://127.0.0.1:<port>`, None
 /// with no server): a copied file's `frame_url` is it plus where the page
-/// server frames it (pages::site::frame_href: what bise's viewer draws, an
-/// office file, a site, an image or a pdf, at `/a/<id>/view`; any other
-/// file at its own link); a link or a page gets none. `opened`: the app
+/// server frames it (pages::site::copy_href: its own link; every type
+/// opens in its plugin's view, docs/plugin-apps.md steps 1-5); a link or a
+/// page gets none. `opened`: the app
 /// that opens a row and the others (crate::app_openers, A3), the hub's
 /// matcher's answer, never the client's.
 pub fn artifacts(ev: &Value, page_url: impl Fn(&str) -> Option<String>, frame_base: Option<&str>, opened: impl Fn(&Value) -> bend_plugins::opens::Opened) -> Vec<Artifact> {
@@ -453,12 +453,12 @@ pub fn artifacts(ev: &Value, page_url: impl Fn(&str) -> Option<String>, frame_ba
             // a version's frame: its copy (pages::site::served); a file too big to copy
             // has none and opens in its app (docs/plugin-apps.md A4)
             let by = s(r, "by");
-            let frame_of = |x: &Value, n: u64, newest: bool| -> Option<String> {
+            let frame_of = |x: &Value, n: u64| -> Option<String> {
                 let copy = s(x, "copy");
                 let copy = crate::pages::site::served(&by, Some(copy.as_str()))?;
-                frame_base.map(|b| format!("{b}{}", crate::pages::site::frame_href(&id, n, copy, newest)))
+                frame_base.map(|b| format!("{b}{}", crate::pages::site::copy_href(&id, n, copy)))
             };
-            let frame_url = frame_of(r, version, true);
+            let frame_url = frame_of(r, version);
             let versions = r.get("versions").and_then(Value::as_array).map_or_else(Vec::new, |vs| {
                 vs.iter()
                     .map(|x| {
@@ -470,7 +470,7 @@ pub fn artifacts(ev: &Value, page_url: impl Fn(&str) -> Option<String>, frame_ba
                             target: s(x, "target"),
                             copy: Some(s(x, "copy")).filter(|c| !c.is_empty()),
                             // the row's rule, per version (architect m_23970)
-                            frame_url: frame_of(x, n, n == version),
+                            frame_url: frame_of(x, n),
                             by: x.get("by").and_then(|b| serde_json::from_value(b.clone()).ok()),
                         }
                     })
@@ -984,7 +984,7 @@ mod tests {
     }
 
     /// architect m_23970: each version's frame_url is the row's rule
-    /// (pages::site::frame_href) for that version; art-live: the row's
+    /// (pages::site::copy_href) for that version; art-live: the row's
     /// live words come through as the store's row has them.
     #[test]
     fn each_version_gets_its_frame_url_and_the_row_its_live_words() {
@@ -997,8 +997,8 @@ mod tests {
         let base = "http://127.0.0.1:47123";
         let a = artifacts(&ev, |_| None, Some(base), |_| Default::default());
         let urls: Vec<Option<String>> = a[0].versions.iter().map(|x| x.frame_url.clone()).collect();
-        let href = |v: u64, newest: bool| Some(format!("{base}{}", crate::pages::site::frame_href("q3", v, "/st/artifacts/q3/v1/q3.pptx", newest)));
-        assert_eq!(urls, [href(1, false), href(2, true), None], "older: /a/q3/1/view, newest: /a/q3/view, no copy: none");
+        let href = |v: u64| Some(format!("{base}/a/q3/{v}/q3.pptx"));
+        assert_eq!(urls, [href(1), href(2), None], "each version its copy's link, no copy: none");
         assert_eq!(a[0].frame_url, urls[1], "the row's and its newest version's are the same");
         assert_eq!(a[0].live.as_ref().and_then(|l| l.line.as_deref()), Some("v2 · 1 slide changed"));
         assert_eq!(a[0].live.as_ref().and_then(|l| l.back.as_ref()).map(|b| b.v), Some(1));

@@ -416,6 +416,17 @@ describe("a document's view (docs/plugin-apps.md A4, A5)", () => {
     stop();
   });
 
+  // TODO(site-storage-seed): goes in v2026.12.15
+  it("a site's kept storage is asked of the hub with its session, the answer back as is", async () => {
+    const { store, asked } = docRig((c) => (c.cmd === 'view_call' && c.method === 'dev.bise/storage/seed' ? { result: { local: { done: '3' } } } : undefined));
+    const { proxy, stop } = await live(store);
+    proxy.send({ jsonrpc: '2.0', id: 7, method: 'dev.bise/storage/seed', params: {} });
+    await flush();
+    expect(asked.find((c) => c.cmd === 'view_call' && c.method === 'dev.bise/storage/seed')).toEqual({ cmd: 'view_call', project: 'p', doc: SID, method: 'dev.bise/storage/seed', params: {} });
+    expect(proxy.got.at(-1)).toMatchObject({ id: 7, result: { local: { done: '3' } } });
+    stop();
+  });
+
   it("a save passes through with its session as it is: saving…, then saved; a conflict's body becomes a copy", async () => {
     let outcome = 'saved';
     const { store, asked } = docRig((c) => (c.cmd === 'view_call' && c.method === 'ai.mistral.vibe/resources/write' ? { result: { outcome, etag: 'e2' } } : undefined));

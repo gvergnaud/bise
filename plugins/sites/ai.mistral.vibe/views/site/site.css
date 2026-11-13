@@ -1,0 +1,6 @@
+/* Sites (plugins/sites): the site's frame fills the tab; one line of state before it opens. */
+html, body { height: 100%; margin: 0; }
+#site { height: 100%; display: flex; flex-direction: column; }
+.st-frame { flex: 1; width: 100%; border: 0; background: #fff; }
+.st-state { margin: auto; color: var(--color-text-secondary); font: var(--font-text-md-size, 13px) / 1.4 var(--font-sans, system-ui, sans-serif); }
+.st-state[data-state="failed"] { color: var(--color-text-danger); }

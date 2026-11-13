@@ -5,8 +5,9 @@
 //! - [`Pages::doc_binding`]: a session's handle, copied out, or
 //!   `bad-handle`;
 //! - [`Pages::doc_url`]: `resources/url`'s token and the session's origin;
-//! - [`Pages::file_of_url`]: the `/h/` route's file (apps-hub-views'
-//!   route): a token of a session of that origin only;
+//! - [`Pages::file_of_url`]: the `/h/` route's file and its CSP
+//!   (apps-hub-views' route): a token of a session of that origin only, a
+//!   folder document's files by their path (a site, A5);
 //! - [`Pages::root_hash`]: a root file's content hash, cached by its size
 //!   and mtime so a video's ranges hash it once.
 
@@ -54,12 +55,28 @@ impl Pages {
         m.iter().find(|(_, o)| o.sessions.iter().any(|s| s == session)).map(|(h, _)| h.clone())
     }
 
-    /// The file a `/h/<token>` request on view host `origin_hash` gets:
-    /// the token's handle, when its session is one of that origin's.
-    pub fn file_of_url(&self, token: &str, origin_hash: &str) -> Option<FileAt> {
+    /// The file a `/h/<token>[/<rel>]` request on view host `origin_hash`
+    /// gets, with its CSP: the token's handle, when its session is one of
+    /// that origin's; `rel`: a file of a folder document (a site's,
+    /// view_files_disk::in_folder), never of a file's. An html file on a
+    /// document's own origin (`isolate: "document"`, A5) runs as a page
+    /// (view_csp::document_page_csp, the view's declared origins); any
+    /// other is data ([`super::views::DOC_FILE_CSP`]).
+    pub fn file_of_url(&self, token: &str, origin_hash: &str, rel: &str) -> Option<(FileAt, String)> {
         let b = self.files.lock().unwrap_or_else(|e| e.into_inner()).by_url(token).cloned()?;
         (self.session_hash(&b.session).as_deref() == Some(origin_hash)).then_some(())?;
-        crate::view_files_disk::file_at(&super::artifact::notes::arts(self), &self.bise_root, &b.target).ok()
+        let at = crate::view_files_disk::file_at(&super::artifact::notes::arts(self), &self.bise_root, &b.target).ok()?;
+        let f = match (at.path.is_dir(), rel) {
+            (true, _) => crate::view_files_disk::in_folder(&at.path, rel).ok()?,
+            (false, "") => at,
+            (false, _) => return None,
+        };
+        let page = self.sandbox_of(origin_hash, Some(&b.session)).filter(|s| s.isolated && f.mime == "text/html");
+        let csp = match page {
+            Some(s) => super::view_csp::document_page_csp(&s.csp, self.port, self.view_dev),
+            None => super::views::DOC_FILE_CSP.to_string(),
+        };
+        Some((f, csp))
     }
 
     /// A root file's content hash (its read's `etag`), from the cache

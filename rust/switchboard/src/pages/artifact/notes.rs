@@ -127,7 +127,7 @@ pub fn anchored(n: &Note) -> Option<Anchor> {
 /// Its text is `parts::render` of these parts.
 ///
 /// ```text
-/// you sent 2 notes on "q3.pptx" (artifact q3-pptx v4, http://127.0.0.1:47438/a/q3-pptx/view):
+/// you sent 2 notes on "q3.pptx" (artifact q3-pptx v4, http://127.0.0.1:47438/a/q3-pptx/4/q3.pptx):
 /// 1. <artifact-selection artifact="q3-pptx" version="4" n="1">
 /// {"kind":"shape","slide":2,"shape":"12"}
 /// Revenue grew 4%
@@ -183,8 +183,16 @@ pub fn parts_json(pages: &Pages, id: &str, sent: &[Note]) -> String {
     serde_json::to_string(&ps).unwrap_or_default()
 }
 
+/// Where the agent finds artifact `id` in its message: its newest copy's
+/// link (pages::site::copy_href; its app opens it in the window, the viewer
+/// shell is gone with docs/plugin-apps.md step 5), else its target.
 fn view_url(pages: &Pages, id: &str) -> String {
-    format!("{}/a/{id}/view", pages.base())
+    let Some(m) = arts(pages).get(id) else { return format!("{}/a/{id}", pages.base()) };
+    let Some(cur) = m.current() else { return format!("{}/a/{id}", pages.base()) };
+    match super::super::site::served(&m.by, cur.copy.as_deref()) {
+        Some(copy) => format!("{}{}", pages.base(), super::super::site::copy_href(id, cur.v, copy)),
+        None => cur.target.clone(),
+    }
 }
 
 /// The notes of artifact `id` with their outcomes, as served and pushed.

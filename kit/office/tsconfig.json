@@ -1,5 +1,5 @@
 {
-  "//": "The artifact viewer's scripts (served raw by the hub's page server under /kit/office/): ES modules that import each other and office/dist's bundles by their URL (/kit/office/x.js, mapped here to the .ts next door or office/dist's .d.ts), plus theme.ts, a classic script. Emitted next to their .ts by scripts/ts_emit.ts and committed (cargo and the release never run node). ../globals.d.ts types the kit's shared window APIs (BiseAnchors, BiseNotes), globals.d.ts the viewer's own. typescript is office/sdk's.",
+  "//": "kit/office/frame.ts, the one list of messages between an artifact's frame and the desktop window (the viewer shell that lived here went with docs/plugin-apps.md step 5). Emitted next to its .ts by scripts/ts_emit.ts and committed (cargo and the release never run node). typescript is office/sdk's.",
   "compilerOptions": {
     "target": "ESNext",
     "module": "ESNext",
@@ -17,6 +17,5 @@
     "noEmit": true,
     "skipLibCheck": true
   },
-  "//erasable": "no erasableSyntaxOnly here: office/dist's .d.ts re-export office/sdk's sources, which use parameter properties, so they join this program; ts_emit's transpile keeps the viewer's own files to their types-only diff",
-  "include": ["*.ts", "../globals.d.ts", "../../office/sdk/src/sheets/exceljs.d.ts"]
+  "include": ["*.ts"]
 }

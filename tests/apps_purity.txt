@@ -18,21 +18,11 @@ apps/desktop/src/plugins/SkillTab.tsx | 1 | step 1 | a skill's .md file drawn as
 # ---- step 4: xlsx, csv (sheets), and the viewer shell the office types share
 office/sdk/build.ts | 3 | step 4 | the view bundles' entries (steps 1-4 each move theirs)
 office/sdk/test/viewer.test.ts | 2 | step 4 | the viewers' units, move with their views (steps 1-4)
-office/sdk/test/notes.offscreen.ts | 2 | step 4 | the viewer page's notes check, by /kit/office/ urls
-kit/office/select.ts | 2 | step 4 | the viewers' selection and notes, replaced by @bise/view's
-kit/office/swap.ts | 1 | step 4 | the viewer's live swap to a new version
-kit/office/theme.ts | 1 | step 4 | the viewer page's theme, replaced by the host context's
-kit/office/globals.d.ts | 1 | step 4 | the viewers' globals
-kit/pointer.check.ts | 2 | step 4 | lists kit/office/viewer.css and select.css among the kit's sheets
-rust/switchboard/src/pages/artifact/mod.rs | 1 | step 4 | /kit/office/ bundles for /a/<id>/view
-rust/switchboard/src/pages/artifact/view.rs | 7 | step 5 | /a/<id>/view's shell, by kind (site the last)
 
-# ---- step 5: sites
-kit/office/site.ts | 3 | step 5 | the site frame, moves to plugins/sites
-kit/office/viewer.ts | 1 | step 5 | the viewer shell, until its last kind moves
+# ---- step 5: sites (the viewer shell went with it)
 kit/office/frame.ts | 1 | step 5 | the viewer's frame messages, until its last kind moves
 apps/desktop/src/artifacts/frameNote.test.ts | 3 | step 5 | reads kit/office/frame.js's FRAME
-rust/switchboard/src/pages/site.rs | 2 | step 5 | viewer_kind, office_kind and the sites' list: each step deletes its arms
+rust/switchboard/src/pages/site.rs | 1 | step 5 | the sites' list (kind == site), until Sites lists its own
 
 # ---- thumbs: thumbnails, icons and previews from the opener (A6b, apps-thumbs)
 apps/desktop/src/main/thumbs/prune.ts | 1 | thumbs | the cache's .png files, rewritten with the cache per version

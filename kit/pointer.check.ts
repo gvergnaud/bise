@@ -31,12 +31,11 @@ const ARROW = base.find((l) => l.startsWith(":is(:disabled") && l.includes("curs
 const pages = (dir: string) => (existsSync(join(root, dir)) ? readdirSync(join(root, dir)).filter((f) => f.endsWith(".html")).map((f) => `${dir}/${f}`) : []);
 const ROOTS = [
   "kit/kit.css", // the hub's pages (with tokens.css and notes.css)
-  "kit/office/viewer.css", // the artifact viewers: office, markdown, pdf, image, video
   "site/docs/docs.css", // bise.dev/docs
   ...["site", "site/book", "site/m"].flatMap(pages).filter((p) => read(p).includes("<style")),
 ];
 /** every stylesheet text of the web surfaces: the roots and the kit's other sheets */
-const SHEETS = [...ROOTS, "kit/notes.css", "kit/site.css", "kit/office/select.css", "site/book/paper.css"];
+const SHEETS = [...ROOTS, "kit/notes.css", "kit/site.css", "site/book/paper.css"];
 const styleOf = (p: string) => (p.endsWith(".html") ? [...read(p).matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join("\n") : read(p));
 
 law("the kit has the root rule this check copies (kit.css: the hand, then the arrow when disabled)", () => {

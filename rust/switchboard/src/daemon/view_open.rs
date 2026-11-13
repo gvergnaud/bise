@@ -17,7 +17,7 @@
 //!    outlives an open that did not happen.
 //!
 //! One of bise's own types not migrated yet (a BUILTIN opener) answers
-//! the frame its viewer draws today ([`frame_of`], the row's own rule).
+//! its frame today ([`frame_of`], the row's own rule: a bise page's page).
 
 use super::views::{gone, read_view, server_error, static_folder, ViewDone};
 use super::Shell;
@@ -61,9 +61,8 @@ fn target_of(r: &Resolved) -> Target {
 }
 
 /// The frame of version `version` (None: the newest) of the artifact
-/// `meta`, at `base` (the page server's): a page's page, a copy bise's
-/// viewer draws at `/a/<id>/view` (or `/a/<id>/<v>/view` for an older
-/// version), any other copy at its own link. None: nothing to frame (a
+/// `meta`, at `base` (the page server's): a page's page, a copy at its own
+/// link (pages::site::copy_href). None: nothing to frame (a
 /// link, a file too big to copy: its app reads it by handle), or no such version.
 pub fn frame_of(meta: &crate::artifacts::Meta, version: Option<u64>, base: &str) -> Option<String> {
     let newest = meta.versions.iter().map(|v| v.v).max()?;
@@ -73,7 +72,7 @@ pub fn frame_of(meta: &crate::artifacts::Meta, version: Option<u64>, base: &str)
         return Some(format!("{base}/p/{}", meta.id));
     }
     let copy = crate::pages::site::served(&meta.by, v.copy.as_deref())?;
-    Some(format!("{base}{}", crate::pages::site::frame_href(&meta.id, n, copy, n == newest)))
+    Some(format!("{base}{}", crate::pages::site::copy_href(&meta.id, n, copy)))
 }
 
 /// Step 1's answer: a BUILTIN's frame (the whole answer), or a plugin's
@@ -191,8 +190,10 @@ impl Shell {
                     sh.apps_seen(&f.plugin, &f.server, &list);
                     let tool = view_call::tool_of(&list, &f.tool);
                     let permissions = view_call::granted(&r.declared, &grant);
-                    let hash = crate::pages::views::origin_key(&f.plugin, &f.server, &f.uri, crate::view_open::doc_key(c.isolate, &target, &project).as_ref());
-                    pages.view_sandbox_as(&hash, &doc, crate::pages::views::ViewSandbox { csp: r.csp.clone(), perms: permissions.clone(), folder });
+                    let key = crate::view_open::doc_key(c.isolate, &target, &project);
+                    let hash = crate::pages::views::origin_key(&f.plugin, &f.server, &f.uri, key.as_ref());
+                    let sandbox = crate::pages::views::ViewSandbox { csp: r.csp.clone(), perms: permissions.clone(), folder, isolated: key.is_some() };
+                    pages.view_sandbox_as(&hash, &doc, sandbox);
                     let origin = bise_proto::view_rules::origin_of(&hash, pages.port);
                     let document = crate::view_open::facts(&c.resolved, &c.opener.type_title, writable, &c.versions);
                     let resource = ViewResource {
@@ -233,9 +234,9 @@ mod tests {
     fn an_artifact_opens_in_the_frame_its_row_draws_today() {
         let base = "http://127.0.0.1:4";
         let m = meta("t1", &[(1, Some("v1/q3.html")), (2, Some("v2/q3.html"))]);
-        assert_eq!(frame_of(&m, None, base).as_deref(), Some("http://127.0.0.1:4/a/q3/view"), "the newest");
-        assert_eq!(frame_of(&m, Some(2), base).as_deref(), Some("http://127.0.0.1:4/a/q3/view"));
-        assert_eq!(frame_of(&m, Some(1), base).as_deref(), Some("http://127.0.0.1:4/a/q3/1/view"), "an older version");
+        assert_eq!(frame_of(&m, None, base).as_deref(), Some("http://127.0.0.1:4/a/q3/2/q3.html"), "the newest: its copy");
+        assert_eq!(frame_of(&m, Some(2), base).as_deref(), Some("http://127.0.0.1:4/a/q3/2/q3.html"));
+        assert_eq!(frame_of(&m, Some(1), base).as_deref(), Some("http://127.0.0.1:4/a/q3/1/q3.html"), "an older version");
         assert_eq!(frame_of(&m, Some(9), base), None, "no such version");
         assert_eq!(frame_of(&meta("page", &[(1, None)]), None, base).as_deref(), Some("http://127.0.0.1:4/p/q3"), "a page: its page");
         assert_eq!(frame_of(&meta("t1", &[(1, None)]), None, base), None, "no copy: nothing to frame");
