@@ -617,7 +617,13 @@ with tempfile.TemporaryDirectory() as home:
     # file here (HEAVY_ADMIT_FILE: quiet windows, our jobs' CPU, the lanes), the load another
     loadf = os.path.join(home, "load")
     admitf = os.path.join(home, "admit")
-    envl = dict(envr, HEAVY_LOAD_FILE=loadf, HEAVY_LOAD_CEILING="24", HEAVY_JOBS_CPU="900", HEAVY_ADMIT_FILE=admitf)
+    # the load probe's ps is a file too (HEAVY_PROBE_PS): his process's args must never reach the log
+    psf = os.path.join(home, "ps")
+    open(psf, "w").write("  PID  PPID  %CPU COMM             ARGS\n"
+                         "  900     1 300.0 /usr/local/bin/s /usr/local/bin/someapp --key=HIS\n"
+                         " 1518     1  40.0 sb-core          /x/.local/share/bise/sb-core\n")
+    envl = dict(envr, HEAVY_LOAD_FILE=loadf, HEAVY_LOAD_CEILING="24", HEAVY_JOBS_CPU="900", HEAVY_ADMIT_FILE=admitf,
+                HEAVY_PROBE_PS=psf)
 
     def admits(load, facts, what, extra=None, args=()):
         """Whether a job starts with that load and those facts, and its stderr: it ran, or heavy-run
@@ -659,6 +665,9 @@ with tempfile.TemporaryDirectory() as home:
     check(any("admitted over ceiling, load 50, ours 300%" in l for l in lines()), "heavy.log notes it %r" % lines()[-2:])
     ok, err = admits(50, "quiet=- cpu=600 agents=0 low=0", "over ceiling, ours")
     check(not ok and "the ceiling 24; ours 600%" in err, "load 50, ours 600 pct (over half the bar): the floor waits " + repr(err[-200:]))
+    probes = [l for l in lines() if "\tload-probe\t" in l]
+    check(len(probes) == 1 and probes[0].split("\t")[2:] == ["50", "ours=0% -", "bise=40% sb-core:40", "his=300% someapp:300"],
+          "its first load hold logs whose CPU it waits on, his basename only: %r" % probes)
     ok, _ = admits(50, "quiet=- cpu=100 agents=1 low=0", "over ceiling, past floor")
     check(not ok, "load 50 with an agent job running: the next one waits")
     # the quiet window: nothing new starts, floors included; the release lane's job does

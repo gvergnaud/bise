@@ -457,6 +457,11 @@ admit_facts() {
   if [ -n "${HEAVY_ADMIT_FILE:-}" ]; then cat "$HEAVY_ADMIT_FILE" 2>/dev/null; return; fi
   /usr/bin/python3 "$(cd "$(dirname "$0")" && pwd)/disk_reclaim.py" --admit 2>/dev/null
 }
+# the load probe's fields: our trees', other bise's and his CPU, the top 3 of each (one ps, 1 s
+# at most: disk_reclaim.py --probe; HEAVY_PROBE_PS (tests): a ps text file instead of ps)
+load_probe() {
+  /usr/bin/python3 "$(cd "$(dirname "$0")" && pwd)/disk_reclaim.py" --probe "$D" 2>/dev/null || echo "probe=failed"
+}
 # a field of that line: fact <name> <line>
 fact() { echo "$2" | tr ' ' '\n' | sed -n "s/^$1=//p"; }
 # whether a release-lane job (heavy5.lock) ran at any time from epoch $1 to
@@ -862,7 +867,11 @@ while :; do
         # over the ceiling: a lane's floor still goes when the load isn't ours (our jobs under
         # half the bar); a runaway of ours holds everyone
         if [ -n "$floor" ] && [ $(( jc * 2 )) -lt "$bar" ]; then over="admitted over ceiling, load $ld, ours ${jc}%"
-        else hold=load; msg="the machine is busy (load $ld, the ceiling $ceil; ours ${jc}%)"; fi
+        else hold=load; msg="the machine is busy (load $ld, the ceiling $ceil; ours ${jc}%)"
+          # whose CPU it waits on, once per wait (architect m_64754): never holds the admission
+          [ -n "${probed:-}" ] || { probed=1; printf "%s\tload-probe\t%s\t%s\n" "$(date +%s)" "$ld" \
+            "$(load_probe | head -1)" >>"$D/heavy.log"; }
+        fi
       elif [ -n "$floor" ]; then
         :  # the lane's floor: its first job goes
       elif [ "$jc" -ge "$bar" ]; then

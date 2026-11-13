@@ -191,6 +191,46 @@ def _self_test():
     assert tree_cpu(ps, [10]) == 595.0, "a job's whole tree, its setsid'd electron too"
     assert tree_cpu(ps, [10, 20, 11]) == 646.0, "two jobs, a pid listed twice counted once"
     assert tree_cpu(ps, [99]) == 0 and tree_cpu([], [10]) == 0, "no such job: 0"
+    # the load probe (architect m_64754): ps text in, three classes out, his args never logged
+    text = "\n".join([
+        "  PID  PPID  %CPU COMM             ARGS",
+        "    1     0   4.0 /sbin/launchd    /sbin/launchd",
+        "  715     1  80.0 /Applications/Go /Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        " 1109   715 120.0 /Applications/Go /Applications/Google Chrome.app/Contents/Frameworks/G.framework/Helpers/"
+        "Google Chrome Helper (GPU).app/Contents/MacOS/Google Chrome Helper (GPU) --token=SECRET https://x.y/z",
+        "  900     1 300.0 /usr/local/bin/s /usr/local/bin/someapp --key=HIS",
+        " 1518     1   5.0 /Users/u/.local /Users/u/.local/share/bise/versions/r/sb-core",
+        " 1600  1518   1.0 /bin/bash        /bin/bash -c cd /Users/u/.bise/worktrees/h-1/tasks-build/harness && x",
+        " 1601  1600 400.0 cargo            cargo test -p bend-tui",
+        " 1602  1601 200.0 rustc            rustc --crate-name a",
+        " 1700  1518 150.0 node             node vite build",
+        " 2000     1   1.0 /bin/bash        /bin/bash /Users/u/.bise/run/heavy-run tests/gate.sh quick",
+        " 2001  2000 500.0 cargo            cargo test -p switchboard",
+        " 2100     1  50.0 zsh              -zsh",
+        " 2200     1  60.0 /Users/u/lab/har /Users/u/lab/harness/rust/target/debug/bise-gate x",
+        "junk line",
+    ])
+    rows = ps_rows(text)
+    assert len(rows) == 13 and rows[2][3].startswith("/Applications/Google Chrome.app/Contents/Frameworks"), rows[2]
+    assert ps_rows("") == [] and ps_rows("no header\n 1 0 1.0 x x") == [], "no header: no rows"
+    assert exe_name(rows[2][3]) == "Google Chrome Helper (GPU)", "a Mac app's binary keeps its spaces"
+    assert exe_name("cargo test") == "cargo" and exe_name("-zsh") == "-zsh" and exe_name("") == "?"
+    paths = ["/Users/u/.bise/", "/Users/u/.local/share/bise/", "/Users/u/lab/harness/"]
+    assert bise_tag("/bin/bash -c cd /Users/u/.bise/worktrees/h-1/tasks-build/harness", paths) == "bash@tasks-build"
+    assert bise_tag("python3 /Users/u/.bise/hubs/h/agents/fast-loop/tmp/x.py", paths) == "python3@fast-loop"
+    assert bise_tag("/Users/u/.local/share/bise/versions/r/sb-core", paths) == "sb-core"
+    assert bise_tag("cargo test", paths) is None and bise_tag("/x/repl-live --y", paths) == "repl-live"
+    pr = load_probe(rows, [2000], paths)
+    assert pr["ours"] == (501.0, [("cargo", 500.0), ("bash", 1.0)]), pr["ours"]
+    assert pr["bise"][0] == 816.0, "its shell's cargo by ancestry, a build under a known tree: %r" % (pr["bise"],)
+    assert pr["bise"][1] == [("cargo@tasks-build", 400.0), ("rustc@tasks-build", 200.0), ("node", 150.0)], pr["bise"]
+    assert pr["his"] == (554.0, [("someapp", 300.0), ("Google Chrome Helper (GPU)", 120.0), ("Google Chrome", 80.0)]), pr["his"]
+    line = probe_line(pr)
+    assert line.split("\t")[0] == "ours=501% cargo:500,bash:1", line
+    assert "SECRET" not in line and "HIS" not in line and "https" not in line, "his args never logged: " + line
+    assert probe_line(load_probe([], [1], paths)) == "ours=0% -\tbise=0% -\this=0% -"
+    assert load_probe([(5, 5, 1.0, "loop"), (6, 7, 1.0, "a"), (7, 6, 1.0, "b")], [], paths)["his"][0] == 3.0, \
+        "a pid its own parent, a ppid cycle: no hang"
     import tempfile
     with tempfile.TemporaryDirectory() as d:
         build = os.path.join(d, "state", "build")
@@ -440,6 +480,138 @@ def admit_facts(run):
     agents = sum(1 for s, _, r in jobs if s not in release and r in (0, 1, 2))
     low = sum(1 for s, _, r in jobs if s not in release and r == 3)
     return "quiet=%s cpu=%d agents=%d low=%d" % (",".join(q) or "-", int(tree_cpu(rows, [p for _, p, _ in jobs])), agents, low)
+
+
+# the load probe (fast-loop, architect m_64754): whose CPU a load wait waits on. One ps snapshot
+# at a wait's first load hold, three classes: our heavy-run trees, other bise, the rest (his)
+BISE_BINS = ("bise", "repl-live", "sb-core", "sb", "bend", "switchboard")
+
+
+def ps_rows(text):
+    """[(pid, ppid, %cpu, args)] from 'ps -axo pid,ppid,pcpu,comm,args' text, pure. comm is cut
+    to its column's width and may hold spaces: args starts where the header's ARGS does."""
+    lines = text.splitlines()
+    if not lines or "ARGS" not in lines[0]:
+        return []
+    at = lines[0].index("ARGS")
+    rows = []
+    for line in lines[1:]:
+        p = line[:at].split(None, 3)
+        if len(p) < 3 or not p[0].isdigit() or not p[1].isdigit():
+            continue
+        try:
+            rows.append((int(p[0]), int(p[1]), float(p[2]), line[at:].strip()))
+        except ValueError:
+            continue
+    return rows
+
+
+def exe_name(args):
+    """The executable's basename from a command line, pure: a Mac app's binary may hold spaces
+    (.../Contents/MacOS/Google Chrome Helper (Renderer) --type=...), else the first word's."""
+    i = args.find("/Contents/MacOS/")
+    if i >= 0:
+        name = args[i + len("/Contents/MacOS/"):]
+        j = name.find(" -")
+        return (name[:j] if j >= 0 else name).strip() or "?"
+    w = args.split(None, 1)
+    return os.path.basename(w[0]) if w else "?"
+
+
+def bise_tag(args, paths):
+    """None when args show nothing of bise; else its label: the basename, plus the agent or
+    worktree name its path gives (.../worktrees/<hub>/<agent>/..., .../agents/<agent>/...), pure.
+    paths: the bise home, its install dir and the known trees."""
+    name = exe_name(args)
+    hit = name in BISE_BINS or any(p and p in args for p in paths)
+    if not hit:
+        return None
+    for mark in ("/worktrees/", "/agents/"):
+        i = args.find(mark)
+        if i >= 0:
+            parts = args[i + len(mark):].split("/")
+            who = parts[1] if mark == "/worktrees/" and len(parts) > 1 else parts[0]
+            who = who.split()[0] if who.split() else ""
+            if who:
+                return "%s@%s" % (name, who)
+    return name
+
+
+def load_probe(rows, job_pids, paths):
+    """{class: (total %CPU, [(label, %CPU)] top 3)} for 'ours', 'bise', 'his', pure. ours: the
+    heavy-run jobs' trees by ppid; bise: a process whose args show bise (bise_tag) or whose
+    parent is bise's (an agent's cargo has no bise path, its shell's parent has), labelled like
+    its nearest tagged ancestor when it has none of its own; his: the rest, its basename only,
+    never args (they can hold URLs, paths, tokens). Labels summed, the top 3 by CPU."""
+    kids, by = {}, {}
+    for r in rows:
+        kids.setdefault(r[1], []).append(r[0])
+        by[r[0]] = r
+    ours, todo = set(), [p for p in job_pids if p in by]
+    while todo:
+        p = todo.pop()
+        if p not in ours:
+            ours.add(p)
+            todo += kids.get(p, [])
+    tags = {}
+
+    def tag(pid, depth=0):
+        if pid in tags:
+            return tags[pid]
+        r = by.get(pid)
+        t = None
+        if r is not None and depth < 64:
+            t = bise_tag(r[3], paths)
+            if t is None and r[1] != pid and r[1] > 1:
+                up = tag(r[1], depth + 1)
+                t = up and (exe_name(r[3]) + "@" + up.split("@", 1)[1] if "@" in up else exe_name(r[3]))
+        tags[pid] = t
+        return t
+    sums = {"ours": {}, "bise": {}, "his": {}}
+    for pid, _, cpu, args in rows:
+        if pid in ours:
+            c, label = "ours", exe_name(args)
+        else:
+            t = tag(pid)
+            c, label = ("bise", t) if t else ("his", exe_name(args))
+        sums[c][label] = sums[c].get(label, 0.0) + cpu
+    return {c: (sum(d.values()), sorted(d.items(), key=lambda x: (-x[1], x[0]))[:3]) for c, d in sums.items()}
+
+
+def probe_line(probe):
+    """load_probe's result as heavy.log's fields: 'ours=<cpu>% <label>:<cpu>,...' per class."""
+    out = []
+    for c in ("ours", "bise", "his"):
+        tot, top = probe[c]
+        out.append("%s=%d%% %s" % (c, tot, ",".join("%s:%d" % (l.replace(",", ";").replace("\t", " "), v)
+                                                    for l, v in top) or "-"))
+    return "\t".join(out)
+
+
+def probe_paths():
+    """bise's own paths for bise_tag: its home, its install dir, the shared trees."""
+    return [os.path.expanduser("~/.bise/"), os.path.expanduser("~/.local/share/bise/")] \
+        + [t.rstrip("/") + "/" for t in shared_trees()]
+
+
+def probe(run):
+    """The load probe's fields, one ps (1 s at most: over it or failed, the line says so).
+    HEAVY_PROBE_PS (tests): that file's text instead of ps's."""
+    f = os.environ.get("HEAVY_PROBE_PS")
+    if f:
+        text = open(f).read()
+    else:
+        try:
+            text = subprocess.run(["ps", "-axww", "-o", "pid,ppid,pcpu,comm,args"], capture_output=True,
+                                  text=True, timeout=1).stdout
+        except subprocess.TimeoutExpired:
+            return "probe=ps over 1 s"
+        except (OSError, subprocess.SubprocessError) as e:
+            return "probe=ps failed: %s" % type(e).__name__
+    rows = ps_rows(text)
+    if not rows:
+        return "probe=ps gave nothing"
+    return probe_line(load_probe(rows, [p for _, p, _ in heavy_jobs(os.path.join(run, "reserve"))], probe_paths()))
 
 
 def stray(t):
@@ -1078,6 +1250,7 @@ def main():
     ap.add_argument("--self-test", action="store_true")
     ap.add_argument("--own", metavar="CWD", help="the own-cap of the job that starts in CWD (heavy-run)")
     ap.add_argument("--admit", action="store_true", help="heavy-run's admission facts: quiet windows, our jobs' CPU, lanes")
+    ap.add_argument("--probe", metavar="RUN", help="the load probe's heavy.log fields: whose CPU a load wait waits on")
     ap.add_argument("--grown", nargs="+", metavar="T0 TREE [DIR]",
                     help="KB a job grew its dirs (relative to TREE; none: its cargo targets) since T0 (heavy-run)")
     a = ap.parse_args()
@@ -1097,6 +1270,12 @@ def main():
         except Exception as e:  # never a failed admission: no line, heavy-run then reads none
             print("disk_reclaim --admit: %s: %s" % (type(e).__name__, e), file=sys.stderr)
             return 1
+        return 0
+    if a.probe:
+        try:
+            print(probe(a.probe))
+        except Exception as e:  # never a held admission: the line says so, the wait goes on
+            print("probe=failed: %s" % type(e).__name__)
         return 0
     if a.own:
         try:
