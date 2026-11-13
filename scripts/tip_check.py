@@ -439,6 +439,12 @@ def away_step(home, main_tree, wt, tip, base, log, v, journals, now=time.time, s
                SB_BUILD_DIR=os.environ.get("SB_BUILD_DIR") or os.path.join(home, "dev", "build"))
     for k in ("SB_SOCKET", "CARGO_TARGET_DIR", "HEAVY_SLOT"):
         env.pop(k, None)
+    # node and pnpm for the candidate's build: fnm's default alias, as nightly_gate.sh adds it (the
+    # hub starts this runner with no shell setup: on 11-13 03:55 the build died 'pnpm: command not
+    # found' and that infra failure was blamed on a land)
+    nb = os.path.join(os.environ.get("FNM_DIR") or os.path.join(os.path.expanduser("~"), ".local", "share", "fnm"), "aliases", "default", "bin")
+    if os.path.isdir(nb):
+        env["PATH"] = nb + os.pathsep + env.get("PATH", "")
     poll = float(os.environ.get("TIP_CHECK_AWAY_POLL", 20))
     with open(log, "a") as o:
         o.write("== %s as-he-does quick on %s (he's away, idle %d s), its out %s\n" % (time.strftime("%F %T"), tip[:12], idle, out))
@@ -472,6 +478,11 @@ def away_step(home, main_tree, wt, tip, base, log, v, journals, now=time.time, s
     except ValueError:
         known = {}
     kind, new = away_verdict(steps, reds, known)
+    # a tool missing (exit 127, 'command not found') is this machine's, never a land's: no verdict
+    infra = [l for l in rd("candidate.log").splitlines()[-20:] if "command not found" in l or "exit 127" in l]
+    if kind == "red" and infra:
+        v["ahd"] = "none:infra (%s)" % infra[-1].strip()[:120]
+        return
     v["ahd"] = {"green": "green", "none": "none:no result (%s)" % out, "owned": "owned:%d" % len(reds)}.get(kind, "red:" + ";".join(new))
     if kind != "red":
         return
