@@ -9,6 +9,7 @@
 // Bise fait mac keeps main's palette whole (r2-palette, Gabriel m_44243): its glyphs, its rows,
 // no chips. Only the rows in view are drawn, the others are gaps of their height (paletteWindow.ts,
 // cmdk-perf): a one-letter query can match a thousand rows. Owner: amb-web (lead m_11864), in amb-win's shell.
+import { useCoverWhile } from '@/ds';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { useCoreEvent, useIndex, useProjects, useStore } from '@/store';
@@ -117,6 +118,8 @@ export function Palette({ onClose }: { onClose: () => void }) {
   const [at, setAt] = useState(0);
   const [version, setVersion] = useState(0);
   const field = useRef<HTMLInputElement>(null);
+  // a web tab's page draws above the window's page: it hides while the palette shows (ds/cover.ts; ui-review m_64756)
+  useCoverWhile(true);
   useCoreEvent(
     useCallback((ev: Ev) => {
       if (READS.has(ev.ev)) setVersion((v) => v + 1);

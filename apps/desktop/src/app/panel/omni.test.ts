@@ -118,11 +118,13 @@ describe('the rows (designer m_64584)', () => {
 });
 
 describe('a page with its title (a web tab read it)', () => {
-  it('its title matches by prefix and completes inline', () => {
+  it('its title ranks it as a prefix match, but only its address completes inline (Chrome; ui-review m_64756)', () => {
     const p: WebPage = { url: 'https://docs.rs/tokio', title: 'Tokio docs', n: 1, visits: [{ at: NOW, typed: false }] };
-    const hits = omniHits('tok', web(p), [], NONE, NOW);
-    expect(hits).toHaveLength(1);
-    expect(completionOf('tok', hits[0])).toBe('tokio docs');
+    const hits = omniHits('tok', web(p), [item('w', 'tokens', 200)], NONE, NOW);
+    expect(hits.map((h) => h.kind)).toEqual(['web', 'found']);
+    expect(completionOf('tok', hits[0])).toBeNull();
+    expect(omniRows('tok', hits).map((r) => r.kind)).toEqual(['search', 'web', 'found']);
+    expect(completionOf('docs', hits[0])).toBe('docs.rs/tokio');
     expect(omniHits('docs', web(p), [], NONE, NOW)).toHaveLength(1);
   });
 });

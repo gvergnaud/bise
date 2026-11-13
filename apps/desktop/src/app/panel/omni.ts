@@ -85,15 +85,21 @@ function classOf(q: string, prefixes: readonly string[], hay: string): number {
   return ws.every((w) => l.includes(w)) ? 1 : 0;
 }
 
-/** What a page completes from: its shown URL, then with www., then whole, then its title (a web tab read it). Pure. */
+/** What a page's address completes from: its shown URL, then with www., then whole. Pure. */
+function addressPrefixes(p: WebPage): readonly string[] {
+  return [shownUrl(p.url), noScheme(p.url), p.url];
+}
+
+/** What ranks a page as a prefix match: its address, then its title (a web tab read it). Pure. */
 function pagePrefixes(p: WebPage): readonly string[] {
-  return [shownUrl(p.url), noScheme(p.url), p.url, ...(p.title === undefined ? [] : [p.title])];
+  return [...addressPrefixes(p), ...(p.title === undefined ? [] : [p.title])];
 }
 
 /** The whole text a hit completes `q` to (his letters kept, the rest the hit's), or null: no prefix match. Pure. */
 export function completionOf(q: string, hit: OmniHit | undefined): string | null {
   if (hit === undefined) return null;
-  const c = prefixOf(q, hit.kind === 'web' ? pagePrefixes(hit.page) : [hit.item.a.title]);
+  // a page completes its address only, as Chrome: its title ranks it, never fills the field (ui-review m_64756)
+  const c = prefixOf(q, hit.kind === 'web' ? addressPrefixes(hit.page) : [hit.item.a.title]);
   return c === null ? null : q + c.slice(q.length);
 }
 
