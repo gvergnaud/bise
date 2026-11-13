@@ -80,15 +80,22 @@ describe('a change in the panel (page pr-guided V2)', () => {
     };
     let v = refuse('gh_missing', 'looked in /usr/bin:/bin');
     const why = v.getByTestId('review.failed.why');
-    expect(why.textContent).toBe(pages.review_gh_missing({ cmd: pages.review_gh_install }) + pages.copy);
+    expect(why.textContent).toBe(pages.review_gh_missing({ cmd: pages.review_gh_install }));
     expect(why.textContent).not.toContain('/usr/bin');
     expect(why.getAttribute('data-tip')).toBe('looked in /usr/bin:/bin');
     expect(v.getByTestId('review.failed.cmd').textContent).toBe(pages.review_gh_install);
-    expect(v.getByTestId('review.failed.copy')).toBeTruthy();
+    // Copy: after the line's words, its own tip (never the PATH), 'Copied' once clicked (designer m_64667)
+    const copy = v.getByTestId('review.failed.copy');
+    expect(why.contains(copy)).toBe(false);
+    expect(copy.closest('[data-tip]')?.getAttribute('data-tip')).toBe(pages.review_gh_copy_tip);
+    expect(copy.textContent).toBe(pages.copy);
+    fireEvent.click(copy);
+    expect(v.getByTestId('review.failed.copy').textContent).toBe(pages.copied);
     cleanup();
     v = refuse('gh_signed_out');
     expect(v.getByTestId('review.failed.cmd').textContent).toBe(pages.review_gh_login);
-    expect(v.getByTestId('review.failed.why').textContent).toBe(pages.review_gh_signed_out({ cmd: pages.review_gh_login }).replace(pages.review_gh_login, pages.review_gh_login + pages.copy));
+    expect(v.getByTestId('review.failed.why').textContent).toBe(pages.review_gh_signed_out({ cmd: pages.review_gh_login }));
+    expect(v.getByTestId('review.failed.why').textContent?.endsWith(pages.review_gh_login)).toBe(true);
     cleanup();
     v = refuse('gh_not_found');
     expect(v.getByTestId('review.failed.why').textContent).toBe(pages.review_gh_no_pr);

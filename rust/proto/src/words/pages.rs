@@ -164,8 +164,10 @@ crate::words! { pages:
     review_gh_install = "brew install gh";
     /// review_gh_missing's tip on hover, never in the line: the PATH the hub looked in
     review_gh_looked_in(path) = "looked in {path}";
-    /// a PR's diff: gh runs but has no GitHub login; {cmd} is review_gh_login, in mono with a Copy
-    review_gh_signed_out(cmd) = "the GitHub CLI (gh) isn't signed in · run {cmd} in a terminal";
+    /// a PR's diff: gh runs but has no GitHub login; {cmd} is review_gh_login, in mono, its Copy at the line's end (designer m_64667)
+    review_gh_signed_out(cmd) = "the GitHub CLI (gh) isn't signed in · in a terminal, run {cmd}";
+    /// a refused PR diff's Copy, its own tip (the line's PATH tip stays on the line's text)
+    review_gh_copy_tip = "Copy the command";
     /// the command that signs gh in
     review_gh_login = "gh auth login";
     /// a PR's diff: GitHub has no such PR, or his gh login can't see it

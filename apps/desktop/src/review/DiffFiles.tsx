@@ -314,13 +314,16 @@ function DiffErrLine({ err, testId }: { err: DiffErr; testId: string }) {
     // the catalog's one template, cut at its {cmd} hole: the command goes in mono
     const hole = '\u0000';
     const [before = '', after = ''] = words({ cmd: hole }).split(hole);
+    // the PATH tip on the line's words only; Copy after them, its own tip (designer m_64667)
     return (
-      <span data-testid={`${testId}.why`} {...tip}>
-        {before}
-        <code className="rv-cmd" data-testid={`${testId}.cmd`}>{cmd}</code>
-        <Button kind="ghost" size="sm" onClick={() => { copyText(cmd); }} testId={`${testId}.copy`}>{pages.copy}</Button>
-        {after}
-      </span>
+      <>
+        <span data-testid={`${testId}.why`} {...tip}>
+          {before}
+          <code className="rv-cmd" data-testid={`${testId}.cmd`}>{cmd}</code>
+          {after}
+        </span>{' '}
+        <CopyCmd cmd={cmd} testId={`${testId}.copy`} />
+      </>
     );
   };
   switch (err.kind) {
@@ -333,6 +336,24 @@ function DiffErrLine({ err, testId }: { err: DiffErr; testId: string }) {
     default:
       return <span data-testid={`${testId}.why`} {...tip}>{err.text}</span>;
   }
+}
+
+/** How long Copy reads 'Copied' after a click (the update card's ~1.5 s, designer m_59191). */
+const COPIED_MS = 1500;
+
+/** A command's Copy: its own tip, 'Copied' for COPIED_MS after a click. */
+function CopyCmd({ cmd, testId }: { cmd: string; testId: string }) {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const t = setTimeout(() => { setCopied(false); }, COPIED_MS);
+    return () => { clearTimeout(t); };
+  }, [copied]);
+  return (
+    <span {...tipAttrs(pages.review_gh_copy_tip)}>
+      <Button kind="ghost" size="sm" onClick={() => { copyText(cmd); setCopied(true); }} testId={testId}>{copied ? pages.copied : pages.copy}</Button>
+    </span>
+  );
 }
 
 function FileDiff({ path, head, tip, add, rm, lines, picked, pop, scroller, testId }: FileDiffProps) {
