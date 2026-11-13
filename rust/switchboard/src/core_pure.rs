@@ -108,9 +108,9 @@ pub(super) fn task_req(t: bise_proto::sb::Task) -> Result<Value, Value> {
     let mut q = serde_json::to_value(&t).map_err(|e| serde_json::json!({"ok": false, "error": e.to_string()}))?;
     match &t {
         Task::New { name, .. } => q["slug"] = serde_json::json!(crate::router::slug(name)),
-        // the hub's reads: the view's rows (tasks chunk 3)
+        // the hub's reads (task_list.rs): core.rs answers them before
         Task::List { .. } | Task::Show { .. } => {
-            return Err(serde_json::json!({"ok": false, "error": "sb task list|show: not in this build yet"}))
+            return Err(serde_json::json!({"ok": false, "error": "sb task list|show: the hub reads these"}))
         }
         _ => {}
     }

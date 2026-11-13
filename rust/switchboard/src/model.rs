@@ -177,6 +177,12 @@ pub struct State {
     pub timers: crate::every::Timers,
     /// `sb wake`'s watches (sb-core's view `wakes`, `wakes_ended`)
     pub wakes: crate::wake::Wakes,
+    /// tasks (docs/tasks.md): the works with the status sb-core computed
+    /// (view `works`, wstatus.bend), by id. A step's view carries only
+    /// the works it touched; `works_gone` drops the folded ones
+    pub works: BTreeMap<String, bise_proto::core::view::ViewWork>,
+    /// the works done more than 7 days ago, folded (view `tombs`), by id
+    pub tombs: BTreeMap<String, bise_proto::core::state::Tomb>,
 }
 
 impl State {

@@ -108,3 +108,33 @@ fn a_report_ticks_a_done_when_of_its_turns_task() {
     let tick = ch.iter().find(|j| j["id"] == a.as_str()).expect("a tick");
     assert_eq!(tick["by"], "docs", "{tick}");
 }
+
+#[test]
+fn list_and_show_read_the_status_sb_core_computed() {
+    let mut t = T::new();
+    let a = new(&mut t, MAIN, "Native mac", &["it builds"]);
+    let w = &t.hub.st.works[&a];
+    assert_eq!(w.work.name, "Native mac", "the step's view carries the work it made");
+    // nobody runs a turn of it yet: Waiting, quiet since its birth
+    assert_eq!((w.status.as_str(), w.why.as_str(), w.at), ("waiting", "quiet", Some(t.env.now)), "{w:?}");
+    // docs' brief came in main's turn: the turn it starts serves it (law
+    // delivered_sets_turn_works): Working, and who
+    t.spawn_task("docs");
+    let w = &t.hub.st.works[&a];
+    assert_eq!(w.work.agents, ["main", "docs"], "{w:?}");
+    assert_eq!((w.status.as_str(), w.who.as_str()), ("working", "docs"), "{w:?}");
+    let r = task(&mut t, MAIN, Task::List { all: false });
+    let text = r["text"].as_str().unwrap();
+    assert!(text.starts_with("native-mac · Native mac · working · docs"), "{text}");
+    let r = task(&mut t, MAIN, Task::Show { id: a.clone() });
+    assert!(r["text"].as_str().unwrap().contains("1. [ ] it builds"), "{r}");
+    // done: out of the list, in --all
+    assert_eq!(task(&mut t, MAIN, Task::Done { id: a.clone() })["ok"], true);
+    assert_eq!(t.hub.st.works[&a].status, "done");
+    let open = task(&mut t, MAIN, Task::List { all: false })["text"].as_str().unwrap().to_string();
+    assert!(!open.contains("native-mac"), "{open}");
+    let all = task(&mut t, MAIN, Task::List { all: true })["text"].as_str().unwrap().to_string();
+    assert!(all.contains("native-mac · Native mac · done"), "{all}");
+    let r = task(&mut t, MAIN, Task::Show { id: "nope".into() });
+    assert_eq!(r["ok"], false, "{r}");
+}

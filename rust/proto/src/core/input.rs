@@ -150,6 +150,12 @@ core_kinds! {
         /// `agent`'s transcript at `pos`: journaled once per card closed
         /// with his answer (law answer_pos_once)
         AnswerPos = "answer_pos" => IAnswerPos { card: Nat, agent: Str, pos: Nat },
+        /// tasks (architect m_64425): his page waits per work, the shell's
+        /// facts (`sb page waiting`'s rows that carry a work): work
+        /// `works[i]` has `ns[i]` of them. Sent at the shell's boot before
+        /// any client, then when they change; it replaces the ones before
+        /// (runtime only, R.pw)
+        PageWaits = "page_waits" => IPageWaits { works: Strs, ns: Nats },
         /// `sb every`: the hub checked the request and computed `next_ms`;
         /// one of `every_ms`, `daily_min`; `name` only when given
         EverySet = "every_set" => IEverySet {

@@ -285,6 +285,12 @@ law in_answer_pos_bare:
 def in_answer_pos_bare():
   {==}
 
+law in_page_waits_bare:
+  {IN.of(J.obj([J.kv("t", J.JStr{"page_waits"})])) == IN.IPageWaits{Nil{}, Nil{}} : IN.In}
+
+def in_page_waits_bare():
+  {==}
+
 law in_every_set_bare:
   {IN.of(J.obj([J.kv("t", J.JStr{"every_set"})])) == IN.IEverySet{"", "", "", 0n, "", None{}, None{}, None{}, None{}, None{}} : IN.In}
 
@@ -838,6 +844,16 @@ law in_IAnswerPos_round:
   {IN.of(IN.json(IN.IAnswerPos{card, agent, pos})) == IN.IAnswerPos{card, agent, pos} : IN.In}
 
 def in_IAnswerPos_round(card, agent, pos):
+  {==}
+
+law in_IPageWaits_round:
+  for works: List<&2, String>
+  for ns: List<&2, Nat>
+  {IN.of(IN.json(IN.IPageWaits{works, ns})) == IN.IPageWaits{works, ns} : IN.In}
+
+def in_IPageWaits_round(works, ns):
+  %K.strs_round(works) : {IN.of(IN.json(IN.IPageWaits{works, ns})) == IN.IPageWaits{_, ns} : IN.In}
+  %K.nats_round(ns) : {IN.of(IN.json(IN.IPageWaits{works, ns})) == IN.IPageWaits{K.strs(K.jstrs(works)), _} : IN.In}
   {==}
 
 law in_IEverySet_round:

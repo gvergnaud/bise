@@ -122,6 +122,28 @@ impl Hub {
         if let Some(w) = v.wakes_ended {
             self.st.wakes.load_ended(&w);
         }
+        // tasks: view_all's head holds every work (as all_agents); a
+        // step's view only the works it touched
+        if v.all_agents && v.works.is_some() {
+            self.st.works.clear();
+            self.st.tombs.clear();
+        }
+        for w in v.works.iter().flatten() {
+            match serde_json::from_value::<bise_proto::core::view::ViewWork>(w.clone()) {
+                Ok(w) => {
+                    self.st.works.insert(w.work.id.clone(), w);
+                }
+                Err(e) => eprintln!("sb-core: work row {} (skipped): {}", e, w),
+            }
+        }
+        for id in v.works_gone.iter().flatten() {
+            self.st.works.remove(id);
+        }
+        for t in v.tombs.iter().flatten() {
+            if let Some(t) = parse::<bise_proto::core::state::Tomb>(t) {
+                self.st.tombs.insert(t.id.clone(), t);
+            }
+        }
         self.st.next_msg = v.next_msg;
         self.st.next_card = v.next_card;
         self.st.paused = v.paused;

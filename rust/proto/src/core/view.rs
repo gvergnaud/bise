@@ -21,7 +21,7 @@
 //! fixtures/core_view.jsonl, one view per shape).
 
 use super::core_records;
-use super::state::{Brief, Declared, Lifecycle, Report, Run, Workspace};
+use super::state::{Brief, Declared, Lifecycle, Report, Run, Work, Workspace};
 use serde::{Deserialize, Serialize};
 
 core_records! {
@@ -66,6 +66,26 @@ core_records! {
         /// Waiting reads these, never a predicate of its own (hot-view
         /// sha 2b).
         ViewMsg = "msg" => VMsg { msg: Json, state: Json, settled: Bool, queued: Bool, owes: Bool },
+        /// tasks (docs/tasks.md): one work with the status sb-core
+        /// computes from the facts (wstatus.bend), never stored.
+        ViewWork = "work" => VWork {
+            /// the work as its journal line holds it
+            work: Json(Work),
+            /// `needs_you`, `working`, `waiting`, `stalled`, `to_review`,
+            /// `paused`, `done`, `ongoing`
+            status: Str,
+            /// what the status is about: `agent` (working), `reply`
+            /// (waits for `who`'s reply), `timer`, `watch` (wakes at
+            /// `at`), `until` (paused until `at`), `crash` (`who`
+            /// stopped), `quiet` (nothing moves since `at`), "" none
+            why: Str,
+            who: Str,
+            at: OptNat,
+            /// his open cards and page waits on it
+            needs: Nat,
+            /// its open cards
+            cards: Nats,
+        },
         /// The view. A missing `all_agents` reads true (every agent), a
         /// missing `next_msg`/`next_card` 1, as the hub read them before.
         View = "view" => VView {
@@ -94,6 +114,13 @@ core_records! {
             /// `sb wake`'s live watches
             wakes: OptJsonsOmit,
             wakes_ended: OptJsonsOmit,
+            /// tasks: the works a step changed (view_all's head: every
+            /// one, as `all_agents`), each a [`ViewWork`] row; absent
+            /// when none changed
+            works: OptJsonsOmit,
+            /// the works folded by the step (their tombs: `tombs`)
+            works_gone: OptStrsOmit,
+            tombs: OptJsonsOmit,
         },
     }
 }

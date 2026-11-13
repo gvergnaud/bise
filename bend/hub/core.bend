@@ -443,6 +443,26 @@ def works_of_send(w: Maybe<&2, List<&2, String>>, +s: S.St, +from: String) -> Li
     case None{}:
       works_of_agent(M.get_agent(s, from))
 
+# the works when they are exactly one, else none
+def single(xs: List<&2, String>) -> List<&2, String>:
+  match xs:
+    case Con{+h, Nil{}}:
+      [h]
+    case _:
+      Nil{}
+
+# his words (architect m_64507, tasks-ux F4): a Task tab's message keeps
+# its work; any other message of his to an agent carries the work its
+# turn serves when it is exactly one, else none (law
+# his_words_follow_a_single_task). Read at the send from St: the Msg
+# keeps what it got, so a replay never recomputes it from a later turn.
+def works_his(w: Maybe<&2, List<&2, String>>, +s: S.St, +to: String) -> List<&2, String>:
+  match w:
+    case Some{+ws}:
+      ws
+    case None{}:
+      single(works_of_agent(M.get_agent(s, to)))
+
 def card_new(+id: Nat, +kind: String, +agent: String, +text: String, +for_msg: Maybe<&2, Nat>, +created: Nat, +place: Maybe<&2, String>, +pr: Maybe<&2, Nat>, +about: Maybe<&2, J.Json>) -> S.Card:
   S.Card.with_about(S.Card.with_pr(S.Card.with_place(S.Card.with_created(S.Card.with_for_msg(S.Card.with_text(S.Card.with_agent(S.Card.with_kind(S.Card.with_id(S.Card.empty(), id), kind), agent), text), for_msg), created), place), pr), about)
 
@@ -786,6 +806,11 @@ def Snd.sender(x: Snd) -> String:
     case Snd{+from, _, _, _, _, _, _, _, _, _, _, _}:
       from
 
+def Snd.recipient(x: Snd) -> String:
+  match x:
+    case Snd{_, +to, _, _, _, _, _, _, _, _, _, _}:
+      to
+
 def Snd.with_works(x: Snd, +v: Maybe<&2, List<&2, String>>) -> Snd:
   match x:
     case Snd{+from, +to, +text, +expect, +reply_to, +plain, +auto, +queued, +via, +parts, +fwd, _}:
@@ -808,8 +833,15 @@ def task_of(+q: J.Json) -> Maybe<&2, List<&2, String>>:
   task_of.go(task_ids(q))
 
 # the send with its works resolved (Some: what its message carries)
+def Snd.resolved.works(his: Bool, +s: S.St, +x: Snd) -> List<&2, String>:
+  match his:
+    case True{}:
+      works_his(Snd.works(x), s, Snd.recipient(x))
+    case False{}:
+      works_of_send(Snd.works(x), s, Snd.sender(x))
+
 def Snd.resolved(+s: S.St, +x: Snd) -> Snd:
-  Snd.with_works(x, Some{works_of_send(Snd.works(x), s, Snd.sender(x))})
+  Snd.with_works(x, Some{Snd.resolved.works(String.eq(Snd.sender(x), M.USER()), s, x)})
 
 def send.emit.go(-o: S.St, +cx: X.Cx<o>, +s: Snd, +thread: Nat) -> X.Cx<o> & SendR:
   match s:
@@ -3854,7 +3886,7 @@ def Hub.r(x: Hub) -> X.R:
       r
 
 def hub_new(+workspace: String) -> Hub:
-  Hub{M.init(workspace), X.R{Nil{}, Nil{}, Nil{}, Nil{}, Nil{}, Nil{}, workspace, False{}, 0n, False{}, Nil{}, None{}, None{}, Nil{}, Nil{}}, Fresh{}}
+  Hub{M.init(workspace), X.R{Nil{}, Nil{}, Nil{}, Nil{}, Nil{}, Nil{}, workspace, False{}, 0n, False{}, Nil{}, None{}, None{}, Nil{}, Nil{}, Nil{}}, Fresh{}}
 
 # the context of one input over the hub
 def start(+h: Hub, +i: J.Json) -> X.Cx<Hub.d(h)>:
@@ -4486,6 +4518,17 @@ def placed.in(-o: S.St, +cx: X.Cx<o>, +name: String, +ws: J.Json, +err: String) 
   +d = PL.placed_of(st(o, cx), name, ws, err)
   placed.join(o, PL.joiners(st(o, cx), name), placed(o, d, cx), d, err)
 
+# tasks: the page waits input's lists as R.pw (a work without its count,
+# or a count of 0, keeps none)
+def page_waits(ws: List<&2, String>, ns: List<&2, Nat>) -> List<&2, X.Kn>:
+  match ws ns:
+    case Con{+w, +wt} Con{1n+n, +nt}:
+      X.Kn{w, 1n+n} <> page_waits(wt, nt)
+    case Con{_, +wt} Con{0n, +nt}:
+      page_waits(wt, nt)
+    case _ _:
+      Nil{}
+
 # one input, decoded by the generated codec (gen/in.bend, from
 # bise_proto::core::In): an unknown tag is INone, a missing field its
 # default
@@ -4543,6 +4586,8 @@ def dispatch(-o: S.St, +cx: X.Cx<o>, +i: GI.In) -> X.Cx<o>:
       answer_card(o, cx, card, text, parts, "inbox")
     case GI.IAnswerPos{+card, +agent, +pos}:
       A.answer_pos(o, cx, card, agent, pos)
+    case GI.IPageWaits{+works, +ns}:
+      set_r(o, cx, X.R.with_pw(rr(o, cx), page_waits(works, ns)))
     case GI.IInterrupt{+agent}:
       interrupt.go(o, M.resolve(st(o, cx), agent), cx)
     case GI.IUnqueue{+id}:

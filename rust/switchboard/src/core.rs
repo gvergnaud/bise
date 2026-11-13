@@ -1931,6 +1931,19 @@ impl Hub {
             return;
         }
         let q = match req {
+            // tasks: the hub's reads of sb-core's works (task_list.rs)
+            AgentReq::Task(bise_proto::sb::Task::List { all }) => {
+                reply(fx, json!({"ok": true, "text": crate::task_list::list(&self.st, all, env.now())}));
+                return;
+            }
+            AgentReq::Task(bise_proto::sb::Task::Show { id }) => {
+                let body = match crate::task_list::show(&self.st, &id, env.now()) {
+                    Ok(text) => json!({"ok": true, "text": text}),
+                    Err(e) => json!({"ok": false, "error": e}),
+                };
+                reply(fx, body);
+                return;
+            }
             AgentReq::List | AgentReq::Tasks => {
                 let Some(from) = self.st.resolve(from) else {
                     reply(fx, json!({"ok": false, "error": format!("unknown agent: {}", from)}));

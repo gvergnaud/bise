@@ -602,7 +602,7 @@ pub const STATE: State = State {
                 k("report", W::Json),
                 k("snap", W::OptStr),
                 k("follow", W::OptStr),
-                k("turn_works", W::Strs),
+                k("turn_works", W::StrsOmit),
             ])],
         },
         Record {
@@ -689,7 +689,7 @@ pub const STATE: State = State {
                     k("runs", W::Nats),
                     k("name", W::Str),
                     k("held", W::Bool),
-                    k("works", W::Strs),
+                    k("works", W::StrsOmit),
                 ]),
             ],
         },
@@ -1025,7 +1025,9 @@ pub const STATE: State = State {
 /// reads the field's default; an enum's other word reads its fallback.
 /// The others get a Rust name when a Rust reader needs one.
 pub const RUST: &[(&str, &str)] =
-    &[("Life", "Lifecycle"), ("Run", "Run"), ("Decl", "Declared"), ("MSt", "MsgState"), ("Msg", "Msg"), ("ViewAsk", "ViewAsk"), ("Card", "Card")];
+    &[("Life", "Lifecycle"), ("Run", "Run"), ("Decl", "Declared"), ("MSt", "MsgState"), ("Msg", "Msg"), ("ViewAsk", "ViewAsk"), ("Card", "Card"),
+      // tasks: the view's work rows (docs/tasks.md)
+      ("WKind", "WorkKind"), ("Goal", "Goal"), ("Fin", "Fin"), ("Work", "Work"), ("Tomb", "Tomb")];
 
 mod generated;
 mod opaque;

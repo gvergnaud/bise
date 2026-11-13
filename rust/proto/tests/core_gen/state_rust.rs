@@ -41,6 +41,7 @@ fn rust_key(r: &st::Record, k: &st::Key) -> (String, Option<&'static str>) {
         Wire::Word | Wire::Obj => (rust_name(named(f.ty)).into(), None),
         Wire::OptWord => (format!("Option<{}>", rust_name(named(f.ty))), None),
         Wire::OptObjOmit => (format!("Option<{}>", rust_name(named(f.ty))), Some("Option::is_none")),
+        Wire::Recs => (format!("Vec<{}>", rust_name(named(f.ty))), None),
         w => panic!("{}.{}: {w:?} has no Rust reader yet", r.name, k.field),
     }
 }

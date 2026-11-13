@@ -571,7 +571,7 @@ pub fn hh_mm(ms: u64) -> String {
 }
 
 /// `14:20`, `tomorrow 07:30`, or `2025-10-04 18:00` past tomorrow.
-fn when_label(ms: u64, now: u64) -> String {
+pub fn when_label(ms: u64, now: u64) -> String {
     let (Some(t), Some(n)) = (tm_of(ms), tm_of(now)) else { return format!("{} ms", ms) };
     let hm = format!("{:02}:{:02}", t.tm_hour, t.tm_min);
     let day = |tm: &libc::tm| (tm.tm_year, tm.tm_yday);

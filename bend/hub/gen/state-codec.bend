@@ -2632,7 +2632,7 @@ def Ans.journal_round(x):
 def Agent.photo_kvs(r: S.Agent) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
   match r:
     case S.Agent{+name, +is_main, +parent, +life, +declared, +aliases, +files, +ws, +dir, +brief, +created, +failure, +note, +report, +snap, +follow, +turn_works}:
-      [J.kv("name", J.JStr{name}), J.kv("is_main", J.JBool{is_main}), J.kv("parent", K.jmaybe_s(parent)), J.kv("life", J.JStr{Life.word(life)}), J.kv("declared", Decl.opt_json(declared)), J.kv("aliases", J.JArr{K.jstrs(aliases)}), J.kv("files", J.JArr{K.jstrs(files)}), J.kv("ws", ws), J.kv("dir", J.JStr{dir}), J.kv("brief", brief), J.kv("created", J.JNum{created}), J.kv("failure", K.jmaybe_s(failure)), J.kv("note", J.JStr{note}), J.kv("report", report), J.kv("snap", K.jmaybe_s(snap)), J.kv("follow", K.jmaybe_s(follow)), J.kv("turn_works", J.JArr{K.jstrs(turn_works)})]
+      K.cat([[J.kv("name", J.JStr{name}), J.kv("is_main", J.JBool{is_main}), J.kv("parent", K.jmaybe_s(parent)), J.kv("life", J.JStr{Life.word(life)}), J.kv("declared", Decl.opt_json(declared)), J.kv("aliases", J.JArr{K.jstrs(aliases)}), J.kv("files", J.JArr{K.jstrs(files)}), J.kv("ws", ws), J.kv("dir", J.JStr{dir}), J.kv("brief", brief), J.kv("created", J.JNum{created}), J.kv("failure", K.jmaybe_s(failure)), J.kv("note", J.JStr{note}), J.kv("report", report), J.kv("snap", K.jmaybe_s(snap)), J.kv("follow", K.jmaybe_s(follow))], K.omit_ss("turn_works", turn_works)])
 
 def Agent.photo_json(r: S.Agent) -> J.Json:
   J.obj(Agent.photo_kvs(r))
@@ -3061,7 +3061,11 @@ law Agent.photo.turn_works:
   {rd.ss(J.get(J.obj(Agent.photo_kvs(S.Agent{name, is_main, parent, life, declared, aliases, files, ws, dir, brief, created, failure, note, report, snap, follow, turn_works})), "turn_works")) == turn_works : List<&2, String>}
 
 def Agent.photo.turn_works(name, is_main, parent, life, declared, aliases, files, ws, dir, brief, created, failure, note, report, snap, follow, turn_works):
-  K.strs_round(turn_works)
+  match turn_works:
+    case Nil{}:
+      {==}
+    case Con{turn_works_h, turn_works_t}:
+      K.strs_round(Con{turn_works_h, turn_works_t})
 
 # the fields it carries come back (the others at their default)
 law Agent.photo_round_by_fields:
@@ -3669,7 +3673,7 @@ def Timer.view_json(r: S.Timer) -> J.Json:
 def Timer.photo_kvs(r: S.Timer) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
   match r:
     case S.Timer{+id, +agent, +by, +text, +sched, +next, +until, +times, +fired, +page, +last, +runs, +name, +held, +works}:
-      [J.kv("id", J.JNum{id}), J.kv("agent", J.JStr{agent}), J.kv("by", J.JStr{by}), J.kv("text", J.JStr{text}), J.kv("sched", Sched.journal_json(sched)), J.kv("next", J.JNum{next}), J.kv("until", K.jmaybe_n(until)), J.kv("times", K.jmaybe_n(times)), J.kv("fired", J.JNum{fired}), J.kv("page", K.jmaybe_s(page)), J.kv("last", J.JNum{last}), J.kv("runs", J.JArr{K.jnats(runs)}), J.kv("name", J.JStr{name}), J.kv("held", J.JBool{held}), J.kv("works", J.JArr{K.jstrs(works)})]
+      K.cat([[J.kv("id", J.JNum{id}), J.kv("agent", J.JStr{agent}), J.kv("by", J.JStr{by}), J.kv("text", J.JStr{text}), J.kv("sched", Sched.journal_json(sched)), J.kv("next", J.JNum{next}), J.kv("until", K.jmaybe_n(until)), J.kv("times", K.jmaybe_n(times)), J.kv("fired", J.JNum{fired}), J.kv("page", K.jmaybe_s(page)), J.kv("last", J.JNum{last}), J.kv("runs", J.JArr{K.jnats(runs)}), J.kv("name", J.JStr{name}), J.kv("held", J.JBool{held})], K.omit_ss("works", works)])
 
 def Timer.photo_json(r: S.Timer) -> J.Json:
   J.obj(Timer.photo_kvs(r))
@@ -4002,7 +4006,11 @@ law Timer.photo.works:
   {rd.ss(J.get(J.obj(Timer.photo_kvs(S.Timer{id, agent, by, text, sched, next, until, times, fired, page, last, runs, name, held, works})), "works")) == works : List<&2, String>}
 
 def Timer.photo.works(id, agent, by, text, sched, next, until, times, fired, page, last, runs, name, held, works):
-  K.strs_round(works)
+  match works:
+    case Nil{}:
+      {==}
+    case Con{works_h, works_t}:
+      K.strs_round(Con{works_h, works_t})
 
 # the fields it carries come back (the others at their default)
 law Timer.photo_round_by_fields:

@@ -828,7 +828,7 @@ def hv_rt_at(-o: HS.St, m: Maybe<&2, HS.Card>, +cx: HX.Cx<o>, +v: HS.ViewAsk, +t
       match cx:
         case HX.Cx{c, r}:
           match r:
-            case HX.R{a, b, st, d, e, f, g, h, i, j, k, l, m, n, vc}:
+            case HX.R{a, b, st, d, e, f, g, h, i, j, k, l, m, n, vc, pw}:
               {==}
     case Some{x}:
       match cx:
