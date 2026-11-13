@@ -41,6 +41,18 @@ ENTITLEMENTS = M.DESKTOP_ENT
 SignError = M.SignError
 
 
+def appex_refusals(app, steps, entitlements_of=M.read_entitlements):
+    """The signed app extensions (steps' .appex bundles) whose entitlements are not their own
+    (mac_sign.appex_ok: one built without them, PRESERVE keeps none), as '<rel>: <keys>'."""
+    out = []
+    for rel, kind, _ in steps:
+        if kind == "bundle" and M.appex_of(rel) == rel:
+            ents = entitlements_of(os.path.join(app, rel))
+            if not M.appex_ok(ents):
+                out.append("%s: %s" % (rel, sorted(ents) if isinstance(ents, dict) else ents))
+    return out
+
+
 def sign(app, identity, keychain=None, entitlements=ENTITLEMENTS, say=None, own=None):
     """Sign every piece of the app inside out (mac_sign.sign_tree; `own`: {nested bundle rel:
     its entitlements file}, an app extension's), then verify the whole: deep and strict. With a
@@ -54,6 +66,10 @@ def sign(app, identity, keychain=None, entitlements=ENTITLEMENTS, say=None, own=
     r = subprocess.run(["codesign", "--verify", "--deep", "--strict", "--verbose=2", app], capture_output=True, text=True)
     if r.returncode != 0:
         raise SignError("codesign --verify --deep --strict: %s" % r.stderr.strip())
+    bad = appex_refusals(app, steps)
+    if bad:
+        raise SignError("an app extension without its own entitlements (the sandbox, an app group; "
+                        "fileproviderd would refuse it): %s" % "; ".join(bad))
     if identity != "-":
         team = M.read_team(app)
         for rel, kind, _ in steps:

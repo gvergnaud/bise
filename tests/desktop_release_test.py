@@ -139,6 +139,42 @@ def test_signs_a_fake_bundle():
         check(os.readlink(os.path.join(root, "bise")) == os.readlink(os.path.join(bindir, "bise")), "one link")
 
 
+def test_a_release_refuses_an_appex_without_its_own_entitlements():
+    """architect m_64086: PRESERVE on an appex built without entitlements would ship a Finder
+    extension fileproviderd refuses; the release's signing checks every signed appex."""
+    ax = "Contents/PlugIns/bise-kb.appex"
+    steps = [(ax + "/Contents/MacOS/bise-kb", "exec", M.PRESERVE), (ax, "bundle", M.PRESERVE), ("Contents/MacOS/bise", "exec", None),
+             (".", "bundle", None)]
+    own = {M.SANDBOX: True, M.GROUPS: ["9G5B2RTD6U.dev.bise.desktop.kb"]}
+    asked = []
+    ok = lambda p: (asked.append(p), own)[1]  # noqa: E731
+    check(S.appex_refusals("/a.app", steps, ok) == [] and asked == ["/a.app/" + ax], "its own (sandbox + group): fine, only the appex read: %s" % asked)
+    for bad in ({}, {M.GROUPS: own[M.GROUPS]}, {M.SANDBOX: True}, dict(own, **{"com.apple.security.cs.allow-jit": True})):
+        r = S.appex_refusals("/a.app", steps, lambda p: bad)
+        check(len(r) == 1 and r[0].startswith(ax + ":"), "refused: %s -> %s" % (bad, r))
+    if sys.platform != "darwin":
+        return
+    # the release's sign() itself: an appex built with its own entitlements keeps them (ad hoc, real
+    # codesign), one built without them is refused
+    with tempfile.TemporaryDirectory() as t:
+        app = fake_app(t)
+        appex = os.path.join(app, ax)
+        os.makedirs(os.path.join(appex, "Contents", "MacOS"))
+        with open(os.path.join(appex, "Contents", "Info.plist"), "wb") as f:
+            plistlib.dump({"CFBundleIdentifier": "dev.bise.test.kb", "CFBundleExecutable": "bise-kb", "CFBundlePackageType": "XPC!"}, f)
+        shutil.copy("/usr/bin/true", os.path.join(appex, "Contents", "MacOS", "bise-kb"))
+        subprocess.run(["codesign", "--remove-signature", os.path.join(appex, "Contents", "MacOS", "bise-kb")], capture_output=True)
+        subprocess.run(["codesign", "--force", "--sign", "-", appex], capture_output=True)
+        check(raises(S.SignError, S.sign, app, "-"), "an appex built without its entitlements: the release refuses it")
+        kb = os.path.join(t, "kb.plist")
+        with open(kb, "wb") as f:
+            plistlib.dump(own, f)
+        subprocess.run(["codesign", "--force", "--sign", "-", "--entitlements", kb, appex], capture_output=True)
+        S.sign(app, "-")
+        check(M.read_entitlements(appex) == own, "the appex keeps its build's entitlements: %s" % M.read_entitlements(appex))
+        check("allow-jit" in str(M.read_entitlements(app)), "the app keeps its own")
+
+
 def wire(states, version=1):
     """Electron Framework-shaped bytes: some code, the sentinel, a fuse wire, more code."""
     return b"\xcf\xfa\xed\xfe junk" + R.FUSE_SENTINEL + bytes([version, len(states)]) + states + b"\x00 more"

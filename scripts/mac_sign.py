@@ -175,6 +175,26 @@ def appex_of(rel):
 # entitlements_for's answer for a piece that keeps the entitlements it was signed with
 # (codesign --preserve-metadata=entitlements): an app extension's own, its build's
 PRESERVE = "preserve"
+SANDBOX = "com.apple.security.app-sandbox"
+GROUPS = "com.apple.security.application-groups"
+
+
+def appex_ok(ents, group=None):
+    """A signed app extension's entitlements are its own: the sandbox (fileproviderd starts no
+    extension without it), an app group (`group` when given), none of the app's cs.* keys. Pure."""
+    ents = ents if isinstance(ents, dict) else {}
+    groups = ents.get(GROUPS)
+    return (ents.get(SANDBOX) is True and isinstance(groups, list) and bool(groups)
+            and (group is None or groups == [group]) and not any(k.startswith("com.apple.security.cs.") for k in ents))
+
+
+def read_entitlements(path):
+    """What codesign says `path` is signed with (codesign -d --entitlements - --xml), a dict ({} when none)."""
+    r = subprocess.run(["codesign", "-d", "--entitlements", "-", "--xml", path], capture_output=True)
+    try:
+        return plistlib.loads(r.stdout) if r.stdout.strip() else {}
+    except (plistlib.InvalidFileException, ValueError):
+        return {}
 
 
 def entitlements_for(rel, kind, default=None, bid=None, cli_bundles=(), own=None):

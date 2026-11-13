@@ -1105,7 +1105,7 @@ def team_sign_cases():
             plistlib.dump(dict(fp("ZZZZZZZZZZ.dev.bise.desktop.cand.kb"), CFBundleIdentifier=T.CAND_ID + ".kb"), f)
         os.makedirs(os.path.dirname(os.path.join(c["src"], K.KB_ENT)))
         with open(os.path.join(c["src"], K.KB_ENT), "wb") as f:
-            plistlib.dump({K.SANDBOX: True, K.GROUPS: ["@GROUP@"]}, f)
+            plistlib.dump({M.SANDBOX: True, K.GROUPS: ["@GROUP@"]}, f)
         try:
             go()
             check(False, "an appex whose group is not his team's is refused")
@@ -1120,7 +1120,7 @@ def team_sign_cases():
         except T.TryError as e:
             check(K.KB_ENT in str(e) and not signed and not asked, "no kb.entitlements: refused before the keychain: %s" % e)
         with open(os.path.join(c["src"], K.KB_ENT), "wb") as f:
-            plistlib.dump({K.SANDBOX: True, K.GROUPS: ["@GROUP@"]}, f)
+            plistlib.dump({M.SANDBOX: True, K.GROUPS: ["@GROUP@"]}, f)
         try:
             go(run=lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, "     0 valid identities found\n", ""))
             check(False, "no identity of his team: refused")
@@ -1134,7 +1134,7 @@ def team_sign_cases():
         # kb-fileprovider's #5 (dfbcd55b7): fileproviderd refused an appex signed with the app's entitlements.
         # Inside out: the appex (its executable, then the bundle) with kb.entitlements (sandbox + the group,
         # @GROUP@ rewritten), then the app with its own; never the app's file on the appex, never --deep
-        appex_ent, app_ent = {K.SANDBOX: True, K.GROUPS: [group]}, {"jit": True, K.GROUPS: [group]}
+        appex_ent, app_ent = {M.SANDBOX: True, K.GROUPS: [group]}, {"jit": True, K.GROUPS: [group]}
         order = [rel for rel, _ in steps]
         want = [os.path.join(K.APPEX, "Contents", "MacOS", "bise-kb"), K.APPEX, os.path.join("Contents", "MacOS", T.CAND_NAME), "."]
         check(sorted(order) == sorted(want) and order.index(want[0]) < order.index(want[1]) < order.index(".") == len(order) - 1,
@@ -1148,8 +1148,8 @@ def team_sign_cases():
             check(False, "a signed appex without the sandbox is refused")
         except T.TryError as e:
             check("not sandboxed" in str(e), "the signed appex must say the sandbox and the group: %s" % e)
-        check(K.appex_ok(appex_ent, group) and not K.appex_ok(dict(appex_ent, **{"com.apple.security.cs.allow-jit": True}), group)
-              and not K.appex_ok({K.SANDBOX: True, K.GROUPS: ["x"]}, group), "appex_ok: sandbox, the group, none of the app's keys")
+        check(M.appex_ok(appex_ent, group) and not M.appex_ok(dict(appex_ent, **{"com.apple.security.cs.allow-jit": True}), group)
+              and not M.appex_ok({M.SANDBOX: True, K.GROUPS: ["x"]}, group), "appex_ok: sandbox, the group, none of the app's keys")
         del steps[:]
         out = go()
         check(t["app"] != c["app"] and t["app"].startswith(c["dir"] + "/team/") and T.bundle_id(t["app"]) == T.CAND_ID

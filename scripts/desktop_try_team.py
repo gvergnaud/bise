@@ -21,9 +21,9 @@ the appex's group (d1b93dcc9: an ad hoc build skips the Finder). The rules:
 Signing is the release's (desktop_sign.sign: inside out, hardened, no --deep): the appex first
 with its own entitlements (the candidate's apps/desktop/native/kb/kb.entitlements: the sandbox,
 which fileproviderd requires, and the group), then the app with desktop.plist plus the group
-(team_entitlements both); the signed appex must say the sandbox and the group (appex_ok), else the
-run fails (kb-fileprovider's #5 on dfbcd55b7: an appex with the app's entitlements, no sandbox).
-The pure parts (identity_of, kb_group, team_entitlements, appex_ok, team_paths, outer_codesign) and
+(team_entitlements both); the signed appex must say the sandbox and this group (mac_sign.appex_ok),
+else the run fails (kb-fileprovider's #5 on dfbcd55b7: an appex with the app's entitlements).
+The pure parts (identity_of, kb_group, team_entitlements, team_paths, outer_codesign) and
 sign_candidate with a fake signer and a fake `security` are tested in tests/desktop_try_test.py.
 """
 import json
@@ -41,7 +41,6 @@ APPEX = os.path.join("Contents", "PlugIns", "bise-kb.appex")
 # the appex's own entitlements, in the candidate's worktree (its group is @GROUP@ there)
 KB_ENT = os.path.join("apps", "desktop", "native", "kb", "kb.entitlements")
 GROUPS = "com.apple.security.application-groups"
-SANDBOX = "com.apple.security.app-sandbox"
 FIND = ["security", "find-identity", "-v", "-p", "codesigning"]
 
 
@@ -68,13 +67,6 @@ def team_entitlements(base, group):
     the appex's group among the app's own) and the appex's (kb.entitlements', its @GROUP@
     rewritten). Pure."""
     return dict(base or {}, **{GROUPS: [group]})
-
-
-def appex_ok(ents, group):
-    """The signed appex's entitlements say the sandbox and the group, nothing of the app's: what
-    fileproviderd needs to start it. Pure."""
-    return (ents or {}).get(SANDBOX) is True and (ents or {}).get(GROUPS) == [group] \
-        and not any(k.startswith("com.apple.security.cs.") for k in (ents or {}))
 
 
 def team_paths(c, arch, name):
@@ -111,12 +103,8 @@ def default_team(app):
 
 
 def default_entitlements_of(path):
-    """What codesign says `path` is signed with (codesign -d --entitlements - --xml), a dict."""
-    r = subprocess.run(["codesign", "-d", "--entitlements", "-", "--xml", path], capture_output=True)
-    try:
-        return plistlib.loads(r.stdout) if r.stdout.strip() else {}
-    except (plistlib.InvalidFileException, ValueError):
-        return {}
+    import mac_sign
+    return mac_sign.read_entitlements(path)
 
 
 def sign_candidate(info, c, arch, name, say, run=subprocess.run, sign=default_sign, team_of=default_team, base=None,
@@ -164,8 +152,9 @@ def sign_candidate(info, c, arch, name, say, run=subprocess.run, sign=default_si
     got = team_of(t["app"])
     if got != TEAM:
         raise TryError("the signed copy %s says team %s, not %s" % (t["app"], got, TEAM))
+    import mac_sign
     appex = entitlements_of(os.path.join(t["app"], APPEX))
-    if not appex_ok(appex, group):
+    if not mac_sign.appex_ok(appex, group):
         raise TryError("the signed copy's %s is not sandboxed with the group %s (fileproviderd would refuse it): %s"
                        % (APPEX, group, sorted(appex)))
     out = dict(info, app=t["app"], bise=os.path.join(t["app"], os.path.relpath(info["bise"], c["app"])), team_signed=True, team=TEAM,
