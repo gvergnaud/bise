@@ -163,6 +163,17 @@ pub struct Found {
     pub known: bool,
 }
 
+/// A folder macOS guards that he asked to look in (`found_scan {dir}`,
+/// his click on 'Look in Documents'): how many repos it had, or macOS's no.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Looked {
+    pub path: String,
+    pub n: u32,
+    /// it could not be read: his « Don't Allow », or Files & Folders off
+    pub refused: bool,
+}
+
 /// One row of the Plugins list (the TUI's `/plugins`, the app's
 /// plugins place): a real plugin, a Mistral connector, a local MCP server
 /// or a skills folder, with its parts. Built by

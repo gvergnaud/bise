@@ -11,6 +11,7 @@ import { keep } from '@/app/keep';
 import type { AnsweredFrom } from './answered';
 import type { AnswerJump } from './store';
 import type { Acted } from './acted';
+import type { FoundFolders } from './reads';
 import type { Refused } from './refused';
 import type { InboxItem } from '@/inbox/listed';
 import { guideForKey, guideKey, prActKey, prDetailKey, prDiffKey, prLogKey, rangeDiffKey, type GuideEv, type PrActState } from './types';
@@ -101,6 +102,8 @@ export const useSigning = (): { readonly id: string; readonly url: string } | nu
 /** provider_use's last answer (checking, then works or failed), null before any. */
 export const useProviderCheck = (): EvOf<'provider_check'> | null => useSlice('provider_check', (s) => s.providerCheck());
 export const useFound = (): readonly Found[] => useSlice('found', (s) => s.found());
+/** the scan's folders macOS guards: not looked in yet, and the ones he looked in; null before the first scan answered */
+export const useFoundFolders = (): FoundFolders | null => useSlice('found_folders', (s) => s.foundFolders());
 export const useComputerUse = (): EvOf<'computer_use'> | null => useSlice('computer_use', (s) => s.computerUse());
 export const usePlugins = (project?: string): readonly Plugin[] | null => useSlice(`plugins:${project ?? ''}`, (s) => s.plugins(project));
 /** which app opens what (File types); none until the core sent them */

@@ -74,8 +74,19 @@ pub enum CoreEv {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         ms: Option<u64>,
     },
-    /// the answer to `found_scan`
-    Found { dir: String, items: Vec<Found> },
+    /// the answer to `found_scan`, whole each time: the repos of `dir`
+    /// (his home) and of each guarded folder he looked in; `guarded`: the
+    /// folders macOS guards (Documents, Desktop, Downloads...) the scan did
+    /// not enter and he has not looked in yet (his click sends
+    /// `found_scan {dir}`); `looked`: the ones he did
+    Found {
+        dir: String,
+        items: Vec<Found>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        guarded: Vec<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        looked: Vec<Looked>,
+    },
     /// the answer to `away_back` (S9, amb-mac m_9038): what happened while
     /// he was away, since `since_ms`: agents that turned done or failed,
     /// his cards (questions and approvals) that came; `projects`: each

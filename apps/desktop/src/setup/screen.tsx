@@ -5,14 +5,14 @@
 // amb-home.
 import { useEffect, useRef, useState } from 'react';
 import type { Artifact } from '@/proto';
-import { useAccounts, useArtifacts, useClaudePlan, useFound, usePrefs, useProjects, useProviderCheck, useRoles, useStore } from '@/store';
+import { useAccounts, useArtifacts, useClaudePlan, useFound, useFoundFolders, usePrefs, useProjects, useProviderCheck, useRoles, useStore } from '@/store';
 import { useRoute, useRouter } from '@/app/router';
 import { onboarded, prefsOf, useCmdError } from '@/settings';
 import { Onboarding } from './Onboarding';
 import { mainHasModel } from './model';
 import { shareOf } from './TelemetryNote';
 import { useHelper } from './helper';
-import { pickerPort } from '@/settings/picker';
+import { openFilesSettings, pickerPort } from '@/settings/picker';
 
 export function OnboardingScreen() {
   const store = useStore();
@@ -23,6 +23,7 @@ export function OnboardingScreen() {
       accounts={useAccounts()}
       claudePlan={useClaudePlan()}
       found={useFound()}
+      folders={useFoundFolders()}
       home={(globalThis as { bise?: { home?: string } }).bise?.home ?? ''}
       perms={perms}
       fn={fn}
@@ -40,6 +41,7 @@ export function OnboardingScreen() {
         open: (url) => {
           void window.bise.openExternal(url);
         },
+        filesSettings: openFilesSettings,
         ...pickerPort(),
       }}
     />

@@ -206,10 +206,11 @@ export interface BiseApi {
     readonly input: () => void;
     readonly gesture: (g: AppGesture) => void;
   };
-  /** Voice mode's failed line (designer's voice-window (1)): 'open settings' opens System Settings ›
-   *  Privacy › Microphone (test mode: EXTERNAL_LINE with its URL on stdout, nothing opens). */
+  /** Opens a pane of System Settings › Privacy & Security: Microphone (voice mode's failed line,
+   *  designer's voice-window (1)), Files & Folders (the projects scan's 'macOS said no', designer
+   *  m_64068). Test mode: EXTERNAL_LINE with its URL on stdout, nothing opens. */
+  readonly privacySettings: (pane: PrivacyPane) => void;
   readonly voice: {
-    readonly openMicSettings: () => void;
     /** One line in app.log, next to core.log (the field's dictation: start, stop, final len/error/ms; never words). */
     readonly log?: (line: string) => void;
   };
@@ -595,8 +596,8 @@ export const IPC = {
   notifySettings: 'bise:notify-settings',
   /** a window -> main: the inbox lists bise's notifications ask (true) or not: the badge counts it */
   notifyListed: 'bise:notify-listed',
-  /** a window -> main: open System Settings › Privacy › Microphone (voice mode's failed line) */
-  micSettings: 'bise:mic-settings',
+  /** a window -> main: open a pane of System Settings › Privacy & Security (PRIVACY_URLS) */
+  privacySettings: 'bise:privacy-settings',
   /** a window -> main: one line for app.log next to core.log (the field's dictation; never his words) */
   appLog: 'bise:app-log',
   /** a window -> main: he typed, clicked or scrolled (no argument, no content: main/usage/clock.ts) */
@@ -779,8 +780,12 @@ export const CAPSULE_LINE = 'bise-desktop: capsule';
 
 /** Test mode's stdout lines for effects that would leave the app. */
 export const EXTERNAL_LINE = 'bise-desktop: external';
-/** System Settings › Privacy › Microphone (window.bise.voice.openMicSettings). */
-export const MIC_SETTINGS_URL = 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone';
+/** The panes of System Settings › Privacy & Security a window may open (window.bise.privacySettings). */
+export const PRIVACY_URLS = {
+  microphone: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone',
+  files: 'x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders',
+} as const;
+export type PrivacyPane = keyof typeof PRIVACY_URLS;
 export const OPEN_PATH_LINE = 'bise-desktop: open-path';
 
 /** Test mode: window.bise.quickLook's line on stdout, `QUICKLOOK_LINE <path>`. */

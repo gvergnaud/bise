@@ -14,10 +14,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { AppCmd, ProjectRow } from '@/proto';
 import { Act, Button, Check, Field, Group, Sheet, sentenceCase } from '@/ds';
-import { useBroken, useCoreEvent, useFound, useProjects, type Ev } from '@/store';
+import { useBroken, useCoreEvent, useFound, useFoundFolders, useProjects, type Ev } from '@/store';
 import { settings } from '@/proto/words.gen';
+import { Guarded } from '@/setup/Guarded';
 import { addLabel, addPaths, addSay, foundSub, offers, scanSay } from './add';
-import { biseHome } from './picker';
+import { biseHome, openFilesSettings } from './picker';
 
 /** The clock, read only in the click handlers (when he looks again or adds). */
 const clock = (): number => Date.now();
@@ -32,6 +33,8 @@ export interface AddSheetProps {
   home?: string | undefined;
   /** the core added them: their rows (the sidebar's opener shows the first) */
   onAdded?: (rows: readonly ProjectRow[]) => void;
+  /** System Settings › Privacy & Security › Files & Folders (none: the bridge's) */
+  filesSettings?: () => void;
 }
 
 /** The sheet; its state (ticks, typed path, the waits) starts again at each open. */
@@ -75,8 +78,9 @@ interface Adding {
   err0: number;
 }
 
-function OpenSheet({ onClose, send, pickFolder, onAdded, home = biseHome() }: AddSheetProps) {
+function OpenSheet({ onClose, send, pickFolder, onAdded, home = biseHome(), filesSettings = openFilesSettings }: AddSheetProps) {
   const found = useFound();
+  const folders = useFoundFolders();
   const projects = useProjects();
   const broken = useBroken();
   const scanErr = useRefusal('found_scan');
@@ -212,6 +216,8 @@ function OpenSheet({ onClose, send, pickFolder, onAdded, home = biseHome() }: Ad
         }))}
       />
       )}
+      {/* Documents, Desktop, Downloads: never scanned before his click (setup-scan-tcc, designer m_64068) */}
+      {folders !== null && <Guarded folders={folders} send={send} openSettings={filesSettings} testId="settings.add.guarded" />}
       <div className="settings-add-opts">
         <Group
           testId="settings.add.opts"

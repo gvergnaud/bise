@@ -56,7 +56,7 @@ function useActs(project: string, agent: string): (a: Act) => void {
         store.voiceMode(project, agent, true);
         return;
       case 'settings':
-        window.bise.voice.openMicSettings();
+        window.bise.privacySettings('microphone');
         return;
       case 'think':
         // a hold while it is his turn keeps the floor: the core waits (no send); nothing to tell it

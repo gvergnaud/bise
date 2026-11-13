@@ -200,10 +200,10 @@ const api: BiseApi = {
       ipcRenderer.send(IPC.usageGesture, g);
     },
   },
+  privacySettings: (pane) => {
+    ipcRenderer.send(IPC.privacySettings, pane);
+  },
   voice: {
-    openMicSettings: () => {
-      ipcRenderer.send(IPC.micSettings);
-    },
     log: (line: string) => {
       ipcRenderer.send(IPC.appLog, line);
     },

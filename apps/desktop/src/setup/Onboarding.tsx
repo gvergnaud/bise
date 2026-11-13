@@ -30,6 +30,7 @@ import type { Look } from '@/bims/render/look';
 import { settings } from '@/proto/words.gen';
 import { countGesture } from '@/app/usage';
 import { TelemetryNote } from './TelemetryNote';
+import { Guarded, type Folders } from './Guarded';
 import './setup.css';
 
 export interface OnboardingPorts {
@@ -40,6 +41,8 @@ export interface OnboardingPorts {
   pickFolder?: () => Promise<string | null>;
   /** a link in his browser (a provider's keys or billing page) */
   open?: (url: string) => void;
+  /** System Settings › Privacy & Security › Files & Folders (a guarded folder macOS refused) */
+  filesSettings?: () => void;
 }
 
 export interface OnboardingProps {
@@ -47,6 +50,8 @@ export interface OnboardingProps {
   /** Claude Code is signed in with a Claude plan: the model step points at its monthly API credits */
   claudePlan?: boolean;
   found: readonly Found[];
+  /** the scan's folders macOS guards (skipped, looked in); null: no scan answered yet */
+  folders?: Folders | null;
   perms: Perms;
   /** the helper's last fn act (talk_start, talk_end...), with a counter so the same act twice counts */
   fn?: { act: string; n: number } | null;
@@ -76,7 +81,7 @@ const FIRST_KISS = 48;
 /** A fn sentinel in onb_first_fn's words, where the key chip goes. */
 const FN_HOLE = '\u0000';
 
-export function Onboarding({ accounts, claudePlan = false, found, perms, fn = null, check = null, signInError = null, ports, now: pinned, home = '', hasModel = false, share = true }: OnboardingProps) {
+export function Onboarding({ accounts, claudePlan = false, found, folders = null, perms, fn = null, check = null, signInError = null, ports, now: pinned, home = '', hasModel = false, share = true }: OnboardingProps) {
   const [opened] = useState(() => Date.now());
   const now = pinned ?? opened;
   const [st, setSt] = useState<OnbState>(START);
@@ -277,7 +282,7 @@ export function Onboarding({ accounts, claudePlan = false, found, perms, fn = nu
               </Button>
             )}
           </div>
-          {found.length === 0 && s.chosen.length === 0 ? (
+          {found.length === 0 && s.chosen.length === 0 && folders === null ? (
             <Help>{settings.scan_looking}</Help>
           ) : rows.length === 0 ? (
             <Help testId="setup.filter.none">{noRepoWords(q)}</Help>
@@ -285,6 +290,17 @@ export function Onboarding({ accounts, claudePlan = false, found, perms, fn = nu
             <div className="setup-list" data-testid="setup.list">
               <Group testId="setup.found" items={rows} />
             </div>
+          )}
+          {/* Documents, Desktop, Downloads: never scanned before his click (setup-scan-tcc, designer m_64068) */}
+          {folders !== null && (
+            <Guarded
+              folders={folders}
+              send={ports.send}
+              openSettings={() => {
+                ports.filesSettings?.();
+              }}
+              testId="setup.guarded"
+            />
           )}
         </Onb>
       );

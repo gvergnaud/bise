@@ -126,6 +126,18 @@ crate::words! { settings:
     onb_no_repos = "no repos in this folder. choose a folder…, or continue without one.";
     /// onboarding: no repo matches the filter
     onb_no_match(q) = "no repo matches “{q}”. choose a folder…, or clear the filter.";
+    /// onboarding and the add sheet: the line over the folders macOS guards that the scan skipped (designer m_64068)
+    onb_guarded = "macOS keeps these folders private: bise looks in them only when you ask.";
+    /// a guarded folder's button: his click scans it (macOS asks then)
+    onb_look_in(folder) = "Look in {folder}";
+    /// a guarded folder's button while it is scanned
+    onb_looking_in(folder) = "looking in {folder}…";
+    /// a guarded folder looked in, no repo there
+    onb_none_in(folder) = "no repos in {folder}";
+    /// a guarded folder macOS refused (his « Don't Allow »)
+    onb_refused_in(folder) = "macOS said no to {folder}";
+    /// after a refusal: opens System Settings › Privacy & Security › Files & Folders
+    onb_open_settings = "Open Settings";
     /// onboarding: the first message's title
     onb_first_title = "what should i do first?";
     /// onboarding: the first message's composer, empty

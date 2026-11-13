@@ -125,6 +125,16 @@ export type Found = { path: string, name: string, git: boolean, last_ms: number,
 known: boolean, };
 
 /**
+ * A folder macOS guards that he asked to look in (`found_scan {dir}`,
+ * his click on 'Look in Documents'): how many repos it had, or macOS's no.
+ */
+export type Looked = { path: string, n: number, 
+/**
+ * it could not be read: his « Don't Allow », or Files & Folders off
+ */
+refused: boolean, };
+
+/**
  * One project's part of `away_summary` (only a project where something
  * happened while he was away).
  */

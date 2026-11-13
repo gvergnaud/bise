@@ -2,7 +2,7 @@
 //! a fake world behind the Setup port, no HOME, no browser, no key store.
 
 use super::*;
-use crate::ambient::setup::{CuPorts, Done, Entry, KeychainPort, RegistryOp, SetupPorts};
+use crate::ambient::setup::{CuPorts, Done, Entry, KeychainPort, RegistryOp, SetupPorts, Walked};
 use bise_home::projects::Row;
 use bise_proto::app_rows::{Account, LoginState, PartKind, Plugin, PluginKind, PluginPart, PluginScope, PluginState, RoleRow};
 use std::cell::RefCell;
@@ -94,6 +94,11 @@ fn rows() -> Vec<Row> {
 }
 
 fn setup(t: &mut T) -> Rc<RefCell<World>> {
+    setup_home(t, Some(PathBuf::from("/h")))
+}
+
+/// The fake ports with that home folder (None: an explicit `$BISE_HOME`).
+fn setup_home(t: &mut T, home_dir: Option<PathBuf>) -> Rc<RefCell<World>> {
     let w = Rc::new(RefCell::new(World::default()));
     let (a, b, c, d, e, f, g, h, i) = (w.clone(), w.clone(), w.clone(), w.clone(), w.clone(), w.clone(), w.clone(), w.clone(), w.clone());
     let (j, k, l, m) = (w.clone(), w.clone(), w.clone(), w.clone());
@@ -170,9 +175,15 @@ fn setup(t: &mut T) -> Rc<RefCell<World>> {
         }),
         scan: Box::new(|dir, tx| {
             let e = |n: &str, t: u64| Entry { path: PathBuf::from(format!("/p/{n}")), name: n.into(), last_ms: t };
-            let _ = tx.send(Done::Scanned { dir, entries: vec![e("shop", 2), e("blog", 5)] });
+            // his home: two repos, Documents and Desktop skipped; Documents: one; Desktop: macOS said no
+            let walked = match dir.to_str() {
+                Some("/h/Documents") => Walked { entries: vec![e("notes", 9)], ..Walked::default() },
+                Some("/h/Desktop") => Walked { refused: true, ..Walked::default() },
+                _ => Walked { entries: vec![e("shop", 2), e("blog", 5)], guarded: vec!["/h/Documents".into(), "/h/Desktop".into()], refused: false },
+            };
+            let _ = tx.send(Done::Scanned { dir, walked });
         }),
-        home_dir: PathBuf::from("/h"),
+        home_dir,
         rows: Box::new(rows),
         add: Box::new(move |p| {
             if p == Path::new("/p/home") {
@@ -568,6 +579,36 @@ fn found_scan_answers_found_newest_first_with_his_projects_flagged() {
     let f = evs(&out, "found")[0];
     assert_eq!(f["dir"], "/h");
     assert_eq!(f["items"].as_array().unwrap().iter().map(|i| (i["name"].as_str().unwrap(), i["known"].as_bool().unwrap())).collect::<Vec<_>>(), vec![("blog", false), ("shop", true)]);
+    assert_eq!(f["guarded"], json!(["/h/Documents", "/h/Desktop"]), "the guarded folders it skipped, for his 'Look in Documents'");
+    assert_eq!(f["looked"], json!([]));
+    // his click on 'Look in Documents': its repos join the list, the folder is looked
+    app(&mut t, r#"{"cmd":"found_scan","dir":"/h/Documents"}"#);
+    t.until(|o| !evs(o, "found").is_empty());
+    let out = t.take();
+    let f = evs(&out, "found")[0];
+    assert_eq!(f["dir"], "/h", "the list stays his home's");
+    let names: Vec<&str> = f["items"].as_array().unwrap().iter().map(|i| i["name"].as_str().unwrap()).collect();
+    assert_eq!(names, vec!["notes", "blog", "shop"]);
+    assert_eq!((f["guarded"].clone(), f["looked"].clone()), (json!(["/h/Desktop"]), json!([{"path": "/h/Documents", "n": 1, "refused": false}])));
+    // 'Look in Desktop': macOS said no
+    app(&mut t, r#"{"cmd":"found_scan","dir":"/h/Desktop"}"#);
+    t.until(|o| !evs(o, "found").is_empty());
+    let out = t.take();
+    let f = evs(&out, "found")[0];
+    assert_eq!(f["looked"][1], json!({"path": "/h/Desktop", "n": 0, "refused": true}));
+    assert_eq!(f["guarded"], json!([]));
+}
+
+#[test]
+fn a_throwaway_bise_home_never_scans_his_home() {
+    let mut t = T::new();
+    setup_home(&mut t, None);
+    app(&mut t, r#"{"cmd":"found_scan"}"#);
+    t.until(|o| !evs(o, "found").is_empty());
+    let out = t.take();
+    let f = evs(&out, "found")[0];
+    assert_eq!((f["dir"].as_str(), f["items"].as_array().map(Vec::len)), (Some(""), Some(0)), "no walk: {f}");
+    assert_eq!(f["guarded"], json!([]));
 }
 
 #[test]

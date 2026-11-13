@@ -15,7 +15,7 @@
 //! a sign-in) come back on the tick. A key is never in an event.
 
 use super::Core;
-use crate::ambient::setup::{rank, CuBusy, Done, RegistryOp, SetupPorts};
+use crate::ambient::setup::{rank, repos_after, CuBusy, Done, RegistryOp, SetupPorts, Walked};
 use bise_proto::app_cmd::{AppCmd, TelemetryAct};
 use bise_proto::app_rows::CheckState;
 use bise_proto::core_ev::CoreEv;
@@ -168,6 +168,9 @@ pub(crate) struct Setup {
     keychain_moving: bool,
     /// N1: the last move's lines and whether it failed
     keychain_said: (Vec<String>, bool),
+    /// the projects step's scans so far (`found`, whole each time): his
+    /// home's, then the guarded folders he looked in
+    repos: Option<crate::ambient::setup::Repos>,
     /// `provider_use`: the last seq given, and each provider's newest
     /// (an older check's end is dropped, architect m_28532)
     use_seq: u64,
@@ -204,7 +207,7 @@ impl Core {
     /// The setup's ports (the binary's live ones, or a test's).
     pub fn set_setup(&mut self, ports: SetupPorts) {
         let (tx, rx) = channel();
-        self.setup = Some(Setup { ports, tx, rx, signing: None, logins: Vec::new(), staged: Default::default(), found: None, evidence: Vec::new(), signals_at: None, markets: Vec::new(), summaries: Default::default(), cu: None, update: Default::default(), held: None, keychain_moving: false, keychain_said: (Vec::new(), false), use_seq: 0, using: Default::default(), gauge: Default::default() });
+        self.setup = Some(Setup { ports, tx, rx, signing: None, logins: Vec::new(), staged: Default::default(), found: None, evidence: Vec::new(), signals_at: None, markets: Vec::new(), summaries: Default::default(), cu: None, update: Default::default(), held: None, keychain_moving: false, keychain_said: (Vec::new(), false), repos: None, use_seq: 0, using: Default::default(), gauge: Default::default() });
     }
 
     /// R8: his `/model <model>` in `agent`'s view, before it goes to the
@@ -451,8 +454,13 @@ impl Core {
                 ("bise_update", res)
             }
             AppCmd::FoundScan { dir } => {
-                let dir = dir.filter(|d| !d.trim().is_empty()).map(PathBuf::from).unwrap_or_else(|| p.home_dir.clone());
-                (p.scan)(dir, s.tx.clone());
+                // no folder: his home (its guarded folders skipped); a throwaway home scans nothing
+                match dir.filter(|d| !d.trim().is_empty()).map(PathBuf::from).or_else(|| p.home_dir.clone()) {
+                    Some(dir) => (p.scan)(dir, s.tx.clone()),
+                    None => {
+                        let _ = s.tx.send(Done::Scanned { dir: PathBuf::new(), walked: Walked::default() });
+                    }
+                }
                 ("found_scan", Ok(()))
             }
             AppCmd::ProjectAdd { path, land } => {
@@ -847,10 +855,17 @@ impl Core {
         let done: Vec<Done> = s.rx.try_iter().collect();
         for d in done {
             match d {
-                Done::Scanned { dir, entries } => {
-                    let known: Vec<PathBuf> = self.setup.as_ref().map(|s| (s.ports.rows)().into_iter().map(|r| r.path).collect()).unwrap_or_default();
-                    let items = rank(entries, &known);
-                    self.emit(json!({"ev": "found", "dir": dir.to_string_lossy(), "items": items}));
+                Done::Scanned { dir, walked } => {
+                    let Some(s) = self.setup.as_mut() else { continue };
+                    let known: Vec<PathBuf> = (s.ports.rows)().into_iter().map(|r| r.path).collect();
+                    let r = repos_after(s.repos.take(), dir, walked);
+                    let items = rank(r.entries.clone(), &known);
+                    let path = |p: &PathBuf| p.to_string_lossy().into_owned();
+                    let guarded: Vec<String> = r.guarded.iter().map(path).collect();
+                    let looked: Vec<Value> = r.looked.iter().map(|(p, n, refused)| json!({"path": path(p), "n": n, "refused": refused})).collect();
+                    let ev = json!({"ev": "found", "dir": path(&r.dir), "items": items, "guarded": guarded, "looked": looked});
+                    s.repos = Some(r);
+                    self.emit(ev);
                 }
                 // V14: the link it opened, once per sign-in
                 Done::Signing { id, url } => {

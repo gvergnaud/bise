@@ -265,6 +265,8 @@ export function applyTyped(s: Store, ev: Ev): void {
       return;
     case "found":
       s.put("found", ev.items);
+      // the folders macOS guards: not looked in yet, and the ones he looked in (his 'Look in Documents')
+      s.put("found_folders", { guarded: ev.guarded ?? [], looked: ev.looked ?? [] });
       return;
     case "plugins":
       s.put(`plugins:${ev.project ?? ""}`, ev.items);

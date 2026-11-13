@@ -10,6 +10,11 @@
 //! flow, run as `bise auth login <id>`), devflow's `[flow] mode` (the
 //! binary hands its writer in: bend-tui doesn't link switchboard).
 //! A key never goes out in an event or a log line ([`redact`]).
+//! The repo scan ([`walk`]) never enters a folder macOS guards
+//! (Documents, Desktop, Downloads...: no privacy prompt he didn't cause);
+//! it names them, and he looks in one by his click (`found_scan {dir}`,
+//! merged by [`repos_after`]). Under an explicit `$BISE_HOME` it never
+//! scans his home (architect m_64055).
 
 use bise_home::projects::Row;
 use bise_proto::app_rows::{Account, Found, Plugin, RoleRow};
@@ -29,7 +34,7 @@ pub enum Done {
     /// a sign-in opened its link (V14: `auth login --events`' open)
     Signing { id: String, url: String },
     /// a folder walked: its repos
-    Scanned { dir: PathBuf, entries: Vec<Entry> },
+    Scanned { dir: PathBuf, walked: Walked },
     /// his sign-in ended (Err: its last line)
     SignedIn { id: String, res: Result<(), String> },
     /// a plugin server's login ended (P.1; Err: its reason)
@@ -208,8 +213,9 @@ pub struct SetupPorts {
     pub sign_in_cancel: IdFn,
     /// walks a folder on its own thread, `Done::Scanned` at its end
     pub scan: Box<dyn Fn(PathBuf, Sender<Done>)>,
-    /// his home folder (`found_scan` without a folder)
-    pub home_dir: PathBuf,
+    /// his home folder (`found_scan` without a folder); None under an
+    /// explicit `$BISE_HOME` (a throwaway home never scans his own)
+    pub home_dir: Option<PathBuf>,
     /// the registry's rows, home first
     pub rows: Box<dyn Fn() -> Vec<Row>>,
     pub add: PathFn,
@@ -411,17 +417,80 @@ fn skipped(name: &str) -> bool {
     name.starts_with('.') || ["Library", "node_modules", "target", "Applications"].contains(&name)
 }
 
+/// One folder walked ([`walk`]): its repos, the guarded folders it did
+/// not enter, and whether macOS refused the folder itself.
+#[derive(Debug, Default, PartialEq)]
+pub struct Walked {
+    pub entries: Vec<Entry>,
+    /// the folders macOS guards (`files::protected`) met and not entered,
+    /// in [`crate::files::GUARDED`]'s order
+    pub guarded: Vec<PathBuf>,
+    /// `dir` itself could not be read: permission denied (his « Don't
+    /// Allow », or Files & Folders off)
+    pub refused: bool,
+}
+
+/// What the setup shows of the scans (the `found` event, whole each
+/// time): his home's walk, then each guarded folder he looked in.
+#[derive(Debug, Default, PartialEq)]
+pub struct Repos {
+    pub dir: PathBuf,
+    pub entries: Vec<Entry>,
+    /// guarded folders not looked in yet
+    pub guarded: Vec<PathBuf>,
+    /// the guarded folders he looked in: (folder, repos found, refused)
+    pub looked: Vec<(PathBuf, usize, bool)>,
+}
+
+/// A walk's end: in a guarded folder of the scan before (his click on
+/// 'Look in Documents', again after a refusal), its repos join the list;
+/// any other folder starts a new list.
+pub fn repos_after(prev: Option<Repos>, dir: PathBuf, w: Walked) -> Repos {
+    match prev {
+        Some(mut r) if r.guarded.contains(&dir) || r.looked.iter().any(|l| l.0 == dir) => {
+            r.guarded.retain(|g| g != &dir);
+            r.looked.retain(|l| l.0 != dir);
+            r.looked.push((dir, w.entries.len(), w.refused));
+            for e in w.entries {
+                if !r.entries.iter().any(|x| x.path == e.path) {
+                    r.entries.push(e);
+                }
+            }
+            r
+        }
+        _ => Repos { dir, entries: w.entries, guarded: w.guarded, looked: Vec::new() },
+    }
+}
+
 /// The git repos under `dir`, `depth` levels down (a repo's own folders
 /// are not entered; a worktree, whose `.git` is a file, is not a repo
-/// here; `skip`: bise's own folders). No git process: the last commit's
-/// time is `.git/logs/HEAD`'s (else `.git/HEAD`'s) modification time.
-pub fn walk(dir: &Path, depth: usize, skip: &[PathBuf]) -> Vec<Entry> {
-    let mut out = Vec::new();
-    let Ok(rd) = std::fs::read_dir(dir) else { return out };
+/// here; `skip`: bise's own folders). A folder macOS guards (Documents,
+/// Desktop, Downloads, iCloud Drive, cloud folders, a volume: `home` is
+/// his home folder) is never entered on the way, so a walk never makes
+/// macOS ask him: only `dir` itself is read, the one he picked. No git
+/// process: the last commit's time is `.git/logs/HEAD`'s (else
+/// `.git/HEAD`'s) modification time.
+pub fn walk(dir: &Path, depth: usize, skip: &[PathBuf], home: Option<&Path>) -> Walked {
+    let mut out = Walked::default();
+    match std::fs::read_dir(dir) {
+        Ok(rd) => walk_in(rd, depth, skip, home, &mut out),
+        Err(e) => out.refused = e.kind() == std::io::ErrorKind::PermissionDenied,
+    }
+    let rank = |p: &PathBuf| crate::files::GUARDED.iter().position(|g| home.is_some_and(|h| p == &h.join(g))).unwrap_or(usize::MAX);
+    out.guarded.sort_by_key(rank);
+    out
+}
+
+fn walk_in(rd: std::fs::ReadDir, depth: usize, skip: &[PathBuf], home: Option<&Path>, out: &mut Walked) {
     for e in rd.flatten() {
         let path = e.path();
         let name = e.file_name().to_string_lossy().into_owned();
+        // the entry's own type (readdir's, no stat): a guarded folder is never opened
         if skipped(&name) || !e.file_type().is_ok_and(|t| t.is_dir()) || skip.iter().any(|s| s == &path) {
+            continue;
+        }
+        if crate::files::protected(home, &path) {
+            out.guarded.push(path);
             continue;
         }
         let git = path.join(".git");
@@ -429,12 +498,15 @@ pub fn walk(dir: &Path, depth: usize, skip: &[PathBuf]) -> Vec<Entry> {
             let t = |p: PathBuf| std::fs::metadata(p).and_then(|m| m.modified()).ok();
             let at = t(git.join("logs/HEAD")).or_else(|| t(git.join("HEAD"))).or_else(|| t(path.clone()));
             let last_ms = at.and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map_or(0, |d| d.as_millis() as u64);
-            out.push(Entry { path: bise_home::projects::canonical(&path), name, last_ms });
+            out.entries.push(Entry { path: bise_home::projects::canonical(&path), name, last_ms });
         } else if depth > 1 {
-            out.extend(walk(&path, depth - 1, skip));
+            #[cfg(test)]
+            tests::WALKED.lock().unwrap_or_else(|e| e.into_inner()).push(path.clone());
+            if let Ok(rd) = std::fs::read_dir(&path) {
+                walk_in(rd, depth - 1, skip, home, out);
+            }
         }
     }
-    out
 }
 
 /// A stdin line fit for a log: a `provider_use`'s key is never written.
@@ -595,12 +667,13 @@ pub fn live(flow: FlowFn) -> SetupPorts {
         scan: Box::new(move |dir, tx| {
             let h = home();
             let skip = vec![h.root().to_path_buf(), bise_home::projects::canonical(&home().bise_root())];
+            let user = h.user_home().to_path_buf();
             std::thread::spawn(move || {
-                let entries = walk(&dir, DEPTH, &skip);
-                let _ = tx.send(Done::Scanned { dir, entries });
+                let walked = walk(&dir, DEPTH, &skip, Some(&user));
+                let _ = tx.send(Done::Scanned { dir, walked });
             });
         }),
-        home_dir: home().user_home().to_path_buf(),
+        home_dir: (!home().explicit()).then(|| home().user_home().to_path_buf()),
         rows: Box::new(move || bise_home::projects::list(&home(), &home().bise_root())),
         add: Box::new(move |path| {
             let now = std::time::SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64);
@@ -804,12 +877,71 @@ mod tests {
         std::fs::write(d.join("shop/.git/logs/HEAD"), "x").unwrap();
         std::fs::create_dir_all(d.join("code/wt")).unwrap();
         std::fs::write(d.join("code/wt/.git"), "gitdir: /elsewhere").unwrap();
-        let mut names: Vec<String> = walk(&d, DEPTH, &[d.join("bise")]).into_iter().map(|e| e.name).collect();
+        let mut names: Vec<String> = walk(&d, DEPTH, &[d.join("bise")], None).entries.into_iter().map(|e| e.name).collect();
         names.sort();
         assert_eq!(names, vec!["api", "shop"], "depth 2, no dot folder, Library, node_modules, worktree, skipped folder");
-        assert!(walk(&d.join("none"), DEPTH, &[]).is_empty());
-        let shop = walk(&d, 1, &[]).into_iter().find(|e| e.name == "shop").unwrap();
+        assert_eq!(walk(&d.join("none"), DEPTH, &[], None), Walked::default(), "gone: nothing, not refused");
+        let shop = walk(&d, 1, &[], None).entries.into_iter().find(|e| e.name == "shop").unwrap();
         assert!(shop.last_ms > 0 && shop.path == d.join("shop"));
+    }
+
+    /// The folders a walk opened (read_dir) below its own folder.
+    pub(super) static WALKED: std::sync::Mutex<Vec<PathBuf>> = std::sync::Mutex::new(Vec::new());
+
+    fn walked_under(d: &Path) -> Vec<PathBuf> {
+        WALKED.lock().unwrap_or_else(|e| e.into_inner()).iter().filter(|p| p.starts_with(d)).cloned().collect()
+    }
+
+    #[test]
+    fn the_home_walk_never_enters_a_folder_macos_guards_and_says_which_it_skipped() {
+        // a fake home: repos in Documents and Desktop, one in code
+        let home = scratch("guarded");
+        for p in ["Documents/repo/.git", "Desktop/app/.git", "Downloads/x", "code/api/.git", "Library/Mobile Documents/r/.git"] {
+            std::fs::create_dir_all(home.join(p)).unwrap();
+        }
+        let w = walk(&home, DEPTH, &[], Some(&home));
+        assert_eq!(w.entries.iter().map(|e| e.name.as_str()).collect::<Vec<_>>(), vec!["api"], "no repo of a guarded folder");
+        assert_eq!(w.guarded, vec![home.join("Documents"), home.join("Desktop"), home.join("Downloads")], "the ones skipped, in the offer's order");
+        assert!(!w.refused);
+        let opened = walked_under(&home);
+        assert!(opened.iter().all(|p| !["Documents", "Desktop", "Downloads", "Library"].iter().any(|g| p.starts_with(home.join(g)))), "no read_dir inside a guarded folder: {opened:?}");
+        assert!(opened.contains(&home.join("code")));
+        // his pick: Documents itself is walked, its repo found
+        let picked = walk(&home.join("Documents"), DEPTH, &[], Some(&home));
+        assert_eq!(picked.entries.iter().map(|e| e.name.as_str()).collect::<Vec<_>>(), vec!["repo"]);
+        assert!(picked.guarded.is_empty() && !picked.refused);
+    }
+
+    #[test]
+    fn a_look_in_a_guarded_folder_joins_the_list_any_other_scan_starts_again() {
+        let e = |n: &str| Entry { path: PathBuf::from(format!("/h/{n}")), name: n.into(), last_ms: 1 };
+        let home = Walked { entries: vec![e("api")], guarded: vec!["/h/Documents".into(), "/h/Desktop".into()], refused: false };
+        let r = repos_after(None, "/h".into(), home);
+        let r = repos_after(Some(r), "/h/Documents".into(), Walked { entries: vec![e("Documents/a"), e("api")], ..Walked::default() });
+        assert_eq!(r.entries.iter().map(|e| e.name.as_str()).collect::<Vec<_>>(), vec!["api", "Documents/a"], "joined, no twice");
+        assert_eq!((r.guarded.clone(), r.looked.clone()), (vec![PathBuf::from("/h/Desktop")], vec![(PathBuf::from("/h/Documents"), 2, false)]));
+        // refused, then looked again once he allowed it: one row, the last answer
+        let r = repos_after(Some(r), "/h/Desktop".into(), Walked { refused: true, ..Walked::default() });
+        let r = repos_after(Some(r), "/h/Desktop".into(), Walked { entries: vec![e("Desktop/b")], ..Walked::default() });
+        assert_eq!(r.looked.iter().map(|l| (l.0.to_str().unwrap(), l.1, l.2)).collect::<Vec<_>>(), vec![("/h/Documents", 2, false), ("/h/Desktop", 1, false)]);
+        assert!(r.guarded.is_empty());
+        // the sheet opened again: his home's scan, a new list
+        let again = repos_after(Some(r), "/h".into(), Walked { entries: vec![e("api")], guarded: vec!["/h/Documents".into()], refused: false });
+        assert_eq!((again.entries.len(), again.guarded.len(), again.looked.len()), (1, 1, 0));
+    }
+
+    #[test]
+    fn a_folder_macos_refuses_is_said_refused() {
+        use std::os::unix::fs::PermissionsExt;
+        let home = scratch("refused");
+        let docs = home.join("Documents");
+        std::fs::create_dir_all(docs.join("repo/.git")).unwrap();
+        std::fs::set_permissions(&docs, std::fs::Permissions::from_mode(0o000)).unwrap();
+        let w = walk(&docs, DEPTH, &[], Some(&home));
+        std::fs::set_permissions(&docs, std::fs::Permissions::from_mode(0o755)).unwrap();
+        // root reads anyway (a CI container): then it just finds it
+        assert!(w.refused || w.entries.len() == 1, "{w:?}");
+        assert!(w.entries.is_empty() == w.refused);
     }
 
     #[test]

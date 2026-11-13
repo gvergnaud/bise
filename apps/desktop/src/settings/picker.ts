@@ -9,6 +9,12 @@ export function biseHome(): string | undefined {
   return (globalThis as { bise?: { home?: string } }).bise?.home;
 }
 
+/** System Settings › Privacy & Security › Files & Folders, when the shell has the bridge (a guarded folder macOS refused). */
+export function openFilesSettings(): void {
+  const bise = (globalThis as { bise?: { privacySettings?: (pane: 'files') => void } }).bise;
+  bise?.privacySettings?.('files');
+}
+
 /** The picker port when the shell has one, else nothing. */
 export function pickerPort(): { pickFolder?: () => Promise<string | null> } {
   const bise = (globalThis as { bise?: { pickFolder?: () => Promise<string | null> } }).bise;

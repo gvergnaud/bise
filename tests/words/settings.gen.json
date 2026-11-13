@@ -2629,6 +2629,11 @@
     "one": null,
     "text": "git · {when}"
   },
+  "settings.onb_guarded": {
+    "args": [],
+    "one": null,
+    "text": "macOS keeps these folders private: bise looks in them only when you ask."
+  },
   "settings.onb_hello_sub": {
     "args": [],
     "one": null,
@@ -2646,6 +2651,20 @@
     ],
     "one": null,
     "text": "{provider} says this key is wrong: “{said}”"
+  },
+  "settings.onb_look_in": {
+    "args": [
+      "folder"
+    ],
+    "one": null,
+    "text": "Look in {folder}"
+  },
+  "settings.onb_looking_in": {
+    "args": [
+      "folder"
+    ],
+    "one": null,
+    "text": "looking in {folder}…"
   },
   "settings.onb_me": {
     "args": [],
@@ -2696,6 +2715,13 @@
     "one": null,
     "text": "no repos in this folder. choose a folder…, or continue without one."
   },
+  "settings.onb_none_in": {
+    "args": [
+      "folder"
+    ],
+    "one": null,
+    "text": "no repos in {folder}"
+  },
   "settings.onb_not_now": {
     "args": [],
     "one": null,
@@ -2710,6 +2736,11 @@
     "args": [],
     "one": null,
     "text": "open bise"
+  },
+  "settings.onb_open_settings": {
+    "args": [],
+    "one": null,
+    "text": "Open Settings"
   },
   "settings.onb_other_head": {
     "args": [],
@@ -2765,6 +2796,13 @@
     "args": [],
     "one": null,
     "text": "Ready on this Mac"
+  },
+  "settings.onb_refused_in": {
+    "args": [
+      "folder"
+    ],
+    "one": null,
+    "text": "macOS said no to {folder}"
   },
   "settings.onb_said": {
     "args": [

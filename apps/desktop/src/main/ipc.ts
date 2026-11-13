@@ -6,7 +6,7 @@ import { appendFile, existsSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, extname, isAbsolute, join } from 'node:path';
 import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, session, shell, type OpenDialogOptions } from 'electron';
-import { COPY_LINE, EXTERNAL_LINE, IPC, MIC_SETTINGS_URL, OPEN_PATH_LINE, QUICKLOOK_LINE, REVEAL_LINE, SAVE_COPY_LINE, TEST_CLIP_FILE_ENV, TEST_CLIP_HOOK, TEST_CLIP_TEXT_ENV, TEST_PICK_FILES_ENV, TEST_PICK_FOLDER_ENV, TEST_SAVE_TO_ENV, type A11y, type FileFacts, type MenuAction, type PopupAt, type PopupItem, type SaveResult, type SkillRead, type ThumbAnswer } from '../shared/api';
+import { COPY_LINE, EXTERNAL_LINE, IPC, PRIVACY_URLS, type PrivacyPane, OPEN_PATH_LINE, QUICKLOOK_LINE, REVEAL_LINE, SAVE_COPY_LINE, TEST_CLIP_FILE_ENV, TEST_CLIP_HOOK, TEST_CLIP_TEXT_ENV, TEST_PICK_FILES_ENV, TEST_PICK_FOLDER_ENV, TEST_SAVE_TO_ENV, type A11y, type FileFacts, type MenuAction, type PopupAt, type PopupItem, type SaveResult, type SkillRead, type ThumbAnswer } from '../shared/api';
 import { saveCopy } from './savecopy';
 import { a11yNow } from './a11y';
 import { popupMenu } from './menu-popup';
@@ -127,14 +127,16 @@ export function installIpc(testMode: boolean): void {
     done(viewPermissionIn(wc, permission, d) ?? base(permission));
   });
   ipcMain.handle(IPC.openExternal, (_e, raw: unknown): Promise<boolean> => openLink(raw, testMode));
-  // voice mode's failed line: System Settings › Privacy › Microphone, the one settings URL a window may open
-  ipcMain.on(IPC.micSettings, () => {
+  // a Privacy & Security pane (voice mode's Microphone, the projects scan's Files & Folders): the only settings URLs a window may open
+  ipcMain.on(IPC.privacySettings, (_e, pane: unknown) => {
+    const url = typeof pane === 'string' && Object.hasOwn(PRIVACY_URLS, pane) ? PRIVACY_URLS[pane as PrivacyPane] : null;
+    if (url === null) return;
     if (testMode) {
-      process.stdout.write(`${EXTERNAL_LINE} ${MIC_SETTINGS_URL}
+      process.stdout.write(`${EXTERNAL_LINE} ${url}
 `);
       return;
     }
-    void shell.openExternal(MIC_SETTINGS_URL);
+    void shell.openExternal(url);
   });
   // a window's line for app.log, next to core.log (his dictation's decisions; we were blind on his Mac)
   ipcMain.on(IPC.appLog, (_e, raw: unknown) => {

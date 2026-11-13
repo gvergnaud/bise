@@ -72,6 +72,13 @@ import {
   type VoiceModeState,
 } from "./types";
 import { EMPTY, StoreBase } from "./base";
+import type { Looked } from "@/proto";
+
+/** The folders macOS guards that the scan skipped (`found`'s guarded) and the ones he looked in. */
+export interface FoundFolders {
+  readonly guarded: readonly string[];
+  readonly looked: readonly Looked[];
+}
 
 export class StoreReads extends StoreBase {
   // ---- reads (stable references between changes)
@@ -139,6 +146,10 @@ export class StoreReads extends StoreBase {
   }
   found(): readonly Found[] {
     return this.slice("found", EMPTY);
+  }
+  /** the scan's folders macOS guards: not looked in yet, and the ones he looked in; null before the first scan answered */
+  foundFolders(): FoundFolders | null {
+    return this.slice<FoundFolders | null>("found_folders", null);
   }
   /** a workspace's plugins in numbers (none: bise's home's); null until the core sent them */
   pluginsSummary(project?: string): PluginsSummary | null {

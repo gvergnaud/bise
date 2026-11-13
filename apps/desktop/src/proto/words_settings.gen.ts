@@ -928,6 +928,18 @@ export const settings = {
   onb_no_repos: "no repos in this folder. choose a folder…, or continue without one.",
   /** onboarding: no repo matches the filter */
   onb_no_match: (a: { q: string | number }): string => "no repo matches “" + String(a.q) + "”. choose a folder…, or clear the filter.",
+  /** onboarding and the add sheet: the line over the folders macOS guards that the scan skipped (designer m_64068) */
+  onb_guarded: "macOS keeps these folders private: bise looks in them only when you ask.",
+  /** a guarded folder's button: his click scans it (macOS asks then) */
+  onb_look_in: (a: { folder: string | number }): string => "Look in " + String(a.folder),
+  /** a guarded folder's button while it is scanned */
+  onb_looking_in: (a: { folder: string | number }): string => "looking in " + String(a.folder) + "…",
+  /** a guarded folder looked in, no repo there */
+  onb_none_in: (a: { folder: string | number }): string => "no repos in " + String(a.folder),
+  /** a guarded folder macOS refused (his « Don't Allow ») */
+  onb_refused_in: (a: { folder: string | number }): string => "macOS said no to " + String(a.folder),
+  /** after a refusal: opens System Settings › Privacy & Security › Files & Folders */
+  onb_open_settings: "Open Settings",
   /** onboarding: the first message's title */
   onb_first_title: "what should i do first?",
   /** onboarding: the first message's composer, empty */

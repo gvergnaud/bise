@@ -467,11 +467,14 @@ fn sent_path_in(home: Option<&Path>, path: &str) -> String {
     }
 }
 
+/// The folders of his home macOS guards (TCC), in the order the setup
+/// offers them.
+pub(crate) const GUARDED: [&str; 5] = ["Documents", "Desktop", "Downloads", "Library/Mobile Documents", "Library/CloudStorage"];
+
 /// A folder macOS guards (TCC: « would like to access files in your
 /// Desktop folder »): shown as an entry, read only once entered.
 pub(crate) fn protected(home: Option<&Path>, path: &Path) -> bool {
-    let guarded = ["Desktop", "Documents", "Downloads", "Library/Mobile Documents", "Library/CloudStorage"];
-    let in_home = home.is_some_and(|h| guarded.iter().any(|g| path == h.join(g)));
+    let in_home = home.is_some_and(|h| GUARDED.iter().any(|g| path == h.join(g)));
     let volume = path.parent() == Some(Path::new("/Volumes"));
     in_home || volume
 }

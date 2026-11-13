@@ -383,6 +383,26 @@ describe('Onboarding', () => {
     ]);
   });
 
+  it("the projects step (setup-scan-tcc): the scan found nothing outside the guarded folders: it says so, never 'looking' forever, and Documents is scanned only on his click", () => {
+    const p = ports();
+    const docs = '/Users/camille/Documents';
+    const ui = (check: typeof WORKS | null = null, folders: { guarded: string[]; looked: [] } | null = null) => (
+      <Onboarding accounts={accounts()} found={[]} folders={folders} perms={{}} ports={p} now={NOW} check={check} />
+    );
+    const { rerender } = render(ui());
+    fireEvent.click(screen.getByTestId('setup.next'));
+    passModel(rerender, (c) => ui(c));
+    expect(p.sent.at(-1)).toEqual({ cmd: 'found_scan' });
+    expect(screen.getByTestId('setup.step.projects').textContent).toContain(settings.scan_looking);
+    expect(screen.queryByTestId('setup.guarded')).toBeNull();
+    // the home scan answered: no repo outside Documents
+    rerender(ui(WORKS, { guarded: [docs], looked: [] }));
+    expect(screen.getByTestId('setup.filter.none').textContent).toBe(settings.onb_no_repos);
+    expect(p.sent.filter((c) => c.cmd === 'found_scan')).toEqual([{ cmd: 'found_scan' }]);
+    fireEvent.click(screen.getByTestId('setup.guarded.Documents'));
+    expect(p.sent.at(-1)).toEqual({ cmd: 'found_scan', dir: docs });
+  });
+
   it('paths read with ~ for his home, a long one cut in the middle keeping the last folders', () => {
     expect(homePath('/Users/camille/code/shop', '/Users/camille')).toBe('~/code/shop');
     expect(homePath('/Users/camille', '/Users/camille/')).toBe('~');
