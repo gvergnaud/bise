@@ -45,6 +45,7 @@
 {"cmd":"task_act","project":"acme-1a2b3c4d","req":{"step":"done","id":"native-mac"}}
 {"cmd":"task_move","project":"acme-1a2b3c4d","card":12,"works":["native-mac"]}
 {"cmd":"task_move","project":"acme-1a2b3c4d","art":"a_41","works":[]}
+{"cmd":"task_move","project":"acme-1a2b3c4d","art":"weekly-update","page":true,"works":["digest"]}
 {"cmd":"pr_detail","project":"acme-1a2b3c4d","url":"https://github.com/acme/web/pull/412","req":6}
 {"cmd":"pr_check_log","project":"acme-1a2b3c4d","url":"https://github.com/acme/web/pull/412","check":"ci / test","req":7}
 {"cmd":"inbox_history","project":"acme-1a2b3c4d","agent":"perf","state":"answered","words":"avif","before":12,"limit":50}

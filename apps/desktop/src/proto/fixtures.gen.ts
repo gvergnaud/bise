@@ -192,6 +192,7 @@ export const hub_cmd: readonly HubCmd[] = [
   {"cmd":"task_act","project":"acme-1a2b3c4d","req":{"id":"native-mac","step":"done"}},
   {"card":12,"cmd":"task_move","project":"acme-1a2b3c4d","works":["native-mac"]},
   {"art":"a_41","cmd":"task_move","project":"acme-1a2b3c4d","works":[]},
+  {"art":"weekly-update","cmd":"task_move","page":true,"project":"acme-1a2b3c4d","works":["digest"]},
   {"cmd":"pr_detail","project":"acme-1a2b3c4d","req":6,"url":"https://github.com/acme/web/pull/412"},
   {"check":"ci / test","cmd":"pr_check_log","project":"acme-1a2b3c4d","req":7,"url":"https://github.com/acme/web/pull/412"},
   {"agent":"perf","before":12,"cmd":"inbox_history","limit":50,"project":"acme-1a2b3c4d","state":"answered","words":"avif"},

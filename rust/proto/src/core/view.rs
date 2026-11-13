@@ -58,6 +58,10 @@ core_records! {
             /// when its turn started (null: no turn)
             turn_ms: OptNat,
             turns: Nat,
+            /// tasks: the works its turn serves (sb-core's fact; the
+            /// shell's stamps read it, never compute it); omitted when it
+            /// serves none (most agents, and every view before tasks)
+            turn_works: OptStrsOmit,
         },
         /// One message with its state, whether its question is settled,
         /// and what sb-core says of it (model.bend's predicates, the ones

@@ -49,12 +49,20 @@ def waits_on(+ws: List<&2, X.Waiter>, +s: S.St, +n: String) -> Maybe<&2, String>
       LZ.pick(Maybe<&2, String>, String.eq(X.Waiter.agent(w), n),
         u => waits_to(M.msg_of(s, X.Waiter.msg(w))), u => waits_on(t, s, n))
 
+# tasks: an agent's turn works on its row, omitted when it serves none
+def turn_works_row(xs: List<&2, String>) -> Maybe<&2, List<&2, String>>:
+  match xs:
+    case Nil{}:
+      None{}
+    case Con{+h, +t}:
+      Some{Con{h, t}}
+
 def agent_json(+a: S.Agent, +x: X.Rt, +wo: Maybe<&2, String>) -> J.Json:
   V.agent(S.Agent.name(a), S.Agent.dir(a), S.Agent.is_main(a), S.Agent.parent(a),
     S.Agent.brief(a), S.Agent.created(a), S.Agent.ws(a), SC.Life.word(S.Agent.life(a)),
     S.Agent.failure(a), jdecl(S.Agent.declared(a), S.Agent.note(a)), S.Agent.report(a),
     S.Agent.aliases(a), S.Agent.files(a), S.Agent.snap(a), M.follows(a),
-    H.run_str(X.Rt.run(x)), X.Rt.waiting(x), wo, X.Rt.turn(x), X.Rt.turns(x))
+    H.run_str(X.Rt.run(x)), X.Rt.waiting(x), wo, X.Rt.turn(x), X.Rt.turns(x), turn_works_row(S.Agent.turn_works(a)))
 
 def is_archived(l: S.Life) -> Bool:
   match l:

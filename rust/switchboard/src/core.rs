@@ -159,12 +159,14 @@ pub enum Input {
         client: ClientId,
         req: bise_proto::sb::Task,
     },
-    /// tasks: he moved card `card` or artifact `art` to the tasks `works`
-    /// (HubCmd task_move; a client's only): sb-core's work_move
+    /// tasks: he moved card `card` or artifact `art` (`page`: the page
+    /// `art`, from the row he acted on) to the tasks `works` (HubCmd
+    /// task_move; a client's only): sb-core's work_move
     ClientWorkMove {
         client: ClientId,
         card: Option<u64>,
         art: String,
+        page: bool,
         works: Vec<String>,
     },
     /// `by`: its sender, sb-core refuses it first when it may not speak as `from` (issue 37 #2)
@@ -448,6 +450,10 @@ pub enum Effect {
     /// name-free: another agent takes the old name `from`: pages and
     /// artifacts that still say it are `to`'s (daemon/names.rs)
     Retarget { from: String, to: String },
+    /// tasks: he moved artifact `art` (`page`: the page `art`) to `works`
+    /// (sb-core's fx art_works): that store sets them (daemon/art.rs,
+    /// artifacts_works)
+    ArtWorks { art: String, works: Vec<String>, page: bool },
     /// The state changed: broadcast a snapshot.
     State,
     /// Ask a small model for a task's role line (BISE-126), off the hub's
@@ -1190,6 +1196,7 @@ impl Hub {
             onto: feature::onto(&a.ws), // a feature's agent lands on the feature (dev-flow §5.1)
             checks: std::path::PathBuf::new(),
             lands: std::path::PathBuf::new(),
+            works: a.turn_works.clone().unwrap_or_default(),
         })
     }
 
@@ -1750,8 +1757,8 @@ impl Hub {
                 Ok(req) => self.core(&mut fx, env, Some(client), In::WorkAct(ci::WorkAct { req })),
                 Err(e) => fx.push(notice(client, e["error"].as_str().unwrap_or("refused"))),
             },
-            Input::ClientWorkMove { client, card, art, works } => {
-                self.core(&mut fx, env, Some(client), In::WorkMove(ci::WorkMove { card, art, works }))
+            Input::ClientWorkMove { client, card, art, page, works } => {
+                self.core(&mut fx, env, Some(client), In::WorkMove(ci::WorkMove { card, art, works, page }))
             }
             Input::Agent { token, from, req, by } => self.agent_step(&mut fx, env, token, &from, req, by),
             Input::Speaks { token, from, cmd, by } => self.core(&mut fx, env, None, In::Speaks(by.speaks(token, from, cmd))),

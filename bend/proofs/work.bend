@@ -121,6 +121,25 @@ def Laws.same_page_waits_leave_its_row(pw, id):
   %Equal.sym(Bool, Nat.is_eq(HKY.kn_get(pw, id), HKY.kn_get(pw, id)), True{}, eq_refl(HKY.kn_get(pw, id))) : {Bool.not(_) == False{} : Bool}
   {==}
 
+# the R of a context after with_r is that R
+def cx_r_with_r(-o: HS.St, cx: HX.Cx<o>, +r: HX.R) -> {HX.Cx.r(o, HX.with_r(o, cx, r)) == r : HX.R}:
+  match cx:
+    case HX.Cx{c, r0}:
+      {==}
+
+# the page waits of R.with_pw(x, v) are v
+def r_pw_with(x: HX.R, +v: List<&2, HX.Kn>) -> {HX.R.pw(HX.R.with_pw(x, v)) == v : List<&2, HX.Kn>}:
+  match x:
+    case HX.R{a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16}:
+      {==}
+
+def Laws.page_waits_is_the_whole_set(o, cx, ws, ns):
+  %Equal.sym(HX.R, HX.Cx.r(o, HX.with_r(o, cx, HX.R.with_pw(HC.rr(o, cx), HC.page_waits(ws, ns)))), HX.R.with_pw(HC.rr(o, cx), HC.page_waits(ws, ns)), cx_r_with_r(o, cx, HX.R.with_pw(HC.rr(o, cx), HC.page_waits(ws, ns)))) : {HX.R.pw(_) == HC.page_waits(ws, ns) : List<&2, HX.Kn>}
+  r_pw_with(HC.rr(o, cx), HC.page_waits(ws, ns))
+
+def Laws.no_page_waits_no_needs(ns, id):
+  {==}
+
 def Laws.moved_by_you_sticks(c, ws):
   %Equal.sym(Bool, Nat.is_eq(HS.Card.id(c), HS.Card.id(c)), True{}, eq_refl(HS.Card.id(c))) : {HLZ.pick(List<&2, HS.Card>, _, u => HS.Card.with_moved(HS.Card.with_works(c, ws), True{}) <> Nil{}, u => c <> HM.card_moved(Nil{}, HS.Card.id(c), ws)) == [HS.Card.with_moved(HS.Card.with_works(c, ws), True{})] : List<&2, HS.Card>}
   {==}

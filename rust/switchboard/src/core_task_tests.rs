@@ -193,20 +193,26 @@ fn his_gesture_on_a_task_is_made_as_him_and_a_refusal_is_his_notice() {
 fn his_move_of_an_artifact_or_a_card_is_journaled_and_an_unknown_one_refused() {
     let mut t = T::new();
     let a = new(&mut t, MAIN, "Native mac", &[]);
-    let fx = t.go(Input::ClientWorkMove { client: 7, card: None, art: "a_41".into(), works: vec![a.clone()] });
+    let fx = t.go(Input::ClientWorkMove { client: 7, card: None, art: "a_41".into(), page: false, works: vec![a.clone()] });
     assert_eq!(notice_to(&fx, 7), None, "{fx:?}");
     let m = lines(&t, "art_moved");
     assert_eq!(m.last().unwrap()["moved"], json!({"art": "a_41", "works": [a]}), "{m:?}");
+    // the store's Meta is told (its one owner): sb-core keeps no map
+    assert!(fx.contains(&Effect::ArtWorks { art: "a_41".into(), works: vec![a.clone()], page: false }), "{fx:?}");
+    // a page: typed from the row he acted on, all the way to the store
+    let fx = t.go(Input::ClientWorkMove { client: 7, card: None, art: "a_41".into(), page: true, works: vec![a.clone()] });
+    assert_eq!(lines(&t, "art_moved").last().unwrap()["moved"]["page"], true);
+    assert!(fx.contains(&Effect::ArtWorks { art: "a_41".into(), works: vec![a.clone()], page: true }), "{fx:?}");
     // out of every task: an empty list
-    t.go(Input::ClientWorkMove { client: 7, card: None, art: "a_41".into(), works: vec![] });
+    t.go(Input::ClientWorkMove { client: 7, card: None, art: "a_41".into(), page: false, works: vec![] });
     assert_eq!(lines(&t, "art_moved").last().unwrap()["moved"]["art"], "a_41");
     // an unknown card or task: nothing moved, his notice
-    let fx = t.go(Input::ClientWorkMove { client: 7, card: Some(99), art: String::new(), works: vec![a.clone()] });
+    let fx = t.go(Input::ClientWorkMove { client: 7, card: Some(99), art: String::new(), page: false, works: vec![a.clone()] });
     assert!(notice_to(&fx, 7).is_some_and(|n| n.contains("no card #99")), "{fx:?}");
-    let fx = t.go(Input::ClientWorkMove { client: 7, card: None, art: "a_42".into(), works: vec!["nope".into()] });
+    let fx = t.go(Input::ClientWorkMove { client: 7, card: None, art: "a_42".into(), page: false, works: vec!["nope".into()] });
     assert!(notice_to(&fx, 7).is_some(), "{fx:?}");
     assert_eq!(lines(&t, "card_moved").len(), 0);
-    assert_eq!(lines(&t, "art_moved").len(), 2);
+    assert_eq!(lines(&t, "art_moved").len(), 3);
 }
 
 fn interrupted(fx: &[Effect], agent: &str) -> bool {

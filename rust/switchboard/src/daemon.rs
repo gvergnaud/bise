@@ -1012,6 +1012,7 @@ impl Shell {
             }
             Effect::Renamed { old, new } => self.renamed(old, new),
             Effect::Retarget { from, to } => self.retarget(&from, &to),
+            Effect::ArtWorks { art, works, page } => self.art_works(&art, works, page),
             // sent by the loop when the gate allows (daemon/state_gate.rs)
             Effect::State => self.state_gate.changed(),
             Effect::AskRole { dir, key, request } => self.ask_role(dir, key, request),
@@ -1761,6 +1762,9 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
     sh.answers_replayed(&events);
     sh.start_pages(&paths, &tx);
     sh.start_here(&paths);
+    // tasks: his page waits per work, before the sockets serve any client
+    // (architect m_64425: no status computed without the page facts)
+    sh.page_waits_send();
     match sh.idle.grace() {
         Some(g) => log_line(&paths, &sh.idle.boot_line(g)),
         None => log_line(&paths, "idle exit: off (the hub runs until stopped)"),

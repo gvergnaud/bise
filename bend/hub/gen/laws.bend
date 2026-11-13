@@ -298,7 +298,7 @@ def in_work_act_bare():
   {==}
 
 law in_work_move_bare:
-  {IN.of(J.obj([J.kv("t", J.JStr{"work_move"})])) == IN.IWorkMove{None{}, "", Nil{}} : IN.In}
+  {IN.of(J.obj([J.kv("t", J.JStr{"work_move"})])) == IN.IWorkMove{None{}, "", Nil{}, False{}} : IN.In}
 
 def in_work_move_bare():
   {==}
@@ -879,21 +879,22 @@ law in_IWorkMove_round:
   for card: Maybe<&2, Nat>
   for art: String
   for works: List<&2, String>
-  {IN.of(IN.json(IN.IWorkMove{card, art, works})) == IN.IWorkMove{card, art, works} : IN.In}
+  for page: Bool
+  {IN.of(IN.json(IN.IWorkMove{card, art, works, page})) == IN.IWorkMove{card, art, works, page} : IN.In}
 
-def in_IWorkMove_round(card, art, works):
+def in_IWorkMove_round(card, art, works, page):
   match card art:
     case None{} SNil{}:
-      %K.strs_round(works) : {IN.of(IN.json(IN.IWorkMove{None{}, SNil{}, works})) == IN.IWorkMove{None{}, SNil{}, _} : IN.In}
+      %K.strs_round(works) : {IN.of(IN.json(IN.IWorkMove{None{}, SNil{}, works, page})) == IN.IWorkMove{None{}, SNil{}, _, page} : IN.In}
       {==}
     case None{} SCon{h_art, t_art}:
-      %K.strs_round(works) : {IN.of(IN.json(IN.IWorkMove{None{}, SCon{h_art, t_art}, works})) == IN.IWorkMove{None{}, SCon{h_art, t_art}, _} : IN.In}
+      %K.strs_round(works) : {IN.of(IN.json(IN.IWorkMove{None{}, SCon{h_art, t_art}, works, page})) == IN.IWorkMove{None{}, SCon{h_art, t_art}, _, page} : IN.In}
       {==}
     case Some{x_card} SNil{}:
-      %K.strs_round(works) : {IN.of(IN.json(IN.IWorkMove{Some{x_card}, SNil{}, works})) == IN.IWorkMove{Some{x_card}, SNil{}, _} : IN.In}
+      %K.strs_round(works) : {IN.of(IN.json(IN.IWorkMove{Some{x_card}, SNil{}, works, page})) == IN.IWorkMove{Some{x_card}, SNil{}, _, page} : IN.In}
       {==}
     case Some{x_card} SCon{h_art, t_art}:
-      %K.strs_round(works) : {IN.of(IN.json(IN.IWorkMove{Some{x_card}, SCon{h_art, t_art}, works})) == IN.IWorkMove{Some{x_card}, SCon{h_art, t_art}, _} : IN.In}
+      %K.strs_round(works) : {IN.of(IN.json(IN.IWorkMove{Some{x_card}, SCon{h_art, t_art}, works, page})) == IN.IWorkMove{Some{x_card}, SCon{h_art, t_art}, _, page} : IN.In}
       {==}
 
 law in_IEverySet_round:
@@ -1486,6 +1487,12 @@ law fx_renamed_bare:
 def fx_renamed_bare():
   {==}
 
+law fx_art_works_bare:
+  {FX.of(J.obj([J.kv("fx", J.JStr{"art_works"})])) == FX.FArtWorks{"", Nil{}, False{}} : FX.Fx}
+
+def fx_art_works_bare():
+  {==}
+
 law fx_retarget_bare:
   {FX.of(J.obj([J.kv("fx", J.JStr{"retarget"})])) == FX.FRetarget{"", ""} : FX.Fx}
 
@@ -1829,6 +1836,16 @@ law fx_FRenamed_round:
   {FX.of(FX.json(FX.FRenamed{old, new})) == FX.FRenamed{old, new} : FX.Fx}
 
 def fx_FRenamed_round(old, new):
+  {==}
+
+law fx_FArtWorks_round:
+  for art: String
+  for works: List<&2, String>
+  for page: Bool
+  {FX.of(FX.json(FX.FArtWorks{art, works, page})) == FX.FArtWorks{art, works, page} : FX.Fx}
+
+def fx_FArtWorks_round(art, works, page):
+  %K.strs_round(works) : {FX.of(FX.json(FX.FArtWorks{art, works, page})) == FX.FArtWorks{art, _, page} : FX.Fx}
   {==}
 
 law fx_FRetarget_round:

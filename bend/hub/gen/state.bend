@@ -188,9 +188,9 @@ type Work is Data:
 type Tomb is Data:
   Tomb{id: String, name: String, done: Nat, merged_into: Maybe<&2, String>}
 
-# his "Move to task…" on an artifact: its works from now on, an agent's turn never moves it back (law moved_by_you_sticks)
+# his "Move to task…" on an artifact or a page (`page`: the target is the page store's page `art`, typed from the row he acted on, never looked up; an old line: an artifact): its works from now on, an agent's turn never moves it back (law moved_by_you_sticks)
 type Moved is Data:
-  Moved{art: String, works: List<&2, String>}
+  Moved{art: String, works: List<&2, String>, page: Bool}
 
 # an agent's turn's works as they change (work_turn): a new turn sets them, a steered delivery (`add`) adds to them
 type WTurn is Data:
@@ -202,7 +202,7 @@ type CardMove is Data:
 
 # the hub's durable state; `paused` since that ms (None runs); `hot`/`old` the messages split (hot ids ascending, old newest first); `gone` the withdrawn cards he may still answer, newest first; `agents`/`arch` the agents split (agents: not archived, in creation order; arch: archived, newest archived first; `order` every name, in creation order)
 type St is Data:
-  St{agents: List<&2, Agent>, order: List<&2, String>, hot: List<&2, MRec>, cards: List<&2, Card>, notes: List<&2, String>, next_msg: Nat, next_card: Nat, tm: Tms, x: Xs, paused: Maybe<&2, Nat>, old: List<&2, MRec>, gone: List<&2, Item>, arch: List<&2, Agent>, works: List<&2, Work>, tombs: List<&2, Tomb>, moved: List<&2, Moved>}
+  St{agents: List<&2, Agent>, order: List<&2, String>, hot: List<&2, MRec>, cards: List<&2, Card>, notes: List<&2, String>, next_msg: Nat, next_card: Nat, tm: Tms, x: Xs, paused: Maybe<&2, Nat>, old: List<&2, MRec>, gone: List<&2, Item>, arch: List<&2, Agent>, works: List<&2, Work>, tombs: List<&2, Tomb>}
 
 # ---- Msg ----
 
@@ -3047,40 +3047,55 @@ def Tomb.open(+r: Tomb) -> Tomb:
 # ---- Moved ----
 
 def Moved.empty() -> Moved:
-  Moved{"", Nil{}}
+  Moved{"", Nil{}, False{}}
 
 def Moved.art(r: Moved) -> String:
   match r:
-    case Moved{f0, _}:
+    case Moved{f0, _, _}:
       f0
 
 def Moved.with_art(r: Moved, v: String) -> Moved:
   match r:
-    case Moved{_, f1}:
-      Moved{v, f1}
+    case Moved{_, f1, f2}:
+      Moved{v, f1, f2}
 
 def Moved.over_art(r: Moved, g: String -> String) -> Moved:
   match r:
-    case Moved{f0, f1}:
-      Moved{g(f0), f1}
+    case Moved{f0, f1, f2}:
+      Moved{g(f0), f1, f2}
 
 def Moved.works(r: Moved) -> List<&2, String>:
   match r:
-    case Moved{_, f1}:
+    case Moved{_, f1, _}:
       f1
 
 def Moved.with_works(r: Moved, v: List<&2, String>) -> Moved:
   match r:
-    case Moved{f0, _}:
-      Moved{f0, v}
+    case Moved{f0, _, f2}:
+      Moved{f0, v, f2}
 
 def Moved.over_works(r: Moved, g: List<&2, String> -> List<&2, String>) -> Moved:
   match r:
-    case Moved{f0, f1}:
-      Moved{f0, g(f1)}
+    case Moved{f0, f1, f2}:
+      Moved{f0, g(f1), f2}
+
+def Moved.page(r: Moved) -> Bool:
+  match r:
+    case Moved{_, _, f2}:
+      f2
+
+def Moved.with_page(r: Moved, v: Bool) -> Moved:
+  match r:
+    case Moved{f0, f1, _}:
+      Moved{f0, f1, v}
+
+def Moved.over_page(r: Moved, g: Bool -> Bool) -> Moved:
+  match r:
+    case Moved{f0, f1, f2}:
+      Moved{f0, f1, g(f2)}
 
 def Moved.open(+r: Moved) -> Moved:
-  Moved.with_works(Moved.with_art(Moved.empty(), Moved.art(r)), Moved.works(r))
+  Moved.with_page(Moved.with_works(Moved.with_art(Moved.empty(), Moved.art(r)), Moved.works(r)), Moved.page(r))
 
 # ---- WTurn ----
 
@@ -3191,248 +3206,233 @@ def CardMove.open(+r: CardMove) -> CardMove:
 # ---- St ----
 
 def St.empty() -> St:
-  St{Nil{}, Nil{}, Nil{}, Nil{}, Nil{}, 1n, 1n, Tms.empty(), Xs.empty(), None{}, Nil{}, Nil{}, Nil{}, Nil{}, Nil{}, Nil{}}
+  St{Nil{}, Nil{}, Nil{}, Nil{}, Nil{}, 1n, 1n, Tms.empty(), Xs.empty(), None{}, Nil{}, Nil{}, Nil{}, Nil{}, Nil{}}
 
 def St.agents(r: St) -> List<&2, Agent>:
   match r:
-    case St{f0, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _}:
+    case St{f0, _, _, _, _, _, _, _, _, _, _, _, _, _, _}:
       f0
 
 def St.with_agents(r: St, v: List<&2, Agent>) -> St:
   match r:
-    case St{_, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      St{v, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+    case St{_, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      St{v, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}
 
 def St.over_agents(r: St, g: List<&2, Agent> -> List<&2, Agent>) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      St{g(f0), f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      St{g(f0), f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}
 
 def St.order(r: St) -> List<&2, String>:
   match r:
-    case St{_, f1, _, _, _, _, _, _, _, _, _, _, _, _, _, _}:
+    case St{_, f1, _, _, _, _, _, _, _, _, _, _, _, _, _}:
       f1
 
 def St.with_order(r: St, v: List<&2, String>) -> St:
   match r:
-    case St{f0, _, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      St{f0, v, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+    case St{f0, _, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      St{f0, v, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}
 
 def St.over_order(r: St, g: List<&2, String> -> List<&2, String>) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      St{f0, g(f1), f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      St{f0, g(f1), f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}
 
 def St.hot(r: St) -> List<&2, MRec>:
   match r:
-    case St{_, _, f2, _, _, _, _, _, _, _, _, _, _, _, _, _}:
+    case St{_, _, f2, _, _, _, _, _, _, _, _, _, _, _, _}:
       f2
 
 def St.with_hot(r: St, v: List<&2, MRec>) -> St:
   match r:
-    case St{f0, f1, _, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      St{f0, f1, v, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+    case St{f0, f1, _, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      St{f0, f1, v, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}
 
 def St.over_hot(r: St, g: List<&2, MRec> -> List<&2, MRec>) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      St{f0, f1, g(f2), f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      St{f0, f1, g(f2), f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}
 
 def St.cards(r: St) -> List<&2, Card>:
   match r:
-    case St{_, _, _, f3, _, _, _, _, _, _, _, _, _, _, _, _}:
+    case St{_, _, _, f3, _, _, _, _, _, _, _, _, _, _, _}:
       f3
 
 def St.with_cards(r: St, v: List<&2, Card>) -> St:
   match r:
-    case St{f0, f1, f2, _, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      St{f0, f1, f2, v, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+    case St{f0, f1, f2, _, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      St{f0, f1, f2, v, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}
 
 def St.over_cards(r: St, g: List<&2, Card> -> List<&2, Card>) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      St{f0, f1, f2, g(f3), f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      St{f0, f1, f2, g(f3), f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}
 
 def St.notes(r: St) -> List<&2, String>:
   match r:
-    case St{_, _, _, _, f4, _, _, _, _, _, _, _, _, _, _, _}:
+    case St{_, _, _, _, f4, _, _, _, _, _, _, _, _, _, _}:
       f4
 
 def St.with_notes(r: St, v: List<&2, String>) -> St:
   match r:
-    case St{f0, f1, f2, f3, _, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      St{f0, f1, f2, f3, v, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+    case St{f0, f1, f2, f3, _, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      St{f0, f1, f2, f3, v, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}
 
 def St.over_notes(r: St, g: List<&2, String> -> List<&2, String>) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      St{f0, f1, f2, f3, g(f4), f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      St{f0, f1, f2, f3, g(f4), f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}
 
 def St.next_msg(r: St) -> Nat:
   match r:
-    case St{_, _, _, _, _, f5, _, _, _, _, _, _, _, _, _, _}:
+    case St{_, _, _, _, _, f5, _, _, _, _, _, _, _, _, _}:
       f5
 
 def St.with_next_msg(r: St, v: Nat) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, _, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      St{f0, f1, f2, f3, f4, v, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+    case St{f0, f1, f2, f3, f4, _, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      St{f0, f1, f2, f3, f4, v, f6, f7, f8, f9, f10, f11, f12, f13, f14}
 
 def St.over_next_msg(r: St, g: Nat -> Nat) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      St{f0, f1, f2, f3, f4, g(f5), f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      St{f0, f1, f2, f3, f4, g(f5), f6, f7, f8, f9, f10, f11, f12, f13, f14}
 
 def St.next_card(r: St) -> Nat:
   match r:
-    case St{_, _, _, _, _, _, f6, _, _, _, _, _, _, _, _, _}:
+    case St{_, _, _, _, _, _, f6, _, _, _, _, _, _, _, _}:
       f6
 
 def St.with_next_card(r: St, v: Nat) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, _, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      St{f0, f1, f2, f3, f4, f5, v, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+    case St{f0, f1, f2, f3, f4, f5, _, f7, f8, f9, f10, f11, f12, f13, f14}:
+      St{f0, f1, f2, f3, f4, f5, v, f7, f8, f9, f10, f11, f12, f13, f14}
 
 def St.over_next_card(r: St, g: Nat -> Nat) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      St{f0, f1, f2, f3, f4, f5, g(f6), f7, f8, f9, f10, f11, f12, f13, f14, f15}
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      St{f0, f1, f2, f3, f4, f5, g(f6), f7, f8, f9, f10, f11, f12, f13, f14}
 
 def St.tm(r: St) -> Tms:
   match r:
-    case St{_, _, _, _, _, _, _, f7, _, _, _, _, _, _, _, _}:
+    case St{_, _, _, _, _, _, _, f7, _, _, _, _, _, _, _}:
       f7
 
 def St.with_tm(r: St, v: Tms) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, _, f8, f9, f10, f11, f12, f13, f14, f15}:
-      St{f0, f1, f2, f3, f4, f5, f6, v, f8, f9, f10, f11, f12, f13, f14, f15}
+    case St{f0, f1, f2, f3, f4, f5, f6, _, f8, f9, f10, f11, f12, f13, f14}:
+      St{f0, f1, f2, f3, f4, f5, f6, v, f8, f9, f10, f11, f12, f13, f14}
 
 def St.over_tm(r: St, g: Tms -> Tms) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      St{f0, f1, f2, f3, f4, f5, f6, g(f7), f8, f9, f10, f11, f12, f13, f14, f15}
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      St{f0, f1, f2, f3, f4, f5, f6, g(f7), f8, f9, f10, f11, f12, f13, f14}
 
 def St.x(r: St) -> Xs:
   match r:
-    case St{_, _, _, _, _, _, _, _, f8, _, _, _, _, _, _, _}:
+    case St{_, _, _, _, _, _, _, _, f8, _, _, _, _, _, _}:
       f8
 
 def St.with_x(r: St, v: Xs) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, f7, _, f9, f10, f11, f12, f13, f14, f15}:
-      St{f0, f1, f2, f3, f4, f5, f6, f7, v, f9, f10, f11, f12, f13, f14, f15}
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, _, f9, f10, f11, f12, f13, f14}:
+      St{f0, f1, f2, f3, f4, f5, f6, f7, v, f9, f10, f11, f12, f13, f14}
 
 def St.over_x(r: St, g: Xs -> Xs) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      St{f0, f1, f2, f3, f4, f5, f6, f7, g(f8), f9, f10, f11, f12, f13, f14, f15}
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      St{f0, f1, f2, f3, f4, f5, f6, f7, g(f8), f9, f10, f11, f12, f13, f14}
 
 def St.paused(r: St) -> Maybe<&2, Nat>:
   match r:
-    case St{_, _, _, _, _, _, _, _, _, f9, _, _, _, _, _, _}:
+    case St{_, _, _, _, _, _, _, _, _, f9, _, _, _, _, _}:
       f9
 
 def St.with_paused(r: St, v: Maybe<&2, Nat>) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, _, f10, f11, f12, f13, f14, f15}:
-      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, v, f10, f11, f12, f13, f14, f15}
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, _, f10, f11, f12, f13, f14}:
+      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, v, f10, f11, f12, f13, f14}
 
 def St.over_paused(r: St, g: Maybe<&2, Nat> -> Maybe<&2, Nat>) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, g(f9), f10, f11, f12, f13, f14, f15}
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, g(f9), f10, f11, f12, f13, f14}
 
 def St.old(r: St) -> List<&2, MRec>:
   match r:
-    case St{_, _, _, _, _, _, _, _, _, _, f10, _, _, _, _, _}:
+    case St{_, _, _, _, _, _, _, _, _, _, f10, _, _, _, _}:
       f10
 
 def St.with_old(r: St, v: List<&2, MRec>) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, _, f11, f12, f13, f14, f15}:
-      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, v, f11, f12, f13, f14, f15}
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, _, f11, f12, f13, f14}:
+      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, v, f11, f12, f13, f14}
 
 def St.over_old(r: St, g: List<&2, MRec> -> List<&2, MRec>) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, g(f10), f11, f12, f13, f14, f15}
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, g(f10), f11, f12, f13, f14}
 
 def St.gone(r: St) -> List<&2, Item>:
   match r:
-    case St{_, _, _, _, _, _, _, _, _, _, _, f11, _, _, _, _}:
+    case St{_, _, _, _, _, _, _, _, _, _, _, f11, _, _, _}:
       f11
 
 def St.with_gone(r: St, v: List<&2, Item>) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, _, f12, f13, f14, f15}:
-      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, v, f12, f13, f14, f15}
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, _, f12, f13, f14}:
+      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, v, f12, f13, f14}
 
 def St.over_gone(r: St, g: List<&2, Item> -> List<&2, Item>) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, g(f11), f12, f13, f14, f15}
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, g(f11), f12, f13, f14}
 
 def St.arch(r: St) -> List<&2, Agent>:
   match r:
-    case St{_, _, _, _, _, _, _, _, _, _, _, _, f12, _, _, _}:
+    case St{_, _, _, _, _, _, _, _, _, _, _, _, f12, _, _}:
       f12
 
 def St.with_arch(r: St, v: List<&2, Agent>) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, _, f13, f14, f15}:
-      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, v, f13, f14, f15}
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, _, f13, f14}:
+      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, v, f13, f14}
 
 def St.over_arch(r: St, g: List<&2, Agent> -> List<&2, Agent>) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, g(f12), f13, f14, f15}
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, g(f12), f13, f14}
 
 def St.works(r: St) -> List<&2, Work>:
   match r:
-    case St{_, _, _, _, _, _, _, _, _, _, _, _, _, f13, _, _}:
+    case St{_, _, _, _, _, _, _, _, _, _, _, _, _, f13, _}:
       f13
 
 def St.with_works(r: St, v: List<&2, Work>) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, _, f14, f15}:
-      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, v, f14, f15}
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, _, f14}:
+      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, v, f14}
 
 def St.over_works(r: St, g: List<&2, Work> -> List<&2, Work>) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, g(f13), f14, f15}
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, g(f13), f14}
 
 def St.tombs(r: St) -> List<&2, Tomb>:
   match r:
-    case St{_, _, _, _, _, _, _, _, _, _, _, _, _, _, f14, _}:
+    case St{_, _, _, _, _, _, _, _, _, _, _, _, _, _, f14}:
       f14
 
 def St.with_tombs(r: St, v: List<&2, Tomb>) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, _, f15}:
-      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, v, f15}
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, _}:
+      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, v}
 
 def St.over_tombs(r: St, g: List<&2, Tomb> -> List<&2, Tomb>) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, g(f14), f15}
-
-def St.moved(r: St) -> List<&2, Moved>:
-  match r:
-    case St{_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, f15}:
-      f15
-
-def St.with_moved(r: St, v: List<&2, Moved>) -> St:
-  match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, _}:
-      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, v}
-
-def St.over_moved(r: St, g: List<&2, Moved> -> List<&2, Moved>) -> St:
-  match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, g(f15)}
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, g(f14)}
 
 def St.open(+r: St) -> St:
-  St.with_moved(St.with_tombs(St.with_works(St.with_arch(St.with_gone(St.with_old(St.with_paused(St.with_x(St.with_tm(St.with_next_card(St.with_next_msg(St.with_notes(St.with_cards(St.with_hot(St.with_order(St.with_agents(St.empty(), St.agents(r)), St.order(r)), St.hot(r)), St.cards(r)), St.notes(r)), St.next_msg(r)), St.next_card(r)), St.tm(r)), St.x(r)), St.paused(r)), St.old(r)), St.gone(r)), St.arch(r)), St.works(r)), St.tombs(r)), St.moved(r))
+  St.with_tombs(St.with_works(St.with_arch(St.with_gone(St.with_old(St.with_paused(St.with_x(St.with_tm(St.with_next_card(St.with_next_msg(St.with_notes(St.with_cards(St.with_hot(St.with_order(St.with_agents(St.empty(), St.agents(r)), St.order(r)), St.hot(r)), St.cards(r)), St.notes(r)), St.next_msg(r)), St.next_card(r)), St.tm(r)), St.x(r)), St.paused(r)), St.old(r)), St.gone(r)), St.arch(r)), St.works(r)), St.tombs(r))
 

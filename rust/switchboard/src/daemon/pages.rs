@@ -217,6 +217,7 @@ impl Shell {
                     return json!({"ok": false, "error": format!("no page {id}")});
                 }
                 if self.page_tick(&id, &item, &words, &[]) {
+                    self.page_waits_send();
                     json!({"ok": true, "id": id, "item": item, "ticked": crate::pages::checklist::is_done_word(&words)})
                 } else {
                     json!({"ok": false, "error": format!("{id} has no checklist row {item}")})
@@ -277,6 +278,8 @@ impl Shell {
                     went,
                     // --public / --private (pages-ui): the static export and the user's mirror
                     public: r.public,
+                    // tasks: the works of its turn, from sb-core's view (never the request)
+                    works: self.art_turn_works(from),
                 };
                 let gone: Vec<String> = self.hub.st.agents.keys().filter(|n| self.page_agent_gone(n)).cloned().collect();
                 let is_gone = |n: &str| gone.iter().any(|g| g == n) || !self.hub.st.agents.contains_key(n);
@@ -310,6 +313,8 @@ impl Shell {
                         self.page_questions(&meta.id, &meta.agent, &p.html);
                         // its checklists: the step of his whose turn came
                         self.page_steps(&meta.id);
+                        // tasks: what waits on him per work, the whole set
+                        self.page_waits_send();
                         self.state_now();
                         let url = pages.url(&meta.id);
                         json!({"ok": true, "id": meta.id, "version": meta.version(), "url": url, "unknown_notes": unknown})
@@ -322,7 +327,30 @@ impl Shell {
     }
 
     /// The page server's news.
+    /// tasks: what waits on him per work (pages::waiting::by_work over
+    /// `sb page waiting`'s items and each page's own works), the whole set
+    /// to sb-core's `page_waits`: at boot before the first client, then
+    /// on each change of a page or its notes. No last-sent copy: sb-core
+    /// recomputes only the works whose count moved (architect m_64740).
+    pub(super) fn page_waits_send(&mut self) {
+        let Some(pages) = self.pg.pages.clone() else { return };
+        let works_of = |id: &str| pages.store.meta(id).map(|m| m.works.works().to_vec()).unwrap_or_default();
+        let (works, ns) = crate::pages::waiting::by_work(&pages.waiting(), &works_of);
+        self.step(Input::PageWaits { works, ns });
+    }
+
+    /// What the page server tells the loop; his notes, sends and answers
+    /// change what waits on him, so page_waits goes after them.
     pub(super) fn page_msg(&mut self, m: crate::pages::PageMsg) {
+        use crate::pages::{store::Target, PageMsg};
+        let waits = matches!(m, PageMsg::Notes { .. } | PageMsg::Answer { .. } | PageMsg::Sent { target: Target::Page(_), .. });
+        self.page_msg_go(m);
+        if waits {
+            self.page_waits_send();
+        }
+    }
+
+    fn page_msg_go(&mut self, m: crate::pages::PageMsg) {
         let Some(pages) = self.pg.pages.clone() else { return };
         match m {
             crate::pages::PageMsg::Notes { id } => {

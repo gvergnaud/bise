@@ -101,7 +101,7 @@ type In is Data:
   # work_act
   IWorkAct{req: J.Json}
   # work_move
-  IWorkMove{card: Maybe<&2, Nat>, art: String, works: List<&2, String>}
+  IWorkMove{card: Maybe<&2, Nat>, art: String, works: List<&2, String>, page: Bool}
   # every_set
   IEverySet{agent: String, by: String, text: String, next_ms: Nat, name: String, every_ms: Maybe<&2, Nat>, daily_min: Maybe<&2, Nat>, until_ms: Maybe<&2, Nat>, times: Maybe<&2, Nat>, page: Maybe<&2, String>}
   # every_stop
@@ -287,7 +287,7 @@ def IWorkAct.of(+i: J.Json) -> In:
   IWorkAct{K.get_j(i, "req")}
 
 def IWorkMove.of(+i: J.Json) -> In:
-  IWorkMove{K.opt_n(J.get(i, "card")), K.get_s(i, "art"), K.get_ss(i, "works")}
+  IWorkMove{K.opt_n(J.get(i, "card")), K.get_s(i, "art"), K.get_ss(i, "works"), K.get_b(i, "page")}
 
 def IEverySet.of(+i: J.Json) -> In:
   IEverySet{K.get_s(i, "agent"), K.get_s(i, "by"), K.get_s(i, "text"), K.get_n(i, "next_ms"), K.get_s(i, "name"), K.opt_n(J.get(i, "every_ms")), K.opt_n(J.get(i, "daily_min")), K.opt_n(J.get(i, "until_ms")), K.opt_n(J.get(i, "times")), K.opt_s(J.get(i, "page"))}
@@ -1030,8 +1030,8 @@ def kvs(x: In) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
       [J.kv("t", J.JStr{"page_waits"}), J.kv("works", J.JArr{K.jstrs(works)}), J.kv("ns", J.JArr{K.jnats(ns)})]
     case IWorkAct{+req}:
       [J.kv("t", J.JStr{"work_act"}), J.kv("req", req)]
-    case IWorkMove{+card, +art, +works}:
-      K.cat([[J.kv("t", J.JStr{"work_move"}), J.kv("card", K.jmaybe_n(card))], K.omit_s("art", art), [J.kv("works", J.JArr{K.jstrs(works)})]])
+    case IWorkMove{+card, +art, +works, +page}:
+      K.cat([[J.kv("t", J.JStr{"work_move"}), J.kv("card", K.jmaybe_n(card))], K.omit_s("art", art), [J.kv("works", J.JArr{K.jstrs(works)}), J.kv("page", J.JBool{page})]])
     case IEverySet{+agent, +by, +text, +next_ms, +name, +every_ms, +daily_min, +until_ms, +times, +page}:
       K.cat([[J.kv("t", J.JStr{"every_set"}), J.kv("agent", J.JStr{agent}), J.kv("by", J.JStr{by}), J.kv("text", J.JStr{text}), J.kv("next_ms", J.JNum{next_ms})], K.omit_s("name", name), K.omit_mn("every_ms", every_ms), K.omit_mn("daily_min", daily_min), K.omit_mn("until_ms", until_ms), K.omit_mn("times", times), K.omit_ms("page", page)])
     case IEveryStop{+id, +why, +wake}:

@@ -377,7 +377,7 @@ impl Shell {
             // agent's op): sb-core makes them as him; a refusal is its
             // notice as this command's error
             HubCmd::TaskAct { req, .. } => self.step_typed(id, &tag, Input::ClientWorkAct { client: id, req }),
-            HubCmd::TaskMove { card, art, works, .. } => self.step_typed(id, &tag, Input::ClientWorkMove { client: id, card, art, works }),
+            HubCmd::TaskMove { card, art, page, works, .. } => self.step_typed(id, &tag, Input::ClientWorkMove { client: id, card, art, page, works }),
             // a PR's tab reads the forge on a thread (daemon/pr_detail.rs)
             HubCmd::PrDetail { url, req, .. } => match crate::forge::pr_link(&url) {
                 Some(l) => self.pr_detail(id, l.url, req),

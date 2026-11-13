@@ -175,6 +175,7 @@ mod tests {
             onto: None,
             checks: root.join("worktrees"),
             lands: root.join("lands.jsonl"),
+            works: Vec::new(),
         };
         let o = crate::land::run(&job, &crate::land::Queue::default(), &mut || {}).unwrap();
         assert_eq!((o.target.as_str(), o.commits), ("main", 1));

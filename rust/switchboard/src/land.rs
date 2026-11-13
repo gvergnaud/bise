@@ -76,6 +76,17 @@ pub struct Job {
     /// The hub's land records (`Paths::lands`, the daemon sets it): the
     /// revert guard's "whose land was it" ([`crate::land_revert`]).
     pub lands: PathBuf,
+    /// tasks: the works the lander's turn serves (sb-core's view, read at
+    /// the request): its commit names them (`Bise-Task:`,
+    /// [`crate::land_trailer`])
+    pub works: Vec<String>,
+}
+
+impl Job {
+    /// The commit's message: his words, then a trailer per work.
+    fn commit_message(&self) -> String {
+        crate::land_trailer::with_tasks(&self.message, &self.works)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -429,7 +440,7 @@ pub fn run_onto(job: &Job, queue: &Queue, joined: &mut dyn FnMut(), onto_now: &m
             Ok(())
         }
     };
-    let new = commit_files(&job.dir, &target, &mine, &job.message, &mut verify, &mut || {})?;
+    let new = commit_files(&job.dir, &target, &mine, &job.commit_message(), &mut verify, &mut || {})?;
     let base = git(&job.dir, &["rev-parse", &format!("{}^", new)])?;
     let (pushed, push_error) = pushed(job, &target, &main);
     let sha = shorten(&job.dir, &new);
@@ -478,7 +489,7 @@ fn land_branch(job: &Job, l: Line, main: &str, real_main: &str, mine: &[String],
         if job.message.trim().is_empty() {
             return Err("you have changes not committed: give a message (sb land \"<message>\"), or commit them with sb land --here first".into());
         }
-        commit_files(&job.dir, &branch, mine, &job.message, &mut |_, _| Ok(()), &mut || {})?;
+        commit_files(&job.dir, &branch, mine, &job.commit_message(), &mut |_, _| Ok(()), &mut || {})?;
     }
     let dirty = git(&job.dir, &["status", "--porcelain", "--untracked-files=no"])?;
     if !dirty.is_empty() {
@@ -609,6 +620,7 @@ mod tests {
             onto: None,
             checks: shared.parent().unwrap_or(shared).join("worktrees"),
             lands: shared.parent().unwrap_or(shared).join("lands.jsonl"),
+            works: Vec::new(),
         }
     }
 

@@ -135,10 +135,47 @@ pub fn of_page(id: &str, html: &str, notes: &[Note], questions: &[Question], wen
     out
 }
 
+/// tasks (docs/tasks.md; architect m_64423, m_64740): what waits on him,
+/// counted per work, as sb-core's `page_waits` reads it. Each item counts
+/// once for each work of its page (`works_of`: the page store's Meta, its
+/// one owner); a page with no work counts for none. The works in the
+/// order they first come; the whole set each time (a work missing from
+/// it has none: law page_waits_is_the_whole_set).
+pub fn by_work(items: &[Waiting], works_of: &dyn Fn(&str) -> Vec<String>) -> (Vec<String>, Vec<u64>) {
+    let mut seen: std::collections::HashMap<&str, Vec<String>> = std::collections::HashMap::new();
+    let (mut works, mut ns): (Vec<String>, Vec<u64>) = (Vec::new(), Vec::new());
+    for it in items {
+        let ws = seen.entry(it.page.as_str()).or_insert_with(|| works_of(&it.page));
+        for w in ws.iter() {
+            match works.iter().position(|x| x == w) {
+                Some(i) => ns[i] += 1,
+                None => {
+                    works.push(w.clone());
+                    ns.push(1);
+                }
+            }
+        }
+    }
+    (works, ns)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn page_waits_count_each_item_once_per_work_of_its_page() {
+        let it = |page: &str| Waiting { page: page.into(), item: "q".into(), kind: "question", text: String::new(), days: None };
+        let items = vec![it("login-plan"), it("login-plan"), it("weekly"), it("notes")];
+        let works_of = |p: &str| match p {
+            "login-plan" => vec!["login".to_string()],
+            "weekly" => vec!["login".to_string(), "digest".to_string()],
+            _ => vec![],
+        };
+        assert_eq!(by_work(&items, &works_of), (vec!["login".to_string(), "digest".to_string()], vec![3, 1]));
+        assert_eq!(by_work(&[], &works_of), (vec![], vec![]), "nothing waits: the empty set, every work at 0");
+    }
 
     // a plan (data-plan): its drafts are one card, so one line
     const PAGE: &str = r#"<section data-kit="checklist" data-id="steps" data-plan><ol>

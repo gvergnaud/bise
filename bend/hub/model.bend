@@ -450,14 +450,6 @@ def card_moved(xs: List<&2, S.Card>, +id: Nat, +ws: List<&2, String>) -> List<&2
     case Con{+h, +t}:
       LZ.pick(List<&2, S.Card>, Nat.is_eq(S.Card.id(h), id), u => S.Card.with_moved(S.Card.with_works(h, ws), True{}) <> t, u => h <> card_moved(t, id, ws))
 
-# tasks: his move of an artifact (its newest replaces the one before)
-def art_moved(xs: List<&2, S.Moved>, +m: S.Moved) -> List<&2, S.Moved>:
-  match xs:
-    case Nil{}:
-      [m]
-    case Con{+h, +t}:
-      LZ.pick(List<&2, S.Moved>, String.eq(S.Moved.art(h), S.Moved.art(m)), u => m <> t, u => h <> art_moved(t, m))
-
 def is_queued(s: S.MSt) -> Bool:
   match s:
     case S.Queued{_}:
@@ -858,8 +850,10 @@ def apply(+st: S.St, e: Ev) -> S.St:
       S.St.over_works(on_agent(st, ag, OTurnWorks{ws, S.WTurn.add(t)}), xs => WO.served(xs, ws, ag, S.WTurn.at(t)))
     case ECardMoved{+m}:
       S.St.over_cards(st, cs => card_moved(cs, S.CardMove.card(m), S.CardMove.works(m)))
-    case EArtMoved{+m}:
-      S.St.over_moved(st, ms => art_moved(ms, m))
+    # his act, journaled; its works are the artifact's own (the shell's
+    # Meta, fx art_works): sb-core keeps no map of them (architect m_64740)
+    case EArtMoved{_}:
+      st
 
 # an event that changes St.order (apply's over_order): a new task, a
 # rename. Every other one keeps it (law apply_keeps_order), so a step

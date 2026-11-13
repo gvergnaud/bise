@@ -956,9 +956,9 @@ pub const STATE: State = State {
         },
         Record {
             name: "Moved",
-            doc: "his \"Move to task…\" on an artifact: its works from now on, an agent's turn never moves it back (law moved_by_you_sticks)",
-            fields: &[f("art", Str), f("works", Strs)],
-            shapes: &[Shape { name: "journal", read: true, keys: &[k("art", W::Str), k("works", W::Strs)] }],
+            doc: "his \"Move to task…\" on an artifact or a page (`page`: the target is the page store's page `art`, typed from the row he acted on, never looked up; an old line: an artifact): its works from now on, an agent's turn never moves it back (law moved_by_you_sticks)",
+            fields: &[f("art", Str), f("works", Strs), f("page", Bool)],
+            shapes: &[Shape { name: "journal", read: true, keys: &[k("art", W::Str), k("works", W::Strs), k("page", W::Flag)] }],
         },
         Record {
             name: "WTurn",
@@ -990,10 +990,10 @@ pub const STATE: State = State {
                 f("gone", Ts("Item")),
                 f("arch", Ts("Agent")),
                 // tasks: the works (open, and done within 7 days), the
-                // folded ones, his artifact moves
+                // folded ones (his artifact moves are the artifacts' own:
+                // the shell's Meta, through fx art_works; architect m_64740)
                 f("works", Ts("Work")),
                 f("tombs", Ts("Tomb")),
-                f("moved", Ts("Moved")),
             ],
             // the photo a boot starts from (issue 36): every field
             shapes: &[photo(&[
@@ -1012,7 +1012,6 @@ pub const STATE: State = State {
                 k("arch", W::Recs),
                 k("works", W::Recs),
                 k("tombs", W::Recs),
-                k("moved", W::Recs),
             ])],
         },
     ],

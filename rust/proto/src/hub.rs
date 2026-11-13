@@ -999,8 +999,10 @@ pub enum HubCmd {
     /// it; a refusal is its notice as this command's error (docs/tasks.md)
     TaskAct { project: Project, req: crate::sb::Task },
     /// he moved a card (`card`) or an artifact (`art`, its id: exactly one
-    /// of the two) to the tasks `works` (none: out of every task). sb-core
-    /// keeps his move: no stamp changes it after (moved_by_you_sticks)
+    /// of the two) to the tasks `works` (none: out of every task). `page`:
+    /// `art` is a page (the row he acted on is a page's), never looked up
+    /// by id. sb-core keeps his move: no stamp changes it after
+    /// (moved_by_you_sticks)
     TaskMove {
         project: Project,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1008,6 +1010,8 @@ pub enum HubCmd {
         card: Option<u64>,
         #[serde(default, skip_serializing_if = "String::is_empty")]
         art: String,
+        #[serde(default, skip_serializing_if = "crate::is_false")]
+        page: bool,
         #[serde(default)]
         works: Vec<String>,
     },

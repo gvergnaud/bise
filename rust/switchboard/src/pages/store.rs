@@ -55,6 +55,11 @@ pub struct Meta {
     /// the static export the user's mirror publishes; absent: local only
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub public: bool,
+    /// tasks: the works the page serves and whether he moved it, its one
+    /// owner (the artifact row only copies them); written only through
+    /// its own type (artifacts_works.rs; architect m_64769)
+    #[serde(flatten)]
+    pub works: crate::artifacts_works::ArtWorks,
 }
 
 /// One place the page's text went: `--went <kind>:<ref>[@<block>]=<url>`
@@ -178,6 +183,10 @@ pub struct Publish {
     pub taste: Option<u64>,
     /// `--public` Some(true), `--private` Some(false), neither None (as it was)
     pub public: Option<bool>,
+    /// tasks: the works the publisher's turn serves, stamped by the hub
+    /// from sb-core's view (never from the request); none for the hub's
+    /// own pages
+    pub works: Vec<String>,
 }
 
 /// A page id: `[a-z0-9-]{1,40}`.
@@ -293,6 +302,16 @@ impl Store {
 
     pub fn save_meta(&self, m: &Meta) -> Result<(), String> {
         write_json(&self.page_dir(&m.id).join("meta.json"), m)
+    }
+
+    /// tasks: his move of page `id` to `works` (sb-core's fx art_works
+    /// with `page`): exactly those, his for good. Ok(false): no such page,
+    /// nothing written (never a create).
+    pub fn move_works(&self, id: &str, works: Vec<String>) -> Result<bool, String> {
+        let Some(mut m) = self.meta(id) else { return Ok(false) };
+        m.works.moved_to(works);
+        self.save_meta(&m)?;
+        Ok(true)
     }
 
     /// name-free (sb-core's `retarget` fx): another agent takes the old
@@ -412,8 +431,11 @@ impl Store {
                 watch: None,
                 taste: None,
                 public: false,
+                works: Default::default(),
             },
         };
+        // tasks: each version adds its turn's works (none once he moved it)
+        meta.works.stamp(&p.works);
         meta.taste = p.taste.map(|n| serde_json::json!({"rules": n}));
         // --public / --private; neither: as it was
         if let Some(public) = p.public {
@@ -523,7 +545,7 @@ impl Store {
                 return Err(format!("{id} is {}'s page: start another --id", m.agent));
             }
             Some(m) => Meta { agent: agent.to_string(), ..m },
-            None => Meta { id: id.to_string(), title: String::new(), agent: agent.to_string(), created_ms: now, versions: Vec::new(), state: ready(), ask: None, opened_version: 0, went: Vec::new(), watch: None, taste: None, public: false },
+            None => Meta { id: id.to_string(), title: String::new(), agent: agent.to_string(), created_ms: now, versions: Vec::new(), state: ready(), ask: None, opened_version: 0, went: Vec::new(), watch: None, taste: None, public: false, works: Default::default() },
         };
         if let Some(t) = title.map(str::trim).filter(|t| !t.is_empty()) {
             meta.title = t.to_string();

@@ -4723,26 +4723,29 @@ def work_move.card(-o: S.St, m: Maybe<&2, S.Card>, +cx: X.Cx<o>, +id: Nat, +ws: 
     case Some{_}:
       emit(o, cx, M.ECardMoved{S.CardMove.with_works(S.CardMove.with_card(S.CardMove.empty(), id), ws)}, Unit{}, Unit{}, Unit{})
 
-# ...or on an artifact (`art`: its id in the shell's store; St.moved)
-def work_move.art(-o: S.St, +cx: X.Cx<o>, +art: String, +ws: List<&2, String>) -> X.Cx<o>:
+# ...or on an artifact (`art`: its id in the shell's store; `page`: the
+# page store's page, typed from the row he acted on, never looked up):
+# his act journaled, and that store's Meta told (fx art_works: the one
+# owner of its works; architect m_64740, m_64769)
+def work_move.art(-o: S.St, +cx: X.Cx<o>, +art: String, +ws: List<&2, String>, +page: Bool) -> X.Cx<o>:
   LZ.pick(X.Cx<o>, String.is_empty(art), u => cx,
-    u => emit(o, cx, M.EArtMoved{S.Moved.with_works(S.Moved.with_art(S.Moved.empty(), art), ws)}, Unit{}, Unit{}, Unit{}))
+    u => out(o, emit(o, cx, M.EArtMoved{S.Moved.with_page(S.Moved.with_works(S.Moved.with_art(S.Moved.empty(), art), ws), page)}, Unit{}, Unit{}, Unit{}), F.art_works(art, ws, page)))
 
-def work_move.go(-o: S.St, card: Maybe<&2, Nat>, +cx: X.Cx<o>, +art: String, +ws: List<&2, String>) -> X.Cx<o>:
+def work_move.go(-o: S.St, card: Maybe<&2, Nat>, +cx: X.Cx<o>, +art: String, +ws: List<&2, String>, +page: Bool) -> X.Cx<o>:
   match card:
     case Some{+id}:
-      work_move.art(o, work_move.card(o, M.card_of(S.St.cards(st(o, cx)), id), cx, id, ws), art, ws)
+      work_move.art(o, work_move.card(o, M.card_of(S.St.cards(st(o, cx)), id), cx, id, ws), art, ws, page)
     case None{}:
-      work_move.art(o, cx, art, ws)
+      work_move.art(o, cx, art, ws, page)
 
 # its works read as the live ones they name (task_flag: a merged one's
 # target; an unknown one refused, nothing moved)
-def work_move(-o: S.St, f: TaskFlag, +cx: X.Cx<o>, +card: Maybe<&2, Nat>, +art: String) -> X.Cx<o>:
+def work_move(-o: S.St, f: TaskFlag, +cx: X.Cx<o>, +card: Maybe<&2, Nat>, +art: String, +page: Bool) -> X.Cx<o>:
   match f:
     case TFErr{+e}:
       notice(o, cx, e)
     case TFOk{+ws}:
-      work_move.go(o, card, cx, art, ws)
+      work_move.go(o, card, cx, art, ws, page)
 
 # one input, decoded by the generated codec (gen/in.bend, from
 # bise_proto::core::In): an unknown tag is INone, a missing field its
@@ -4803,8 +4806,8 @@ def dispatch(-o: S.St, +cx: X.Cx<o>, +i: GI.In) -> X.Cx<o>:
       A.answer_pos(o, cx, card, agent, pos)
     case GI.IWorkAct{+req}:
       req_task(o, cx, TAHim{}, M.USER(), req)
-    case GI.IWorkMove{+card, +art, +works}:
-      work_move(o, task_flag(works, S.St.works(st(o, cx))), cx, card, art)
+    case GI.IWorkMove{+card, +art, +works, +page}:
+      work_move(o, task_flag(works, S.St.works(st(o, cx))), cx, card, art, page)
     case GI.IPageWaits{+works, +ns}:
       page_waits.in(o, Nat.is_eq(List.length(&2, String, works), List.length(&2, Nat, ns)), cx, works, ns)
     case GI.IInterrupt{+agent}:

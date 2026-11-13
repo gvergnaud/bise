@@ -167,6 +167,10 @@ pub struct Meta {
     /// crate::artifacts_retention): the row stays, `file expired`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expired_ms: Option<u64>,
+    /// tasks: the works it serves and whether he moved it; written only
+    /// through its own type (artifacts_works.rs)
+    #[serde(flatten)]
+    pub works: crate::artifacts_works::ArtWorks,
 }
 
 impl Meta {
@@ -207,6 +211,9 @@ pub struct Add {
     /// The turn it came in, stamped by the hub from sb-core's fact (never
     /// from the request); None outside a turn.
     pub turn: Option<Turn>,
+    /// tasks: the works that turn serves, stamped by the hub from
+    /// sb-core's view (its `turn_works`); none for his own add
+    pub works: Vec<String>,
     /// His edits in the viewer's grid (pages/artifact/save.rs): the sitting
     /// they came in; None for any other add.
     pub sitting: Option<Sitting>,
@@ -282,6 +289,9 @@ struct PageMeta {
     created_ms: u64,
     #[serde(default)]
     versions: Vec<PageVersion>,
+    /// tasks: the page's works, its store's (page_meta copies them)
+    #[serde(flatten)]
+    works: crate::artifacts_works::ArtWorks,
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]
@@ -601,6 +611,21 @@ impl Store {
         write_atomic(&self.dir().join(&m.id).join("meta.json"), &bytes)
     }
 
+    /// tasks: his move of artifact `id` to `works` (sb-core's fx
+    /// art_works): exactly those, his for good. Ok(false): an unknown or
+    /// archived artifact, nothing written (never a create). Only the
+    /// stored ones: a page of the same id is the page store's, never
+    /// this store's (architect m_64769).
+    pub fn move_works(&self, id: &str, works: Vec<String>) -> Result<bool, String> {
+        if self.archived().contains_key(id) {
+            return Ok(false);
+        }
+        let Some(mut m) = self.stored().into_iter().find(|m| m.id == id) else { return Ok(false) };
+        m.works.moved_to(works);
+        self.save(&m)?;
+        Ok(true)
+    }
+
     /// A stored artifact's title, set (a PR's: the forge's,
     /// forge::artifact). An unknown id: an error.
     pub fn retitle(&self, id: &str, title: &str) -> Result<(), String> {
@@ -768,6 +793,7 @@ impl Store {
                     pr_ended: false,
                     audience: None,
                     expired_ms: None,
+                    works: Default::default(),
                 }
             }
         };
@@ -870,6 +896,8 @@ impl Store {
                 meta.versions.push(Version { v, at_ms: now, target, copy, no_copy, sig, turn: a.turn.clone(), sitting: a.sitting.clone(), revs, serve: None, names });
             }
         }
+        // tasks: each new version adds its turn's works (none once he moved it)
+        meta.works.stamp(&a.works);
         self.save(&meta)?;
         Ok(Added { meta, new_version: true, page: false, not_artifact: false, replaced: same, assets: assets.files.len(), unkept: assets.unkept, scripts: assets.scripts })
     }
@@ -1250,6 +1278,8 @@ fn page_meta(p: &PageMeta, base: Option<&str>) -> Meta {
         pr_ended: false,
         audience: Some(Audience::You),
         expired_ms: None,
+        // the page's own (its store's Meta owns them): a copy for the row
+        works: p.works.clone(),
         versions: p
             .versions
             .iter()

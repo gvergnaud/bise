@@ -163,8 +163,9 @@ core_kinds! {
         /// agent's `sb task` is an `IReq` by that agent
         WorkAct = "work_act" => IWorkAct { req: Json },
         /// tasks: his "Move to task…" on a card (`card`) or an artifact
-        /// (`art`): its works from then (law moved_by_you_sticks)
-        WorkMove = "work_move" => IWorkMove { card: OptNat, art: StrOmit, works: Strs },
+        /// (`art`; `page`: the page store's page `art`, typed from the row
+        /// he acted on): its works from then (law moved_by_you_sticks)
+        WorkMove = "work_move" => IWorkMove { card: OptNat, art: StrOmit, works: Strs, page: Bool },
         /// `sb every`: the hub checked the request and computed `next_ms`;
         /// one of `every_ms`, `daily_min`; `name` only when given
         EverySet = "every_set" => IEverySet {

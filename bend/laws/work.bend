@@ -13,6 +13,7 @@ import ../hub/work.bend as HWO
 import ../hub/cx.bend as HX
 import ../hub/wstatus.bend as HWS
 import ../hub/view.bend as HV
+import ../hub/keyed.bend as HKY
 
 # LAW: `--task <id>` gives the message its works, whatever the sender's
 # turn serves.
@@ -178,8 +179,8 @@ law pause_without_end_never_resumes:
 
 # LAW: his move of a card gives it his works and marks it moved: no
 # stamp changes a card's works after its open, so his move stays
-# (architect m_64425; an artifact's is St.moved, read by the shell's
-# stamp at the door).
+# (architect m_64425; an artifact's is its own Meta in the shell's store,
+# set through fx art_works: artifacts_works.rs, m_64740).
 law moved_by_you_sticks:
   for +c: HS.Card
   for +ws: List<&2, String>
@@ -268,6 +269,22 @@ law a_card_event_touches_only_its_works:
   for +c: HS.Card
   for +cs0: List<&2, HS.Card>
   {HV.card_works(HM.ECardOpened{c}, cs0) == HS.Card.works(c) : List<&2, String>}
+
+# LAW: page_waits is the whole set: the input replaces his page waits,
+# never merges into the last ones, so a work missing from it has none
+# (architect m_64740: the shell keeps no last-sent copy).
+law page_waits_is_the_whole_set:
+  for -o: HS.St
+  for +cx: HX.Cx<o>
+  for +ws: List<&2, String>
+  for +ns: List<&2, Nat>
+  {HX.R.pw(HX.Cx.r(o, HC.page_waits.in(o, True{}, cx, ws, ns))) == HC.page_waits(ws, ns) : List<&2, HX.Kn>}
+
+# LAW: nothing waits on him: every work's count is 0.
+law no_page_waits_no_needs:
+  for +ns: List<&2, Nat>
+  for +id: String
+  {HKY.kn_get(HC.page_waits(Nil{}, ns), id) == 0n : Nat}
 
 # LAW: page waits the same on a work leave its row as it is: page_waits
 # recomputes only the works whose count changed.
