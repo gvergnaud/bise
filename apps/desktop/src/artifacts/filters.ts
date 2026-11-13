@@ -110,7 +110,8 @@ interface Tok {
 /** The field's tokens: `key:value`, `key:"two words"`, or a word. */
 function tokens(q: string): Tok[] {
   const out: Tok[] = [];
-  for (const m of q.matchAll(/([a-z]+):"([^"]*)"?|([a-z]+):(\S+)|(\S+)/giu)) {
+  // `key:` alone (nothing after it yet) is a token with no value, never a word
+  for (const m of q.matchAll(/([a-z]+):"([^"]*)"?|([a-z]+):(\S*)|(\S+)/giu)) {
     const [raw, k1, v1, k2, v2, w] = m;
     if (k1 !== undefined) out.push({ key: k1.toLowerCase(), value: (v1 ?? '').toLowerCase(), raw });
     else if (k2 !== undefined) out.push({ key: k2.toLowerCase(), value: (v2 ?? '').toLowerCase(), raw });
@@ -132,6 +133,8 @@ export function parseFilters(q: string): Filters {
       continue;
     }
     const d = dimOf(t.key);
+    // a bare dimension (`app:` as he types it) narrows nothing yet: its completion offers the values
+    if (d !== undefined && t.value === '') continue;
     const k = d?.parse(t.value) ?? null;
     if (d === undefined || k === null) {
       words.push(t.key === null ? t.value : `${t.key}:${t.value}`);

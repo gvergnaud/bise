@@ -72,6 +72,17 @@ describe("the field's grammar", () => {
     expect(f.words).toEqual(['pricing', 'since:soon']);
   });
 
+  it("a bare dimension as he types it ('app:', 'by:') narrows nothing, never a word that hides every row", () => {
+    for (const q of ['app:', 'by:', 'since:', 'app: by:']) {
+      const f = parseFilters(q);
+      expect([f.keys.size, f.words]).toEqual([0, []]);
+      expect(applyFilters(items, f, ctx)).toHaveLength(items.length);
+    }
+    expect(parseFilters('app: pricing').words).toEqual(['pricing']);
+    // an unknown key stays a word, as typed
+    expect(parseFilters('foo:').words).toEqual(['foo:']);
+  });
+
   it('withToken: a click sets one alone, ⌘-click adds or takes out, × takes all; the words stay', () => {
     expect(withToken('pricing', 'since', 'today')).toBe('since:today pricing');
     expect(withToken('since:today pricing', 'since', 'week')).toBe('since:week pricing');

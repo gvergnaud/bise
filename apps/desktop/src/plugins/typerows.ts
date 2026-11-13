@@ -90,7 +90,7 @@ export function typeLines(rows: readonly TypeRow[]): TypeLine[] {
  * 'Website'), the title ('Excel workbook') or the app that opens it now ('Sheets'; none: 'your
  * Mac'). No words: every type. Pure.
  */
-export function typesMatching<R extends TypeRow>(rows: readonly R[], q: string): R[] {
+export function typesMatching<R extends Pick<TypeRow, 'type' | 'title' | 'app'>>(rows: readonly R[], q: string): R[] {
   const s = q.trim().toLowerCase();
   if (s === '') return [...rows];
   return rows.filter((r) => [typeName(r.type, r.title), r.title, r.app?.app ?? common.your_mac].some((w) => w.toLowerCase().includes(s)));
