@@ -72,6 +72,7 @@ pub const TAGS: &[&str] = &[
     "project_rename",
     "plugins",
     "plugin_set",
+    "skills_read_guarded",
     "plugin_grant",
     "opener_set",
     "plugin_setting",
@@ -158,6 +159,9 @@ pub(crate) struct Setup {
     markets: Vec<(String, Vec<bise_proto::app_rows::Plugin>)>,
     /// the last `plugins_summary` sent, per project (only a change goes out)
     summaries: std::collections::HashMap<Option<String>, bise_proto::app_rows::PluginsSummary>,
+    /// the guarded folders macOS refused at his last 'Read skills in
+    /// Documents…' (cleared at his next turn of that switch)
+    skills_refused: Vec<String>,
     /// computer use's page while it is open
     cu: Option<CuLive>,
     /// the desktop app's update check (bar S.6)
@@ -207,7 +211,7 @@ impl Core {
     /// The setup's ports (the binary's live ones, or a test's).
     pub fn set_setup(&mut self, ports: SetupPorts) {
         let (tx, rx) = channel();
-        self.setup = Some(Setup { ports, tx, rx, signing: None, logins: Vec::new(), staged: Default::default(), found: None, evidence: Vec::new(), signals_at: None, markets: Vec::new(), summaries: Default::default(), cu: None, update: Default::default(), held: None, keychain_moving: false, keychain_said: (Vec::new(), false), repos: None, use_seq: 0, using: Default::default(), gauge: Default::default() });
+        self.setup = Some(Setup { ports, tx, rx, signing: None, logins: Vec::new(), staged: Default::default(), found: None, evidence: Vec::new(), signals_at: None, markets: Vec::new(), summaries: Default::default(), skills_refused: Vec::new(), cu: None, update: Default::default(), held: None, keychain_moving: false, keychain_said: (Vec::new(), false), repos: None, use_seq: 0, using: Default::default(), gauge: Default::default() });
     }
 
     /// R8: his `/model <model>` in `agent`'s view, before it goes to the
@@ -499,6 +503,7 @@ impl Core {
                 let shown = self.emit_plugins(project);
                 ("plugin_set", res.and(shown))
             }
+            AppCmd::SkillsReadGuarded { project, on } => ("skills_read_guarded", self.skills_read_guarded(project, on)),
             AppCmd::PluginGrant { project, plugin, uri, perms } => {
                 let res = (p.plugin_grant)(&plugin, &uri, &perms);
                 let shown = self.emit_plugins(project);
@@ -781,11 +786,54 @@ impl Core {
         let s = self.setup.as_ref().ok_or("this core has no setup")?;
         let rows = (s.ports.plugins)(&ws, &s.logins);
         let connectors = (s.ports.connectors_problem)();
+        let skills_refused = s.skills_refused.clone();
         self.emit_summary(project.clone(), &rows);
         let (browse, items): (Vec<_>, Vec<_>) = rows.into_iter().partition(|r| r.state == bise_proto::app_rows::PluginState::Available);
-        self.ev(CoreEv::Plugins { project, items, connectors: connectors.clone(), file_types: Vec::new() });
+        self.ev(CoreEv::Plugins { project, items, connectors: connectors.clone(), file_types: Vec::new(), skills_refused });
         self.ev(CoreEv::Browse { source: MISTRAL.into(), items: browse, connectors });
         Ok(())
+    }
+
+    /// His 'Read skills in Documents…' switch (skills-scan-tcc): the pref
+    /// written, then off: the list again (listed, unread); on: each linked
+    /// skill read once off the loop (his act: macOS may ask now), the
+    /// list at its end ([`Self::on_guarded_read`]).
+    fn skills_read_guarded(&mut self, project: Option<String>, on: bool) -> Result<(), String> {
+        let ws = self.workspace_of(project.as_deref())?;
+        self.set_read_guarded(on)?;
+        let s = self.setup.as_mut().ok_or("this core has no setup")?;
+        s.skills_refused.clear();
+        if on {
+            (s.ports.read_guarded)(ws, project, s.tx.clone());
+            Ok(())
+        } else {
+            self.emit_plugins(project)
+        }
+    }
+
+    fn set_read_guarded(&mut self, on: bool) -> Result<(), String> {
+        let s = self.setup.as_ref().ok_or("this core has no setup")?;
+        let now = (s.ports.prefs)().unwrap_or_else(|| json!({}));
+        let key = format!("{}.{}", bise_home::prefs::SKILLS, bise_home::prefs::READ_GUARDED);
+        bise_home::prefs::set_dotted(&now, &key, json!(on)).and_then(|v| (s.ports.write_prefs)(&v))?;
+        self.emit_prefs();
+        Ok(())
+    }
+
+    /// The reads of his switch ended: a folder macOS refused turns it
+    /// back off and is named on the list.
+    fn on_guarded_read(&mut self, project: Option<String>, refused: Vec<String>) {
+        if !refused.is_empty() {
+            if let Err(e) = self.set_read_guarded(false) {
+                self.setup_error("skills_read_guarded", &e);
+            }
+        }
+        if let Some(s) = self.setup.as_mut() {
+            s.skills_refused = refused;
+        }
+        if let Err(e) = self.emit_plugins(project) {
+            self.setup_error("skills_read_guarded", &e);
+        }
     }
 
     /// `plugins_summary` of that workspace, its rows read now (the core's
@@ -881,6 +929,7 @@ impl Core {
                     self.emit_accounts();
                 }
                 Done::Used { seq, used } => self.on_used(seq, used),
+                Done::GuardedRead { project, refused } => self.on_guarded_read(project, refused),
                 d @ Done::Tested { .. } => self.on_tested(d),
                 Done::CuCheck(v) => {
                     if let Some(c) = self.setup.as_mut().and_then(|s| s.cu.as_mut()) {

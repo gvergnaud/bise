@@ -34,7 +34,13 @@ connectors?: ConnectorsProblem | null,
  * Settings › Plugins › File types (docs/plugin-apps.md A3): every
  * type an on plugin's app opens, by type key
  */
-file_types?: Array<FileType>, } | { "ev": "browse", source: string, items: Array<Plugin>, 
+file_types?: Array<FileType>, 
+/**
+ * the guarded folders macOS refused when he last turned
+ * 'Read skills in Documents…' on (`skills_read_guarded`): the
+ * switch went back off ('macOS said no to Documents')
+ */
+skills_refused?: Array<string>, } | { "ev": "browse", source: string, items: Array<Plugin>, 
 /**
  * `mistral`'s: why the list may be missing or old
  */

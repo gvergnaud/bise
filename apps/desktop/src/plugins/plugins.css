@@ -238,3 +238,7 @@
 .plg-kv-sub { display: block; }
 /* the add sheet: a type another app opens today, its line then Keep / Use (Add.tsx PreviewSheet) */
 .plg-claim { display: flex; align-items: center; justify-content: space-between; gap: var(--gap-block); font: var(--t-13) var(--font-ui); color: var(--c-text); }
+/* his 'Read skills in Documents…' switch atop the skills group (skills-scan-tcc, designer m_64245):
+   its count line text-2; after a refusal, 'macOS said no to Documents' and its quiet 'Open Settings' */
+.plg-guarded .plg-row-words { display: flex; flex-direction: column; min-width: 0; }
+.plg-guarded-said { display: inline-flex; align-items: baseline; gap: var(--s-2); }

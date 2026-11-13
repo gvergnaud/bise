@@ -166,6 +166,17 @@ pub enum AppCmd {
         name: String,
         on: bool,
     },
+    /// his switch on the plugins page, 'Read skills in Documents, Desktop
+    /// or Downloads' (skills-scan-tcc, architect m_64243): `prefs.json`'s
+    /// `skills.read_guarded`. On: the core reads each skill linked into a
+    /// folder macOS guards once, off its loop (macOS may ask him then);
+    /// when macOS says no, the switch goes back off and `plugins` names
+    /// the folder in `skills_refused`. Then `prefs` and `plugins` again
+    SkillsReadGuarded {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        project: Option<Project>,
+        on: bool,
+    },
     /// grant an MCP App's view its permissions (docs/mcp-apps.md C8:
     /// the add screen's 'its views' step, the plugins page's VIEWS
     /// group): `plugins.json`'s `view_grants` through bend_plugins' one
@@ -713,6 +724,7 @@ impl AppCmd {
         "bise_update",
         "plugins",
         "plugin_set",
+        "skills_read_guarded",
         "plugin_grant",
         "opener_set",
         "plugin_setting",

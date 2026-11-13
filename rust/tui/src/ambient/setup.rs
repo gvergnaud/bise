@@ -61,6 +61,9 @@ pub enum Done {
     Signals { inputs: Vec<bend_plugins::signals::Inputs> },
     /// a marketplace added and read: its plugins as Browse rows
     Market { source: String, res: Result<Vec<Plugin>, String> },
+    /// he turned 'Read skills in Documents…' on: each linked skill read
+    /// once; the guarded folders macOS refused (none: all read)
+    GuardedRead { project: Option<String>, refused: Vec<String> },
     /// a Mistral connector's connect said a step (`said`) or ended
     /// (`res`); the list is sent again either way
     Connecting { id: String, project: Option<String>, said: Option<String>, res: Option<Result<(), String>> },
@@ -194,6 +197,9 @@ pub struct CuPorts {
     pub profile: CuProfileFn,
 }
 
+/// His 'Read skills in Documents…' reads: (workspace, project, channel).
+pub type ReadGuardedFn = Box<dyn Fn(PathBuf, Option<String>, Sender<Done>)>;
+
 /// Everything the setup commands read or write.
 pub struct SetupPorts {
     /// `prefs.json`'s object (None: no file)
@@ -233,6 +239,10 @@ pub struct SetupPorts {
     /// a plugin's setting in his MCP secrets, through bend_plugins' one
     /// writer: (workspace, plugin, var, value or none to forget)
     pub plugin_setting: PluginSettingFn,
+    /// his switch turned on (`skills_read_guarded`): reads each skill of
+    /// the workspace linked into a folder macOS guards, on its own thread
+    /// (macOS may ask him and wait), `Done::GuardedRead` at its end
+    pub read_guarded: ReadGuardedFn,
     /// a plugin server's browser login, `Done::LoggedIn` at its end (never
     /// run by a test)
     pub plugin_login: PluginLoginFn,
@@ -695,6 +705,12 @@ pub fn live(flow: FlowFn) -> SetupPorts {
         plugin_grant: Box::new(|plugin, uri, perms| crate::plugins::grant(plugin, uri, perms).map(|_| ())),
         opener_set: Box::new(|key, to| crate::plugins::opener_set(key, to).map(|_| ())),
         plugin_setting: Box::new(crate::plugins::setting),
+        read_guarded: Box::new(|ws, project, tx| {
+            std::thread::spawn(move || {
+                let refused = crate::plugins::guarded_refused(&ws);
+                let _ = tx.send(Done::GuardedRead { project, refused });
+            });
+        }),
         roles: Box::new(move || role_rows(&bise_catalog::Setup::load(&home().config_file()))),
         gauge_input: Box::new(move || {
             let file = home().config_file();

@@ -48,6 +48,7 @@ import { MonoTile, PluginIcon } from './PluginIcon';
 import { Room } from './Room';
 import { AddMenu, type AddItem } from './Add';
 import { FileTypes } from './FileTypes';
+import { GuardedSwitch } from './GuardedSwitch';
 import { typesMatching } from './typerows';
 import './plugins.css';
 
@@ -81,6 +82,10 @@ export interface PlaceProps {
   room?: ReactNode;
   /** which app opens what (the plugins event's file_types): the File types group */
   fileTypes?: readonly FileType[];
+  /** his 'Read skills in Documents…' switch (prefs `skills.read_guarded`) and the folders macOS
+      refused at his last turn on: the switch row atop the skills group (skills-scan-tcc) */
+  readGuarded?: boolean;
+  skillsRefused?: readonly string[];
 }
 
 /** Where browse lands: the not-installed part's head, or one of its sources' groups. */
@@ -89,7 +94,7 @@ const NOT_INSTALLED = 'not-installed';
 /** How long the head browse landed on keeps its tint (designer m_62916: the eye lands). */
 const LIT_MS = 1000;
 
-export function PlaceView({ rows, summary, browse, problem, project, projectName, kind: kind0, ports, room, fileTypes = [] }: PlaceProps) {
+export function PlaceView({ rows, summary, browse, problem, project, projectName, kind: kind0, ports, room, fileTypes = [], readGuarded = false, skillsRefused = [] }: PlaceProps) {
   // /skills and /plugins mount it anew (the screen keys it by its kind)
   const [kind, setKind] = useState<KindFilter>(kind0 ?? 'all');
   const [q, setQ] = useState('');
@@ -182,6 +187,8 @@ export function PlaceView({ rows, summary, browse, problem, project, projectName
               <div key={g.kind} className="plg-group" data-testid={`plugins.group.${g.kind}`}>
                 <GroupLabel count={g.hits.length}>{sentenceCase(groupWords(g.kind))}</GroupLabel>
                 <div className="plg-list">
+                  {/* his switch atop the skills folders, only when a skill links into Documents (designer m_64248) */}
+                  {g.kind === 'skills' && <GuardedSwitch rows={all} on={readGuarded} refused={skillsRefused} {...at} send={ports.send} />}
                   {g.hits.map((h) => (
                     <PlaceRow key={keyOf(h.p)} h={h} project={project}
                       onOpen={() => {

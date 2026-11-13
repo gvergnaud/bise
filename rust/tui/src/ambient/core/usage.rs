@@ -88,6 +88,7 @@ pub(crate) fn of_cmd(c: &AppCmd) -> Counted {
         | AppCmd::PluginGrant { .. }
         | AppCmd::OpenerSet { .. }
         | AppCmd::PluginSetting { .. }
+        | AppCmd::SkillsReadGuarded { .. }
         | AppCmd::PluginConnect { .. }
         | AppCmd::PluginAccountConnect { .. }
         | AppCmd::PluginAccountRename { .. }

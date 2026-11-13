@@ -272,6 +272,8 @@ export function applyTyped(s: Store, ev: Ev): void {
       s.put(`plugins:${ev.project ?? ""}`, ev.items);
       // which app opens what, as the hub's matcher has it (File types, docs/plugin-apps.md A3)
       s.put(`file_types:${ev.project ?? ""}`, ev.file_types ?? []);
+      // the folders macOS refused at his last 'Read skills in Documents…' (skills-scan-tcc)
+      s.put(`skills_refused:${ev.project ?? ""}`, ev.skills_refused ?? []);
       return;
     case "plugins_summary":
       // the sidebar's plugins row and the place's band (bend_plugins::catalog::summary)

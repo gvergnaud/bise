@@ -38,9 +38,7 @@ pub(crate) fn rows(workspace: &Path, pending: &[String]) -> Vec<bise_proto::app_
     // while it is off (skills-scan-tcc); his own folders from Home, none
     // under a throwaway BISE_HOME.
     let home = bise_home::Home::from_env();
-    let app = resolve::builtin_root().and_then(|r| r.parent().map(Path::to_path_buf));
-    let bise = skills::BiseSkills::of(true, bise_home::projects::desktop_for(workspace));
-    let roots = skills::roots(skills::user_home(&home), workspace, app.as_deref(), bise);
+    let roots = skill_roots(workspace, &home);
     let mode = skills::mode_of(&home);
     let found = skills::scan(&roots, std::time::Duration::from_millis(300), &mode, Some(home.user_home()));
     let inputs = catalog::Inputs {
@@ -56,6 +54,42 @@ pub(crate) fn rows(workspace: &Path, pending: &[String]) -> Vec<bise_proto::app_
         secrets_dir: Some(&secrets),
     };
     catalog::rows(&inputs)
+}
+
+/// The skills folders main reads for `workspace` (the user's view): his
+/// own from Home (none under a throwaway `$BISE_HOME`), bise's where the
+/// desktop is on.
+fn skill_roots(workspace: &Path, home: &bise_home::Home) -> Vec<bend_plugins::skills::Root> {
+    use bend_plugins::{resolve, skills};
+    let app = resolve::builtin_root().and_then(|r| r.parent().map(Path::to_path_buf));
+    let bise = skills::BiseSkills::of(true, bise_home::projects::desktop_for(workspace));
+    skills::roots(skills::user_home(home), workspace, app.as_deref(), bise)
+}
+
+/// His 'Read skills in Documents…' turned on (skills-scan-tcc): each
+/// skill of `workspace`'s folders linked into a folder macOS guards,
+/// read once, with no deadline (macOS may ask him and wait for his
+/// answer); the folders macOS refused, each once. Blocking: run it on a
+/// thread of its own.
+pub(crate) fn guarded_refused(workspace: &Path) -> Vec<String> {
+    use bend_plugins::skills;
+    let home = bise_home::Home::from_env();
+    let list = skills::Mode::List { home: home.user_home().to_path_buf() };
+    let found = skills::scan(&skill_roots(workspace, &home), skills::SCAN_LIMIT, &list, Some(home.user_home()));
+    refused_of(found.guarded.iter().map(|g| (g.path.as_path(), g.folder.as_str())))
+}
+
+/// The folders whose file macOS refused (EPERM), each once, in order.
+fn refused_of<'a>(files: impl Iterator<Item = (&'a Path, &'a str)>) -> Vec<String> {
+    use std::io::Read;
+    let mut out: Vec<String> = Vec::new();
+    for (path, folder) in files {
+        let read = std::fs::File::open(path).and_then(|mut f| f.read(&mut [0u8; 1]));
+        if read.is_err_and(|e| e.kind() == std::io::ErrorKind::PermissionDenied) && !out.iter().any(|f| f == folder) {
+            out.push(folder.to_string());
+        }
+    }
+    out
 }
 
 /// Why his Mistral connectors may be missing or old (their cache's last

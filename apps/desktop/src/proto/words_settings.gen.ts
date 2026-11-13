@@ -1728,6 +1728,12 @@ export const settings = {
   plugins_project_where: (a: { project: string | number }): string => String(a.project) + "/.agents/skills · this project only",
   /** Plugins list: a skill whose SKILL.md links into a folder macOS guards, not read while his switch is off (skills-scan-tcc, designer m_64245) */
   plugins_skill_guarded: (a: { folder: string | number }): string => "in " + String(a.folder) + " · read when used",
+  /** Plugins list: his switch atop the skills folders, shown only when a skill links into a folder macOS guards (designer m_64245, m_64248) */
+  plugins_read_guarded: "Read skills in Documents, Desktop or Downloads",
+  /** Plugins list: the switch's second line, the skills linked in and where */
+  plugins_guarded_count: (a: { n: number; folders: string | number }): string => a.n === 1 ? String(a.n) + " skill is linked into " + String(a.folders) : String(a.n) + " skills are linked into " + String(a.folders),
+  /** Plugins list: the last two folders of that line (`Documents and Desktop`) */
+  plugins_and: (a: { a: string | number; b: string | number }): string => String(a.a) + " and " + String(a.b),
   /** Plugins list: bise's own skills (`skills:bise`, always on) */
   plugins_bise_title: "bise",
   /** Plugins list: what bise's own skills are */

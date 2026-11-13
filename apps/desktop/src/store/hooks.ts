@@ -106,6 +106,8 @@ export const useFound = (): readonly Found[] => useSlice('found', (s) => s.found
 export const useFoundFolders = (): FoundFolders | null => useSlice('found_folders', (s) => s.foundFolders());
 export const useComputerUse = (): EvOf<'computer_use'> | null => useSlice('computer_use', (s) => s.computerUse());
 export const usePlugins = (project?: string): readonly Plugin[] | null => useSlice(`plugins:${project ?? ''}`, (s) => s.plugins(project));
+/** the folders macOS refused at his last 'Read skills in Documents…'; none until the core said so */
+export const useSkillsRefused = (project?: string): readonly string[] => useSlice(`skills_refused:${project ?? ''}`, (s) => s.skillsRefused(project));
 /** which app opens what (File types); none until the core sent them */
 export const useFileTypes = (project?: string): readonly FileType[] => useSlice(`file_types:${project ?? ''}`, (s) => s.fileTypes(project));
 /** the plugins in numbers (the sidebar's row, the place's band); null until the core sent them */

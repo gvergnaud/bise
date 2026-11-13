@@ -29,6 +29,10 @@ struct World {
     plugin_logins: Vec<(PathBuf, String)>,
     plugin_logouts: Vec<(PathBuf, String)>,
     logging_in: Option<std::sync::mpsc::Sender<Done>>,
+    /// his 'Read skills in Documents…' turned on: the workspaces read and
+    /// the channel of the last one, to end it from the test
+    guarded_reads: Vec<PathBuf>,
+    reading_guarded: Option<(Option<String>, std::sync::mpsc::Sender<Done>)>,
     /// computer use: on, the poll's channel and stop flag, fixes, live tests, offs
     cu_on: bool,
     cu_poll: Option<(std::sync::mpsc::Sender<Done>, std::sync::Arc<std::sync::atomic::AtomicBool>)>,
@@ -270,6 +274,14 @@ fn setup_home(t: &mut T, home_dir: Option<PathBuf>) -> Rc<RefCell<World>> {
             }
             gs.borrow_mut().settings.push((plugin.into(), var.into(), value.map(String::from)));
             Ok(())
+        }),
+        read_guarded: Box::new({
+            let w = w.clone();
+            move |ws, project, tx| {
+                let mut w = w.borrow_mut();
+                w.guarded_reads.push(ws);
+                w.reading_guarded = Some((project, tx));
+            }
         }),
         plugin_login: Box::new(move |ws, name, _project, tx| {
             let mut w = l.borrow_mut();
@@ -1397,4 +1409,30 @@ fn account_commands_reach_their_ports() {
     app(&mut t, r#"{"cmd":"plugin_account_rename","id":"mistral:gmail","account":"account-2","title":"  "}"#);
     assert_eq!(evs(&t.take(), "error")[0]["cmd"], "plugin_account_rename");
     assert_eq!(w.borrow().account_changes.len(), n);
+}
+
+/// His 'Read skills in Documents…' (skills-scan-tcc): on writes the pref
+/// and reads the linked skills off the loop, the list at its end; a
+/// folder macOS refused turns it back off and is named on the list; off
+/// writes it and sends the list at once.
+#[test]
+fn the_skills_switch_reads_off_the_loop_and_a_refusal_turns_it_off() {
+    let mut t = T::new();
+    let w = setup(&mut t);
+    app(&mut t, r#"{"cmd":"skills_read_guarded","on":true}"#);
+    let out = t.take();
+    assert_eq!(evs(&out, "prefs")[0]["prefs"]["skills"]["read_guarded"], true);
+    assert!(evs(&out, "plugins").is_empty(), "no list before the reads end");
+    assert_eq!(w.borrow().guarded_reads, vec![PathBuf::from("/p/home")]);
+    let (project, tx) = w.borrow_mut().reading_guarded.take().unwrap();
+    tx.send(Done::GuardedRead { project, refused: vec!["Documents".into()] }).unwrap();
+    t.until(|o| !evs(o, "plugins").is_empty());
+    let out = t.take();
+    assert_eq!(evs(&out, "prefs")[0]["prefs"]["skills"]["read_guarded"], false, "back off");
+    assert_eq!(evs(&out, "plugins")[0]["skills_refused"], json!(["Documents"]));
+    app(&mut t, r#"{"cmd":"skills_read_guarded","on":false}"#);
+    let out = t.take();
+    assert_eq!(w.borrow().prefs.as_ref().unwrap()["skills"]["read_guarded"], false);
+    assert!(evs(&out, "plugins")[0].get("skills_refused").is_none(), "his next turn clears it");
+    assert_eq!(w.borrow().guarded_reads.len(), 1, "off reads nothing");
 }

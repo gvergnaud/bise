@@ -106,6 +106,11 @@ pub enum CoreEv {
         /// type an on plugin's app opens, by type key
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         file_types: Vec<crate::rows::FileType>,
+        /// the guarded folders macOS refused when he last turned
+        /// 'Read skills in Documents…' on (`skills_read_guarded`): the
+        /// switch went back off ('macOS said no to Documents')
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        skills_refused: Vec<String>,
     },
     /// what a source offers to add: `source` is `mistral` (the connectors
     /// not connected yet) or a marketplace's address

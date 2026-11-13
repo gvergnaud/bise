@@ -3,7 +3,7 @@
 // once it shows (the sidebar's dot goes). bise's home's list: the place is every project's.
 // Owner: plug-desktop.
 import { useEffect, useState } from 'react';
-import { useBrowse, useBrowseSources, useFileTypes, usePlugins, usePluginsSummary, usePluginPreview, useProjects, useStore } from '@/store';
+import { useBrowse, useBrowseSources, useFileTypes, usePlugins, usePluginsSummary, usePluginPreview, usePrefs, useProjects, useSkillsRefused, useStore } from '@/store';
 import { useRouter } from '@/app/router';
 import { MAIN } from '@/app/route';
 import type { Plugin } from '@/proto';
@@ -13,6 +13,7 @@ import { AddSheet, type AddItem } from './Add';
 import { bandShows } from './model';
 import { markSeen } from './seen';
 import { putWords } from './try';
+import { readGuardedOn } from './GuardedSwitch';
 
 export function PluginsScreen({ kind, id }: { kind?: 'skills'; id?: string }) {
   const store = useStore();
@@ -20,6 +21,8 @@ export function PluginsScreen({ kind, id }: { kind?: 'skills'; id?: string }) {
   const rows = usePlugins();
   const summary = usePluginsSummary();
   const fileTypes = useFileTypes();
+  const readGuarded = readGuardedOn(usePrefs());
+  const skillsRefused = useSkillsRefused();
   const mistral = useBrowse('mistral');
   const sources = useBrowseSources();
   const preview = usePluginPreview();
@@ -62,7 +65,7 @@ export function PluginsScreen({ kind, id }: { kind?: 'skills'; id?: string }) {
   }
   return (
     <>
-      <PlaceView key={kind ?? 'all'} rows={rows} summary={summary} browse={browse} fileTypes={fileTypes} {...(kind === undefined ? {} : { kind })}
+      <PlaceView key={kind ?? 'all'} rows={rows} summary={summary} browse={browse} fileTypes={fileTypes} readGuarded={readGuarded} skillsRefused={skillsRefused} {...(kind === undefined ? {} : { kind })}
         ports={{ send, open: (x) => { router.go({ screen: 'plugins', id: x }); }, setUpComputer, add: (item) => { if (item !== 'browse') setSheet(item); } }} />
       <AddSheet item={sheet} project={undefined} summary={summary} preview={preview} ports={{ send }} onClose={() => { setSheet(null); store.put('plugin_preview', null); }} />
     </>

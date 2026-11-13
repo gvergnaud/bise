@@ -20,6 +20,13 @@ crate::words! { settings:
     /// Plugins list: a skill whose SKILL.md links into a folder macOS
     /// guards, not read while his switch is off (skills-scan-tcc, designer m_64245)
     plugins_skill_guarded(folder) = "in {folder} · read when used";
+    /// Plugins list: his switch atop the skills folders, shown only when a
+    /// skill links into a folder macOS guards (designer m_64245, m_64248)
+    plugins_read_guarded = "Read skills in Documents, Desktop or Downloads";
+    /// Plugins list: the switch's second line, the skills linked in and where
+    plugins_guarded_count(n, folders) = one "{n} skill is linked into {folders}" | "{n} skills are linked into {folders}";
+    /// Plugins list: the last two folders of that line (`Documents and Desktop`)
+    plugins_and(a, b) = "{a} and {b}";
     /// Plugins list: bise's own skills (`skills:bise`, always on)
     plugins_bise_title = "bise";
     /// Plugins list: what bise's own skills are

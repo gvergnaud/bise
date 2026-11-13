@@ -196,6 +196,10 @@ export class StoreReads extends StoreBase {
   dropPeek(key: string): void {
     if (this.slices.get(`peek:${key}`) != null) this.put(`peek:${key}`, null);
   }
+  /** the folders macOS refused at his last 'Read skills in Documents…' (the plugins event's skills_refused) */
+  skillsRefused(project?: string): readonly string[] {
+    return this.slice<readonly string[]>(`skills_refused:${project ?? ""}`, EMPTY);
+  }
   /** which app opens what (the plugins event's file_types, docs/plugin-apps.md A3): File types' rows; none before the core sent them */
   fileTypes(project?: string): readonly FileType[] {
     return this.slice<readonly FileType[]>(`file_types:${project ?? ""}`, EMPTY);

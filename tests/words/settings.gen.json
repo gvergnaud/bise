@@ -3372,6 +3372,14 @@
     "one": null,
     "text": "always on"
   },
+  "settings.plugins_and": {
+    "args": [
+      "a",
+      "b"
+    ],
+    "one": null,
+    "text": "{a} and {b}"
+  },
   "settings.plugins_badge_failed": {
     "args": [],
     "one": null,
@@ -3784,6 +3792,14 @@
     "args": [],
     "one": null,
     "text": "Mistral connectors"
+  },
+  "settings.plugins_guarded_count": {
+    "args": [
+      "n",
+      "folders"
+    ],
+    "one": "{n} skill is linked into {folders}",
+    "text": "{n} skills are linked into {folders}"
   },
   "settings.plugins_hint_connect_again": {
     "args": [],
@@ -4386,6 +4402,11 @@
     "args": [],
     "one": null,
     "text": "what can your agents use?"
+  },
+  "settings.plugins_read_guarded": {
+    "args": [],
+    "one": null,
+    "text": "Read skills in Documents, Desktop or Downloads"
   },
   "settings.plugins_refresh": {
     "args": [],
