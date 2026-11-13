@@ -445,6 +445,16 @@ def real_opens_with_nothing():
         shutil.rmtree(w, ignore_errors=True)
 
 
+def real_open_fronts_a_running_app():
+    """--real on an app already open with nothing staged brings it to the front, never quits it
+    (app-quits: his launcher click restarted the same build); a staged build or an open try restarts."""
+    check(T.real_plan([4242], False, False) == "front", "open, nothing staged: to the front")
+    check(T.real_plan([4242], True, False) == "restart", "a staged build waits: restart to swap it in")
+    check(T.real_plan([4242], False, True) == "restart", "the try is open: it stops, then the real one opens")
+    check(T.real_plan([], False, False) == "restart", "not running: it opens")
+    check(T.real_front_cmd("/A/bise try.app") == ["open", "-a", "/A/bise try.app"], "the front: no -n, no second instance")
+
+
 def real_open_in_background_offscreen():
     """--real with BISE_DESKTOP_OFFSCREEN=1 opens with 'open -g' (never in front, amb-tools m_18713);
     his own --real opens as before."""
@@ -1100,6 +1110,7 @@ if __name__ == "__main__":
     real_opens_with_nothing()
     real_stop_never_his_hubs()
     quit_only_this_bundle()
+    real_open_fronts_a_running_app()
     real_open_in_background_offscreen()
     candidate_then_promote()
     repack_reads_its_config()

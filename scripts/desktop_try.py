@@ -815,14 +815,36 @@ def open_bundle(real, app, extra, environ):
         run(real_open_cmd(app, extra, environ), his_env(environ))
 
 
+def real_plan(running, staged, try_open):
+    """What --real does (pure): 'front' when the bundle already runs on his home with no staged build
+    to swap in and no try open: it is brought to the front, never quit (app-quits: his '~/Applications/
+    bise (try)' click at 08:28 on 2026-11-13 quit and reopened the same dd93c388 for nothing);
+    else 'restart' (quit, swap the staged build in, open)."""
+    return "front" if running and not staged and not try_open else "restart"
+
+
+def real_front_cmd(app):
+    """The 'open' that brings the running bundle to the front (pure): no -n, so LaunchServices
+    activates the instance of this path instead of starting a second one."""
+    return ["open", "-a", app]
+
+
 def open_real(real, tryh, paths, environ=None, timeout=20):
     """bise-ambient --real (ambient-lead m_18348): the promoted bundle on his real bise home, his
-    running hubs; no build, no try world. Any open try is stopped and any instance of the bundle
-    quits first; the bundle is opened with no variable (real_app_env). Says what it opened."""
+    running hubs; no build, no try world. Already open with nothing staged: brought to the front
+    (real_plan). Else any open try is stopped and any instance of the bundle quits first; the bundle
+    is opened with no variable (real_app_env). Says what it opened."""
     environ = os.environ if environ is None else environ
     app = paths["app"]
     extra = real_app_env(environ, real, his_bise())
-    if os.path.isdir(tryh) and (app_running(app, tryh) or any(os.path.exists(s) for s in hub_socks(tryh))):
+    try_open = os.path.isdir(tryh) and (app_running(app, tryh) or any(os.path.exists(s) for s in hub_socks(tryh)))
+    running = bundle_apps(app)
+    if not extra and real_plan(running, (read_stamp(paths) or {}).get("where") == "staged", try_open) == "front":
+        run(real_front_cmd(app), his_env(environ))
+        say("bise desktop was already open on your home %s: %s (%s, pid %d): brought to the front, not restarted"
+            % (real, app, live_build(app).get("commit", "")[:8] or "unknown build", running[0]))
+        return running[0]
+    if try_open:
         r = stop(real, tryh, app)
         say("stopped the try (app %s, %d hubs)" % (r["app"] or "not running", len(r["hubs"])))
     quit_bundle(app)
