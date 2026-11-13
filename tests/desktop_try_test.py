@@ -1035,8 +1035,13 @@ def team_sign_cases():
     found = "  %s\n  %s\n  %s\n     3 valid identities found\n" % (other, dev, ours)
     check(K.identity_of(found, K.TEAM) == "E" * 40, "the identity is the Developer ID Application one of his team: %s" % K.identity_of(found, K.TEAM))
     check(K.identity_of("  %s\n  %s\n     2 valid identities found\n" % (other, dev), K.TEAM) is None, "no Developer ID of his team: none")
-    group = K.kb_group(K.TEAM, T.CAND_ID)
-    check(group == "9G5B2RTD6U.dev.bise.desktop.cand.kb", "the candidate keeps its own group: %s" % group)
+    # the group is the built appex's own (its Info.plist, what kbenv.ts reads; a fresh one when build.sh's
+    # KB_GROUP names it, kb-fileprovider m_64056), never recomputed; another team's or none: refused
+    group = "9G5B2RTD6U.dev.bise.desktop.cand.kb2"
+    fp = lambda g: {"NSExtension": {"NSExtensionFileProviderDocumentGroup": g}}  # noqa: E731
+    check(K.kb_group(fp(group), K.TEAM) == group, "the appex's own group: %s" % K.kb_group(fp(group), K.TEAM))
+    check(K.kb_group(fp("ZZZZZZZZZZ.dev.bise.desktop.cand.kb"), K.TEAM) is None and K.kb_group(fp("9G5B2RTD6U."), K.TEAM) is None
+          and K.kb_group({}, K.TEAM) is None, "another team's group, an empty one or none: refused")
     ent = K.team_entitlements({"com.apple.security.cs.allow-jit": True}, group)
     check(ent == {"com.apple.security.cs.allow-jit": True, K.GROUPS: [group]}, "desktop.plist's keys plus the group: %s" % ent)
     team_argv, adhoc = K.outer_codesign("/c/x.app", "E" * 40, "/c/e.plist"), K.outer_codesign("/c/x.app", "-", "/c/e.plist")
@@ -1061,18 +1066,61 @@ def team_sign_cases():
             asked.append(cmd)
             return subprocess.CompletedProcess(cmd, 0, found, "")
 
-        def sign(app, identity, entitlements, say):
+        import mac_sign as M
+        steps, last = [], {}  # the real inside-out signing (mac_sign.sign_tree), codesign faked: (rel, entitlements)
+
+        def codesign(argv, **kw):
+            path = argv[-1]
+            ent = argv[argv.index("--entitlements") + 1] if "--entitlements" in argv else None
+            with open(ent, "rb") if ent else open(os.devnull, "rb") as f:
+                d = plistlib.load(f) if ent else ("preserve" if "--preserve-metadata=entitlements" in argv else None)
+            steps.append((os.path.relpath(path, signed[-1][0]), d))
+            last[os.path.normpath(path)] = d
+            return subprocess.CompletedProcess(argv, 0, "", "")
+
+        def sign(app, identity, entitlements, own, say):
             with open(entitlements, "rb") as f:
                 signed.append((app, identity, plistlib.load(f)))
+            real = M.subprocess.run
+            M.subprocess.run = codesign
+            try:
+                M.sign_tree(app, identity, None, entitlements, outer=True, own=own)
+            finally:
+                M.subprocess.run = real
         quiet = lambda *x: None  # noqa: E731
-        go = lambda run=security, team="9G5B2RTD6U": K.sign_candidate(info, c, "mac-arm64", T.CAND_NAME, T.CAND_ID, quiet,  # noqa: E731
-                                                                     run=run, sign=sign, team_of=lambda a: team, base={"jit": True})
+        go = lambda run=security, team="9G5B2RTD6U": K.sign_candidate(info, c, "mac-arm64", T.CAND_NAME, quiet,  # noqa: E731
+                                                                     run=run, sign=sign, team_of=lambda a: team, base={"jit": True},
+                                                                     entitlements_of=lambda p: last.get(os.path.normpath(p)) if isinstance(last.get(os.path.normpath(p)), dict) else {})
         try:
             go()
             check(False, "a candidate with no appex is refused")
         except T.TryError as e:
             check("bise-kb.appex" in str(e) and not signed and not asked, "no appex: refused before the keychain, nothing signed: %s" % e)
-        os.makedirs(os.path.join(c["app"], K.APPEX, "Contents"))
+        mach_exec = b"\xcf\xfa\xed\xfe" + b"\0" * 8 + b"\x02\0\0\0" + b"\0" * 48  # a thin MH_EXECUTE header
+        for exe in (os.path.join(c["app"], "Contents", "MacOS", T.CAND_NAME), os.path.join(c["app"], K.APPEX, "Contents", "MacOS", "bise-kb")):
+            os.makedirs(os.path.dirname(exe), exist_ok=True)
+            with open(exe, "wb") as f:
+                f.write(mach_exec)
+        with open(os.path.join(c["app"], K.APPEX, "Contents", "Info.plist"), "wb") as f:
+            plistlib.dump(dict(fp("ZZZZZZZZZZ.dev.bise.desktop.cand.kb"), CFBundleIdentifier=T.CAND_ID + ".kb"), f)
+        os.makedirs(os.path.dirname(os.path.join(c["src"], K.KB_ENT)))
+        with open(os.path.join(c["src"], K.KB_ENT), "wb") as f:
+            plistlib.dump({K.SANDBOX: True, K.GROUPS: ["@GROUP@"]}, f)
+        try:
+            go()
+            check(False, "an appex whose group is not his team's is refused")
+        except T.TryError as e:
+            check("names no file provider group of team" in str(e) and not signed and not asked, "a group of another team: refused: %s" % e)
+        with open(os.path.join(c["app"], K.APPEX, "Contents", "Info.plist"), "wb") as f:
+            plistlib.dump(dict(fp(group), CFBundleIdentifier=T.CAND_ID + ".kb"), f)
+        os.remove(os.path.join(c["src"], K.KB_ENT))
+        try:
+            go()
+            check(False, "a candidate whose worktree has no kb.entitlements is refused")
+        except T.TryError as e:
+            check(K.KB_ENT in str(e) and not signed and not asked, "no kb.entitlements: refused before the keychain: %s" % e)
+        with open(os.path.join(c["src"], K.KB_ENT), "wb") as f:
+            plistlib.dump({K.SANDBOX: True, K.GROUPS: ["@GROUP@"]}, f)
         try:
             go(run=lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, "     0 valid identities found\n", ""))
             check(False, "no identity of his team: refused")
@@ -1083,6 +1131,27 @@ def team_sign_cases():
         check(asked == [K.FIND], "the identity is looked up by team in the keychain: %s" % asked)
         check(len(signed) == 1 and signed[0][0] == t["app"] and signed[0][1] == "E" * 40 and signed[0][2] == {"jit": True, K.GROUPS: [group]},
               "the copy is signed with his team's identity and the group: %s" % signed)
+        # kb-fileprovider's #5 (dfbcd55b7): fileproviderd refused an appex signed with the app's entitlements.
+        # Inside out: the appex (its executable, then the bundle) with kb.entitlements (sandbox + the group,
+        # @GROUP@ rewritten), then the app with its own; never the app's file on the appex, never --deep
+        appex_ent, app_ent = {K.SANDBOX: True, K.GROUPS: [group]}, {"jit": True, K.GROUPS: [group]}
+        order = [rel for rel, _ in steps]
+        want = [os.path.join(K.APPEX, "Contents", "MacOS", "bise-kb"), K.APPEX, os.path.join("Contents", "MacOS", T.CAND_NAME), "."]
+        check(sorted(order) == sorted(want) and order.index(want[0]) < order.index(want[1]) < order.index(".") == len(order) - 1,
+              "inside out: the appex's executable, its bundle, the app last: %s" % order)
+        check(dict(steps) == {want[0]: appex_ent, want[1]: appex_ent, want[2]: app_ent, ".": app_ent},
+              "the appex gets its own entitlements (sandbox + group), the app its own: %s" % steps)
+        try:
+            K.sign_candidate(
+                info, c, "mac-arm64", T.CAND_NAME, quiet, run=security, sign=sign, team_of=lambda a: "9G5B2RTD6U",
+                base={"jit": True}, entitlements_of=lambda p: app_ent)
+            check(False, "a signed appex without the sandbox is refused")
+        except T.TryError as e:
+            check("not sandboxed" in str(e), "the signed appex must say the sandbox and the group: %s" % e)
+        check(K.appex_ok(appex_ent, group) and not K.appex_ok(dict(appex_ent, **{"com.apple.security.cs.allow-jit": True}), group)
+              and not K.appex_ok({K.SANDBOX: True, K.GROUPS: ["x"]}, group), "appex_ok: sandbox, the group, none of the app's keys")
+        del steps[:]
+        out = go()
         check(t["app"] != c["app"] and t["app"].startswith(c["dir"] + "/team/") and T.bundle_id(t["app"]) == T.CAND_ID
               and os.path.isdir(os.path.join(t["app"], K.APPEX)), "a copy apart, with the candidate's own id and its appex: %s" % t["app"])
         saved = json.load(open(t["json"]))

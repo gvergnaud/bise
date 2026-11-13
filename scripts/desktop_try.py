@@ -976,7 +976,7 @@ def main(argv):
         info = candidate(mine, paths, sha, sign=sign)
         if "--team-sign" in flags:
             import desktop_try_team  # Gabriel's go for his team (architect m_63935): a signed copy, apart
-            info = desktop_try_team.sign_candidate(info, cand_paths(paths, info["sha"]), paths["arch"], CAND_NAME, CAND_ID, say)
+            info = desktop_try_team.sign_candidate(info, cand_paths(paths, info["sha"]), paths["arch"], CAND_NAME, say)
         print(json.dumps(info))
         return 0
     if "--promote" in flags:

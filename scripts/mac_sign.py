@@ -158,8 +158,31 @@ def in_cli(rel, cli_bundles):
     return any(rel.startswith(os.path.join(b, "Contents", "MacOS") + os.sep) for b in cli_bundles if b != ".")
 
 
-def entitlements_for(rel, kind, default=None, bid=None, cli_bundles=()):
-    """The entitlements file of one piece, or None. Pure.
+def main_of(rel, bundles):
+    """The bundle among `bundles` whose main executable `rel` is (under <b>/Contents/MacOS/), or None. Pure."""
+    return next((b for b in bundles if b != "." and rel.startswith(os.path.join(b, "Contents", "MacOS") + os.sep)), None)
+
+
+def appex_of(rel):
+    """The app extension (.appex) that `rel` is, or whose main executable it is, or None. Pure."""
+    parts = rel.split(os.sep)
+    for i, p in enumerate(parts):
+        if p.endswith(".appex") and (i == len(parts) - 1 or parts[i + 1:i + 3] == ["Contents", "MacOS"]):
+            return os.sep.join(parts[:i + 1])
+    return None
+
+
+# entitlements_for's answer for a piece that keeps the entitlements it was signed with
+# (codesign --preserve-metadata=entitlements): an app extension's own, its build's
+PRESERVE = "preserve"
+
+
+def entitlements_for(rel, kind, default=None, bid=None, cli_bundles=(), own=None):
+    """The entitlements file of one piece, PRESERVE, or None. Pure.
+      - a bundle in `own` ({bundle rel: file}) and its main executable: that file;
+      - an app extension (.appex) and its main executable: PRESERVE, never the default: its build
+        gave it its own (bise-kb.appex: the sandbox and its app group, which fileproviderd
+        requires; the app's would replace them);
       - bend-jsrt: JSRT_ENT, in both products;
       - the CLI's bundle (id CLI_ID or DEV_ID) and its main executable: CLI_ENT;
       - a library or a framework: never;
@@ -167,6 +190,12 @@ def entitlements_for(rel, kind, default=None, bid=None, cli_bundles=()):
         terminal release's other binaries: sb-core and the agent runtime need nothing)."""
     if kind == "lib":
         return None
+    own = own or {}
+    mine = rel if kind == "bundle" else main_of(rel, own) if kind == "exec" else None
+    if mine in own:
+        return own[mine]
+    if kind in ("bundle", "exec") and appex_of(rel):
+        return PRESERVE
     if kind == "exec" and os.path.basename(rel) == "bend-jsrt":
         return JSRT_ENT
     if (kind == "bundle" and bid in (CLI_ID, DEV_ID)) or (kind == "exec" and in_cli(rel, cli_bundles)):
@@ -197,13 +226,16 @@ def codesign_argv(path, kind, identity, entitlements=None, keychain=None, rel=No
         argv += ["--keychain", keychain]
     if kind == "exec":
         argv += ["--identifier", ident(rel or path)]
-    if entitlements:
+    if entitlements == PRESERVE:
+        argv += ["--preserve-metadata=entitlements"]
+    elif entitlements:
         argv += ["--entitlements", entitlements]
     return argv + [path]
 
 
-def sign_tree(top, identity, keychain=None, default=None, outer=True, say=None):
-    """Sign every piece under top, inside out (plan(scan(top))), each with entitlements_for.
+def sign_tree(top, identity, keychain=None, default=None, outer=True, say=None, own=None):
+    """Sign every piece under top, inside out (plan(scan(top))), each with entitlements_for (`own`:
+    {bundle rel: entitlements file} for a nested bundle that brings its own, an app extension).
     Returns the steps as (rel, kind, entitlements)."""
     steps = plan(scan(top), outer)
     bids = {rel: bundle_id(os.path.normpath(os.path.join(top, rel))) for rel, k in steps if k == "bundle"}
@@ -212,11 +244,11 @@ def sign_tree(top, identity, keychain=None, default=None, outer=True, say=None):
     with tempfile.TemporaryDirectory(prefix="mac-sign-") as tmp:
         for i, (rel, kind) in enumerate(steps):
             path = os.path.normpath(os.path.join(top, rel))
-            ent = entitlements_for(rel, kind, default, bids.get(rel), cli)
-            if ent and not os.path.isfile(ent):
+            ent = entitlements_for(rel, kind, default, bids.get(rel), cli, own)
+            if ent and ent != PRESERVE and not os.path.isfile(ent):
                 raise SignError("no entitlements file at %s" % ent)
             use = ent
-            if identity == "-":
+            if identity == "-" and ent != PRESERVE and not appex_of(rel):
                 base = None
                 if ent:
                     with open(ent, "rb") as f:

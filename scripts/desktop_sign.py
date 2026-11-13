@@ -20,6 +20,9 @@ The signing core is scripts/mac_sign.py, the terminal release's too (scripts/dis
     bend-jsrt and repl-live get the terminal release's files, so the hub has one identity, V8
     one set of entitlements; repl-live gets the desktop's default (its TLS is macOS's own: no
     library validation key anywhere);
+  - an app extension (Contents/PlugIns/bise-kb.appex) and its executable never get the app's
+    file: they keep the entitlements their build signed them with (the sandbox and the kb app
+    group, which fileproviderd requires), or the caller's `own` file for that bundle;
   - a bare executable is named dev.bise.<name>; a bundle keeps its Info.plist's id.
 
 What a symlink points at is signed where it lives, never twice. The pure parts are tested in
@@ -38,15 +41,16 @@ ENTITLEMENTS = M.DESKTOP_ENT
 SignError = M.SignError
 
 
-def sign(app, identity, keychain=None, entitlements=ENTITLEMENTS, say=None):
-    """Sign every piece of the app inside out (mac_sign.sign_tree), then verify the whole: deep
-    and strict. With a real identity, the runtime's bise.app must carry a Developer ID
-    requirement naming dev.bise.cli (mac_sign.dr_ok)."""
+def sign(app, identity, keychain=None, entitlements=ENTITLEMENTS, say=None, own=None):
+    """Sign every piece of the app inside out (mac_sign.sign_tree; `own`: {nested bundle rel:
+    its entitlements file}, an app extension's), then verify the whole: deep and strict. With a
+    real identity, the runtime's bise.app must carry a Developer ID requirement naming
+    dev.bise.cli (mac_sign.dr_ok)."""
     if not os.path.isdir(app) or not app.rstrip("/").endswith(".app"):
         raise SignError("not an app bundle: %s" % app)
     if entitlements and not os.path.isfile(entitlements):
         raise SignError("no entitlements file at %s" % entitlements)
-    steps = M.sign_tree(app, identity, keychain, entitlements, outer=True, say=say)
+    steps = M.sign_tree(app, identity, keychain, entitlements, outer=True, say=say, own=own)
     r = subprocess.run(["codesign", "--verify", "--deep", "--strict", "--verbose=2", app], capture_output=True, text=True)
     if r.returncode != 0:
         raise SignError("codesign --verify --deep --strict: %s" % r.stderr.strip())

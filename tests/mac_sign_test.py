@@ -108,6 +108,18 @@ def test_entitlements():
     check(E("Contents/MacOS/bise", "exec", S.ENTITLEMENTS, None, ["Contents/Resources/bin/bise.app"]) == S.ENTITLEMENTS,
           "the desktop's own executable keeps its own")
     check(E("sb-core", "exec", None) is None, "sb-core needs nothing")
+    # an app extension keeps its own (bise-kb.appex: the sandbox + its group; fileproviderd refused it
+    # with the app's, kb-fileprovider's #5 on dfbcd55b7), or the caller's `own` file for it
+    ax, ax_exe = "Contents/PlugIns/bise-kb.appex", "Contents/PlugIns/bise-kb.appex/Contents/MacOS/bise-kb"
+    for default in (None, S.ENTITLEMENTS):
+        check(E(ax_exe, "exec", default) == E(ax, "bundle", default, "dev.bise.desktop.kb") == M.PRESERVE,
+              "the appex and its executable keep their entitlements, never the app's")
+        check(E(ax_exe, "exec", default, own={ax: "/kb.plist"}) == E(ax, "bundle", default, own={ax: "/kb.plist"}) == "/kb.plist",
+              "an appex given its own file: that file, on its executable too")
+    check(E("Contents/PlugIns/bise-kb.appex/Contents/Resources/tool", "exec", S.ENTITLEMENTS) == S.ENTITLEMENTS
+          and M.appex_of("Contents/MacOS/bise") is None, "only the appex and its main executable")
+    keep = M.codesign_argv("/a/x.appex", "bundle", "ABC", M.PRESERVE)
+    check("--preserve-metadata=entitlements" in keep and "--entitlements" not in keep, "PRESERVE: codesign keeps them: %s" % keep)
     # the agent runtime's TLS is macOS's own (wire.c): no entitlement, library validation on.
     # The desktop's default reaches it there (its bare executables), never library validation off.
     for exe in ("repl-live", "repl-scripted"):
