@@ -22,6 +22,7 @@ import ./lazy.bend as LZ
 import ./agents.bend as AG
 import ./work.bend as WO
 import ./wstatus.bend as WS
+import ./keyed.bend as KY
 
 def jdecl(d: Maybe<&2, S.Decl>, +note: String) -> J.Json:
   match d:
@@ -670,26 +671,36 @@ def evs_folded(evs: List<&2, M.Ev>) -> List<&2, String>:
     case Con{+e, +t}:
       List.append(&2, String, ev_folded(e), evs_folded(t))
 
-# an event changes his cards (a Needs-you count of any work)
-def card_ev(e: M.Ev) -> Bool:
-  match e:
-    case M.ECardOpened{_}:
-      True{}
-    case M.ECardClosed{_, _, _}:
-      True{}
-    case M.ECardWithdrawn{_, _}:
-      True{}
-    case M.ECardMoved{_}:
-      True{}
-    case _:
-      False{}
+# the works of card `id` among `cs` (none: no such card)
+def works_of_card(cs: List<&2, S.Card>, +id: Nat) -> List<&2, String>:
+  match cs:
+    case Nil{}:
+      Nil{}
+    case Con{+c, +t}:
+      LZ.pick(List<&2, String>, Nat.is_eq(S.Card.id(c), id), u => S.Card.works(c), u => works_of_card(t, id))
 
-def card_evs(evs: List<&2, M.Ev>) -> Bool:
+# the works whose Needs-you count a card event moves: only that card's
+# (architect m_64541), read in the cards before the step (`cs0`) for a
+# card it closed, before and after for a move
+def card_works(e: M.Ev, +cs0: List<&2, S.Card>) -> List<&2, String>:
+  match e:
+    case M.ECardOpened{+c}:
+      S.Card.works(c)
+    case M.ECardClosed{+id, _, _}:
+      works_of_card(cs0, id)
+    case M.ECardWithdrawn{+id, _}:
+      works_of_card(cs0, id)
+    case M.ECardMoved{+m}:
+      WO.union(works_of_card(cs0, S.CardMove.card(m)), S.CardMove.works(m))
+    case _:
+      Nil{}
+
+def evs_card_works(evs: List<&2, M.Ev>, +cs0: List<&2, S.Card>) -> List<&2, String>:
   match evs:
     case Nil{}:
-      False{}
+      Nil{}
     case Con{+e, +t}:
-      LZ.or(card_ev(e), u => card_evs(t))
+      WO.union(card_works(e, cs0), evs_card_works(t, cs0))
 
 # one of `xs` is in `ys`
 def meets(xs: List<&2, String>, +ys: List<&2, String>) -> Bool:
@@ -699,15 +710,10 @@ def meets(xs: List<&2, String>, +ys: List<&2, String>) -> Bool:
     case Con{+h, +t}:
       LZ.or(WO.has(ys, h), u => meets(t, ys))
 
-# the same page waits (the shell's page_waits input, in its order)
-def pw_same(a: List<&2, X.Kn>, b: List<&2, X.Kn>) -> Bool:
-  match a b:
-    case Nil{} Nil{}:
-      True{}
-    case Con{+x, +xt} Con{+y, +yt}:
-      LZ.and(String.eq(X.Kn.key(x), X.Kn.key(y)) && Nat.is_eq(X.Kn.n(x), X.Kn.n(y)), u => pw_same(xt, yt))
-    case _ _:
-      False{}
+# his page waits on work `id` changed in the step (`pw0` before): only
+# those works' rows (architect m_64541)
+def pw_moved(+pw0: List<&2, X.Kn>, +pw: List<&2, X.Kn>, +id: String) -> Bool:
+  Bool.not(Nat.is_eq(KY.kn_get(pw0, id), KY.kn_get(pw, id)))
 
 # work `w`'s quiet time reached STALL_MS between `now0` (before the
 # step) and `now`
@@ -715,18 +721,20 @@ def stall_crossed(+w: S.Work, +now0: Nat, +now: Nat) -> Bool:
   +t = Nat.add(S.Work.last(w), WS.STALL_MS())
   Nat.is_gt(t, now0) && Nat.is_ge(now, t)
 
-# work `w` is touched by the step
-def work_touched(+w: S.Work, +every: Bool, +ids: List<&2, String>, +names: List<&2, String>, +now0: Nat, +now: Nat) -> Bool:
-  LZ.or(every, u => LZ.or(WO.has(ids, S.Work.id(w)), u => LZ.or(meets(S.Work.agents(w), names), u => stall_crossed(w, now0, now))))
+# work `w` is touched by the step: `every` (view_all), named by its
+# events or its cards' (`ids`), one of its agents changed, its page
+# waits moved, or its quiet time crossed 2 h
+def work_touched(+w: S.Work, +every: Bool, +ids: List<&2, String>, +names: List<&2, String>, +pw0: List<&2, X.Kn>, +pw: List<&2, X.Kn>, +now0: Nat, +now: Nat) -> Bool:
+  LZ.or(every, u => LZ.or(WO.has(ids, S.Work.id(w)), u => LZ.or(meets(S.Work.agents(w), names), u => LZ.or(pw_moved(pw0, pw, S.Work.id(w)), u => stall_crossed(w, now0, now)))))
 
-def work_rows(xs: List<&2, S.Work>, +s: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>, +pw: List<&2, X.Kn>, +now: Nat, +every: Bool, +ids: List<&2, String>, +names: List<&2, String>, +now0: Nat) -> List<&2, J.Json>:
+def work_rows(xs: List<&2, S.Work>, +s: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>, +pw0: List<&2, X.Kn>, +pw: List<&2, X.Kn>, +now: Nat, +every: Bool, +ids: List<&2, String>, +names: List<&2, String>, +now0: Nat) -> List<&2, J.Json>:
   match xs:
     case Nil{}:
       Nil{}
     case Con{+w, +t}:
-      LZ.pick(List<&2, J.Json>, work_touched(w, every, ids, names, now0, now),
-        u => WS.row(w, s, rts, ws, pw, now) <> work_rows(t, s, rts, ws, pw, now, every, ids, names, now0),
-        u => work_rows(t, s, rts, ws, pw, now, every, ids, names, now0))
+      LZ.pick(List<&2, J.Json>, work_touched(w, every, ids, names, pw0, pw, now0, now),
+        u => WS.row(w, s, rts, ws, pw, now) <> work_rows(t, s, rts, ws, pw0, pw, now, every, ids, names, now0),
+        u => work_rows(t, s, rts, ws, pw0, pw, now, every, ids, names, now0))
 
 def tombs_json(ts: List<&2, S.Tomb>) -> List<&2, J.Json>:
   match ts:
@@ -762,12 +770,12 @@ def some_names(xs: List<&2, String>) -> Maybe<&2, List<&2, String>>:
 
 # the rows of the works a step touched (`pw0`, `now0`: the page waits
 # and the clock before it); `all`: every work
-def works_rows(all: Bool, +s: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>, +pw0: List<&2, X.Kn>, +pw: List<&2, X.Kn>, +now0: Nat, +now: Nat, +names: List<&2, String>, +evs: List<&2, M.Ev>) -> Maybe<&2, List<&2, J.Json>>:
+def works_rows(all: Bool, +s: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>, +pw0: List<&2, X.Kn>, +pw: List<&2, X.Kn>, +now0: Nat, +now: Nat, +names: List<&2, String>, +evs: List<&2, M.Ev>, +cs0: List<&2, S.Card>) -> Maybe<&2, List<&2, J.Json>>:
   match all:
     case True{}:
-      Some{work_rows(S.St.works(s), s, rts, ws, pw, now, True{}, Nil{}, Nil{}, now)}
+      Some{work_rows(S.St.works(s), s, rts, ws, pw, pw, now, True{}, Nil{}, Nil{}, now)}
     case False{}:
-      some_rows(work_rows(S.St.works(s), s, rts, ws, pw, now, LZ.or(card_evs(evs), u => Bool.not(pw_same(pw0, pw))), evs_works(evs), names, now0))
+      some_rows(work_rows(S.St.works(s), s, rts, ws, pw0, pw, now, False{}, WO.union(evs_works(evs), evs_card_works(evs, cs0)), names, now0))
 
 def works_gone(all: Bool, +evs: List<&2, M.Ev>) -> Maybe<&2, List<&2, String>>:
   match all:
@@ -795,10 +803,10 @@ def view.go(+s: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>, +all: Bool,
 
 # the view of a step (`pw0`, `now0`: the page waits and the clock before
 # it, for the works it touched)
-def view(+s: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>, +all: Bool, +ids: List<&2, Nat>, +names: List<&2, String>, +evs: List<&2, M.Ev>, +pw0: List<&2, X.Kn>, +pw: List<&2, X.Kn>, +now0: Nat, +now: Nat) -> J.Json:
+def view(+s: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>, +all: Bool, +ids: List<&2, Nat>, +names: List<&2, String>, +evs: List<&2, M.Ev>, +pw0: List<&2, X.Kn>, +pw: List<&2, X.Kn>, +now0: Nat, +now: Nat, +cs0: List<&2, S.Card>) -> J.Json:
   view.go(s, rts, ws, all, ids, names, all || Bool.not(List.is_empty(&2, M.Ev, evs)), all || order_evs(evs),
     all || timer_evs(False{}, evs), all || timer_evs(True{}, evs), all || wake_evs(evs),
-    works_rows(all, s, rts, ws, pw0, pw, now0, now, names, evs), evs)
+    works_rows(all, s, rts, ws, pw0, pw, now0, now, names, evs, cs0), evs)
 
 # ---- view_all in lines (c6 (c), architect m_56956) ----
 # One line holding the whole view set sb-core's steady RSS: Bend's heap
@@ -855,7 +863,7 @@ def all_head(+s: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>, +xs: List<
     S.St.next_msg(s), S.St.next_card(s), S.St.paused(s),
     order_when(True{}, s), cards_when(True{}, s), notes_when(True{}, s),
     timers_live(True{}, s), timers_ended(True{}, s), wakes_live(True{}, s), wakes_ended(True{}, s),
-    works_rows(True{}, s, rts, ws, pw, pw, now, now, Nil{}, Nil{}), None{}, works_tombs(True{}, s, Nil{}))
+    works_rows(True{}, s, rts, ws, pw, pw, now, now, Nil{}, Nil{}, Nil{}), None{}, works_tombs(True{}, s, Nil{}))
 
 # a next line: a partial view of these agents and cold rows
 def all_part(+s: S.St, +agents: List<&2, J.Json>, +cold: Maybe<&2, List<&2, J.Json>>) -> J.Json:

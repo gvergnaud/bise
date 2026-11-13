@@ -291,6 +291,18 @@ law in_page_waits_bare:
 def in_page_waits_bare():
   {==}
 
+law in_work_act_bare:
+  {IN.of(J.obj([J.kv("t", J.JStr{"work_act"})])) == IN.IWorkAct{J.JNull{}} : IN.In}
+
+def in_work_act_bare():
+  {==}
+
+law in_work_move_bare:
+  {IN.of(J.obj([J.kv("t", J.JStr{"work_move"})])) == IN.IWorkMove{None{}, "", Nil{}} : IN.In}
+
+def in_work_move_bare():
+  {==}
+
 law in_every_set_bare:
   {IN.of(J.obj([J.kv("t", J.JStr{"every_set"})])) == IN.IEverySet{"", "", "", 0n, "", None{}, None{}, None{}, None{}, None{}} : IN.In}
 
@@ -855,6 +867,34 @@ def in_IPageWaits_round(works, ns):
   %K.strs_round(works) : {IN.of(IN.json(IN.IPageWaits{works, ns})) == IN.IPageWaits{_, ns} : IN.In}
   %K.nats_round(ns) : {IN.of(IN.json(IN.IPageWaits{works, ns})) == IN.IPageWaits{K.strs(K.jstrs(works)), _} : IN.In}
   {==}
+
+law in_IWorkAct_round:
+  for req: J.Json
+  {IN.of(IN.json(IN.IWorkAct{req})) == IN.IWorkAct{req} : IN.In}
+
+def in_IWorkAct_round(req):
+  {==}
+
+law in_IWorkMove_round:
+  for card: Maybe<&2, Nat>
+  for art: String
+  for works: List<&2, String>
+  {IN.of(IN.json(IN.IWorkMove{card, art, works})) == IN.IWorkMove{card, art, works} : IN.In}
+
+def in_IWorkMove_round(card, art, works):
+  match card art:
+    case None{} SNil{}:
+      %K.strs_round(works) : {IN.of(IN.json(IN.IWorkMove{None{}, SNil{}, works})) == IN.IWorkMove{None{}, SNil{}, _} : IN.In}
+      {==}
+    case None{} SCon{h_art, t_art}:
+      %K.strs_round(works) : {IN.of(IN.json(IN.IWorkMove{None{}, SCon{h_art, t_art}, works})) == IN.IWorkMove{None{}, SCon{h_art, t_art}, _} : IN.In}
+      {==}
+    case Some{x_card} SNil{}:
+      %K.strs_round(works) : {IN.of(IN.json(IN.IWorkMove{Some{x_card}, SNil{}, works})) == IN.IWorkMove{Some{x_card}, SNil{}, _} : IN.In}
+      {==}
+    case Some{x_card} SCon{h_art, t_art}:
+      %K.strs_round(works) : {IN.of(IN.json(IN.IWorkMove{Some{x_card}, SCon{h_art, t_art}, works})) == IN.IWorkMove{Some{x_card}, SCon{h_art, t_art}, _} : IN.In}
+      {==}
 
 law in_IEverySet_round:
   for agent: String

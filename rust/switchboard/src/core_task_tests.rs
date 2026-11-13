@@ -134,7 +134,162 @@ fn list_and_show_read_the_status_sb_core_computed() {
     let open = task(&mut t, MAIN, Task::List { all: false })["text"].as_str().unwrap().to_string();
     assert!(!open.contains("native-mac"), "{open}");
     let all = task(&mut t, MAIN, Task::List { all: true })["text"].as_str().unwrap().to_string();
-    assert!(all.contains("native-mac · Native mac · done"), "{all}");
+    assert!(all.contains("native-mac · Native mac · done · today"), "{all}");
     let r = task(&mut t, MAIN, Task::Show { id: "nope".into() });
     assert_eq!(r["ok"], false, "{r}");
+}
+
+#[test]
+fn his_page_waits_make_needs_you_and_a_ragged_input_is_refused() {
+    let mut t = T::new();
+    let a = new(&mut t, MAIN, "Native mac", &[]);
+    let b = new(&mut t, MAIN, "Digest", &[]);
+    t.go(Input::PageWaits { works: vec![a.clone()], ns: vec![2] });
+    assert_eq!((t.hub.st.works[&a].status.as_str(), t.hub.st.works[&a].needs), ("needs_you", 2));
+    let r = task(&mut t, MAIN, Task::List { all: false });
+    assert!(r["text"].as_str().unwrap().starts_with("native-mac · Native mac · needs you · 2 questions"), "{r}");
+    // the other work's row is untouched: still its last one
+    assert_eq!(t.hub.st.works[&b].status, "waiting");
+    // two lists of different lengths: refused, the page waits kept
+    t.go(Input::PageWaits { works: vec![a.clone(), b.clone()], ns: vec![1] });
+    assert_eq!(t.hub.st.works[&a].needs, 2, "a short list is never zipped");
+    // his waits answered: back to its status
+    t.go(Input::PageWaits { works: vec![], ns: vec![] });
+    assert_eq!(t.hub.st.works[&a].status, "waiting");
+}
+
+fn notice_to(fx: &[Effect], client: ClientId) -> Option<String> {
+    fx.iter().find_map(|e| match e {
+        Effect::ToClient { client: c, body } if *c == client && body["ev"] == "notice" => body["text"].as_str().map(String::from),
+        _ => None,
+    })
+}
+
+#[test]
+fn his_gesture_on_a_task_is_made_as_him_and_a_refusal_is_his_notice() {
+    let mut t = T::new();
+    let a = new(&mut t, MAIN, "Native mac", &[]);
+    // his pause from the desktop: by the user, never an agent
+    let fx = t.go(Input::ClientWorkAct { client: 7, req: Task::Pause { id: a.clone(), until_ms: None } });
+    assert_eq!(notice_to(&fx, 7), None, "{fx:?}");
+    let ch = lines(&t, "work_changed");
+    assert_eq!((ch.last().unwrap()["op"].as_str(), ch.last().unwrap()["by"].as_str()), (Some("pause"), Some("user")), "{ch:?}");
+    assert_eq!(t.hub.st.works[&a].status, "paused");
+    // his gesture starts no turn: no agent serves what he made
+    let turns = lines(&t, "work_turn").len();
+    let fx = t.go(Input::ClientWorkAct { client: 7, req: Task::New { name: "Digest".into(), why: String::new(), goals: vec![] } });
+    assert_eq!(notice_to(&fx, 7), None, "{fx:?}");
+    assert_eq!(lines(&t, "work_created").last().unwrap()["work"]["by"], "user");
+    assert_eq!(lines(&t, "work_turn").len(), turns, "his new work joins no agent's turn");
+    // an unknown task: refused, its word to his client only
+    let fx = t.go(Input::ClientWorkAct { client: 7, req: Task::Done { id: "nope".into() } });
+    assert!(notice_to(&fx, 7).is_some_and(|n| n.contains("no task nope")), "{fx:?}");
+    // the reads are the hub's: a gesture never asks for them
+    let fx = t.go(Input::ClientWorkAct { client: 7, req: Task::List { all: false } });
+    assert!(notice_to(&fx, 7).is_some(), "{fx:?}");
+}
+
+#[test]
+fn his_move_of_an_artifact_or_a_card_is_journaled_and_an_unknown_one_refused() {
+    let mut t = T::new();
+    let a = new(&mut t, MAIN, "Native mac", &[]);
+    let fx = t.go(Input::ClientWorkMove { client: 7, card: None, art: "a_41".into(), works: vec![a.clone()] });
+    assert_eq!(notice_to(&fx, 7), None, "{fx:?}");
+    let m = lines(&t, "art_moved");
+    assert_eq!(m.last().unwrap()["moved"], json!({"art": "a_41", "works": [a]}), "{m:?}");
+    // out of every task: an empty list
+    t.go(Input::ClientWorkMove { client: 7, card: None, art: "a_41".into(), works: vec![] });
+    assert_eq!(lines(&t, "art_moved").last().unwrap()["moved"]["art"], "a_41");
+    // an unknown card or task: nothing moved, his notice
+    let fx = t.go(Input::ClientWorkMove { client: 7, card: Some(99), art: String::new(), works: vec![a.clone()] });
+    assert!(notice_to(&fx, 7).is_some_and(|n| n.contains("no card #99")), "{fx:?}");
+    let fx = t.go(Input::ClientWorkMove { client: 7, card: None, art: "a_42".into(), works: vec!["nope".into()] });
+    assert!(notice_to(&fx, 7).is_some(), "{fx:?}");
+    assert_eq!(lines(&t, "card_moved").len(), 0);
+    assert_eq!(lines(&t, "art_moved").len(), 2);
+}
+
+fn interrupted(fx: &[Effect], agent: &str) -> bool {
+    fx.iter().any(|e| matches!(e, Effect::Interrupt { agent: a, .. } if a == agent))
+}
+
+fn sent_to(t: &T, to: &str) -> Vec<Value> {
+    lines(t, "message_sent").into_iter().map(|j| j["msg"].clone()).filter(|m| m["to"] == to).collect()
+}
+
+#[test]
+fn a_paused_task_notes_its_turn_holds_its_messages_and_stops_it_after_the_grace() {
+    let mut t = T::new();
+    let a = new(&mut t, MAIN, "Native mac", &[]);
+    // docs's turn serves it (its brief inherits main's turn)
+    t.spawn_task("docs");
+    assert_eq!(lines(&t, "work_turn").last().unwrap()["turn"]["works"], json!([a]));
+    let before = sent_to(&t, "docs").len();
+    t.go(Input::ClientWorkAct { client: 7, req: Task::Pause { id: a.clone(), until_ms: None } });
+    // the note first (no work: a steer), and one resume note carrying [a]
+    let new: Vec<Value> = sent_to(&t, "docs").into_iter().skip(before).collect();
+    assert_eq!(new.len(), 2, "{new:?}");
+    assert!(new[0]["text"].as_str().unwrap().starts_with(&format!("task {a} is paused: save your work")), "{new:?}");
+    assert_eq!(new[0]["works"], Value::Null, "the note carries no work");
+    assert_eq!(new[1]["works"], json!([a]), "law pause_queues_one_resume_note_per_agent");
+    let note = new[1]["id"].as_u64().unwrap();
+    assert!(matches!(t.hub.st.msg_state()[&note], MsgState::Queued { .. }), "held while paused");
+    // main's next word on that task waits too (law paused_work_holds_its_deliveries)
+    t.req(MAIN, send("docs", "and the icon", &[&a]));
+    let held = sent_to(&t, "docs").last().unwrap()["id"].as_u64().unwrap();
+    assert!(matches!(t.hub.st.msg_state()[&held], MsgState::Queued { .. }));
+    // within the grace: never stopped
+    t.env.now += 60_000;
+    assert!(!interrupted(&t.go(Input::Tick), "docs"), "law pause_interrupts_only_after_grace");
+    // past it, still busy: stopped once, its turn serves nothing
+    t.env.now += 61_000;
+    assert!(interrupted(&t.go(Input::Tick), "docs"));
+    let turn = lines(&t, "work_turn").last().unwrap()["turn"].clone();
+    assert_eq!((turn["agent"].as_str(), turn["works"].clone()), (Some("docs"), json!([])), "{turn}");
+    t.env.now += 1_000;
+    assert!(!interrupted(&t.go(Input::Tick), "docs"), "one stop, never again");
+    // his resume: the held messages go, the resume note with them
+    t.go(Input::ClientWorkAct { client: 7, req: Task::Resume { id: a.clone() } });
+    assert_ne!(t.hub.st.works[&a].status, "paused");
+    for id in [note, held] {
+        assert_eq!(t.hub.st.msg_state()[&id], MsgState::Delivered, "law work_resume_delivers_held");
+    }
+}
+
+#[test]
+fn a_turn_with_another_open_task_is_never_stopped() {
+    let mut t = T::new();
+    let a = new(&mut t, MAIN, "Native mac", &[]);
+    let b = new(&mut t, MAIN, "Digest", &[]);
+    t.spawn_task("docs");
+    assert_eq!(lines(&t, "work_turn").last().unwrap()["turn"]["works"], json!([a, b]));
+    t.go(Input::ClientWorkAct { client: 7, req: Task::Pause { id: a.clone(), until_ms: None } });
+    let note = sent_to(&t, "docs").into_iter().find(|m| m["text"].as_str().unwrap_or("").contains("is paused")).unwrap();
+    assert!(note["text"].as_str().unwrap().ends_with(&format!("then go on with {b}.")), "{note}");
+    t.env.now += 200_000;
+    assert!(!interrupted(&t.go(Input::Tick), "docs"), "law pause_never_stops_an_agent_with_an_open_work");
+}
+
+#[test]
+fn a_pause_until_a_time_resumes_by_itself_and_a_stale_end_does_nothing() {
+    let mut t = T::new();
+    let a = new(&mut t, MAIN, "Native mac", &[]);
+    let until = t.env.now + 10_000;
+    t.go(Input::ClientWorkAct { client: 7, req: Task::Pause { id: a.clone(), until_ms: Some(until) } });
+    let act = lines(&t, "act_set").last().unwrap()["act"].clone();
+    assert_eq!((act["due"].as_u64(), act["what"].clone()), (Some(until), json!({"kind": "work_resume", "work": a})), "law pause_until_is_a_timer");
+    assert_eq!(t.hub.st.works[&a].work.until_timer, act["id"].as_u64());
+    // paused again with no end: the old act does nothing
+    t.go(Input::ClientWorkAct { client: 7, req: Task::Pause { id: a.clone(), until_ms: None } });
+    t.env.now = until + 1;
+    t.go(Input::Tick);
+    assert_eq!(t.hub.st.works[&a].status, "paused", "law pause_without_end_never_resumes");
+    // a new end: it resumes when it comes, by bise
+    let until = t.env.now + 5_000;
+    t.go(Input::ClientWorkAct { client: 7, req: Task::Pause { id: a.clone(), until_ms: Some(until) } });
+    t.env.now = until;
+    t.go(Input::Tick);
+    let ch = lines(&t, "work_changed").last().unwrap().clone();
+    assert_eq!((ch["op"].as_str(), ch["by"].as_str()), (Some("resume"), Some("switchboard")), "by bise: {ch}");
+    assert_ne!(t.hub.st.works[&a].status, "paused");
 }

@@ -476,8 +476,10 @@ pub enum Every {
 
 /// `sb task`'s verbs, tagged `step` (docs/tasks.md). `new` makes a work
 /// its caller serves; `list` and `show` are the hub's reads; the others
-/// are one change of work `id` (sb-core says who may make it).
+/// are one change of work `id` (sb-core says who may make it). His
+/// gestures on the desktop send the same verbs (`HubCmd::TaskAct`).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(tag = "step", rename_all = "snake_case")]
 pub enum Task {
     New {
@@ -511,6 +513,7 @@ pub enum Task {
         #[serde(default)]
         id: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "ts", ts(optional))]
         until_ms: Option<u64>,
     },
     Resume {

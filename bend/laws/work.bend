@@ -12,6 +12,7 @@ import ../hub/core.bend as HC
 import ../hub/work.bend as HWO
 import ../hub/cx.bend as HX
 import ../hub/wstatus.bend as HWS
+import ../hub/view.bend as HV
 
 # LAW: `--task <id>` gives the message its works, whatever the sender's
 # turn serves.
@@ -21,8 +22,10 @@ law task_flag_replaces_turn_works:
   for +from: String
   {HC.works_of_send(Some{ws}, s, from) == ws : List<&2, String>}
 
-# LAW: a notice of the hub carries no works: the hub is never an agent,
-# so it has no turn to inherit from.
+# LAW: a notice of the hub never inherits works: the hub is never an
+# agent, so it has no turn to inherit from. The only hub message with
+# works is a pause's resume note, and they are explicit
+# (pause_queues_one_resume_note_per_agent; architect m_64603).
 law notice_carries_no_works:
   for +s: HS.St
   {HC.works_of_send(None{}, s, HM.HUB()) == Nil{} : List<&2, String>}
@@ -88,6 +91,114 @@ law an_agent_never_marks_done:
   for +xs: List<&2, HS.Work>
   {HC.task_refused(w, HS.WDone{}, by, False{}, xs) == Some{"only main changes a task: tick your done-when with sb report --done-when <n>"} : Maybe<&2, String>}
 
+# LAW: an agent never acts as him: its request's change is by the agent
+# itself, whatever it writes (his gestures come only from a client's
+# socket, In work_act; architect m_64425).
+law an_agent_never_acts_as_him:
+  for +t: Nat
+  for +from: String
+  {HC.task_by(HC.TAReq{t}, from) == from : String}
+
+# LAW: only main among the agents changes any work: the right is read
+# from the asker, never from a name it carries.
+law only_main_changes_any_work:
+  for +t: Nat
+  for +from: String
+  {HC.task_all(HC.TAReq{t}, from) == String.eq(from, HM.MAIN()) : Bool}
+
+# ---- a work's pause (architect m_64602/m_64603) ----
+
+# LAW: a message held by its works' pause is not delivered: it stays
+# queued, the ones after it keep their order.
+law paused_work_holds_its_deliveries:
+  for +m: HS.Msg
+  for +rest: List<&2, HS.Msg>
+  {HWO.unheld.pick(True{}, m, rest) == rest : List<&2, HS.Msg>}
+
+# LAW: a message with no work (a notice, a word to no task) is never
+# held by a work's pause.
+law a_message_with_no_work_is_never_held:
+  for +xs: List<&2, HS.Work>
+  {HWO.all_paused(Nil{}, xs) == False{} : Bool}
+
+# LAW: an agent that ended its turn itself (what the note asks) is never
+# interrupted.
+law pause_never_stops_an_idle_agent:
+  for +ids: List<&2, String>
+  for +xs: List<&2, HS.Work>
+  for +now: Nat
+  {HWO.stops(False{}, ids, xs, now) == False{} : Bool}
+
+# LAW: a turn's open work (no pause time) never lets the stop through:
+# every work of the turn must pass the grace (grace.go ands them), and a
+# turn that serves no work is never stopped.
+law pause_never_stops_an_agent_with_an_open_work:
+  for +now: Nat
+  {HWO.grace.at(None{}, now) == False{} : Bool}
+
+law pause_never_stops_a_turn_with_no_work:
+  for +xs: List<&2, HS.Work>
+  for +now: Nat
+  {HWO.stops.works(Nil{}, xs, now) == False{} : Bool}
+
+# LAW: a paused work stops a turn only once PAUSE_GRACE passed since its
+# pause: the note goes first, the stop after.
+law pause_interrupts_only_after_grace:
+  for +at: Nat
+  for +now: Nat
+  {HWO.grace.at(Some{at}, now) == Nat.is_ge(now, Nat.add(at, HWO.PAUSE_GRACE_MS())) : Bool}
+
+# LAW: the resume note carries exactly its work, explicitly; one per
+# agent of the work, in the hub's order (work_pause.agents filters
+# St.order, which names each agent once).
+law pause_queues_one_resume_note_per_agent:
+  for +n: String
+  for +id: String
+  {HC.Snd.works(HC.work_resume_note(n, id)) == Some{[id]} : Maybe<&2, List<&2, String>>}
+
+# LAW: an until act of a work no longer paused does nothing (resumed by
+# hand before its end).
+law stale_until_never_resumes:
+  for +u: Maybe<&2, Nat>
+  for +now: Nat
+  {HWO.until_due.go(None{}, u, now) == False{} : Bool}
+
+# LAW: an until act of a work paused again with no end does nothing; with
+# a new end, it resumes only once that end came.
+law until_follows_the_last_pause:
+  for +p: Nat
+  for +at: Nat
+  for +now: Nat
+  {HWO.until_due.go(Some{p}, Some{at}, now) == Nat.is_ge(now, at) : Bool}
+
+law pause_without_end_never_resumes:
+  for +p: Nat
+  for +now: Nat
+  {HWO.until_due.go(Some{p}, None{}, now) == False{} : Bool}
+
+# LAW: his move of a card gives it his works and marks it moved: no
+# stamp changes a card's works after its open, so his move stays
+# (architect m_64425; an artifact's is St.moved, read by the shell's
+# stamp at the door).
+law moved_by_you_sticks:
+  for +c: HS.Card
+  for +ws: List<&2, String>
+  {HM.card_moved([c], HS.Card.id(c), ws) == [HS.Card.with_moved(HS.Card.with_works(c, ws), True{})] : List<&2, HS.Card>}
+
+# ---- the fold (architect m_64423 Q3) ----
+
+# LAW: a done work folds to its tomb once DONE_KEEP_MS (7 days) passed
+# since its done, not before.
+law a_done_work_folds_after_seven_days:
+  for +f: HS.Fin
+  for +now: Nat
+  {HWO.fold_due.go(Some{f}, now) == Nat.is_ge(now, Nat.add(HS.Fin.at(f), HWO.DONE_KEEP_MS())) : Bool}
+
+# LAW: an open work never folds.
+law an_open_work_never_folds:
+  for +now: Nat
+  {HWO.fold_due.go(None{}, now) == False{} : Bool}
+
 # ---- status (bend/hub/wstatus.bend; architect m_64423: a function of
 # facts, never stored, never an agent's word) ----
 
@@ -125,3 +236,17 @@ law his_waits_make_needs_you:
   for +ws: List<&2, HX.Waiter>
   for +now: Nat
   {HWS.st.needs(1n+k, w, s, rts, ws, now) == HWS.WSNeeds{1n+k} : HWS.WSt}
+
+# LAW: a card event touches only its card's works: the rows of the other
+# works stay as they are (architect m_64541; cards are frequent).
+law a_card_event_touches_only_its_works:
+  for +c: HS.Card
+  for +cs0: List<&2, HS.Card>
+  {HV.card_works(HM.ECardOpened{c}, cs0) == HS.Card.works(c) : List<&2, String>}
+
+# LAW: page waits the same on a work leave its row as it is: page_waits
+# recomputes only the works whose count changed.
+law same_page_waits_leave_its_row:
+  for +pw: List<&2, HX.Kn>
+  for +id: String
+  {HV.pw_moved(pw, pw, id) == False{} : Bool}

@@ -373,6 +373,11 @@ impl Shell {
             // only, never an agent's op): sb-core plans it (merge::plan),
             // `pr_acted` answers this client
             HubCmd::PrAct { url, head, act, req, .. } => self.step_typed(id, &tag, Input::PrAct { client: id, req, url, head, act }),
+            // his task gestures (this socket's clients only, never an
+            // agent's op): sb-core makes them as him; a refusal is its
+            // notice as this command's error
+            HubCmd::TaskAct { req, .. } => self.step_typed(id, &tag, Input::ClientWorkAct { client: id, req }),
+            HubCmd::TaskMove { card, art, works, .. } => self.step_typed(id, &tag, Input::ClientWorkMove { client: id, card, art, works }),
             // a PR's tab reads the forge on a thread (daemon/pr_detail.rs)
             HubCmd::PrDetail { url, req, .. } => match crate::forge::pr_link(&url) {
                 Some(l) => self.pr_detail(id, l.url, req),

@@ -39,11 +39,12 @@ type Sched is Data:
   Every{ms: Nat}
   Daily{min: Nat}
 
-# what an act does: send a held route (its id), try a cross-hub delivery again (its xid), or close a view's approval card he left unanswered (its card id; docs/mcp-apps.md, C5)
+# what an act does: send a held route (its id), try a cross-hub delivery again (its xid), close a view's approval card he left unanswered (its card id; docs/mcp-apps.md, C5), or end the pause of a work paused until a time (its id; docs/tasks.md)
 type What is Data:
   RouteSend{rid: Nat}
   Retry{xid: Nat}
   CardDue{card: Nat}
+  WorkResume{work: String}
 
 # a cross-hub delivery: his words forwarded (input), bise's question (ask), a followed job's end (job_end)
 type XKind is Data:

@@ -316,12 +316,13 @@ pub const STATE: State = State {
         },
         Enum {
             name: "What",
-            doc: "what an act does: send a held route (its id), try a cross-hub delivery again (its xid), or close a view's approval card he left unanswered (its card id; docs/mcp-apps.md, C5)",
+            doc: "what an act does: send a held route (its id), try a cross-hub delivery again (its xid), close a view's approval card he left unanswered (its card id; docs/mcp-apps.md, C5), or end the pause of a work paused until a time (its id; docs/tasks.md)",
             tag_key: "kind",
             variants: &[
                 vf("RouteSend", "route_send", &[f("rid", Nat)]),
                 vf("Retry", "retry", &[f("xid", Nat)]),
                 vf("CardDue", "card_due", &[f("card", Nat)]),
+                vf("WorkResume", "work_resume", &[f("work", Str)]),
             ],
             fallback: "RouteSend",
         },

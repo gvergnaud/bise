@@ -153,6 +153,20 @@ pub enum Input {
         client: ClientId,
         id: u64,
     },
+    /// tasks: his gesture on a task (HubCmd task_act; a client's only, so
+    /// sb-core makes it as him, never as an agent): one `sb task` verb
+    ClientWorkAct {
+        client: ClientId,
+        req: bise_proto::sb::Task,
+    },
+    /// tasks: he moved card `card` or artifact `art` to the tasks `works`
+    /// (HubCmd task_move; a client's only): sb-core's work_move
+    ClientWorkMove {
+        client: ClientId,
+        card: Option<u64>,
+        art: String,
+        works: Vec<String>,
+    },
     /// `by`: its sender, sb-core refuses it first when it may not speak as `from` (issue 37 #2)
     Agent { token: Token, from: String, req: AgentReq, by: crate::peer::Sender },
     /// A request the shell serves itself: may its sender speak as `from`? Answered by fx spoke.
@@ -185,6 +199,10 @@ pub enum Input {
     /// hub-loop: the shell made task `name`'s worktree (`ws`), or could
     /// not (`err`); daemon/place_work.rs, sb-core's hub/place.bend
     Placed { name: String, ws: Value, err: String },
+    /// tasks (docs/tasks.md): his page waits per work, the shell's facts
+    /// (sb-core's page_waits; sent at boot before any client, then when
+    /// the waiting set changes). `works` and `ns` go in pairs
+    PageWaits { works: Vec<String>, ns: Vec<u64> },
     /// issue 32 3b: the shell removed task `name`'s worktree (`snapshot`:
     /// its saved work's ref), or could not (`err`); daemon/place_work.rs
     Unplaced { name: String, snapshot: Option<String>, err: String },
@@ -1726,6 +1744,15 @@ impl Hub {
             }
             Input::ClientUnqueue { client, id } => self.core(&mut fx, env, Some(client), In::Unqueue(ci::Unqueue { id })),
             Input::ClientSteerQueued { client, id } => self.core(&mut fx, env, Some(client), In::SteerQueued(ci::SteerQueued { id })),
+            // his task gestures: sb-core's req_task as him (TAHim), its
+            // refusal a notice to that client
+            Input::ClientWorkAct { client, req } => match pure::task_req(req) {
+                Ok(req) => self.core(&mut fx, env, Some(client), In::WorkAct(ci::WorkAct { req })),
+                Err(e) => fx.push(notice(client, e["error"].as_str().unwrap_or("refused"))),
+            },
+            Input::ClientWorkMove { client, card, art, works } => {
+                self.core(&mut fx, env, Some(client), In::WorkMove(ci::WorkMove { card, art, works }))
+            }
             Input::Agent { token, from, req, by } => self.agent_step(&mut fx, env, token, &from, req, by),
             Input::Speaks { token, from, cmd, by } => self.core(&mut fx, env, None, In::Speaks(by.speaks(token, from, cmd))),
             // the waits' timeouts, then sb every's timers (sb-core decides)
@@ -1735,6 +1762,7 @@ impl Hub {
             Input::WakeStop { id } => self.wake_stop_by_him(&mut fx, env, id),
             Input::WakeHit { id, text, rc, tail, after_ms } => self.wake_hit(&mut fx, env, id, &text, crate::wake::Hit { rc, tail, after_ms }),
             Input::Placed { name, ws, err } => self.core(&mut fx, env, None, In::Placed(ci::Placed { name, ws, err })),
+            Input::PageWaits { works, ns } => self.core(&mut fx, env, None, In::PageWaits(ci::PageWaits { works, ns })),
             Input::Unplaced { name, snapshot, err } => self.core(&mut fx, env, None, In::Unplaced(ci::Unplaced { name, snapshot, err })),
             Input::ConfirmOpen { agent, text } => self.core(&mut fx, env, None, In::ConfirmOpen(ci::ConfirmOpen { agent, text })),
             Input::ConfirmClose { card, res } => self.core(&mut fx, env, None, In::ConfirmClose(ci::ConfirmClose { card, res })),

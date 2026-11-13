@@ -570,6 +570,25 @@ pub fn hh_mm(ms: u64) -> String {
     tm_of(ms).map_or_else(String::new, |t| format!("{:02}:{:02}", t.tm_hour, t.tm_min))
 }
 
+/// A past time: `14:20` today, `yesterday 14:20`, `Mon 14:20` this week,
+/// else `2025-10-04 18:00` (tasks-ux m_64563).
+pub fn past_label(ms: u64, now: u64) -> String {
+    let (Some(t), Some(n)) = (tm_of(ms), tm_of(now)) else { return format!("{} ms", ms) };
+    let hm = format!("{:02}:{:02}", t.tm_hour, t.tm_min);
+    let day = |tm: &libc::tm| (tm.tm_year, tm.tm_yday);
+    if day(&t) == day(&n) {
+        return hm;
+    }
+    if tm_of(now.saturating_sub(DAY_MS)).map(|x| day(&x)) == Some(day(&t)) {
+        return format!("yesterday {}", hm);
+    }
+    if now.saturating_sub(ms) < 6 * DAY_MS {
+        const DAYS: [&str; 7] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+        return format!("{} {}", DAYS[t.tm_wday.rem_euclid(7) as usize], hm);
+    }
+    format!("{}-{:02}-{:02} {}", t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, hm)
+}
+
 /// `14:20`, `tomorrow 07:30`, or `2025-10-04 18:00` past tomorrow.
 pub fn when_label(ms: u64, now: u64) -> String {
     let (Some(t), Some(n)) = (tm_of(ms), tm_of(now)) else { return format!("{} ms", ms) };

@@ -526,12 +526,14 @@ def What.journal_kvs(e: S.What) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
       [J.kv("kind", J.JStr{"retry"}), J.kv("xid", J.JNum{xid})]
     case S.CardDue{+card}:
       [J.kv("kind", J.JStr{"card_due"}), J.kv("card", J.JNum{card})]
+    case S.WorkResume{+work}:
+      [J.kv("kind", J.JStr{"work_resume"}), J.kv("work", J.JStr{work})]
 
 def What.journal_json(e: S.What) -> J.Json:
   J.obj(What.journal_kvs(e))
 
 def What.of_word(+w: String, +j: J.Json) -> S.What:
-  Bool.pick(S.What, String.eq(w, "retry"), S.Retry{rd.n(J.get(j, "xid"))}, Bool.pick(S.What, String.eq(w, "card_due"), S.CardDue{rd.n(J.get(j, "card"))}, S.RouteSend{rd.n(J.get(j, "rid"))}))
+  Bool.pick(S.What, String.eq(w, "retry"), S.Retry{rd.n(J.get(j, "xid"))}, Bool.pick(S.What, String.eq(w, "card_due"), S.CardDue{rd.n(J.get(j, "card"))}, Bool.pick(S.What, String.eq(w, "work_resume"), S.WorkResume{rd.s(J.get(j, "work"))}, S.RouteSend{rd.n(J.get(j, "rid"))})))
 
 # any other word, or none: route_send (an inline row reads the line's own object)
 def What.journal_of(+j: J.Json) -> S.What:
@@ -548,6 +550,8 @@ def What.journal_round(e):
     case S.Retry{x_0}:
       {==}
     case S.CardDue{x_0}:
+      {==}
+    case S.WorkResume{x_0}:
       {==}
 
 # ---- XKind (its word) ----

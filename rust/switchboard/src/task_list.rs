@@ -3,31 +3,41 @@
 //! The status and what it is about are sb-core's (wstatus.bend); this
 //! file only puts them in words, never decides one.
 
-use crate::every::{hh_mm, when_label};
+use crate::every::{hh_mm, past_label, when_label};
 use crate::model::State;
 use bise_proto::core::view::ViewWork as VWork;
 
-/// What a work's status is about, in words: `working · designer`,
-/// `waits for designer's reply`, `quiet since 14:20` (tasks-ux m_64508:
-/// never blank).
+/// A work's status and what it is about, one pattern for all: `<status>
+/// · <what>` (tasks-ux m_64508: never blank; m_64563: the status word
+/// always there, the Board's and the Task tab's pill read the same).
 pub fn what(w: &VWork, now: u64) -> String {
-    let at = |f: &dyn Fn(u64) -> String| w.at.map(f).unwrap_or_default();
+    let past = || w.at.map(|t| past_label(t, now)).unwrap_or_default();
+    let next = || w.at.map(|t| when_label(t, now)).unwrap_or_default();
     match (w.status.as_str(), w.why.as_str()) {
-        ("needs_you", _) => format!("needs you ({})", w.needs),
+        ("needs_you", _) => format!("needs you · {} question{}", w.needs, if w.needs == 1 { "" } else { "s" }),
         ("working", _) => format!("working · {}", w.who),
-        ("waiting", "reply") => format!("waits for {}'s reply", w.who),
-        ("waiting", "timer") => format!("wakes at {}", at(&|t| when_label(t, now))),
-        ("waiting", "watch") => format!("{} waits on a watch", w.who),
-        ("waiting", _) => format!("quiet since {}", at(&|t| when_label(t, now))),
-        ("stalled", "crash") => format!(
-            "stalled: {} stopped at {}",
-            w.who,
-            at(&|t| when_label(t, now))
-        ),
-        ("stalled", _) => format!("stalled: quiet since {}", at(&|t| when_label(t, now))),
-        ("to_review", _) => "to review".into(),
-        ("paused", "until") => format!("paused until {}", at(&|t| when_label(t, now))),
+        ("waiting", "reply") => format!("waiting · {}'s reply", w.who),
+        ("waiting", "timer") => format!("waiting · wakes at {}", next()),
+        ("waiting", "watch") => format!("waiting · {}'s watch", w.who),
+        ("waiting", _) => format!("waiting · quiet since {}", past()),
+        ("stalled", "crash") => format!("stalled · {} stopped at {}", w.who, past()),
+        ("stalled", _) => format!("stalled · quiet since {}", past()),
+        ("paused", "until") => format!("paused · until {}", next()),
+        ("paused", _) => "paused · by you".into(),
+        ("done", _) => match &w.work.done {
+            Some(f) => format!("done · {}", days_ago(f.at, now)),
+            None => "done".into(),
+        },
         (s, _) => s.replace('_', " "),
+    }
+}
+
+/// `today`, `yesterday`, `3 days ago`
+fn days_ago(at: u64, now: u64) -> String {
+    match now.saturating_sub(at) / (24 * 3_600_000) {
+        0 => "today".into(),
+        1 => "yesterday".into(),
+        n => format!("{} days ago", n),
     }
 }
 
@@ -108,12 +118,7 @@ pub fn show(st: &State, id: &str, now: u64) -> Result<String, String> {
         return Ok(head.join("\n"));
     }
     if let Some(t) = st.tombs.get(&id) {
-        head.push(format!(
-            "{} · {} · done {}, folded (sb history finds the rest)",
-            t.id,
-            t.name,
-            when_label(t.done, now)
-        ));
+        head.push(format!("{} · {} · done · {}, folded (sb history finds the rest)", t.id, t.name, days_ago(t.done, now)));
         return Ok(head.join("\n"));
     }
     Err(format!("no task {} (sb task list --all)", id))
@@ -157,7 +162,7 @@ fn card(w: &VWork, now: u64) -> Vec<String> {
     }
     out.push(format!("made by {} at {}", x.by, hh_mm(x.created_ms)));
     if let Some(f) = &x.done {
-        out.push(format!("done {} by {}", when_label(f.at, now), f.by));
+        out.push(format!("done {} by {}", past_label(f.at, now), f.by));
     }
     out
 }

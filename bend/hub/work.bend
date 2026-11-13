@@ -281,6 +281,122 @@ def target.of(m: Maybe<&2, S.Work>, +id: String) -> Maybe<&2, String>:
 def target(+xs: List<&2, S.Work>, +id: String) -> Maybe<&2, String>:
   target.of(find(xs, id), id)
 
+# ---- a work's pause (architect m_64425 Q-c) ----
+
+# 2 min: a busy turn whose works are all paused gets the note first; it
+# is stopped only after this, if it still runs
+def PAUSE_GRACE_MS() -> Nat:
+  120000n
+
+# when work `m` (the one found) was paused; none: not paused, or no work
+def paused_at(m: Maybe<&2, S.Work>) -> Maybe<&2, Nat>:
+  match m:
+    case None{}:
+      None{}
+    case Some{+w}:
+      S.Work.paused(w)
+
+def is_paused(+xs: List<&2, S.Work>, +id: String) -> Bool:
+  Maybe.is_some(&2, Nat, paused_at(find(xs, id)))
+
+def every_paused(ids: List<&2, String>, +xs: List<&2, S.Work>) -> Bool:
+  match ids:
+    case Nil{}:
+      True{}
+    case Con{+h, +t}:
+      LZ.and(is_paused(xs, h), u => every_paused(t, xs))
+
+# works `ids` all paused, and at least one: a message, a turn with no
+# work is never a paused work's
+def all_paused(ids: List<&2, String>, +xs: List<&2, S.Work>) -> Bool:
+  match ids:
+    case Nil{}:
+      False{}
+    case Con{+h, +t}:
+      every_paused(Con{h, t}, xs)
+
+# a message held by its works' pause: it waits in the queue, in its
+# order, until one of them resumes (law paused_work_holds_its_deliveries)
+def held(+m: S.Msg, +xs: List<&2, S.Work>) -> Bool:
+  all_paused(S.Msg.works(m), xs)
+
+def unheld.pick(h: Bool, +m: S.Msg, +rest: List<&2, S.Msg>) -> List<&2, S.Msg>:
+  match h:
+    case True{}:
+      rest
+    case False{}:
+      m <> rest
+
+# the messages a delivery may take: the held ones stay queued
+def unheld(ms: List<&2, S.Msg>, +xs: List<&2, S.Work>) -> List<&2, S.Msg>:
+  match ms:
+    case Nil{}:
+      Nil{}
+    case Con{+m, +t}:
+      unheld.pick(held(m, xs), m, unheld(t, xs))
+
+def grace.at(m: Maybe<&2, Nat>, +now: Nat) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{+at}:
+      Nat.is_ge(now, Nat.add(at, PAUSE_GRACE_MS()))
+
+def grace.go(ids: List<&2, String>, +xs: List<&2, S.Work>, +now: Nat) -> Bool:
+  match ids:
+    case Nil{}:
+      True{}
+    case Con{+h, +t}:
+      LZ.and(grace.at(paused_at(find(xs, h)), now), u => grace.go(t, xs, now))
+
+def stops.works(ids: List<&2, String>, +xs: List<&2, S.Work>, +now: Nat) -> Bool:
+  match ids:
+    case Nil{}:
+      False{}
+    case Con{+h, +t}:
+      grace.go(Con{h, t}, xs, now)
+
+# a busy turn serving `ids` is stopped: every one of them paused for the
+# grace at least. An agent that ended its turn itself, a turn with one
+# open work or with none: never (laws
+# pause_never_stops_an_agent_with_an_open_work,
+# pause_never_stops_an_idle_agent, pause_interrupts_only_after_grace)
+def stops(busy: Bool, ids: List<&2, String>, +xs: List<&2, S.Work>, +now: Nat) -> Bool:
+  match busy:
+    case False{}:
+      False{}
+    case True{}:
+      stops.works(ids, xs, now)
+
+# the works of `ids` not paused: what the turn goes on with
+def open_of(ids: List<&2, String>, +xs: List<&2, S.Work>) -> List<&2, String>:
+  match ids:
+    case Nil{}:
+      Nil{}
+    case Con{+h, +t}:
+      +rest = open_of(t, xs)
+      Bool.pick(List<&2, String>, is_paused(xs, h), rest, h <> rest)
+
+def any_paused(xs: List<&2, S.Work>) -> Bool:
+  match xs:
+    case Nil{}:
+      False{}
+    case Con{+w, +t}:
+      LZ.or(Maybe.is_some(&2, Nat, S.Work.paused(w)), u => any_paused(t))
+
+# a pause's until act resumes the work only while it is still paused
+# with an end that came; a pause changed meanwhile leaves the old act
+# without effect (law stale_until_never_resumes)
+def until_due.go(p: Maybe<&2, Nat>, u: Maybe<&2, Nat>, +now: Nat) -> Bool:
+  match p u:
+    case Some{_} Some{+at}:
+      Nat.is_ge(now, at)
+    case _ _:
+      False{}
+
+def until_due(+w: S.Work, +now: Nat) -> Bool:
+  until_due.go(S.Work.paused(w), S.Work.until(w), now)
+
 # ---- the fold ----
 
 # 7 days: a done work stays in the lists, then folds
@@ -293,6 +409,24 @@ def done_at(m: Maybe<&2, S.Fin>) -> Nat:
       0n
     case Some{+f}:
       S.Fin.at(f)
+
+# a work folds DONE_KEEP_MS after its done; an open one never (law
+# a_done_work_folds_after_seven_days)
+def fold_due.go(m: Maybe<&2, S.Fin>, +now: Nat) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{+f}:
+      Nat.is_ge(now, Nat.add(S.Fin.at(f), DONE_KEEP_MS()))
+
+# the ids of the works due to fold at `now`
+def folds(xs: List<&2, S.Work>, +now: Nat) -> List<&2, String>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case Con{+w, +t}:
+      +rest = folds(t, now)
+      Bool.pick(List<&2, String>, fold_due.go(S.Work.done(w), now), S.Work.id(w) <> rest, rest)
 
 def tomb(+w: S.Work) -> S.Tomb:
   S.Tomb.with_merged_into(S.Tomb.with_done(S.Tomb.with_name(S.Tomb.with_id(S.Tomb.empty(), S.Work.id(w)), S.Work.name(w)), done_at(S.Work.done(w))), S.Work.merged_into(w))

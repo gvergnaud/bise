@@ -99,6 +99,10 @@ pub const METHODS: &[MethodRow] = &[
     m("prs/list", "prs", Some("prs")),
     // his Merge or Close on a PR's tab: answered once the forge said
     m("pr/act", "pr_act", Some("pr_acted")),
+    // his gestures on a task (docs/tasks.md): the view's rows show the
+    // change; a refusal is the command's error
+    m("task/act", "task_act", None),
+    m("task/move", "task_move", None),
     // a PR's tab: its detail and a check's log, from the forge on a thread
     m("pr/detail", "pr_detail", Some("pr_detail")),
     m("pr/checkLog", "pr_check_log", Some("pr_check_log")),

@@ -28,7 +28,7 @@
 #[path = "ts/words.rs"]
 mod words;
 
-use bise_proto::{activity, anchor, app_cmd, app_rows, app_rpc, commands, core_ev, context, diff, draft, helper, hub, inbox, log, ops, parts, pty, rows, rpc, thread};
+use bise_proto::{activity, anchor, app_cmd, app_rows, app_rpc, commands, core_ev, context, diff, draft, helper, hub, inbox, log, ops, parts, pty, rows, rpc, sb, thread};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
@@ -93,7 +93,7 @@ fn modules(cfg: &Config) -> Vec<(&'static str, Vec<Decl>)> {
         ),
         module!(cfg, "ops": ops::BranchRow, ops::VersionItem, ops::ReleaseEv, ops::UpdateEv),
         module!(cfg, "inbox": inbox::InboxState, inbox::InboxKind, inbox::Where, inbox::AnswerAt, inbox::InboxRecord, inbox::StateFilter, inbox::HistoryParams, inbox::InboxPage),
-        module!(cfg, "hub": hub::JobState, hub::Job, activity::Party, activity::MsgMode, activity::ActivityEv, hub::HubEv, hub::Mode, hub::PrAct, hub::PrActErr, hub::SendOpts, hub::HubCmd, hub::ErrorKind),
+        module!(cfg, "hub": hub::JobState, hub::Job, activity::Party, activity::MsgMode, activity::ActivityEv, hub::HubEv, hub::Mode, hub::PrAct, hub::PrActErr, sb::Task, hub::SendOpts, hub::HubCmd, hub::ErrorKind),
         module!(cfg, "rpc": rpc::Id, rpc::Request, rpc::Notification, rpc::Response, rpc::ErrorData, rpc::RpcError, rpc::Watermark, rpc::ClientInfo, rpc::ClientKind, rpc::InitializeParams, rpc::HubState, rpc::AgentGetParams, rpc::AgentGetResult, rpc::InitializeResult, rpc::CommandsList, rpc::CommandRunResult, rpc::SendReason, rpc::SendResult, rpc::CardAnswer, rpc::AnswerResult, rpc::AppOpenResult, bise_proto::view_rpc::ViewResource, bise_proto::view_rpc::ViewCallResult, bise_proto::view_rpc::PluginViewsResult, bise_proto::view_rpc::OpenWith, bise_proto::view_rpc::DocumentFacts, bise_proto::view_rpc::DocVersion, bise_proto::view_rpc::OpenedWith, bise_proto::view_rpc::DocView, bise_proto::view_rpc::ViewOpened, bise_proto::view_rpc::NoWrite, bise_proto::view_rpc::ReadMeta, bise_proto::view_rpc::WriteOutcome),
         module!(cfg, "files": bise_proto::files::FileKind, bise_proto::files::EntryArtifact, bise_proto::files::FolderRow, bise_proto::files::Crumb, bise_proto::files::FolderList, bise_proto::files::Make, bise_proto::files::FileNewResult, bise_proto::files::OpenTarget, bise_proto::files::IdEntry, bise_proto::files::FilesIds, bise_proto::files::FilesMintResult, bise_proto::files::ViewCopyResult),
         module!(cfg, "commands": commands::WordRow, commands::ArgRow, commands::CommandRow),
