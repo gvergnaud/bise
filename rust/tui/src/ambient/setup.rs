@@ -51,6 +51,9 @@ pub enum Done {
     /// a `provider_use` check ended (its seq: a newer one for the same
     /// provider drops it)
     Used { seq: u64, used: crate::firstkey::Used },
+    /// a `gateway_models` list ended (its seq: only the last one counts):
+    /// the base URL it answered at, its ids and their rows, or why not
+    GatewayListed { seq: u64, res: Result<crate::gateway::Listed, crate::gateway::Fail> },
     /// N1: a /keychain move ended: its lines (item names and counts,
     /// never a secret) and whether it failed
     Keychain { lines: Vec<String>, failed: bool },
@@ -112,10 +115,13 @@ pub type WriteFn = Box<dyn Fn(&Value) -> Result<(), String>>;
 pub type IdFn = Box<dyn Fn(&str) -> Result<(), String>>;
 /// (the model and its role, its provider's generation, the channel of its end)
 pub type ModelTestFn = Box<dyn Fn(super::model_test::ModelTest, u64, Sender<Done>)>;
-/// (provider, the key pasted or none, its seq, the channel of its end) ->
-/// (the provider's name, the model it is checked with), at once; the
-/// check's end comes as `Done::Used`
-pub type ProviderUseFn = Box<dyn Fn(&str, Option<String>, Option<String>, u64, Sender<Done>) -> (String, String)>;
+/// (what is asked, its seq, the channel of its end) -> (the provider's
+/// name, the model it is checked with), at once; the check's end comes as
+/// `Done::Used`
+pub type ProviderUseFn = Box<dyn Fn(crate::firstkey::UseReq, u64, Sender<Done>) -> (String, String)>;
+/// (the gateway's URL, the key pasted or none, its seq, the channel of
+/// its end); the list's end comes as `Done::GatewayListed`
+pub type GatewayModelsFn = Box<dyn Fn(String, Option<String>, u64, Sender<Done>)>;
 pub type SignInFn = Box<dyn Fn(&str, Sender<Done>) -> Result<(), String>>;
 pub type PathFn = Box<dyn Fn(&Path) -> Result<(), String>>;
 /// Reads the desktop app's release channel he follows (stable or beta) on
@@ -210,6 +216,13 @@ pub struct SetupPorts {
     /// presence only): the accounts event says so
     pub claude_plan: Box<dyn Fn() -> bool>,
     pub provider_use: ProviderUseFn,
+    /// a LiteLLM gateway's URL in his tools' configs and the file it is in
+    /// (bise_catalog::detect::gateway_found: never a key, never under a
+    /// test home); on the model step only (onboarding-models)
+    pub gateway_find: Box<dyn Fn() -> Option<(String, String)>>,
+    /// lists a gateway's models on its own thread (url, the key pasted or
+    /// none, its seq): `Done::GatewayListed` at its end
+    pub gateway_models: GatewayModelsFn,
     pub key_remove: IdFn,
     /// only a provider that signs in; its browser flow, `Done::SignedIn`
     /// at its end (never run by a test)
@@ -519,15 +532,19 @@ fn walk_in(rd: std::fs::ReadDir, depth: usize, skip: &[PathBuf], home: Option<&P
     }
 }
 
-/// A stdin line fit for a log: a `provider_use`'s key is never written.
+/// The commands that may carry a key (`key`), never logged as sent.
+const KEYED: &[&str] = &["provider_use", "gateway_models"];
+
+/// A stdin line fit for a log: a `provider_use`'s or a
+/// `gateway_models`'s key is never written.
 pub fn redact(line: &str) -> String {
     match serde_json::from_str::<Value>(line) {
-        Ok(mut v) if v.get("cmd").and_then(Value::as_str) == Some("provider_use") && v.get("key").is_some() => {
+        Ok(mut v) if v.get("cmd").and_then(Value::as_str).is_some_and(|c| KEYED.contains(&c)) && v.get("key").is_some() => {
             v["key"] = Value::from("…");
             v.to_string()
         }
         Ok(_) => line.to_string(),
-        Err(_) if line.contains("provider_use") => "(a provider_use line that isn't JSON)".into(),
+        Err(_) if KEYED.iter().any(|c| line.contains(c)) => "(a line with a key that isn't JSON)".into(),
         Err(_) => line.to_string(),
     }
 }
@@ -648,17 +665,36 @@ pub fn live(flow: FlowFn) -> SetupPorts {
         claude_plan: Box::new(move || bise_catalog::detect::claude_plan(home().user_home(), &env)),
         // the key step's one path (firstkey.rs): checked live on its own
         // thread, saved only once it works
-        provider_use: Box::new(move |id, key, base_url, seq, tx| {
+        provider_use: Box::new(move |req, seq, tx| {
             let h = home();
             let env = |k: &str| std::env::var(k).ok().filter(|v| !v.is_empty());
-            let said = crate::firstkey::model_for(&h, &env, id);
-            let id = id.to_string();
+            let (name, model) = crate::firstkey::model_for(&h, &env, &req.id);
+            let said = (name, req.model.clone().filter(|m| !m.trim().is_empty()).unwrap_or(model));
             std::thread::spawn(move || {
                 let env = |k: &str| std::env::var(k).ok().filter(|v| !v.is_empty());
-                let used = crate::firstkey::use_provider(&h, &env, &id, key, base_url, &crate::firstkey::live_ports());
+                let used = crate::firstkey::use_provider(&h, &env, &req, &crate::firstkey::live_ports());
                 let _ = tx.send(Done::Used { seq, used });
             });
             said
+        }),
+        // a gateway's URL in Vibe's or Claude Code's config: the URL only, never a key
+        gateway_find: Box::new(move || {
+            let env = |k: &str| std::env::var(k).ok().filter(|v| !v.is_empty());
+            bise_catalog::detect::gateway_found(&home(), &env).map(|g| (g.url, g.from))
+        }),
+        // its list on its own thread, 5 s at most, nothing written
+        gateway_models: Box::new(move |url, key, seq, tx| {
+            let h = home();
+            std::thread::spawn(move || {
+                let env = |k: &str| std::env::var(k).ok().filter(|v| !v.is_empty());
+                let key = key.or_else(|| crate::firstkey::found_key(&h, &env, crate::firstkey::GATEWAY)).unwrap_or_default();
+                let res = crate::gateway::list(&url, &key, &crate::gateway::live_get).map(|(at, ids)| {
+                    let setup = bise_catalog::Setup::load(&h.config_file());
+                    let rows = crate::gateway::rows(&setup.catalog, crate::firstkey::GATEWAY, &ids);
+                    crate::gateway::Listed { at, ids, rows }
+                });
+                let _ = tx.send(Done::GatewayListed { seq, res });
+            });
         }),
         key_remove: Box::new(move |id| {
             let paths = auth_paths();

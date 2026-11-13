@@ -298,6 +298,11 @@ pub struct Provider {
     /// `hidden = true`: not offered to a new user (a private proxy); it
     /// still works when a config or a key picks it
     pub hidden: bool,
+    /// `gateway = true`: a gateway in front of other providers (LiteLLM,
+    /// onboarding-models): a model it serves that the catalog knows
+    /// under another provider takes that model's caps and wire family
+    /// ([`gateway_id`]); an unknown one gets the defaults
+    pub gateway: bool,
     /// its recommended voice model (the voice screen's pick, BISE-298),
     /// its id without the provider; "" = its first listed one
     pub voice_model: String,
@@ -423,6 +428,25 @@ pub struct Catalog {
 pub fn split_name(name: &str) -> Option<(&str, &str)> {
     let (p, m) = name.split_once('/')?;
     (!p.is_empty() && !m.is_empty()).then_some((p, m))
+}
+
+/// The catalog model a gateway's model `id` is (architect m_64551): its
+/// id with one leading `<route>/` cut (`azure_ai/claude-opus-5-5` ->
+/// `claude-opus-5-5`; none to cut: as it is), matched exactly against
+/// the ids of the providers that are not gateways, the first in file
+/// order (`anthropic/claude-opus-5-5` before the hidden proxy's). No
+/// fuzzy match: None, and the model gets the defaults. Only for a
+/// provider with `gateway = true`.
+pub fn gateway_id(c: &Catalog, p: &Provider, id: &str) -> Option<String> {
+    if !p.gateway {
+        return None;
+    }
+    let bare = id.split_once('/').map_or(id, |(_, rest)| rest);
+    if bare.is_empty() {
+        return None;
+    }
+    let real = |pid: &str| c.provider(pid).is_some_and(|q| !q.gateway && q.chats());
+    c.models.iter().find(|m| m.id == bare && !m.stt && real(&m.provider)).map(|m| m.name())
 }
 
 /// A name without a provider, as the config had before BISE-142: the
@@ -590,7 +614,26 @@ impl Catalog {
                 m.api.clone().unwrap_or_else(|| p.api.clone()),
                 Known::Listed,
             ),
-            None => (base, base_price, p.api.clone(), Known::Unlisted),
+            // a gateway's model the catalog knows elsewhere: that model's
+            // caps and family, the gateway's own connection (its headers,
+            // key command, timeout)
+            None => match gateway_id(self, p, &mid) {
+                Some(known) => {
+                    let r = self.resolve(&known);
+                    let caps = Caps {
+                        headers_env: base.headers_env.clone(),
+                        headers: base.headers.clone(),
+                        key_command: base.key_command.clone(),
+                        idle_timeout_sec: base.idle_timeout_sec,
+                        cache_key: String::new(),
+                        cache_header: String::new(),
+                        ..r.caps
+                    };
+                    let api = if r.api == "anthropic" { "anthropic" } else { "openai-chat" };
+                    (caps, r.price, api.to_string(), Known::Listed)
+                }
+                None => (base, base_price, p.api.clone(), Known::Unlisted),
+            },
         };
         Resolved {
             name: full.clone(),
@@ -682,6 +725,7 @@ impl Catalog {
                                 voice_model: String::new(),
                                 model: String::new(),
                                 hidden: false,
+                                gateway: false,
                                 auth: String::new(),
                                 shape: String::new(),
                                 caps: PartialCaps::default(),
@@ -737,6 +781,10 @@ impl Catalog {
                                     "hidden" => match fv.as_bool() {
                                         Some(b) => p.hidden = b,
                                         None => warn(format!("{}.hidden: true or false", where_)),
+                                    },
+                                    "gateway" => match fv.as_bool() {
+                                        Some(b) => p.gateway = b,
+                                        None => warn(format!("{}.gateway: true or false", where_)),
                                     },
                                     "stt" => match s() {
                                         Some(a) if a.is_empty() || voice::STT_FAMILIES.contains(&a.as_str()) => p.stt = a,

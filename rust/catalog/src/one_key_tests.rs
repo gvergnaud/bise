@@ -68,8 +68,9 @@ fn one_key(pid: &str, in_env: bool) -> Setup {
 #[test]
 fn the_table_covers_every_provider_a_user_can_bring_one_key_for() {
     let c = Catalog::builtin();
+    // a gateway (LiteLLM) has no model of its own: its list comes from it (onboarding-models)
     let offered: Vec<&str> =
-        c.providers.iter().filter(|p| p.chats() && p.needs.is_empty() && !p.key_env.is_empty()).map(|p| p.id.as_str()).collect();
+        c.providers.iter().filter(|p| p.chats() && p.needs.is_empty() && !p.key_env.is_empty() && !p.gateway).map(|p| p.id.as_str()).collect();
     let rows: Vec<&str> = TABLE.iter().map(|r| r.0).collect();
     assert_eq!(offered, rows, "a new chat provider: add its row (and a small_model when it has a cheaper one)");
 }
@@ -209,11 +210,15 @@ fn pick_for_keeps_main_of_that_provider_else_the_providers_pick() {
 /// replaced.
 #[test]
 fn model_to_write_never_replaces_a_main_that_runs() {
-    let w = |main: &str, runs: bool| roles::model_to_write(main, runs, "openai/gpt-6-astra");
+    let w = |main: &str, runs: bool| roles::model_to_write(main, runs, "openai/gpt-6-astra", false);
     assert_eq!(w("", false).as_deref(), Some("openai/gpt-6-astra"));
     assert_eq!(w("none", false).as_deref(), Some("openai/gpt-6-astra"));
     assert_eq!(w("anthropic/claude-opus-5-5", false).as_deref(), Some("openai/gpt-6-astra"));
     assert_eq!(w("anthropic/claude-opus-5-5", true), None);
     assert_eq!(w("openai/gpt-6-astra", false), None);
-    assert_eq!(roles::model_to_write("", false, ""), None);
+    assert_eq!(roles::model_to_write("", false, "", false), None);
+    // his pick on a model list (onboarding-models): written over a main that runs
+    let p = |main: &str| roles::model_to_write(main, true, "litellm/azure_ai/claude-opus-5-5", true);
+    assert_eq!(p("mistral/mistral-large-4").as_deref(), Some("litellm/azure_ai/claude-opus-5-5"));
+    assert_eq!(p("litellm/azure_ai/claude-opus-5-5"), None);
 }

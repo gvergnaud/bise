@@ -1065,6 +1065,152 @@
     "one": null,
     "text": "{key} doesn't work. {provider} says it's wrong."
   },
+  "settings.first_gateway_bad_url": {
+    "args": [],
+    "one": null,
+    "text": "that isn't a URL: it starts with https://"
+  },
+  "settings.first_gateway_busy": {
+    "args": [],
+    "one": null,
+    "text": "the gateway is busy: try again in a moment."
+  },
+  "settings.first_gateway_connect": {
+    "args": [],
+    "one": null,
+    "text": "connect"
+  },
+  "settings.first_gateway_context": {
+    "args": [
+      "ctx"
+    ],
+    "one": null,
+    "text": "{ctx} context"
+  },
+  "settings.first_gateway_down": {
+    "args": [
+      "host"
+    ],
+    "one": null,
+    "text": "i couldn't reach {host}. check your network or VPN."
+  },
+  "settings.first_gateway_empty": {
+    "args": [],
+    "one": null,
+    "text": "the gateway serves no model for this key."
+  },
+  "settings.first_gateway_filter": {
+    "args": [],
+    "one": null,
+    "text": "filter"
+  },
+  "settings.first_gateway_key_found": {
+    "args": [
+      "var"
+    ],
+    "one": null,
+    "text": "the key in {var} · enter keeps it"
+  },
+  "settings.first_gateway_line": {
+    "args": [],
+    "one": null,
+    "text": "LiteLLM, or any server with OpenAI's or Anthropic's API."
+  },
+  "settings.first_gateway_listing": {
+    "args": [],
+    "one": null,
+    "text": "listing models…"
+  },
+  "settings.first_gateway_models_sub": {
+    "args": [
+      "host",
+      "n"
+    ],
+    "one": "{host} serves {n} model.",
+    "text": "{host} serves {n} models."
+  },
+  "settings.first_gateway_models_title": {
+    "args": [],
+    "one": null,
+    "text": "which model?"
+  },
+  "settings.first_gateway_no_key": {
+    "args": [],
+    "one": null,
+    "text": "paste the gateway's key."
+  },
+  "settings.first_gateway_no_list": {
+    "args": [
+      "host"
+    ],
+    "one": null,
+    "text": "{host} answered but lists no models: is the URL its /v1?"
+  },
+  "settings.first_gateway_no_match": {
+    "args": [
+      "q"
+    ],
+    "one": null,
+    "text": "no model matches “{q}”."
+  },
+  "settings.first_gateway_recommended": {
+    "args": [],
+    "one": null,
+    "text": "recommended"
+  },
+  "settings.first_gateway_sign_in_page": {
+    "args": [
+      "host"
+    ],
+    "one": null,
+    "text": "{host} answered with a web page, not its API: is the URL its /v1?"
+  },
+  "settings.first_gateway_sub": {
+    "args": [],
+    "one": null,
+    "text": "your company's gateway: its URL and a key"
+  },
+  "settings.first_gateway_title": {
+    "args": [],
+    "one": null,
+    "text": "connect your gateway"
+  },
+  "settings.first_gateway_tls": {
+    "args": [
+      "host"
+    ],
+    "one": null,
+    "text": "{host}'s certificate was refused."
+  },
+  "settings.first_gateway_unknown": {
+    "args": [],
+    "one": null,
+    "text": "unknown to bise · 128k assumed"
+  },
+  "settings.first_gateway_url": {
+    "args": [],
+    "one": null,
+    "text": "its URL, https://…"
+  },
+  "settings.first_gateway_url_from": {
+    "args": [
+      "at"
+    ],
+    "one": null,
+    "text": "found in {at}"
+  },
+  "settings.first_gateway_use": {
+    "args": [
+      "model"
+    ],
+    "one": null,
+    "text": "use {model}"
+  },
+  "settings.first_gateway_wrong_key": {
+    "args": [],
+    "one": null,
+    "text": "the gateway says this key is wrong."
+  },
   "settings.first_get_one": {
     "args": [],
     "one": null,
@@ -1185,6 +1331,13 @@
     ],
     "one": null,
     "text": "main uses {model}."
+  },
+  "settings.first_main_uses_gateway": {
+    "args": [
+      "model"
+    ],
+    "one": null,
+    "text": "main uses {model} on your gateway."
   },
   "settings.first_meaning_bise": {
     "args": [],

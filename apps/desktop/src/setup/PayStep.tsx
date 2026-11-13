@@ -3,12 +3,12 @@
 // key field with its keys page, then the live check: checking, failed (why, the provider's own
 // words, the page that fixes it) or "it works" with what the model said and what each role runs.
 // Owner: amb-home.
-import { useRef, type KeyboardEvent, type ReactNode } from 'react';
+import { useState, useRef, type KeyboardEvent, type ReactNode } from 'react';
 import type { Account, AppCmd, KeyFrom } from '@/proto';
 import { Act, Button, Field, Group, Help, Onb, type GroupItem } from '@/ds';
 import { failedWords, fromWords, retries, shortModel, type ProviderCheck } from '@/settings';
 import { common, settings } from '@/proto/words.gen';
-import { CHATGPT, OPENROUTER, enterRow, keyFieldSend, keyProviders, openRouterSignIn, phase, pickRow, readyId, rows, startCheck, type PayState, type Row } from './pay';
+import { CHATGPT, GATEWAY, OPENROUTER, enterRow, gatewayList, gatewayUse, gwModels, gwPhase, keyFieldSend, keyProviders, openRouterSignIn, phase, pickRow, readyId, rows, startCheck, type GatewayFound, type GatewayList, type PayState, type Row } from './pay';
 import { hasWebGL } from './island/Island';
 
 /** where the model's name goes in first_works' words (a sentinel no name holds) */
@@ -30,11 +30,15 @@ export interface PayProps {
   open?: (url: string) => void;
   /** the core refused the sign-in he started (error {cmd: sign_in}): its words */
   signInError?: string | null;
-  /** '← back' from here (the waiting view's 'cancel'): the sign-in cancelled, back to the list */
+  /** '← back' from here (esc in an empty field): one level up, as the foot's button */
   back?: () => void;
+  /** gateway_find's answer: a LiteLLM gateway's URL found in his tools' configs, and where */
+  gwFound?: GatewayFound | null;
+  /** gateway_models' last answer */
+  gwList?: GatewayList | null;
 }
 
-export function PayStep({ frame, accounts, claudePlan = false, check, s, set, send, go, open, signInError = null, back }: PayProps) {
+export function PayStep({ frame, accounts, claudePlan = false, check, s, set, send, go, open, signInError = null, back, gwFound = null, gwList = null }: PayProps) {
   const run = (r: { s: PayState; cmd: AppCmd | null }) => {
     if (r.cmd !== null) send(r.cmd);
     set(r.s);
@@ -42,6 +46,21 @@ export function PayStep({ frame, accounts, claudePlan = false, check, s, set, se
   const ph = phase(s, check);
   const field = useRef<HTMLInputElement>(null);
   const urlField = useRef<HTMLInputElement>(null);
+  // the gateway's model list: its filter and the row ↑↓ moves to (tasks-ux m_64555: recommended on top, selected)
+  const [q, setQ] = useState('');
+  const [sel, setSel] = useState(0);
+  const gwUrl = gwFound?.url ?? null;
+  // esc in a field (tasks-ux m_64555): words in it, cleared; empty, one level up
+  const escField = (e: KeyboardEvent<HTMLInputElement>, clear?: () => void) => {
+    if (e.key !== 'Escape') return false;
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.currentTarget.value !== '') {
+      e.currentTarget.value = '';
+      clear?.();
+    } else back?.();
+    return true;
+  };
   const name = (id: string) => accounts.find((a) => a.id === id)?.label ?? id;
   const link = (text: string, url: string | null, id: string): ReactNode =>
     url === null ? (
@@ -129,6 +148,131 @@ export function PayStep({ frame, accounts, claudePlan = false, check, s, set, se
     );
   }
 
+  // the gateway's fields (onboarding-models): its URL (the one found, with where, a suggestion he
+  // confirms), its key (blank: the one found); connect lists its models, nothing saved yet
+  const gwAcc = accounts.find((a) => a.id === GATEWAY);
+  const gph = gwPhase(s, gwList);
+  const gwFailed = gph === 'failed' && gwList !== null ? gwWords(gwList, s.gw?.url ?? '') : null;
+  if (v.t === 'gateway') {
+    const listing = s.gw?.wait === true && gph === 'listing';
+    const failed = s.gw?.wait === true ? gwFailed : null;
+    const connect = () => {
+      if (listing) return;
+      run(gatewayList(s, urlField.current?.value ?? '', field.current?.value, gwList));
+    };
+    const enter = (e: KeyboardEvent<HTMLInputElement>) => {
+      if (escField(e)) return;
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      connect();
+    };
+    const url = s.gw?.url ?? gwUrl ?? '';
+    const keyVar = gwAcc?.from?.t === 'env' ? gwAcc.from.var : null;
+    return (
+      <Onb {...frame} title={settings.first_gateway_title} sub={settings.first_gateway_line} cta={{ text: settings.first_gateway_connect, onClick: connect, ...(listing ? { state: 'loading' as const } : {}), testId: 'setup.pay.gw.connect' }}>
+        <div className="setup-key">
+          <Field ref={urlField} autoFocus defaultValue={url} placeholder={settings.first_gateway_url} state={failed?.at === 'url' ? 'error' : undefined} testId="setup.pay.gw.url" onKeyDown={enter} />
+          {gwFound?.from != null && url === gwUrl && <Help testId="setup.pay.gw.from">{inMono(settings.first_gateway_url_from({ at: gwFound.from }), gwFound.from)}</Help>}
+          <Field
+            ref={field}
+            type="password"
+            defaultValue={s.gw?.key ?? ''}
+            placeholder={gwAcc?.from != null ? settings.first_gateway_key_found({ var: keyVar ?? fromWords(gwAcc.from) }) : settings.key_paste}
+            state={failed?.at === 'key' ? 'error' : undefined}
+            testId="setup.pay.gw.key"
+            onKeyDown={enter}
+          />
+          {listing && <Help testId="setup.pay.gw.listing">{settings.first_gateway_listing}</Help>}
+          {failed !== null && (
+            <div data-testid="setup.pay.gw.failed">
+              <Help>
+                <span className="setup-mark">▲</span> {failed.line}
+              </Help>
+              {failed.said !== null && <Help>{failed.said}</Help>}
+            </div>
+          )}
+          {!listing && failed === null && <Help>{settings.first_goes_in_auth}</Help>}
+        </div>
+      </Onb>
+    );
+  }
+
+  // the gateway's models (2m): listing, its failure (from its ready row), or its list, known models first
+  if (v.t === 'models') {
+    if (gph === 'listing' || gph === 'none') {
+      return (
+        <Onb {...frame} title={settings.first_gateway_models_title}>
+          <Help testId="setup.pay.gw.listing">{settings.first_gateway_listing}</Help>
+        </Onb>
+      );
+    }
+    if (gwFailed !== null) {
+      return (
+        <Onb {...frame} title={gwFailed.line} cta={{ text: settings.first_gateway_title, onClick: () => { set({ ...s, view: { t: 'gateway' }, gw: s.gw === null ? null : { ...s.gw, wait: false } }); }, testId: 'setup.pay.gw.edit' }}>
+          <div className="setup-works" data-testid="setup.pay.gw.failed">{gwFailed.said !== null && <p className="setup-dim">{gwFailed.said}</p>}</div>
+        </Onb>
+      );
+    }
+    const all = gwList?.state === 'listed' ? (gwList.models ?? []) : [];
+    const shown = gwModels(gwList, q);
+    const at = Math.min(sel, Math.max(shown.length - 1, 0));
+    const picked = shown[at];
+    const mine = s.sent?.id === GATEWAY;
+    const pickModel = (id: string) => {
+      if (mine && ph === 'checking') return;
+      if (gwList !== null) run(gatewayUse(s, id, gwList, check));
+    };
+    const keys = (e: KeyboardEvent<HTMLInputElement>) => {
+      if (escField(e, () => { setQ(''); setSel(0); })) return;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSel(Math.max(0, Math.min(shown.length - 1, at + (e.key === 'ArrowDown' ? 1 : -1))));
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (picked !== undefined) pickModel(picked.id);
+      }
+    };
+    const failed = mine && ph === 'failed' && check !== null ? failedWords(check, null, false) : null;
+    const items = shown.map((m, i): GroupItem => {
+      const here = mine && check !== null ? s.sent !== null && `${GATEWAY}/${m.id}` === (check.model ?? '') : false;
+      const line = m.known !== true ? settings.first_gateway_unknown : [m.recommended === true ? settings.first_gateway_recommended : null, m.context != null ? settings.first_gateway_context({ ctx: tokens(m.context) }) : null].filter((x) => x !== null).join(' · ');
+      return {
+        id: m.id,
+        label: m.label,
+        sub: (
+          <>
+            {m.label !== m.id && <code>{m.id}</code>}
+            {m.label !== m.id && line !== '' && ' · '}
+            <span className={m.known !== true ? 'setup-unknown' : undefined}>{line}</span>
+            {here && ph === 'checking' && <span className="setup-row-failed"> {settings.first_checking_key}</span>}
+            {here && failed !== null && (
+              <span className="setup-row-failed" data-testid={`setup.pay.gw.failed.${m.id}`}>
+                {' '}<span className="setup-mark">▲</span> {failed.line}{failed.said !== null && <> {failed.said}</>}
+              </span>
+            )}
+          </>
+        ),
+        sel: i === at,
+        onPick: () => { setSel(i); pickModel(m.id); },
+      };
+    });
+    return (
+      <Onb
+        {...frame}
+        title={settings.first_gateway_models_title}
+        sub={settings.first_gateway_models_sub({ host: hostOf(gwList?.url ?? s.gw?.url ?? ''), n: all.length })}
+        cta={picked !== undefined ? { text: settings.first_gateway_use({ model: picked.label }), onClick: () => { pickModel(picked.id); }, ...(mine && ph === 'checking' ? { state: 'loading' as const } : {}), testId: 'setup.pay.gw.use' } : undefined}
+      >
+        <div className="setup-pick">
+          <Field autoFocus value={q} placeholder={settings.first_gateway_filter} testId="setup.pay.gw.filter" onChange={(e) => { setQ(e.currentTarget.value); setSel(0); }} onKeyDown={keys} />
+        </div>
+        <div className="setup-list">
+          {items.length > 0 ? <Group list testId="setup.pay.gw.models" items={items} /> : <Help>{settings.first_gateway_no_match({ q: q.trim() })}</Help>}
+        </div>
+      </Onb>
+    );
+  }
+
   if (v.t === 'key') {
     const acc = accounts.find((a) => a.id === v.id);
     const url = acc?.keys_url != null && acc.keys_url !== '' ? acc.keys_url : null;
@@ -197,14 +341,8 @@ export function PayStep({ frame, accounts, claudePlan = false, check, s, set, se
     if (ph === 'signing') {
       return (
         // no 'continue' while he signs in: a dead button; it comes back on the list (designer m_52243)
+        // the way out is the foot's '← back' alone: it cancels the sign-in (designer m_64550: one button, not two)
         <Onb {...frame} title={common.signing_wait({ label: name(v.id) })}>
-          {/* a way out where he looks, the terminal's 'esc cancel': what '← back' does from here (designer m_52216) */}
-          <p className="setup-cancel">
-            <Act onClick={() => { back?.(); }} testId="setup.pay.signin.cancel">
-              {settings.cancel}
-            </Act>
-            <span className="setup-esc">esc</span>
-          </p>
           {signInError !== null && <p className="setup-dim err" data-testid="setup.pay.signin.err">{signInError}</p>}
         </Onb>
       );
@@ -235,7 +373,7 @@ export function PayStep({ frame, accounts, claudePlan = false, check, s, set, se
   }
 
   // what already works here on top, under its head; the other ways under theirs; nothing found: one list, no heads (designer m_52236)
-  const { ready, other } = rows(accounts);
+  const { ready, other } = rows(accounts, gwUrl);
   const item = (r: Row): GroupItem => {
     const it = rowItem(r, () => { run(pickRow(s, r, check)); });
     if (!ready.includes(r)) return it;
@@ -253,7 +391,7 @@ export function PayStep({ frame, accounts, claudePlan = false, check, s, set, se
       // a key that doesn't work isn't ready: no ✓, its slot kept so nothing moves (designer m_52270)
       check: failed === null ? READY : NOT_READY,
       // ⏎'s row: the first, or the one that failed (it checks again)
-      sel: ph !== 'checking' && ph !== 'works' && id === (enterRow(s, accounts) ?? null),
+      sel: ph !== 'checking' && ph !== 'works' && id === (enterRow(s, accounts, gwUrl) ?? null),
       sub:
         failed === null ? sub : (
           <>
@@ -311,6 +449,15 @@ function rowItem(r: Row, pick: () => void): GroupItem {
       return { id: 'chatgpt', label: settings.first_chatgpt, sub: settings.first_chatgpt_sub, onPick: pick };
     case 'openrouter':
       return { id: 'openrouter', label: 'OpenRouter', sub: settings.first_openrouter_way, onPick: pick };
+    case 'gateway': {
+      // ready (URL and key found): its host and where its key is; else what it asks for (designer m_64550)
+      const label = r.acc?.label ?? 'LiteLLM gateway';
+      if (r.url !== null && r.acc?.from != null) {
+        const host = hostOf(r.url);
+        return { id: 'gateway', label, sub: <>{host} · {foundWords(r.acc.from)}</>, onPick: pick };
+      }
+      return { id: 'gateway', label, sub: settings.first_gateway_sub, onPick: pick };
+    }
     case 'api':
       return { id: 'api', label: settings.api_key, sub: settings.first_api_key_sub, onPick: pick };
     case 'coding':
@@ -346,4 +493,40 @@ function inMono(text: string, part: string): ReactNode {
 function withIds(line: string): ReactNode {
   const parts = line.split(/([\w.-]+\/[\w./-]*[\w-]|[a-z][\w.]*-[\w.-]*\d[\w-]*)/);
   return parts.map((p, i) => (i % 2 === 1 ? <code key={i}>{p}</code> : p));
+}
+
+/** A URL's host, as he reads it ('gateway.example.com'). */
+export function hostOf(url: string): string {
+  return url.replace(/^https?:\/\//, '').split(/[/?#]/)[0] ?? url;
+}
+
+/** A failed gateway list in words (the flow's errors table): its line, the gateway's own words, the field it marks. */
+export function gwWords(list: GatewayList, url: string): { line: string; said: string | null; at: 'url' | 'key' | null } {
+  const host = hostOf(list.url ?? url);
+  const said = list.said != null && list.said !== '' ? list.said : null;
+  switch (list.why) {
+    case 'bad_url':
+      return { line: settings.first_gateway_bad_url, said: null, at: 'url' };
+    case 'no_key':
+      return { line: settings.first_gateway_no_key, said: null, at: 'key' };
+    case 'tls':
+      return { line: settings.first_gateway_tls({ host }), said, at: 'url' };
+    case 'wrong_key':
+      return { line: settings.first_gateway_wrong_key, said, at: 'key' };
+    case 'sign_in_page':
+      return { line: settings.first_gateway_sign_in_page({ host }), said: null, at: 'url' };
+    case 'busy':
+      return { line: settings.first_gateway_busy, said, at: null };
+    case 'no_list':
+      return { line: settings.first_gateway_no_list({ host }), said, at: 'url' };
+    case 'empty':
+      return { line: settings.first_gateway_empty, said: null, at: 'key' };
+    default:
+      return { line: settings.first_gateway_down({ host }), said, at: null };
+  }
+}
+
+/** A context size, short: 1M, 256k. */
+export function tokens(n: number): string {
+  return n >= 1_000_000 ? `${+(n / 1_000_000).toFixed(1)}M` : `${Math.round(n / 1000)}k`;
 }

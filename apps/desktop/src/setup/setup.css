@@ -35,6 +35,8 @@
 .setup-list .b-gi .l span.setup-row-failed { font-family: var(--font-ui); color: var(--c-text-2); }
 .setup-list .b-gi .l span.setup-row-failed span { display: inline; font: inherit; }
 .setup-list .b-gi .l span.setup-row-failed .setup-mark { color: var(--c-err); }
+/* the gateway's model list: a model bise doesn't know, its line in text-3 (designer m_64550) */
+.setup-list .b-gi .l span.setup-unknown { display: inline; font-family: var(--font-ui); color: var(--c-text-3); }
 @media (max-height: 640px) {
   .setup { padding-top: var(--s-3); padding-bottom: var(--s-3); }
   .setup .b-onb { padding-top: var(--s-3); padding-bottom: var(--s-3); }

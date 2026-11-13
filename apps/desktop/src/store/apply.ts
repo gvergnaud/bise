@@ -264,6 +264,14 @@ export function applyTyped(s: Store, ev: Ev): void {
       // the last check's state (provider_use): checking, works or failed
       s.put("provider_check", ev);
       return;
+    case "gateway_found":
+      // a LiteLLM gateway's URL in his tools' configs (a suggestion), or none
+      s.put("gateway_found", ev);
+      return;
+    case "gateway_list":
+      // a gateway's model list: listing, then listed or failed
+      s.put("gateway_list", ev);
+      return;
     case "found":
       s.put("found", ev.items);
       // the folders macOS guards: not looked in yet, and the ones he looked in (his 'Look in Documents')

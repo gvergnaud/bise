@@ -145,6 +145,7 @@ mod computer_use;
 mod keybar;
 mod keycheck;
 mod firstkey;
+mod gateway;
 pub(crate) mod scan;
 mod onboarding;
 mod hints;

@@ -6,6 +6,8 @@ import type { Account, AppCmd, Found } from '@/proto';
 import { core_ev } from '@/proto/fixtures.gen';
 import { settings } from '@/proto/words.gen';
 import { firstSend, fnAct, ideas, next, START, stepOf, STEPS, ticked } from './model';
+import type { GatewayList } from './pay';
+import type { ProviderCheck } from '@/settings';
 
 // the first message's composer: its props (the real one is ProseMirror's, tested in src/composer)
 const composer = vi.hoisted(() => ({ props: null as null | { placeholder?: string; onSend: (o: { text: string }) => void; onReady?: (a: { fill: (t: string) => void; focus: () => void }) => void }, filled: [] as string[] }));
@@ -35,13 +37,15 @@ const found = (): Found[] => {
 };
 /** `looks`: his bim's look kept on leaving hello (page bim-pick), `telemetry`: Gabriel's note's acts
  * (hello marks it seen), apart so the steps' own commands read alone */
-const ports = (): OnboardingPorts & { sent: AppCmd[]; looks: AppCmd[]; telemetry: AppCmd[]; log: string[] } => {
+const ports = (): OnboardingPorts & { sent: AppCmd[]; looks: AppCmd[]; telemetry: AppCmd[]; finds: AppCmd[]; log: string[] } => {
   const sent: AppCmd[] = [];
   const looks: AppCmd[] = [];
   const telemetry: AppCmd[] = [];
+  // the model step's gateway_find (onboarding-models): its own list, the rest stay as they were
+  const finds: AppCmd[] = [];
   const log: string[] = [];
-  const to = (c: AppCmd) => (c.cmd === 'prefs_set' && c.key === 'bim' ? looks : c.cmd === 'telemetry' ? telemetry : sent);
-  return { sent, looks, telemetry, log, send: (c) => to(c).push(c), done: () => log.push('done') };
+  const to = (c: AppCmd) => (c.cmd === 'prefs_set' && c.key === 'bim' ? looks : c.cmd === 'telemetry' ? telemetry : c.cmd === 'gateway_find' ? finds : sent);
+  return { sent, looks, telemetry, finds, log, send: (c) => to(c).push(c), done: () => log.push('done') };
 };
 
 /** The model step's check that works (ChatGPT, signed in in the fixture): its pick, then the answer. */
@@ -188,6 +192,93 @@ describe('Onboarding', () => {
     expect(screen.getByTestId('setup.step.model')).toBeTruthy();
   });
 
+  it("the LiteLLM gateway (onboarding-models): its ready row lists its models, his pick is checked, and back walks the views he came through to hello", () => {
+    const p = ports();
+    const gw: Account = { id: 'litellm', kind: 'key', label: 'LiteLLM gateway', state: 'signed_out', needs_url: true, from: { t: 'env', var: 'LITELLM_API_KEY' } };
+    const out = [...accounts().map((a) => ({ ...a, state: 'signed_out' as const, from: null })), gw];
+    const found = { ev: 'gateway_found', url: 'https://gw.test', from: '~/.claude/settings.json' } as const;
+    const ui = (extra: Partial<Parameters<typeof Onboarding>[0]> = {}) => <Onboarding accounts={out} found={[]} perms={{}} ports={p} now={NOW} {...extra} />;
+    const { rerender } = render(ui());
+    fireEvent.click(screen.getByTestId('setup.next'));
+    // the model step asks for a gateway's URL once, on its own (his act: he opened the step)
+    expect(p.finds).toEqual([{ cmd: 'gateway_find' }]);
+    // a '← back' button in the column's foot, nothing top left (designer m_64550: B)
+    const back = screen.getByTestId('setup.back');
+    expect(back.tagName).toBe('BUTTON');
+    expect(back.closest('.foot')).not.toBeNull();
+    expect(screen.getByTestId('setup.root').querySelector('.setup-top [data-testid="setup.back"]')).toBeNull();
+    // URL and key found: a ready row; one click lists its models (the key found: never sent)
+    rerender(ui({ gwFound: found }));
+    expect(screen.getByTestId('setup.pay.ready.gateway').textContent).toContain('gw.test');
+    fireEvent.click(screen.getByTestId('setup.pay.ready.gateway'));
+    expect(p.sent).toEqual([{ cmd: 'gateway_models', url: 'https://gw.test' }]);
+    expect(screen.getByTestId('setup.pay.gw.listing').textContent).toBe('listing models…');
+    const list: GatewayList = { ev: 'gateway_list', state: 'listed', url: 'https://gw.test/v1', models: [
+      { id: 'azure_ai/claude-opus-5-5', label: 'opus 5.5', known: true, recommended: true, context: 1_000_000 },
+      { id: 'my-own-model', label: 'my-own-model' },
+    ] };
+    rerender(ui({ gwFound: found, gwList: list }));
+    // known first, recommended selected; the unknown one says so in text-3
+    const models = screen.getByTestId('setup.pay.gw.models');
+    expect(models.textContent).toContain('recommended · 1M context');
+    expect(screen.getByTestId('setup.pay.gw.models.my-own-model').textContent).toContain('unknown to bise · 128k assumed');
+    expect(screen.getByTestId('setup.pay.gw.models.my-own-model').querySelector('.setup-unknown')).not.toBeNull();
+    // ↓ then ⏎ in the filter: the other one; the button names the selected
+    const filter = screen.getByTestId<HTMLInputElement>('setup.pay.gw.filter');
+    expect(screen.getByTestId('setup.pay.gw.use').textContent).toBe('use opus 5.5');
+    fireEvent.keyDown(filter, { key: 'ArrowDown' });
+    expect(screen.getByTestId('setup.pay.gw.use').textContent).toBe('use my-own-model');
+    fireEvent.keyDown(filter, { key: 'ArrowUp' });
+    fireEvent.click(screen.getByTestId('setup.pay.gw.use'));
+    expect(p.sent.at(-1)).toEqual({ cmd: 'provider_use', id: 'litellm', model: 'litellm/azure_ai/claude-opus-5-5', base_url: 'https://gw.test/v1' });
+    const works: ProviderCheck = { ev: 'provider_check', id: 'litellm', name: 'LiteLLM gateway', model: 'litellm/azure_ai/claude-opus-5-5', label: 'opus 5.5', state: 'works', main: 'litellm/azure_ai/claude-opus-5-5', lines: ['main uses opus 5.5 on your gateway.'] };
+    rerender(ui({ gwFound: found, gwList: list, check: works }));
+    expect(screen.getByTestId('setup.step.model').textContent).toContain('it works: opus 5.5 answered.');
+    // no skip on 'it works' (tasks-ux m_64555): its continue goes on
+    expect(screen.queryByTestId('setup.skip')).toBeNull();
+    // back: its model list (never hello), then the list, then hello
+    fireEvent.click(screen.getByTestId('setup.back'));
+    expect(screen.getByTestId('setup.pay.gw.models')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('setup.back'));
+    expect(screen.getByTestId('setup.pay.ready')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('setup.back'));
+    expect(screen.getByTestId('setup.step.hello')).toBeTruthy();
+  });
+
+  it('the gateway\'s fields: the URL found as a suggestion with its source, connect lists, a failure under the fields, esc clears then goes back', () => {
+    const p = ports();
+    const out = accounts().map((a) => ({ ...a, state: 'signed_out' as const, from: null }));
+    const found = { ev: 'gateway_found', url: 'https://gw.test', from: '~/.vibe/config.toml' } as const;
+    const ui = (extra: Partial<Parameters<typeof Onboarding>[0]> = {}) => <Onboarding accounts={out} found={[]} perms={{}} ports={p} now={NOW} gwFound={found} {...extra} />;
+    const { rerender } = render(ui());
+    fireEvent.click(screen.getByTestId('setup.next'));
+    // no key found: the row is under the other ways, it opens the fields
+    fireEvent.click(screen.getByTestId('setup.pay.gateway'));
+    const url = screen.getByTestId<HTMLInputElement>('setup.pay.gw.url');
+    expect(url.value).toBe('https://gw.test');
+    expect(screen.getByTestId('setup.pay.gw.from').textContent).toBe('found in ~/.vibe/config.toml');
+    const key = screen.getByTestId<HTMLInputElement>('setup.pay.gw.key');
+    expect(key.type).toBe('password');
+    key.value = 'sk-fake-gw';
+    fireEvent.keyDown(key, { key: 'Enter' });
+    expect(p.sent).toEqual([{ cmd: 'gateway_models', url: 'https://gw.test', key: 'sk-fake-gw' }]);
+    rerender(ui({ gwList: { ev: 'gateway_list', state: 'listing' } }));
+    expect(screen.getByTestId('setup.pay.gw.listing')).toBeTruthy();
+    // a wrong key: the gateway's words under the fields, the key field marked; the key never on screen
+    rerender(ui({ gwList: { ev: 'gateway_list', state: 'failed', why: 'wrong_key', said: 'invalid key' } }));
+    expect(screen.getByTestId('setup.pay.gw.failed').textContent).toContain('the gateway says this key is wrong.');
+    expect(screen.getByTestId('setup.pay.gw.failed').textContent).toContain('invalid key');
+    expect(document.body.textContent).not.toContain('sk-fake-gw');
+    // esc in the key field with words clears it; empty, it goes back to the list
+    const k2 = screen.getByTestId<HTMLInputElement>('setup.pay.gw.key');
+    k2.value = 'oops';
+    fireEvent.keyDown(k2, { key: 'Escape' });
+    expect(k2.value).toBe('');
+    expect(screen.getByTestId('setup.pay.gw.key')).toBeTruthy();
+    fireEvent.keyDown(k2, { key: 'Escape' });
+    expect(screen.getByTestId('setup.pay')).toBeTruthy();
+  });
+
   it("'← back' on OpenRouter's sign-in cancels it and goes to the list, to pick another way (Matthias, Slack: stuck on 'waiting for you to sign in')", () => {
     const p = ports();
     const out: Account[] = [...accounts().map((a) => ({ ...a, state: 'signed_out' as const })), { id: 'openrouter', kind: 'key', label: 'OpenRouter', state: 'signed_out' }];
@@ -211,12 +302,13 @@ describe('Onboarding', () => {
     fireEvent.click(screen.getByTestId('setup.back'));
     expect(screen.getByTestId('setup.step.hello')).toBeTruthy();
     expect(p.sent.filter((c) => c.cmd === 'sign_in_cancel')).toHaveLength(1);
-    // the waiting view's own way out, where he looks (designer m_52216): 'cancel  esc' does what back does
+    // the waiting view's way out is the foot's '← back', alone there (designer m_64550: one button, never two)
     fireEvent.click(screen.getByTestId('setup.next'));
     fireEvent.click(screen.getByTestId('setup.pay.openrouter'));
     fireEvent.click(screen.getByTestId('setup.pay.openrouter.signin'));
-    expect(screen.getByTestId('setup.pay.signin.cancel').parentElement?.textContent).toBe('cancelesc');
-    fireEvent.click(screen.getByTestId('setup.pay.signin.cancel'));
+    expect(screen.queryByTestId('setup.pay.signin.cancel')).toBeNull();
+    expect(screen.getByTestId('setup.back').closest('.foot')?.querySelectorAll('button')).toHaveLength(1);
+    fireEvent.click(screen.getByTestId('setup.back'));
     expect(screen.getByTestId('setup.pay')).toBeTruthy();
     expect(p.sent.filter((c) => c.cmd === 'sign_in_cancel')).toHaveLength(2);
     // esc where the focus is once the sign-in's button has gone (ui-review m_52241: it fell on the body); no dead 'continue' while it waits (designer m_52243)

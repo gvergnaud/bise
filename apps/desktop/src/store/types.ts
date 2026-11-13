@@ -87,6 +87,9 @@ export const TAGS = {
   setup_gauge: true,
   signing: true,
   provider_check: true,
+  // onboarding-models: a LiteLLM gateway's URL found, its model list
+  gateway_found: true,
+  gateway_list: true,
   app_update: true,
   // update-flow: a newer bise for the machine (the status pill's), folded by the core
   machine_update: true,

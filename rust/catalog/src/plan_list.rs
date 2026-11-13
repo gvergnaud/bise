@@ -51,11 +51,31 @@ pub fn read(cache_dir: &Path) -> Vec<(String, Vec<String>)> {
     let text = std::fs::read_to_string(cache_dir.join("chatgpt-models.json")).ok();
     let v: Option<serde_json::Value> = text.and_then(|t| serde_json::from_str(&t).ok());
     let ids: Vec<String> = v.iter().flat_map(crate::live_efforts::plan_models).map(|m| m.slug).collect();
-    if ids.is_empty() {
-        Vec::new()
-    } else {
-        vec![(crate::chatgpt::ID.to_string(), ids)]
+    let mut out = Vec::new();
+    if !ids.is_empty() {
+        out.push((crate::chatgpt::ID.to_string(), ids));
     }
+    // a LiteLLM gateway's list (onboarding-models): one more provider's
+    let gw = std::fs::read_to_string(cache_dir.join(bise_home::GATEWAY_MODELS_FILE)).ok();
+    if let Some(l) = gw.as_deref().and_then(gateway_list_of) {
+        out.push(l);
+    }
+    out
+}
+
+/// The gateway list file's text (`{"provider": "litellm", "models":
+/// ["claude-opus-5-5", ...]}`) as a plan list; None when it is not one
+/// or lists nothing. Pure.
+pub fn gateway_list_of(text: &str) -> Option<(String, Vec<String>)> {
+    let v: serde_json::Value = serde_json::from_str(text).ok()?;
+    let provider = v.get("provider")?.as_str()?.trim();
+    let ids: Vec<String> = v.get("models")?.as_array()?.iter().filter_map(|m| m.as_str()).map(str::trim).filter(|m| !m.is_empty()).map(String::from).collect();
+    (!provider.is_empty() && !ids.is_empty()).then(|| (provider.to_string(), ids))
+}
+
+/// The gateway list file's text for `provider`'s `ids`. Pure.
+pub fn gateway_list_text(provider: &str, ids: &[String]) -> String {
+    serde_json::json!({ "provider": provider, "models": ids }).to_string()
 }
 
 /// The model of `provider` a role runs, by its plan's list (`listed`, ids

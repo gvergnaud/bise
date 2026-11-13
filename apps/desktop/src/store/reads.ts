@@ -137,6 +137,14 @@ export class StoreReads extends StoreBase {
   providerCheck(): EvOf<"provider_check"> | null {
     return this.slice<EvOf<"provider_check"> | null>("provider_check", null);
   }
+  /** gateway_find's answer (a LiteLLM gateway's URL and where it was found); null before any. */
+  gatewayFound(): EvOf<"gateway_found"> | null {
+    return this.slice<EvOf<"gateway_found"> | null>("gateway_found", null);
+  }
+  /** gateway_models' last answer (listing, listed, failed); null before any. */
+  gatewayList(): EvOf<"gateway_list"> | null {
+    return this.slice<EvOf<"gateway_list"> | null>("gateway_list", null);
+  }
   accounts(): readonly Account[] {
     return this.slice("accounts", EMPTY);
   }

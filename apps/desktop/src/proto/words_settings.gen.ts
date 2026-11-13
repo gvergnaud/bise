@@ -1182,6 +1182,8 @@ export const settings = {
   first_works_plan: (a: { model: string | number }): string => "main and your agents use " + String(a.model) + " now, on your plan.",
   /** it works: main's model */
   first_main_uses: (a: { model: string | number }): string => "main uses " + String(a.model) + ".",
+  /** it works: main's model, on a LiteLLM gateway (designer m_64550) */
+  first_main_uses_gateway: (a: { model: string | number }): string => "main uses " + String(a.model) + " on your gateway.",
   /** it works: another key in the environment */
   first_shadows: (a: { var: string | number }): string => String(a.var) + " in your environment holds another key: i use this one.",
   /** it works: optional keys */
@@ -1270,6 +1272,56 @@ export const settings = {
   first_key_found: "blank: i use the key i found",
   /** the key step: the button under the URL and key fields */
   first_check_it: "check it",
+  /** the model step's 'LiteLLM gateway' row (onboarding-models, designer m_64550): its line under Other ways */
+  first_gateway_sub: "your company's gateway: its URL and a key",
+  /** the gateway view's title */
+  first_gateway_title: "connect your gateway",
+  /** the gateway view's line */
+  first_gateway_line: "LiteLLM, or any server with OpenAI's or Anthropic's API.",
+  /** the gateway view's URL field, empty */
+  first_gateway_url: "its URL, https://…",
+  /** the gateway view: where the URL in the field was found (a suggestion he confirms) */
+  first_gateway_url_from: (a: { at: string | number }): string => "found in " + String(a.at),
+  /** the gateway view's key field when LITELLM_API_KEY is set */
+  first_gateway_key_found: (a: { var: string | number }): string => "the key in " + String(a.var) + " · enter keeps it",
+  /** the gateway view's button */
+  first_gateway_connect: "connect",
+  /** the gateway view while its list loads */
+  first_gateway_listing: "listing models…",
+  /** the gateway's model list: its title */
+  first_gateway_models_title: "which model?",
+  /** the gateway's model list: its line */
+  first_gateway_models_sub: (a: { host: string | number; n: number }): string => a.n === 1 ? String(a.host) + " serves " + String(a.n) + " model." : String(a.host) + " serves " + String(a.n) + " models.",
+  /** the gateway's model list: its filter */
+  first_gateway_filter: "filter",
+  /** the gateway's model list: a known model's line (its context) */
+  first_gateway_context: (a: { ctx: string | number }): string => String(a.ctx) + " context",
+  /** the gateway's model list: a provider's own pick */
+  first_gateway_recommended: "recommended",
+  /** the gateway's model list: a model bise doesn't know (designer m_64550) */
+  first_gateway_unknown: "unknown to bise · 128k assumed",
+  /** the gateway's model list: none matches the filter */
+  first_gateway_no_match: (a: { q: string | number }): string => "no model matches “" + String(a.q) + "”.",
+  /** the gateway's model list: the button */
+  first_gateway_use: (a: { model: string | number }): string => "use " + String(a.model),
+  /** the gateway failed: not a URL */
+  first_gateway_bad_url: "that isn't a URL: it starts with https://",
+  /** the gateway failed: no key */
+  first_gateway_no_key: "paste the gateway's key.",
+  /** the gateway failed: no answer */
+  first_gateway_down: (a: { host: string | number }): string => "i couldn't reach " + String(a.host) + ". check your network or VPN.",
+  /** the gateway failed: its certificate */
+  first_gateway_tls: (a: { host: string | number }): string => String(a.host) + "'s certificate was refused.",
+  /** the gateway failed: 401/403 */
+  first_gateway_wrong_key: "the gateway says this key is wrong.",
+  /** the gateway failed: a web page answered */
+  first_gateway_sign_in_page: (a: { host: string | number }): string => String(a.host) + " answered with a web page, not its API: is the URL its /v1?",
+  /** the gateway failed: 429 */
+  first_gateway_busy: "the gateway is busy: try again in a moment.",
+  /** the gateway failed: no list there */
+  first_gateway_no_list: (a: { host: string | number }): string => String(a.host) + " answered but lists no models: is the URL its /v1?",
+  /** the gateway failed: an empty list */
+  first_gateway_empty: "the gateway serves no model for this key.",
   /** a provider the catalog doesn't know */
   first_unknown_provider: (a: { id: string | number }): string => "unknown provider " + String(a.id),
   /** a link opened */

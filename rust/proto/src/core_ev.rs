@@ -74,6 +74,31 @@ pub enum CoreEv {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         ms: Option<u64>,
     },
+    /// the answer to `gateway_find` (onboarding-models): a LiteLLM
+    /// gateway's URL found in his tools' configs and the file it is in
+    /// (`~/.claude/settings.json`), a suggestion he confirms; none found:
+    /// both absent
+    GatewayFound {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        url: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        from: Option<String>,
+    },
+    /// the answer to `gateway_models`: listing, then listed (`url`: the
+    /// base URL the list answered at, what `provider_use` sends; `models`
+    /// known first, recommended on top) or failed (`why`, the gateway's
+    /// own words in `said`). Never the key
+    GatewayList {
+        state: GatewayState,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        url: Option<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        models: Vec<GatewayModel>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        why: Option<GatewayWhy>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        said: Option<String>,
+    },
     /// the answer to `found_scan`, whole each time: the repos of `dir`
     /// (his home) and of each guarded folder he looked in; `guarded`: the
     /// folders macOS guards (Documents, Desktop, Downloads...) the scan did
@@ -548,7 +573,7 @@ pub enum TelemetryDone {
 }
 
 impl CoreEv {
-    pub const TAGS: &'static [&'static str] = &["projects", "open", "prefs", "accounts", "signing", "provider_check", "found", "away_summary", "plugins", "browse", "plugin_preview", "plugins_summary", "computer_use", "level", "heard", "shot", "dictation", "voice_mode", "voice_answer", "commands", "skills", "files", "roles", "setup_gauge", "library_folders", "app_update", "machine_update", "hub_refused", "index", "setup_first", "computer_live", "computer_peek", "keychain", "broken", "state", "main", "hub", "sent", "agent_sent", "send_answered", "word", "phase", "page", "agent_entry", "agent_history", "agent_preview", "agent_queued", "agent_typing", "fake_voice", "telemetry"];
+    pub const TAGS: &'static [&'static str] = &["projects", "open", "prefs", "accounts", "signing", "provider_check", "gateway_found", "gateway_list", "found", "away_summary", "plugins", "browse", "plugin_preview", "plugins_summary", "computer_use", "level", "heard", "shot", "dictation", "voice_mode", "voice_answer", "commands", "skills", "files", "roles", "setup_gauge", "library_folders", "app_update", "machine_update", "hub_refused", "index", "setup_first", "computer_live", "computer_peek", "keychain", "broken", "state", "main", "hub", "sent", "agent_sent", "send_answered", "word", "phase", "page", "agent_entry", "agent_history", "agent_preview", "agent_queued", "agent_typing", "fake_voice", "telemetry"];
 
     pub fn decode(line: &str) -> Result<CoreEv, String> {
         decode(parse(line)?, "ev", Self::TAGS, |tag, raw| CoreEv::Unknown { tag, raw })

@@ -116,6 +116,42 @@ export type CheckState = "checking" | "works" | "failed" | "unknown";
 export type CheckWhy = "wrong_key" | "no_credit" | "model" | "no_access" | "unreachable" | "config" | "no_key" | "unknown";
 
 /**
+ * Where a `gateway_models` listing is (onboarding-models).
+ */
+export type GatewayState = "listing" | "listed" | "failed" | "unknown";
+
+/**
+ * Why a gateway's model list failed, each with its own words.
+ */
+export type GatewayWhy = "bad_url" | "no_key" | "unreachable" | "tls" | "wrong_key" | "sign_in_page" | "busy" | "no_list" | "empty" | "unknown";
+
+/**
+ * One model a gateway serves, as the model step lists it.
+ */
+export type GatewayModel = { 
+/**
+ * the gateway's own id (`azure_ai/claude-opus-5-5`); bise's model
+ * is `litellm/<id>`
+ */
+id: string, 
+/**
+ * its name for people (`opus 5.5`), the id when bise doesn't know it
+ */
+label: string, 
+/**
+ * bise knows it (its caps and price)
+ */
+known?: boolean, 
+/**
+ * a provider's own pick: on top
+ */
+recommended?: boolean, 
+/**
+ * its context window in tokens, when known
+ */
+context?: number | null, };
+
+/**
  * A folder found by `found_scan` that could be a project.
  */
 export type Found = { path: string, name: string, git: boolean, last_ms: number, 

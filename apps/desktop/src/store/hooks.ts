@@ -101,6 +101,10 @@ export const useClaudePlan = (): boolean => useSlice('claude_plan', (s) => s.cla
 export const useSigning = (): { readonly id: string; readonly url: string } | null => useSlice('signing', (s) => s.signing());
 /** provider_use's last answer (checking, then works or failed), null before any. */
 export const useProviderCheck = (): EvOf<'provider_check'> | null => useSlice('provider_check', (s) => s.providerCheck());
+/** gateway_find's answer (a LiteLLM gateway's URL found, where), null before any. */
+export const useGatewayFound = (): EvOf<'gateway_found'> | null => useSlice('gateway_found', (s) => s.gatewayFound());
+/** gateway_models' last answer (listing, then listed or failed), null before any. */
+export const useGatewayList = (): EvOf<'gateway_list'> | null => useSlice('gateway_list', (s) => s.gatewayList());
 export const useFound = (): readonly Found[] => useSlice('found', (s) => s.found());
 /** the scan's folders macOS guards: not looked in yet, and the ones he looked in; null before the first scan answered */
 export const useFoundFolders = (): FoundFolders | null => useSlice('found_folders', (s) => s.foundFolders());

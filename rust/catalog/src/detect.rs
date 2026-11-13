@@ -14,6 +14,12 @@
 //!   the exit code read). That plan only runs in Claude Code
 //!   (Anthropic's terms).
 //!
+//! - A LiteLLM gateway's base URL ([`gateway_found`], onboarding-models):
+//!   Vibe's `[[providers]]` entry keyed by LITELLM_API_KEY (`api_base`),
+//!   else Claude Code's `env.ANTHROPIC_FOUNDRY_BASE_URL`. The one value
+//!   read here, a URL, never a key; on the first run's model step only,
+//!   shown as a suggestion he confirms; never under a test home.
+//!
 //! `BISE_DETECT_KEYCHAIN`: `0`/`off` skips the keychain probe, `found` /
 //! `missing` fake its answer (tests never reach the real keychain; a temp
 //! HOME does not isolate it).
@@ -89,6 +95,65 @@ pub fn claude_plan(home: &Path, env: &dyn Fn(&str) -> Option<String>) -> bool {
     file || claude_keychain(env)
 }
 
+/// A LiteLLM gateway's base URL another tool was set up with (the first
+/// run's 'LiteLLM gateway' row, onboarding-models; architect m_64551):
+/// only that one field of each file is read, never a key or another
+/// field, and only on the model step (his act), never under a test home.
+/// What the window shows as a suggestion, with where it was found.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GatewayFound {
+    pub url: String,
+    /// the file, as he reads it (`~/.claude/settings.json`)
+    pub from: String,
+}
+
+/// The variable a gateway's key is exported in (LiteLLM's docs, company
+/// setup scripts): the provider whose URL it names is a LiteLLM gateway.
+pub const GATEWAY_KEY_ENV: &str = "LITELLM_API_KEY";
+
+/// Vibe's config.toml: the `api_base` of its `[[providers]]` entry whose
+/// `api_key_env_var` is LITELLM_API_KEY. Pure.
+pub fn vibe_gateway_url(text: &str) -> Option<String> {
+    let v: toml::Table = toml::from_str(text).ok()?;
+    let ps = v.get("providers")?.as_array()?;
+    let p = ps.iter().find(|p| p.get("api_key_env_var").and_then(|k| k.as_str()) == Some(GATEWAY_KEY_ENV))?;
+    url_of(p.get("api_base")?.as_str()?)
+}
+
+/// Claude Code's settings.json: its `env.ANTHROPIC_FOUNDRY_BASE_URL` (a
+/// gateway in Claude Code's foundry mode). Pure.
+pub fn claude_gateway_url(text: &str) -> Option<String> {
+    let v: serde_json::Value = serde_json::from_str(text).ok()?;
+    url_of(v.get("env")?.get("ANTHROPIC_FOUNDRY_BASE_URL")?.as_str()?)
+}
+
+/// An http(s) URL, trimmed, no trailing '/'.
+fn url_of(s: &str) -> Option<String> {
+    let u = s.trim().trim_end_matches('/');
+    ((u.starts_with("https://") || u.starts_with("http://")) && !u.chars().any(char::is_whitespace)).then(|| u.to_string())
+}
+
+/// The gateway URL found in Vibe's then Claude Code's config, for
+/// `home`; None under an explicit (test) home: a throwaway home never
+/// reads his tools' configs.
+pub fn gateway_found(home: &bise_home::Home, env: &dyn Fn(&str) -> Option<String>) -> Option<GatewayFound> {
+    if home.explicit() {
+        return None;
+    }
+    let user = home.user_home();
+    let vibe = match non_empty(env("VIBE_HOME")) {
+        Some(d) => PathBuf::from(d).join("config.toml"),
+        None => user.join(".vibe").join("config.toml"),
+    };
+    let claude = match non_empty(env("CLAUDE_CONFIG_DIR")) {
+        Some(d) => PathBuf::from(d).join("settings.json"),
+        None => user.join(".claude").join("settings.json"),
+    };
+    let tilde = |p: &Path| p.strip_prefix(user).map_or(p.display().to_string(), |r| format!("~/{}", r.display()));
+    let read = |p: &Path, f: fn(&str) -> Option<String>| std::fs::read_to_string(p).ok().as_deref().and_then(f).map(|url| GatewayFound { url, from: tilde(p) });
+    read(&vibe, vibe_gateway_url).or_else(|| read(&claude, claude_gateway_url))
+}
+
 /// Both. The keychain probe runs a process: call it once, off a UI
 /// thread.
 pub fn detect(home: &Path, env: &dyn Fn(&str) -> Option<String>) -> Detected {
@@ -139,6 +204,37 @@ mod tests {
         assert!(!claude_plan(&h, &off));
         put(&h.join(".claude/.credentials.json"), r#"{"claudeAiOauth": {"accessToken": "fake", "subscriptionType": "max"}}"#);
         assert_eq!(detect(&h, &off), Detected { codex_chatgpt: false, claude_plan: true });
+        let _ = std::fs::remove_dir_all(&h);
+    }
+
+    #[test]
+    fn a_gateway_url_is_read_from_vibe_or_claude_code_and_nothing_else() {
+        // Vibe: the provider whose key is LITELLM_API_KEY, its api_base only
+        let vibe = "active_model = \"x\"\n[[providers]]\nname = \"mistral\"\napi_base = \"https://api.mistral.test/v1\"\napi_key_env_var = \"MISTRAL_API_KEY\"\n\n[[providers]]\nname = \"gw\"\napi_base = \"https://gw.test/\"\napi_key_env_var = \"LITELLM_API_KEY\"\n";
+        assert_eq!(vibe_gateway_url(vibe).as_deref(), Some("https://gw.test"));
+        assert_eq!(vibe_gateway_url("[[providers]]\napi_base = \"https://a.test\"\napi_key_env_var = \"OTHER\"\n"), None);
+        assert_eq!(vibe_gateway_url("not toml ["), None);
+        // Claude Code: env.ANTHROPIC_FOUNDRY_BASE_URL; a key beside it is never read
+        let claude = r#"{"env": {"CLAUDE_CODE_USE_FOUNDRY": "1", "ANTHROPIC_FOUNDRY_BASE_URL": "https://gw.test", "ANTHROPIC_FOUNDRY_API_KEY": "sk-fake"}}"#;
+        assert_eq!(claude_gateway_url(claude).as_deref(), Some("https://gw.test"));
+        assert_eq!(claude_gateway_url(r#"{"env": {"ANTHROPIC_FOUNDRY_BASE_URL": "gw.test"}}"#), None);
+        assert_eq!(claude_gateway_url(r#"{"model": "opus"}"#), None);
+    }
+
+    #[test]
+    fn a_test_home_never_reads_his_tools_configs() {
+        let h = home("gw");
+        put(&h.join(".claude/settings.json"), r#"{"env": {"ANTHROPIC_FOUNDRY_BASE_URL": "https://gw.test"}}"#);
+        let none = |_: &str| None;
+        // an explicit root (BISE_HOME): nothing read
+        assert_eq!(gateway_found(&bise_home::Home::at(h.join("bise-root")), &none), None);
+        // his default layout (~/.bise under that HOME): found, with its source
+        let hs = h.display().to_string();
+        let me = bise_home::Home::from_lookup(&|k: &str| (k == "HOME").then(|| hs.clone()));
+        assert_eq!(gateway_found(&me, &none), Some(GatewayFound { url: "https://gw.test".into(), from: "~/.claude/settings.json".into() }));
+        // Vibe's wins
+        put(&h.join(".vibe/config.toml"), "[[providers]]\napi_base = \"https://vibe-gw.test\"\napi_key_env_var = \"LITELLM_API_KEY\"\n");
+        assert_eq!(gateway_found(&me, &none).map(|g| g.from), Some("~/.vibe/config.toml".into()));
         let _ = std::fs::remove_dir_all(&h);
     }
 
