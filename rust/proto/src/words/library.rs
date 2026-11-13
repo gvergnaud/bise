@@ -37,22 +37,24 @@ crate::words! { library:
     new_folder_tip = "new folder";
     /// a theme's folded task rows, `11 more`
     n_more(n) = "{n} more";
-    // his q-library pick (artifacts-signal v13, designer m_62289): the column's views on top, the
-    // tree, then grey From agents · Unfiled · Archived
-    /// the column's first view: what is for him (Kept, then Open work)
+    // his q-library pick (artifacts-signal v13, designer m_62289, m_63213): the column's views on
+    // top, the tree, then grey Unfiled · Archived; For you | All in the filter bar
+    /// the column's first row: the library's root (Drive's word; designer m_63213)
+    home = "Home";
+    /// the filter bar's toggle, one side: his files (every section but the agents')
     for_you = "For you";
+    /// the toggle's other side: every file in place, the agents' too
+    all_audience = "All";
+    /// the toggle's VoiceOver name
+    audience_switch = "whose files";
     /// the column's grey place of the archived ones
     archived_place = "Archived";
     /// a theme's quiet row folding its done tasks' folders, `3 done`
     n_done(n) = "{n} done";
-    /// the folder switch's other side: every file in place, the agents' too
-    everything = "Everything";
-    /// the folder switch's VoiceOver name
-    folder_switch = "what the folder shows";
-    /// in a folder on For you: what the switch hides, `14 from agents`
+    /// on For you: what the toggle hides, `14 from agents`
     n_from_agents(n) = "{n} from agents";
-    /// its way to them: flips the switch to Everything
-    show_everything = "Show everything";
+    /// its way to them: flips the toggle to All
+    show_all = "Show all";
     /// a folder's count under a project filter, `14 of 74`
     of_total(n, total) = "{n} of {total}";
     /// the new-folder field's placeholder
@@ -250,12 +252,11 @@ crate::words! { library:
     found(n, q) = "{n} found for \"{q}\"";
     /// the results' head, where it looked and its keys
     found_where = "in all folders · ⏎ opens the first, esc clears";
-    /// the kind filter's first (in the toolbar above the list), `all 17`
-    all_kinds = "All";
+    /// the app tabs' first (in the toolbar above the list), `All apps 17`: 'All' alone is the
+    /// For you | All toggle's (designer m_63680, one 'All' in the bar)
+    all_kinds = "All apps";
     /// the toolbar's search field: its placeholder and VoiceOver name
     search_placeholder = "search artifacts";
-    /// the toolbar's one menu when the page is narrow (the kinds and the projects folded in it)
-    filters = "Filters";
     /// the toolbar's + : its tip (designer m_45148)
     add_tip = "add files… · or drop them on the list";
     /// no result: the empty page's title, `nothing matches “dark”.`

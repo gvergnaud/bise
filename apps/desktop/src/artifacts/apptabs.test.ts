@@ -81,7 +81,7 @@ describe('the tabs', () => {
   });
 });
 
-describe("the toolbar folds in two steps: the tabs into 'All ▾', then every filter into 'Filters ▾'", () => {
+describe("the toolbar folds in two steps: the tabs into 'All ▾', then every filter into one menu that says its app ('All apps ▾', designer m_63720)", () => {
   it('folds one step while too narrow, unfolds one step once the less folded one fits', () => {
     expect(nextStage(0, 900, [800, 0, 0])).toBe(0);
     expect(nextStage(0, 700, [800, 0, 0])).toBe(1);

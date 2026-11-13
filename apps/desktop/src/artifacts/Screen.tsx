@@ -42,7 +42,7 @@ import {
   nameOf, placeWords, prSideItems, projectOfTyped, rememberMove, searchItems, titlePath, type At, type Library,
   type PrSide,
 } from './folders';
-import { FolderSwitch, folderView, HiddenRow, type FolderMode } from './FolderSwitch';
+import { AudienceToggle, audienceView, HiddenRow, type Audience } from './Audience';
 import { SLOTS, slotOf } from './slots';
 import { FolderColumn, type Editing } from './Column';
 import { appTabsOf, keyOfTag, PRS } from './apps';
@@ -93,18 +93,18 @@ const keepScope = (p: string) => {
   try { window.localStorage.setItem(SCOPE_KEY, p); } catch { /* private window */ }
 };
 
-// a folder's For you · Everything switch (his condition on his q-library pick): For you by default,
-// kept from folder to folder and visit to visit
-const FOLDER_MODE_KEY = 'bise.artifacts.folderMode';
-const readFolderMode = (): FolderMode => {
+// the filter bar's For you | All (Audience.tsx, his m_63198): For you by default, kept from place to
+// place and visit to visit (the folder switch's choice before it carries over)
+const AUDIENCE_KEY = 'bise.artifacts.folderMode';
+const readAudience = (): Audience => {
   try {
-    return window.localStorage.getItem(FOLDER_MODE_KEY) === 'all' ? 'all' : 'you';
+    return window.localStorage.getItem(AUDIENCE_KEY) === 'all' ? 'all' : 'you';
   } catch {
     return 'you';
   }
 };
-const keepFolderMode = (m: FolderMode) => {
-  try { window.localStorage.setItem(FOLDER_MODE_KEY, m); } catch { /* private window */ }
+const keepAudience = (a: Audience) => {
+  try { window.localStorage.setItem(AUDIENCE_KEY, a); } catch { /* private window */ }
 };
 
 /** What floats over the page: one at a time. */
@@ -156,9 +156,9 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
   const [anchorKey, setAnchorKey] = useState<string | null>(null);
   const [open, setOpenRaw] = useState<ReadonlySet<string>>(mem.open);
   const [full, setFullRaw] = useState<ReadonlySet<string>>(mem.full);
-  // a folder's For you · Everything (FolderSwitch.tsx), kept across folders and visits
-  const [folderMode, setFolderModeRaw] = useState<FolderMode>(readFolderMode);
-  const setFolderMode = (m: FolderMode) => { keepFolderMode(m); setFolderModeRaw(m); };
+  // the filter bar's For you | All (Audience.tsx), kept across places and visits
+  const [aud, setAudRaw] = useState<Audience>(readAudience);
+  const setAud = (a: Audience) => { keepAudience(a); setAudRaw(a); };
   // the themes whose done tasks' folders are open in the column ('N done')
   const [doneOpen, setDoneOpen] = useState<ReadonlySet<string>>(new Set());
   const setView = (v: View) => { keepView(v); setViewRaw(v); };
@@ -251,14 +251,19 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
   const anyPr = (searching || sect === 'you') && hereAll.some((it) => it.a.pr != null);
   // the place's items by section (sections.ts: the hub's section, ordered by last touch): For you
   // is Kept then Open work, Done and Between agents one list each; a search keeps every section
-  // in a folder (not a search, not the archived): the switch's For you (his files, every section of
-  // his) or Everything (every file in place); the agents' it hides are one row under the list
-  const inFolderView = atNow.at === 'folder' && !searching && !archivedOn;
-  // the Archived place shows every archived one, whatever its section (the hub reads an archived one as
-  // Done: under For you's Kept · Open work it drew nothing, ui-review m_63514)
-  const viewOf = (items: readonly Item[]) =>
-    inFolderView ? itemsIn(folderView(items, folderMode).shown, 'all') : itemsIn(items, searching || archivedOn ? 'all' : sect);
-  const fview = inFolderView ? folderView(here, folderMode) : null;
+  // the bar's For you | All in every place (Audience.tsx): For you hides the agents' files (one row
+  // under the list says how many), All shows every file. Home on For you is Kept then Open work (Done
+  // one click away), on All every section under its head; elsewhere every section of what the side
+  // shows (the Archived place too: the hub reads an archived one as Done, ui-review m_63514). A route
+  // into the agents' list (an old link) still shows it.
+  const audOn = atNow.at !== 'ext' && sect !== 'agents';
+  const viewOf = (items: readonly Item[]) => {
+    if (sect === 'agents') return itemsIn(items, 'agents');
+    const mine = audOn ? audienceView(items, aud).shown : [...items];
+    if (atNow.at === 'all' && !searching && !archivedOn) return itemsIn(mine, aud === 'all' && sect === 'you' ? 'all' : sect);
+    return itemsIn(mine, 'all');
+  };
+  const hiddenN = audOn && aud === 'you' ? audienceView(here, aud).hidden : 0;
   const inView = viewOf(here);
   // the app tabs (apps.ts, docs/plugin-apps.md A6b, his pick A): the `app:` token's keys, OR inside;
   // their counts faceted (every other filter applied, the app one left out)
@@ -560,7 +565,8 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
   // the toolbar above the list (his m_44961, designer's spec D): the kinds the place holds (all,
   // then each kind with its count), the project scope; the cards/list switch, the search ('/'), +
   const kindsTotal = inView.length;
-  const toolbar = stack === null && (
+  // a slot's place (slots.ts: Shared, bise) has its own crumb and list: no filter bar over it (kb-desktop-ui m_63688)
+  const toolbar = stack === null && atNow.at !== 'ext' && (
     <Toolbar testId="artifacts.toolbar" lead={narrow ? fold : null}
       apps={searching || appsPicked.length > 0 || appTabs.tabs.length + appTabs.more.length > 1 ? { total: kindsTotal, ...appTabs } : null}
       appsOn={appsPicked} onApp={pickAppTab}
@@ -569,6 +575,7 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
       view={view} onView={setView}
       q={q} onQ={(e) => { setQ(e.currentTarget.value); setCaret(e.currentTarget.selectionStart); }} onQKey={searchKey}
       onClear={() => { setQ(''); searchRef.current?.focus(); }} searchRef={searchRef}
+      audience={audOn ? <AudienceToggle aud={aud} onAud={setAud} testId="artifacts.aud" /> : null}
       when={archivedOn ? null : whenProps} onClearAll={somethingSet ? clearAll : null}
       completion={comp === null ? null : <WhoCompletion c={comp} active={compActive} field={searchRef} onPick={pickCompletion} onClose={() => { setCaret(null); }} />}
       add={<AddButton place={place_} tip={library.add_tip} testId="artifacts.add" />} />
@@ -708,13 +715,19 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
   })();
   // over Done or Between agents: back to For you; under For you: those two, one click away
   const backRow = stack === null && !searching && <BackRow view={sect} n={inView.length} onBack={() => { setSect('you'); }} testId="artifacts.back" />;
-  const quietRows = stack === null && !searching && sect === 'you' && !archivedOn && (fview === null
-    ? <QuietRows n={sectN} onGo={setSect} testId="artifacts.quiet" />
-    : fview.hidden > 0 && <HiddenRow n={fview.hidden} onShow={() => { setFolderMode('all'); }} testId="artifacts.hidden" />);
-  // From agents' foot (designer m_62438): what their copies weigh and how long bise keeps them
-  // in one project its hub's count, in All projects the sum of those that said one
+  // under the list: Home on For you keeps Done one click away; on For you anywhere, the agents' files
+  // the toggle hides, one row that flips it (designer m_63213)
+  const quietRows = stack === null && sect === 'you' && (
+    <>
+      {!searching && !archivedOn && atNow.at === 'all' && aud === 'you' && <QuietRows n={{ ...sectN, agents: 0 }} onGo={setSect} testId="artifacts.quiet" />}
+      {hiddenN > 0 && <HiddenRow n={hiddenN} onShow={() => { setAud('all'); }} testId="artifacts.hidden" />}
+    </>
+  );
+  // the agents' files' foot (designer m_62438, m_63213): what their copies weigh and how long bise keeps
+  // them, at the list's end on All (and over the agents' list); in one project its hub's count, in All
+  // projects the sum of those that said one
   const agentsBytes = bytesIn(scope === '' ? projects.map((p) => p.project) : [scope], (p) => store.agentsBytes(p));
-  const agentsFoot = stack === null && !searching && sect === 'agents' && agentsBytes !== undefined && (
+  const agentsFoot = stack === null && !searching && (sect === 'agents' || (audOn && aud === 'all')) && agentsBytes !== undefined && (
     <p className="art-agents-foot" data-testid="artifacts.agents.foot">{library.agents_files({ size: sizeWords(agentsBytes) })}</p>
   );
 
@@ -730,8 +743,6 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
         )}
         {atNow.at === 'ext' && slotOf(atNow.key)?.crumb(atNow.key)}
       </p>
-      {/* the switch at the right of the place's line (designer m_62289 3b), in a folder only */}
-      {inFolderView && <FolderSwitch mode={folderMode} onMode={setFolderMode} testId="artifacts.fswitch" />}
     </header>
   );
   // a stack open: its path alone, 'desktop app / agent view / agent view step 2' (the sheet has its

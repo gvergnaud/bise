@@ -143,8 +143,8 @@ export function FolderColumn(p: ColumnProps) {
   return (
     <nav className={`art-col${p.side === true ? ' side' : ''}`} aria-label={library.library_head} data-testid={testId}>
       <div className="art-col-head">{library.library_head}</div>
-      {/* the views (his q-library pick): For you, Recent, Kept */}
-      <PlaceRow icon="artifacts" name={library.for_you} on={at.at === 'all' && sect === 'you'} digit={digit({ at: 'all' })}
+      {/* the views (his q-library pick): Home (the root; For you | All is the bar's, designer m_63213), Recent, Kept */}
+      <PlaceRow icon="artifacts" name={library.home} on={at.at === 'all' && sect === 'you'} digit={digit({ at: 'all' })}
         onGo={() => { toSect('you'); }} testId={`${testId}.all`} />
       <PlaceRow icon="scheduled" name={library.recent} on={at.at === 'recent'} digit={digit({ at: 'recent' })} onGo={() => { p.onGo({ at: 'recent' }); }} testId={`${testId}.recent`} />
       <PlaceRow icon="pin" name={library.sect_kept} on={at.at === 'kept'} digit={digit({ at: 'kept' })} onGo={() => { p.onGo({ at: 'kept' }); }} testId={`${testId}.kept`} />
@@ -181,10 +181,9 @@ export function FolderColumn(p: ColumnProps) {
       })}
       {field(null)}
       {p.slots}
-      {/* grey, one click each: From agents, Unfiled (while something is in it), Archived */}
+      {/* grey, one click each: Unfiled (while something is in it), Archived; the agents' files are the
+          bar's All (designer m_63213: no From agents row) */}
       <div className="art-col-grey" data-testid={`${testId}.grey`}>
-        <PlaceRow icon="thread" name={library.sect_agents} on={at.at === 'all' && sect === 'agents'}
-          onGo={() => { toSect('agents'); }} testId={`${testId}.agents`} />
         {p.unfiledAny !== false && (
           <PlaceRow icon="inbox" name={sentenceCase(library.unfiled)} on={at.at === 'unfiled'} digit={digit({ at: 'unfiled' })} count={counts.get('unfiled')} countAtRest
             over={p.drop?.over === 'unfiled'} drop={p.drop} dropId="unfiled" flash={p.flash === 'unfiled'}

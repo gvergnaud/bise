@@ -29,10 +29,6 @@
 .art-col-grey .art-col-row{color:var(--c-text-3)}
 .art-col-grey .art-col-row > .b-app-icon{color:var(--c-text-3)}
 .art-col-grey .art-col-row[aria-current]{color:var(--c-text)}
-/* a folder's For you · Everything switch, at the right of the place's line (designer m_62289 3b) */
-.art-head:has(.art-fswitch){display:flex;align-items:center;gap:var(--s-3)}
-.art-head:has(.art-fswitch) .art-head-s{flex:1;min-width:0}
-.art-fswitch{flex:none;margin-left:auto}
 .art-hidden-n{font:var(--t-12) var(--font-ui);color:var(--c-text-3)}
 .art-col-head{display:flex;align-items:center;gap:var(--s-2);height:var(--h-row-tight);margin-top:var(--s-3);padding:0 var(--s-2);font:500 var(--f-meta);color:var(--c-text-3)}
 .art-col-head:first-child{margin-top:0}

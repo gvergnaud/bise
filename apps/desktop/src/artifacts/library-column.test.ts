@@ -1,11 +1,12 @@
 // His q-library pick (artifacts-signal v13, designer m_62289): the column's views, its done tasks'
-// fold, its grey places and slots (Column.tsx, folders.ts, slots.ts), and a folder's For you ·
-// Everything switch (FolderSwitch.tsx). The hub's section is read as sent, never re-decided.
+// fold, its grey places and slots (Column.tsx, folders.ts, slots.ts), and the bar's For you | All
+// (Audience.tsx). The hub's section is read as sent, never re-decided.
 import { describe, expect, it } from 'vitest';
 import type { Artifact } from '@/proto';
 import { columnPlaces, tasksOf } from './Column';
 import { atOfPath, atPath, countsOf, doneFolders, isHis, itemsAt, libraryOf, samePlace, type At, type Folder } from './folders';
-import { folderView } from './FolderSwitch';
+import { audienceView } from './Audience';
+import { formatRoute, parseRoute } from '@/app/route';
 import type { Item } from './model';
 import { slotOf, type ColumnSlot } from './slots';
 
@@ -69,12 +70,25 @@ describe("the column (his q-library pick)", () => {
   });
 });
 
-describe("a folder's For you · Everything switch (his condition)", () => {
+describe("the bar's For you | All (his m_63198)", () => {
   const lib = libraryOf(FOLDERS, ITEMS);
   const here = itemsAt(lib, ITEMS, { at: 'folder', id: 'desk' });
 
-  it('For you shows his files and counts the agents\' it hides; Everything shows every file', () => {
-    expect(folderView(here, 'you')).toEqual({ shown: here.filter((it) => it.a.section !== 'agents'), hidden: 2 });
-    expect(folderView(here, 'all')).toEqual({ shown: here, hidden: 0 });
+  it("For you shows his files and counts the agents' it hides; All shows every file", () => {
+    expect(audienceView(here, 'you')).toEqual({ shown: here.filter((it) => it.a.section !== 'agents'), hidden: 2 });
+    expect(audienceView(here, 'all')).toEqual({ shown: here, hidden: 0 });
+  });
+});
+
+describe("a slot's place in the window's route (kb-desktop-ui m_63688)", () => {
+  it("keeps 'x/<key>' whole, a ':' in the key too, with or without a project", () => {
+    for (const project of ['', 'harness']) {
+      for (const key of ['bise', 'bise:plugins', 'shared:f-acme']) {
+        const r = { screen: 'artifacts' as const, project, at: atPath({ at: 'ext', key }) };
+        const back = parseRoute(formatRoute(r));
+        expect(back).toEqual(r);
+        expect(atOfPath((back as { at?: string }).at ?? '')).toEqual({ at: 'ext', key });
+      }
+    }
   });
 });

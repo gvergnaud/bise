@@ -22,6 +22,11 @@
     "one": null,
     "text": "all artifacts"
   },
+  "library.all_audience": {
+    "args": [],
+    "one": null,
+    "text": "All"
+  },
   "library.all_folders": {
     "args": [],
     "one": null,
@@ -30,7 +35,7 @@
   "library.all_kinds": {
     "args": [],
     "one": null,
-    "text": "All"
+    "text": "All apps"
   },
   "library.all_projects": {
     "args": [],
@@ -63,6 +68,11 @@
     "args": [],
     "one": null,
     "text": "Archived"
+  },
+  "library.audience_switch": {
+    "args": [],
+    "one": null,
+    "text": "whose files"
   },
   "library.back_for_you": {
     "args": [],
@@ -179,11 +189,6 @@
     "one": null,
     "text": "empty for now"
   },
-  "library.everything": {
-    "args": [],
-    "one": null,
-    "text": "Everything"
-  },
   "library.expired_thread": {
     "args": [
       "agent"
@@ -207,11 +212,6 @@
     ],
     "one": null,
     "text": "{ending} file"
-  },
-  "library.filters": {
-    "args": [],
-    "one": null,
-    "text": "Filters"
   },
   "library.first_say": {
     "args": [],
@@ -250,11 +250,6 @@
     "one": null,
     "text": "bise can't list this folder yet"
   },
-  "library.folder_switch": {
-    "args": [],
-    "one": null,
-    "text": "what the folder shows"
-  },
   "library.folders": {
     "args": [],
     "one": null,
@@ -289,6 +284,11 @@
     "args": [],
     "one": null,
     "text": "Save a copy…"
+  },
+  "library.home": {
+    "args": [],
+    "one": null,
+    "text": "Home"
   },
   "library.in_folders": {
     "args": [
@@ -794,10 +794,10 @@
     "one": null,
     "text": "{who} saved {n} {what} in one turn · {day}"
   },
-  "library.show_everything": {
+  "library.show_all": {
     "args": [],
     "one": null,
-    "text": "Show everything"
+    "text": "Show all"
   },
   "library.sort_with_main": {
     "args": [],

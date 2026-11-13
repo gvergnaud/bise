@@ -8,7 +8,7 @@
 // filters and the keys do stays the screen's (Screen.tsx). Under 900 the library's crumb (its
 // column folded, Fold.tsx) leads the row. Owner: m-artifacts (nm-pages-a's page).
 import { useLayoutEffect, useRef, useState, type ChangeEvent, type KeyboardEvent, type ReactNode, type Ref } from 'react';
-import { AppIcon, Button, cx, Dropdown, Filters, ListBar, ListSearch, Press, sentenceCase, tipAttrs } from '@/ds';
+import { AppIcon, Button, cx, Dropdown, Filters, ListBar, ListSearch, Press, tipAttrs } from '@/ds';
 import { library } from '@/proto/words_library.gen';
 import type { Facet, When } from './filters';
 import type { View } from './gridKeys';
@@ -54,6 +54,8 @@ export interface ToolbarProps {
   readonly searchRef: Ref<HTMLInputElement>;
   /** + add files (Drops.tsx AddButton) */
   readonly add: ReactNode;
+  /** For you | All (Audience.tsx), between the project and When; null: not drawn (a slot's place) */
+  readonly audience?: ReactNode;
   /** the When chip (filters.ts): its rows with their counts, the one picked; null: not drawn */
   readonly when?: WhenProps | null;
   /** Clear (designer m_61790): only while something is set; never the project or the place */
@@ -99,7 +101,7 @@ export function filtersOn(apps: number, project: string): number {
   return apps + (project === '' ? 0 : 1);
 }
 
-export function Toolbar({ lead, apps, appsOn, onApp, scope, projects, project, onProject, view, onView, q, onQ, onQKey, onClear, searchRef, add, when = null, onClearAll = null, completion = null, testId }: ToolbarProps) {
+export function Toolbar({ lead, apps, appsOn, onApp, scope, projects, project, onProject, view, onView, q, onQ, onQKey, onClear, searchRef, add, audience = null, when = null, onClearAll = null, completion = null, testId }: ToolbarProps) {
   const box = useRef<HTMLDivElement>(null);
   // the filters fold once the row has less room than they need beside the right side (never an
   // overflow, ui-review m_45291), in two steps (his pick A): first the app tabs into one 'All ▾'
@@ -161,19 +163,18 @@ export function Toolbar({ lead, apps, appsOn, onApp, scope, projects, project, o
       {lead}
       {folded ? (
         <Dropdown testId={`${testId}.fold`}
-          label={<>{sentenceCase(library.filters)}{on > 0 && <span className="art-n">{on}</span>}</>}
+          // the menu says the app it holds, 'All apps ▾' or 'Sheets ▾', never 'Filters ▾' (designer m_63720)
+          label={<>{foldWord(appRows, appsOn)}{on > 0 && <span className="art-n">{on}</span>}</>}
           groups={[
             ...(apps === null ? [] : [{ id: 'apps', head: library.apps_label, rows: appRows.map((k) => ({ id: `k:${k.id}`, name: k.word, trailing: String(k.n), current: isOn(appsOn, k.id), testId: `${testId}.fold.k.${k.id}` })) }]),
             { id: 'projects', rows: projects.map((r) => ({ id: `p:${r.project}`, name: r.name, trailing: String(r.n), current: project === r.project, testId: `${testId}.fold.p.${r.project === '' ? 'all' : r.project}` })) },
           ]}
           onPick={(id) => { if (id.startsWith('k:')) onApp(id.slice(2), false); else onProject(id.slice(2)); }} />
-      ) : (
-        <>
-          {tabs}
-          {scope}
-        </>
-      )}
+      ) : scope}
+      {/* designer m_63213's order: project · For you | All · When · app tabs · search; no toggle in a slot's place */}
+      {audience}
       {when !== null && <WhenChip {...when} testId="artifacts.when" />}
+      {!folded && tabs}
       {onClearAll !== null && <Button kind="ghost" onClick={onClearAll} testId="artifacts.clear">{library.clear}</Button>}
     </ListBar>
   );
@@ -210,6 +211,12 @@ function AppTabs({ apps, on, onPick }: { apps: AppsOpt; on: readonly string[]; o
       )}
     </>
   );
+}
+
+/** A folded menu's words: the apps picked ('Sheets', 'Sheets + Slides'), else 'All apps'. Pure. */
+export function foldWord(rows: readonly { readonly id: string; readonly word: string }[], on: readonly string[]): string {
+  const words = rows.filter((k) => k.id !== 'all' && on.includes(k.id)).map((k) => k.word);
+  return words.length === 0 ? library.all_kinds : words.join(' + ');
 }
 
 /** The app tabs folded (stage 1): one 'All ▾' (or the picked apps' words) holding All, the tabs and More's. */
