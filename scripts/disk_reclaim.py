@@ -214,6 +214,9 @@ def _self_test():
     assert len(rows) == 13 and rows[2][3].startswith("/Applications/Google Chrome.app/Contents/Frameworks"), rows[2]
     assert ps_rows("") == [] and ps_rows("no header\n 1 0 1.0 x x") == [], "no header: no rows"
     assert exe_name(rows[2][3]) == "Google Chrome Helper (GPU)", "a Mac app's binary keeps its spaces"
+    assert exe_name("/L/Python.app/Contents/MacOS/Python /Users/him/secret/x.py --t=1") == "Python", "never his args"
+    assert exe_name("/A/Foo.app/Contents/MacOS/foo-bin /his/path") == "foo-bin"
+    assert exe_name("/A/Foo.app/Contents/MacOS/Foo") == "Foo"
     assert exe_name("cargo test") == "cargo" and exe_name("-zsh") == "-zsh" and exe_name("") == "?"
     paths = ["/Users/u/.bise/", "/Users/u/.local/share/bise/", "/Users/u/lab/harness/"]
     assert bise_tag("/bin/bash -c cd /Users/u/.bise/worktrees/h-1/tasks-build/harness", paths) == "bash@tasks-build"
@@ -509,11 +512,16 @@ def ps_rows(text):
 def exe_name(args):
     """The executable's basename from a command line, pure: a Mac app's binary may hold spaces
     (.../Contents/MacOS/Google Chrome Helper (Renderer) --type=...), else the first word's."""
-    i = args.find("/Contents/MacOS/")
+    i = args.find(".app/Contents/MacOS/")
     if i >= 0:
-        name = args[i + len("/Contents/MacOS/"):]
-        j = name.find(" -")
-        return (name[:j] if j >= 0 else name).strip() or "?"
+        # its bundle's name when the binary bears it, else the binary's first word: never what
+        # follows (his args: 'Python.app/Contents/MacOS/Python /his/script.py' gave the script)
+        bundle = args[:i].rsplit("/", 1)[-1]
+        name = args[i + len(".app/Contents/MacOS/"):]
+        if bundle and name.startswith(bundle) and name[len(bundle):len(bundle) + 1] in ("", " "):
+            return bundle
+        w = name.split(None, 1)
+        return w[0] if w else "?"
     w = args.split(None, 1)
     return os.path.basename(w[0]) if w else "?"
 
