@@ -727,18 +727,36 @@
    ]
   },
   {
-   "name": "app: an opener with no app id (a row from an older hub) keys as <plugin>-<tool>, its word still reads as that key",
+   "name": "app: two plugins sharing an app key are one app (one tab), by the key or either's word",
    "now": 1794405600000,
    "offset_min": 60,
    "rows": [
-    {"id": "old", "title": "old", "agent": "perf", "kind": "doc", "by": "perf", "new": false, "touched_ms": 1794400000000, "opener": {"plugin": "media", "tool": "open", "app_id": ""}, "app_word": "Preview"},
-    {"id": "new", "title": "new", "agent": "perf", "kind": "doc", "by": "perf", "new": false, "touched_ms": 1794400000000, "opener": {"plugin": "media", "tool": "open", "app_id": "preview"}, "app_word": "Preview"}
+    {"id": "a", "title": "a", "agent": "perf", "kind": "doc", "by": "perf", "new": false, "touched_ms": 1794400000000, "app": "tables", "app_word": "Tables"},
+    {"id": "b", "title": "b", "agent": "perf", "kind": "doc", "by": "perf", "new": false, "touched_ms": 1794400000000, "app": "tables", "app_word": "Tables Pro"},
+    {"id": "c", "title": "c", "agent": "perf", "kind": "doc", "by": "perf", "new": false, "touched_ms": 1794400000000, "app": "tables-grid", "app_word": "Grid"}
    ],
    "filter": {
-    "apps": ["media-open"]
+    "apps": ["tables pro"]
    },
    "want": [
-    "old"
+    "b"
+   ]
+  },
+  {
+   "name": "app: a shared key by the key itself keeps both plugins' rows",
+   "now": 1794405600000,
+   "offset_min": 60,
+   "rows": [
+    {"id": "a", "title": "a", "agent": "perf", "kind": "doc", "by": "perf", "new": false, "touched_ms": 1794400000000, "app": "tables", "app_word": "Tables"},
+    {"id": "b", "title": "b", "agent": "perf", "kind": "doc", "by": "perf", "new": false, "touched_ms": 1794400000000, "app": "tables", "app_word": "Tables Pro"},
+    {"id": "c", "title": "c", "agent": "perf", "kind": "doc", "by": "perf", "new": false, "touched_ms": 1794400000000, "app": "tables-grid", "app_word": "Grid"}
+   ],
+   "filter": {
+    "apps": ["tables"]
+   },
+   "want": [
+    "a",
+    "b"
    ]
   },
   {

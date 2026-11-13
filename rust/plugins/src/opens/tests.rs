@@ -171,7 +171,7 @@ fn op(tool: &str, app: &str, entries: &[(&str, OpenRank, bool)]) -> OpenerDecl {
         tool: tool.into(),
         uri: format!("ui://x/{tool}"),
         app: app.into(),
-        app_id: app_id_fallback("x", tool),
+        app_id: format!("x-{tool}"),
         entries: entries.iter().map(|(k, r, f)| Entry { keys: vec![k.to_string()], title: format!("{k} file"), rank: *r, folder: *f, icon: None }).collect(),
         makes: vec![],
         write: false,
@@ -305,10 +305,10 @@ fn the_row_says_the_matched_type() {
 }
 
 /// A1's `app_id` (architect m_63530): a slug declared beside the title;
-/// a bad or reserved one is dropped with a warning and the app keeps the
-/// fallback `<plugin>-<tool>`, never the title.
+/// a bad or reserved one is dropped with a warning; none: left for the
+/// plugin's fallback ([`fill_app_ids`]).
 #[test]
-fn an_app_id_is_a_declared_slug_else_plugin_dash_tool() {
+fn an_app_id_is_a_declared_slug_a_bad_one_dropped() {
     let tool = |id: Option<Value>| {
         let mut ui = json!({"files": [{"match": ["*.xlsx"], "title": "Excel workbook"}]});
         if let Some(id) = id {
@@ -322,9 +322,29 @@ fn an_app_id_is_a_declared_slug_else_plugin_dash_tool() {
     };
     assert_eq!(id_of(Some(json!("sheets"))), ("sheets".into(), 0));
     assert_eq!(id_of(Some(json!("pdf-2"))), ("pdf-2".into(), 0));
-    assert_eq!(id_of(None), ("office-grid".into(), 0), "none: <plugin>-<tool>, whatever the app's count");
+    assert_eq!(id_of(None), (String::new(), 0), "none: the plugin's fallback fills it");
     for bad in [json!("mac"), json!("prs"), json!("links"), json!("~views"), json!("Sheets"), json!("a b"), json!(""), json!("x".repeat(33)), json!(3)] {
-        assert_eq!(id_of(Some(bad.clone())), ("office-grid".into(), 1), "{bad}: dropped, warned, the fallback");
+        assert_eq!(id_of(Some(bad.clone())), (String::new(), 1), "{bad}: dropped, warned, the fallback fills it");
+    }
+}
+
+/// The fallback (architect m_63808, designer m_63819): a plugin's first
+/// undeclared opener in manifest order takes the plugin's id, each further
+/// one `<plugin>-<tool>`, and so does any when the plugin's id is no valid
+/// app id; a declared one stays; each undeclared one is warned; never the
+/// title.
+#[test]
+fn an_undeclared_app_id_is_the_plugins_then_plugin_dash_tool() {
+    let ids = |plugin: &str, decl: &[(&str, &str)]| {
+        let mut list: Vec<OpenerDecl> = decl.iter().map(|(t, id)| OpenerDecl { app_id: id.to_string(), ..op(t, "Some Title", &[("*.x", D, false)]) }).collect();
+        let d = fill_app_ids(plugin, &mut list);
+        (list.into_iter().map(|o| o.app_id).collect::<Vec<_>>(), d.iter().filter(|x| x.code == "plugin.opener.no_app_id").count())
+    };
+    assert_eq!(ids("tables", &[("grid", "")]), (vec!["tables".to_string()], 1), "one undeclared: the plugin's id");
+    assert_eq!(ids("tables", &[("grid", ""), ("chart", "")]), (vec!["tables".to_string(), "tables-chart".into()], 2), "two: the second <plugin>-<tool>");
+    assert_eq!(ids("tables", &[("grid", "sheets"), ("chart", "")]), (vec!["sheets".to_string(), "tables".into()], 1), "a declared one doesn't count");
+    for reserved in ["mac", "prs", "links", "~views", "My_Plugin"] {
+        assert_eq!(ids(reserved, &[("open", "")]).0, vec![format!("{reserved}-open")], "{reserved}: no valid app id, <plugin>-<tool>");
     }
 }
 
@@ -344,7 +364,8 @@ fn the_on_plugins_openers_are_gathered_static_then_servers() {
     }));
     let servers: ServerTools = [(("fake-opener".to_string(), "fake-opener".to_string()), vec![fake2]), (("gone".to_string(), "x".to_string()), vec![])].into_iter().collect();
     let (o, d) = Openers::gather(&fixtures(&[]), &servers);
-    assert!(d.is_empty(), "{d:?}");
+    // the fixtures declare no app_id: each opener is warned so (an_undeclared_app_id_…), nothing else
+    assert!(d.iter().all(|x| x.code == "plugin.opener.no_app_id"), "{d:?}");
     let got: Vec<_> = o.plugins.iter().map(|p| (p.plugin.as_str(), p.openers.iter().map(|x| x.tool.as_str()).collect::<Vec<_>>())).collect();
     assert!(o.plugins.iter().all(|p| !p.first_party), "his folder's plugins are not bise's own");
     assert_eq!(got, [("fake-claim", vec!["claim"]), ("fake-opener", vec!["fake", "open_fake2"]), ("hostile-opener", vec!["hostile"])]);
@@ -412,7 +433,7 @@ fn only_openers_that_use_documents_get_a_documents_folder() {
     .collect();
     assert_eq!(Openers::gather(&res, &ServerTools::new()).0.documents_to_make(&res), Vec::<std::path::PathBuf>::new(), "before tools/list: none");
     let (o, d) = Openers::gather(&res, &servers);
-    assert!(d.is_empty(), "{d:?}");
+    assert!(d.iter().all(|x| x.code == "plugin.opener.no_app_id"), "{d:?}");
     assert_eq!(o.documents_to_make(&res), [dir.join("documents").join("maker")]);
 
     // two openers with an icon: the plugin's is the first one's, in the

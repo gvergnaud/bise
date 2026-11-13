@@ -11,9 +11,7 @@ import { library } from '@/proto/words_library.gen';
 /** What the filter and the card read of a row's opener (bise_proto `Opener`, A3). */
 export interface AppOpener {
   readonly plugin: string;
-  /** its tool, for the id's fallback */
-  readonly tool?: string;
-  /** the app's own id, the `app:` key (A1's app_id; none: `<plugin>-<tool>`) */
+  /** the app's own id, the `app:` key (A1's app_id, else the plugin's fallback the hub fills) */
   readonly app_id?: string | null;
   /** the app's title, 'Sheets' */
   readonly app: string;
@@ -58,16 +56,15 @@ function sentence(w: string): string {
 /**
  * The app a row follows: its opener's app, else a PR's review, a link's browser, his Mac. Its id
  * is the `app:` key, stable (architect m_63490, m_63530): the opener's app id (A1's app_id, else
- * `<plugin>-<tool>`), else `prs`, `links`, `mac`, never a word a rewording changes; the hub's
+ * the plugin's fallback the hub fills), else `prs`, `links`, `mac`, never a word a rewording changes; the hub's
  * `sb artifact list --app` keys the same (artifacts_filter.rs app_of, both on
  * tests/fixtures/artifacts-filter.json). Pure.
  */
 export function appOf(a: AppRow): AppTag {
   if (a.pr != null) return PRS;
   const o = a.opener ?? null;
-  // an empty app_id (a row from an older hub): A1's fallback, Rust's app_id_fallback, pinned on
-  // both sides by the shared fixture's opener row (architect m_63779)
-  if (o !== null) return { id: o.app_id != null && o.app_id !== '' ? o.app_id : `${o.plugin}-${o.tool ?? ''}`, word: o.app };
+  // the hub always fills app_id (opens::fill_app_ids owns the fallback; architect m_63821)
+  if (o !== null) return { id: o.app_id ?? '', word: o.app };
   return isLink(a) ? LINKS : MAC;
 }
 

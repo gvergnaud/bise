@@ -82,7 +82,8 @@ pub struct OpenerDecl {
     /// plugin's name
     pub app: String,
     /// the app's own id (`sheets`), the `app:` filter's key: A1's
-    /// `dev.bise/ui.app_id`, else [`app_id_fallback`] (architect m_63530)
+    /// `dev.bise/ui.app_id`; none: empty from [`parse`], then
+    /// [`app_id_fallback`] by [`fill_app_ids`] (architect m_63808)
     pub app_id: String,
     pub entries: Vec<Entry>,
     pub makes: Vec<Make>,
@@ -358,13 +359,15 @@ pub fn parse(plugin: &str, server: &str, tool: &Value) -> (Option<OpenerDecl>, V
         return (None, diags);
     }
     let app = app.unwrap_or_else(|| plugin.to_string());
+    // none (or refused): empty here, the plugin's fallback filled once its
+    // openers are all known ([`fill_app_ids`])
     let app_id = match bise.and_then(|b| b.get("app_id")) {
-        None => app_id_fallback(plugin, name),
+        None => String::new(),
         Some(v) => match v.as_str().filter(|s| app_id_ok(s)) {
             Some(id) => id.to_string(),
             None => {
                 diags.push(invalid(plugin, name, format!("dev.bise/ui.app_id {v} must be a slug [a-z0-9-] of 1-32 characters, not mac, prs or links; dropped")));
-                app_id_fallback(plugin, name)
+                String::new()
             }
         },
     };
@@ -381,11 +384,30 @@ pub fn app_id_ok(id: &str) -> bool {
     (1..=32).contains(&id.len()) && id.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-') && !APP_IDS_RESERVED.contains(&id) && !id.starts_with('~')
 }
 
-/// An app's id when it declares none (or a bad one): `<plugin>-<tool>`,
-/// always, so a plugin that adds a second app never moves the first's
-/// key (architect m_63530). Pure.
-pub fn app_id_fallback(plugin: &str, tool: &str) -> String {
-    format!("{plugin}-{tool}")
+/// An app's id when it declares none (or a refused one; architect
+/// m_63808, designer m_63819): the plugin's first such opener in manifest
+/// order (`nth_undeclared` 0) takes the plugin's id (`app:tables`), each
+/// further one `<plugin>-<tool>`, and so does any when the plugin's id is
+/// no valid app id (reserved, `~…`, not a slug); never the title. Pure.
+pub fn app_id_fallback(plugin: &str, tool: &str, nth_undeclared: usize) -> String {
+    if nth_undeclared == 0 && app_id_ok(plugin) { plugin.to_string() } else { format!("{plugin}-{tool}") }
+}
+
+/// A plugin's openers (manifest order) given their fallback app ids
+/// ([`app_id_fallback`]), and a `plugin.opener.no_app_id` warning for each
+/// one that declares none, so its author declares it.
+pub fn fill_app_ids(plugin: &str, openers: &mut [OpenerDecl]) -> Vec<Diagnostic> {
+    let mut diags = Vec::new();
+    for (nth, o) in openers.iter_mut().filter(|o| o.app_id.is_empty()).enumerate() {
+        o.app_id = app_id_fallback(plugin, &o.tool, nth);
+        diags.push(Diagnostic {
+            code: "plugin.opener.no_app_id",
+            severity: Severity::Warning,
+            plugin: plugin.to_string(),
+            message: format!("opener {:?}: declare dev.bise/ui.app_id so app: stays put; keyed as {:?} now", o.tool, o.app_id),
+        });
+    }
+    diags
 }
 
 /// A plugin's openers from one server's tools as its `tools/list` lists
@@ -516,6 +538,7 @@ impl Openers {
                 diags.push(invalid(&p.name, &list[MAX_OPENERS].tool, format!("more than {MAX_OPENERS} openers; the rest are dropped")));
                 list.truncate(MAX_OPENERS);
             }
+            diags.extend(fill_app_ids(&p.name, &mut list));
             if !list.is_empty() {
                 let icon = list.iter().find_map(|o| o.icon.as_deref()).and_then(|i| i.strip_prefix("./")).map(|rel| p.root.join(rel));
                 plugins.push(PluginOpeners { plugin: p.name.clone(), icon, first_party: p.scope == crate::resolve::Scope::BuiltIn, openers: list });

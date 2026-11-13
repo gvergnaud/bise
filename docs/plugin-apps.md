@@ -71,8 +71,12 @@ An opener is a tool whose `_meta` has a view and a file entrypoint:
   as `Opener.app_id`. A slug `[a-z0-9-]{1,32}`; `mac`, `prs`, `links`
   (bise's keys for a PR, a link, his Mac) and any `~…` are refused with
   `plugin.opener.invalid`: the id dropped, the app kept. None or
-  refused: `<plugin>-<tool>`, always (never the plugin's name alone nor
-  the title: a second app or a retitle never moves a saved `app:`).
+  refused (architect m_63821, designer m_63819; `opens::fill_app_ids`,
+  the hub fills it, the window never derives one): the plugin's first
+  such opener in manifest order takes the plugin's id (`app:tables`),
+  each further one `<plugin>-<tool>`, and so does any when the plugin's
+  id is no valid app id (reserved, `~…`, not a slug); never the title.
+  Each one is warned (`plugin.opener.no_app_id`: declare it).
   The built-ins declare theirs (sheets, writer, slides, preview; a
   migration row's is its plugin's). Two plugins declaring one id share
   a tab, labelled by a first-party opener's title when one is

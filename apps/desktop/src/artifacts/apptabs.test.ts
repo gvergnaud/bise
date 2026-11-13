@@ -31,8 +31,7 @@ const ids = (xs: readonly Item[]) => xs.map((x) => x.a.id);
 describe('the app: token, one dimension of the bar', () => {
   it("keys an item by a stable key, never a word: the opener's app id, a PR's review, his Mac (architect m_63490, m_63530)", () => {
     expect(items.map(appKeyOf)).toEqual(['sheets', 'sheets', 'preview', 'mac', 'prs']);
-    // an app that declares no id: <plugin>-<tool>
-    expect(appKeyOf(item('x', { opener: { plugin: 'media', tool: 'open', app: 'Preview', type: '*.x', type_title: 'X' } }))).toBe('media-open');
+
   });
 
   it('OR inside (two apps), AND across (by:), quoted values, any case; a word reads as its key', () => {

@@ -13,7 +13,8 @@ const words = (tabs: readonly { word: string; n: number }[]) => tabs.map((t) => 
 describe('which app a row follows (the hub picked it, A2: the window never matches)', () => {
   it("its opener's app, keyed by the app's own id, never its plugin nor its word (architect m_63490, m_63530)", () => {
     expect(appOf(row({ opener: sheets, path: '/p/pricing.xlsx' }))).toEqual({ id: 'sheets', word: 'Sheets' });
-    expect(appOf(row({ opener: { ...sheets, app_id: null } })).id).toBe('office-grid');
+    // the hub fills the fallback (opens::fill_app_ids): the window never derives one
+    expect(appOf(row({ opener: { ...sheets, plugin: 'office', app_id: 'office' } })).id).toBe('office');
   });
 
   it("a PR is bise's review whatever its opener; a link his browser; nothing else his Mac", () => {
