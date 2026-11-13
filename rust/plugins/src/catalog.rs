@@ -179,6 +179,7 @@ fn plugin_row(i: &Inputs, p: &resolve::Plugin, names: &[(String, String, String)
         parts,
         opens,
         makes,
+        guarded: None,
     };
     // the `@` menu says what a pickable one waits on (at-plugins)
     if row.pickable {
@@ -408,6 +409,7 @@ fn connector_base(c: &ConnectorEntry, id: PluginId) -> Plugin {
         logins: Vec::new(),
         opens: Vec::new(),
         makes: Vec::new(),
+        guarded: None,
     }
 }
 
@@ -422,9 +424,15 @@ fn folder_of(s: &SkillEntry) -> Option<PathBuf> {
 fn skills_row(i: &Inputs, scope: SkillsScope) -> Option<Plugin> {
     let id = PluginId::Skills { scope };
     let mine: Vec<&SkillEntry> = i.skills.iter().filter(|s| s.owner == id).collect();
-    let unread: Vec<&crate::skills::Guarded> = i.guarded.iter().filter(|g| g.owner == id && !g.read).collect();
-    let folder = mine.first().and_then(|s| folder_of(s)).or_else(|| unread.first()?.path.parent()?.parent().map(Path::to_path_buf));
-    if mine.is_empty() && unread.is_empty() {
+    let unread: Vec<&crate::skills::Guarded> = i.guarded.iter().filter(|g| g.owner == id && !g.read && !g.whole).collect();
+    // the folder itself links into a guarded one: not listed, the row says why
+    let whole = i.guarded.iter().find(|g| g.owner == id && g.whole);
+    let folder = mine
+        .first()
+        .and_then(|s| folder_of(s))
+        .or_else(|| unread.first()?.path.parent()?.parent().map(Path::to_path_buf))
+        .or_else(|| whole.map(|g| g.path.clone()));
+    if mine.is_empty() && unread.is_empty() && whole.is_none() {
         return None;
     }
     // <project>/.agents/skills: the project is two folders up
@@ -482,6 +490,7 @@ fn skills_row(i: &Inputs, scope: SkillsScope) -> Option<Plugin> {
         logins: Vec::new(),
         opens: Vec::new(),
         makes: Vec::new(),
+        guarded: whole.map(|g| PartGuarded { folder: g.folder.clone(), read: false }),
     })
 }
 

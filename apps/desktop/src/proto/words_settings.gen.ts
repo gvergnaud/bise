@@ -1732,6 +1732,8 @@ export const settings = {
   plugins_read_guarded: "Read skills in Documents, Desktop or Downloads",
   /** Plugins list: the switch's second line, the skills linked in and where */
   plugins_guarded_count: (a: { n: number; folders: string | number }): string => a.n === 1 ? String(a.n) + " skill is linked into " + String(a.folders) : String(a.n) + " skills are linked into " + String(a.folders),
+  /** Plugins list: the switch's line for a skills folder that is itself a link into a guarded folder, not listed while off (architect m_64257) */
+  plugins_guarded_roots: (a: { n: number; folders: string | number }): string => a.n === 1 ? "a skills folder is in " + String(a.folders) : String(a.n) + " skills folders are in " + String(a.folders),
   /** Plugins list: the last two folders of that line (`Documents and Desktop`) */
   plugins_and: (a: { a: string | number; b: string | number }): string => String(a.a) + " and " + String(a.b),
   /** Plugins list: bise's own skills (`skills:bise`, always on) */

@@ -35,6 +35,7 @@ fn row(id: &str, kind: PluginKind, scope: PluginScope, state: PluginState, on: b
         logins: Vec::new(),
         opens: Vec::new(),
         makes: Vec::new(),
+        guarded: None,
     }
 }
 

@@ -46,6 +46,7 @@ fn plugin(id: &str, kind: PluginKind, scope: Scope, what: &str, parts: Vec<Plugi
         needs_node: false,
         opens: vec![],
         makes: vec![],
+        guarded: None,
     }
 }
 

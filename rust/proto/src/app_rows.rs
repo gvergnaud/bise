@@ -276,6 +276,11 @@ pub struct Plugin {
     /// what its apps make (A1's `makes`: the launcher's New ›)
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub makes: Vec<PluginMake>,
+    /// a skills folder that is itself a link into a folder macOS guards,
+    /// not listed while his switch is off (none of its skills is in
+    /// `parts`): which folder (skills-scan-tcc, architect m_64257)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub guarded: Option<PartGuarded>,
 }
 
 /// One of a plugin's settings (`bend_plugins::resolve::Setting`): a field

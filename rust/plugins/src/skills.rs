@@ -100,6 +100,10 @@ pub struct Guarded {
     pub folder: String,
     /// read by this scan ([`Mode::Read`] and the read worked)
     pub read: bool,
+    /// a whole skills folder linked in ([`Mode::List`]): `path` is the
+    /// folder, `name` empty; none of its skills is listed, so this entry
+    /// says why they are not there (architect m_64257)
+    pub whole: bool,
 }
 
 /// A loose skill folder and the plugin it is.
@@ -332,20 +336,29 @@ fn read(file: &Path) -> Option<(String, PathBuf)> {
     Some((String::from_utf8_lossy(&buf).into_owned(), real))
 }
 
-/// The `<dir>/SKILL.md` of each root's entries, with the root's index.
-/// In [`Mode::List`], a root reached by a link into a guarded folder is
-/// not listed (nothing of it is shown: a listing there is a stat).
-fn skill_files(roots: &[Root], deadline: Instant, mode: &Mode) -> (Vec<(usize, PathBuf)>, Vec<PathBuf>) {
-    let dirs: Vec<PathBuf> = roots.iter().map(|r| r.dir.clone()).collect();
-    let m = mode.clone();
-    let (listed, stuck) = timed(dirs, deadline, move |d| if guard(&m, d).is_some() { Vec::new() } else { list(d) });
+/// The `<dir>/SKILL.md` of each root's entries, with the root's index,
+/// and the roots not listed. In [`Mode::List`], a root reached by a link
+/// into a guarded folder is not listed (a listing there is a read): it
+/// comes back with that folder's name instead.
+fn skill_files(roots: &[Root], deadline: Instant, mode: &Mode) -> (Vec<(usize, PathBuf)>, Vec<(usize, String)>, Vec<PathBuf>) {
+    let guarded: Vec<(usize, String)> = roots
+        .iter()
+        .enumerate()
+        .filter_map(|(i, r)| {
+            let into = guard(mode, &r.dir)?;
+            let Mode::List { home } = mode else { return None };
+            Some((i, bise_home::guarded::label(Some(home), &into.folder)))
+        })
+        .collect();
+    let dirs: Vec<PathBuf> = roots.iter().enumerate().filter(|(i, _)| !guarded.iter().any(|(g, _)| g == i)).map(|(_, r)| r.dir.clone()).collect();
+    let (listed, stuck) = timed(dirs, deadline, list);
     let mut files = Vec::new();
     for (i, r) in roots.iter().enumerate() {
         for (_, entries) in listed.iter().filter(|(d, _)| *d == r.dir) {
             files.extend(entries.iter().map(|e| (i, e.join("SKILL.md"))));
         }
     }
-    (files, stuck)
+    (files, guarded, stuck)
 }
 
 /// Where `file`'s link leads into a guarded folder, in [`Mode::List`]
@@ -382,12 +395,17 @@ fn look(mode: &Mode, home: Option<&Path>, file: &Path) -> (Option<String>, Found
 /// is read once. `home`: his home, to name the skills linked into a
 /// guarded folder in [`Mode::Read`] too (none: not named).
 pub fn scan(roots: &[Root], limit: Duration, mode: &Mode, home: Option<&Path>) -> Scan {
-    let (files, mut stuck) = skill_files(roots, Instant::now() + limit, mode);
+    let (files, roots_in, mut stuck) = skill_files(roots, Instant::now() + limit, mode);
     let paths: Vec<PathBuf> = files.iter().map(|(_, f)| f.clone()).collect();
     let (m, h) = (mode.clone(), home.map(Path::to_path_buf));
     let (found, more) = timed(paths, Instant::now() + limit, move |f| look(&m, h.as_deref(), f));
     stuck.extend(more);
     let mut out = Scan::default();
+    for (i, folder) in roots_in {
+        if !out.guarded.iter().any(|g| g.whole && g.path == roots[i].dir) {
+            out.guarded.push(Guarded { name: String::new(), path: roots[i].dir.clone(), owner: roots[i].id(), folder, read: false, whole: true });
+        }
+    }
     let mut seen = HashSet::new();
     for (i, f) in &files {
         if !seen.insert(f) {
@@ -403,12 +421,12 @@ pub fn scan(roots: &[Root], limit: Duration, mode: &Mode, home: Option<&Path>) -
                     continue;
                 }
                 out.listed.push(SkillEntry { name: name.clone(), description: unread_description(folder), path: f.clone(), owner: owner.clone() });
-                out.guarded.push(Guarded { name, path: f.clone(), owner, folder: folder.clone(), read: false });
+                out.guarded.push(Guarded { name, path: f.clone(), owner, folder: folder.clone(), read: false, whole: false });
             }
             Found::Read(read) => {
                 let skill = read.as_ref().and_then(|(text, real)| parse(text).map(|(name, description)| SkillEntry { name, description, path: real.clone(), owner: owner.clone() }));
                 if let Some(folder) = linked {
-                    out.guarded.push(Guarded { name: skill.as_ref().map_or_else(dir_name, |s| s.name.clone()), path: f.clone(), owner, folder: folder.clone(), read: skill.is_some() });
+                    out.guarded.push(Guarded { name: skill.as_ref().map_or_else(dir_name, |s| s.name.clone()), path: f.clone(), owner, folder: folder.clone(), read: skill.is_some(), whole: false });
                 }
                 if let Some(s) = skill {
                     out.listed.push(s.clone());
@@ -531,7 +549,12 @@ pub fn fingerprint(roots: &[Root], st: &StateV2, limit: Duration, mode: &Mode) -
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
     matches!(mode, Mode::Read).hash(&mut h);
-    let (files, mut stuck) = skill_files(roots, Instant::now() + limit, mode);
+    let (files, roots_in, mut stuck) = skill_files(roots, Instant::now() + limit, mode);
+    // a root linked into a guarded folder counts by its link's own lstat
+    for (i, _) in &roots_in {
+        roots[*i].dir.hash(&mut h);
+        guard(mode, &roots[*i].dir).and_then(|into| link_stat(&into.link)).hash(&mut h);
+    }
     let paths: Vec<PathBuf> = files.iter().map(|(_, f)| f.clone()).collect();
     let m = mode.clone();
     let (stats, more) = timed(paths, Instant::now() + limit, move |f| match guard(&m, f) {

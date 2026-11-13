@@ -255,7 +255,13 @@ opens?: Array<PluginOpens>,
 /**
  * what its apps make (A1's `makes`: the launcher's New ›)
  */
-makes?: Array<PluginMake>, };
+makes?: Array<PluginMake>, 
+/**
+ * a skills folder that is itself a link into a folder macOS guards,
+ * not listed while his switch is off (none of its skills is in
+ * `parts`): which folder (skills-scan-tcc, architect m_64257)
+ */
+guarded?: PartGuarded | null, };
 
 /**
  * One of a plugin's settings (`bend_plugins::resolve::Setting`): a field

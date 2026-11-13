@@ -9,18 +9,39 @@ import { Act, Toggle } from '@/ds';
 import { settings } from '@/proto/words.gen';
 import { openFilesSettings } from '@/settings/picker';
 
-/** The skills linked into a guarded folder, and those folders in first-seen order. Pure. */
-export function guardedOf(rows: readonly Plugin[]): { n: number; folders: string[] } {
-  const folders: string[] = [];
-  let n = 0;
+export interface Linked {
+  /** the skills linked into a guarded folder, and those folders in first-seen order */
+  n: number;
+  folders: string[];
+  /** the skills folders that are themselves links into one (not listed while off), and those folders */
+  roots: number;
+  rootFolders: string[];
+}
+
+/** What links into a guarded folder, from the rows. Pure. */
+export function guardedOf(rows: readonly Plugin[]): Linked {
+  const out: Linked = { n: 0, folders: [], roots: 0, rootFolders: [] };
+  const add = (list: string[], f: string) => { if (!list.includes(f)) list.push(f); };
   for (const p of rows) {
+    if (p.guarded != null) {
+      out.roots += 1;
+      add(out.rootFolders, p.guarded.folder);
+    }
     for (const x of p.parts ?? []) {
       if (x.kind !== 'skill' || x.guarded == null) continue;
-      n += 1;
-      if (!folders.includes(x.guarded.folder)) folders.push(x.guarded.folder);
+      out.n += 1;
+      add(out.folders, x.guarded.folder);
     }
   }
-  return { n, folders };
+  return out;
+}
+
+/** The switch's second line: the skills linked in, then the folders that are (designer m_64245). Pure. */
+export function linkedLine(l: Linked): string {
+  const parts: string[] = [];
+  if (l.n > 0) parts.push(settings.plugins_guarded_count({ n: l.n, folders: folderList(l.folders) }));
+  if (l.roots > 0) parts.push(settings.plugins_guarded_roots({ n: l.roots, folders: folderList(l.rootFolders) }));
+  return parts.join(' · ');
 }
 
 /** `Documents`, `Documents and Desktop`, `Documents, Desktop and Downloads`. Pure. */
@@ -46,8 +67,8 @@ export interface GuardedSwitchProps {
 }
 
 export function GuardedSwitch({ rows, on, refused, project, send, openSettings = openFilesSettings }: GuardedSwitchProps) {
-  const { n, folders } = guardedOf(rows);
-  if (n === 0 && refused.length === 0) return null;
+  const linked = guardedOf(rows);
+  if (linked.n === 0 && linked.roots === 0 && refused.length === 0) return null;
   const at = project === undefined ? {} : { project };
   return (
     <div className="plg-row plg-guarded" data-testid="plugins.guarded">
@@ -59,7 +80,7 @@ export function GuardedSwitch({ rows, on, refused, project, send, openSettings =
             <Act onClick={openSettings} testId="plugins.guarded.settings">{settings.onb_open_settings}</Act>
           </span>
         ) : (
-          <span className="plg-row-what" data-testid="plugins.guarded.count">{settings.plugins_guarded_count({ n, folders: folderList(folders) })}</span>
+          <span className="plg-row-what" data-testid="plugins.guarded.count">{linkedLine(linked)}</span>
         )}
       </span>
       <span className="plg-row-end">

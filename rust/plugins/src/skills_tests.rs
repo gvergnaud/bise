@@ -272,7 +272,7 @@ fn list_mode_never_stats_or_reads_through_a_link_into_documents() {
     let rs = roots(Some(&home), &t.0.join("ws"), None, BiseSkills::None);
     let s = scan(&rs, LIMIT, &mode, Some(&home));
     assert_eq!(names(&s.skills), ["plain"], "x is not read");
-    assert_eq!(s.guarded, [Guarded { name: "x".into(), path: link.clone(), owner: PluginId::Skills { scope: SkillsScope::Vibe }, folder: "Documents".into(), read: false }]);
+    assert_eq!(s.guarded, [Guarded { name: "x".into(), path: link.clone(), owner: PluginId::Skills { scope: SkillsScope::Vibe }, folder: "Documents".into(), read: false, whole: false }]);
     assert_eq!(names(&s.listed), ["plain", "x"]);
     assert_eq!(s.listed[1].description, unread_description("Documents"));
     assert_eq!(s.listed[1].path, link);
@@ -307,19 +307,30 @@ fn read_mode_reads_through_the_link_and_names_it() {
     assert_ne!(fingerprint(&rs, &st, LIMIT, &mode_for(None, &home)).0, before, "the switch itself moves it");
 }
 
-/// A whole skills folder linked into Documents is not listed while off.
+/// A whole skills folder linked into Documents is not listed while off:
+/// one guarded entry says why its skills are not there (architect
+/// m_64257), and no listing happens inside it.
 #[test]
-fn a_root_linked_into_documents_is_not_listed() {
+fn a_root_linked_into_documents_is_one_guarded_entry() {
     let t = Tmp::new("root");
     let home = t.0.join("home");
-    skill(&home.join("Documents/skills"), "z", "z", "zed");
+    skill(&home.join("Documents/x"), "z", "z", "zed");
     std::fs::create_dir_all(home.join(".agents")).unwrap();
-    std::os::unix::fs::symlink(home.join("Documents/skills"), home.join(".agents/skills")).unwrap();
+    std::os::unix::fs::symlink(home.join("Documents/x"), home.join(".agents/skills")).unwrap();
     let rs = roots(Some(&home), &t.0.join("ws"), None, BiseSkills::None);
-    let s = scan(&rs, LIMIT, &Mode::List { home: home.clone() }, Some(&home));
+    let list = Mode::List { home: home.clone() };
+    let s = scan(&rs, LIMIT, &list, Some(&home));
     assert!(s.skills.is_empty() && s.listed.is_empty());
-    assert_eq!(was_touched(&home.join(".agents/skills")), Vec::<PathBuf>::new());
-    assert_eq!(names(&scan(&rs, LIMIT, &Mode::Read, Some(&home)).skills), ["z"]);
+    let root = Guarded { name: String::new(), path: home.join(".agents/skills"), owner: PluginId::Skills { scope: SkillsScope::Personal }, folder: "Documents".into(), read: false, whole: true };
+    assert_eq!(s.guarded, [root]);
+    let st = StateV2::default();
+    let fp = fingerprint(&rs, &st, LIMIT, &list).0;
+    std::fs::write(home.join("Documents/x/z/SKILL.md"), "name: z\ndescription: edited\n").unwrap();
+    assert_eq!(fingerprint(&rs, &st, LIMIT, &list).0, fp);
+    assert_eq!(was_touched(&home.join(".agents/skills")), Vec::<PathBuf>::new(), "no listing inside");
+    let read = scan(&rs, LIMIT, &Mode::Read, Some(&home));
+    assert_eq!(names(&read.skills), ["z"]);
+    assert!(read.guarded.iter().all(|g| !g.whole && g.read), "on: its skills read, each named as linked");
 }
 
 /// A throwaway home (`$BISE_HOME` elsewhere) never reads his own folders.

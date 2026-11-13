@@ -3801,6 +3801,14 @@
     "one": "{n} skill is linked into {folders}",
     "text": "{n} skills are linked into {folders}"
   },
+  "settings.plugins_guarded_roots": {
+    "args": [
+      "n",
+      "folders"
+    ],
+    "one": "a skills folder is in {folders}",
+    "text": "{n} skills folders are in {folders}"
+  },
   "settings.plugins_hint_connect_again": {
     "args": [],
     "one": null,

@@ -249,6 +249,7 @@ fn setup_home(t: &mut T, home_dir: Option<PathBuf>) -> Rc<RefCell<World>> {
                 parts,
                 opens: vec![],
                 makes: vec![],
+                guarded: None,
             };
             let notion = Plugin { id: "mistral:notion".into(), name: "mistral:notion".into(), kind: PluginKind::Mistral, state: PluginState::Available, on: false, ..p("notion", false, vec![]) };
             vec![p("linear", true, vec![login("linear")]), p("computer", !off, vec![]), notion]

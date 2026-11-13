@@ -401,3 +401,27 @@ fn a_plugins_settings_say_whether_they_are_set_never_their_value() {
     // no secrets dir: only the environment counts
     assert!(settings_of(p, None).iter().all(|s| !s.set));
 }
+
+/// A skills folder that links into Documents, not listed while his
+/// switch is off, still has its row, which says where (architect
+/// m_64257); an unread skill is a part named by its folder.
+#[test]
+fn a_guarded_skills_folder_and_an_unread_skill_show_with_where() {
+    use crate::skills::Guarded;
+    let t = tmp();
+    let roots = Roots { builtin: Some(t.0.join("builtin")), user: Some(t.0.join("user")), ..Roots::for_test(&t.0) };
+    let res = resolve::resolve(&roots);
+    let (cat, st, grants) = (catalog(), StateV2::default(), crate::state::Grants::new());
+    let guarded = [
+        Guarded { name: String::new(), path: t.0.join("home/.agents/skills"), owner: PluginId::Skills { scope: SkillsScope::Personal }, folder: "Documents".into(), read: false, whole: true },
+        Guarded { name: "grill-me".into(), path: t.0.join("home/.vibe/skills/grill-me/SKILL.md"), owner: PluginId::Skills { scope: SkillsScope::Vibe }, folder: "Documents".into(), read: false, whole: false },
+    ];
+    let rs = rows(&Inputs { resolution: &res, catalog: &cat, skills: &[], guarded: &guarded, state: &st, grants: &grants, status_dir: None, oauth_dir: None, pending_logins: &[], secrets_dir: None });
+    let personal = row(&rs, "skills:personal");
+    assert!(personal.parts.is_empty());
+    assert_eq!(personal.guarded, Some(PartGuarded { folder: "Documents".into(), read: false }));
+    let vibe = row(&rs, "skills:vibe");
+    let g = part(vibe, "skills:vibe#skill:grill-me");
+    assert_eq!((g.what.as_deref(), g.guarded.clone()), (None, Some(PartGuarded { folder: "Documents".into(), read: false })));
+    assert_eq!(g.path.as_deref(), Some(t.0.join("home/.vibe/skills/grill-me/SKILL.md").to_str().unwrap()), "his click reads that file");
+}
