@@ -25,6 +25,7 @@ The release body drops that line (desktop_feed.notes_from_tag_message). Pure par
 throwaway repo with a fake nightly: tests/desktop_tag_test.py.
 """
 import datetime
+import json
 import os
 import re
 import subprocess
@@ -163,6 +164,38 @@ def judge_checks(run, known):
         raise TagError("the desktop checks (%s): %s" % (run["when"], e))
 
 
+def cargo_words(cmd):
+    """A cargo command's words that make its artifact: '-q' and '--offline' dropped. Pure."""
+    return [w for w in (cmd or "").split() if w not in ("-q", "--offline")]
+
+
+def bise_match(cand, key, script_text):
+    """The candidate's packed bise when it stands for this tree's (plan A step 5): cand.json's
+    build_key equal to `key` (reusable: never dirty) and its bise_cargo equal to tree_bise.sh's own
+    cargo command; else None. Pure but for the bise's existence."""
+    import build_key  # noqa: PLC0415
+    m = re.search(r"cargo build[^)\n]*", script_text or "")
+    if not cand or not m or not build_key.reusable(key) or cand.get("build_key") != key:
+        return None
+    if cargo_words(cand.get("bise_cargo")) != cargo_words(m.group(0).split(">")[0]):
+        return None
+    b = cand.get("bise")
+    return b if b and os.path.isfile(b) else None
+
+
+def candidate_bise(repo, env, script_text):
+    """This sha's candidate (desktop_try's desktop-cand/<sha12>/cand.json) and bise_match on it."""
+    try:
+        import build_key  # noqa: PLC0415
+        import desktop_try  # noqa: PLC0415
+        sha = git("rev-parse", "HEAD", repo=repo)
+        c = desktop_try.cand_paths(desktop_try.try_paths(env), sha)
+        cand = json.load(open(c["json"]))
+        return bise_match(cand, build_key.build_key(repo, sha, env), script_text)
+    except (OSError, ValueError, TagError, ImportError):
+        return None
+
+
 def tree_bise(bh, repo, env):
     """The real-core checks' world runs this tree's own bise, as in the nightly (nightly_gate.sh's
     desktop-checks step): scripts/tree_bise.sh builds it in a heavy slot (target beside the tree,
@@ -172,6 +205,13 @@ def tree_bise(bh, repo, env):
     or why the build failed ('tree_bise.sh exit N'): the caller then runs no checks."""
     script = os.path.join(repo, "scripts", "tree_bise.sh")
     if env.get("QA_BISE") or env.get("DESKTOP_TAG_CHECKS") or not os.path.isfile(script):
+        return None
+    # one app build per sha (plan A step 5, architect m_63479): this sha's candidate packed the same
+    # bise (same key, same cargo command): taken, no second build
+    got = candidate_bise(repo, env, read(script))
+    if got:
+        say("the real-core world's bise: the candidate's of this sha (%s), no second build" % got)
+        env["QA_BISE"], env["AMBIENT_QA_APP_ROOT"] = got, repo
         return None
     target = env.get("CARGO_TARGET_DIR") or os.path.join(os.path.dirname(repo), "target")
     os.makedirs(target, exist_ok=True)

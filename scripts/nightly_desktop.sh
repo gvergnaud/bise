@@ -176,6 +176,14 @@ for s in "${steps[@]}"; do
       else as_he_does full; fi ;;
     land)
       if [ "$land_specs" = checks ]; then
+        # one app build per sha (release-speed plan A step 5, architect m_63479): the candidate's vite
+        # build of this sha in the same mode proves what this build-only check proves; its key
+        # (desktop_try.build_key) must match this tree's, never a dirty one
+        ck="$(jq -r '.build_key // empty' "$cdir/cand.json" 2>/dev/null)"
+        if [ -n "$app" ] && [ -n "$ck" ] && [ "$ck" = "$(cd "$here" && python3 -B scripts/build_key.py "$sha" 2>/dev/null)" ]; then
+          record land green "built once: the candidate's build of this sha ($ck); test:land's specs run in the release's desktop checks"
+          continue
+        fi
         { deps && ( cd "$here/apps/desktop" && "$pnpm" build ); } >"$out/land.log" 2>&1; rc=$?
         if [ $rc = 0 ]; then record land green "pnpm build; test:land's specs run in the release's desktop checks"
         else reds+=("desktop/build"); record land red "pnpm build exit $rc, $out/land.log"; fi

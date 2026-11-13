@@ -150,7 +150,7 @@ def build_script(paths, sign_dir=None, out=None, root=None, repo=REPO, name=APP_
     desktop = os.path.join(repo, "apps", "desktop")
     lines = ["set -euo pipefail",
              "export CARGO_TARGET_DIR=%s CARGO_INCREMENTAL=0" % q(paths["target"]),
-             "cd %s/rust && cargo build -p bend-harness" % q(repo),
+             "cd %s/rust && %s" % (q(repo), BISE_CARGO),
              "cd %s && scripts/bins.sh repl-live repl-scripted sb-core" % q(repo),
              "export MACOSX_DEPLOYMENT_TARGET=\"$(scripts/bins.sh macos-target)\"",
              "mkdir -p %s" % q(os.path.dirname(paths["helper"])),
@@ -182,6 +182,11 @@ def root_path(paths, stamp):
 def stamp_path(paths):
     """The try build's stamp, next to its native helper in his build dir."""
     return os.path.join(os.path.dirname(paths["helper"]), "try.stamp")
+
+
+# one app build per sha (release-speed plan A step 5): the key, its mode env and the bise's cargo
+# command, in their own module (nightly_desktop.sh calls it alone)
+from build_key import BISE_CARGO, BUILD_MODE_ENV, PACK_ONLY_ENV, build_key, reusable  # noqa: E402,F401
 
 
 def build_stamp(env, paths, sign, repo=REPO):
@@ -513,6 +518,10 @@ def candidate(env, paths, sha, repo=REPO, sign=None):
     if not cand_built(c):
         raise TryError("no packed app with id %s, or no root, in %s after the build (id: %s)" % (CAND_ID, c["dir"], bundle_id(c["app"])))
     info["built_ms"] = int(time.time() * 1000)
+    # what it was built from (build_key): a release's land step and checks take this build when theirs
+    # matches; and the cargo command of its packed bise (tree_bise.sh takes it only for its own)
+    info["build_key"] = build_key(c["src"], sha, env)
+    info["bise_cargo"] = BISE_CARGO
     with open(c["json"] + ".tmp", "w") as f:
         json.dump(info, f, indent=1)
     os.replace(c["json"] + ".tmp", c["json"])

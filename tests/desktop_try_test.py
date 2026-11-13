@@ -865,6 +865,44 @@ def repack_reads_its_config():
         check(r.returncode != 0 and "tray-badge.node" in r.stderr, "the bundle's own helper path, its badge apart, still fails: %s" % r.stderr)
 
 
+def build_key_cases():
+    """One app build per sha (release-speed plan A step 5, architect m_63479): build_key is the sha,
+    node, pnpm and the build's mode; a dirty tree's never stands; the build config reads no env the
+    key doesn't cover."""
+    import re
+    with tempfile.TemporaryDirectory() as d:
+        g = lambda *a: subprocess.run(["git", "-C", d, *a], capture_output=True, text=True, check=True).stdout.strip()  # noqa: E731
+        g("init", "-q")
+        g("config", "user.email", "t@t")
+        g("config", "user.name", "t")
+        g("config", "commit.gpgsign", "false")
+        open(os.path.join(d, "f"), "w").write("1\n")
+        g("add", "f")
+        g("commit", "-q", "-m", "one")
+        sha = g("rev-parse", "HEAD")
+        k = T.build_key(d, sha, env=dict(os.environ))
+        check(k is not None and k.startswith(sha[:12] + " node") and "mode[BISE_DESKTOP_SOURCEMAP=]" in k and T.reusable(k),
+              "build_key: the sha, node, pnpm and the mode: %r" % k)
+        check(T.build_key(d, sha, env=dict(os.environ)) == k, "build_key: stable for the same sha and tools")
+        k2 = T.build_key(d, sha, env=dict(os.environ, BISE_DESKTOP_SOURCEMAP="1"))
+        check(k2 != k and "BISE_DESKTOP_SOURCEMAP=1" in k2, "build_key: another mode (a sourcemap build) is another key")
+        open(os.path.join(d, "f"), "w").write("2\n")
+        kd = T.build_key(d, sha, env=dict(os.environ))
+        check(kd.endswith(" dirty") and not T.reusable(kd), "build_key: a dirty tree says so, never reused: %r" % kd)
+        check(T.build_key(d, "0" * 40, env=dict(os.environ)) is None, "build_key: no such sha, None")
+    # the guard: every process.env name the vite config or electron-builder reads is in the key's mode
+    # (the vite config's must be) or a pack-only one, so a new knob can't share a key unseen
+    desk = os.path.join(HERE, "..", "apps", "desktop")
+    pat = re.compile(r"process\.env\[['\"]([A-Z0-9_]+)['\"]\]|process\.env\.([A-Z0-9_]+)|need\(['\"]([A-Z0-9_]+)['\"]\)")
+    for f, allowed in (("electron.vite.config.ts", T.BUILD_MODE_ENV), ("electron-builder.mjs", T.BUILD_MODE_ENV + T.PACK_ONLY_ENV)):
+        text = open(os.path.join(desk, f)).read()
+        names = {a or b or c for a, b, c in pat.findall(text)}
+        check(names and not (names - set(allowed)), "%s reads only env build_key covers: %s" % (f, sorted(names - set(allowed)) or "ok"))
+        check("process.env[" not in re.sub(r"process\.env\[['\"][A-Z0-9_]+['\"]\]|process\.env\[name\]", "", text),
+              "%s reads no env by a computed name but need()'s" % f)
+    check(T.BISE_CARGO in T.build_script(T.try_paths({"HOME": "/h"}), None, repo="/r"), "the candidate's bise is built by BISE_CARGO")
+
+
 def cand_users():
     """promote-lock: cand_lock.users(dir) finds a process running from under a candidate dir (a copy
     of /bin/sleep there), by the given or the resolved path, and nothing once it ended."""
@@ -981,6 +1019,7 @@ if __name__ == "__main__":
     candidate_then_promote()
     repack_reads_its_config()
     cand_users()
+    build_key_cases()
     if "--pure" not in sys.argv:
         hook_keeps_pid()
         integration()

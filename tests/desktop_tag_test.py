@@ -77,6 +77,23 @@ def raises(fn, words):
 def pure():
     tsv = "w1\taaa\tred\t/o1\nw2\tbbb\tgreen\t/o2\nw3\taaa\tgreen\t/o3\nbad line\n"
     check(T.last_run(tsv, "aaa") == {"when": "w3", "verdict": "green", "out": "/o3", "reuse": ""}, "last_run: the last line of that sha")
+    # one app build per sha (plan A step 5, architect m_63479): the candidate's packed bise stands for
+    # tree_bise's only with the same key (never dirty) AND the same cargo command
+    with tempfile.TemporaryDirectory() as d:
+        b = os.path.join(d, "bise")
+        open(b, "w").close()
+        script = 'if ! (cd "$here/rust" && CARGO_TARGET_DIR="$t" cargo build --offline -q -p bend-harness) >&2; then'
+        k = "abc123456789 node22 pnpm10 mode[BISE_DESKTOP_SOURCEMAP=]"
+        cand = {"build_key": k, "bise_cargo": "cargo build -p bend-harness", "bise": b}
+        check(T.bise_match(cand, k, script) == b, "bise_match: same key, same cargo command: the candidate's bise")
+        check(T.bise_match(cand, k.replace("node22", "node24"), script) is None, "bise_match: another key (node): a build")
+        check(T.bise_match(dict(cand, build_key=k + " dirty"), k + " dirty", script) is None, "bise_match: a dirty key never stands")
+        check(T.bise_match(dict(cand, bise_cargo="cargo build --release -p bend-harness"), k, script) is None,
+              "bise_match: a release-profile candidate bise is never the debug QA bise")
+        check(T.bise_match(dict(cand, bise_cargo="cargo build -p bend-harness --features x"), k, script) is None,
+              "bise_match: another feature set: a build")
+        check(T.bise_match({"build_key": k, "bise": b}, k, script) is None, "bise_match: no cargo command recorded (an older candidate): a build")
+        check(T.bise_match(dict(cand, bise=os.path.join(d, "gone")), k, script) is None, "bise_match: no bise file: a build")
     # a recut's reused line (plan A step 8): read as the sha's run, never by the full check after the tag
     rtsv = tsv + "w4\tccc\tgreen\t/o3\tby-reuse=aaa\n"
     check(T.last_run(rtsv, "ccc") == {"when": "w4", "verdict": "green", "out": "/o3", "reuse": "aaa"}, "last_run: a by-reuse line names R")

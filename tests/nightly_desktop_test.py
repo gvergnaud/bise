@@ -29,7 +29,7 @@ echo "try $*" >> "$FAKE_LOG"
 sha=$2; d="$FAKE_CAND_DIR/${sha:0:12}"
 [ -n "${FAKE_BUILT_BEFORE:-}" ] && echo "bise try: candidate ${sha:0:8} is built: $d/app"
 [ "${FAKE_TRY_RC:-0}" = 0 ] || { echo "cargo: error"; exit 1; }
-mkdir -p "$d/app"; echo '{}' > "$d/cand.json"
+mkdir -p "$d/app"; echo "{${FAKE_CAND_KEY:+\\"build_key\\": \\"$FAKE_CAND_KEY\\"}}" > "$d/cand.json"
 # the clock moves past the end while it builds
 [ -n "${FAKE_TRY_NOW:-}" ] && echo "$FAKE_TRY_NOW" > "$NIGHTLY_DESKTOP_NOW"
 echo "{\\"sha\\": \\"$sha\\", \\"app\\": \\"$d/app\\", \\"dir\\": \\"$d\\"}"
@@ -99,7 +99,7 @@ def main():
         repo, home = os.path.join(t, "harness"), os.path.join(t, "home")
         for d in (("apps", "desktop", "node_modules", "@playwright", "test"), ("apps", "desktop", "node_modules", "electron", "dist", "Electron.app"), ("scripts",), ("tests",)):
             os.makedirs(os.path.join(repo, *d))
-        for f in ("nightly_desktop.sh", "cand_lock.py"):
+        for f in ("nightly_desktop.sh", "cand_lock.py", "build_key.py"):
             shutil.copy(os.path.join(ROOT, "scripts", f), os.path.join(repo, "scripts"))
         for f in ("known_reds.py", "known_reds.txt"):
             shutil.copy(os.path.join(ROOT, "tests", f), os.path.join(repo, "tests"))
@@ -255,6 +255,19 @@ def main():
         check("STEP land: green (pnpm build; test:land's specs run in the release's desktop checks)" in o, "release land: why " + o)
         rc, o, calls = run(NIGHTLY_DESKTOP_LAND_SPECS="checks", FAKE_BUILD_RED="1")
         check(rc == 1 and facts()[0] == ["desktop/build"] and facts()[1].get("land") == "red", "release land: build red %s %s" % (facts(), o))
+        # one app build per sha (plan A step 5, architect m_63479): the candidate built this sha with
+        # this tree's key: no second build; another key (or none): the build as before
+        sys.path.insert(0, os.path.join(ROOT, "scripts"))
+        import build_key as BK
+        key = BK.build_key(repo, sha, env=dict(os.environ, HOME=home))
+        rc, o, calls = run(NIGHTLY_DESKTOP_LAND_SPECS="checks", FAKE_CAND_KEY=key)
+        if BK.reusable(key):
+            check(rc == 0 and not [c for c in calls if c.startswith("pnpm")] and "STEP land: green (built once: the candidate's build of this sha (%s)" % key in o,
+                  "release land: the candidate's build of the same key stands: %s %s" % (calls, o[-300:]))
+        else:
+            print("note: no reusable key here (%r): the skip case not run" % key)
+        rc, o, calls = run(NIGHTLY_DESKTOP_LAND_SPECS="checks", FAKE_CAND_KEY="0123456789ab node0 pnpm0 mode[]")
+        check(rc == 0 and [c for c in calls if c.startswith("pnpm")] == ["pnpm build"], "release land: another key: built again %s" % calls)
 
         # a candidate built before (another agent's) is kept
         rc, o, _ = run(FAKE_BUILT_BEFORE="1")
