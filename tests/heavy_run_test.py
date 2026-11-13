@@ -4,6 +4,7 @@ land check, the rest, --low), then first come first served; a dead waiter's
 ticket blocks nobody; heavy.log gets a start and an end line; --install puts
 the script in ~/.bise/run. Runs in a temp HOME with one slot (HEAVY_SLOTS=1),
 ~15 s."""
+import faulthandler
 import json
 import os
 import shlex
@@ -11,6 +12,11 @@ import subprocess
 import sys
 import tempfile
 import time
+
+# a line at a time (a gate's log is a file: a hang showed the output of a minute before it), and a
+# hang ends as a red with every thread's stack instead of holding a pass (marketing m_64005: >12 min)
+sys.stdout.reconfigure(line_buffering=True)
+faulthandler.dump_traceback_later(int(os.environ.get("HEAVY_RUN_TEST_MAX", 900)), exit=True)
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import wait  # noqa: E402
@@ -49,6 +55,15 @@ def job_ends(p, secs=30):
     return p.poll()
 
 
+def reap(p, secs=30):
+    """Wait for a process we stopped, at most secs, then kill it: never an unbounded wait."""
+    try:
+        return p.wait(timeout=secs)
+    except subprocess.TimeoutExpired:
+        p.kill()
+        return p.wait(timeout=secs)
+
+
 def held(slot):
     """The slot is taken (a probe with lockf -t 0 fails)."""
     return subprocess.run(["/usr/bin/lockf", "-k", "-t", "0", slot, "true"], capture_output=True).returncode != 0
@@ -60,11 +75,17 @@ with tempfile.TemporaryDirectory() as home:
     # hermetic: none of the release pass it may sit in (lane A gives HEAVY_PASS_LANE and its gate's
     # GATE_QUIET...): with them the quiet and slot-6 cases took the pass's ways (11.11's lane A red,
     # marketing m_63931). From os.environ itself, so the children started with env=None too
-    for k in ("HEAVY_PASS_LANE", "GATE_QUIET", "GATE_REUSE_FROM", "GATE_ALL"):
+    # Every HEAVY_* and GATE_* knob goes (the caller's job's HEAVY_SLOT, HEAVY_SUBMIT, a pass's lane...):
+    # only this test's own ones below reach heavy-run (marketing m_64005: 11.11 held a 5th time)
+    for k in [k for k in os.environ if k.startswith(("HEAVY_", "GATE_"))]:
         os.environ.pop(k, None)
-    # on AC as far as heavy-run knows (HEAVY_ON_BATTERY=0): the --alone cases run on battery too
+    # Nothing from the real machine (main m_64010): its own slots and state under this temp HOME, the
+    # load a file (0), the admission's facts a file (no ps of the real Mac: a slow snapshot under a
+    # pass's load), the disk a file, on AC. The load cases below write their own load and facts.
+    open(os.path.join(home, "load0"), "w").write("0")
+    open(os.path.join(home, "admit0"), "w").write("quiet=- cpu=0 agents=0 low=0")
     env = dict(os.environ, HOME=home, HEAVY_SLOTS="1", HEAVY_FREE_KB_FILE=os.path.join(home, "plenty_kb"), HEAVY_ON_BATTERY="0",
-               # the machine's real load never holds a job here (the load cases fake it)
+               HEAVY_LOAD_FILE=os.path.join(home, "load0"), HEAVY_ADMIT_FILE=os.path.join(home, "admit0"),
                HEAVY_LOAD_CEILING="9999", HEAVY_START_GAP="0", HEAVY_RECLAIM_GAP="0", HEAVY_RECLAIM="true")
     env.pop("SB_AGENT", None)
     env.pop("HEAVY_SLOT", None)
@@ -114,7 +135,7 @@ with tempfile.TemporaryDirectory() as home:
     dead = subprocess.Popen([HEAVY, "--prio", "true"], env=dict(env, HEAVY_SUBMIT="1", HEAVY_NO_LANE="1"), stderr=subprocess.DEVNULL)
     check(wait_for(lambda: any(f.startswith("0-1-") for f in os.listdir(q))), "a --prio waiter's ticket")
     dead.kill()
-    dead.wait()
+    reap(dead)
     young = subprocess.Popen(["sleep", "60"])
     with open(os.path.join(q, "0-2-%d" % young.pid), "w") as fh:
         fh.write("%d" % (time.time() - 1000))
@@ -261,9 +282,10 @@ with tempfile.TemporaryDirectory() as home:
     # its start line says what it waited on (review-gates m_37641): the disk, some seconds
     st = [l.split("\t") for l in lines() if ran in l and l.split("\t")[2] == "-"]
     wt = dict(kv.split(":") for kv in st[-1][6][len("waited="):].split()) if st and st[-1][6:7] and st[-1][6].startswith("waited=") else {}
-    # (its last round, the slot probe once the disk was there, counts a second or two as slot)
-    check(int(wt.get("disk", 0)) >= 2 and int(wt.get("slot", 9)) <= 2 and wt.get("load") == "0",
-          "its start line: waited=disk:>=2 slot:<=2 load:0: %r" % (st[-1][6:] if st else lines()[-2:]))
+    # (its last round, the slot probe once the disk was there, counts as slot: seconds on an idle Mac,
+    # 16 under 11.11's pass, marketing m_64005; so the slot field is only a number here)
+    check(int(wt.get("disk", 0)) >= 2 and wt.get("slot", "").isdigit() and wt.get("load") == "0",
+          "its start line: waited=disk:>=2 slot:<n> load:0: %r" % (st[-1][6:] if st else lines()[-2:]))
     errf.seek(0)
     err = errf.read()
     check("heavy-run: waiting for disk room: 11 GB free" in err and "disk room again (20 GB free)" in err,
@@ -584,7 +606,7 @@ with tempfile.TemporaryDirectory() as home:
         else:
             check(stays(lambda: not os.path.exists(ran7), 2, "it waits"), "a running 'other' job, %s: a 2 GB job waits at 13 GB free" % what)
             small.terminate()
-            small.wait()
+            reap(small)
         open(go_k, "w").close()
         job_ends(big, 30)
     if os.path.exists(dtsv):
@@ -598,16 +620,21 @@ with tempfile.TemporaryDirectory() as home:
     envl = dict(envr, HEAVY_LOAD_FILE=loadf, HEAVY_LOAD_CEILING="24", HEAVY_JOBS_CPU="900", HEAVY_ADMIT_FILE=admitf)
 
     def admits(load, facts, what, extra=None, args=()):
-        """Whether a job starts within 3 s with that load and those facts; its stderr."""
+        """Whether a job starts with that load and those facts, and its stderr: it ran, or heavy-run
+        said why it waits (its admission's line, once a round), whichever comes first; no fixed
+        timeout to race (marketing m_64005: 3 s ran out under a pass's load before it started)."""
         open(loadf, "w").write(str(load))
         open(admitf, "w").write(facts)
         ran = os.path.join(home, "ran-%d" % len(os.listdir(home)))
-        e = open(os.path.join(home, "err-%d" % len(os.listdir(home))), "w+")
+        ef = os.path.join(home, "err-%d" % len(os.listdir(home)))
+        e = open(ef, "w+")
         p = subprocess.Popen([HEAVY, *args, "sh", "-c", 'touch "$0"', ran], env=dict(envl, **(extra or {})), stderr=e)
-        went = wait_for(lambda: os.path.exists(ran), 3, what)
+        holds = ("heavy-run: a slot is free but", "heavy-run: lane ")
+        wait_for(lambda: os.path.exists(ran) or any(h in open(ef).read() for h in holds), 120, what)
+        went = os.path.exists(ran)
         if not went:
             p.kill()
-            p.wait()
+            p.wait(timeout=30)
         else:
             job_ends(p, 30)
         e.seek(0)
@@ -650,7 +677,7 @@ with tempfile.TemporaryDirectory() as home:
     check(wait_for(lambda: os.path.exists(ready), 10, "the window's command"), "heavy-run quiet runs its command")
     check(dq.quiet_held(qdir) == ["tip-e2e"], "its window is open while it runs: %r" % dq.quiet_held(qdir))
     os.killpg(w.pid, 9)
-    w.wait()
+    reap(w)
     check(wait_for(lambda: dq.quiet_held(qdir) == [], 10, "the lock freed"), "a killed wrapper's window is gone")
     r = subprocess.run([HEAVY, "quiet", "as-he-does", "--", "true"], env=envl, capture_output=True, text=True, timeout=30)
     q = [l.split("\t") for l in lines() if l.startswith("quiet\t")]
@@ -671,7 +698,7 @@ with tempfile.TemporaryDirectory() as home:
                        capture_output=True, text=True, timeout=30)
     check(r.returncode == 0 and r.stdout.startswith("heavy5.lock"), "lane A's own step runs in its window: %r %r" % (r.stdout, r.stderr[-200:]))
     os.killpg(pa.pid, 9)
-    pa.wait()
+    reap(pa)
     # the window gone (a killed wrapper frees it), lane B goes, in slot 6 while slot 5 is held
     s5lock = os.path.join(run, "heavy5.lock")
     s5 = subprocess.Popen(["/usr/bin/lockf", "-k", s5lock, "sleep", "30"], start_new_session=True)
@@ -684,7 +711,7 @@ with tempfile.TemporaryDirectory() as home:
                        capture_output=True, text=True, timeout=30)
     check(r.returncode == 0 and not r.stdout.startswith("heavy6.lock"), "a plain --prio never takes slot 6: %r" % r.stdout)
     os.killpg(s5.pid, 9)
-    s5.wait()
+    reap(s5)
     r = subprocess.run([HEAVY, "quiet", "desktop-checks", "--", "true"], env=dict(envl, HEAVY_PASS_LANE="B"), capture_output=True, text=True, timeout=30)
     check(r.returncode == 0 and "timing-bound part done" not in r.stderr and "(lane B) closed" in r.stderr,
           "a pass lane's window leaves the 'done' line to release_cut.sh: %r" % r.stderr[-200:])
@@ -746,7 +773,7 @@ with tempfile.TemporaryDirectory() as home:
                           stderr=eb)
     check(stays(lambda: not os.path.exists(ranb), 2, "it waits"), "on battery at 12 %: the job waits")
     wb.kill()
-    wb.wait()
+    reap(wb)
     eb.seek(0)
     check("on battery at 12 %, under 30 %: plug the Mac in" in eb.read(), "the wait says plug it in")
     r = subprocess.run([HEAVY, "sh", "-c", 'touch "$0"', ranb], env=dict(envr, HEAVY_ON_BATTERY="1", HEAVY_BATTERY_PCT="80"),
@@ -802,7 +829,7 @@ with tempfile.TemporaryDirectory() as home:
                              stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
         check(stays(lambda: p.poll() is None, 2, "it waits"), "%s: the quick gate waits for a slot" % what)
         p.kill()
-        p.wait()
+        reap(p)
     # the cap (review-gates m_37126): HEAVY_LIGHT_MAX light runs at once; the next waits, then runs
     go_l3 = os.path.join(home, "go_l3")
     lh = subprocess.Popen(["/usr/bin/lockf", "-k", os.path.join(run, "light1.lock"), "sh", "-c",
