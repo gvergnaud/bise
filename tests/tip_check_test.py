@@ -289,10 +289,12 @@ def world():
         idlef, nd, ndlog = os.path.join(t, "idle"), os.path.join(t, "fake_nd.sh"), os.path.join(t, "nd.log")
         with open(nd, "w") as f:
             f.write('echo "steps=$NIGHTLY_DESKTOP_STEPS home=$BISE_HOME out=$1 sha=$2" >>"%s"\n'
-                    'i=0; while [ -e "%s.slow" ] && [ $i -lt 100 ]; do i=$((i+1)); [ "$(cat %s)" = 0 ] && break; '
+                    # slow: runs on (10 s at most) until tip_check stops it; never ends by itself when he
+                    # comes back, or the run could finish green before tip_check's poll sees him (flaky)
+                    'i=0; while [ -e "%s.slow" ] && [ $i -lt 100 ]; do i=$((i+1)); '
                     'perl -e "select(undef,undef,undef,0.1)"; done\n'
                     'printf "candidate\\tgreen\\nquick\\t%%s\\n" "${FAKE_Q:-green}" >"$1/steps.tsv"\n'
-                    '[ -n "${FAKE_RED:-}" ] && echo "$FAKE_RED" >"$1/reds.txt"; exit 0\n' % (ndlog, idlef, idlef))
+                    '[ -n "${FAKE_RED:-}" ] && echo "$FAKE_RED" >"$1/reds.txt"; exit 0\n' % (ndlog, idlef))
         away_env = dict(e2e_env, TIP_CHECK_IDLE_FILE=idlef, TIP_CHECK_DESKTOP=nd, TIP_CHECK_AWAY_POLL="0.2", TIP_CHECK_AWAY_GAP="0")
         open(idlef, "w").write("3600")
         h1 = land_file("h1", "mu", "apps/desktop/a.ts")
