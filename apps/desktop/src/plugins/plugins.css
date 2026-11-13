@@ -14,8 +14,9 @@
 .plg-mono { font-family: var(--font-mono); font-size: var(--t-12); }
 .plg-add-words { display: inline-flex; align-items: center; gap: var(--gap-inline); }
 .plg-sec { display: flex; flex-direction: column; gap: var(--gap-block); }
-/* the list's row (ds ListBar): the section's gap is its room to the chips */
-.plg-sec > .b-listbar { margin-bottom: 0; }
+/* the list's row (ds ListBar): the section's gap is its controls' room to the chips (its own 8 of
+   ground above and under them overlap the gaps) */
+.plg-sec > .b-listbar { margin-block: calc(-1 * var(--s-2)); }
 
 /* the room: bims' diorama of his plugins' objects (Room.tsx), the banner's visual: it fills the
    banner's box (360 x 176, 264 x 132 narrow), the canvas at 2.2:1 centred; without WebGL their icons

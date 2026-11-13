@@ -3,6 +3,11 @@
    12 under the banner, the cards/list switch, the crumb under 900. */
 /* 12 from the banner to the toolbar (the banner's own 24 under it, ds banner.css, is the gap) */
 .art-scroll > .b-banner{margin-bottom:var(--gap-block)}
+/* no banner over it (a folder, All, a search): the toolbar's controls and the column 24 under the
+   window's bar, as the banner stands 24 from the page's edges (his m_63954: glued to the bar);
+   under 900 the screen's own 16 above the scroller is most of it */
+.art-scroll > .art-lib:first-child{padding-top:var(--s-6)}
+@media (max-width: 900px){.art-scroll > .art-lib:first-child{padding-top:var(--s-2)}}
 /* every line of the list on the cards' left edge: the no-match Empty too (designer m_45293) */
 .art-main .b-empty{padding-inline:0}
 /* under 900 the library's crumb leads the row: its words on the list's edge at rest, its hover tint

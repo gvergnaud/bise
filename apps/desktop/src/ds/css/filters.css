@@ -10,15 +10,17 @@
 .b-filters>[role=tab].dis{color:var(--c-text-3)}
 .b-filters>[role=tab].on{background:var(--c-seg-on);color:var(--c-text);box-shadow:var(--e-1)}
 .b-filters>[role=tab]:focus-visible{outline:2px solid var(--c-focus);outline-offset:-2px}
-/* the row above a list (ListBar; his m_52658, designer m_52674, Artifacts' spec D m_44968): 32 high,
-   8 above the list, filters left and search right on the list's edges (12 in with `inset`: the ds
-   ListRow's content edge); sticky at the top of the page's scroller on the page's ground, a 1 px
-   --c-line under it only while stuck. */
-.b-listbar{position:sticky;top:0;z-index:3;display:flex;align-items:center;justify-content:space-between;gap:var(--s-2);box-sizing:border-box;height:var(--h-control);margin:0 0 var(--s-2);background:var(--c-solid);box-shadow:0 1px 0 transparent;transition:box-shadow var(--d-fast) var(--ease-out)}
+/* the row above a list (ListBar; his m_52658, designer m_52674, Artifacts' spec D m_44968): its
+   controls 32 high, 8 above the list, filters left and search right on the list's edges (12 in with
+   `inset`: the ds ListRow's content edge); sticky at the top of the page's scroller on the page's
+   ground, a 1 px --c-line under it only while stuck. The row holds 8 of ground above and under its
+   controls: stuck, they never touch the window's bar or the list scrolling under them (his m_63954,
+   'tout est trop collé'); at rest its -8 top margin keeps the controls where they were. */
+.b-listbar{position:sticky;top:0;z-index:3;display:flex;align-items:center;justify-content:space-between;gap:var(--s-2);box-sizing:border-box;height:calc(var(--h-control) + 2 * var(--s-2));padding-block:var(--s-2);margin:calc(-1 * var(--s-2)) 0 0;background:var(--c-solid);box-shadow:0 1px 0 transparent;transition:box-shadow var(--d-fast) var(--ease-out)}
 .b-listbar.inset{padding:0 var(--s-3)}
 .b-listbar[data-stuck]{box-shadow:0 1px 0 var(--c-line)}
 /* too narrow for its filters and its search: the search on its own row, right edge, 8 below (designer m_53025) */
-.b-listbar[data-below]{flex-wrap:wrap;height:auto;min-height:var(--h-control);row-gap:var(--s-2);padding-block:var(--s-2)}
+.b-listbar[data-below]{flex-wrap:wrap;height:auto;min-height:var(--h-control);row-gap:var(--s-2);padding-block:var(--s-2);margin:0 0 var(--s-2)}
 .b-listbar[data-below] > .b-listbar-end{flex-basis:100%;justify-content:flex-end}
 /* its second row ends on the row's own right edge, not 12 in (designer m_53073) */
 .b-listbar.inset[data-below] > .b-listbar-end{margin-right:calc(-1 * var(--s-3))}

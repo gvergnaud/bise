@@ -60,8 +60,11 @@
 .art-fold-pop .art-col{position:static}
 
 /* a place's line under the filters: the folder's '…' and its words (its name is the bar's crumb);
-   a stack's path; under 900 the fold's crumb. On the page's 12 edge, as the lead */
-.art-head{margin:var(--s-4) 0 0;padding:0 var(--s-3)}
+   a stack's path; under 900 the fold's crumb. On the page's 12 edge, as the lead; 24 under the
+   bar's controls, 8 over the cards (never glued to them, his m_63954) */
+.art-head{margin:var(--s-4) 0 var(--s-2);padding:0 var(--s-3)}
+/* first in the place (a stack's path, a slot's line): the library's own 24 above it is its room */
+.art-main > .art-head:first-child{margin-top:0}
 .art-head-t{display:flex;align-items:center;gap:var(--s-2)}
 .art-head-t .t{font:600 var(--f-ui);color:var(--c-text)}
 .art-head-s{display:flex;align-items:center;gap:var(--s-2);margin:0;min-height:var(--h-control-sm);font:400 var(--f-ui);color:var(--c-text-3)}
