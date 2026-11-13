@@ -8,6 +8,7 @@ import { availableParallelism } from 'node:os';
 import { resolve } from 'node:path';
 import { configDefaults, defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
+import { vitestWorkers } from './src/test-workers';
 
 // every test: src/**/*.test.ts(x) next to its code, the feature tests, the checks' pure helpers
 // (tests/checks/**/*.test.ts: composer/still.ts; the checks themselves are *.spec.ts)
@@ -43,11 +44,11 @@ export default defineConfig({
     passWithNoTests: true,
     // the window's keep starts empty for every test (src/test-setup.ts)
     setupFiles: ['src/test-setup.ts'],
-    // at most 4 workers, half the cpus on a small machine: the gate runs this while the heavy
-    // slots are busy (load 25 on 12 cpus), and 11 workers there starve each other's RPC to the
-    // runner ('Timeout calling onTaskUpdate', -43's gate). 4 runs as fast here: the long bims
-    // files set the wall time, and they yield between worlds (lying, walklaw, parkpath tests).
-    maxWorkers: Math.max(1, Math.min(4, Math.floor(availableParallelism() / 2))),
+    // at most 4 workers: 11 workers at load 25 starved each other's RPC to the runner ('Timeout
+    // calling onTaskUpdate', -43's gate), and 4 runs as fast: the long bims files set the wall
+    // time. Under heavy-run, the job's share it gives (HEAVY_CPUS), at least 2: 4 each at load 45
+    // timed out again on 11-11 (src/test-workers.ts, architect m_60240, m_60250).
+    maxWorkers: vitestWorkers(availableParallelism(), process.env.HEAVY_CPUS),
     // two projects (c3-quick-90s): bims-laws, the bims' world simulations (each file 20-210 s
     // at load 22, ~1000 s of the bims' 1090), and unit, the rest. `pnpm test` runs both (the
     // full gate, the tip, a release); the quick gate runs unit, and bims-laws only when a
