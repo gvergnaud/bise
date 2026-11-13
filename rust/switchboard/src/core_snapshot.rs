@@ -83,7 +83,8 @@ impl Hub {
             lids.entry(id.clone()).or_insert_with(|| l.clone());
         }
         let places = crate::place::views(&places, &lids, &self.landing, &stale, &self.trying, &self.pr_ahead);
-        Snapshot { agents, cards, places, flow: self.flow, ..Snapshot::default() }
+        let (works, tombs) = crate::task_list::rows(&self.st);
+        Snapshot { agents, cards, places, flow: self.flow, works, tombs, ..Snapshot::default() }
     }
 
     /// The cards whose answer the hub carries out now (inbox-reappear,

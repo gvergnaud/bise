@@ -114,6 +114,7 @@ export const NOTIFICATIONS = {
   "hub/switch": { ev: "switch", scope: "hub" },
   "hub/growth": { ev: "growth", scope: "hub" },
   "hub/pulse": { ev: "pulse", scope: "hub" },
+  "hub/works": { ev: "works", scope: "hub" },
   "hub/bise_update": { ev: "bise_update", scope: "hub" },
   "job/end": { ev: "job_end", scope: "hub" },
   "job/followedEnd": { ev: "followed_end", scope: "hub" },

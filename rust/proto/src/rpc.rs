@@ -288,6 +288,8 @@ pub const NOTIFICATIONS: &[NoteRow] = &[
     n("hub/growth", "growth", Scope::Hub),
     // the H1 sidebar: the project's pulse (rows::pulse)
     n("hub/pulse", "pulse", Scope::Hub),
+    // tasks: the project's tasks with their status (rows::works)
+    n("hub/works", "works", Scope::Hub),
     // a newer bise, as this hub sees it (rows::bise_update, update-flow)
     n("hub/bise_update", "bise_update", Scope::Hub),
     n("job/end", "job_end", Scope::Hub),

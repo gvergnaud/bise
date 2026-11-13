@@ -130,6 +130,8 @@ export const TAGS = {
   // the H1 sidebar: a project's pulse (rows::Pulse); known, kept nowhere: the core folds it into
   // ProjectRow.pulse (apply.ts)
   pulse: true,
+  // tasks: a project's tasks with their status (rows::WorkRow); known, the tasks store keeps them
+  works: true,
   // running processes (procs-hub's proto, docs/processes.md): known; procs-desktop applies them
   processes: true,
   proc_out: true,

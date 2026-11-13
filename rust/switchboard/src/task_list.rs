@@ -1,43 +1,73 @@
-//! tasks (docs/tasks.md): `sb task list` and `sb task show`, the hub's
-//! reads of the works sb-core's view gave (`State.works`, `State.tombs`).
+//! tasks (docs/tasks.md): `sb task list` and `sb task show`, main's
+//! `<open_tasks>`, and the `works` event's rows: the hub's reads of the
+//! works sb-core's view gave (`State.works`, `State.tombs`).
 //! The status and what it is about are sb-core's (wstatus.bend); this
 //! file only puts them in words, never decides one.
 
 use crate::every::{hh_mm, past_label, when_label};
 use crate::model::State;
+use bise_proto::core::state::WorkKind;
 use bise_proto::core::view::ViewWork as VWork;
+use bise_proto::rows::{WorkDone, WorkGoal, WorkRow, WorkStatus, WorkTomb};
 
 /// A work's status and what it is about, one pattern for all: `<status>
 /// · <what>` (tasks-ux m_64508: never blank; m_64563: the status word
-/// always there, the Board's and the Task tab's pill read the same).
+/// always there, the Board's and the Task tab's pill read the same). The
+/// pick is the wire row's (`rows::WorkRow::what`, words::tasks), the one
+/// the window reads too (architect m_64809).
 pub fn what(w: &VWork, now: u64) -> String {
-    let past = || w.at.map(|t| past_label(t, now)).unwrap_or_default();
-    let next = || w.at.map(|t| when_label(t, now)).unwrap_or_default();
-    match (w.status.as_str(), w.why.as_str()) {
-        ("needs_you", _) => format!("needs you · {} question{}", w.needs, if w.needs == 1 { "" } else { "s" }),
-        ("working", _) => format!("working · {}", w.who),
-        ("waiting", "reply") => format!("waiting · {}'s reply", w.who),
-        ("waiting", "timer") => format!("waiting · wakes at {}", next()),
-        ("waiting", "watch") => format!("waiting · {}'s watch", w.who),
-        ("waiting", _) => format!("waiting · quiet since {}", past()),
-        ("stalled", "crash") => format!("stalled · {} stopped at {}", w.who, past()),
-        ("stalled", _) => format!("stalled · quiet since {}", past()),
-        ("paused", "until") => format!("paused · until {}", next()),
-        ("paused", _) => "paused · by you".into(),
-        ("done", _) => match &w.work.done {
-            Some(f) => format!("done · {}", days_ago(f.at, now)),
-            None => "done".into(),
-        },
-        (s, _) => s.replace('_', " "),
+    row(w).what(now, |t| past_label(t, now), |t| when_label(t, now))
+}
+
+/// The wire row of a work (the `works` event): its facts and the status
+/// sb-core computed.
+pub fn row(w: &VWork) -> WorkRow {
+    let x = &w.work;
+    WorkRow {
+        id: x.id.clone(),
+        name: x.name.clone(),
+        why: x.why.clone(),
+        goals: x.goals.iter().map(|g| WorkGoal { text: g.text.clone(), done: g.done, by: g.by.clone() }).collect(),
+        ongoing: x.kind == WorkKind::Ongoing,
+        origin: x.origin,
+        by: x.by.clone(),
+        created_ms: x.created_ms,
+        paused_ms: x.paused,
+        until_ms: x.until,
+        done: x.done.as_ref().map(|f| WorkDone { at_ms: f.at, by: f.by.clone() }),
+        merged_into: x.merged_into.clone(),
+        named_by_you: x.named_by_you,
+        agents: x.agents.clone(),
+        last_ms: x.last,
+        status: WorkStatus::of_word(&w.status),
+        about: w.why.clone(),
+        who: w.who.clone(),
+        at_ms: w.at,
+        needs: w.needs,
+        cards: w.cards.clone(),
     }
+}
+
+/// The `works` event's lists: every work sb-core keeps, oldest first, and
+/// the folded ones' tombs.
+pub fn rows(st: &State) -> (Vec<WorkRow>, Vec<WorkTomb>) {
+    let mut ws: Vec<&VWork> = st.works.values().collect();
+    ws.sort_by_key(|w| (w.work.created_ms, w.work.id.clone()));
+    let tombs = st
+        .tombs
+        .values()
+        .map(|t| WorkTomb { id: t.id.clone(), name: t.name.clone(), done_ms: t.done, merged_into: t.merged_into.clone() })
+        .collect();
+    (ws.into_iter().map(row).collect(), tombs)
 }
 
 /// `today`, `yesterday`, `3 days ago`
 fn days_ago(at: u64, now: u64) -> String {
+    use bise_proto::words::tasks;
     match now.saturating_sub(at) / (24 * 3_600_000) {
-        0 => "today".into(),
-        1 => "yesterday".into(),
-        n => format!("{} days ago", n),
+        0 => tasks::today.into(),
+        1 => tasks::yesterday.into(),
+        n => tasks::days_ago(n),
     }
 }
 

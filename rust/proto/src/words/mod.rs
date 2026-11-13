@@ -50,6 +50,7 @@ pub mod running;
 pub mod scheduled;
 pub mod settings;
 pub mod side;
+pub mod tasks;
 pub mod thread;
 pub mod views;
 pub mod viewkit;
@@ -88,6 +89,7 @@ pub const ALL: &[(&str, &[Word])] = &[
     ("scheduled", scheduled::WORDS),
     ("settings", settings::WORDS),
     ("side", side::WORDS),
+    ("tasks", tasks::WORDS),
     ("thread", thread::WORDS),
     ("views", views::WORDS),
     ("viewkit", viewkit::WORDS),

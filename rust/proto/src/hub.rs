@@ -510,6 +510,16 @@ pub enum HubEv {
     /// the project's pulse (the H1 sidebar, rows::pulse): at hello, then
     /// at most once a minute and only when it changed
     Pulse { project: Project, pulse: crate::rows::Pulse },
+    /// tasks (rows::works, architect m_64809): the project's tasks with
+    /// their status, done ones within 7 days too, and the folded ones'
+    /// tombs; at hello and whenever one changes (the whole list)
+    Works {
+        project: Project,
+        #[serde(default)]
+        works: Vec<crate::rows::WorkRow>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        tombs: Vec<crate::rows::WorkTomb>,
+    },
     /// a newer bise to update to, as this hub sees it (update-flow,
     /// rows::bise_update): at hello and when it changes; None: nothing
     /// to show (on it, or no release known)
@@ -645,7 +655,7 @@ pub enum HubEv {
 }
 
 impl HubEv {
-    pub const TAGS: &'static [&'static str] = &["welcome", "agents", "cards", "thread", "thread_hits", "thread_marks", "entry", "typing", "partial", "artifacts", "artifacts_moved", "artifact_notes", "files_ids", "folders", "library", "scheduled", "worktrees", "processes", "proc_out", "merged", "features", "prs", "pr_acted", "pr_detail", "pr_check_log", "models", "tool_out", "queued_taken", "log", "completion", "log_body", "diff", "guide", "branches", "versions", "release", "update", "route", "route_done", "jobs", "job_end", "followed_end", "activity", "flow", "paused", "switch", "growth", "pulse", "bise_update", "usage", "pages", "page_changed", "card_open", "app_open", "inbox_history", "inbox_recorded", "focused", "approvals", "notice", "refused", "error"];
+    pub const TAGS: &'static [&'static str] = &["welcome", "agents", "cards", "thread", "thread_hits", "thread_marks", "entry", "typing", "partial", "artifacts", "artifacts_moved", "artifact_notes", "files_ids", "folders", "library", "scheduled", "worktrees", "processes", "proc_out", "merged", "features", "prs", "pr_acted", "pr_detail", "pr_check_log", "models", "tool_out", "queued_taken", "log", "completion", "log_body", "diff", "guide", "branches", "versions", "release", "update", "route", "route_done", "jobs", "job_end", "followed_end", "activity", "flow", "paused", "switch", "growth", "pulse", "works", "bise_update", "usage", "pages", "page_changed", "card_open", "app_open", "inbox_history", "inbox_recorded", "focused", "approvals", "notice", "refused", "error"];
 
     pub fn decode(line: &str) -> Result<HubEv, String> {
         Self::from_value(parse(line)?)

@@ -34,6 +34,10 @@ pub struct Snapshot {
     /// the shell's: his late promises (checklist rows of his past
     /// data-due), a count for the morning page and the menu bar
     pub overdue: u32,
+    /// tasks: every task sb-core keeps with its status, oldest first, and
+    /// the folded ones' tombs (task_list::rows; the `works` event)
+    pub works: Vec<bise_proto::rows::WorkRow>,
+    pub tombs: Vec<bise_proto::rows::WorkTomb>,
 }
 
 /// One agent as the views see it (snapshot_rows.rs builds it).

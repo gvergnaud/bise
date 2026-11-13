@@ -10,7 +10,7 @@ import type { InboxRecord, StateFilter } from './inbox';
 import type { BodyOf, Completion, CompletionAsk, LogItem } from './log';
 import type { BranchRow, ReleaseEv, UpdateEv, VersionItem } from './ops';
 import type { Part } from './parts';
-import type { Agent, ApprovalMode, ApprovalRule, ArchivedAgent, Artifact, ArtifactMoved, BiseUpdate, Card, CheckerKind, Feature, FlowMode, Folder, FolderOp, Growth, LibraryProject, Merged, Model, Page, Place, Pr, PrDetail, PrErr, Proc, Pulse, ReportKind, ScheduledTask, SwitchRow, UsageRow, Worktree } from './rows';
+import type { Agent, ApprovalMode, ApprovalRule, ArchivedAgent, Artifact, ArtifactMoved, BiseUpdate, Card, CheckerKind, Feature, FlowMode, Folder, FolderOp, Growth, LibraryProject, Merged, Model, Page, Place, Pr, PrDetail, PrErr, Proc, Pulse, ReportKind, ScheduledTask, SwitchRow, UsageRow, WorkRow, WorkTomb, Worktree } from './rows';
 import type { OpenWith } from './rpc';
 import type { Entry, FindHit, Mark } from './thread';
 
@@ -137,7 +137,7 @@ key?: number | null, } | { "ev": "followed_end", project: string, agent: string,
 /**
  * the messages held so far (queued for an agent, not delivered)
  */
-held?: number, } | { "ev": "switch", project: string, switch?: SwitchRow | null, } | { "ev": "growth", project: string, growth: Growth, } | { "ev": "pulse", project: string, pulse: Pulse, } | { "ev": "bise_update", project: string, update: BiseUpdate | null, } | { "ev": "usage", project: string, counting?: boolean, 
+held?: number, } | { "ev": "switch", project: string, switch?: SwitchRow | null, } | { "ev": "growth", project: string, growth: Growth, } | { "ev": "pulse", project: string, pulse: Pulse, } | { "ev": "works", project: string, works: Array<WorkRow>, tombs?: Array<WorkTomb>, } | { "ev": "bise_update", project: string, update: BiseUpdate | null, } | { "ev": "usage", project: string, counting?: boolean, 
 /**
  * boxed: HubEv stays small (hub::size)
  */

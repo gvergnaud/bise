@@ -46,6 +46,12 @@ impl Shell {
         (HubEv::Agents { project: project.clone(), agents, places, archived: None }, HubEv::Cards { project, cards, others })
     }
 
+    /// tasks: the `works` event of the snapshot (its tasks with their
+    /// status, the folded ones' tombs).
+    pub(in crate::daemon) fn works_ev(&self, snap: &Snapshot) -> HubEv {
+        HubEv::Works { project: self.project(), works: snap.works.clone(), tombs: snap.tombs.clone() }
+    }
+
     /// The agents event for connection `id`: a light one gets the live
     /// rows and the archived list when it hasn't got this one yet
     /// (always its first).
@@ -229,9 +235,14 @@ impl Shell {
         }
         let ids: Vec<ClientId> = self.proto.conns.keys().copied().collect();
         let (agents, cards) = self.proto_rows(snap);
-        let (a, c) = (agents.encode(), cards.encode());
-        let new = (a != self.proto.last.0, c != self.proto.last.1);
-        self.proto.last = (a, c);
+        let works = self.works_ev(snap);
+        let (a, c, w) = (agents.encode(), cards.encode(), works.encode());
+        let new = (a != self.proto.last.0, c != self.proto.last.1, w != self.proto.last.2);
+        self.proto.last = (a, c, w);
+        // tasks (architect m_64809): the whole list, when it changed
+        if new.2 {
+            self.proto_note(&ids, &works);
+        }
         // agents-light (architect m_37000 2.): the live rows when they
         // changed, the archived list only to a connection that hasn't got
         // this one (a usage tick never resends it)
