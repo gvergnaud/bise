@@ -72,7 +72,7 @@ pub struct LateSend {
 }
 
 fn core_err(why: &str, reason: &str) -> RpcError {
-    RpcError { data: Some(rpc::ErrorData { reason: Some(reason.to_string()), ..Default::default() }), ..RpcError::new(rpc::code::REFUSED, why) }
+    RpcError { data: Some(Box::new(rpc::ErrorData { reason: Some(reason.to_string()), ..Default::default() })), ..RpcError::new(rpc::code::REFUSED, why) }
 }
 
 /// One request waiting for its response.

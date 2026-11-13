@@ -79,8 +79,10 @@ pub struct Response {
 pub struct RpcError {
     pub code: i64,
     pub message: String,
+    /// boxed: an RpcError is many functions' Err, kept small (clippy's
+    /// result_large_err once ErrorData took `tip`)
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub data: Option<ErrorData>,
+    pub data: Option<Box<ErrorData>>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -131,14 +133,14 @@ impl RpcError {
 
     /// The hub refused this action: its words, `reason` for a send.
     pub fn refused(message: impl Into<String>, reason: Option<&str>) -> RpcError {
-        let data = reason.map(|r| ErrorData { reason: Some(r.to_string()), ..Default::default() });
+        let data = reason.map(|r| Box::new(ErrorData { reason: Some(r.to_string()), ..Default::default() }));
         RpcError { code: code::HUB_REFUSED, message: message.into(), data }
     }
 
     /// refused, with the worktree state of an undelivered send (data.ws)
     pub fn with_ws(mut self, ws: Option<&str>) -> RpcError {
         if let Some(w) = ws {
-            self.data.get_or_insert_with(ErrorData::default).ws = Some(w.to_string());
+            self.data.get_or_insert_with(Box::default).ws = Some(w.to_string());
         }
         self
     }
@@ -147,25 +149,25 @@ impl RpcError {
     /// words, reason `removed_field`, the field in the detail.
     pub fn removed(r: &crate::Removed) -> RpcError {
         let data = ErrorData { reason: Some("removed_field".into()), field: Some(r.field.into()), ..Default::default() };
-        RpcError { code: code::HUB_REFUSED, message: crate::words::common::removed_field.into(), data: Some(data) }
+        RpcError { code: code::HUB_REFUSED, message: crate::words::common::removed_field.into(), data: Some(Box::new(data)) }
     }
 
     /// A method bise retired (crate::RETIRED): the same words as a
     /// removed field, reason `retired_method`, the method in the detail.
     pub fn retired(r: &crate::Retired) -> RpcError {
         let data = ErrorData { reason: Some("retired_method".into()), field: Some(r.tag.into()), ..Default::default() };
-        RpcError { code: code::HUB_REFUSED, message: crate::words::common::removed_field.into(), data: Some(data) }
+        RpcError { code: code::HUB_REFUSED, message: crate::words::common::removed_field.into(), data: Some(Box::new(data)) }
     }
 
     pub fn with_kind(mut self, kind: ErrorKind) -> RpcError {
-        self.data.get_or_insert_with(ErrorData::default).kind = Some(kind);
+        self.data.get_or_insert_with(Box::default).kind = Some(kind);
         self
     }
 
     /// with the line's hover tip (data.tip), when there is one
     pub fn with_tip(mut self, tip: Option<&str>) -> RpcError {
         if let Some(t) = tip {
-            self.data.get_or_insert_with(ErrorData::default).tip = Some(t.to_string());
+            self.data.get_or_insert_with(Box::default).tip = Some(t.into());
         }
         self
     }
