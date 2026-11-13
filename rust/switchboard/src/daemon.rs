@@ -755,7 +755,7 @@ impl Shell {
         self.refresh_models();
         // main hears it as a report of the task (its spawn answer named the
         // model it asked), and the task's turn starts again on the default
-        let report = AgentReq::Report { kind: "progress".into(), summary: text.clone(), decisions: Vec::new(), step: None, result: None };
+        let report = AgentReq::Report { kind: "progress".into(), summary: text.clone(), decisions: Vec::new(), step: None, result: None, done_when: None, task: Vec::new() };
         self.step(Input::Agent { token: 0, from: agent.to_string(), req: report, by: crate::peer::Sender::hub() });
         self.step(Input::Agent {
             token: 0,
@@ -772,6 +772,7 @@ impl Shell {
                 attach: Vec::new(),
                 parts: String::new(),
                 fwd: None,
+                task: Vec::new(),
             },
         });
         self.state_now();

@@ -291,6 +291,42 @@ law journal_resumed_bare:
 def journal_resumed_bare():
   {==}
 
+law journal_work_created_bare:
+  {GJ.of(J.obj([J.kv("type", J.JStr{"work_created"})])) == Some{M.EWorkCreated{SC.Work.journal_of(J.JNull{})}} : Maybe<&2, M.Ev>}
+
+def journal_work_created_bare():
+  {==}
+
+law journal_work_changed_bare:
+  {GJ.of(J.obj([J.kv("type", J.JStr{"work_changed"})])) == Some{M.EWorkChanged{"", SC.WOp.journal_of(J.obj([J.kv("type", J.JStr{"work_changed"})])), "", 0n}} : Maybe<&2, M.Ev>}
+
+def journal_work_changed_bare():
+  {==}
+
+law journal_work_folded_bare:
+  {GJ.of(J.obj([J.kv("type", J.JStr{"work_folded"})])) == Some{M.EWorkFolded{"", 0n}} : Maybe<&2, M.Ev>}
+
+def journal_work_folded_bare():
+  {==}
+
+law journal_work_turn_bare:
+  {GJ.of(J.obj([J.kv("type", J.JStr{"work_turn"})])) == Some{M.EWorkTurn{SC.WTurn.journal_of(J.JNull{})}} : Maybe<&2, M.Ev>}
+
+def journal_work_turn_bare():
+  {==}
+
+law journal_card_moved_bare:
+  {GJ.of(J.obj([J.kv("type", J.JStr{"card_moved"})])) == Some{M.ECardMoved{SC.CardMove.journal_of(J.JNull{})}} : Maybe<&2, M.Ev>}
+
+def journal_card_moved_bare():
+  {==}
+
+law journal_art_moved_bare:
+  {GJ.of(J.obj([J.kv("type", J.JStr{"art_moved"})])) == Some{M.EArtMoved{SC.Moved.journal_of(J.JNull{})}} : Maybe<&2, M.Ev>}
+
+def journal_art_moved_bare():
+  {==}
+
 law journal_unknown_tag:
   {GJ.of(J.obj([J.kv("type", J.JStr{"weather"})])) == None{} : Maybe<&2, M.Ev>}
 
@@ -837,6 +873,84 @@ law journal_resumed_round:
 def journal_resumed_round(at):
   {==}
 
+law journal_work_created_round:
+  for work: S.Work
+  {GJ.of(GJ.json(M.EWorkCreated{work})) == Some{M.EWorkCreated{work}} : Maybe<&2, M.Ev>}
+
+def journal_work_created_round(work):
+  %SC.Work.journal_round(work) : {GJ.of(GJ.json(M.EWorkCreated{work})) == Some{M.EWorkCreated{_}} : Maybe<&2, M.Ev>}
+  {==}
+
+law journal_work_changed_round:
+  for id: String
+  for op: S.WOp
+  for by: String
+  for at: Nat
+  {GJ.of(GJ.json(M.EWorkChanged{id, op, by, at})) == Some{M.EWorkChanged{id, op, by, at}} : Maybe<&2, M.Ev>}
+
+def journal_work_changed_round(id, op, by, at):
+  match op:
+    case S.WRename{op_a}:
+      {==}
+    case S.WWhy{op_a}:
+      {==}
+    case S.WGoal{op_a}:
+      {==}
+    case S.WTick{op_a}:
+      {==}
+    case S.WUntick{op_a}:
+      {==}
+    case S.WMakeOngoing{}:
+      {==}
+    case S.WPause{op_a}:
+      {==}
+    case S.WResume{}:
+      {==}
+    case S.WDone{}:
+      {==}
+    case S.WReopen{}:
+      {==}
+    case S.WMerge{op_a}:
+      {==}
+    case S.WAddAgent{op_a}:
+      {==}
+    case S.WUntilTimer{op_a}:
+      {==}
+    case S.WNoop{}:
+      {==}
+
+law journal_work_folded_round:
+  for id: String
+  for at: Nat
+  {GJ.of(GJ.json(M.EWorkFolded{id, at})) == Some{M.EWorkFolded{id, at}} : Maybe<&2, M.Ev>}
+
+def journal_work_folded_round(id, at):
+  {==}
+
+law journal_work_turn_round:
+  for turn: S.WTurn
+  {GJ.of(GJ.json(M.EWorkTurn{turn})) == Some{M.EWorkTurn{turn}} : Maybe<&2, M.Ev>}
+
+def journal_work_turn_round(turn):
+  %SC.WTurn.journal_round(turn) : {GJ.of(GJ.json(M.EWorkTurn{turn})) == Some{M.EWorkTurn{_}} : Maybe<&2, M.Ev>}
+  {==}
+
+law journal_card_moved_round:
+  for moved: S.CardMove
+  {GJ.of(GJ.json(M.ECardMoved{moved})) == Some{M.ECardMoved{moved}} : Maybe<&2, M.Ev>}
+
+def journal_card_moved_round(moved):
+  %SC.CardMove.journal_round(moved) : {GJ.of(GJ.json(M.ECardMoved{moved})) == Some{M.ECardMoved{_}} : Maybe<&2, M.Ev>}
+  {==}
+
+law journal_art_moved_round:
+  for moved: S.Moved
+  {GJ.of(GJ.json(M.EArtMoved{moved})) == Some{M.EArtMoved{moved}} : Maybe<&2, M.Ev>}
+
+def journal_art_moved_round(moved):
+  %SC.Moved.journal_round(moved) : {GJ.of(GJ.json(M.EArtMoved{moved})) == Some{M.EArtMoved{_}} : Maybe<&2, M.Ev>}
+  {==}
+
 # ---- the released fixture (rust/proto/fixtures/core_journal.jsonl) ----
 
 def back(m: Maybe<&2, M.Ev>) -> Maybe<&2, J.Json>:
@@ -1116,6 +1230,42 @@ law journal_fixture_44_resumed:
 def journal_fixture_44_resumed():
   {==}
 
+law journal_fixture_45_work_created:
+  {back(GJ.of(J.obj([J.kv("type", J.JStr{"work_created"}), J.kv("work", J.obj([J.kv("id", J.JStr{"login-timeout"}), J.kv("name", J.JStr{"Login timeout on slow networks"}), J.kv("why", J.JStr{"the login spins for 30 s"}), J.kv("goals", J.JArr{[J.obj([J.kv("text", J.JStr{"reproduced on a 3G profile"}), J.kv("done", J.JBool{True{}}), J.kv("by", J.JStr{"auth-fix"})]), J.obj([J.kv("text", J.JStr{"login works on 3G within 10 s"}), J.kv("done", J.JBool{False{}}), J.kv("by", J.JStr{""})])]}), J.kv("kind", J.JStr{"task"}), J.kv("origin", J.JNum{12n}), J.kv("by", J.JStr{"main"}), J.kv("created_ms", J.JNum{1400000n}), J.kv("paused", J.JNum{1450000n}), J.kv("until", J.JNum{1600000n}), J.kv("until_timer", J.JNum{4n}), J.kv("done", J.obj([J.kv("at", J.JNum{1500000n}), J.kv("by", J.JStr{"user"})])), J.kv("merged_into", J.JStr{"auth"}), J.kv("named_by_you", J.JBool{True{}}), J.kv("agents", J.JArr{[J.JStr{"auth-fix"}, J.JStr{"designer"}]}), J.kv("last", J.JNum{1400000n})]))]))) == Some{J.obj([J.kv("type", J.JStr{"work_created"}), J.kv("work", J.obj([J.kv("id", J.JStr{"login-timeout"}), J.kv("name", J.JStr{"Login timeout on slow networks"}), J.kv("why", J.JStr{"the login spins for 30 s"}), J.kv("goals", J.JArr{[J.obj([J.kv("text", J.JStr{"reproduced on a 3G profile"}), J.kv("done", J.JBool{True{}}), J.kv("by", J.JStr{"auth-fix"})]), J.obj([J.kv("text", J.JStr{"login works on 3G within 10 s"}), J.kv("done", J.JBool{False{}}), J.kv("by", J.JStr{""})])]}), J.kv("kind", J.JStr{"task"}), J.kv("origin", J.JNum{12n}), J.kv("by", J.JStr{"main"}), J.kv("created_ms", J.JNum{1400000n}), J.kv("paused", J.JNum{1450000n}), J.kv("until", J.JNum{1600000n}), J.kv("until_timer", J.JNum{4n}), J.kv("done", J.obj([J.kv("at", J.JNum{1500000n}), J.kv("by", J.JStr{"user"})])), J.kv("merged_into", J.JStr{"auth"}), J.kv("named_by_you", J.JBool{True{}}), J.kv("agents", J.JArr{[J.JStr{"auth-fix"}, J.JStr{"designer"}]}), J.kv("last", J.JNum{1400000n})]))])} : Maybe<&2, J.Json>}
+
+def journal_fixture_45_work_created():
+  {==}
+
+law journal_fixture_46_work_changed:
+  {back(GJ.of(J.obj([J.kv("type", J.JStr{"work_changed"}), J.kv("id", J.JStr{"login-timeout"}), J.kv("op", J.JStr{"tick"}), J.kv("n", J.JNum{1n}), J.kv("by", J.JStr{"auth-fix"}), J.kv("at", J.JNum{1410000n})]))) == Some{J.obj([J.kv("type", J.JStr{"work_changed"}), J.kv("id", J.JStr{"login-timeout"}), J.kv("op", J.JStr{"tick"}), J.kv("n", J.JNum{1n}), J.kv("by", J.JStr{"auth-fix"}), J.kv("at", J.JNum{1410000n})])} : Maybe<&2, J.Json>}
+
+def journal_fixture_46_work_changed():
+  {==}
+
+law journal_fixture_47_work_folded:
+  {back(GJ.of(J.obj([J.kv("type", J.JStr{"work_folded"}), J.kv("id", J.JStr{"login-timeout"}), J.kv("at", J.JNum{2100000n})]))) == Some{J.obj([J.kv("type", J.JStr{"work_folded"}), J.kv("id", J.JStr{"login-timeout"}), J.kv("at", J.JNum{2100000n})])} : Maybe<&2, J.Json>}
+
+def journal_fixture_47_work_folded():
+  {==}
+
+law journal_fixture_48_work_turn:
+  {back(GJ.of(J.obj([J.kv("type", J.JStr{"work_turn"}), J.kv("turn", J.obj([J.kv("agent", J.JStr{"auth-fix"}), J.kv("works", J.JArr{[J.JStr{"login-timeout"}]}), J.kv("add", J.JBool{True{}}), J.kv("at", J.JNum{1400100n})]))]))) == Some{J.obj([J.kv("type", J.JStr{"work_turn"}), J.kv("turn", J.obj([J.kv("agent", J.JStr{"auth-fix"}), J.kv("works", J.JArr{[J.JStr{"login-timeout"}]}), J.kv("add", J.JBool{True{}}), J.kv("at", J.JNum{1400100n})]))])} : Maybe<&2, J.Json>}
+
+def journal_fixture_48_work_turn():
+  {==}
+
+law journal_fixture_49_card_moved:
+  {back(GJ.of(J.obj([J.kv("type", J.JStr{"card_moved"}), J.kv("moved", J.obj([J.kv("card", J.JNum{3n}), J.kv("works", J.JArr{[J.JStr{"login-timeout"}]})]))]))) == Some{J.obj([J.kv("type", J.JStr{"card_moved"}), J.kv("moved", J.obj([J.kv("card", J.JNum{3n}), J.kv("works", J.JArr{[J.JStr{"login-timeout"}]})]))])} : Maybe<&2, J.Json>}
+
+def journal_fixture_49_card_moved():
+  {==}
+
+law journal_fixture_50_art_moved:
+  {back(GJ.of(J.obj([J.kv("type", J.JStr{"art_moved"}), J.kv("moved", J.obj([J.kv("art", J.JStr{"repro-page"}), J.kv("works", J.JArr{[J.JStr{"login-timeout"}]})]))]))) == Some{J.obj([J.kv("type", J.JStr{"art_moved"}), J.kv("moved", J.obj([J.kv("art", J.JStr{"repro-page"}), J.kv("works", J.JArr{[J.JStr{"login-timeout"}]})]))])} : Maybe<&2, J.Json>}
+
+def journal_fixture_50_art_moved():
+  {==}
+
 def again(m: Maybe<&2, J.Json>) -> Maybe<&2, J.Json>:
   match m:
     case None{}:
@@ -1393,21 +1543,57 @@ law journal_stable_44_resumed:
 def journal_stable_44_resumed():
   {==}
 
-law journal_stable_45_every_set:
+law journal_stable_45_work_created:
+  {again(back(GJ.of(J.obj([J.kv("type", J.JStr{"work_created"}), J.kv("work", J.obj([J.kv("id", J.JStr{"login-timeout"}), J.kv("name", J.JStr{"Login timeout on slow networks"}), J.kv("why", J.JStr{"the login spins for 30 s"}), J.kv("goals", J.JArr{[J.obj([J.kv("text", J.JStr{"reproduced on a 3G profile"}), J.kv("done", J.JBool{True{}}), J.kv("by", J.JStr{"auth-fix"})]), J.obj([J.kv("text", J.JStr{"login works on 3G within 10 s"}), J.kv("done", J.JBool{False{}}), J.kv("by", J.JStr{""})])]}), J.kv("kind", J.JStr{"task"}), J.kv("origin", J.JNum{12n}), J.kv("by", J.JStr{"main"}), J.kv("created_ms", J.JNum{1400000n}), J.kv("paused", J.JNum{1450000n}), J.kv("until", J.JNum{1600000n}), J.kv("until_timer", J.JNum{4n}), J.kv("done", J.obj([J.kv("at", J.JNum{1500000n}), J.kv("by", J.JStr{"user"})])), J.kv("merged_into", J.JStr{"auth"}), J.kv("named_by_you", J.JBool{True{}}), J.kv("agents", J.JArr{[J.JStr{"auth-fix"}, J.JStr{"designer"}]}), J.kv("last", J.JNum{1400000n})]))])))) == back(GJ.of(J.obj([J.kv("type", J.JStr{"work_created"}), J.kv("work", J.obj([J.kv("id", J.JStr{"login-timeout"}), J.kv("name", J.JStr{"Login timeout on slow networks"}), J.kv("why", J.JStr{"the login spins for 30 s"}), J.kv("goals", J.JArr{[J.obj([J.kv("text", J.JStr{"reproduced on a 3G profile"}), J.kv("done", J.JBool{True{}}), J.kv("by", J.JStr{"auth-fix"})]), J.obj([J.kv("text", J.JStr{"login works on 3G within 10 s"}), J.kv("done", J.JBool{False{}}), J.kv("by", J.JStr{""})])]}), J.kv("kind", J.JStr{"task"}), J.kv("origin", J.JNum{12n}), J.kv("by", J.JStr{"main"}), J.kv("created_ms", J.JNum{1400000n}), J.kv("paused", J.JNum{1450000n}), J.kv("until", J.JNum{1600000n}), J.kv("until_timer", J.JNum{4n}), J.kv("done", J.obj([J.kv("at", J.JNum{1500000n}), J.kv("by", J.JStr{"user"})])), J.kv("merged_into", J.JStr{"auth"}), J.kv("named_by_you", J.JBool{True{}}), J.kv("agents", J.JArr{[J.JStr{"auth-fix"}, J.JStr{"designer"}]}), J.kv("last", J.JNum{1400000n})]))]))) : Maybe<&2, J.Json>}
+
+def journal_stable_45_work_created():
+  {==}
+
+law journal_stable_46_work_changed:
+  {again(back(GJ.of(J.obj([J.kv("type", J.JStr{"work_changed"}), J.kv("id", J.JStr{"login-timeout"}), J.kv("op", J.JStr{"tick"}), J.kv("n", J.JNum{1n}), J.kv("by", J.JStr{"auth-fix"}), J.kv("at", J.JNum{1410000n})])))) == back(GJ.of(J.obj([J.kv("type", J.JStr{"work_changed"}), J.kv("id", J.JStr{"login-timeout"}), J.kv("op", J.JStr{"tick"}), J.kv("n", J.JNum{1n}), J.kv("by", J.JStr{"auth-fix"}), J.kv("at", J.JNum{1410000n})]))) : Maybe<&2, J.Json>}
+
+def journal_stable_46_work_changed():
+  {==}
+
+law journal_stable_47_work_folded:
+  {again(back(GJ.of(J.obj([J.kv("type", J.JStr{"work_folded"}), J.kv("id", J.JStr{"login-timeout"}), J.kv("at", J.JNum{2100000n})])))) == back(GJ.of(J.obj([J.kv("type", J.JStr{"work_folded"}), J.kv("id", J.JStr{"login-timeout"}), J.kv("at", J.JNum{2100000n})]))) : Maybe<&2, J.Json>}
+
+def journal_stable_47_work_folded():
+  {==}
+
+law journal_stable_48_work_turn:
+  {again(back(GJ.of(J.obj([J.kv("type", J.JStr{"work_turn"}), J.kv("turn", J.obj([J.kv("agent", J.JStr{"auth-fix"}), J.kv("works", J.JArr{[J.JStr{"login-timeout"}]}), J.kv("add", J.JBool{True{}}), J.kv("at", J.JNum{1400100n})]))])))) == back(GJ.of(J.obj([J.kv("type", J.JStr{"work_turn"}), J.kv("turn", J.obj([J.kv("agent", J.JStr{"auth-fix"}), J.kv("works", J.JArr{[J.JStr{"login-timeout"}]}), J.kv("add", J.JBool{True{}}), J.kv("at", J.JNum{1400100n})]))]))) : Maybe<&2, J.Json>}
+
+def journal_stable_48_work_turn():
+  {==}
+
+law journal_stable_49_card_moved:
+  {again(back(GJ.of(J.obj([J.kv("type", J.JStr{"card_moved"}), J.kv("moved", J.obj([J.kv("card", J.JNum{3n}), J.kv("works", J.JArr{[J.JStr{"login-timeout"}]})]))])))) == back(GJ.of(J.obj([J.kv("type", J.JStr{"card_moved"}), J.kv("moved", J.obj([J.kv("card", J.JNum{3n}), J.kv("works", J.JArr{[J.JStr{"login-timeout"}]})]))]))) : Maybe<&2, J.Json>}
+
+def journal_stable_49_card_moved():
+  {==}
+
+law journal_stable_50_art_moved:
+  {again(back(GJ.of(J.obj([J.kv("type", J.JStr{"art_moved"}), J.kv("moved", J.obj([J.kv("art", J.JStr{"repro-page"}), J.kv("works", J.JArr{[J.JStr{"login-timeout"}]})]))])))) == back(GJ.of(J.obj([J.kv("type", J.JStr{"art_moved"}), J.kv("moved", J.obj([J.kv("art", J.JStr{"repro-page"}), J.kv("works", J.JArr{[J.JStr{"login-timeout"}]})]))]))) : Maybe<&2, J.Json>}
+
+def journal_stable_50_art_moved():
+  {==}
+
+law journal_stable_51_every_set:
   {again(back(GJ.of(J.obj([J.kv("type", J.JStr{"every_set"}), J.kv("id", J.JNum{3n}), J.kv("agent", J.JStr{"docs"}), J.kv("by", J.JStr{"main"}), J.kv("text", J.JStr{"ping"}), J.kv("next_ms", J.JNum{5000n}), J.kv("at", J.JNum{4000n}), J.kv("every_ms", J.JNum{500n})])))) == back(GJ.of(J.obj([J.kv("type", J.JStr{"every_set"}), J.kv("id", J.JNum{3n}), J.kv("agent", J.JStr{"docs"}), J.kv("by", J.JStr{"main"}), J.kv("text", J.JStr{"ping"}), J.kv("next_ms", J.JNum{5000n}), J.kv("at", J.JNum{4000n}), J.kv("every_ms", J.JNum{500n})]))) : Maybe<&2, J.Json>}
 
-def journal_stable_45_every_set():
+def journal_stable_51_every_set():
   {==}
 
-law journal_stable_46_every_set:
+law journal_stable_52_every_set:
   {again(back(GJ.of(J.obj([J.kv("type", J.JStr{"every_set"}), J.kv("id", J.JNum{4n}), J.kv("agent", J.JStr{"docs"}), J.kv("by", J.JStr{"user"}), J.kv("text", J.JStr{"standup"}), J.kv("next_ms", J.JNum{5000n}), J.kv("at", J.JNum{4000n}), J.kv("daily_min", J.JNum{3000n}), J.kv("held", J.JBool{False{}})])))) == back(GJ.of(J.obj([J.kv("type", J.JStr{"every_set"}), J.kv("id", J.JNum{4n}), J.kv("agent", J.JStr{"docs"}), J.kv("by", J.JStr{"user"}), J.kv("text", J.JStr{"standup"}), J.kv("next_ms", J.JNum{5000n}), J.kv("at", J.JNum{4000n}), J.kv("daily_min", J.JNum{3000n}), J.kv("held", J.JBool{False{}})]))) : Maybe<&2, J.Json>}
 
-def journal_stable_46_every_set():
+def journal_stable_52_every_set():
   {==}
 
-law journal_stable_47_every_set:
+law journal_stable_53_every_set:
   {again(back(GJ.of(J.obj([J.kv("type", J.JStr{"every_set"}), J.kv("id", J.JNum{5n}), J.kv("agent", J.JStr{"docs"}), J.kv("by", J.JStr{"user"}), J.kv("text", J.JStr{"none"}), J.kv("next_ms", J.JNum{5000n}), J.kv("at", J.JNum{4000n})])))) == back(GJ.of(J.obj([J.kv("type", J.JStr{"every_set"}), J.kv("id", J.JNum{5n}), J.kv("agent", J.JStr{"docs"}), J.kv("by", J.JStr{"user"}), J.kv("text", J.JStr{"none"}), J.kv("next_ms", J.JNum{5000n}), J.kv("at", J.JNum{4000n})]))) : Maybe<&2, J.Json>}
 
-def journal_stable_47_every_set():
+def journal_stable_53_every_set():
   {==}
 

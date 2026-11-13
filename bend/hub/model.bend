@@ -15,6 +15,7 @@ import ./lazy.bend as LZ
 import ./gone.bend as G
 import ./names.bend as NM
 import ./agents.bend as AG
+import ./work.bend as WO
 import ./gen/state.bend as S
 
 type Ev is Data:
@@ -71,6 +72,14 @@ type Ev is Data:
   # them (after a rollback the project comes back unpaused)
   EPaused{at: Nat}
   EResumed{at: Nat}
+  # tasks (hub/work.bend): a work made, one change of it, folded to a
+  # tomb; an agent's turn's works (`add`: steered in); his moves
+  EWorkCreated{w: S.Work}
+  EWorkChanged{id: String, op: S.WOp, by: String, at: Nat}
+  EWorkFolded{id: String, at: Nat}
+  EWorkTurn{t: S.WTurn}
+  ECardMoved{m: S.CardMove}
+  EArtMoved{m: S.Moved}
 
 type AgentOp is Data:
   OLife{life: S.Life, reason: Maybe<&2, String>}
@@ -84,6 +93,8 @@ type AgentOp is Data:
   OFollow{f: Maybe<&2, String>}
   # hub-loop: the end of a drop (`ok`: removed, `snap` its saved work)
   ODrop{ok: Bool, snap: Maybe<&2, String>}
+  # tasks: its turn's works (`add`: steered in, else a new turn's)
+  OTurnWorks{works: List<&2, String>, add: Bool}
 
 type MsgOp is Data:
   OSt{st: S.MSt}
@@ -363,6 +374,8 @@ def agent_op(+a: S.Agent, op: AgentOp) -> S.Agent:
       S.Agent.with_follow(a, f)
     case ODrop{ok, +sn}:
       agent_op.drop(ok, a, sn)
+    case OTurnWorks{+ws, add}:
+      S.Agent.with_turn_works(a, WO.turn_works(S.Agent.turn_works(a), ws, add))
 
 def Agent.strip(+a: S.Agent, +n: String) -> S.Agent:
   S.Agent.with_aliases(a, NM.drop_str(S.Agent.aliases(a), n))
@@ -428,6 +441,22 @@ def drop_card(xs: List<&2, S.Card>, +id: Nat) -> List<&2, S.Card>:
 
 def put_card(xs: List<&2, S.Card>, +c: S.Card) -> List<&2, S.Card>:
   snoc(S.Card, drop_card(xs, S.Card.id(c)), c)
+
+# tasks: his move of card `id` to `works` (law moved_by_you_sticks)
+def card_moved(xs: List<&2, S.Card>, +id: Nat, +ws: List<&2, String>) -> List<&2, S.Card>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case Con{+h, +t}:
+      LZ.pick(List<&2, S.Card>, Nat.is_eq(S.Card.id(h), id), u => S.Card.with_moved(S.Card.with_works(h, ws), True{}) <> t, u => h <> card_moved(t, id, ws))
+
+# tasks: his move of an artifact (its newest replaces the one before)
+def art_moved(xs: List<&2, S.Moved>, +m: S.Moved) -> List<&2, S.Moved>:
+  match xs:
+    case Nil{}:
+      [m]
+    case Con{+h, +t}:
+      LZ.pick(List<&2, S.Moved>, String.eq(S.Moved.art(h), S.Moved.art(m)), u => m <> t, u => h <> art_moved(t, m))
 
 def is_queued(s: S.MSt) -> Bool:
   match s:
@@ -817,6 +846,20 @@ def apply(+st: S.St, e: Ev) -> S.St:
       S.St.with_paused(st, Some{at})
     case EResumed{_}:
       S.St.with_paused(st, None{})
+    case EWorkCreated{+w}:
+      S.St.over_works(st, xs => WO.put(xs, w))
+    case EWorkChanged{+id, +op, +by, +at}:
+      S.St.over_works(st, xs => WO.changed(xs, id, op, by, at))
+    case EWorkFolded{+id, _}:
+      WO.folded(st, id)
+    case EWorkTurn{+t}:
+      +ws = S.WTurn.works(t)
+      +ag = S.WTurn.agent(t)
+      S.St.over_works(on_agent(st, ag, OTurnWorks{ws, S.WTurn.add(t)}), xs => WO.served(xs, ws, ag, S.WTurn.at(t)))
+    case ECardMoved{+m}:
+      S.St.over_cards(st, cs => card_moved(cs, S.CardMove.card(m), S.CardMove.works(m)))
+    case EArtMoved{+m}:
+      S.St.over_moved(st, ms => art_moved(ms, m))
 
 # an event that changes St.order (apply's over_order): a new task, a
 # rename. Every other one keeps it (law apply_keeps_order), so a step

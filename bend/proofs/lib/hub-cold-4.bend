@@ -230,6 +230,18 @@ def hc_apply.go(+e: HM.Ev, +s: HS.St, sp: HI.Split(s), k: hc_GeEv(s, e)) -> hc_S
       HX.Both{{==}, sp}
     case HM.EResumed{a}:
       HX.Both{{==}, sp}
+    case HM.EWorkCreated{w0}:
+      HX.Both{{==}, sp}
+    case HM.EWorkChanged{w0, w1, w2, w3}:
+      HX.Both{{==}, sp}
+    case HM.EWorkFolded{w0, w1}:
+      HX.Both{{==}, sp}
+    case HM.EWorkTurn{wt}:
+      HX.Both{{==}, sp}
+    case HM.ECardMoved{cm}:
+      HX.Both{{==}, sp}
+    case HM.EArtMoved{am}:
+      HX.Both{{==}, sp}
 
 def hc_apply(+s: HS.St, e: HM.Ev, sp: HI.Split(s), k: hc_GeEv(s, e)) -> hc_StOk(s, e):
   %HSL.St.open_eq(s) : hc_StOk(_, e)
@@ -333,6 +345,18 @@ def hc_fresh_ge(+s: HS.St, e: HM.Ev, k: HX.FreshEv(s, e)) -> hc_GeEv(s, e):
       Unit{}
     case HM.EResumed{a}:
       Unit{}
+    case HM.EWorkCreated{w0}:
+      Unit{}
+    case HM.EWorkChanged{w0, w1, w2, w3}:
+      Unit{}
+    case HM.EWorkFolded{w0, w1}:
+      Unit{}
+    case HM.EWorkTurn{wt}:
+      Unit{}
+    case HM.ECardMoved{cm}:
+      Unit{}
+    case HM.EArtMoved{am}:
+      Unit{}
 
 # the split holds after a journal of fresh events
 def hc_split_all(+evs: List<&2, HM.Ev>, +s: HS.St, sp: HI.Split(s), f: HX.Fresh(evs, s)) -> HI.Split(HM.apply_all(evs, s)):
@@ -420,6 +444,18 @@ def hc_replay_ge(+st: HS.St, e: HM.Ev, ok: {CO.replay_fresh(st, e) == True{} : B
     case HM.EPaused{a}:
       Unit{}
     case HM.EResumed{a}:
+      Unit{}
+    case HM.EWorkCreated{w0}:
+      Unit{}
+    case HM.EWorkChanged{w0, w1, w2, w3}:
+      Unit{}
+    case HM.EWorkFolded{w0, w1}:
+      Unit{}
+    case HM.EWorkTurn{wt}:
+      Unit{}
+    case HM.ECardMoved{cm}:
+      Unit{}
+    case HM.EArtMoved{am}:
       Unit{}
 
 def hc_replay_one(ok: Bool, +st: HS.St, +e: HM.Ev, +eok: {CO.replay_fresh(st, e) == ok : Bool}, sp: HI.Split(st))
@@ -523,6 +559,18 @@ def hc_kept1(+xs: List<&2, HS.MRec>, e: HM.Ev) -> HI.IsPrefix(HI.ids(xs), HI.ids
     case HM.EPaused{a}:
       PL1.hub_prefix_refl(HI.ids(xs))
     case HM.EResumed{a}:
+      PL1.hub_prefix_refl(HI.ids(xs))
+    case HM.EWorkCreated{w0}:
+      PL1.hub_prefix_refl(HI.ids(xs))
+    case HM.EWorkChanged{w0, w1, w2, w3}:
+      PL1.hub_prefix_refl(HI.ids(xs))
+    case HM.EWorkFolded{w0, w1}:
+      PL1.hub_prefix_refl(HI.ids(xs))
+    case HM.EWorkTurn{wt}:
+      PL1.hub_prefix_refl(HI.ids(xs))
+    case HM.ECardMoved{cm}:
+      PL1.hub_prefix_refl(HI.ids(xs))
+    case HM.EArtMoved{am}:
       PL1.hub_prefix_refl(HI.ids(xs))
 
 def hc_apply_kept(+s: HS.St, +e: HM.Ev, +sp: HI.Split(s), +k: hc_GeEv(s, e)) -> HI.Kept(s, HM.apply(s, e)):

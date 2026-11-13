@@ -284,7 +284,7 @@ fn enum_codec(s: &mut String, e: &st::Enum) {
 /// How a key's segment of the key-value list is: always one key-value
 /// (`Lit`), or its presence or its key known only from its value.
 fn stuck(w: Wire) -> bool {
-    matches!(w, Wire::StrOmit | Wire::OptStrOmit | Wire::OptNatOmit | Wire::OptObjOmit | Wire::OptJsonOmit | Wire::Flag | Wire::Hand(_) | Wire::Inline)
+    matches!(w, Wire::StrOmit | Wire::StrsOmit | Wire::OptStrOmit | Wire::OptNatOmit | Wire::OptObjOmit | Wire::OptJsonOmit | Wire::Flag | Wire::Hand(_) | Wire::Inline)
 }
 
 /// A record's shape of the same name as `shape`, else its journal's.
@@ -305,6 +305,7 @@ fn key_kv(k: &st::Key, f: &st::Field, shape: &str, v: &str) -> String {
         Wire::OptNat => format!("J.kv(\"{key}\", K.jmaybe_n({v}))"),
         Wire::Json => format!("J.kv(\"{key}\", {v})"),
         Wire::Strs => format!("J.kv(\"{key}\", J.JArr{{K.jstrs({v})}})"),
+        Wire::StrsOmit => format!("K.omit_ss(\"{key}\", {v})"),
         Wire::Nats => format!("J.kv(\"{key}\", J.JArr{{K.jnats({v})}})"),
         Wire::Word => format!("J.kv(\"{key}\", J.JStr{{{}.word({v})}})", named(f.ty)),
         Wire::OptWord => format!("J.kv(\"{key}\", {}.opt_json({v}))", named(f.ty)),
@@ -428,7 +429,7 @@ fn key_read(k: &st::Key, f: &st::Field, shape: &str, look: &dyn Fn(&str) -> Stri
         Wire::Json => format!("rd.j({m})"),
         // the lookup itself: absent reads none, any JSON reads as is
         Wire::OptJsonOmit => m,
-        Wire::Strs => format!("rd.ss({m})"),
+        Wire::Strs | Wire::StrsOmit => format!("rd.ss({m})"),
         Wire::Nats => format!("rd.ns({m})"),
         Wire::Word => format!("{}.of_word(rd.s({m}))", named(f.ty)),
         Wire::OptWord => format!("{}.opt_of({m})", named(f.ty)),
@@ -487,6 +488,7 @@ fn split(k: &st::Key, f: &st::Field, v: &str) -> Vec<(String, String)> {
     let one = |p: &str| (p.to_string(), p.to_string());
     match k.wire {
         Wire::StrOmit => vec![one("SNil{}"), one(&format!("SCon{{{v}_h, {v}_t}}"))],
+        Wire::StrsOmit => vec![one("Nil{}"), one(&format!("Con{{{v}_h, {v}_t}}"))],
         Wire::OptStr | Wire::OptStrOmit | Wire::OptNat | Wire::OptNatOmit | Wire::OptObjOmit | Wire::OptJsonOmit => vec![one("None{}"), one(&format!("Some{{{v}_x}}"))],
         Wire::Flag => vec![one("True{}"), one("False{}")],
         Wire::Word => the_enum(named(f.ty)).variants.iter().map(|x| one(&format!("S.{}{{}}", x.name))).collect(),
@@ -511,6 +513,7 @@ fn writes(k: &st::Key, p: Option<&str>, look: &str) -> Option<bool> {
     let p = p?;
     Some(match k.wire {
         Wire::StrOmit => p.starts_with("SCon") && k.key == look,
+        Wire::StrsOmit => p.starts_with("Con") && k.key == look,
         Wire::OptStrOmit | Wire::OptNatOmit | Wire::OptObjOmit | Wire::OptJsonOmit => p.starts_with("Some") && k.key == look,
         Wire::Flag => p == "True{}" && k.key == look,
         Wire::Hand(h) => h.keys.iter().any(|(vn, key)| p.starts_with(&format!("S.{vn}{{")) && *key == look),
@@ -525,6 +528,7 @@ fn skip_call(k: &st::Key, f: &st::Field, shape: &str, v: &str, rest: &str, look:
         Wire::OptObjOmit => format!("skip_mj(\"{}\", {}, {rest}, \"{look}\", {{==}})", k.key, opt_json(f, shape, v)),
         Wire::OptJsonOmit => format!("skip_mj(\"{}\", {v}, {rest}, \"{look}\", {{==}})", k.key),
         Wire::StrOmit => format!("skip_s(\"{}\", {v}, {rest}, \"{look}\", {{==}})", k.key),
+        Wire::StrsOmit => format!("skip_ss(\"{}\", {v}, {rest}, \"{look}\", {{==}})", k.key),
         Wire::OptStrOmit => format!("skip_ms(\"{}\", {v}, {rest}, \"{look}\", {{==}})", k.key),
         Wire::OptNatOmit => format!("skip_mn(\"{}\", {v}, {rest}, \"{look}\", {{==}})", k.key),
         Wire::Flag => format!("skip_flag(\"{}\", {v}, {rest}, \"{look}\", {{==}})", k.key),
@@ -607,7 +611,13 @@ fn shape_laws(s: &mut String, r: &st::Record, sh: &st::Shape) {
                     }
                 }
             }
-            match (list_lemma(k.wire, &v), &k.wire) {
+            // a list absent when empty: its round under the Con only
+            let lemma = match k.wire {
+                Wire::StrsOmit if pat.starts_with("Con") => Some(format!("K.strs_round({pat})")),
+                Wire::StrsOmit => None,
+                w => list_lemma(w, &v),
+            };
+            match (lemma, &k.wire) {
                 (Some(l), _) => writeln!(s, "{ind}{l}").unwrap(),
                 (None, Wire::Obj) => match STATE.record(named(f.ty)) {
                     // a nested record: its shape's own round law
@@ -917,6 +927,21 @@ def skip_s(k, s, rest, key, d):
       {==}
     case SCon{h, t}:
       skip_one(J.kv(k, J.JStr{SCon{h, t}}), rest, key, d)
+
+law skip_ss:
+  for k: String
+  for xs: List<&2, String>
+  for rest: List<&2, List<&2, Sigma<&2, &2, String, _ => J.Json>>>
+  for key: String
+  for d: {String.eq(k, key) == False{} : Bool}
+  {J.get_kv(K.cat(rest), key) == J.get_kv(K.cat(K.omit_ss(k, xs) <> rest), key) : Maybe<&2, J.Json>}
+
+def skip_ss(k, xs, rest, key, d):
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{h, t}:
+      skip_one(J.kv(k, J.JArr{K.jstrs(Con{h, t})}), rest, key, d)
 
 law skip_ms:
   for k: String

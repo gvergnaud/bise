@@ -49,11 +49,12 @@ import ./stall.bend as SL
 import ./disk.bend as DK
 import ./forward.bend as FW
 import ./viewctx.bend as VC
+import ./work.bend as WO
 
 type Snd is Data:
   Snd{from: String, to: String, text: String, expect: Bool,
     reply_to: Maybe<&2, Nat>, plain: Bool, auto: Bool, queued: Bool,
-    via: Maybe<&2, String>, parts: String, fwd: Maybe<&2, Nat>}
+    via: Maybe<&2, String>, parts: String, fwd: Maybe<&2, Nat>, works: Maybe<&2, List<&2, String>>}
 
 type SendR is Data:
   SOk{m: S.Msg}
@@ -73,7 +74,7 @@ type DropR is Data:
 type NewTask is Data:
   NewTask{parent: String, base: String, brief: J.Json, brief_text: String,
     objective: String, worktree: Bool, with_changes: Bool, parts: String,
-    fwd: Maybe<&2, Nat>}
+    fwd: Maybe<&2, Nat>, works: Maybe<&2, List<&2, String>>}
 
 # where a hub is in its boot: Fresh, nothing applied since init;
 # Restored, only a photo's slices (restore_photo, then restore_more);
@@ -113,6 +114,28 @@ type Cmd is Data:
   CWithdraw{}
   CProjectSend{}
   CProjectAsk{}
+  CTask{}
+
+# tasks: `sb task <verb>` (docs/tasks.md)
+type TaskV is Data:
+  TVNew{}
+  TVRename{}
+  TVWhy{}
+  TVGoal{}
+  TVTick{}
+  TVUntick{}
+  TVOngoing{}
+  TVPause{}
+  TVResume{}
+  TVDone{}
+  TVReopen{}
+  TVMerge{}
+  TVOther{}
+
+# tasks: a request's `--task` ids, each read as the live work it names
+type TaskFlag is Data:
+  TFOk{ws: List<&2, String>}
+  TFErr{e: String}
 
 # the hub after an input: the new state and its effects, or, when a git
 # answer is missing, the hub unchanged and the query (the daemon replays
@@ -401,13 +424,38 @@ def disk_free(-o: S.St, +cx: X.Cx<o>, +gb: Nat) -> X.Cx<o>:
 # open_card_full: the same, with what it is `about` (the shell's ArtLink:
 # a page at its block, an artifact), kept on the card as is and never
 # read here (inbox-answered, architect m_55388; tests/state_guard.py)
+# tasks: an agent's turn's works (none: not an agent of this hub, his
+# own words, a notice of the hub)
+def works_of_agent(m: Maybe<&2, S.Agent>) -> List<&2, String>:
+  match m:
+    case None{}:
+      Nil{}
+    case Some{+a}:
+      S.Agent.turn_works(a)
+
+# tasks (docs/tasks.md): the works a message carries: its `--task`, else
+# its sender's turn's when the sender is an agent; his own words and a
+# notice of the hub carry none (law notice_carries_no_works)
+def works_of_send(w: Maybe<&2, List<&2, String>>, +s: S.St, +from: String) -> List<&2, String>:
+  match w:
+    case Some{+ws}:
+      ws
+    case None{}:
+      works_of_agent(M.get_agent(s, from))
+
 def card_new(+id: Nat, +kind: String, +agent: String, +text: String, +for_msg: Maybe<&2, Nat>, +created: Nat, +place: Maybe<&2, String>, +pr: Maybe<&2, Nat>, +about: Maybe<&2, J.Json>) -> S.Card:
   S.Card.with_about(S.Card.with_pr(S.Card.with_place(S.Card.with_created(S.Card.with_for_msg(S.Card.with_text(S.Card.with_agent(S.Card.with_kind(S.Card.with_id(S.Card.empty(), id), kind), agent), text), for_msg), created), place), pr), about)
 
-def open_card_full(-o: S.St, +cx: X.Cx<o>, +kind: String, +agent: String, +text: String, +for_msg: Maybe<&2, Nat>, +place: Maybe<&2, String>, +pr: Maybe<&2, Nat>, +about: Maybe<&2, J.Json>) -> X.Cx<o>:
+# tasks: the card carries `works` (`sb notify --task`), else the works of
+# its agent's turn (law card_carries_turn_works)
+def open_card_works(-o: S.St, +cx: X.Cx<o>, +kind: String, +agent: String, +text: String, +for_msg: Maybe<&2, Nat>, +place: Maybe<&2, String>, +pr: Maybe<&2, Nat>, +about: Maybe<&2, J.Json>, +works: Maybe<&2, List<&2, String>>) -> X.Cx<o>:
   +id = S.St.next_card(st(o, cx))
-  +cx2 = emit(o, cx, M.ECardOpened{card_new(id, kind, agent, text, for_msg, now(o, cx), place, pr, about)}, {==}, Unit{}, Unit{})
+  +c = S.Card.with_works(card_new(id, kind, agent, text, for_msg, now(o, cx), place, pr, about), works_of_send(works, st(o, cx), agent))
+  +cx2 = emit(o, cx, M.ECardOpened{c}, {==}, Unit{}, Unit{})
   feed(o, cx2, M.MAIN(), FD.card(id, kind, agent, text))
+
+def open_card_full(-o: S.St, +cx: X.Cx<o>, +kind: String, +agent: String, +text: String, +for_msg: Maybe<&2, Nat>, +place: Maybe<&2, String>, +pr: Maybe<&2, Nat>, +about: Maybe<&2, J.Json>) -> X.Cx<o>:
+  open_card_works(o, cx, kind, agent, text, for_msg, place, pr, about, None{})
 
 def open_card_at(-o: S.St, +cx: X.Cx<o>, +kind: String, +agent: String, +text: String, +for_msg: Maybe<&2, Nat>, +place: Maybe<&2, String>, +pr: Maybe<&2, Nat>) -> X.Cx<o>:
   open_card_full(o, cx, kind, agent, text, for_msg, place, pr, None{})
@@ -603,6 +651,15 @@ def jstrs(xs: List<&2, String>) -> List<&2, J.Json>:
     case Con{+h, +t}:
       J.JStr{h} <> jstrs(t)
 
+# tasks: the work_turn line of a delivery whose works change its turn's
+# (WO.turn_change; law delivered_sets_turn_works)
+def work_turn(-o: S.St, ch: Maybe<&2, List<&2, String>>, +cx: X.Cx<o>, +name: String, +busy: Bool) -> X.Cx<o>:
+  match ch:
+    case None{}:
+      cx
+    case Some{+ws}:
+      emit(o, cx, M.EWorkTurn{WO.wturn(name, ws, busy, now(o, cx))}, Unit{}, Unit{}, Unit{})
+
 def pump.batch(-o: S.St, batch: List<&2, S.Msg>, +cx: X.Cx<o>, +name: String, +busy: Bool, +is_main: Bool) -> X.Cx<o>:
   match batch:
     case Nil{}:
@@ -612,7 +669,8 @@ def pump.batch(-o: S.St, batch: List<&2, S.Msg>, +cx: X.Cx<o>, +name: String, +b
       +notes = Bool.pick(List<&2, String>, is_main, S.St.notes(st(o, cx)), Nil{})
       +cx2 = pump.flush(o, Bool.not(List.is_empty(&2, String, notes)), cx)
       +status = is_main && M.any_from_user(b)
-      pump.send(o, busy, deliver_each(o, b, cx2, name, Nil{}), name, ids_of(b), notes, status)
+      +cx3 = work_turn(o, WO.turn_change(works_of_agent(M.get_agent(st(o, cx2), name)), WO.batch_works(b), busy), cx2, name, busy)
+      pump.send(o, busy, deliver_each(o, b, cx3, name, Nil{}), name, ids_of(b), notes, status)
 
 def pump.run(-o: S.St, run: S.Run, +cx: X.Cx<o>, +name: String, +queued: List<&2, S.Msg>, +is_main: Bool) -> X.Cx<o>:
   match run:
@@ -709,18 +767,53 @@ def quiet_ok(a: Bool, e: Bool) -> {Bool.and(a, Bool.and(e, Bool.not(a))) == Fals
 # (parts_never_change_text)
 def sent_of_snd(+s: Snd, +id: Nat, +thread: Nat, +now: Nat) -> S.Sent:
   match s:
-    case Snd{+from, +to, +text, +expect, +reply_to, +plain, +auto, +queued, +via, +parts, +fwd}:
+    case Snd{+from, +to, +text, +expect, +reply_to, +plain, +auto, +queued, +via, +parts, +fwd, +works}:
       +m = S.Sent.with_reply_to(S.Sent.with_to(S.Sent.with_from(S.Sent.with_thread(S.Sent.with_id(S.Sent.empty(), id), thread), from), to), reply_to)
       +m2 = S.Sent.with_created(S.Sent.with_text(S.Sent.with_auto(S.Sent.with_expect(m, Bool.and(expect, Bool.not(auto))), auto), text), now)
-      S.Sent.with_fwd(S.Sent.with_parts(S.Sent.with_via(S.Sent.with_queued(S.Sent.with_plain(m2, plain), queued), via), parts), fwd)
+      S.Sent.with_works(S.Sent.with_fwd(S.Sent.with_parts(S.Sent.with_via(S.Sent.with_queued(S.Sent.with_plain(m2, plain), queued), via), parts), fwd), Maybe.default(&2, List<&2, String>, works, Nil{}))
 
 # the message a send leaves in the state (its words in the journal)
 def msg_of_snd(+s: Snd, +id: Nat, +thread: Nat, +now: Nat) -> S.Msg:
   M.msg_of_sent(sent_of_snd(s, id, thread, now))
 
-def send.emit(-o: S.St, +cx: X.Cx<o>, +s: Snd, +thread: Nat) -> X.Cx<o> & SendR:
+def Snd.works(x: Snd) -> Maybe<&2, List<&2, String>>:
+  match x:
+    case Snd{_, _, _, _, _, _, _, _, _, _, _, +works}:
+      works
+
+def Snd.sender(x: Snd) -> String:
+  match x:
+    case Snd{+from, _, _, _, _, _, _, _, _, _, _, _}:
+      from
+
+def Snd.with_works(x: Snd, +v: Maybe<&2, List<&2, String>>) -> Snd:
+  match x:
+    case Snd{+from, +to, +text, +expect, +reply_to, +plain, +auto, +queued, +via, +parts, +fwd, _}:
+      Snd{from, to, text, expect, reply_to, plain, auto, queued, via, parts, fwd, v}
+
+# a request's `--task` ids (req.flag has read them as live works)
+def task_ids(+q: J.Json) -> List<&2, String>:
+  M.jstr_list(Maybe.default(&2, List<&2, J.Json>, J.get_arr(q, "task"), Nil{}))
+
+# the works a request's `--task` gives its message (none: it inherits;
+# law task_flag_replaces_turn_works)
+def task_of.go(xs: List<&2, String>) -> Maybe<&2, List<&2, String>>:
+  match xs:
+    case Nil{}:
+      None{}
+    case Con{+h, +t}:
+      Some{h <> t}
+
+def task_of(+q: J.Json) -> Maybe<&2, List<&2, String>>:
+  task_of.go(task_ids(q))
+
+# the send with its works resolved (Some: what its message carries)
+def Snd.resolved(+s: S.St, +x: Snd) -> Snd:
+  Snd.with_works(x, Some{works_of_send(Snd.works(x), s, Snd.sender(x))})
+
+def send.emit.go(-o: S.St, +cx: X.Cx<o>, +s: Snd, +thread: Nat) -> X.Cx<o> & SendR:
   match s:
-    case Snd{+from, +to, +text, +expect, +reply_to, +plain, +auto, +queued, +via, +parts, _}:
+    case Snd{+from, +to, +text, +expect, +reply_to, +plain, +auto, +queued, +via, +parts, _, _}:
       +sent = sent_of_snd(s, S.St.next_msg(st(o, cx)), thread, now(o, cx))
       +m = M.msg_of_sent(sent)
       # a card is closed by the user's answer only (answer_card): no reply
@@ -732,6 +825,9 @@ def send.emit(-o: S.St, +cx: X.Cx<o>, +s: Snd, +thread: Nat) -> X.Cx<o> & SendR:
       +w = Bool.pick(Maybe<&2, X.Waiter>, queued || P.is_paused(st(o, cx2)), None{},
         X.waiter_pick(X.R.waiters(rr(o, cx2)), to, reply_to, expect && Bool.not(plain) && Bool.not(String.eq(from, M.USER()))))
       send.waiter(o, w, cx2, m)
+
+def send.emit(-o: S.St, +cx: X.Cx<o>, +s0: Snd, +thread: Nat) -> X.Cx<o> & SendR:
+  send.emit.go(o, cx, Snd.resolved(st(o, cx), s0), thread)
 
 def send.orig(-o: S.St, m: Maybe<&2, S.Msg>, +cx: X.Cx<o>, +s: Snd, +r: Nat) -> X.Cx<o> & SendR:
   match m:
@@ -749,12 +845,12 @@ def send.thread(-o: S.St, reply_to: Maybe<&2, Nat>, +cx: X.Cx<o>, +s: Snd) -> X.
 
 def Snd.to(x: Snd) -> String:
   match x:
-    case Snd{_, +to, _, _, _, _, _, _, _, _, _}:
+    case Snd{_, +to, _, _, _, _, _, _, _, _, _, _}:
       to
 
 def Snd.reply_to(x: Snd) -> Maybe<&2, Nat>:
   match x:
-    case Snd{_, _, _, _, +reply_to, _, _, _, _, _, _}:
+    case Snd{_, _, _, _, +reply_to, _, _, _, _, _, _, _}:
       reply_to
 
 def send.revive(-o: S.St, ok: Bool, +cx: X.Cx<o>, +s: Snd, +why: String) -> X.Cx<o> & SendR:
@@ -792,37 +888,44 @@ def create.sent(-o: S.St, p: X.Cx<o> & SendR, +name: String) -> X.Cx<o> & TaskR:
 
 def NewTask.parent(x: NewTask) -> String:
   match x:
-    case NewTask{+parent, _, _, _, _, _, _, _, _}:
+    case NewTask{+parent, _, _, _, _, _, _, _, _, _}:
       parent
 
 def NewTask.objective(x: NewTask) -> String:
   match x:
-    case NewTask{_, _, _, _, +objective, _, _, _, _}:
+    case NewTask{_, _, _, _, +objective, _, _, _, _, _}:
       objective
 
 def NewTask.brief(x: NewTask) -> J.Json:
   match x:
-    case NewTask{_, _, +brief, _, _, _, _, _, _}:
+    case NewTask{_, _, +brief, _, _, _, _, _, _, _}:
       brief
 
 def NewTask.parts(x: NewTask) -> String:
   match x:
-    case NewTask{_, _, _, _, _, _, _, +parts, _}:
+    case NewTask{_, _, _, _, _, _, _, +parts, _, _}:
       parts
 
 def NewTask.fwd(x: NewTask) -> Maybe<&2, Nat>:
   match x:
-    case NewTask{_, _, _, _, _, _, _, _, +fwd}:
+    case NewTask{_, _, _, _, _, _, _, _, +fwd, _}:
       fwd
+
+# tasks: `sb spawn --task <id>`: the works its brief carries (none: the
+# parent's turn's)
+def NewTask.works(x: NewTask) -> Maybe<&2, List<&2, String>>:
+  match x:
+    case NewTask{_, _, _, _, _, _, _, _, _, +works}:
+      works
 
 def NewTask.brief_text(x: NewTask) -> String:
   match x:
-    case NewTask{_, _, _, +brief_text, _, _, _, _, _}:
+    case NewTask{_, _, _, +brief_text, _, _, _, _, _, _}:
       brief_text
 
 def Snd.from(x: Snd) -> String:
   match x:
-    case Snd{+from, _, _, _, _, _, _, _, _, _, _}:
+    case Snd{+from, _, _, _, _, _, _, _, _, _, _, _}:
       from
 
 def send.life(-o: S.St, life: S.Life, +cx: X.Cx<o>, +s: Snd, +a: S.Agent) -> X.Cx<o> & SendR:
@@ -852,38 +955,38 @@ def send.checked(-o: S.St, pre: Maybe<&2, String>, +cx: X.Cx<o>, +s: Snd) -> X.C
 
 def Snd.text(x: Snd) -> String:
   match x:
-    case Snd{_, _, +text, _, _, _, _, _, _, _, _}:
+    case Snd{_, _, +text, _, _, _, _, _, _, _, _, _}:
       text
 
 def Snd.parts(x: Snd) -> String:
   match x:
-    case Snd{_, _, _, _, _, _, _, _, _, +parts, _}:
+    case Snd{_, _, _, _, _, _, _, _, _, +parts, _, _}:
       parts
 
 def Snd.with_parts(x: Snd, +v: String) -> Snd:
   match x:
-    case Snd{+from, +to, +text, +expect, +reply_to, +plain, +auto, +queued, +via, _, +fwd}:
-      Snd{from, to, text, expect, reply_to, plain, auto, queued, via, v, fwd}
+    case Snd{+from, +to, +text, +expect, +reply_to, +plain, +auto, +queued, +via, _, +fwd, +wk}:
+      Snd{from, to, text, expect, reply_to, plain, auto, queued, via, v, fwd, wk}
 
 def Snd.with_to(x: Snd, +v: String) -> Snd:
   match x:
-    case Snd{+from, _, +text, +expect, +reply_to, +plain, +auto, +queued, +via, +parts, +fwd}:
-      Snd{from, v, text, expect, reply_to, plain, auto, queued, via, parts, fwd}
+    case Snd{+from, _, +text, +expect, +reply_to, +plain, +auto, +queued, +via, +parts, +fwd, +wk}:
+      Snd{from, v, text, expect, reply_to, plain, auto, queued, via, parts, fwd, wk}
 
 def Snd.with_text(x: Snd, +v: String) -> Snd:
   match x:
-    case Snd{+from, +to, _, +expect, +reply_to, +plain, +auto, +queued, +via, +parts, +fwd}:
-      Snd{from, to, v, expect, reply_to, plain, auto, queued, via, parts, fwd}
+    case Snd{+from, +to, _, +expect, +reply_to, +plain, +auto, +queued, +via, +parts, +fwd, +wk}:
+      Snd{from, to, v, expect, reply_to, plain, auto, queued, via, parts, fwd, wk}
 
 def Snd.fwd(x: Snd) -> Maybe<&2, Nat>:
   match x:
-    case Snd{_, _, _, _, _, _, _, _, _, _, +fwd}:
+    case Snd{_, _, _, _, _, _, _, _, _, _, +fwd, _}:
       fwd
 
 def Snd.with_fwd(x: Snd, +v: Maybe<&2, Nat>) -> Snd:
   match x:
-    case Snd{+from, +to, +text, +expect, +reply_to, +plain, +auto, +queued, +via, +parts, _}:
-      Snd{from, to, text, expect, reply_to, plain, auto, queued, via, parts, v}
+    case Snd{+from, +to, +text, +expect, +reply_to, +plain, +auto, +queued, +via, +parts, _, +wk}:
+      Snd{from, to, text, expect, reply_to, plain, auto, queued, via, parts, v, wk}
 
 def send.known(-o: S.St, m: Maybe<&2, String>, +cx: X.Cx<o>, +s: Snd) -> X.Cx<o> & SendR:
   match m:
@@ -1028,7 +1131,7 @@ def send(-o: S.St, +cx: X.Cx<o>, +s: Snd) -> X.Cx<o> & SendR:
   send_why(o, cx, s, "")
 
 def msg(+from: String, +to: String, +text: String, +expect: Bool, +reply_to: Maybe<&2, Nat>, +plain: Bool, +auto: Bool) -> Snd:
-  Snd{from, to, text, expect, reply_to, plain, auto, False{}, None{}, "", None{}}
+  Snd{from, to, text, expect, reply_to, plain, auto, False{}, None{}, "", None{}, None{}}
 
 def fst(-o: S.St, p: X.Cx<o> & SendR) -> X.Cx<o>:
   match p:
@@ -1043,7 +1146,7 @@ def fst(-o: S.St, p: X.Cx<o> & SendR) -> X.Cx<o>:
 # active: nothing is sent, the hub says so to the view.
 
 def view_snd(+agent: String, +text: String) -> Snd:
-  Snd{M.VIEW(), agent, text, False{}, None{}, False{}, False{}, True{}, None{}, "", None{}}
+  Snd{M.VIEW(), agent, text, False{}, None{}, False{}, False{}, True{}, None{}, "", None{}, None{}}
 
 # the message a view's text becomes: sent_of_snd's, with its plugin
 def view_msg_of(+agent: String, +plugin: String, +text: String, +id: Nat, +now: Nat) -> S.Sent:
@@ -1094,7 +1197,7 @@ def create.go.new(-o: S.St, +cx: X.Cx<o>, +t: NewTask, +name: String, +ws: J.Jso
   +m = msg(parent, name, String.append(head, NewTask.brief_text(t)), String.eq(parent, M.MAIN()), None{}, String.eq(parent, M.USER()), False{})
   # send-parts: the brief's parts (`sb spawn --attach`), the head in front
   # (law brief_keeps_parts)
-  create.sent(o, send(o, cx5, Snd.with_fwd(Snd.with_parts(m, NT.brief_parts(head, NewTask.parts(t))), NewTask.fwd(t))), name)
+  create.sent(o, send(o, cx5, Snd.with_works(Snd.with_fwd(Snd.with_parts(m, NT.brief_parts(head, NewTask.parts(t))), NewTask.fwd(t)), NewTask.works(t))), name)
 
 def create.go.free(-o: S.St, taken: Bool, +cx: X.Cx<o>, +t: NewTask, +name: String, +ws: J.Json, +e: {M.name_held(X.d(o, cx), name) == taken : Bool}) -> X.Cx<o> & TaskR:
   match taken:
@@ -1111,7 +1214,7 @@ def create.go(-o: S.St, +cx: X.Cx<o>, +t: NewTask, +name: String, +ws: J.Json) -
 
 def NewTask.with_changes(x: NewTask) -> Bool:
   match x:
-    case NewTask{_, _, _, _, _, _, +with_changes, _, _}:
+    case NewTask{_, _, _, _, _, _, +with_changes, _, _, _}:
       with_changes
 
 # hub-loop: `ws` placing, the shell makes its worktree off its loop
@@ -1132,12 +1235,12 @@ def create.wt(-o: S.St, wt: Bool, +cx: X.Cx<o>, +t: NewTask, +name: String) -> X
 
 def NewTask.worktree(x: NewTask) -> Bool:
   match x:
-    case NewTask{_, _, _, _, _, +worktree, _, _, _}:
+    case NewTask{_, _, _, _, _, +worktree, _, _, _, _}:
       worktree
 
 def NewTask.base(x: NewTask) -> String:
   match x:
-    case NewTask{_, +base, _, _, _, _, _, _, _}:
+    case NewTask{_, +base, _, _, _, _, _, _, _, _}:
       base
 
 # RFC 0001 §7.1 and RFC 0002 §3-4 (the name was validated by the daemon).
@@ -1282,7 +1385,9 @@ def timer_set.new(-o: S.St, s: Maybe<&2, S.Sched>, +cx: X.Cx<o>, +agent: String,
     case Some{+sc}:
       match i:
         case GI.IEverySet{_, +by, +text, +next_ms, +name, _, _, +until_ms, +times, +page}:
-          +t = S.Timer.with_next(S.Timer.with_sched(S.Timer.with_text(S.Timer.with_by(S.Timer.with_agent(S.Timer.with_id(S.Timer.empty(), 1n+S.Tms.last_id(tms(o, cx))), agent), by), text), sc), next_ms)
+          # tasks: the timer carries its setter's turn's works (law timer_carries_turn_works)
+          +t0 = S.Timer.with_works(S.Timer.with_by(S.Timer.with_agent(S.Timer.with_id(S.Timer.empty(), 1n+S.Tms.last_id(tms(o, cx))), agent), by), works_of_agent(M.get_agent(st(o, cx), by)))
+          +t = S.Timer.with_next(S.Timer.with_sched(S.Timer.with_text(t0, text), sc), next_ms)
           emit(o, cx, M.ETimerSet{S.Timer.with_held(S.Timer.with_name(S.Timer.with_page(S.Timer.with_times(S.Timer.with_until(t, until_ms), times), page), name), String.is_empty(name)), now(o, cx)}, Unit{}, Unit{}, Unit{})
         case _:
           cx
@@ -1453,7 +1558,7 @@ def timers_tick(-o: S.St, +cx: X.Cx<o>) -> X.Cx<o>:
 # a watch's wake from bise: never queued mode, so an idle agent starts a
 # turn and a busy one gets it in its turn, steered (law wake_steers_busy)
 def wake_snd(+agent: String, +text: String) -> Snd:
-  Snd{M.HUB(), agent, text, False{}, None{}, False{}, False{}, False{}, None{}, "", None{}}
+  Snd{M.HUB(), agent, text, False{}, None{}, False{}, False{}, False{}, None{}, "", None{}, None{}}
 
 def wake_say(-o: S.St, +cx: X.Cx<o>, +agent: String, +text: String) -> X.Cx<o>:
   fst(o, send(o, cx, wake_snd(agent, text)))
@@ -1907,7 +2012,7 @@ def move_task(-o: S.St, pre: Maybe<&2, String>, +cx: X.Cx<o>, +name: String, +j:
 def feature_retire.tell(-o: S.St, life: S.Life, +cx: X.Cx<o>, +n: String, +text: String) -> X.Cx<o>:
   match life:
     case S.LActive{}:
-      fst(o, send.thread(o, None{}, cx, Snd{M.HUB(), n, text, False{}, None{}, True{}, False{}, True{}, None{}, "", None{}}))
+      fst(o, send.thread(o, None{}, cx, Snd{M.HUB(), n, text, False{}, None{}, True{}, False{}, True{}, None{}, "", None{}, None{}}))
     case _:
       cx
 
@@ -1997,7 +2102,7 @@ def answer.q.main(-o: S.St, +cx: X.Cx<o>, +c: S.Card, +text: String, +parts: Str
 
 # his answer as a message to the asker, his parts with it
 def answer.snd(+to: String, +text: String, +reply_to: Maybe<&2, Nat>, +parts: String) -> Snd:
-  Snd{M.USER(), to, text, False{}, reply_to, False{}, False{}, False{}, None{}, parts, None{}}
+  Snd{M.USER(), to, text, False{}, reply_to, False{}, False{}, False{}, None{}, parts, None{}, None{}}
 
 def answer.q(-o: S.St, m: Maybe<&2, S.Msg>, +cx: X.Cx<o>, +c: S.Card, +text: String, +parts: String, +via: String) -> X.Cx<o>:
   match m:
@@ -2090,7 +2195,7 @@ def late.head(+it: S.Item) -> String:
   cat(["he answered #", ns(S.Item.id(it)), " after you withdrew it (\"", T.one_line(S.Item.text(it)), "\"):\n"])
 
 def late.snd(+it: S.Item, +text: String, +parts: String) -> Snd:
-  Snd{M.HUB(), M.MAIN(), String.append(late.head(it), text), False{}, None{}, False{}, False{}, False{}, None{}, parts, None{}}
+  Snd{M.HUB(), M.MAIN(), String.append(late.head(it), text), False{}, None{}, False{}, False{}, False{}, None{}, parts, None{}, None{}}
 
 # sent: card_late takes the card out of the list (law late_answer_once);
 # not sent: the card stays answerable, he hears why
@@ -2163,7 +2268,7 @@ def says.card(-o: S.St, card: Maybe<&2, Nat>, +cx: X.Cx<o>, +to: String, +text: 
     case Some{+id}:
       answer_card(o, user_sent(o, cx, text), id, text, parts, "thread")
     case None{}:
-      says.sent(o, send(o, cx, Snd{M.USER(), to, text, False{}, None{}, True{}, False{}, queued, None{}, parts, None{}}), to, text, from, parts)
+      says.sent(o, send(o, cx, Snd{M.USER(), to, text, False{}, None{}, True{}, False{}, queued, None{}, parts, None{}, None{}}), to, text, from, parts)
 
 # plain text from the user to the agent in focus. `queued` (the window's
 # "send queued"): a queued-mode message, held while the agent is busy and
@@ -2194,7 +2299,7 @@ def route.target(-o: S.St, m: Maybe<&2, String>, +cx: X.Cx<o>, +target: String, 
       # its answer comes back to that view
       +elsewhere = Bool.not(String.eq(name, focus))
       route.sent(o, send(o, cx, Snd{M.USER(), name, text, elsewhere, None{}, Bool.not(elsewhere), False{}, queued,
-        Bool.pick(Maybe<&2, String>, elsewhere, Some{focus}, None{}), parts, None{}}), name, text, focus, parts)
+        Bool.pick(Maybe<&2, String>, elsewhere, Some{focus}, None{}), parts, None{}, None{}}), name, text, focus, parts)
 
 # `@task text`: a direct message, without main; `queued` and `parts` as
 # user_says
@@ -2599,7 +2704,7 @@ def route_ask(-o: S.St, m: Maybe<&2, XB.Proj()>, +cx: X.Cx<o>, +text: String, +v
 # plain message (the cancel path, no route_done: the window never saw it)
 def route_plain(-o: S.St, +cx: X.Cx<o>, +r: S.Route) -> X.Cx<o>:
   +cx2 = xemit(o, cx, XH.XRoute{S.Route.rid(r), XH.REnd{S.RCancelled{}}})
-  says.sent(o, send(o, cx2, Snd{M.USER(), M.MAIN(), S.Route.text(r), False{}, None{}, True{}, False{}, False{}, XB.via_of(S.Route.via(r)), S.Route.parts(r), None{}}), M.MAIN(), S.Route.text(r), "", "")
+  says.sent(o, send(o, cx2, Snd{M.USER(), M.MAIN(), S.Route.text(r), False{}, None{}, True{}, False{}, False{}, XB.via_of(S.Route.via(r)), S.Route.parts(r), None{}, None{}}), M.MAIN(), S.Route.text(r), "", "")
 
 # his routed words in bise's main thread, where he wrote them: his line,
 # its id, his parts, then where they went (the window and the TUI fold
@@ -2648,7 +2753,7 @@ def route_cancel.go(-o: S.St, m: Maybe<&2, S.Route>, +cx: X.Cx<o>, +rid: Nat) ->
       +cx2 = aemit(o, cx, TM.ActDone{S.Route.act(r)})
       +cx3 = xemit(o, cx2, XH.XRoute{rid, XH.REnd{S.RCancelled{}}})
       +cx4 = route_done(o, cx3, rid, "cancelled", S.Route.to(r), None{}, None{})
-      says.sent(o, send(o, cx4, Snd{M.USER(), M.MAIN(), S.Route.text(r), False{}, None{}, True{}, False{}, False{}, XB.via_of(S.Route.via(r)), S.Route.parts(r), None{}}), M.MAIN(), S.Route.text(r), "", "")
+      says.sent(o, send(o, cx4, Snd{M.USER(), M.MAIN(), S.Route.text(r), False{}, None{}, True{}, False{}, False{}, XB.via_of(S.Route.via(r)), S.Route.parts(r), None{}, None{}}), M.MAIN(), S.Route.text(r), "", "")
 
 def route_cancel(-o: S.St, +cx: X.Cx<o>, +rid: Nat) -> X.Cx<o>:
   route_cancel.go(o, XB.held(xst(o, cx), rid), cx, rid)
@@ -2843,11 +2948,11 @@ def xboot(-o: S.St, +cx: X.Cx<o>) -> X.Cx<o>:
 def xin.snd(k: S.XKind, +text: String, +parts: String) -> Snd:
   match k:
     case S.KInput{}:
-      Snd{M.USER(), M.MAIN(), text, True{}, None{}, False{}, False{}, False{}, Some{XB.VIA_BISE()}, parts, None{}}
+      Snd{M.USER(), M.MAIN(), text, True{}, None{}, False{}, False{}, False{}, Some{XB.VIA_BISE()}, parts, None{}, None{}}
     case S.KAsk{}:
-      Snd{XB.FROM_BISE(), M.MAIN(), text, True{}, None{}, False{}, False{}, False{}, None{}, "", None{}}
+      Snd{XB.FROM_BISE(), M.MAIN(), text, True{}, None{}, False{}, False{}, False{}, None{}, "", None{}, None{}}
     case S.KJobEnd{}:
-      Snd{XB.FROM_BISE(), M.MAIN(), text, False{}, None{}, False{}, False{}, False{}, None{}, "", None{}}
+      Snd{XB.FROM_BISE(), M.MAIN(), text, False{}, None{}, False{}, False{}, False{}, None{}, "", None{}, None{}}
 
 def xin.sent(-o: S.St, p: X.Cx<o> & SendR, +token: Nat, +hub: String, +xid: Nat, +k: S.XKind) -> X.Cx<o>:
   match p:
@@ -2992,7 +3097,7 @@ def req_send.fwd(-o: S.St, f: Maybe<&2, Nat>, bare: Bool, +cx: X.Cx<o>, +token: 
 
 # an agent's `sb send` as the message it makes
 def req_send.snd(+from: String, +to: String, +expect: Bool, +reply_to: Maybe<&2, Nat>, +q: J.Json) -> Snd:
-  Snd{from, to, K.get_s(q, "text"), expect, reply_to, False{}, False{}, K.get_b(q, "queued"), None{}, K.get_s(q, "parts"), None{}}
+  Snd{from, to, K.get_s(q, "text"), expect, reply_to, False{}, False{}, K.get_b(q, "queued"), None{}, K.get_s(q, "parts"), None{}, task_of(q)}
 
 def req_send.go(-o: S.St, +cx: X.Cx<o>, +token: Nat, +from: String, +q: J.Json) -> X.Cx<o>:
   +to = K.get_s(q, "to")
@@ -3229,6 +3334,22 @@ def req_report.kind(-o: S.St, +cx: X.Cx<o>, +from: String, +kind: String, +summa
         u => job_end(o, report_failed(o, cx, from, summary), from, "failed", summary),
         u => cx)))
 
+# tasks: `sb report --done-when <n>`: done-when n ticked on each work of
+# the report (its `--task`, else its turn's), by its agent (0: none)
+def report_ticks(-o: S.St, ws: List<&2, String>, +cx: X.Cx<o>, +by: String, +n: Nat) -> X.Cx<o>:
+  match ws:
+    case Nil{}:
+      cx
+    case Con{+h, +t}:
+      report_ticks(o, t, emit(o, cx, M.EWorkChanged{h, S.WTick{n}, by, now(o, cx)}, Unit{}, Unit{}, Unit{}), by, n)
+
+def report_tick(-o: S.St, n: Nat, +cx: X.Cx<o>, +from: String, +q: J.Json) -> X.Cx<o>:
+  match n:
+    case 0n:
+      cx
+    case 1n+p:
+      report_ticks(o, works_of_send(task_of(q), st(o, cx), from), cx, from, 1n+p)
+
 def req_report.go(-o: S.St, is_main: Bool, +cx: X.Cx<o>, +token: Nat, +from: String, +q: J.Json) -> X.Cx<o>:
   match is_main:
     case True{}:
@@ -3243,7 +3364,7 @@ def req_report.go(-o: S.St, is_main: Bool, +cx: X.Cx<o>, +token: Nat, +from: Str
         J.kv("summary", J.JStr{summary}), J.kv("decisions", J.JArr{jstrs(decisions)}), J.kv("auto", J.JBool{False{}}),
         J.kv("step", Maybe.default(&2, J.Json, J.get(q, "step"), J.JNull{})), J.kv("of", Maybe.default(&2, J.Json, J.get(q, "of"), J.JNull{})),
         J.kv("result", Maybe.default(&2, J.Json, J.get(q, "result"), J.JNull{}))])}, Unit{}, Unit{}, Unit{})
-      +cx3 = req_report.kind(o, cx2, from, kind, summary)
+      +cx3 = req_report.kind(o, report_tick(o, K.get_n(q, "done_when"), cx2, from, q), from, kind, summary)
       +parent = Maybe.default(&2, String, ST.parent_of(M.get_agent(st(o, cx3), from)), M.MAIN())
       +to = Bool.pick(String, String.eq(parent, M.USER()), M.MAIN(), parent)
       # the report answers the parent's open request, if any: no
@@ -3270,15 +3391,15 @@ def req_spawn.res(-o: S.St, p: X.Cx<o> & TaskR, +token: Nat) -> X.Cx<o>:
 
 def new_task(+parent: String, +q: J.Json) -> NewTask:
   NewTask{parent, K.get_s(q, "base"), Maybe.default(&2, J.Json, J.get(q, "brief"), J.JNull{}), K.get_s(q, "brief_text"),
-    K.get_s(q, "objective"), K.get_b(q, "worktree"), K.get_b(q, "with_changes"), K.get_s(q, "brief_parts"), None{}}
+    K.get_s(q, "objective"), K.get_b(q, "worktree"), K.get_b(q, "with_changes"), K.get_s(q, "brief_parts"), None{}, task_of(q)}
 
 # msg-forward: `sb spawn --forward m_<n>`: the brief gets the message main
 # got or sent as its last section, its parts behind the brief's (law
 # forward_brief_records_source: the brief's message carries the id)
 def new_task.fwd(t: NewTask, +m: S.Msg, +w: S.Orig, +at: String) -> NewTask:
   match t:
-    case NewTask{+parent, +base, +brief, +brief_text, +objective, +worktree, +with_changes, _, _}:
-      NewTask{parent, base, brief, FW.brief(brief_text, m, w, parent, at), objective, worktree, with_changes, FW.brief_parts(brief_text, m, w, parent, at), Some{S.Msg.id(m)}}
+    case NewTask{+parent, +base, +brief, +brief_text, +objective, +worktree, +with_changes, _, _, +works}:
+      NewTask{parent, base, brief, FW.brief(brief_text, m, w, parent, at), objective, worktree, with_changes, FW.brief_parts(brief_text, m, w, parent, at), Some{S.Msg.id(m)}, works}
 
 def req_spawn.door(-o: S.St, d: FW.Door, +cx: X.Cx<o>, +token: Nat, +q: J.Json) -> X.Cx<o>:
   match d:
@@ -3355,26 +3476,27 @@ def card_to_asker(-o: S.St, +cx: X.Cx<o>, +id: Nat, +agent: String, +text: Strin
 
 # `about`: what the card is about, the shell's (its `--page|--artifact`
 # resolved), kept on the card as is
-def req_card.go(-o: S.St, +cx: X.Cx<o>, +token: Nat, +agent: String, +text: String, +for_msg: Maybe<&2, Nat>, +about: Maybe<&2, J.Json>) -> X.Cx<o>:
+# `works`: its `--task` (none: the asker's turn's)
+def req_card.go(-o: S.St, +cx: X.Cx<o>, +token: Nat, +agent: String, +text: String, +for_msg: Maybe<&2, Nat>, +about: Maybe<&2, J.Json>, +works: Maybe<&2, List<&2, String>>) -> X.Cx<o>:
   +id = S.St.next_card(st(o, cx))
-  +cx2 = card_to_asker(o, open_card_about(o, cx, "question", agent, text, for_msg, about), id, agent, text)
+  +cx2 = card_to_asker(o, open_card_works(o, cx, "question", agent, text, for_msg, None{}, None{}, about, works), id, agent, text)
   # main hands the question over: no automatic reply
   +cx3 = req_card.settle(o, for_msg, cx2)
   reply(o, cx3, token, ok_body([J.kv("card", J.JNum{id})]))
 
-def req_card.msg(-o: S.St, q: Maybe<&2, S.Msg>, +cx: X.Cx<o>, +token: Nat, +text: String, +id: Nat, +about: Maybe<&2, J.Json>) -> X.Cx<o>:
+def req_card.msg(-o: S.St, q: Maybe<&2, S.Msg>, +cx: X.Cx<o>, +token: Nat, +text: String, +id: Nat, +about: Maybe<&2, J.Json>, +works: Maybe<&2, List<&2, String>>) -> X.Cx<o>:
   match q:
     case None{}:
       reply_err(o, cx, token, String.append("message inconnu : ", mid(id)))
     case Some{+m}:
-      req_card.go(o, cx, token, S.Msg.from(m), text, Some{id}, about)
+      req_card.go(o, cx, token, S.Msg.from(m), text, Some{id}, about, works)
 
-def req_card(-o: S.St, for_msg: Maybe<&2, Nat>, +cx: X.Cx<o>, +token: Nat, +text: String, +about: Maybe<&2, J.Json>) -> X.Cx<o>:
+def req_card(-o: S.St, for_msg: Maybe<&2, Nat>, +cx: X.Cx<o>, +token: Nat, +text: String, +about: Maybe<&2, J.Json>, +works: Maybe<&2, List<&2, String>>) -> X.Cx<o>:
   match for_msg:
     case None{}:
-      req_card.go(o, cx, token, M.MAIN(), text, None{}, about)
+      req_card.go(o, cx, token, M.MAIN(), text, None{}, about, works)
     case Some{+id}:
-      req_card.msg(o, M.msg_of(st(o, cx), id), cx, token, text, id, about)
+      req_card.msg(o, M.msg_of(st(o, cx), id), cx, token, text, id, about, works)
 
 # `sb close N ["note"]`: a card in the user's inbox is the user's to
 # answer or close (BISE-299): refused; an older journal's card of another
@@ -3440,6 +3562,181 @@ def req_task.res(-o: S.St, p: X.Cx<o> & TaskR, +token: Nat) -> X.Cx<o>:
     case (+cx, THalt{}):
       cx
 
+# ---- tasks: `sb task <verb>` (docs/tasks.md; architect m_64423) ----
+# A work is born only here (law work_only_by_command), its id free among
+# the works and the tombs (WO.free). Its agent serves it from then: the
+# id joins its turn's works. main changes any work; the other agents tick
+# their done-when only. An agent's request is never his (by = the agent:
+# law an_agent_never_acts_as_him). `list` and `show` are the shell's.
+
+def task_verb(+s: String) -> TaskV:
+  Bool.pick(TaskV, String.eq(s, "new"), TVNew{},
+  Bool.pick(TaskV, String.eq(s, "rename"), TVRename{},
+  Bool.pick(TaskV, String.eq(s, "why"), TVWhy{},
+  Bool.pick(TaskV, String.eq(s, "goal"), TVGoal{},
+  Bool.pick(TaskV, String.eq(s, "tick"), TVTick{},
+  Bool.pick(TaskV, String.eq(s, "untick"), TVUntick{},
+  Bool.pick(TaskV, String.eq(s, "ongoing"), TVOngoing{},
+  Bool.pick(TaskV, String.eq(s, "pause"), TVPause{},
+  Bool.pick(TaskV, String.eq(s, "resume"), TVResume{},
+  Bool.pick(TaskV, String.eq(s, "done"), TVDone{},
+  Bool.pick(TaskV, String.eq(s, "reopen"), TVReopen{},
+  Bool.pick(TaskV, String.eq(s, "merge"), TVMerge{}, TVOther{}))))))))))))
+
+# the change a verb makes (new and an unknown verb: none)
+def task_op(v: TaskV, +q: J.Json) -> S.WOp:
+  match v:
+    case TVRename{}:
+      S.WRename{String.trim(K.get_s(q, "name"))}
+    case TVWhy{}:
+      S.WWhy{K.get_s(q, "text")}
+    case TVGoal{}:
+      S.WGoal{String.trim(K.get_s(q, "text"))}
+    case TVTick{}:
+      S.WTick{K.get_n(q, "n")}
+    case TVUntick{}:
+      S.WUntick{K.get_n(q, "n")}
+    case TVOngoing{}:
+      S.WMakeOngoing{}
+    case TVPause{}:
+      S.WPause{K.get_n(q, "until_ms")}
+    case TVResume{}:
+      S.WResume{}
+    case TVDone{}:
+      S.WDone{}
+    case TVReopen{}:
+      S.WReopen{}
+    case TVMerge{}:
+      S.WMerge{K.get_s(q, "into")}
+    case _:
+      S.WNoop{}
+
+# what an agent other than main may change: its done-when ticks
+def task_op.agent(op: S.WOp) -> Bool:
+  match op:
+    case S.WTick{_}:
+      True{}
+    case S.WUntick{_}:
+      True{}
+    case _:
+      False{}
+
+def task_refused.goal(+n: Nat, +w: S.Work) -> Maybe<&2, String>:
+  LZ.pick(Maybe<&2, String>, Nat.is_eq(n, 0n) || Nat.is_gt(n, List.length(&2, S.Goal, S.Work.goals(w))),
+    u => Some{cat(["no done-when #", ns(n), " on task ", S.Work.id(w)])},
+    u => None{})
+
+def task_refused.into(m: Maybe<&2, String>, +id: String, +into: String) -> Maybe<&2, String>:
+  match m:
+    case None{}:
+      Some{cat(["no task ", into, " to merge into (sb task list)"])}
+    case Some{+t}:
+      LZ.pick(Maybe<&2, String>, String.eq(t, id), u => Some{"a task does not merge into itself"}, u => None{})
+
+def task_refused.reopen(m: Maybe<&2, S.Fin>, +id: String) -> Maybe<&2, String>:
+  match m:
+    case None{}:
+      Some{cat(["task ", id, " is not done"])}
+    case Some{_}:
+      None{}
+
+def task_refused.text(+t: String, +what: String) -> Maybe<&2, String>:
+  LZ.pick(Maybe<&2, String>, String.is_empty(t), u => Some{what}, u => None{})
+
+# why `by`'s change `op` of work `w` is refused; none: it goes (a name he
+# gave stays his: law named_by_you_sticks)
+def task_refused.op(op: S.WOp, +w: S.Work, +by: String, +xs: List<&2, S.Work>) -> Maybe<&2, String>:
+  match op:
+    case S.WRename{+name}:
+      LZ.pick(Maybe<&2, String>, S.Work.named_by_you(w) && Bool.not(String.eq(by, M.USER())),
+        u => Some{"he named this task: only he renames it"},
+        u => task_refused.text(name, "say its new name"))
+    case S.WGoal{+text}:
+      task_refused.text(text, "say what done means")
+    case S.WTick{+n}:
+      task_refused.goal(n, w)
+    case S.WUntick{+n}:
+      task_refused.goal(n, w)
+    case S.WMerge{+into}:
+      task_refused.into(WO.target(xs, into), S.Work.id(w), into)
+    case S.WReopen{}:
+      task_refused.reopen(S.Work.done(w), S.Work.id(w))
+    case _:
+      None{}
+
+def task_refused(+w: S.Work, +op: S.WOp, +by: String, +is_main: Bool, +xs: List<&2, S.Work>) -> Maybe<&2, String>:
+  LZ.pick(Maybe<&2, String>, is_main || task_op.agent(op),
+    u => task_refused.op(op, w, by, xs),
+    u => Some{"only main changes a task: tick your done-when with sb report --done-when <n>"})
+
+def req_task.go(-o: S.St, r: Maybe<&2, String>, +cx: X.Cx<o>, +token: Nat, +by: String, +id: String, +op: S.WOp) -> X.Cx<o>:
+  match r:
+    case Some{+e}:
+      reply_err(o, cx, token, e)
+    case None{}:
+      reply(o, emit(o, cx, M.EWorkChanged{id, op, by, now(o, cx)}, Unit{}, Unit{}, Unit{}), token, ok_body([J.kv("id", J.JStr{id})]))
+
+# a folded work is refused with its word (reopen on a tomb: v1, m_64425)
+def req_task.missing(+st: S.St, +id: String) -> String:
+  LZ.pick(String, WO.tomb_has(S.St.tombs(st), id),
+    u => cat(["task ", id, " is folded (done more than 7 days ago): ask main to start a new one"]),
+    u => cat(["no task ", id, " (sb task list)"]))
+
+def req_task.change(-o: S.St, m: Maybe<&2, S.Work>, +cx: X.Cx<o>, +token: Nat, +by: String, +is_main: Bool, +id: String, +op: S.WOp) -> X.Cx<o>:
+  match m:
+    case None{}:
+      reply_err(o, cx, token, req_task.missing(st(o, cx), id))
+    case Some{+w}:
+      req_task.go(o, task_refused(w, op, by, is_main, S.St.works(st(o, cx))), cx, token, by, id, op)
+
+# the birth: the work, then its agent's turn serves it (law
+# work_birth_takes_turn)
+def req_task.born(-o: S.St, +cx: X.Cx<o>, +token: Nat, +by: String, +w: S.Work) -> X.Cx<o>:
+  +id = S.Work.id(w)
+  +cx2 = emit(o, cx, M.EWorkCreated{w}, Unit{}, Unit{}, Unit{})
+  +cx3 = emit(o, cx2, M.EWorkTurn{WO.wturn(by, [id], True{}, now(o, cx2))}, Unit{}, Unit{}, Unit{})
+  reply(o, cx3, token, ok_body([J.kv("id", J.JStr{id}), J.kv("name", J.JStr{S.Work.name(w)})]))
+
+# `slug`: the shell's of the name (router's rules), "" when it has none
+def req_task.new(-o: S.St, +cx: X.Cx<o>, +token: Nat, +by: String, +q: J.Json) -> X.Cx<o>:
+  +name = String.trim(K.get_s(q, "name"))
+  +slug = K.get_s(q, "slug")
+  +gs = M.jstr_list(Maybe.default(&2, List<&2, J.Json>, J.get_arr(q, "goals"), Nil{}))
+  LZ.pick(X.Cx<o>, String.is_empty(name) || String.is_empty(slug),
+    u => reply_err(o, cx, token, "say its name: sb task new \"<name>\" [--why \"…\"] [--done-when \"…\"]..."),
+    u => req_task.born(o, cx, token, by, WO.born(WO.free(st(o, cx), slug), name, K.get_s(q, "why"), gs, WO.origin(st(o, cx), by), by, now(o, cx))))
+
+def req_task.verb(-o: S.St, v: TaskV, +cx: X.Cx<o>, +token: Nat, +by: String, +is_main: Bool, +q: J.Json) -> X.Cx<o>:
+  match v:
+    case TVNew{}:
+      req_task.new(o, cx, token, by, q)
+    case TVOther{}:
+      reply_err(o, cx, token, String.append("sb task: unknown verb ", K.get_s(q, "step")))
+    case other:
+      +id = K.get_s(q, "id")
+      req_task.change(o, WO.find(S.St.works(st(o, cx)), id), cx, token, by, is_main, id, task_op(other, q))
+
+def req_task(-o: S.St, +cx: X.Cx<o>, +token: Nat, +by: String, +is_main: Bool, +q: J.Json) -> X.Cx<o>:
+  req_task.verb(o, task_verb(K.get_s(q, "step")), cx, token, by, is_main, q)
+
+# `--task <id>`: each id read as the live work it names (a merged one's
+# target: law merge_redirects); an unknown one is the sender's error
+def task_flag.one(m: Maybe<&2, String>, +h: String, rest: TaskFlag) -> TaskFlag:
+  match m rest:
+    case None{} _:
+      TFErr{cat(["no task ", h, " (sb task list)"])}
+    case Some{_} TFErr{+e}:
+      TFErr{e}
+    case Some{+id} TFOk{+ws}:
+      TFOk{WO.union([id], ws)}
+
+def task_flag(xs: List<&2, String>, +works: List<&2, S.Work>) -> TaskFlag:
+  match xs:
+    case Nil{}:
+      TFOk{Nil{}}
+    case Con{+h, +t}:
+      task_flag.one(WO.target(works, h), h, task_flag(t, works))
+
 def cmd_tag(+c: String) -> Cmd:
   Bool.pick(Cmd, String.eq(c, "send"), CSend{},
   Bool.pick(Cmd, String.eq(c, "wait"), CWait{},
@@ -3458,7 +3755,8 @@ def cmd_tag(+c: String) -> Cmd:
   Bool.pick(Cmd, String.eq(c, "move"), CMove{},
   Bool.pick(Cmd, String.eq(c, "withdraw"), CWithdraw{},
   Bool.pick(Cmd, String.eq(c, "project_send"), CProjectSend{},
-  Bool.pick(Cmd, String.eq(c, "project_ask"), CProjectAsk{}, CCard{}))))))))))))))))))
+  Bool.pick(Cmd, String.eq(c, "project_ask"), CProjectAsk{},
+  Bool.pick(Cmd, String.eq(c, "task"), CTask{}, CCard{})))))))))))))))))))
 
 def req.main.go(-o: S.St, c: Cmd, +cx: X.Cx<o>, +token: Nat, +q: J.Json) -> X.Cx<o>:
   match c:
@@ -3487,7 +3785,7 @@ def req.main.go(-o: S.St, c: Cmd, +cx: X.Cx<o>, +token: Nat, +q: J.Json) -> X.Cx
     case CProjectAsk{}:
       req_xask(o, K.opt_s(J.get(q, "pre_err")), cx, token, q)
     case _:
-      req_card(o, K.opt_n(J.get(q, "for")), cx, token, K.get_s(q, "text"), J.get(q, "about"))
+      req_card(o, K.opt_n(J.get(q, "for")), cx, token, K.get_s(q, "text"), J.get(q, "about"), task_of(q))
 
 def req.main(-o: S.St, is_main: Bool, +cx: X.Cx<o>, +token: Nat, +c: Cmd, +q: J.Json) -> X.Cx<o>:
   match is_main:
@@ -3503,22 +3801,33 @@ def req.go(-o: S.St, c: Cmd, +cx: X.Cx<o>, +token: Nat, +from: String, +q: J.Jso
     case CWait{}:
       wait(o, cx, token, from, K.get_n(q, "msg"), K.get_n(q, "timeout_s"))
     case CAsk{}:
-      req_ask.res(o, send(o, cx, msg(from, K.get_s(q, "to"), K.get_s(q, "text"), True{}, None{}, False{}, False{})), token, from, K.get_n(q, "timeout_s"))
+      req_ask.res(o, send(o, cx, Snd.with_works(msg(from, K.get_s(q, "to"), K.get_s(q, "text"), True{}, None{}, False{}, False{}), task_of(q))), token, from, K.get_n(q, "timeout_s"))
     case CStatus{}:
       req_status(o, cx, token, from, String.eq(from, M.MAIN()), q)
     case CReport{}:
       req_report.go(o, String.eq(from, M.MAIN()), cx, token, from, q)
     case CFollow{}:
       req_follow(o, cx, token, from, q)
+    case CTask{}:
+      req_task(o, cx, token, from, String.eq(from, M.MAIN()), q)
     case other:
       req.main(o, String.eq(from, M.MAIN()), cx, token, other, q)
+
+# its `--task` ids read (task_flag) before the request runs: the request
+# then holds the live works they name
+def req.flag(-o: S.St, f: TaskFlag, +cx: X.Cx<o>, +token: Nat, +from: String, +q: J.Json) -> X.Cx<o>:
+  match f:
+    case TFErr{+e}:
+      reply_err(o, cx, token, e)
+    case TFOk{+ws}:
+      req.go(o, cmd_tag(K.get_s(q, "cmd")), cx, token, from, J.set(q, "task", J.JArr{jstrs(ws)}))
 
 def req.from(-o: S.St, m: Maybe<&2, String>, +cx: X.Cx<o>, +token: Nat, +raw: String, +q: J.Json) -> X.Cx<o>:
   match m:
     case None{}:
       reply_err(o, cx, token, String.append("agent inconnu : ", raw))
     case Some{+from}:
-      req.go(o, cmd_tag(K.get_s(q, "cmd")), cx, token, from, q)
+      req.flag(o, task_flag(task_ids(q), S.St.works(st(o, cx))), cx, token, from, q)
 
 def agent_req(-o: S.St, +cx: X.Cx<o>, +token: Nat, +from: String, +q: J.Json) -> X.Cx<o>:
   req.from(o, M.resolve(st(o, cx), from), cx, token, from, q)
@@ -4215,7 +4524,7 @@ def dispatch(-o: S.St, +cx: X.Cx<o>, +i: GI.In) -> X.Cx<o>:
         u => says_ctx(o, cx, M.MAIN(), text, queued, parts, ""),
         u => route_ctx(o, M.resolve(st(o, cx), target), cx, target, text, focus, queued, parts))
     case GI.INew{+base, +brief, +brief_text, +objective, +worktree, +with_changes}:
-      user_new.res(o, create_task(o, cx, NewTask{M.USER(), base, brief, brief_text, objective, worktree, with_changes, "", None{}}))
+      user_new.res(o, create_task(o, cx, NewTask{M.USER(), base, brief, brief_text, objective, worktree, with_changes, "", None{}, None{}}))
     case GI.IDrop{+name, +force}:
       user_drop.res(o, drop_task(o, cx, name, force), name)
     case GI.IRestore{+name}:

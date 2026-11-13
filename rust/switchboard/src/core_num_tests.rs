@@ -60,7 +60,7 @@ fn an_agent_s_numbers_over_what_sb_core_reads_are_refused_naming_them() {
         AgentReq::Withdraw { card: big, why: "x".into() },
         AgentReq::Wait { msg: big, timeout_s: 1 },
         AgentReq::Wait { msg: 1, timeout_s: u64::MAX },
-        AgentReq::Ask { to: "docs".into(), text: "q".into(), timeout_s: u64::MAX },
+        AgentReq::Ask { to: "docs".into(), text: "q".into(), timeout_s: u64::MAX, task: Vec::new() },
     ];
     for req in reqs {
         let what = format!("{:?}", req);

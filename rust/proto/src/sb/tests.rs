@@ -64,7 +64,7 @@ fn a_known_command_with_bad_fields_is_the_senders_error() {
 #[test]
 fn the_wire_shapes_read_as_their_values() {
     let r = req(json!({"cmd": "send", "to": "a", "text": "b", "reply_to": "12", "mode": "queued", "model": "m"}));
-    assert_eq!(r, Req::Send { to: "a".into(), text: "b".into(), expect_reply: false, reply_to: Some(12), queued: true, why: String::new(), switch: Some(("m".into(), String::new())), attach: vec![], parts: String::new(), fwd: None });
+    assert_eq!(r, Req::Send { to: "a".into(), text: "b".into(), expect_reply: false, reply_to: Some(12), queued: true, why: String::new(), switch: Some(("m".into(), String::new())), attach: vec![], parts: String::new(), fwd: None, task: vec![] });
     // msg-forward: `--forward m_<n>` reads as its id
     let r = req(json!({"cmd": "send", "to": "a", "fwd": "m_7"}));
     assert!(matches!(r, Req::Send { fwd: Some(7), .. }), "{r:?}");
@@ -76,7 +76,7 @@ fn the_wire_shapes_read_as_their_values() {
     let r = req(json!({"cmd": "follow", "agent": "@fix"}));
     assert_eq!(r, Req::Follow { agent: "fix".into(), on: true, hub: String::new() });
     let r = req(json!({"cmd": "report", "kind": "done", "summary": "s", "step": 3, "result": "no"}));
-    assert_eq!(r, Req::Report { kind: "done".into(), summary: "s".into(), decisions: vec![], step: None, result: None }, "step without of; a result that isn't an object");
+    assert_eq!(r, Req::Report { kind: "done".into(), summary: "s".into(), decisions: vec![], step: None, result: None, done_when: None, task: vec![] }, "step without of; a result that isn't an object");
     let r = req(json!({"cmd": "every", "step": "add", "to": "@news", "text": "t", "every_ms": 60000, "page": " ", "name": " a b "}));
     assert_eq!(r, Req::Every(Every::Add { to: "news".into(), text: "t".into(), every_ms: Some(60000), daily_min: None, until_ms: None, times: None, page: None, name: Some("a b".into()) }));
     let r = req(json!({"cmd": "spawn", "name": "fix", "objective": "o", "done_when": "", "report_format": "short", "profile": "fast"}));

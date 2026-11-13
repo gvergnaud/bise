@@ -152,6 +152,18 @@ def hub_apply_names.go(+e: HM.Ev, +s: HS.St, u: HI.NamesApart(s), +k: HX.FreshEv
       u
     case HM.EResumed{a}:
       u
+    case HM.EWorkCreated{w0}:
+      u
+    case HM.EWorkChanged{w0, w1, w2, w3}:
+      u
+    case HM.EWorkFolded{w0, w1}:
+      u
+    case HM.EWorkTurn{+wt}:
+      PLA.ag_on_ok(HAG.has(HS.St.agents(s), HS.WTurn.agent(wt)), HS.St.agents(s), HS.St.arch(s), HS.WTurn.agent(wt), HM.OTurnWorks{HS.WTurn.works(wt), HS.WTurn.add(wt)}, {==}, u)
+    case HM.ECardMoved{cm}:
+      u
+    case HM.EArtMoved{am}:
+      u
 
 def hub_apply_names(+s: HS.St, e: HM.Ev, u: HI.NamesApart(s), +k: HX.FreshEv(s, e)) -> HI.NamesApart(HM.apply(s, e)):
   %HSL.St.open_eq(s) : HI.NamesApart(HM.apply(_, e))

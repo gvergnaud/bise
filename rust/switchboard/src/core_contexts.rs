@@ -40,7 +40,7 @@ mod tests {
 
     fn spawn_req(t: &mut T, name: &str) -> Vec<Effect> {
         let brief = Brief { objective: format!("objective of {name}"), ..Brief::default() };
-        let req = AgentReq::Spawn { name: name.into(), brief, worktree: false, with_changes: false, place: String::new(), feature: String::new(), ask: Default::default(), attach: Vec::new(), parts: String::new(), fwd: None };
+        let req = AgentReq::Spawn { name: name.into(), brief, worktree: false, with_changes: false, place: String::new(), feature: String::new(), ask: Default::default(), attach: Vec::new(), parts: String::new(), fwd: None, task: Vec::new() };
         t.req(MAIN, req).1
     }
 

@@ -92,6 +92,32 @@ pub(crate) fn not_in_a_repo(cmd: &str) -> String {
     format!("sb {}: not in a repo (this workspace has no git): files stay as you saved them, nothing to land", cmd)
 }
 
+/// tasks: a request's `--task` ids on sb-core's line (none: no key, an
+/// older core reads the same line; sb-core reads each as a live work).
+pub(super) fn task_keys(q: &mut Value, task: Vec<String>) {
+    if !task.is_empty() {
+        q["task"] = serde_json::json!(task);
+    }
+}
+
+/// tasks: `sb task <verb>` as sb-core's request (docs/tasks.md); Err: the
+/// reply the hub gives at once. `new` carries its slug (router's rules:
+/// sb-core makes it free among the works and their tombs).
+pub(super) fn task_req(t: bise_proto::sb::Task) -> Result<Value, Value> {
+    use bise_proto::sb::Task;
+    let mut q = serde_json::to_value(&t).map_err(|e| serde_json::json!({"ok": false, "error": e.to_string()}))?;
+    match &t {
+        Task::New { name, .. } => q["slug"] = serde_json::json!(crate::router::slug(name)),
+        // the hub's reads: the view's rows (tasks chunk 3)
+        Task::List { .. } | Task::Show { .. } => {
+            return Err(serde_json::json!({"ok": false, "error": "sb task list|show: not in this build yet"}))
+        }
+        _ => {}
+    }
+    q["cmd"] = serde_json::json!("task");
+    Ok(q)
+}
+
 /// Issue 37 #2: an agent request core.rs turns into sb-core's `req` step
 /// with nothing done before it (no reply, effect or state change), so
 /// sb-core checks its sender in that step. Anything else (core.rs answers
@@ -101,6 +127,7 @@ pub(super) fn rides_req(req: &AgentReq) -> bool {
     match req {
         AgentReq::Send { switch, .. } => switch.is_none(),
         AgentReq::Spawn { ask, feature, .. } => ask.is_empty() && feature.is_empty(),
+        AgentReq::Task(t) => !matches!(t, bise_proto::sb::Task::List { .. } | bise_proto::sb::Task::Show { .. }),
         AgentReq::Wait { .. }
         | AgentReq::Ask { .. }
         | AgentReq::Status { .. }

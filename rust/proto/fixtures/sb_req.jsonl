@@ -111,3 +111,25 @@
 {"cmd":"project_list"}
 {"cmd":"project_send","msg":"m_12","project":"shop"}
 {"cmd":"project_ask","project":"shop","text":"is it green?"}
+{"cmd":"task","goals":["it builds signed","he tried it"],"name":"Native mac","step":"new","why":"he wants the app"}
+{"cmd":"task","name":"Fix the bar","step":"new"}
+{"cmd":"task","step":"list"}
+{"all":true,"cmd":"task","step":"list"}
+{"cmd":"task","id":"native-mac","step":"show"}
+{"cmd":"task","id":"native-mac","step":"done"}
+{"cmd":"task","id":"native-mac","step":"reopen"}
+{"cmd":"task","id":"native-mac","step":"pause","until_ms":1792446164770}
+{"cmd":"task","id":"native-mac","step":"pause"}
+{"cmd":"task","id":"native-mac","step":"resume"}
+{"cmd":"task","id":"native-mac","name":"Native mac app","step":"rename"}
+{"cmd":"task","id":"native-mac","step":"why","text":"he uses it daily"}
+{"cmd":"task","id":"native-mac","step":"goal","text":"notarized"}
+{"cmd":"task","id":"native-mac","n":2,"step":"tick"}
+{"cmd":"task","id":"native-mac","n":2,"step":"untick"}
+{"cmd":"task","id":"digest","step":"ongoing"}
+{"cmd":"task","id":"nm-merge","into":"native-mac","step":"merge"}
+{"cmd":"send","expect_reply":false,"mode":"steer","task":["native-mac"],"text":"on it","to":"main"}
+{"cmd":"ask","task":["native-mac","digest"],"text":"which port?","timeout_s":20,"to":"main"}
+{"cmd":"report","decisions":[],"done_when":2,"kind":"progress","summary":"signed","task":["native-mac"]}
+{"cmd":"card","task":["native-mac"],"text":"ship it?"}
+{"cmd":"spawn","constraints":[],"context":"","done_when":"","effort":"","feature":"","model":"","name":"fix","objective":"fix the bar","profile":"","report_format":"","task":["native-mac"],"with_changes":false,"worktree":false}

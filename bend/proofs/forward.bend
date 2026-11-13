@@ -12,12 +12,12 @@ import ../laws/forward.bend as Laws
 
 def Laws.forward_records_source(s, m, w, at):
   match s:
-    case HC.Snd{from, to, text, expect, reply_to, plain, auto, queued, via, parts, fwd}:
+    case HC.Snd{from, to, text, expect, reply_to, plain, auto, queued, via, parts, fwd, works}:
       {==}
 
 def Laws.forward_brief_records_source(t, m, w, at):
   match t:
-    case HC.NewTask{parent, base, brief, brief_text, objective, worktree, with_changes, parts, fwd}:
+    case HC.NewTask{parent, base, brief, brief_text, objective, worktree, with_changes, parts, fwd, works}:
       {==}
 
 def Laws.forward_only_own(names, m, id, e):

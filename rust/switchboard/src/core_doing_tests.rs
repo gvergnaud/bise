@@ -50,7 +50,7 @@ fn a_view_rebuild_keeps_it() {
     let before = row_doing(&mut t, "a");
     assert_eq!(before.as_ref().map(|d| d.kind), Some(DoingKind::Tool));
     // a step that goes through sb-core (a message to it) rebuilds the view
-    t.req(MAIN, AgentReq::Send { to: "a".into(), text: "hi".into(), expect_reply: false, reply_to: None, queued: true, why: String::new(), switch: None, parts: String::new(), attach: Vec::new(), fwd: None });
+    t.req(MAIN, AgentReq::Send { to: "a".into(), text: "hi".into(), expect_reply: false, reply_to: None, queued: true, why: String::new(), switch: None, parts: String::new(), attach: Vec::new(), fwd: None, task: Vec::new() });
     assert_eq!(row_doing(&mut t, "a"), before);
     assert_eq!(t.hub.doing.get("a").cloned(), before);
 }
@@ -60,7 +60,7 @@ fn a_view_rebuild_keeps_it() {
 fn a_message_and_a_report_are_activity() {
     let mut t = T::new();
     t.spawn_task("a");
-    let (_, fx) = t.req(MAIN, AgentReq::Send { to: "a".into(), text: "secret body".into(), expect_reply: true, reply_to: None, queued: false, why: String::new(), switch: None, parts: String::new(), attach: Vec::new(), fwd: None });
+    let (_, fx) = t.req(MAIN, AgentReq::Send { to: "a".into(), text: "secret body".into(), expect_reply: true, reply_to: None, queued: false, why: String::new(), switch: None, parts: String::new(), attach: Vec::new(), fwd: None, task: Vec::new() });
     let acts: Vec<_> = fx.iter().filter_map(|e| if let Effect::Activity(a) = e { Some(a.clone()) } else { None }).collect();
     assert_eq!(acts.len(), 1, "{fx:?}");
     assert!(matches!(&acts[0], bise_proto::activity::ActivityEv::Message { expects_reply: true, .. }), "{acts:?}");

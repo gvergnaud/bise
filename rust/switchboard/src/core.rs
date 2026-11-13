@@ -1961,6 +1961,7 @@ impl Hub {
                 parts,
                 attach: _,
                 fwd,
+                task,
             } => {
                 // issue #4: the model first, so the message's turn runs on it
                 if let Some((model, effort)) = switch {
@@ -1979,6 +1980,7 @@ impl Hub {
                 if !parts.is_empty() {
                     q["parts"] = json!(parts);
                 }
+                pure::task_keys(&mut q, task);
                 crate::forward::keys(&self.st, &mut q, fwd);
                 q
             }
@@ -1992,11 +1994,11 @@ impl Hub {
             AgentReq::Wait { msg, timeout_s } => {
                 json!({"cmd": "wait", "msg": msg, "timeout_s": timeout_s})
             }
-            AgentReq::Ask {
-                to,
-                text,
-                timeout_s,
-            } => json!({"cmd": "ask", "to": to, "text": text, "timeout_s": timeout_s}),
+            AgentReq::Ask { to, text, timeout_s, task } => {
+                let mut q = json!({"cmd": "ask", "to": to, "text": text, "timeout_s": timeout_s});
+                pure::task_keys(&mut q, task);
+                q
+            }
             AgentReq::Status { status, note } => {
                 json!({"cmd": "status", "status": status, "note": note})
             }
@@ -2047,6 +2049,8 @@ impl Hub {
                 decisions,
                 step,
                 result,
+                done_when,
+                task,
             } => {
                 let mut q = json!({"cmd": "report", "kind": kind, "summary": summary, "decisions": decisions});
                 if let Some((n, of)) = step {
@@ -2056,6 +2060,11 @@ impl Hub {
                 if let Some(r) = result {
                     q["result"] = r;
                 }
+                // tasks: the done-when item it ticks on its works
+                if let Some(n) = done_when {
+                    q["done_when"] = json!(n);
+                }
+                pure::task_keys(&mut q, task);
                 q
             }
             AgentReq::Follow { agent, on, hub } => json!({"cmd": "follow", "agent": agent, "off": !on, "hub": hub}),
@@ -2070,6 +2079,7 @@ impl Hub {
                 parts,
                 attach: _,
                 fwd,
+                task,
             } => {
                 // issue #4: the answer waits for the daemon's pick of the model
                 if !ask.is_empty() {
@@ -2096,6 +2106,7 @@ impl Hub {
                             v["join"] = json!(ws);
                             v["worktree"] = json!(false);
                         }
+                        pure::task_keys(&mut v, task);
                         crate::forward::keys(&self.st, &mut v, fwd);
                         v
                     }
@@ -2143,11 +2154,12 @@ impl Hub {
             }
             // its page or artifact links are the daemon's (daemon/page_cards.rs);
             // `about`, the artifact it resolved, rides it to card_opened
-            AgentReq::Card { text, for_msg, about, .. } => {
+            AgentReq::Card { text, for_msg, about, task, .. } => {
                 let mut q = json!({"cmd": "card", "text": text, "for": for_msg});
                 if let Some(a) = about {
                     q["about"] = a;
                 }
+                pure::task_keys(&mut q, task);
                 q
             }
             AgentReq::Close { card, note } => json!({"cmd": "close", "card": card, "note": note}),
@@ -2156,6 +2168,15 @@ impl Hub {
                 let valid = router::valid_name(&new_name);
                 json!({"cmd": "rename", "agent": agent, "new_name": new_name, "valid": valid})
             }
+            // tasks (docs/tasks.md): every change is sb-core's; `new`
+            // with its slug (router's rules), sb-core makes it free
+            AgentReq::Task(t) => match pure::task_req(t) {
+                Ok(q) => q,
+                Err(body) => {
+                    reply(fx, body);
+                    return;
+                }
+            },
             AgentReq::Restore { agent } => json!({"cmd": "restore", "agent": agent}),
             AgentReq::Isolate { agent } => json!({"cmd": "isolate", "agent": agent}),
             AgentReq::Every(r) => {

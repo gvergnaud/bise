@@ -3,6 +3,7 @@
 import Base
 import ../../vendor/json.bend as J
 import ../../hub/model.bend as HM
+import ../../hub/work.bend as HWO
 import ../../hub/gen/state.bend as HS
 import ../../hub/gen/state-laws.bend as HSL
 import ../../hub/cx.bend as HX
@@ -362,6 +363,29 @@ def hub_ucards_open(+cs: List<&2, HS.Card>, +c: HS.Card, +nc: Nat, +k: {HS.Card.
           PL1.hub_below_snoc(HI.card_ids(cs), HS.Card.id(c), top, PL1.hub_below_mono(HI.card_ids(cs), nc, top, Nat.max_ge_l(nc, 1n+HS.Card.id(c)), b),
             PL1.hub_lt_ge(HS.Card.id(c), 1n+HS.Card.id(c), top, PL1.hub_lt_succ(HS.Card.id(c)), Nat.max_ge_r(nc, 1n+HS.Card.id(c)))))}
 
+# tasks: a card moved to other works keeps its id, so the ids stay
+def hub_cmoved_head(+h: HS.Card, +t: List<&2, HS.Card>, +ws: List<&2, String>) -> {HI.card_ids(HS.Card.with_moved(HS.Card.with_works(h, ws), True{}) <> t) == HI.card_ids(h <> t) : List<&2, Nat>}:
+  %HSL.Card.open_eq(h) : {HI.card_ids(HS.Card.with_moved(HS.Card.with_works(_, ws), True{}) <> t) == HI.card_ids(_ <> t) : List<&2, Nat>}
+  {==}
+
+def hub_cmoved_ids.go(c: Bool, +h: HS.Card, +t: List<&2, HS.Card>, +id: Nat, +ws: List<&2, String>, +e: {Nat.is_eq(HS.Card.id(h), id) == c : Bool},
+    ih: {HI.card_ids(HM.card_moved(t, id, ws)) == HI.card_ids(t) : List<&2, Nat>}) -> {HI.card_ids(HM.card_moved(h <> t, id, ws)) == HI.card_ids(h <> t) : List<&2, Nat>}:
+  match c:
+    case True{}:
+      %Equal.sym(Bool, Nat.is_eq(HS.Card.id(h), id), True{}, e) : {HI.card_ids(HLZ.pick(List<&2, HS.Card>, _, u => HS.Card.with_moved(HS.Card.with_works(h, ws), True{}) <> t, u => h <> HM.card_moved(t, id, ws))) == HI.card_ids(h <> t) : List<&2, Nat>}
+      hub_cmoved_head(h, t, ws)
+    case False{}:
+      %Equal.sym(Bool, Nat.is_eq(HS.Card.id(h), id), False{}, e) : {HI.card_ids(HLZ.pick(List<&2, HS.Card>, _, u => HS.Card.with_moved(HS.Card.with_works(h, ws), True{}) <> t, u => h <> HM.card_moved(t, id, ws))) == HI.card_ids(h <> t) : List<&2, Nat>}
+      %Equal.sym(List<&2, Nat>, HI.card_ids(HM.card_moved(t, id, ws)), HI.card_ids(t), ih) : {HS.Card.id(h) <> _ == HS.Card.id(h) <> HI.card_ids(t) : List<&2, Nat>}
+      {==}
+
+def hub_cmoved_ids(+cs: List<&2, HS.Card>, +id: Nat, +ws: List<&2, String>) -> {HI.card_ids(HM.card_moved(cs, id, ws)) == HI.card_ids(cs) : List<&2, Nat>}:
+  match cs:
+    case Nil{}:
+      {==}
+    case Con{h, t}:
+      hub_cmoved_ids.go(Nat.is_eq(HS.Card.id(h), id), h, t, id, ws, {==}, hub_cmoved_ids(t, id, ws))
+
 # on the state opened by name (S.St.open), each event's apply computes
 def hub_apply_ucards.go(+e: HM.Ev, +s: HS.St, u: HI.UniqueCards(s), k: HX.FreshEv(s, e)) -> HI.UniqueCards(HM.apply(HS.St.open(s), e)):
   match e:
@@ -432,6 +456,19 @@ def hub_apply_ucards.go(+e: HM.Ev, +s: HS.St, u: HI.UniqueCards(s), k: HX.FreshE
     case HM.EPaused{a}:
       u
     case HM.EResumed{a}:
+      u
+    case HM.EWorkCreated{w0}:
+      u
+    case HM.EWorkChanged{w0, w1, w2, w3}:
+      u
+    case HM.EWorkFolded{w0, w1}:
+      u
+    case HM.EWorkTurn{wt}:
+      u
+    case HM.ECardMoved{cm}:
+      %Equal.sym(List<&2, Nat>, HI.card_ids(HM.card_moved(HS.St.cards(s), HS.CardMove.card(cm), HS.CardMove.works(cm))), HI.card_ids(HS.St.cards(s)), hub_cmoved_ids(HS.St.cards(s), HS.CardMove.card(cm), HS.CardMove.works(cm))) : HX.Both<HI.Distinct(_), HI.Below(_, HS.St.next_card(s))>
+      u
+    case HM.EArtMoved{am}:
       u
 
 def hub_apply_ucards(+s: HS.St, e: HM.Ev, u: HI.UniqueCards(s), k: HX.FreshEv(s, e)) -> HI.UniqueCards(HM.apply(s, e)):
@@ -727,6 +764,9 @@ def hub_names_op(+h: HS.Agent, op: HM.AgentOp, nr: {hub_is_rename(op) == False{}
       {==}
     case HM.ODrop{ok, sn}:
       hub_drop_names(ok, h, sn)
+    case HM.OTurnWorks{ws, add}:
+      %HSL.Agent.turn_works.eta(h, HWO.turn_works(HS.Agent.turn_works(h), ws, add)) : {HI.names(_) == HI.names(h) : List<&2, String>}
+      {==}
 
 def hub_prof_map.pick(c: Bool, +h: HS.Agent, +t: List<&2, HS.Agent>, +n: String, +op: HM.AgentOp, +e: {String.eq(HS.Agent.name(h), n) == c : Bool},
     +nr: {hub_is_rename(op) == False{} : Bool}, ih: {HI.profile(HM.map_agent(t, n, op)) == HI.profile(t) : List<&2, List<&2, String>>})

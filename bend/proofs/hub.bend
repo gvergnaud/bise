@@ -1247,6 +1247,18 @@ def apply_order.go(+e: HM.Ev, +s: HS.St, k: {HM.order_ev(e) == False{} : Bool}) 
       {==}
     case HM.EResumed{x0}:
       {==}
+    case HM.EWorkCreated{w0}:
+      {==}
+    case HM.EWorkChanged{w0, w1, w2, w3}:
+      {==}
+    case HM.EWorkFolded{w0, w1}:
+      {==}
+    case HM.EWorkTurn{wt}:
+      {==}
+    case HM.ECardMoved{cm}:
+      {==}
+    case HM.EArtMoved{am}:
+      {==}
 
 def Laws.apply_keeps_order(s, e, k):
   %HSL.St.open_eq(s) : {HS.St.order(HM.apply(_, e)) == HS.St.order(s) : List<&2, String>}

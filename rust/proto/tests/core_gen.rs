@@ -769,6 +769,13 @@ def omit_mb(+k: String, m: Maybe<&2, Bool>) -> List<&2, Sigma<&2, &2, String, _ 
     case Some{+b}:
       [J.kv(k, J.JBool{b})]
 
+def omit_ss(+k: String, xs: List<&2, String>) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case Con{+h, +t}:
+      [J.kv(k, J.JArr{jstrs(Con{h, t})})]
+
 def omit_mss(+k: String, m: Maybe<&2, List<&2, String>>) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
   match m:
     case None{}:

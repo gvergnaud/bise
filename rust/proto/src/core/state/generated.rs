@@ -230,6 +230,8 @@ pub struct Msg {
     pub fwd: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub view: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub works: Vec<String>,
 }
 
 /// Not an object: an error (its reader skips it).
@@ -251,6 +253,7 @@ impl<'de> Deserialize<'de> for Msg {
             has_parts: field(&o, "has_parts"),
             fwd: field(&o, "fwd"),
             view: field(&o, "view"),
+            works: field(&o, "works"),
         })
     }
 }
@@ -295,6 +298,10 @@ pub struct Card {
     pub view: Option<ViewAsk>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub about: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub works: Vec<String>,
+    #[serde(skip_serializing_if = "super::read::is_false")]
+    pub moved: bool,
 }
 
 /// Not an object: an error (its reader skips it).
@@ -312,6 +319,8 @@ impl<'de> Deserialize<'de> for Card {
             pr: field(&o, "pr"),
             view: field(&o, "view"),
             about: field(&o, "about"),
+            works: field(&o, "works"),
+            moved: field(&o, "moved"),
         })
     }
 }

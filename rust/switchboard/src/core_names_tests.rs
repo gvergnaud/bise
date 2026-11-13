@@ -78,6 +78,7 @@ fn the_feed_says_where_the_archived_agent_went() {
             parts: String::new(),
             attach: Vec::new(),
             fwd: None,
+            task: Vec::new(),
         },
     );
     let lines = infos(&fx);
@@ -111,7 +112,7 @@ fn a_rename_takes_a_freed_old_name_and_its_holder_keeps_its_things() {
     // a message to marketing is for the new one now
     let (tok, fx) = t.req(
         "design",
-        AgentReq::Send { to: "marketing".into(), text: "hi".into(), expect_reply: false, reply_to: None, queued: false, why: String::new(), switch: None, parts: String::new(), attach: Vec::new(), fwd: None },
+        AgentReq::Send { to: "marketing".into(), text: "hi".into(), expect_reply: false, reply_to: None, queued: false, why: String::new(), switch: None, parts: String::new(), attach: Vec::new(), fwd: None, task: Vec::new() },
     );
     assert!(reply(&fx, tok).is_some(), "{fx:?}");
     assert!(t.hub.st.msgs().values().any(|m| t.hub.st.text(m.id) == "hi" && m.to == "marketing"));
@@ -127,7 +128,7 @@ fn a_live_holders_queued_and_owed_messages_move_to_it() {
         let (tok, fx) = t.req(
             MAIN,
             // the second one waits for the turn's end (queued mode)
-            AgentReq::Send { to: "marketing".into(), text: text.into(), expect_reply: expect, reply_to: None, queued: !expect, why: String::new(), switch: None, parts: String::new(), attach: Vec::new(), fwd: None },
+            AgentReq::Send { to: "marketing".into(), text: text.into(), expect_reply: expect, reply_to: None, queued: !expect, why: String::new(), switch: None, parts: String::new(), attach: Vec::new(), fwd: None, task: Vec::new() },
         );
         assert!(reply(&fx, tok).is_some(), "{fx:?}");
         t.hub.st.msgs().values().find(|m| t.hub.st.text(m.id) == text).unwrap().id
@@ -170,7 +171,7 @@ fn a_reply_the_archived_agent_owed_is_never_the_new_ones() {
     t.go(Input::ReplIdle { agent: "x".into(), leftover: false });
     let (_, _) = t.req(
         MAIN,
-        AgentReq::Send { to: "x".into(), text: "status?".into(), expect_reply: true, reply_to: None, queued: false, why: String::new(), switch: None, parts: String::new(), attach: Vec::new(), fwd: None },
+        AgentReq::Send { to: "x".into(), text: "status?".into(), expect_reply: true, reply_to: None, queued: false, why: String::new(), switch: None, parts: String::new(), attach: Vec::new(), fwd: None, task: Vec::new() },
     );
     let id = t.hub.st.msgs().values().find(|m| t.hub.st.text(m.id) == "status?").unwrap().id;
     // archived mid-turn: the reply is still owed (an idle turn's end

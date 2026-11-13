@@ -63,15 +63,37 @@ type RSt is Data:
   RSent{}
   RCancelled{}
 
+# a work's kind: a task ends, an ongoing work (a changelog, a watch) never does; any other word reads task
+type WKind is Data:
+  WTask{}
+  WOngoing{}
+
+# one change of a work (`work_changed`, hub/work.bend), its word under `op`; any other word reads WNoop (a newer core's change: skipped)
+type WOp is Data:
+  WRename{name: String}
+  WWhy{why: String}
+  WGoal{text: String}
+  WTick{n: Nat}
+  WUntick{n: Nat}
+  WMakeOngoing{}
+  WPause{until: Nat}
+  WResume{}
+  WDone{}
+  WReopen{}
+  WMerge{into: String}
+  WAddAgent{agent: String}
+  WUntilTimer{timer: Nat}
+  WNoop{}
+
 # ---- the records ----
 
 # a message between two parties of the group (the sender or the recipient may be `user`), without its words (c6: the journal's `message_sent` line keeps them, a `Sent`; what sb-core writes of them is a body the shell fills, body.rs)
 type Msg is Data:
-  Msg{id: Nat, thread: Nat, from: String, to: String, reply_to: Maybe<&2, Nat>, expect: Bool, auto: Bool, created: Nat, plain: Bool, queued: Bool, via: Maybe<&2, String>, has_parts: Bool, fwd: Maybe<&2, Nat>, view: Maybe<&2, String>}
+  Msg{id: Nat, thread: Nat, from: String, to: String, reply_to: Maybe<&2, Nat>, expect: Bool, auto: Bool, created: Nat, plain: Bool, queued: Bool, via: Maybe<&2, String>, has_parts: Bool, fwd: Maybe<&2, Nat>, view: Maybe<&2, String>, works: List<&2, String>}
 
 # a message as its `message_sent` journal line carries it: its Msg and its words (`text`, `parts` as JSON, "" none). sb-core makes it, journals it and keeps the Msg (c6): the words stay in the journal
 type Sent is Data:
-  Sent{id: Nat, thread: Nat, from: String, to: String, reply_to: Maybe<&2, Nat>, expect: Bool, auto: Bool, text: String, created: Nat, plain: Bool, queued: Bool, via: Maybe<&2, String>, parts: String, fwd: Maybe<&2, Nat>, view: Maybe<&2, String>}
+  Sent{id: Nat, thread: Nat, from: String, to: String, reply_to: Maybe<&2, Nat>, expect: Bool, auto: Bool, text: String, created: Nat, plain: Bool, queued: Bool, via: Maybe<&2, String>, parts: String, fwd: Maybe<&2, Nat>, view: Maybe<&2, String>, works: List<&2, String>}
 
 # a forwarded message's words as the shell puts them on a forward request (`orig`, switchboard forward.rs): sb-core keeps no message's words (c6), the journal does
 type Orig is Data:
@@ -91,7 +113,7 @@ type ViewAsk is Data:
 
 # a card of his inbox; `place`, `pr`: a place's card (ready to merge: its id, PR); `view`: a view's call's card (mcp-apps); `about`: the artifact it is about (the shell's ArtLink, opaque: sb-core stores it, never reads it)
 type Card is Data:
-  Card{id: Nat, kind: String, agent: String, text: String, for_msg: Maybe<&2, Nat>, created: Nat, place: Maybe<&2, String>, pr: Maybe<&2, Nat>, view: Maybe<&2, ViewAsk>, about: Maybe<&2, J.Json>}
+  Card{id: Nat, kind: String, agent: String, text: String, for_msg: Maybe<&2, Nat>, created: Nat, place: Maybe<&2, String>, pr: Maybe<&2, Nat>, view: Maybe<&2, ViewAsk>, about: Maybe<&2, J.Json>, works: List<&2, String>, moved: Bool}
 
 # his answer as a card's close journals it: `said`, the option `pick_n`/`pick` ("" none), `via` inbox|thread|page ("" closed without him), the page's question `page`/`block`
 type Ans is Data:
@@ -99,7 +121,7 @@ type Ans is Data:
 
 # an agent of the group; `dir` its folder (stable on a rename); `follow` the hub that follows it ("" this one)
 type Agent is Data:
-  Agent{name: String, is_main: Bool, parent: Maybe<&2, String>, life: Life, declared: Maybe<&2, Decl>, aliases: List<&2, String>, files: List<&2, String>, ws: J.Json, dir: String, brief: J.Json, created: Nat, failure: Maybe<&2, String>, note: String, report: J.Json, snap: Maybe<&2, String>, follow: Maybe<&2, String>}
+  Agent{name: String, is_main: Bool, parent: Maybe<&2, String>, life: Life, declared: Maybe<&2, Decl>, aliases: List<&2, String>, files: List<&2, String>, ws: J.Json, dir: String, brief: J.Json, created: Nat, failure: Maybe<&2, String>, note: String, report: J.Json, snap: Maybe<&2, String>, follow: Maybe<&2, String>, turn_works: List<&2, String>}
 
 # a card main withdrew he may still answer (gone.bend)
 type Item is Data:
@@ -107,7 +129,7 @@ type Item is Data:
 
 # an `sb every` timer: `next` when it is due; `last` when it last woke its agent (0 never); `runs` its last runs, oldest first; `name` what the lists show; `held` set without a name, its set line not written yet
 type Timer is Data:
-  Timer{id: Nat, agent: String, by: String, text: String, sched: Sched, next: Nat, until: Maybe<&2, Nat>, times: Maybe<&2, Nat>, fired: Nat, page: Maybe<&2, String>, last: Nat, runs: List<&2, Nat>, name: String, held: Bool}
+  Timer{id: Nat, agent: String, by: String, text: String, sched: Sched, next: Nat, until: Maybe<&2, Nat>, times: Maybe<&2, Nat>, fired: Nat, page: Maybe<&2, String>, last: Nat, runs: List<&2, Nat>, name: String, held: Bool, works: List<&2, String>}
 
 # a timer that ended: when (0: an old line without it) and why
 type TimerEnd is Data:
@@ -149,460 +171,518 @@ type Route is Data:
 type Xs is Data:
   Xs{outbox: List<&2, Out>, next_xid: Nat, xin: List<&2, XIn>, routes: List<&2, Route>, next_rid: Nat}
 
+# a work's done-when item: its words, ticked, by whom (an agent's report, or `user`)
+type Goal is Data:
+  Goal{text: String, done: Bool, by: String}
+
+# when a work was marked done, and by whom (`user`, or main on his word)
+type Fin is Data:
+  Fin{at: Nat, by: String}
+
+# a task (page tasks-center): what he asked for, whatever the number of agents on it. `id` a slug, stable on a rename; `origin` his message that started it; `agents` every agent a turn of it served (kept after an archive); `last` the newest fact of it (a delivery tagged with it, a report of one of its agents in its turn): Stalled reads it, no agent carries a last-activity time of its own; `until_timer` the timer of a pause until a time
+type Work is Data:
+  Work{id: String, name: String, why: String, goals: List<&2, Goal>, kind: WKind, origin: Maybe<&2, Nat>, by: String, created: Nat, paused: Maybe<&2, Nat>, until: Maybe<&2, Nat>, until_timer: Maybe<&2, Nat>, done: Maybe<&2, Fin>, merged_into: Maybe<&2, String>, named_by_you: Bool, agents: List<&2, String>, last: Nat}
+
+# a work done more than 7 days ago, folded (architect m_64425): its id stays taken and its links resolve; the journal keeps the rest
+type Tomb is Data:
+  Tomb{id: String, name: String, done: Nat, merged_into: Maybe<&2, String>}
+
+# his "Move to task…" on an artifact: its works from now on, an agent's turn never moves it back (law moved_by_you_sticks)
+type Moved is Data:
+  Moved{art: String, works: List<&2, String>}
+
+# an agent's turn's works as they change (work_turn): a new turn sets them, a steered delivery (`add`) adds to them
+type WTurn is Data:
+  WTurn{agent: String, works: List<&2, String>, add: Bool, at: Nat}
+
+# his "Move to task…" on a card: its works from now on
+type CardMove is Data:
+  CardMove{card: Nat, works: List<&2, String>}
+
 # the hub's durable state; `paused` since that ms (None runs); `hot`/`old` the messages split (hot ids ascending, old newest first); `gone` the withdrawn cards he may still answer, newest first; `agents`/`arch` the agents split (agents: not archived, in creation order; arch: archived, newest archived first; `order` every name, in creation order)
 type St is Data:
-  St{agents: List<&2, Agent>, order: List<&2, String>, hot: List<&2, MRec>, cards: List<&2, Card>, notes: List<&2, String>, next_msg: Nat, next_card: Nat, tm: Tms, x: Xs, paused: Maybe<&2, Nat>, old: List<&2, MRec>, gone: List<&2, Item>, arch: List<&2, Agent>}
+  St{agents: List<&2, Agent>, order: List<&2, String>, hot: List<&2, MRec>, cards: List<&2, Card>, notes: List<&2, String>, next_msg: Nat, next_card: Nat, tm: Tms, x: Xs, paused: Maybe<&2, Nat>, old: List<&2, MRec>, gone: List<&2, Item>, arch: List<&2, Agent>, works: List<&2, Work>, tombs: List<&2, Tomb>, moved: List<&2, Moved>}
 
 # ---- Msg ----
 
 def Msg.empty() -> Msg:
-  Msg{0n, 0n, "", "", None{}, False{}, False{}, 0n, False{}, False{}, None{}, False{}, None{}, None{}}
+  Msg{0n, 0n, "", "", None{}, False{}, False{}, 0n, False{}, False{}, None{}, False{}, None{}, None{}, Nil{}}
 
 def Msg.id(r: Msg) -> Nat:
   match r:
-    case Msg{f0, _, _, _, _, _, _, _, _, _, _, _, _, _}:
+    case Msg{f0, _, _, _, _, _, _, _, _, _, _, _, _, _, _}:
       f0
 
 def Msg.with_id(r: Msg, v: Nat) -> Msg:
   match r:
-    case Msg{_, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
-      Msg{v, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}
+    case Msg{_, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Msg{v, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}
 
 def Msg.over_id(r: Msg, g: Nat -> Nat) -> Msg:
   match r:
-    case Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
-      Msg{g(f0), f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}
+    case Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Msg{g(f0), f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}
 
 def Msg.thread(r: Msg) -> Nat:
   match r:
-    case Msg{_, f1, _, _, _, _, _, _, _, _, _, _, _, _}:
+    case Msg{_, f1, _, _, _, _, _, _, _, _, _, _, _, _, _}:
       f1
 
 def Msg.with_thread(r: Msg, v: Nat) -> Msg:
   match r:
-    case Msg{f0, _, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
-      Msg{f0, v, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}
+    case Msg{f0, _, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Msg{f0, v, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}
 
 def Msg.over_thread(r: Msg, g: Nat -> Nat) -> Msg:
   match r:
-    case Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
-      Msg{f0, g(f1), f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}
+    case Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Msg{f0, g(f1), f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}
 
 def Msg.from(r: Msg) -> String:
   match r:
-    case Msg{_, _, f2, _, _, _, _, _, _, _, _, _, _, _}:
+    case Msg{_, _, f2, _, _, _, _, _, _, _, _, _, _, _, _}:
       f2
 
 def Msg.with_from(r: Msg, v: String) -> Msg:
   match r:
-    case Msg{f0, f1, _, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
-      Msg{f0, f1, v, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}
+    case Msg{f0, f1, _, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Msg{f0, f1, v, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}
 
 def Msg.over_from(r: Msg, g: String -> String) -> Msg:
   match r:
-    case Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
-      Msg{f0, f1, g(f2), f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}
+    case Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Msg{f0, f1, g(f2), f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}
 
 def Msg.to(r: Msg) -> String:
   match r:
-    case Msg{_, _, _, f3, _, _, _, _, _, _, _, _, _, _}:
+    case Msg{_, _, _, f3, _, _, _, _, _, _, _, _, _, _, _}:
       f3
 
 def Msg.with_to(r: Msg, v: String) -> Msg:
   match r:
-    case Msg{f0, f1, f2, _, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
-      Msg{f0, f1, f2, v, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}
+    case Msg{f0, f1, f2, _, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Msg{f0, f1, f2, v, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}
 
 def Msg.over_to(r: Msg, g: String -> String) -> Msg:
   match r:
-    case Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
-      Msg{f0, f1, f2, g(f3), f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}
+    case Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Msg{f0, f1, f2, g(f3), f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}
 
 def Msg.reply_to(r: Msg) -> Maybe<&2, Nat>:
   match r:
-    case Msg{_, _, _, _, f4, _, _, _, _, _, _, _, _, _}:
+    case Msg{_, _, _, _, f4, _, _, _, _, _, _, _, _, _, _}:
       f4
 
 def Msg.with_reply_to(r: Msg, v: Maybe<&2, Nat>) -> Msg:
   match r:
-    case Msg{f0, f1, f2, f3, _, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
-      Msg{f0, f1, f2, f3, v, f5, f6, f7, f8, f9, f10, f11, f12, f13}
+    case Msg{f0, f1, f2, f3, _, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Msg{f0, f1, f2, f3, v, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}
 
 def Msg.over_reply_to(r: Msg, g: Maybe<&2, Nat> -> Maybe<&2, Nat>) -> Msg:
   match r:
-    case Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
-      Msg{f0, f1, f2, f3, g(f4), f5, f6, f7, f8, f9, f10, f11, f12, f13}
+    case Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Msg{f0, f1, f2, f3, g(f4), f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}
 
 def Msg.expect(r: Msg) -> Bool:
   match r:
-    case Msg{_, _, _, _, _, f5, _, _, _, _, _, _, _, _}:
+    case Msg{_, _, _, _, _, f5, _, _, _, _, _, _, _, _, _}:
       f5
 
 def Msg.with_expect(r: Msg, v: Bool) -> Msg:
   match r:
-    case Msg{f0, f1, f2, f3, f4, _, f6, f7, f8, f9, f10, f11, f12, f13}:
-      Msg{f0, f1, f2, f3, f4, v, f6, f7, f8, f9, f10, f11, f12, f13}
+    case Msg{f0, f1, f2, f3, f4, _, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Msg{f0, f1, f2, f3, f4, v, f6, f7, f8, f9, f10, f11, f12, f13, f14}
 
 def Msg.over_expect(r: Msg, g: Bool -> Bool) -> Msg:
   match r:
-    case Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
-      Msg{f0, f1, f2, f3, f4, g(f5), f6, f7, f8, f9, f10, f11, f12, f13}
+    case Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Msg{f0, f1, f2, f3, f4, g(f5), f6, f7, f8, f9, f10, f11, f12, f13, f14}
 
 def Msg.auto(r: Msg) -> Bool:
   match r:
-    case Msg{_, _, _, _, _, _, f6, _, _, _, _, _, _, _}:
+    case Msg{_, _, _, _, _, _, f6, _, _, _, _, _, _, _, _}:
       f6
 
 def Msg.with_auto(r: Msg, v: Bool) -> Msg:
   match r:
-    case Msg{f0, f1, f2, f3, f4, f5, _, f7, f8, f9, f10, f11, f12, f13}:
-      Msg{f0, f1, f2, f3, f4, f5, v, f7, f8, f9, f10, f11, f12, f13}
+    case Msg{f0, f1, f2, f3, f4, f5, _, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Msg{f0, f1, f2, f3, f4, f5, v, f7, f8, f9, f10, f11, f12, f13, f14}
 
 def Msg.over_auto(r: Msg, g: Bool -> Bool) -> Msg:
   match r:
-    case Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
-      Msg{f0, f1, f2, f3, f4, f5, g(f6), f7, f8, f9, f10, f11, f12, f13}
+    case Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Msg{f0, f1, f2, f3, f4, f5, g(f6), f7, f8, f9, f10, f11, f12, f13, f14}
 
 def Msg.created(r: Msg) -> Nat:
   match r:
-    case Msg{_, _, _, _, _, _, _, f7, _, _, _, _, _, _}:
+    case Msg{_, _, _, _, _, _, _, f7, _, _, _, _, _, _, _}:
       f7
 
 def Msg.with_created(r: Msg, v: Nat) -> Msg:
   match r:
-    case Msg{f0, f1, f2, f3, f4, f5, f6, _, f8, f9, f10, f11, f12, f13}:
-      Msg{f0, f1, f2, f3, f4, f5, f6, v, f8, f9, f10, f11, f12, f13}
+    case Msg{f0, f1, f2, f3, f4, f5, f6, _, f8, f9, f10, f11, f12, f13, f14}:
+      Msg{f0, f1, f2, f3, f4, f5, f6, v, f8, f9, f10, f11, f12, f13, f14}
 
 def Msg.over_created(r: Msg, g: Nat -> Nat) -> Msg:
   match r:
-    case Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
-      Msg{f0, f1, f2, f3, f4, f5, f6, g(f7), f8, f9, f10, f11, f12, f13}
+    case Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Msg{f0, f1, f2, f3, f4, f5, f6, g(f7), f8, f9, f10, f11, f12, f13, f14}
 
 def Msg.plain(r: Msg) -> Bool:
   match r:
-    case Msg{_, _, _, _, _, _, _, _, f8, _, _, _, _, _}:
+    case Msg{_, _, _, _, _, _, _, _, f8, _, _, _, _, _, _}:
       f8
 
 def Msg.with_plain(r: Msg, v: Bool) -> Msg:
   match r:
-    case Msg{f0, f1, f2, f3, f4, f5, f6, f7, _, f9, f10, f11, f12, f13}:
-      Msg{f0, f1, f2, f3, f4, f5, f6, f7, v, f9, f10, f11, f12, f13}
+    case Msg{f0, f1, f2, f3, f4, f5, f6, f7, _, f9, f10, f11, f12, f13, f14}:
+      Msg{f0, f1, f2, f3, f4, f5, f6, f7, v, f9, f10, f11, f12, f13, f14}
 
 def Msg.over_plain(r: Msg, g: Bool -> Bool) -> Msg:
   match r:
-    case Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
-      Msg{f0, f1, f2, f3, f4, f5, f6, f7, g(f8), f9, f10, f11, f12, f13}
+    case Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Msg{f0, f1, f2, f3, f4, f5, f6, f7, g(f8), f9, f10, f11, f12, f13, f14}
 
 def Msg.queued(r: Msg) -> Bool:
   match r:
-    case Msg{_, _, _, _, _, _, _, _, _, f9, _, _, _, _}:
+    case Msg{_, _, _, _, _, _, _, _, _, f9, _, _, _, _, _}:
       f9
 
 def Msg.with_queued(r: Msg, v: Bool) -> Msg:
   match r:
-    case Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, _, f10, f11, f12, f13}:
-      Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, v, f10, f11, f12, f13}
+    case Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, _, f10, f11, f12, f13, f14}:
+      Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, v, f10, f11, f12, f13, f14}
 
 def Msg.over_queued(r: Msg, g: Bool -> Bool) -> Msg:
   match r:
-    case Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
-      Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, g(f9), f10, f11, f12, f13}
+    case Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, g(f9), f10, f11, f12, f13, f14}
 
 def Msg.via(r: Msg) -> Maybe<&2, String>:
   match r:
-    case Msg{_, _, _, _, _, _, _, _, _, _, f10, _, _, _}:
+    case Msg{_, _, _, _, _, _, _, _, _, _, f10, _, _, _, _}:
       f10
 
 def Msg.with_via(r: Msg, v: Maybe<&2, String>) -> Msg:
   match r:
-    case Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, _, f11, f12, f13}:
-      Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, v, f11, f12, f13}
+    case Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, _, f11, f12, f13, f14}:
+      Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, v, f11, f12, f13, f14}
 
 def Msg.over_via(r: Msg, g: Maybe<&2, String> -> Maybe<&2, String>) -> Msg:
   match r:
-    case Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
-      Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, g(f10), f11, f12, f13}
+    case Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, g(f10), f11, f12, f13, f14}
 
 def Msg.has_parts(r: Msg) -> Bool:
   match r:
-    case Msg{_, _, _, _, _, _, _, _, _, _, _, f11, _, _}:
+    case Msg{_, _, _, _, _, _, _, _, _, _, _, f11, _, _, _}:
       f11
 
 def Msg.with_has_parts(r: Msg, v: Bool) -> Msg:
   match r:
-    case Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, _, f12, f13}:
-      Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, v, f12, f13}
+    case Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, _, f12, f13, f14}:
+      Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, v, f12, f13, f14}
 
 def Msg.over_has_parts(r: Msg, g: Bool -> Bool) -> Msg:
   match r:
-    case Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
-      Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, g(f11), f12, f13}
+    case Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, g(f11), f12, f13, f14}
 
 def Msg.fwd(r: Msg) -> Maybe<&2, Nat>:
   match r:
-    case Msg{_, _, _, _, _, _, _, _, _, _, _, _, f12, _}:
+    case Msg{_, _, _, _, _, _, _, _, _, _, _, _, f12, _, _}:
       f12
 
 def Msg.with_fwd(r: Msg, v: Maybe<&2, Nat>) -> Msg:
   match r:
-    case Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, _, f13}:
-      Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, v, f13}
+    case Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, _, f13, f14}:
+      Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, v, f13, f14}
 
 def Msg.over_fwd(r: Msg, g: Maybe<&2, Nat> -> Maybe<&2, Nat>) -> Msg:
   match r:
-    case Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
-      Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, g(f12), f13}
+    case Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, g(f12), f13, f14}
 
 def Msg.view(r: Msg) -> Maybe<&2, String>:
   match r:
-    case Msg{_, _, _, _, _, _, _, _, _, _, _, _, _, f13}:
+    case Msg{_, _, _, _, _, _, _, _, _, _, _, _, _, f13, _}:
       f13
 
 def Msg.with_view(r: Msg, v: Maybe<&2, String>) -> Msg:
   match r:
-    case Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, _}:
-      Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, v}
+    case Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, _, f14}:
+      Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, v, f14}
 
 def Msg.over_view(r: Msg, g: Maybe<&2, String> -> Maybe<&2, String>) -> Msg:
   match r:
-    case Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
-      Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, g(f13)}
+    case Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, g(f13), f14}
+
+def Msg.works(r: Msg) -> List<&2, String>:
+  match r:
+    case Msg{_, _, _, _, _, _, _, _, _, _, _, _, _, _, f14}:
+      f14
+
+def Msg.with_works(r: Msg, v: List<&2, String>) -> Msg:
+  match r:
+    case Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, _}:
+      Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, v}
+
+def Msg.over_works(r: Msg, g: List<&2, String> -> List<&2, String>) -> Msg:
+  match r:
+    case Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Msg{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, g(f14)}
 
 def Msg.open(+r: Msg) -> Msg:
-  Msg.with_view(Msg.with_fwd(Msg.with_has_parts(Msg.with_via(Msg.with_queued(Msg.with_plain(Msg.with_created(Msg.with_auto(Msg.with_expect(Msg.with_reply_to(Msg.with_to(Msg.with_from(Msg.with_thread(Msg.with_id(Msg.empty(), Msg.id(r)), Msg.thread(r)), Msg.from(r)), Msg.to(r)), Msg.reply_to(r)), Msg.expect(r)), Msg.auto(r)), Msg.created(r)), Msg.plain(r)), Msg.queued(r)), Msg.via(r)), Msg.has_parts(r)), Msg.fwd(r)), Msg.view(r))
+  Msg.with_works(Msg.with_view(Msg.with_fwd(Msg.with_has_parts(Msg.with_via(Msg.with_queued(Msg.with_plain(Msg.with_created(Msg.with_auto(Msg.with_expect(Msg.with_reply_to(Msg.with_to(Msg.with_from(Msg.with_thread(Msg.with_id(Msg.empty(), Msg.id(r)), Msg.thread(r)), Msg.from(r)), Msg.to(r)), Msg.reply_to(r)), Msg.expect(r)), Msg.auto(r)), Msg.created(r)), Msg.plain(r)), Msg.queued(r)), Msg.via(r)), Msg.has_parts(r)), Msg.fwd(r)), Msg.view(r)), Msg.works(r))
 
 # ---- Sent ----
 
 def Sent.empty() -> Sent:
-  Sent{0n, 0n, "", "", None{}, False{}, False{}, "", 0n, False{}, False{}, None{}, "", None{}, None{}}
+  Sent{0n, 0n, "", "", None{}, False{}, False{}, "", 0n, False{}, False{}, None{}, "", None{}, None{}, Nil{}}
 
 def Sent.id(r: Sent) -> Nat:
   match r:
-    case Sent{f0, _, _, _, _, _, _, _, _, _, _, _, _, _, _}:
+    case Sent{f0, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _}:
       f0
 
 def Sent.with_id(r: Sent, v: Nat) -> Sent:
   match r:
-    case Sent{_, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
-      Sent{v, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}
+    case Sent{_, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Sent{v, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
 
 def Sent.over_id(r: Sent, g: Nat -> Nat) -> Sent:
   match r:
-    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
-      Sent{g(f0), f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}
+    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Sent{g(f0), f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
 
 def Sent.thread(r: Sent) -> Nat:
   match r:
-    case Sent{_, f1, _, _, _, _, _, _, _, _, _, _, _, _, _}:
+    case Sent{_, f1, _, _, _, _, _, _, _, _, _, _, _, _, _, _}:
       f1
 
 def Sent.with_thread(r: Sent, v: Nat) -> Sent:
   match r:
-    case Sent{f0, _, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
-      Sent{f0, v, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}
+    case Sent{f0, _, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Sent{f0, v, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
 
 def Sent.over_thread(r: Sent, g: Nat -> Nat) -> Sent:
   match r:
-    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
-      Sent{f0, g(f1), f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}
+    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Sent{f0, g(f1), f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
 
 def Sent.from(r: Sent) -> String:
   match r:
-    case Sent{_, _, f2, _, _, _, _, _, _, _, _, _, _, _, _}:
+    case Sent{_, _, f2, _, _, _, _, _, _, _, _, _, _, _, _, _}:
       f2
 
 def Sent.with_from(r: Sent, v: String) -> Sent:
   match r:
-    case Sent{f0, f1, _, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
-      Sent{f0, f1, v, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}
+    case Sent{f0, f1, _, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Sent{f0, f1, v, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
 
 def Sent.over_from(r: Sent, g: String -> String) -> Sent:
   match r:
-    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
-      Sent{f0, f1, g(f2), f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}
+    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Sent{f0, f1, g(f2), f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
 
 def Sent.to(r: Sent) -> String:
   match r:
-    case Sent{_, _, _, f3, _, _, _, _, _, _, _, _, _, _, _}:
+    case Sent{_, _, _, f3, _, _, _, _, _, _, _, _, _, _, _, _}:
       f3
 
 def Sent.with_to(r: Sent, v: String) -> Sent:
   match r:
-    case Sent{f0, f1, f2, _, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
-      Sent{f0, f1, f2, v, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}
+    case Sent{f0, f1, f2, _, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Sent{f0, f1, f2, v, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
 
 def Sent.over_to(r: Sent, g: String -> String) -> Sent:
   match r:
-    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
-      Sent{f0, f1, f2, g(f3), f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}
+    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Sent{f0, f1, f2, g(f3), f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
 
 def Sent.reply_to(r: Sent) -> Maybe<&2, Nat>:
   match r:
-    case Sent{_, _, _, _, f4, _, _, _, _, _, _, _, _, _, _}:
+    case Sent{_, _, _, _, f4, _, _, _, _, _, _, _, _, _, _, _}:
       f4
 
 def Sent.with_reply_to(r: Sent, v: Maybe<&2, Nat>) -> Sent:
   match r:
-    case Sent{f0, f1, f2, f3, _, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
-      Sent{f0, f1, f2, f3, v, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}
+    case Sent{f0, f1, f2, f3, _, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Sent{f0, f1, f2, f3, v, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
 
 def Sent.over_reply_to(r: Sent, g: Maybe<&2, Nat> -> Maybe<&2, Nat>) -> Sent:
   match r:
-    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
-      Sent{f0, f1, f2, f3, g(f4), f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}
+    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Sent{f0, f1, f2, f3, g(f4), f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
 
 def Sent.expect(r: Sent) -> Bool:
   match r:
-    case Sent{_, _, _, _, _, f5, _, _, _, _, _, _, _, _, _}:
+    case Sent{_, _, _, _, _, f5, _, _, _, _, _, _, _, _, _, _}:
       f5
 
 def Sent.with_expect(r: Sent, v: Bool) -> Sent:
   match r:
-    case Sent{f0, f1, f2, f3, f4, _, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
-      Sent{f0, f1, f2, f3, f4, v, f6, f7, f8, f9, f10, f11, f12, f13, f14}
+    case Sent{f0, f1, f2, f3, f4, _, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Sent{f0, f1, f2, f3, f4, v, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
 
 def Sent.over_expect(r: Sent, g: Bool -> Bool) -> Sent:
   match r:
-    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
-      Sent{f0, f1, f2, f3, f4, g(f5), f6, f7, f8, f9, f10, f11, f12, f13, f14}
+    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Sent{f0, f1, f2, f3, f4, g(f5), f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
 
 def Sent.auto(r: Sent) -> Bool:
   match r:
-    case Sent{_, _, _, _, _, _, f6, _, _, _, _, _, _, _, _}:
+    case Sent{_, _, _, _, _, _, f6, _, _, _, _, _, _, _, _, _}:
       f6
 
 def Sent.with_auto(r: Sent, v: Bool) -> Sent:
   match r:
-    case Sent{f0, f1, f2, f3, f4, f5, _, f7, f8, f9, f10, f11, f12, f13, f14}:
-      Sent{f0, f1, f2, f3, f4, f5, v, f7, f8, f9, f10, f11, f12, f13, f14}
+    case Sent{f0, f1, f2, f3, f4, f5, _, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Sent{f0, f1, f2, f3, f4, f5, v, f7, f8, f9, f10, f11, f12, f13, f14, f15}
 
 def Sent.over_auto(r: Sent, g: Bool -> Bool) -> Sent:
   match r:
-    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
-      Sent{f0, f1, f2, f3, f4, f5, g(f6), f7, f8, f9, f10, f11, f12, f13, f14}
+    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Sent{f0, f1, f2, f3, f4, f5, g(f6), f7, f8, f9, f10, f11, f12, f13, f14, f15}
 
 def Sent.text(r: Sent) -> String:
   match r:
-    case Sent{_, _, _, _, _, _, _, f7, _, _, _, _, _, _, _}:
+    case Sent{_, _, _, _, _, _, _, f7, _, _, _, _, _, _, _, _}:
       f7
 
 def Sent.with_text(r: Sent, v: String) -> Sent:
   match r:
-    case Sent{f0, f1, f2, f3, f4, f5, f6, _, f8, f9, f10, f11, f12, f13, f14}:
-      Sent{f0, f1, f2, f3, f4, f5, f6, v, f8, f9, f10, f11, f12, f13, f14}
+    case Sent{f0, f1, f2, f3, f4, f5, f6, _, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Sent{f0, f1, f2, f3, f4, f5, f6, v, f8, f9, f10, f11, f12, f13, f14, f15}
 
 def Sent.over_text(r: Sent, g: String -> String) -> Sent:
   match r:
-    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
-      Sent{f0, f1, f2, f3, f4, f5, f6, g(f7), f8, f9, f10, f11, f12, f13, f14}
+    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Sent{f0, f1, f2, f3, f4, f5, f6, g(f7), f8, f9, f10, f11, f12, f13, f14, f15}
 
 def Sent.created(r: Sent) -> Nat:
   match r:
-    case Sent{_, _, _, _, _, _, _, _, f8, _, _, _, _, _, _}:
+    case Sent{_, _, _, _, _, _, _, _, f8, _, _, _, _, _, _, _}:
       f8
 
 def Sent.with_created(r: Sent, v: Nat) -> Sent:
   match r:
-    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, _, f9, f10, f11, f12, f13, f14}:
-      Sent{f0, f1, f2, f3, f4, f5, f6, f7, v, f9, f10, f11, f12, f13, f14}
+    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, _, f9, f10, f11, f12, f13, f14, f15}:
+      Sent{f0, f1, f2, f3, f4, f5, f6, f7, v, f9, f10, f11, f12, f13, f14, f15}
 
 def Sent.over_created(r: Sent, g: Nat -> Nat) -> Sent:
   match r:
-    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
-      Sent{f0, f1, f2, f3, f4, f5, f6, f7, g(f8), f9, f10, f11, f12, f13, f14}
+    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Sent{f0, f1, f2, f3, f4, f5, f6, f7, g(f8), f9, f10, f11, f12, f13, f14, f15}
 
 def Sent.plain(r: Sent) -> Bool:
   match r:
-    case Sent{_, _, _, _, _, _, _, _, _, f9, _, _, _, _, _}:
+    case Sent{_, _, _, _, _, _, _, _, _, f9, _, _, _, _, _, _}:
       f9
 
 def Sent.with_plain(r: Sent, v: Bool) -> Sent:
   match r:
-    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, _, f10, f11, f12, f13, f14}:
-      Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, v, f10, f11, f12, f13, f14}
+    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, _, f10, f11, f12, f13, f14, f15}:
+      Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, v, f10, f11, f12, f13, f14, f15}
 
 def Sent.over_plain(r: Sent, g: Bool -> Bool) -> Sent:
   match r:
-    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
-      Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, g(f9), f10, f11, f12, f13, f14}
+    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, g(f9), f10, f11, f12, f13, f14, f15}
 
 def Sent.queued(r: Sent) -> Bool:
   match r:
-    case Sent{_, _, _, _, _, _, _, _, _, _, f10, _, _, _, _}:
+    case Sent{_, _, _, _, _, _, _, _, _, _, f10, _, _, _, _, _}:
       f10
 
 def Sent.with_queued(r: Sent, v: Bool) -> Sent:
   match r:
-    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, _, f11, f12, f13, f14}:
-      Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, v, f11, f12, f13, f14}
+    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, _, f11, f12, f13, f14, f15}:
+      Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, v, f11, f12, f13, f14, f15}
 
 def Sent.over_queued(r: Sent, g: Bool -> Bool) -> Sent:
   match r:
-    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
-      Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, g(f10), f11, f12, f13, f14}
+    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, g(f10), f11, f12, f13, f14, f15}
 
 def Sent.via(r: Sent) -> Maybe<&2, String>:
   match r:
-    case Sent{_, _, _, _, _, _, _, _, _, _, _, f11, _, _, _}:
+    case Sent{_, _, _, _, _, _, _, _, _, _, _, f11, _, _, _, _}:
       f11
 
 def Sent.with_via(r: Sent, v: Maybe<&2, String>) -> Sent:
   match r:
-    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, _, f12, f13, f14}:
-      Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, v, f12, f13, f14}
+    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, _, f12, f13, f14, f15}:
+      Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, v, f12, f13, f14, f15}
 
 def Sent.over_via(r: Sent, g: Maybe<&2, String> -> Maybe<&2, String>) -> Sent:
   match r:
-    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
-      Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, g(f11), f12, f13, f14}
+    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, g(f11), f12, f13, f14, f15}
 
 def Sent.parts(r: Sent) -> String:
   match r:
-    case Sent{_, _, _, _, _, _, _, _, _, _, _, _, f12, _, _}:
+    case Sent{_, _, _, _, _, _, _, _, _, _, _, _, f12, _, _, _}:
       f12
 
 def Sent.with_parts(r: Sent, v: String) -> Sent:
   match r:
-    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, _, f13, f14}:
-      Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, v, f13, f14}
+    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, _, f13, f14, f15}:
+      Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, v, f13, f14, f15}
 
 def Sent.over_parts(r: Sent, g: String -> String) -> Sent:
   match r:
-    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
-      Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, g(f12), f13, f14}
+    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, g(f12), f13, f14, f15}
 
 def Sent.fwd(r: Sent) -> Maybe<&2, Nat>:
   match r:
-    case Sent{_, _, _, _, _, _, _, _, _, _, _, _, _, f13, _}:
+    case Sent{_, _, _, _, _, _, _, _, _, _, _, _, _, f13, _, _}:
       f13
 
 def Sent.with_fwd(r: Sent, v: Maybe<&2, Nat>) -> Sent:
   match r:
-    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, _, f14}:
-      Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, v, f14}
+    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, _, f14, f15}:
+      Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, v, f14, f15}
 
 def Sent.over_fwd(r: Sent, g: Maybe<&2, Nat> -> Maybe<&2, Nat>) -> Sent:
   match r:
-    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
-      Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, g(f13), f14}
+    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, g(f13), f14, f15}
 
 def Sent.view(r: Sent) -> Maybe<&2, String>:
   match r:
-    case Sent{_, _, _, _, _, _, _, _, _, _, _, _, _, _, f14}:
+    case Sent{_, _, _, _, _, _, _, _, _, _, _, _, _, _, f14, _}:
       f14
 
 def Sent.with_view(r: Sent, v: Maybe<&2, String>) -> Sent:
   match r:
-    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, _}:
-      Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, v}
+    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, _, f15}:
+      Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, v, f15}
 
 def Sent.over_view(r: Sent, g: Maybe<&2, String> -> Maybe<&2, String>) -> Sent:
   match r:
-    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
-      Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, g(f14)}
+    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, g(f14), f15}
+
+def Sent.works(r: Sent) -> List<&2, String>:
+  match r:
+    case Sent{_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, f15}:
+      f15
+
+def Sent.with_works(r: Sent, v: List<&2, String>) -> Sent:
+  match r:
+    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, _}:
+      Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, v}
+
+def Sent.over_works(r: Sent, g: List<&2, String> -> List<&2, String>) -> Sent:
+  match r:
+    case Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, g(f15)}
 
 def Sent.open(+r: Sent) -> Sent:
-  Sent.with_view(Sent.with_fwd(Sent.with_parts(Sent.with_via(Sent.with_queued(Sent.with_plain(Sent.with_created(Sent.with_text(Sent.with_auto(Sent.with_expect(Sent.with_reply_to(Sent.with_to(Sent.with_from(Sent.with_thread(Sent.with_id(Sent.empty(), Sent.id(r)), Sent.thread(r)), Sent.from(r)), Sent.to(r)), Sent.reply_to(r)), Sent.expect(r)), Sent.auto(r)), Sent.text(r)), Sent.created(r)), Sent.plain(r)), Sent.queued(r)), Sent.via(r)), Sent.parts(r)), Sent.fwd(r)), Sent.view(r))
+  Sent.with_works(Sent.with_view(Sent.with_fwd(Sent.with_parts(Sent.with_via(Sent.with_queued(Sent.with_plain(Sent.with_created(Sent.with_text(Sent.with_auto(Sent.with_expect(Sent.with_reply_to(Sent.with_to(Sent.with_from(Sent.with_thread(Sent.with_id(Sent.empty(), Sent.id(r)), Sent.thread(r)), Sent.from(r)), Sent.to(r)), Sent.reply_to(r)), Sent.expect(r)), Sent.auto(r)), Sent.text(r)), Sent.created(r)), Sent.plain(r)), Sent.queued(r)), Sent.via(r)), Sent.parts(r)), Sent.fwd(r)), Sent.view(r)), Sent.works(r))
 
 # ---- Orig ----
 
@@ -819,160 +899,190 @@ def ViewAsk.open(+r: ViewAsk) -> ViewAsk:
 # ---- Card ----
 
 def Card.empty() -> Card:
-  Card{0n, "", "", "", None{}, 0n, None{}, None{}, None{}, None{}}
+  Card{0n, "", "", "", None{}, 0n, None{}, None{}, None{}, None{}, Nil{}, False{}}
 
 def Card.id(r: Card) -> Nat:
   match r:
-    case Card{f0, _, _, _, _, _, _, _, _, _}:
+    case Card{f0, _, _, _, _, _, _, _, _, _, _, _}:
       f0
 
 def Card.with_id(r: Card, v: Nat) -> Card:
   match r:
-    case Card{_, f1, f2, f3, f4, f5, f6, f7, f8, f9}:
-      Card{v, f1, f2, f3, f4, f5, f6, f7, f8, f9}
+    case Card{_, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+      Card{v, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}
 
 def Card.over_id(r: Card, g: Nat -> Nat) -> Card:
   match r:
-    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9}:
-      Card{g(f0), f1, f2, f3, f4, f5, f6, f7, f8, f9}
+    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+      Card{g(f0), f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}
 
 def Card.kind(r: Card) -> String:
   match r:
-    case Card{_, f1, _, _, _, _, _, _, _, _}:
+    case Card{_, f1, _, _, _, _, _, _, _, _, _, _}:
       f1
 
 def Card.with_kind(r: Card, v: String) -> Card:
   match r:
-    case Card{f0, _, f2, f3, f4, f5, f6, f7, f8, f9}:
-      Card{f0, v, f2, f3, f4, f5, f6, f7, f8, f9}
+    case Card{f0, _, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+      Card{f0, v, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}
 
 def Card.over_kind(r: Card, g: String -> String) -> Card:
   match r:
-    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9}:
-      Card{f0, g(f1), f2, f3, f4, f5, f6, f7, f8, f9}
+    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+      Card{f0, g(f1), f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}
 
 def Card.agent(r: Card) -> String:
   match r:
-    case Card{_, _, f2, _, _, _, _, _, _, _}:
+    case Card{_, _, f2, _, _, _, _, _, _, _, _, _}:
       f2
 
 def Card.with_agent(r: Card, v: String) -> Card:
   match r:
-    case Card{f0, f1, _, f3, f4, f5, f6, f7, f8, f9}:
-      Card{f0, f1, v, f3, f4, f5, f6, f7, f8, f9}
+    case Card{f0, f1, _, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+      Card{f0, f1, v, f3, f4, f5, f6, f7, f8, f9, f10, f11}
 
 def Card.over_agent(r: Card, g: String -> String) -> Card:
   match r:
-    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9}:
-      Card{f0, f1, g(f2), f3, f4, f5, f6, f7, f8, f9}
+    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+      Card{f0, f1, g(f2), f3, f4, f5, f6, f7, f8, f9, f10, f11}
 
 def Card.text(r: Card) -> String:
   match r:
-    case Card{_, _, _, f3, _, _, _, _, _, _}:
+    case Card{_, _, _, f3, _, _, _, _, _, _, _, _}:
       f3
 
 def Card.with_text(r: Card, v: String) -> Card:
   match r:
-    case Card{f0, f1, f2, _, f4, f5, f6, f7, f8, f9}:
-      Card{f0, f1, f2, v, f4, f5, f6, f7, f8, f9}
+    case Card{f0, f1, f2, _, f4, f5, f6, f7, f8, f9, f10, f11}:
+      Card{f0, f1, f2, v, f4, f5, f6, f7, f8, f9, f10, f11}
 
 def Card.over_text(r: Card, g: String -> String) -> Card:
   match r:
-    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9}:
-      Card{f0, f1, f2, g(f3), f4, f5, f6, f7, f8, f9}
+    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+      Card{f0, f1, f2, g(f3), f4, f5, f6, f7, f8, f9, f10, f11}
 
 def Card.for_msg(r: Card) -> Maybe<&2, Nat>:
   match r:
-    case Card{_, _, _, _, f4, _, _, _, _, _}:
+    case Card{_, _, _, _, f4, _, _, _, _, _, _, _}:
       f4
 
 def Card.with_for_msg(r: Card, v: Maybe<&2, Nat>) -> Card:
   match r:
-    case Card{f0, f1, f2, f3, _, f5, f6, f7, f8, f9}:
-      Card{f0, f1, f2, f3, v, f5, f6, f7, f8, f9}
+    case Card{f0, f1, f2, f3, _, f5, f6, f7, f8, f9, f10, f11}:
+      Card{f0, f1, f2, f3, v, f5, f6, f7, f8, f9, f10, f11}
 
 def Card.over_for_msg(r: Card, g: Maybe<&2, Nat> -> Maybe<&2, Nat>) -> Card:
   match r:
-    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9}:
-      Card{f0, f1, f2, f3, g(f4), f5, f6, f7, f8, f9}
+    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+      Card{f0, f1, f2, f3, g(f4), f5, f6, f7, f8, f9, f10, f11}
 
 def Card.created(r: Card) -> Nat:
   match r:
-    case Card{_, _, _, _, _, f5, _, _, _, _}:
+    case Card{_, _, _, _, _, f5, _, _, _, _, _, _}:
       f5
 
 def Card.with_created(r: Card, v: Nat) -> Card:
   match r:
-    case Card{f0, f1, f2, f3, f4, _, f6, f7, f8, f9}:
-      Card{f0, f1, f2, f3, f4, v, f6, f7, f8, f9}
+    case Card{f0, f1, f2, f3, f4, _, f6, f7, f8, f9, f10, f11}:
+      Card{f0, f1, f2, f3, f4, v, f6, f7, f8, f9, f10, f11}
 
 def Card.over_created(r: Card, g: Nat -> Nat) -> Card:
   match r:
-    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9}:
-      Card{f0, f1, f2, f3, f4, g(f5), f6, f7, f8, f9}
+    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+      Card{f0, f1, f2, f3, f4, g(f5), f6, f7, f8, f9, f10, f11}
 
 def Card.place(r: Card) -> Maybe<&2, String>:
   match r:
-    case Card{_, _, _, _, _, _, f6, _, _, _}:
+    case Card{_, _, _, _, _, _, f6, _, _, _, _, _}:
       f6
 
 def Card.with_place(r: Card, v: Maybe<&2, String>) -> Card:
   match r:
-    case Card{f0, f1, f2, f3, f4, f5, _, f7, f8, f9}:
-      Card{f0, f1, f2, f3, f4, f5, v, f7, f8, f9}
+    case Card{f0, f1, f2, f3, f4, f5, _, f7, f8, f9, f10, f11}:
+      Card{f0, f1, f2, f3, f4, f5, v, f7, f8, f9, f10, f11}
 
 def Card.over_place(r: Card, g: Maybe<&2, String> -> Maybe<&2, String>) -> Card:
   match r:
-    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9}:
-      Card{f0, f1, f2, f3, f4, f5, g(f6), f7, f8, f9}
+    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+      Card{f0, f1, f2, f3, f4, f5, g(f6), f7, f8, f9, f10, f11}
 
 def Card.pr(r: Card) -> Maybe<&2, Nat>:
   match r:
-    case Card{_, _, _, _, _, _, _, f7, _, _}:
+    case Card{_, _, _, _, _, _, _, f7, _, _, _, _}:
       f7
 
 def Card.with_pr(r: Card, v: Maybe<&2, Nat>) -> Card:
   match r:
-    case Card{f0, f1, f2, f3, f4, f5, f6, _, f8, f9}:
-      Card{f0, f1, f2, f3, f4, f5, f6, v, f8, f9}
+    case Card{f0, f1, f2, f3, f4, f5, f6, _, f8, f9, f10, f11}:
+      Card{f0, f1, f2, f3, f4, f5, f6, v, f8, f9, f10, f11}
 
 def Card.over_pr(r: Card, g: Maybe<&2, Nat> -> Maybe<&2, Nat>) -> Card:
   match r:
-    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9}:
-      Card{f0, f1, f2, f3, f4, f5, f6, g(f7), f8, f9}
+    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+      Card{f0, f1, f2, f3, f4, f5, f6, g(f7), f8, f9, f10, f11}
 
 def Card.view(r: Card) -> Maybe<&2, ViewAsk>:
   match r:
-    case Card{_, _, _, _, _, _, _, _, f8, _}:
+    case Card{_, _, _, _, _, _, _, _, f8, _, _, _}:
       f8
 
 def Card.with_view(r: Card, v: Maybe<&2, ViewAsk>) -> Card:
   match r:
-    case Card{f0, f1, f2, f3, f4, f5, f6, f7, _, f9}:
-      Card{f0, f1, f2, f3, f4, f5, f6, f7, v, f9}
+    case Card{f0, f1, f2, f3, f4, f5, f6, f7, _, f9, f10, f11}:
+      Card{f0, f1, f2, f3, f4, f5, f6, f7, v, f9, f10, f11}
 
 def Card.over_view(r: Card, g: Maybe<&2, ViewAsk> -> Maybe<&2, ViewAsk>) -> Card:
   match r:
-    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9}:
-      Card{f0, f1, f2, f3, f4, f5, f6, f7, g(f8), f9}
+    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+      Card{f0, f1, f2, f3, f4, f5, f6, f7, g(f8), f9, f10, f11}
 
 def Card.about(r: Card) -> Maybe<&2, J.Json>:
   match r:
-    case Card{_, _, _, _, _, _, _, _, _, f9}:
+    case Card{_, _, _, _, _, _, _, _, _, f9, _, _}:
       f9
 
 def Card.with_about(r: Card, v: Maybe<&2, J.Json>) -> Card:
   match r:
-    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, _}:
-      Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, v}
+    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, _, f10, f11}:
+      Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, v, f10, f11}
 
 def Card.over_about(r: Card, g: Maybe<&2, J.Json> -> Maybe<&2, J.Json>) -> Card:
   match r:
-    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9}:
-      Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, g(f9)}
+    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+      Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, g(f9), f10, f11}
+
+def Card.works(r: Card) -> List<&2, String>:
+  match r:
+    case Card{_, _, _, _, _, _, _, _, _, _, f10, _}:
+      f10
+
+def Card.with_works(r: Card, v: List<&2, String>) -> Card:
+  match r:
+    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, _, f11}:
+      Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, v, f11}
+
+def Card.over_works(r: Card, g: List<&2, String> -> List<&2, String>) -> Card:
+  match r:
+    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+      Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, g(f10), f11}
+
+def Card.moved(r: Card) -> Bool:
+  match r:
+    case Card{_, _, _, _, _, _, _, _, _, _, _, f11}:
+      f11
+
+def Card.with_moved(r: Card, v: Bool) -> Card:
+  match r:
+    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, _}:
+      Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, v}
+
+def Card.over_moved(r: Card, g: Bool -> Bool) -> Card:
+  match r:
+    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+      Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, g(f11)}
 
 def Card.open(+r: Card) -> Card:
-  Card.with_about(Card.with_view(Card.with_pr(Card.with_place(Card.with_created(Card.with_for_msg(Card.with_text(Card.with_agent(Card.with_kind(Card.with_id(Card.empty(), Card.id(r)), Card.kind(r)), Card.agent(r)), Card.text(r)), Card.for_msg(r)), Card.created(r)), Card.place(r)), Card.pr(r)), Card.view(r)), Card.about(r))
+  Card.with_moved(Card.with_works(Card.with_about(Card.with_view(Card.with_pr(Card.with_place(Card.with_created(Card.with_for_msg(Card.with_text(Card.with_agent(Card.with_kind(Card.with_id(Card.empty(), Card.id(r)), Card.kind(r)), Card.agent(r)), Card.text(r)), Card.for_msg(r)), Card.created(r)), Card.place(r)), Card.pr(r)), Card.view(r)), Card.about(r)), Card.works(r)), Card.moved(r))
 
 # ---- Ans ----
 
@@ -1075,250 +1185,265 @@ def Ans.open(+r: Ans) -> Ans:
 # ---- Agent ----
 
 def Agent.empty() -> Agent:
-  Agent{"", False{}, None{}, LActive{}, None{}, Nil{}, Nil{}, J.JNull{}, "", J.JNull{}, 0n, None{}, "", J.JNull{}, None{}, None{}}
+  Agent{"", False{}, None{}, LActive{}, None{}, Nil{}, Nil{}, J.JNull{}, "", J.JNull{}, 0n, None{}, "", J.JNull{}, None{}, None{}, Nil{}}
 
 def Agent.name(r: Agent) -> String:
   match r:
-    case Agent{f0, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _}:
+    case Agent{f0, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _}:
       f0
 
 def Agent.with_name(r: Agent, v: String) -> Agent:
   match r:
-    case Agent{_, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Agent{v, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+    case Agent{_, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Agent{v, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}
 
 def Agent.over_name(r: Agent, g: String -> String) -> Agent:
   match r:
-    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Agent{g(f0), f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Agent{g(f0), f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}
 
 def Agent.is_main(r: Agent) -> Bool:
   match r:
-    case Agent{_, f1, _, _, _, _, _, _, _, _, _, _, _, _, _, _}:
+    case Agent{_, f1, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _}:
       f1
 
 def Agent.with_is_main(r: Agent, v: Bool) -> Agent:
   match r:
-    case Agent{f0, _, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Agent{f0, v, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+    case Agent{f0, _, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Agent{f0, v, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}
 
 def Agent.over_is_main(r: Agent, g: Bool -> Bool) -> Agent:
   match r:
-    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Agent{f0, g(f1), f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Agent{f0, g(f1), f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}
 
 def Agent.parent(r: Agent) -> Maybe<&2, String>:
   match r:
-    case Agent{_, _, f2, _, _, _, _, _, _, _, _, _, _, _, _, _}:
+    case Agent{_, _, f2, _, _, _, _, _, _, _, _, _, _, _, _, _, _}:
       f2
 
 def Agent.with_parent(r: Agent, v: Maybe<&2, String>) -> Agent:
   match r:
-    case Agent{f0, f1, _, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Agent{f0, f1, v, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+    case Agent{f0, f1, _, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Agent{f0, f1, v, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}
 
 def Agent.over_parent(r: Agent, g: Maybe<&2, String> -> Maybe<&2, String>) -> Agent:
   match r:
-    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Agent{f0, f1, g(f2), f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Agent{f0, f1, g(f2), f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}
 
 def Agent.life(r: Agent) -> Life:
   match r:
-    case Agent{_, _, _, f3, _, _, _, _, _, _, _, _, _, _, _, _}:
+    case Agent{_, _, _, f3, _, _, _, _, _, _, _, _, _, _, _, _, _}:
       f3
 
 def Agent.with_life(r: Agent, v: Life) -> Agent:
   match r:
-    case Agent{f0, f1, f2, _, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Agent{f0, f1, f2, v, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+    case Agent{f0, f1, f2, _, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Agent{f0, f1, f2, v, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}
 
 def Agent.over_life(r: Agent, g: Life -> Life) -> Agent:
   match r:
-    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Agent{f0, f1, f2, g(f3), f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Agent{f0, f1, f2, g(f3), f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}
 
 def Agent.declared(r: Agent) -> Maybe<&2, Decl>:
   match r:
-    case Agent{_, _, _, _, f4, _, _, _, _, _, _, _, _, _, _, _}:
+    case Agent{_, _, _, _, f4, _, _, _, _, _, _, _, _, _, _, _, _}:
       f4
 
 def Agent.with_declared(r: Agent, v: Maybe<&2, Decl>) -> Agent:
   match r:
-    case Agent{f0, f1, f2, f3, _, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Agent{f0, f1, f2, f3, v, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+    case Agent{f0, f1, f2, f3, _, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Agent{f0, f1, f2, f3, v, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}
 
 def Agent.over_declared(r: Agent, g: Maybe<&2, Decl> -> Maybe<&2, Decl>) -> Agent:
   match r:
-    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Agent{f0, f1, f2, f3, g(f4), f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Agent{f0, f1, f2, f3, g(f4), f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}
 
 def Agent.aliases(r: Agent) -> List<&2, String>:
   match r:
-    case Agent{_, _, _, _, _, f5, _, _, _, _, _, _, _, _, _, _}:
+    case Agent{_, _, _, _, _, f5, _, _, _, _, _, _, _, _, _, _, _}:
       f5
 
 def Agent.with_aliases(r: Agent, v: List<&2, String>) -> Agent:
   match r:
-    case Agent{f0, f1, f2, f3, f4, _, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Agent{f0, f1, f2, f3, f4, v, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+    case Agent{f0, f1, f2, f3, f4, _, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Agent{f0, f1, f2, f3, f4, v, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}
 
 def Agent.over_aliases(r: Agent, g: List<&2, String> -> List<&2, String>) -> Agent:
   match r:
-    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Agent{f0, f1, f2, f3, f4, g(f5), f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Agent{f0, f1, f2, f3, f4, g(f5), f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}
 
 def Agent.files(r: Agent) -> List<&2, String>:
   match r:
-    case Agent{_, _, _, _, _, _, f6, _, _, _, _, _, _, _, _, _}:
+    case Agent{_, _, _, _, _, _, f6, _, _, _, _, _, _, _, _, _, _}:
       f6
 
 def Agent.with_files(r: Agent, v: List<&2, String>) -> Agent:
   match r:
-    case Agent{f0, f1, f2, f3, f4, f5, _, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Agent{f0, f1, f2, f3, f4, f5, v, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+    case Agent{f0, f1, f2, f3, f4, f5, _, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Agent{f0, f1, f2, f3, f4, f5, v, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}
 
 def Agent.over_files(r: Agent, g: List<&2, String> -> List<&2, String>) -> Agent:
   match r:
-    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Agent{f0, f1, f2, f3, f4, f5, g(f6), f7, f8, f9, f10, f11, f12, f13, f14, f15}
+    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Agent{f0, f1, f2, f3, f4, f5, g(f6), f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}
 
 def Agent.ws(r: Agent) -> J.Json:
   match r:
-    case Agent{_, _, _, _, _, _, _, f7, _, _, _, _, _, _, _, _}:
+    case Agent{_, _, _, _, _, _, _, f7, _, _, _, _, _, _, _, _, _}:
       f7
 
 def Agent.with_ws(r: Agent, v: J.Json) -> Agent:
   match r:
-    case Agent{f0, f1, f2, f3, f4, f5, f6, _, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Agent{f0, f1, f2, f3, f4, f5, f6, v, f8, f9, f10, f11, f12, f13, f14, f15}
+    case Agent{f0, f1, f2, f3, f4, f5, f6, _, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Agent{f0, f1, f2, f3, f4, f5, f6, v, f8, f9, f10, f11, f12, f13, f14, f15, f16}
 
 def Agent.over_ws(r: Agent, g: J.Json -> J.Json) -> Agent:
   match r:
-    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Agent{f0, f1, f2, f3, f4, f5, f6, g(f7), f8, f9, f10, f11, f12, f13, f14, f15}
+    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Agent{f0, f1, f2, f3, f4, f5, f6, g(f7), f8, f9, f10, f11, f12, f13, f14, f15, f16}
 
 def Agent.dir(r: Agent) -> String:
   match r:
-    case Agent{_, _, _, _, _, _, _, _, f8, _, _, _, _, _, _, _}:
+    case Agent{_, _, _, _, _, _, _, _, f8, _, _, _, _, _, _, _, _}:
       f8
 
 def Agent.with_dir(r: Agent, v: String) -> Agent:
   match r:
-    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, _, f9, f10, f11, f12, f13, f14, f15}:
-      Agent{f0, f1, f2, f3, f4, f5, f6, f7, v, f9, f10, f11, f12, f13, f14, f15}
+    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, _, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Agent{f0, f1, f2, f3, f4, f5, f6, f7, v, f9, f10, f11, f12, f13, f14, f15, f16}
 
 def Agent.over_dir(r: Agent, g: String -> String) -> Agent:
   match r:
-    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Agent{f0, f1, f2, f3, f4, f5, f6, f7, g(f8), f9, f10, f11, f12, f13, f14, f15}
+    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Agent{f0, f1, f2, f3, f4, f5, f6, f7, g(f8), f9, f10, f11, f12, f13, f14, f15, f16}
 
 def Agent.brief(r: Agent) -> J.Json:
   match r:
-    case Agent{_, _, _, _, _, _, _, _, _, f9, _, _, _, _, _, _}:
+    case Agent{_, _, _, _, _, _, _, _, _, f9, _, _, _, _, _, _, _}:
       f9
 
 def Agent.with_brief(r: Agent, v: J.Json) -> Agent:
   match r:
-    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, _, f10, f11, f12, f13, f14, f15}:
-      Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, v, f10, f11, f12, f13, f14, f15}
+    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, _, f10, f11, f12, f13, f14, f15, f16}:
+      Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, v, f10, f11, f12, f13, f14, f15, f16}
 
 def Agent.over_brief(r: Agent, g: J.Json -> J.Json) -> Agent:
   match r:
-    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, g(f9), f10, f11, f12, f13, f14, f15}
+    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, g(f9), f10, f11, f12, f13, f14, f15, f16}
 
 def Agent.created(r: Agent) -> Nat:
   match r:
-    case Agent{_, _, _, _, _, _, _, _, _, _, f10, _, _, _, _, _}:
+    case Agent{_, _, _, _, _, _, _, _, _, _, f10, _, _, _, _, _, _}:
       f10
 
 def Agent.with_created(r: Agent, v: Nat) -> Agent:
   match r:
-    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, _, f11, f12, f13, f14, f15}:
-      Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, v, f11, f12, f13, f14, f15}
+    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, _, f11, f12, f13, f14, f15, f16}:
+      Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, v, f11, f12, f13, f14, f15, f16}
 
 def Agent.over_created(r: Agent, g: Nat -> Nat) -> Agent:
   match r:
-    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, g(f10), f11, f12, f13, f14, f15}
+    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, g(f10), f11, f12, f13, f14, f15, f16}
 
 def Agent.failure(r: Agent) -> Maybe<&2, String>:
   match r:
-    case Agent{_, _, _, _, _, _, _, _, _, _, _, f11, _, _, _, _}:
+    case Agent{_, _, _, _, _, _, _, _, _, _, _, f11, _, _, _, _, _}:
       f11
 
 def Agent.with_failure(r: Agent, v: Maybe<&2, String>) -> Agent:
   match r:
-    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, _, f12, f13, f14, f15}:
-      Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, v, f12, f13, f14, f15}
+    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, _, f12, f13, f14, f15, f16}:
+      Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, v, f12, f13, f14, f15, f16}
 
 def Agent.over_failure(r: Agent, g: Maybe<&2, String> -> Maybe<&2, String>) -> Agent:
   match r:
-    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, g(f11), f12, f13, f14, f15}
+    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, g(f11), f12, f13, f14, f15, f16}
 
 def Agent.note(r: Agent) -> String:
   match r:
-    case Agent{_, _, _, _, _, _, _, _, _, _, _, _, f12, _, _, _}:
+    case Agent{_, _, _, _, _, _, _, _, _, _, _, _, f12, _, _, _, _}:
       f12
 
 def Agent.with_note(r: Agent, v: String) -> Agent:
   match r:
-    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, _, f13, f14, f15}:
-      Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, v, f13, f14, f15}
+    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, _, f13, f14, f15, f16}:
+      Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, v, f13, f14, f15, f16}
 
 def Agent.over_note(r: Agent, g: String -> String) -> Agent:
   match r:
-    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, g(f12), f13, f14, f15}
+    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, g(f12), f13, f14, f15, f16}
 
 def Agent.report(r: Agent) -> J.Json:
   match r:
-    case Agent{_, _, _, _, _, _, _, _, _, _, _, _, _, f13, _, _}:
+    case Agent{_, _, _, _, _, _, _, _, _, _, _, _, _, f13, _, _, _}:
       f13
 
 def Agent.with_report(r: Agent, v: J.Json) -> Agent:
   match r:
-    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, _, f14, f15}:
-      Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, v, f14, f15}
+    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, _, f14, f15, f16}:
+      Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, v, f14, f15, f16}
 
 def Agent.over_report(r: Agent, g: J.Json -> J.Json) -> Agent:
   match r:
-    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, g(f13), f14, f15}
+    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, g(f13), f14, f15, f16}
 
 def Agent.snap(r: Agent) -> Maybe<&2, String>:
   match r:
-    case Agent{_, _, _, _, _, _, _, _, _, _, _, _, _, _, f14, _}:
+    case Agent{_, _, _, _, _, _, _, _, _, _, _, _, _, _, f14, _, _}:
       f14
 
 def Agent.with_snap(r: Agent, v: Maybe<&2, String>) -> Agent:
   match r:
-    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, _, f15}:
-      Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, v, f15}
+    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, _, f15, f16}:
+      Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, v, f15, f16}
 
 def Agent.over_snap(r: Agent, g: Maybe<&2, String> -> Maybe<&2, String>) -> Agent:
   match r:
-    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, g(f14), f15}
+    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, g(f14), f15, f16}
 
 def Agent.follow(r: Agent) -> Maybe<&2, String>:
   match r:
-    case Agent{_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, f15}:
+    case Agent{_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, f15, _}:
       f15
 
 def Agent.with_follow(r: Agent, v: Maybe<&2, String>) -> Agent:
   match r:
-    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, _}:
-      Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, v}
+    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, _, f16}:
+      Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, v, f16}
 
 def Agent.over_follow(r: Agent, g: Maybe<&2, String> -> Maybe<&2, String>) -> Agent:
   match r:
-    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, g(f15)}
+    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, g(f15), f16}
+
+def Agent.turn_works(r: Agent) -> List<&2, String>:
+  match r:
+    case Agent{_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, f16}:
+      f16
+
+def Agent.with_turn_works(r: Agent, v: List<&2, String>) -> Agent:
+  match r:
+    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, _}:
+      Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, v}
+
+def Agent.over_turn_works(r: Agent, g: List<&2, String> -> List<&2, String>) -> Agent:
+  match r:
+    case Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, g(f16)}
 
 def Agent.open(+r: Agent) -> Agent:
-  Agent.with_follow(Agent.with_snap(Agent.with_report(Agent.with_note(Agent.with_failure(Agent.with_created(Agent.with_brief(Agent.with_dir(Agent.with_ws(Agent.with_files(Agent.with_aliases(Agent.with_declared(Agent.with_life(Agent.with_parent(Agent.with_is_main(Agent.with_name(Agent.empty(), Agent.name(r)), Agent.is_main(r)), Agent.parent(r)), Agent.life(r)), Agent.declared(r)), Agent.aliases(r)), Agent.files(r)), Agent.ws(r)), Agent.dir(r)), Agent.brief(r)), Agent.created(r)), Agent.failure(r)), Agent.note(r)), Agent.report(r)), Agent.snap(r)), Agent.follow(r))
+  Agent.with_turn_works(Agent.with_follow(Agent.with_snap(Agent.with_report(Agent.with_note(Agent.with_failure(Agent.with_created(Agent.with_brief(Agent.with_dir(Agent.with_ws(Agent.with_files(Agent.with_aliases(Agent.with_declared(Agent.with_life(Agent.with_parent(Agent.with_is_main(Agent.with_name(Agent.empty(), Agent.name(r)), Agent.is_main(r)), Agent.parent(r)), Agent.life(r)), Agent.declared(r)), Agent.aliases(r)), Agent.files(r)), Agent.ws(r)), Agent.dir(r)), Agent.brief(r)), Agent.created(r)), Agent.failure(r)), Agent.note(r)), Agent.report(r)), Agent.snap(r)), Agent.follow(r)), Agent.turn_works(r))
 
 # ---- Item ----
 
@@ -1361,220 +1486,235 @@ def Item.open(+r: Item) -> Item:
 # ---- Timer ----
 
 def Timer.empty() -> Timer:
-  Timer{0n, "", "", "", Every{0n}, 0n, None{}, None{}, 0n, None{}, 0n, Nil{}, "", False{}}
+  Timer{0n, "", "", "", Every{0n}, 0n, None{}, None{}, 0n, None{}, 0n, Nil{}, "", False{}, Nil{}}
 
 def Timer.id(r: Timer) -> Nat:
   match r:
-    case Timer{f0, _, _, _, _, _, _, _, _, _, _, _, _, _}:
+    case Timer{f0, _, _, _, _, _, _, _, _, _, _, _, _, _, _}:
       f0
 
 def Timer.with_id(r: Timer, v: Nat) -> Timer:
   match r:
-    case Timer{_, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
-      Timer{v, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}
+    case Timer{_, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Timer{v, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}
 
 def Timer.over_id(r: Timer, g: Nat -> Nat) -> Timer:
   match r:
-    case Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
-      Timer{g(f0), f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}
+    case Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Timer{g(f0), f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}
 
 def Timer.agent(r: Timer) -> String:
   match r:
-    case Timer{_, f1, _, _, _, _, _, _, _, _, _, _, _, _}:
+    case Timer{_, f1, _, _, _, _, _, _, _, _, _, _, _, _, _}:
       f1
 
 def Timer.with_agent(r: Timer, v: String) -> Timer:
   match r:
-    case Timer{f0, _, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
-      Timer{f0, v, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}
+    case Timer{f0, _, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Timer{f0, v, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}
 
 def Timer.over_agent(r: Timer, g: String -> String) -> Timer:
   match r:
-    case Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
-      Timer{f0, g(f1), f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}
+    case Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Timer{f0, g(f1), f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}
 
 def Timer.by(r: Timer) -> String:
   match r:
-    case Timer{_, _, f2, _, _, _, _, _, _, _, _, _, _, _}:
+    case Timer{_, _, f2, _, _, _, _, _, _, _, _, _, _, _, _}:
       f2
 
 def Timer.with_by(r: Timer, v: String) -> Timer:
   match r:
-    case Timer{f0, f1, _, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
-      Timer{f0, f1, v, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}
+    case Timer{f0, f1, _, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Timer{f0, f1, v, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}
 
 def Timer.over_by(r: Timer, g: String -> String) -> Timer:
   match r:
-    case Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
-      Timer{f0, f1, g(f2), f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}
+    case Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Timer{f0, f1, g(f2), f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}
 
 def Timer.text(r: Timer) -> String:
   match r:
-    case Timer{_, _, _, f3, _, _, _, _, _, _, _, _, _, _}:
+    case Timer{_, _, _, f3, _, _, _, _, _, _, _, _, _, _, _}:
       f3
 
 def Timer.with_text(r: Timer, v: String) -> Timer:
   match r:
-    case Timer{f0, f1, f2, _, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
-      Timer{f0, f1, f2, v, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}
+    case Timer{f0, f1, f2, _, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Timer{f0, f1, f2, v, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}
 
 def Timer.over_text(r: Timer, g: String -> String) -> Timer:
   match r:
-    case Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
-      Timer{f0, f1, f2, g(f3), f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}
+    case Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Timer{f0, f1, f2, g(f3), f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}
 
 def Timer.sched(r: Timer) -> Sched:
   match r:
-    case Timer{_, _, _, _, f4, _, _, _, _, _, _, _, _, _}:
+    case Timer{_, _, _, _, f4, _, _, _, _, _, _, _, _, _, _}:
       f4
 
 def Timer.with_sched(r: Timer, v: Sched) -> Timer:
   match r:
-    case Timer{f0, f1, f2, f3, _, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
-      Timer{f0, f1, f2, f3, v, f5, f6, f7, f8, f9, f10, f11, f12, f13}
+    case Timer{f0, f1, f2, f3, _, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Timer{f0, f1, f2, f3, v, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}
 
 def Timer.over_sched(r: Timer, g: Sched -> Sched) -> Timer:
   match r:
-    case Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
-      Timer{f0, f1, f2, f3, g(f4), f5, f6, f7, f8, f9, f10, f11, f12, f13}
+    case Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Timer{f0, f1, f2, f3, g(f4), f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}
 
 def Timer.next(r: Timer) -> Nat:
   match r:
-    case Timer{_, _, _, _, _, f5, _, _, _, _, _, _, _, _}:
+    case Timer{_, _, _, _, _, f5, _, _, _, _, _, _, _, _, _}:
       f5
 
 def Timer.with_next(r: Timer, v: Nat) -> Timer:
   match r:
-    case Timer{f0, f1, f2, f3, f4, _, f6, f7, f8, f9, f10, f11, f12, f13}:
-      Timer{f0, f1, f2, f3, f4, v, f6, f7, f8, f9, f10, f11, f12, f13}
+    case Timer{f0, f1, f2, f3, f4, _, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Timer{f0, f1, f2, f3, f4, v, f6, f7, f8, f9, f10, f11, f12, f13, f14}
 
 def Timer.over_next(r: Timer, g: Nat -> Nat) -> Timer:
   match r:
-    case Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
-      Timer{f0, f1, f2, f3, f4, g(f5), f6, f7, f8, f9, f10, f11, f12, f13}
+    case Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Timer{f0, f1, f2, f3, f4, g(f5), f6, f7, f8, f9, f10, f11, f12, f13, f14}
 
 def Timer.until(r: Timer) -> Maybe<&2, Nat>:
   match r:
-    case Timer{_, _, _, _, _, _, f6, _, _, _, _, _, _, _}:
+    case Timer{_, _, _, _, _, _, f6, _, _, _, _, _, _, _, _}:
       f6
 
 def Timer.with_until(r: Timer, v: Maybe<&2, Nat>) -> Timer:
   match r:
-    case Timer{f0, f1, f2, f3, f4, f5, _, f7, f8, f9, f10, f11, f12, f13}:
-      Timer{f0, f1, f2, f3, f4, f5, v, f7, f8, f9, f10, f11, f12, f13}
+    case Timer{f0, f1, f2, f3, f4, f5, _, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Timer{f0, f1, f2, f3, f4, f5, v, f7, f8, f9, f10, f11, f12, f13, f14}
 
 def Timer.over_until(r: Timer, g: Maybe<&2, Nat> -> Maybe<&2, Nat>) -> Timer:
   match r:
-    case Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
-      Timer{f0, f1, f2, f3, f4, f5, g(f6), f7, f8, f9, f10, f11, f12, f13}
+    case Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Timer{f0, f1, f2, f3, f4, f5, g(f6), f7, f8, f9, f10, f11, f12, f13, f14}
 
 def Timer.times(r: Timer) -> Maybe<&2, Nat>:
   match r:
-    case Timer{_, _, _, _, _, _, _, f7, _, _, _, _, _, _}:
+    case Timer{_, _, _, _, _, _, _, f7, _, _, _, _, _, _, _}:
       f7
 
 def Timer.with_times(r: Timer, v: Maybe<&2, Nat>) -> Timer:
   match r:
-    case Timer{f0, f1, f2, f3, f4, f5, f6, _, f8, f9, f10, f11, f12, f13}:
-      Timer{f0, f1, f2, f3, f4, f5, f6, v, f8, f9, f10, f11, f12, f13}
+    case Timer{f0, f1, f2, f3, f4, f5, f6, _, f8, f9, f10, f11, f12, f13, f14}:
+      Timer{f0, f1, f2, f3, f4, f5, f6, v, f8, f9, f10, f11, f12, f13, f14}
 
 def Timer.over_times(r: Timer, g: Maybe<&2, Nat> -> Maybe<&2, Nat>) -> Timer:
   match r:
-    case Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
-      Timer{f0, f1, f2, f3, f4, f5, f6, g(f7), f8, f9, f10, f11, f12, f13}
+    case Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Timer{f0, f1, f2, f3, f4, f5, f6, g(f7), f8, f9, f10, f11, f12, f13, f14}
 
 def Timer.fired(r: Timer) -> Nat:
   match r:
-    case Timer{_, _, _, _, _, _, _, _, f8, _, _, _, _, _}:
+    case Timer{_, _, _, _, _, _, _, _, f8, _, _, _, _, _, _}:
       f8
 
 def Timer.with_fired(r: Timer, v: Nat) -> Timer:
   match r:
-    case Timer{f0, f1, f2, f3, f4, f5, f6, f7, _, f9, f10, f11, f12, f13}:
-      Timer{f0, f1, f2, f3, f4, f5, f6, f7, v, f9, f10, f11, f12, f13}
+    case Timer{f0, f1, f2, f3, f4, f5, f6, f7, _, f9, f10, f11, f12, f13, f14}:
+      Timer{f0, f1, f2, f3, f4, f5, f6, f7, v, f9, f10, f11, f12, f13, f14}
 
 def Timer.over_fired(r: Timer, g: Nat -> Nat) -> Timer:
   match r:
-    case Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
-      Timer{f0, f1, f2, f3, f4, f5, f6, f7, g(f8), f9, f10, f11, f12, f13}
+    case Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Timer{f0, f1, f2, f3, f4, f5, f6, f7, g(f8), f9, f10, f11, f12, f13, f14}
 
 def Timer.page(r: Timer) -> Maybe<&2, String>:
   match r:
-    case Timer{_, _, _, _, _, _, _, _, _, f9, _, _, _, _}:
+    case Timer{_, _, _, _, _, _, _, _, _, f9, _, _, _, _, _}:
       f9
 
 def Timer.with_page(r: Timer, v: Maybe<&2, String>) -> Timer:
   match r:
-    case Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, _, f10, f11, f12, f13}:
-      Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, v, f10, f11, f12, f13}
+    case Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, _, f10, f11, f12, f13, f14}:
+      Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, v, f10, f11, f12, f13, f14}
 
 def Timer.over_page(r: Timer, g: Maybe<&2, String> -> Maybe<&2, String>) -> Timer:
   match r:
-    case Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
-      Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, g(f9), f10, f11, f12, f13}
+    case Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, g(f9), f10, f11, f12, f13, f14}
 
 def Timer.last(r: Timer) -> Nat:
   match r:
-    case Timer{_, _, _, _, _, _, _, _, _, _, f10, _, _, _}:
+    case Timer{_, _, _, _, _, _, _, _, _, _, f10, _, _, _, _}:
       f10
 
 def Timer.with_last(r: Timer, v: Nat) -> Timer:
   match r:
-    case Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, _, f11, f12, f13}:
-      Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, v, f11, f12, f13}
+    case Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, _, f11, f12, f13, f14}:
+      Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, v, f11, f12, f13, f14}
 
 def Timer.over_last(r: Timer, g: Nat -> Nat) -> Timer:
   match r:
-    case Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
-      Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, g(f10), f11, f12, f13}
+    case Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, g(f10), f11, f12, f13, f14}
 
 def Timer.runs(r: Timer) -> List<&2, Nat>:
   match r:
-    case Timer{_, _, _, _, _, _, _, _, _, _, _, f11, _, _}:
+    case Timer{_, _, _, _, _, _, _, _, _, _, _, f11, _, _, _}:
       f11
 
 def Timer.with_runs(r: Timer, v: List<&2, Nat>) -> Timer:
   match r:
-    case Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, _, f12, f13}:
-      Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, v, f12, f13}
+    case Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, _, f12, f13, f14}:
+      Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, v, f12, f13, f14}
 
 def Timer.over_runs(r: Timer, g: List<&2, Nat> -> List<&2, Nat>) -> Timer:
   match r:
-    case Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
-      Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, g(f11), f12, f13}
+    case Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, g(f11), f12, f13, f14}
 
 def Timer.name(r: Timer) -> String:
   match r:
-    case Timer{_, _, _, _, _, _, _, _, _, _, _, _, f12, _}:
+    case Timer{_, _, _, _, _, _, _, _, _, _, _, _, f12, _, _}:
       f12
 
 def Timer.with_name(r: Timer, v: String) -> Timer:
   match r:
-    case Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, _, f13}:
-      Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, v, f13}
+    case Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, _, f13, f14}:
+      Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, v, f13, f14}
 
 def Timer.over_name(r: Timer, g: String -> String) -> Timer:
   match r:
-    case Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
-      Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, g(f12), f13}
+    case Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, g(f12), f13, f14}
 
 def Timer.held(r: Timer) -> Bool:
   match r:
-    case Timer{_, _, _, _, _, _, _, _, _, _, _, _, _, f13}:
+    case Timer{_, _, _, _, _, _, _, _, _, _, _, _, _, f13, _}:
       f13
 
 def Timer.with_held(r: Timer, v: Bool) -> Timer:
   match r:
-    case Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, _}:
-      Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, v}
+    case Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, _, f14}:
+      Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, v, f14}
 
 def Timer.over_held(r: Timer, g: Bool -> Bool) -> Timer:
   match r:
-    case Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13}:
-      Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, g(f13)}
+    case Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, g(f13), f14}
+
+def Timer.works(r: Timer) -> List<&2, String>:
+  match r:
+    case Timer{_, _, _, _, _, _, _, _, _, _, _, _, _, _, f14}:
+      f14
+
+def Timer.with_works(r: Timer, v: List<&2, String>) -> Timer:
+  match r:
+    case Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, _}:
+      Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, v}
+
+def Timer.over_works(r: Timer, g: List<&2, String> -> List<&2, String>) -> Timer:
+  match r:
+    case Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
+      Timer{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, g(f14)}
 
 def Timer.open(+r: Timer) -> Timer:
-  Timer.with_held(Timer.with_name(Timer.with_runs(Timer.with_last(Timer.with_page(Timer.with_fired(Timer.with_times(Timer.with_until(Timer.with_next(Timer.with_sched(Timer.with_text(Timer.with_by(Timer.with_agent(Timer.with_id(Timer.empty(), Timer.id(r)), Timer.agent(r)), Timer.by(r)), Timer.text(r)), Timer.sched(r)), Timer.next(r)), Timer.until(r)), Timer.times(r)), Timer.fired(r)), Timer.page(r)), Timer.last(r)), Timer.runs(r)), Timer.name(r)), Timer.held(r))
+  Timer.with_works(Timer.with_held(Timer.with_name(Timer.with_runs(Timer.with_last(Timer.with_page(Timer.with_fired(Timer.with_times(Timer.with_until(Timer.with_next(Timer.with_sched(Timer.with_text(Timer.with_by(Timer.with_agent(Timer.with_id(Timer.empty(), Timer.id(r)), Timer.agent(r)), Timer.by(r)), Timer.text(r)), Timer.sched(r)), Timer.next(r)), Timer.until(r)), Timer.times(r)), Timer.fired(r)), Timer.page(r)), Timer.last(r)), Timer.runs(r)), Timer.name(r)), Timer.held(r)), Timer.works(r))
 
 # ---- TimerEnd ----
 
@@ -2496,206 +2636,802 @@ def Xs.over_next_rid(r: Xs, g: Nat -> Nat) -> Xs:
 def Xs.open(+r: Xs) -> Xs:
   Xs.with_next_rid(Xs.with_routes(Xs.with_xin(Xs.with_next_xid(Xs.with_outbox(Xs.empty(), Xs.outbox(r)), Xs.next_xid(r)), Xs.xin(r)), Xs.routes(r)), Xs.next_rid(r))
 
+# ---- Goal ----
+
+def Goal.empty() -> Goal:
+  Goal{"", False{}, ""}
+
+def Goal.text(r: Goal) -> String:
+  match r:
+    case Goal{f0, _, _}:
+      f0
+
+def Goal.with_text(r: Goal, v: String) -> Goal:
+  match r:
+    case Goal{_, f1, f2}:
+      Goal{v, f1, f2}
+
+def Goal.over_text(r: Goal, g: String -> String) -> Goal:
+  match r:
+    case Goal{f0, f1, f2}:
+      Goal{g(f0), f1, f2}
+
+def Goal.done(r: Goal) -> Bool:
+  match r:
+    case Goal{_, f1, _}:
+      f1
+
+def Goal.with_done(r: Goal, v: Bool) -> Goal:
+  match r:
+    case Goal{f0, _, f2}:
+      Goal{f0, v, f2}
+
+def Goal.over_done(r: Goal, g: Bool -> Bool) -> Goal:
+  match r:
+    case Goal{f0, f1, f2}:
+      Goal{f0, g(f1), f2}
+
+def Goal.by(r: Goal) -> String:
+  match r:
+    case Goal{_, _, f2}:
+      f2
+
+def Goal.with_by(r: Goal, v: String) -> Goal:
+  match r:
+    case Goal{f0, f1, _}:
+      Goal{f0, f1, v}
+
+def Goal.over_by(r: Goal, g: String -> String) -> Goal:
+  match r:
+    case Goal{f0, f1, f2}:
+      Goal{f0, f1, g(f2)}
+
+def Goal.open(+r: Goal) -> Goal:
+  Goal.with_by(Goal.with_done(Goal.with_text(Goal.empty(), Goal.text(r)), Goal.done(r)), Goal.by(r))
+
+# ---- Fin ----
+
+def Fin.empty() -> Fin:
+  Fin{0n, ""}
+
+def Fin.at(r: Fin) -> Nat:
+  match r:
+    case Fin{f0, _}:
+      f0
+
+def Fin.with_at(r: Fin, v: Nat) -> Fin:
+  match r:
+    case Fin{_, f1}:
+      Fin{v, f1}
+
+def Fin.over_at(r: Fin, g: Nat -> Nat) -> Fin:
+  match r:
+    case Fin{f0, f1}:
+      Fin{g(f0), f1}
+
+def Fin.by(r: Fin) -> String:
+  match r:
+    case Fin{_, f1}:
+      f1
+
+def Fin.with_by(r: Fin, v: String) -> Fin:
+  match r:
+    case Fin{f0, _}:
+      Fin{f0, v}
+
+def Fin.over_by(r: Fin, g: String -> String) -> Fin:
+  match r:
+    case Fin{f0, f1}:
+      Fin{f0, g(f1)}
+
+def Fin.open(+r: Fin) -> Fin:
+  Fin.with_by(Fin.with_at(Fin.empty(), Fin.at(r)), Fin.by(r))
+
+# ---- Work ----
+
+def Work.empty() -> Work:
+  Work{"", "", "", Nil{}, WTask{}, None{}, "", 0n, None{}, None{}, None{}, None{}, None{}, False{}, Nil{}, 0n}
+
+def Work.id(r: Work) -> String:
+  match r:
+    case Work{f0, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _}:
+      f0
+
+def Work.with_id(r: Work, v: String) -> Work:
+  match r:
+    case Work{_, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Work{v, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+
+def Work.over_id(r: Work, g: String -> String) -> Work:
+  match r:
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Work{g(f0), f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+
+def Work.name(r: Work) -> String:
+  match r:
+    case Work{_, f1, _, _, _, _, _, _, _, _, _, _, _, _, _, _}:
+      f1
+
+def Work.with_name(r: Work, v: String) -> Work:
+  match r:
+    case Work{f0, _, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Work{f0, v, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+
+def Work.over_name(r: Work, g: String -> String) -> Work:
+  match r:
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Work{f0, g(f1), f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+
+def Work.why(r: Work) -> String:
+  match r:
+    case Work{_, _, f2, _, _, _, _, _, _, _, _, _, _, _, _, _}:
+      f2
+
+def Work.with_why(r: Work, v: String) -> Work:
+  match r:
+    case Work{f0, f1, _, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Work{f0, f1, v, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+
+def Work.over_why(r: Work, g: String -> String) -> Work:
+  match r:
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Work{f0, f1, g(f2), f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+
+def Work.goals(r: Work) -> List<&2, Goal>:
+  match r:
+    case Work{_, _, _, f3, _, _, _, _, _, _, _, _, _, _, _, _}:
+      f3
+
+def Work.with_goals(r: Work, v: List<&2, Goal>) -> Work:
+  match r:
+    case Work{f0, f1, f2, _, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Work{f0, f1, f2, v, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+
+def Work.over_goals(r: Work, g: List<&2, Goal> -> List<&2, Goal>) -> Work:
+  match r:
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Work{f0, f1, f2, g(f3), f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+
+def Work.kind(r: Work) -> WKind:
+  match r:
+    case Work{_, _, _, _, f4, _, _, _, _, _, _, _, _, _, _, _}:
+      f4
+
+def Work.with_kind(r: Work, v: WKind) -> Work:
+  match r:
+    case Work{f0, f1, f2, f3, _, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Work{f0, f1, f2, f3, v, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+
+def Work.over_kind(r: Work, g: WKind -> WKind) -> Work:
+  match r:
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Work{f0, f1, f2, f3, g(f4), f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+
+def Work.origin(r: Work) -> Maybe<&2, Nat>:
+  match r:
+    case Work{_, _, _, _, _, f5, _, _, _, _, _, _, _, _, _, _}:
+      f5
+
+def Work.with_origin(r: Work, v: Maybe<&2, Nat>) -> Work:
+  match r:
+    case Work{f0, f1, f2, f3, f4, _, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Work{f0, f1, f2, f3, f4, v, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+
+def Work.over_origin(r: Work, g: Maybe<&2, Nat> -> Maybe<&2, Nat>) -> Work:
+  match r:
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Work{f0, f1, f2, f3, f4, g(f5), f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+
+def Work.by(r: Work) -> String:
+  match r:
+    case Work{_, _, _, _, _, _, f6, _, _, _, _, _, _, _, _, _}:
+      f6
+
+def Work.with_by(r: Work, v: String) -> Work:
+  match r:
+    case Work{f0, f1, f2, f3, f4, f5, _, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Work{f0, f1, f2, f3, f4, f5, v, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+
+def Work.over_by(r: Work, g: String -> String) -> Work:
+  match r:
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Work{f0, f1, f2, f3, f4, f5, g(f6), f7, f8, f9, f10, f11, f12, f13, f14, f15}
+
+def Work.created(r: Work) -> Nat:
+  match r:
+    case Work{_, _, _, _, _, _, _, f7, _, _, _, _, _, _, _, _}:
+      f7
+
+def Work.with_created(r: Work, v: Nat) -> Work:
+  match r:
+    case Work{f0, f1, f2, f3, f4, f5, f6, _, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Work{f0, f1, f2, f3, f4, f5, f6, v, f8, f9, f10, f11, f12, f13, f14, f15}
+
+def Work.over_created(r: Work, g: Nat -> Nat) -> Work:
+  match r:
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Work{f0, f1, f2, f3, f4, f5, f6, g(f7), f8, f9, f10, f11, f12, f13, f14, f15}
+
+def Work.paused(r: Work) -> Maybe<&2, Nat>:
+  match r:
+    case Work{_, _, _, _, _, _, _, _, f8, _, _, _, _, _, _, _}:
+      f8
+
+def Work.with_paused(r: Work, v: Maybe<&2, Nat>) -> Work:
+  match r:
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, _, f9, f10, f11, f12, f13, f14, f15}:
+      Work{f0, f1, f2, f3, f4, f5, f6, f7, v, f9, f10, f11, f12, f13, f14, f15}
+
+def Work.over_paused(r: Work, g: Maybe<&2, Nat> -> Maybe<&2, Nat>) -> Work:
+  match r:
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Work{f0, f1, f2, f3, f4, f5, f6, f7, g(f8), f9, f10, f11, f12, f13, f14, f15}
+
+def Work.until(r: Work) -> Maybe<&2, Nat>:
+  match r:
+    case Work{_, _, _, _, _, _, _, _, _, f9, _, _, _, _, _, _}:
+      f9
+
+def Work.with_until(r: Work, v: Maybe<&2, Nat>) -> Work:
+  match r:
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, _, f10, f11, f12, f13, f14, f15}:
+      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, v, f10, f11, f12, f13, f14, f15}
+
+def Work.over_until(r: Work, g: Maybe<&2, Nat> -> Maybe<&2, Nat>) -> Work:
+  match r:
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, g(f9), f10, f11, f12, f13, f14, f15}
+
+def Work.until_timer(r: Work) -> Maybe<&2, Nat>:
+  match r:
+    case Work{_, _, _, _, _, _, _, _, _, _, f10, _, _, _, _, _}:
+      f10
+
+def Work.with_until_timer(r: Work, v: Maybe<&2, Nat>) -> Work:
+  match r:
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, _, f11, f12, f13, f14, f15}:
+      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, v, f11, f12, f13, f14, f15}
+
+def Work.over_until_timer(r: Work, g: Maybe<&2, Nat> -> Maybe<&2, Nat>) -> Work:
+  match r:
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, g(f10), f11, f12, f13, f14, f15}
+
+def Work.done(r: Work) -> Maybe<&2, Fin>:
+  match r:
+    case Work{_, _, _, _, _, _, _, _, _, _, _, f11, _, _, _, _}:
+      f11
+
+def Work.with_done(r: Work, v: Maybe<&2, Fin>) -> Work:
+  match r:
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, _, f12, f13, f14, f15}:
+      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, v, f12, f13, f14, f15}
+
+def Work.over_done(r: Work, g: Maybe<&2, Fin> -> Maybe<&2, Fin>) -> Work:
+  match r:
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, g(f11), f12, f13, f14, f15}
+
+def Work.merged_into(r: Work) -> Maybe<&2, String>:
+  match r:
+    case Work{_, _, _, _, _, _, _, _, _, _, _, _, f12, _, _, _}:
+      f12
+
+def Work.with_merged_into(r: Work, v: Maybe<&2, String>) -> Work:
+  match r:
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, _, f13, f14, f15}:
+      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, v, f13, f14, f15}
+
+def Work.over_merged_into(r: Work, g: Maybe<&2, String> -> Maybe<&2, String>) -> Work:
+  match r:
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, g(f12), f13, f14, f15}
+
+def Work.named_by_you(r: Work) -> Bool:
+  match r:
+    case Work{_, _, _, _, _, _, _, _, _, _, _, _, _, f13, _, _}:
+      f13
+
+def Work.with_named_by_you(r: Work, v: Bool) -> Work:
+  match r:
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, _, f14, f15}:
+      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, v, f14, f15}
+
+def Work.over_named_by_you(r: Work, g: Bool -> Bool) -> Work:
+  match r:
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, g(f13), f14, f15}
+
+def Work.agents(r: Work) -> List<&2, String>:
+  match r:
+    case Work{_, _, _, _, _, _, _, _, _, _, _, _, _, _, f14, _}:
+      f14
+
+def Work.with_agents(r: Work, v: List<&2, String>) -> Work:
+  match r:
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, _, f15}:
+      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, v, f15}
+
+def Work.over_agents(r: Work, g: List<&2, String> -> List<&2, String>) -> Work:
+  match r:
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, g(f14), f15}
+
+def Work.last(r: Work) -> Nat:
+  match r:
+    case Work{_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, f15}:
+      f15
+
+def Work.with_last(r: Work, v: Nat) -> Work:
+  match r:
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, _}:
+      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, v}
+
+def Work.over_last(r: Work, g: Nat -> Nat) -> Work:
+  match r:
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, g(f15)}
+
+def Work.open(+r: Work) -> Work:
+  Work.with_last(Work.with_agents(Work.with_named_by_you(Work.with_merged_into(Work.with_done(Work.with_until_timer(Work.with_until(Work.with_paused(Work.with_created(Work.with_by(Work.with_origin(Work.with_kind(Work.with_goals(Work.with_why(Work.with_name(Work.with_id(Work.empty(), Work.id(r)), Work.name(r)), Work.why(r)), Work.goals(r)), Work.kind(r)), Work.origin(r)), Work.by(r)), Work.created(r)), Work.paused(r)), Work.until(r)), Work.until_timer(r)), Work.done(r)), Work.merged_into(r)), Work.named_by_you(r)), Work.agents(r)), Work.last(r))
+
+# ---- Tomb ----
+
+def Tomb.empty() -> Tomb:
+  Tomb{"", "", 0n, None{}}
+
+def Tomb.id(r: Tomb) -> String:
+  match r:
+    case Tomb{f0, _, _, _}:
+      f0
+
+def Tomb.with_id(r: Tomb, v: String) -> Tomb:
+  match r:
+    case Tomb{_, f1, f2, f3}:
+      Tomb{v, f1, f2, f3}
+
+def Tomb.over_id(r: Tomb, g: String -> String) -> Tomb:
+  match r:
+    case Tomb{f0, f1, f2, f3}:
+      Tomb{g(f0), f1, f2, f3}
+
+def Tomb.name(r: Tomb) -> String:
+  match r:
+    case Tomb{_, f1, _, _}:
+      f1
+
+def Tomb.with_name(r: Tomb, v: String) -> Tomb:
+  match r:
+    case Tomb{f0, _, f2, f3}:
+      Tomb{f0, v, f2, f3}
+
+def Tomb.over_name(r: Tomb, g: String -> String) -> Tomb:
+  match r:
+    case Tomb{f0, f1, f2, f3}:
+      Tomb{f0, g(f1), f2, f3}
+
+def Tomb.done(r: Tomb) -> Nat:
+  match r:
+    case Tomb{_, _, f2, _}:
+      f2
+
+def Tomb.with_done(r: Tomb, v: Nat) -> Tomb:
+  match r:
+    case Tomb{f0, f1, _, f3}:
+      Tomb{f0, f1, v, f3}
+
+def Tomb.over_done(r: Tomb, g: Nat -> Nat) -> Tomb:
+  match r:
+    case Tomb{f0, f1, f2, f3}:
+      Tomb{f0, f1, g(f2), f3}
+
+def Tomb.merged_into(r: Tomb) -> Maybe<&2, String>:
+  match r:
+    case Tomb{_, _, _, f3}:
+      f3
+
+def Tomb.with_merged_into(r: Tomb, v: Maybe<&2, String>) -> Tomb:
+  match r:
+    case Tomb{f0, f1, f2, _}:
+      Tomb{f0, f1, f2, v}
+
+def Tomb.over_merged_into(r: Tomb, g: Maybe<&2, String> -> Maybe<&2, String>) -> Tomb:
+  match r:
+    case Tomb{f0, f1, f2, f3}:
+      Tomb{f0, f1, f2, g(f3)}
+
+def Tomb.open(+r: Tomb) -> Tomb:
+  Tomb.with_merged_into(Tomb.with_done(Tomb.with_name(Tomb.with_id(Tomb.empty(), Tomb.id(r)), Tomb.name(r)), Tomb.done(r)), Tomb.merged_into(r))
+
+# ---- Moved ----
+
+def Moved.empty() -> Moved:
+  Moved{"", Nil{}}
+
+def Moved.art(r: Moved) -> String:
+  match r:
+    case Moved{f0, _}:
+      f0
+
+def Moved.with_art(r: Moved, v: String) -> Moved:
+  match r:
+    case Moved{_, f1}:
+      Moved{v, f1}
+
+def Moved.over_art(r: Moved, g: String -> String) -> Moved:
+  match r:
+    case Moved{f0, f1}:
+      Moved{g(f0), f1}
+
+def Moved.works(r: Moved) -> List<&2, String>:
+  match r:
+    case Moved{_, f1}:
+      f1
+
+def Moved.with_works(r: Moved, v: List<&2, String>) -> Moved:
+  match r:
+    case Moved{f0, _}:
+      Moved{f0, v}
+
+def Moved.over_works(r: Moved, g: List<&2, String> -> List<&2, String>) -> Moved:
+  match r:
+    case Moved{f0, f1}:
+      Moved{f0, g(f1)}
+
+def Moved.open(+r: Moved) -> Moved:
+  Moved.with_works(Moved.with_art(Moved.empty(), Moved.art(r)), Moved.works(r))
+
+# ---- WTurn ----
+
+def WTurn.empty() -> WTurn:
+  WTurn{"", Nil{}, False{}, 0n}
+
+def WTurn.agent(r: WTurn) -> String:
+  match r:
+    case WTurn{f0, _, _, _}:
+      f0
+
+def WTurn.with_agent(r: WTurn, v: String) -> WTurn:
+  match r:
+    case WTurn{_, f1, f2, f3}:
+      WTurn{v, f1, f2, f3}
+
+def WTurn.over_agent(r: WTurn, g: String -> String) -> WTurn:
+  match r:
+    case WTurn{f0, f1, f2, f3}:
+      WTurn{g(f0), f1, f2, f3}
+
+def WTurn.works(r: WTurn) -> List<&2, String>:
+  match r:
+    case WTurn{_, f1, _, _}:
+      f1
+
+def WTurn.with_works(r: WTurn, v: List<&2, String>) -> WTurn:
+  match r:
+    case WTurn{f0, _, f2, f3}:
+      WTurn{f0, v, f2, f3}
+
+def WTurn.over_works(r: WTurn, g: List<&2, String> -> List<&2, String>) -> WTurn:
+  match r:
+    case WTurn{f0, f1, f2, f3}:
+      WTurn{f0, g(f1), f2, f3}
+
+def WTurn.add(r: WTurn) -> Bool:
+  match r:
+    case WTurn{_, _, f2, _}:
+      f2
+
+def WTurn.with_add(r: WTurn, v: Bool) -> WTurn:
+  match r:
+    case WTurn{f0, f1, _, f3}:
+      WTurn{f0, f1, v, f3}
+
+def WTurn.over_add(r: WTurn, g: Bool -> Bool) -> WTurn:
+  match r:
+    case WTurn{f0, f1, f2, f3}:
+      WTurn{f0, f1, g(f2), f3}
+
+def WTurn.at(r: WTurn) -> Nat:
+  match r:
+    case WTurn{_, _, _, f3}:
+      f3
+
+def WTurn.with_at(r: WTurn, v: Nat) -> WTurn:
+  match r:
+    case WTurn{f0, f1, f2, _}:
+      WTurn{f0, f1, f2, v}
+
+def WTurn.over_at(r: WTurn, g: Nat -> Nat) -> WTurn:
+  match r:
+    case WTurn{f0, f1, f2, f3}:
+      WTurn{f0, f1, f2, g(f3)}
+
+def WTurn.open(+r: WTurn) -> WTurn:
+  WTurn.with_at(WTurn.with_add(WTurn.with_works(WTurn.with_agent(WTurn.empty(), WTurn.agent(r)), WTurn.works(r)), WTurn.add(r)), WTurn.at(r))
+
+# ---- CardMove ----
+
+def CardMove.empty() -> CardMove:
+  CardMove{0n, Nil{}}
+
+def CardMove.card(r: CardMove) -> Nat:
+  match r:
+    case CardMove{f0, _}:
+      f0
+
+def CardMove.with_card(r: CardMove, v: Nat) -> CardMove:
+  match r:
+    case CardMove{_, f1}:
+      CardMove{v, f1}
+
+def CardMove.over_card(r: CardMove, g: Nat -> Nat) -> CardMove:
+  match r:
+    case CardMove{f0, f1}:
+      CardMove{g(f0), f1}
+
+def CardMove.works(r: CardMove) -> List<&2, String>:
+  match r:
+    case CardMove{_, f1}:
+      f1
+
+def CardMove.with_works(r: CardMove, v: List<&2, String>) -> CardMove:
+  match r:
+    case CardMove{f0, _}:
+      CardMove{f0, v}
+
+def CardMove.over_works(r: CardMove, g: List<&2, String> -> List<&2, String>) -> CardMove:
+  match r:
+    case CardMove{f0, f1}:
+      CardMove{f0, g(f1)}
+
+def CardMove.open(+r: CardMove) -> CardMove:
+  CardMove.with_works(CardMove.with_card(CardMove.empty(), CardMove.card(r)), CardMove.works(r))
+
 # ---- St ----
 
 def St.empty() -> St:
-  St{Nil{}, Nil{}, Nil{}, Nil{}, Nil{}, 1n, 1n, Tms.empty(), Xs.empty(), None{}, Nil{}, Nil{}, Nil{}}
+  St{Nil{}, Nil{}, Nil{}, Nil{}, Nil{}, 1n, 1n, Tms.empty(), Xs.empty(), None{}, Nil{}, Nil{}, Nil{}, Nil{}, Nil{}, Nil{}}
 
 def St.agents(r: St) -> List<&2, Agent>:
   match r:
-    case St{f0, _, _, _, _, _, _, _, _, _, _, _, _}:
+    case St{f0, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _}:
       f0
 
 def St.with_agents(r: St, v: List<&2, Agent>) -> St:
   match r:
-    case St{_, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
-      St{v, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}
+    case St{_, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      St{v, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
 
 def St.over_agents(r: St, g: List<&2, Agent> -> List<&2, Agent>) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
-      St{g(f0), f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      St{g(f0), f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
 
 def St.order(r: St) -> List<&2, String>:
   match r:
-    case St{_, f1, _, _, _, _, _, _, _, _, _, _, _}:
+    case St{_, f1, _, _, _, _, _, _, _, _, _, _, _, _, _, _}:
       f1
 
 def St.with_order(r: St, v: List<&2, String>) -> St:
   match r:
-    case St{f0, _, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
-      St{f0, v, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}
+    case St{f0, _, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      St{f0, v, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
 
 def St.over_order(r: St, g: List<&2, String> -> List<&2, String>) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
-      St{f0, g(f1), f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      St{f0, g(f1), f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
 
 def St.hot(r: St) -> List<&2, MRec>:
   match r:
-    case St{_, _, f2, _, _, _, _, _, _, _, _, _, _}:
+    case St{_, _, f2, _, _, _, _, _, _, _, _, _, _, _, _, _}:
       f2
 
 def St.with_hot(r: St, v: List<&2, MRec>) -> St:
   match r:
-    case St{f0, f1, _, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
-      St{f0, f1, v, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}
+    case St{f0, f1, _, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      St{f0, f1, v, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
 
 def St.over_hot(r: St, g: List<&2, MRec> -> List<&2, MRec>) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
-      St{f0, f1, g(f2), f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      St{f0, f1, g(f2), f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
 
 def St.cards(r: St) -> List<&2, Card>:
   match r:
-    case St{_, _, _, f3, _, _, _, _, _, _, _, _, _}:
+    case St{_, _, _, f3, _, _, _, _, _, _, _, _, _, _, _, _}:
       f3
 
 def St.with_cards(r: St, v: List<&2, Card>) -> St:
   match r:
-    case St{f0, f1, f2, _, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
-      St{f0, f1, f2, v, f4, f5, f6, f7, f8, f9, f10, f11, f12}
+    case St{f0, f1, f2, _, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      St{f0, f1, f2, v, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
 
 def St.over_cards(r: St, g: List<&2, Card> -> List<&2, Card>) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
-      St{f0, f1, f2, g(f3), f4, f5, f6, f7, f8, f9, f10, f11, f12}
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      St{f0, f1, f2, g(f3), f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
 
 def St.notes(r: St) -> List<&2, String>:
   match r:
-    case St{_, _, _, _, f4, _, _, _, _, _, _, _, _}:
+    case St{_, _, _, _, f4, _, _, _, _, _, _, _, _, _, _, _}:
       f4
 
 def St.with_notes(r: St, v: List<&2, String>) -> St:
   match r:
-    case St{f0, f1, f2, f3, _, f5, f6, f7, f8, f9, f10, f11, f12}:
-      St{f0, f1, f2, f3, v, f5, f6, f7, f8, f9, f10, f11, f12}
+    case St{f0, f1, f2, f3, _, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      St{f0, f1, f2, f3, v, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
 
 def St.over_notes(r: St, g: List<&2, String> -> List<&2, String>) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
-      St{f0, f1, f2, f3, g(f4), f5, f6, f7, f8, f9, f10, f11, f12}
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      St{f0, f1, f2, f3, g(f4), f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
 
 def St.next_msg(r: St) -> Nat:
   match r:
-    case St{_, _, _, _, _, f5, _, _, _, _, _, _, _}:
+    case St{_, _, _, _, _, f5, _, _, _, _, _, _, _, _, _, _}:
       f5
 
 def St.with_next_msg(r: St, v: Nat) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, _, f6, f7, f8, f9, f10, f11, f12}:
-      St{f0, f1, f2, f3, f4, v, f6, f7, f8, f9, f10, f11, f12}
+    case St{f0, f1, f2, f3, f4, _, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      St{f0, f1, f2, f3, f4, v, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
 
 def St.over_next_msg(r: St, g: Nat -> Nat) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
-      St{f0, f1, f2, f3, f4, g(f5), f6, f7, f8, f9, f10, f11, f12}
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      St{f0, f1, f2, f3, f4, g(f5), f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
 
 def St.next_card(r: St) -> Nat:
   match r:
-    case St{_, _, _, _, _, _, f6, _, _, _, _, _, _}:
+    case St{_, _, _, _, _, _, f6, _, _, _, _, _, _, _, _, _}:
       f6
 
 def St.with_next_card(r: St, v: Nat) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, _, f7, f8, f9, f10, f11, f12}:
-      St{f0, f1, f2, f3, f4, f5, v, f7, f8, f9, f10, f11, f12}
+    case St{f0, f1, f2, f3, f4, f5, _, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      St{f0, f1, f2, f3, f4, f5, v, f7, f8, f9, f10, f11, f12, f13, f14, f15}
 
 def St.over_next_card(r: St, g: Nat -> Nat) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
-      St{f0, f1, f2, f3, f4, f5, g(f6), f7, f8, f9, f10, f11, f12}
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      St{f0, f1, f2, f3, f4, f5, g(f6), f7, f8, f9, f10, f11, f12, f13, f14, f15}
 
 def St.tm(r: St) -> Tms:
   match r:
-    case St{_, _, _, _, _, _, _, f7, _, _, _, _, _}:
+    case St{_, _, _, _, _, _, _, f7, _, _, _, _, _, _, _, _}:
       f7
 
 def St.with_tm(r: St, v: Tms) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, _, f8, f9, f10, f11, f12}:
-      St{f0, f1, f2, f3, f4, f5, f6, v, f8, f9, f10, f11, f12}
+    case St{f0, f1, f2, f3, f4, f5, f6, _, f8, f9, f10, f11, f12, f13, f14, f15}:
+      St{f0, f1, f2, f3, f4, f5, f6, v, f8, f9, f10, f11, f12, f13, f14, f15}
 
 def St.over_tm(r: St, g: Tms -> Tms) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
-      St{f0, f1, f2, f3, f4, f5, f6, g(f7), f8, f9, f10, f11, f12}
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      St{f0, f1, f2, f3, f4, f5, f6, g(f7), f8, f9, f10, f11, f12, f13, f14, f15}
 
 def St.x(r: St) -> Xs:
   match r:
-    case St{_, _, _, _, _, _, _, _, f8, _, _, _, _}:
+    case St{_, _, _, _, _, _, _, _, f8, _, _, _, _, _, _, _}:
       f8
 
 def St.with_x(r: St, v: Xs) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, f7, _, f9, f10, f11, f12}:
-      St{f0, f1, f2, f3, f4, f5, f6, f7, v, f9, f10, f11, f12}
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, _, f9, f10, f11, f12, f13, f14, f15}:
+      St{f0, f1, f2, f3, f4, f5, f6, f7, v, f9, f10, f11, f12, f13, f14, f15}
 
 def St.over_x(r: St, g: Xs -> Xs) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
-      St{f0, f1, f2, f3, f4, f5, f6, f7, g(f8), f9, f10, f11, f12}
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      St{f0, f1, f2, f3, f4, f5, f6, f7, g(f8), f9, f10, f11, f12, f13, f14, f15}
 
 def St.paused(r: St) -> Maybe<&2, Nat>:
   match r:
-    case St{_, _, _, _, _, _, _, _, _, f9, _, _, _}:
+    case St{_, _, _, _, _, _, _, _, _, f9, _, _, _, _, _, _}:
       f9
 
 def St.with_paused(r: St, v: Maybe<&2, Nat>) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, _, f10, f11, f12}:
-      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, v, f10, f11, f12}
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, _, f10, f11, f12, f13, f14, f15}:
+      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, v, f10, f11, f12, f13, f14, f15}
 
 def St.over_paused(r: St, g: Maybe<&2, Nat> -> Maybe<&2, Nat>) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
-      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, g(f9), f10, f11, f12}
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, g(f9), f10, f11, f12, f13, f14, f15}
 
 def St.old(r: St) -> List<&2, MRec>:
   match r:
-    case St{_, _, _, _, _, _, _, _, _, _, f10, _, _}:
+    case St{_, _, _, _, _, _, _, _, _, _, f10, _, _, _, _, _}:
       f10
 
 def St.with_old(r: St, v: List<&2, MRec>) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, _, f11, f12}:
-      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, v, f11, f12}
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, _, f11, f12, f13, f14, f15}:
+      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, v, f11, f12, f13, f14, f15}
 
 def St.over_old(r: St, g: List<&2, MRec> -> List<&2, MRec>) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
-      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, g(f10), f11, f12}
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, g(f10), f11, f12, f13, f14, f15}
 
 def St.gone(r: St) -> List<&2, Item>:
   match r:
-    case St{_, _, _, _, _, _, _, _, _, _, _, f11, _}:
+    case St{_, _, _, _, _, _, _, _, _, _, _, f11, _, _, _, _}:
       f11
 
 def St.with_gone(r: St, v: List<&2, Item>) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, _, f12}:
-      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, v, f12}
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, _, f12, f13, f14, f15}:
+      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, v, f12, f13, f14, f15}
 
 def St.over_gone(r: St, g: List<&2, Item> -> List<&2, Item>) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
-      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, g(f11), f12}
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, g(f11), f12, f13, f14, f15}
 
 def St.arch(r: St) -> List<&2, Agent>:
   match r:
-    case St{_, _, _, _, _, _, _, _, _, _, _, _, f12}:
+    case St{_, _, _, _, _, _, _, _, _, _, _, _, f12, _, _, _}:
       f12
 
 def St.with_arch(r: St, v: List<&2, Agent>) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, _}:
-      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, v}
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, _, f13, f14, f15}:
+      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, v, f13, f14, f15}
 
 def St.over_arch(r: St, g: List<&2, Agent> -> List<&2, Agent>) -> St:
   match r:
-    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
-      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, g(f12)}
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, g(f12), f13, f14, f15}
+
+def St.works(r: St) -> List<&2, Work>:
+  match r:
+    case St{_, _, _, _, _, _, _, _, _, _, _, _, _, f13, _, _}:
+      f13
+
+def St.with_works(r: St, v: List<&2, Work>) -> St:
+  match r:
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, _, f14, f15}:
+      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, v, f14, f15}
+
+def St.over_works(r: St, g: List<&2, Work> -> List<&2, Work>) -> St:
+  match r:
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, g(f13), f14, f15}
+
+def St.tombs(r: St) -> List<&2, Tomb>:
+  match r:
+    case St{_, _, _, _, _, _, _, _, _, _, _, _, _, _, f14, _}:
+      f14
+
+def St.with_tombs(r: St, v: List<&2, Tomb>) -> St:
+  match r:
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, _, f15}:
+      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, v, f15}
+
+def St.over_tombs(r: St, g: List<&2, Tomb> -> List<&2, Tomb>) -> St:
+  match r:
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, g(f14), f15}
+
+def St.moved(r: St) -> List<&2, Moved>:
+  match r:
+    case St{_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, f15}:
+      f15
+
+def St.with_moved(r: St, v: List<&2, Moved>) -> St:
+  match r:
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, _}:
+      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, v}
+
+def St.over_moved(r: St, g: List<&2, Moved> -> List<&2, Moved>) -> St:
+  match r:
+    case St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
+      St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, g(f15)}
 
 def St.open(+r: St) -> St:
-  St.with_arch(St.with_gone(St.with_old(St.with_paused(St.with_x(St.with_tm(St.with_next_card(St.with_next_msg(St.with_notes(St.with_cards(St.with_hot(St.with_order(St.with_agents(St.empty(), St.agents(r)), St.order(r)), St.hot(r)), St.cards(r)), St.notes(r)), St.next_msg(r)), St.next_card(r)), St.tm(r)), St.x(r)), St.paused(r)), St.old(r)), St.gone(r)), St.arch(r))
+  St.with_moved(St.with_tombs(St.with_works(St.with_arch(St.with_gone(St.with_old(St.with_paused(St.with_x(St.with_tm(St.with_next_card(St.with_next_msg(St.with_notes(St.with_cards(St.with_hot(St.with_order(St.with_agents(St.empty(), St.agents(r)), St.order(r)), St.hot(r)), St.cards(r)), St.notes(r)), St.next_msg(r)), St.next_card(r)), St.tm(r)), St.x(r)), St.paused(r)), St.old(r)), St.gone(r)), St.arch(r)), St.works(r)), St.tombs(r)), St.moved(r))
 

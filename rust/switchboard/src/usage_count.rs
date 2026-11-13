@@ -86,6 +86,12 @@ pub fn of_journal(ev: &Value) -> Option<CountKey> {
         | JournalKind::JobEnd
         | JournalKind::Paused
         | JournalKind::Resumed
+        | JournalKind::WorkCreated
+        | JournalKind::WorkChanged
+        | JournalKind::WorkFolded
+        | JournalKind::WorkTurn
+        | JournalKind::CardMoved
+        | JournalKind::ArtMoved
         | JournalKind::Unknown => None,
     }
 }

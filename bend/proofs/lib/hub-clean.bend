@@ -378,6 +378,18 @@ def cl_apply.go(+e: HM.Ev, +s: HS.St, la: HI.Clean(HS.St.agents(s)), lr: HI.Clea
       HX.Both{la, lr}
     case HM.EResumed{a}:
       HX.Both{la, lr}
+    case HM.EWorkCreated{w0}:
+      HX.Both{la, lr}
+    case HM.EWorkChanged{w0, w1, w2, w3}:
+      HX.Both{la, lr}
+    case HM.EWorkFolded{w0, w1}:
+      HX.Both{la, lr}
+    case HM.EWorkTurn{+wt}:
+      cl_on(HAG.has(HS.St.agents(s), HS.WTurn.agent(wt)), HS.St.agents(s), HS.St.arch(s), HS.WTurn.agent(wt), HM.OTurnWorks{HS.WTurn.works(wt), HS.WTurn.add(wt)}, {==}, la, lr)
+    case HM.ECardMoved{cm}:
+      HX.Both{la, lr}
+    case HM.EArtMoved{am}:
+      HX.Both{la, lr}
 
 def cl_apply(+s: HS.St, e: HM.Ev, u: HI.NoReserved(s), +k: HX.FreshEv(s, e)) -> HI.NoReserved(HM.apply(s, e)):
   match u:

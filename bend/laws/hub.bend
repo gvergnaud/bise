@@ -291,7 +291,7 @@ law wake_replay_keeps:
 law wake_steers_busy:
   for +a: String
   for +text: String
-  {HC.wake_snd(a, text) == HC.Snd{HM.HUB(), a, text, False{}, None{}, False{}, False{}, False{}, None{}, "", None{}} : HC.Snd}
+  {HC.wake_snd(a, text) == HC.Snd{HM.HUB(), a, text, False{}, None{}, False{}, False{}, False{}, None{}, "", None{}, None{}} : HC.Snd}
 
 # LAW: a busy agent's pump steers every queued message that is not queued
 # mode (a wake, a timer's fire, his message, an agent's): in order, now.
@@ -769,12 +769,12 @@ law route_no_parts_no_key:
 law xin_input_keeps_parts:
   for +text: String
   for +parts: String
-  {HC.xin.snd(HS.KInput{}, text, parts) == HC.Snd{HM.USER(), HM.MAIN(), text, True{}, None{}, False{}, False{}, False{}, Some{HXB.VIA_BISE()}, parts, None{}} : HC.Snd}
+  {HC.xin.snd(HS.KInput{}, text, parts) == HC.Snd{HM.USER(), HM.MAIN(), text, True{}, None{}, False{}, False{}, False{}, Some{HXB.VIA_BISE()}, parts, None{}, None{}} : HC.Snd}
 
 law xin_ask_has_no_parts:
   for +text: String
   for +parts: String
-  {HC.xin.snd(HS.KAsk{}, text, parts) == HC.Snd{HXB.FROM_BISE(), HM.MAIN(), text, True{}, None{}, False{}, False{}, False{}, None{}, "", None{}} : HC.Snd}
+  {HC.xin.snd(HS.KAsk{}, text, parts) == HC.Snd{HXB.FROM_BISE(), HM.MAIN(), text, True{}, None{}, False{}, False{}, False{}, None{}, "", None{}, None{}} : HC.Snd}
 
 # ---- followed jobs (desktop S10, core.bend's `followed jobs`) ----
 

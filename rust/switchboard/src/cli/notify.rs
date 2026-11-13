@@ -7,7 +7,7 @@ use super::*;
 
 /// `sb notify`'s hub request: a notification is a card on the wire.
 pub(super) fn notify_req(rest: &[String]) -> Result<bise_proto::sb::Req, String> {
-    let (pos, o) = parse_args(rest, &["for", "page", "artifact", "open"], &[])?;
+    let (pos, o) = parse_args(rest, &["for", "page", "artifact", "open", "task"], &[])?;
     let text = text_of(&pos)?;
     // `--open <n>=<artifact>[#<anchor>]` (repeatable): option n
     // opens that artifact in his app, nothing sent (notif-open)
@@ -36,5 +36,5 @@ pub(super) fn notify_req(rest: &[String]) -> Result<bise_proto::sb::Req, String>
         Ok(Some(spec.trim().to_string()))
     };
     // a notification is a card on the wire: the hub's command keeps its name
-    Ok(bise_proto::sb::Req::Card { text, for_msg, page: link("page")?, artifact: link("artifact")?, open, about: None })
+    Ok(bise_proto::sb::Req::Card { text, for_msg, page: link("page")?, artifact: link("artifact")?, open, about: None, task: tasks_of(&o) })
 }

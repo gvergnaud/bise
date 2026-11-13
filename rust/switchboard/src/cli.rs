@@ -15,6 +15,8 @@ mod report;
 use report::{result_of, step_of};
 mod wake;
 mod notify;
+mod task;
+use task::task_req;
 use notify::notify_req;
 use keeps::keeps_req;
 use wake::wake_req;
@@ -322,6 +324,12 @@ fn list_of(v: Option<&Value>) -> Vec<String> {
         Some(Value::String(s)) => vec![s.clone()],
         _ => Vec::new(),
     }
+}
+
+/// tasks: `--task <id>` (repeatable, or `a,b`): the works a request
+/// carries (docs/tasks.md); none: the caller's turn's.
+fn tasks_of(opts: &Map<String, Value>) -> Vec<String> {
+    list_of(opts.get("task")).iter().flat_map(|s| s.split(',').map(|x| x.trim().to_string())).filter(|x| !x.is_empty()).collect()
 }
 
 /// The first positional word, an agent name (`@name` accepted).

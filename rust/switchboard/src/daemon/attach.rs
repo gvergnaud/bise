@@ -28,7 +28,7 @@ impl Shell {
     pub(super) fn attached(&mut self, from: &str, req: AgentReq) -> Result<AgentReq, String> {
         let sender = || self.hub.st.resolve(from).unwrap_or_else(|| from.to_string());
         match req {
-            AgentReq::Send { to, text, expect_reply, reply_to, queued, why, switch, attach, fwd, .. } if !attach.is_empty() => {
+            AgentReq::Send { to, text, expect_reply, reply_to, queued, why, switch, attach, fwd, task, .. } if !attach.is_empty() => {
                 attach::capped(attach.len())?;
                 let sender = sender();
                 let tmps = self.hub.st.resolve(&to).and_then(|r| {
@@ -37,13 +37,13 @@ impl Shell {
                 });
                 let items = self.items(&sender, &attach, tmps.as_ref())?;
                 let said = said(&self.opts.home.images_dir(), &text, &items)?;
-                Ok(AgentReq::Send { to, text: said.text, expect_reply, reply_to, queued, why, switch, attach, parts: said.parts, fwd })
+                Ok(AgentReq::Send { to, text: said.text, expect_reply, reply_to, queued, why, switch, attach, parts: said.parts, fwd, task })
             }
-            AgentReq::Spawn { name, brief, worktree, with_changes, place, feature, ask, attach, fwd, .. } if !attach.is_empty() => {
+            AgentReq::Spawn { name, brief, worktree, with_changes, place, feature, ask, attach, fwd, task, .. } if !attach.is_empty() => {
                 attach::capped(attach.len())?;
                 let items = self.items(&sender(), &attach, None)?;
                 let said = said(&self.opts.home.images_dir(), &crate::prompts::brief_body(&brief), &items)?;
-                Ok(AgentReq::Spawn { name, brief, worktree, with_changes, place, feature, ask, attach, parts: said.parts, fwd })
+                Ok(AgentReq::Spawn { name, brief, worktree, with_changes, place, feature, ask, attach, parts: said.parts, fwd, task })
             }
             req => Ok(req),
         }
