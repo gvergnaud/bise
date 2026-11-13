@@ -13,6 +13,9 @@ import type { ViewPerm } from '@/shared/viewperms';
 /** The view → host methods of a document view (A5), beside C7's. */
 export const DOC = {
   write: 'ai.mistral.vibe/resources/write',
+  /** view → hub: a URL of its own document (`/h/<token>` on its origin) for a <video>, pdf.js
+   * ranges or a site's frame (A4), granted as a read */
+  url: 'resources/url',
   viewState: 'ai.mistral.vibe/viewState',
   selection: 'dev.bise/selection',
   notes: 'dev.bise/notes',

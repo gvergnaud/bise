@@ -439,6 +439,18 @@ describe("a document's view (docs/plugin-apps.md A4, A5)", () => {
     stop();
   });
 
+  it("a URL of its document goes to the hub with its session, the hub's url back as is (Sites' frame, Preview's video)", async () => {
+    const url = `/h/${'c'.repeat(32)}/`;
+    const { store, asked } = docRig((c) => (c.cmd === 'view_call' && c.method === 'resources/url' ? { result: { url } } : undefined));
+    const { proxy, stop } = await live(store);
+    const params = { uri: `view-file://${'b'.repeat(32)}` };
+    proxy.send({ jsonrpc: '2.0', id: 8, method: 'resources/url', params });
+    await flush();
+    expect(asked.find((c) => c.cmd === 'view_call' && c.method === 'resources/url')).toEqual({ cmd: 'view_call', project: 'p', doc: SID, method: 'resources/url', params });
+    expect(proxy.got.find((m) => m['id'] === 8)).toMatchObject({ result: { url } });
+    stop();
+  });
+
   it('its state comes back at its next open; Open with closes the session, opens with the pick and forgets the state', async () => {
     const { store, asked, timers } = docRig();
     const { proxy, stop } = await live(store);

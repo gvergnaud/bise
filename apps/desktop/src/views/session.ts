@@ -225,6 +225,13 @@ export class ViewSession {
         doc.onSaved(a, params);
         return 'error' in a ? error(id, a.error) : result(id, a.result);
       }
+      // a URL of its own document (A4, granted as a read): the hub checks the handle is the
+      // session's and mints its `/h/<token>` on the view's origin
+      case DOC.url: {
+        if (this.env.doc === undefined) return error(id, { code: RPC.notFound, message: `${method} is not supported` });
+        const a = await this.env.ask({ cmd: 'view_call', ...this.wire, method, params });
+        return 'error' in a ? error(id, a.error) : result(id, a.result);
+      }
       case DOC.viewState: {
         const doc = this.env.doc;
         if (doc === undefined) return error(id, { code: RPC.notFound, message: `${method} is not supported` });

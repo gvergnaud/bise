@@ -45,7 +45,7 @@ export interface DocWire {
 export type Wire = ViewRef | DocWire;
 
 /** A view's methods on its server or its document (view/call's `method`). */
-export type CallMethod = 'tools/call' | 'resources/read' | 'ai.mistral.vibe/resources/write';
+export type CallMethod = 'tools/call' | 'resources/read' | 'resources/url' | 'ai.mistral.vibe/resources/write';
 
 /** The hub's commands for a view (hub/view_resource, hub/view_call, …; a document's hub/view_open, hub/view_close, hub/view_copy, hub/view_notes). */
 export type ViewCmd =

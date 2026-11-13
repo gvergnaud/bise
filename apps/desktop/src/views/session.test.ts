@@ -148,6 +148,15 @@ describe("the view's requests", () => {
     expect(r.answerOf(6)?.['error']).toEqual({ code: -32031, message: 'not visible', data: { reason: 'not-visible' } });
   });
 
+  it("a tool call's view has no document: resources/url is not offered, never asked", async () => {
+    const r = rig();
+    await live(r);
+    r.req(5, 'resources/url', { uri: 'ui://fake-app/data' });
+    await r.flush();
+    expect(r.answerOf(5)?.['error']).toMatchObject({ code: -32601 });
+    expect(r.asked.some((c) => c.cmd === 'view_call')).toBe(false);
+  });
+
   it('plugin off: the error to the view, and the card says its server is gone', async () => {
     const r = rig(RES, () => ({ error: { code: -32032, message: 'plugin off' } }));
     await live(r);
