@@ -112,6 +112,8 @@ SELFTESTS = [
     ("upgrade_paths_test", "python3 -B tests/upgrade_paths_test.py", ("scripts/upgrade_paths.py", "tests/upgrade_paths_test.py")),
     ("release_halt_test", "python3 -B tests/release_halt_test.py", ("scripts/release_halt.py", "tests/release_halt_test.py")),
     ("desktop_tag_test", "python3 -B tests/desktop_tag_test.py", ("scripts/desktop_tag.py", "scripts/upgrade_paths.py", "tests/desktop_tag_test.py")),
+    # a release recut keeps its full run's green verdicts (release-speed plan A step 8)
+    ("release_reuse_test", "python3 -B tests/release_reuse_test.py", ("scripts/release_reuse.py", "tests/release_reuse_test.py", "tests/test_map.py")),
     ("macos_floor_test", "python3 -B tests/macos_floor_test.py",
      ("tests/macos_floor_test.py", "rust/.cargo/config.toml", "apps/desktop/native/mac/build.sh", "apps/desktop/electron-builder.mjs",
       "scripts/desktop_feed.py", "scripts/desktop_release.py")),

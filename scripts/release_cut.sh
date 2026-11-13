@@ -52,6 +52,11 @@ tag|pass)
   [ -s "$notes" ] || { echo "no notes in $4: write the app's notes first (the tag's body)"; exit 2; }
   if [ "$what" = pass ]; then
     sha="$(git -C "$R" rev-parse --verify -q "$sha^{commit}")" || { echo "no commit '$2'"; exit 2; }
+    # the full check after a by-reuse tag went red: no cut until it is owned (marketing m_63313 c)
+    if [ -s "$BH/run/nightly/release-red" ]; then
+      echo "no cut: the full check after the last by-reuse tag is red, not owned yet ($BH/run/nightly/release-red):"
+      cat "$BH/run/nightly/release-red"; exit 1
+    fi
   fi
   tree="${RELEASE_TREE:-$HOME/.cache/bise-release/tree}"
   if [ ! -e "$tree/.git" ]; then
@@ -72,10 +77,21 @@ tag|pass)
     free=$(df -g "${HEAVY_DISK_VOLUME:-$HOME}" 2>/dev/null | awk 'NR == 2 {print $4}')
     floor="${RELEASE_PASS_DISK_GB:-40}"
     echo "release pass $tag on $sha: lane A the tip gate, lane B the app side; logs in $keep"
+    # a recut one fix from a full tip run R (plan A step 8, scripts/release_reuse.py): lane A keeps
+    # R's green rows where test_map vouches (gate.sh asks again in its tree), lane B R's green app
+    # verdicts when the change reaches neither the app nor its checks
+    rbase="$(cd "$R" && RELEASE_REUSE_REPO="$R" python3 -B scripts/release_reuse.py base "$sha" 2>/dev/null)"
+    envA=() envB=()
+    if [ -n "$rbase" ]; then
+      envA=(GATE_REUSE_FROM="$rbase")
+      app="$(cd "$R" && RELEASE_REUSE_REPO="$R" python3 -B scripts/release_reuse.py app "$rbase" "$sha" 2>&1)"
+      case "$app" in "REUSE "*) envB=(DESKTOP_TAG_REUSE="$rbase") ;; esac
+      echo "a recut of ${rbase:0:12}: lane A keeps its green rows where test_map vouches; lane B: $app"
+    fi
     # each lane in its own process group (set -m): lane A red stops lane B's whole tree
     set -m
     ta=$(date +%s) la=$(load)
-    HEAVY_PASS_LANE=A "$R/scripts/nightly_gate.sh" --tip --sha "$sha" >"$keep/lane-A.out" 2>&1 & pa=$!
+    env ${envA[@]+"${envA[@]}"} HEAVY_PASS_LANE=A "$R/scripts/nightly_gate.sh" --tip --sha "$sha" >"$keep/lane-A.out" 2>&1 & pa=$!
     ra=""
     if [ -n "$free" ] && [ "$free" -lt "$floor" ]; then
       echo "only $free GB free (a 2-lane pass wants $floor, RELEASE_PASS_DISK_GB): lane B starts after lane A"
@@ -83,7 +99,7 @@ tag|pass)
     fi
     if [ -z "$ra" ] || [ "$ra" = 0 ]; then
       tb=$(date +%s) lb=$(load)
-      (cd "$tree" && HEAVY_PASS_LANE=B exec "${tagger[@]}" --checks-only) >"$keep/lane-B.out" 2>&1 & pb=$!
+      (cd "$tree" && exec env ${envB[@]+"${envB[@]}"} HEAVY_PASS_LANE=B "${tagger[@]}" --checks-only) >"$keep/lane-B.out" 2>&1 & pb=$!
     fi
     if [ -z "$ra" ]; then wait "$pa"; ra=$?; row A "$ra" "$ta" "$la"; fi
     tl=$(tail -1 "$BH/run/nightly/tip-last" 2>/dev/null | cut -d' ' -f4)
@@ -105,7 +121,44 @@ tag|pass)
     [ "$rb" = 0 ] || { echo "lane B (the app side of $sha) red or refused, rc $rb: $keep/lane-B.out"; tail -5 "$keep/lane-B.out"; exit 1; }
   fi
   # the tag: tip-green checked just before it (desktop_tag.py), its verdicts read, not run again
-  cd "$tree" && "${tagger[@]}"
+  (cd "$tree" && "${tagger[@]}"); rc=$?
+  # a tag that took a verdict of R: its full check (every test, every app verdict, none reused)
+  # runs at once in the release lane, after it (architect m_63312, marketing m_63313 c)
+  if [ "$what" = pass ] && [ $rc = 0 ] && [ -n "${rbase:-}" ]; then
+    if awk -F'\t' -v s="$sha" '$1 == s && $6 ~ /^by-reuse=/ { f = 1 } END { exit !f }' "$BH/gate/green-shas.tsv" 2>/dev/null \
+       || git -C "$tree" tag -l --format='%(contents)' "$tag" | grep -q ' by-reuse '; then
+      nohup "$R/scripts/release_cut.sh" after "$sha" "$tag" >"$keep/after.out" 2>&1 &
+      echo "a by-reuse tag: its full check runs now in the release lane (pid $!, $keep/after.out); a red writes $BH/run/nightly/release-red and blocks the next cut"
+    fi
+  fi
+  exit $rc
+  ;;
+after)
+  # release_cut.sh after <sha> <tag>: the full check of a by-reuse tag: the tip gate with every
+  # test (TIP_FULL: a by-reuse green line doesn't count) and the app side with no verdict reused
+  # (DESKTOP_TAG_NO_REUSE), in its own tree (a next cut may use the other). A red: release-red,
+  # which main forwards with the question 'release_halt.py halt <tag>?' (marketing m_63313 c);
+  # release_cut.sh pass refuses to start while it is there (main deletes it once owned)
+  [ $# = 3 ] || { sed -n '2,40p' "$0"; exit 2; }
+  sha="$(git -C "$R" rev-parse --verify -q "$2^{commit}")" || { echo "no commit '$2'"; exit 2; }
+  tag="$3" out="$BH/run/nightly"
+  TIP_FULL=1 "$R/scripts/nightly_gate.sh" --tip --sha "$sha"; ra=$?
+  rb=skipped
+  if [ $ra = 0 ]; then
+    atree="${RELEASE_AFTER_TREE:-$HOME/.cache/bise-release/after-tree}"
+    if [ ! -e "$atree/.git" ]; then mkdir -p "$(dirname "$atree")"; git -C "$R" worktree add -q --detach "$atree" "$sha"; fi
+    git -C "$atree" checkout -q -f --detach "$sha" && find "$atree" -name __pycache__ -type d -prune -exec rm -rf {} +
+    (cd "$atree" && DESKTOP_TAG_NO_REUSE=1 PYTHONDONTWRITEBYTECODE=1 python3 scripts/desktop_tag.py "$tag" "$sha" --checks-only); rb=$?
+  fi
+  if [ $ra != 0 ] || [ "$rb" != 0 ]; then
+    what="the tip gate (rc $ra; $(cut -d' ' -f4 "$out/tip-last" 2>/dev/null))"
+    [ $ra = 0 ] && what="the app side (rc $rb)"
+    { echo "release $tag (${sha:0:12}): the full check after its by-reuse tag is red: $what"
+      echo "question for main: release_halt.py halt $tag? (the next cut waits until this is owned: delete this file once it is)"; } >"$out/release-red.tmp" \
+      && mv "$out/release-red.tmp" "$out/release-red"
+    cat "$out/release-red"; exit 1
+  fi
+  echo "the full check after $tag (${sha:0:12}) is green: every test and every app verdict, none reused"
   ;;
 *)
   sed -n '2,20p' "$0"; exit 2 ;;

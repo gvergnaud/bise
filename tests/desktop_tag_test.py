@@ -76,7 +76,21 @@ def raises(fn, words):
 
 def pure():
     tsv = "w1\taaa\tred\t/o1\nw2\tbbb\tgreen\t/o2\nw3\taaa\tgreen\t/o3\nbad line\n"
-    check(T.last_run(tsv, "aaa") == {"when": "w3", "verdict": "green", "out": "/o3"}, "last_run: the last line of that sha")
+    check(T.last_run(tsv, "aaa") == {"when": "w3", "verdict": "green", "out": "/o3", "reuse": ""}, "last_run: the last line of that sha")
+    # a recut's reused line (plan A step 8): read as the sha's run, never by the full check after the tag
+    rtsv = tsv + "w4\tccc\tgreen\t/o3\tby-reuse=aaa\n"
+    check(T.last_run(rtsv, "ccc") == {"when": "w4", "verdict": "green", "out": "/o3", "reuse": "aaa"}, "last_run: a by-reuse line names R")
+    check(T.last_run(rtsv, "ccc", fresh=True) is None, "last_run fresh: a by-reuse line doesn't count")
+    with tempfile.TemporaryDirectory() as d:
+        nd = os.path.join(d, "run", "nightly")
+        os.makedirs(nd)
+        open(os.path.join(nd, "desktop-runs.tsv"), "w").write("w1\taaa\tgreen\t/oa\n")
+        open(os.path.join(nd, "checks-verdicts.tsv"), "w").write("w1\taaa\tred\t/oc\n")
+        got = T.reuse_verdicts(d, "ccc", "aaa", "w9")
+        check(got == ["desktop-runs"], "reuse_verdicts: only R's GREEN verdicts stand (red checks, no upgrades run again): %r" % got)
+        check(T.last_run(open(os.path.join(nd, "desktop-runs.tsv")).read(), "ccc") == {"when": "w9", "verdict": "green", "out": "/oa", "reuse": "aaa"},
+              "reuse_verdicts: N's line points at R's run, typed by-reuse")
+        check(T.reuse_verdicts(d, "ccc", "aaa", "w10") == [], "reuse_verdicts: N's own line already there: nothing added")
     check(T.last_run(tsv, "aa") is None and T.last_run("", "aaa") is None, "last_run: exact sha only")
     known = {"r1": ("s", "night-reds", "w"), "r2": ("s", "land-reds", "w")}
     ok = {"candidate": "green", "quick": "red", "dmg": "green"}

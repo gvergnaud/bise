@@ -726,11 +726,12 @@ gate_lock() {
 # (audit-blind's rerun beside its second full gate, 2026-10-14) both sets
 # timed out at ~350 s (partial_e2e, repl_start_e2e, subscriptions_e2e)
 # a full gate on a clean tree whose sha a full gate with every test passed
-# (green-shas.tsv, written below): the static checks only, no lock wait
+# (green-shas.tsv, written below; never a by-reuse line, which ran only part): the static
+# checks only, no lock wait
 green_file="$gdir/green-shas.tsv"
 clean_tree() { [ -z "$(git status --porcelain 2>/dev/null)" ]; }
 if [ "$mode" = full ] && [ "${GATE_FORCE:-}" != 1 ] && clean_tree \
-  && g="$(awk -F'\t' -v s="$(git rev-parse HEAD)" '$1 == s { l = $0 } END { print l }' "$green_file" 2>/dev/null)" && [ -n "$g" ]; then
+  && g="$(awk -F'\t' -v s="$(git rev-parse HEAD)" '$1 == s && $6 == "" { l = $0 } END { print l }' "$green_file" 2>/dev/null)" && [ -n "$g" ]; then
   python3 tests/word_lint.py --all || { echo "GATE full FAILED"; exit 1; }
   IFS=$'\t' read -r _ gend gsecs gagent glogf <<<"$g"
   echo "GATE full GREEN (0s): $(git rev-parse --short HEAD) passed a full gate with every test at $(date -r "$gend" '+%F %T') (${gsecs}s, ${gagent:-?}, $glogf): word_lint only (GATE_FORCE=1 runs it all)"
@@ -985,8 +986,20 @@ if [ "$mode" = full ]; then
   # yes, 2026-10-12): the change = this tree vs its merge-base with main.
   # Everything: --all, a release agent, the nightly run, no branch change
   # (main's tip), shared code or a path no rule knows. The Rust part always.
-  pick_args=() picked="" dwhy="" fchanged=""
-  if [ "${2:-}" = --all ] || [ "${GATE_ALL:-}" = 1 ]; then picked="ALL --all"
+  pick_args=() picked="" dwhy="" fchanged="" reuse=""
+  # GATE_REUSE_FROM=<R> (a release recut, release_cut.sh pass: release-speed plan A step 8): R's
+  # green e2e/tmux rows stand, only test_map's pick for R..HEAD and what R didn't pass run; the
+  # Rust part always (scripts/release_reuse.py plan says ALL when it can't vouch for it)
+  if [ -n "${GATE_REUSE_FROM:-}" ] && clean_tree; then
+    rp="$(RELEASE_REUSE_REPO="$PWD" python3 scripts/release_reuse.py plan "$GATE_REUSE_FROM" HEAD 2>&1)" || rp="ALL release_reuse.py failed: $rp"
+    case "$rp" in
+      "REUSE "*) reuse="$GATE_REUSE_FROM"; picked="$(echo "$rp" | cut -d' ' -f3-)"
+                 fchanged="$(git diff --name-only "$reuse" HEAD)"; dwhy="$(gate_plan $fchanged && echo "$dwhy")" || dwhy="gate_plan failed" ;;
+      *) echo "reuse of ${GATE_REUSE_FROM:0:12}: none, every test runs (${rp#ALL })" ;;
+    esac
+  fi
+  if [ -n "$reuse" ]; then :
+  elif [ "${2:-}" = --all ] || [ "${GATE_ALL:-}" = 1 ]; then picked="ALL --all"
   elif case "${SB_AGENT:-}" in release*) true ;; *) false ;; esac; then picked="ALL a release's gate"
   elif ! fb="$(git merge-base HEAD "${GATE_FULL_BASE:-main}" 2>/dev/null)"; then picked="ALL no merge-base with ${GATE_FULL_BASE:-main}"
   else
@@ -1000,11 +1013,17 @@ if [ "$mode" = full ]; then
   # the desktop's checks: with every test, or when the change reaches it
   if [ "${picked#ALL}" != "$picked" ] && [ -z "$fchanged" ]; then dwhy="${picked#ALL }"; fi
   [ -d apps/desktop ] && echo "desktop checks: ${dwhy:-not run, the change does not reach apps/desktop (tests/test_map.py desktop)}"
-  case "$picked" in
-    ALL*) echo "e2e/tmux tests: all (${picked#ALL })" ;;
-    *) echo "e2e/tmux tests: $(echo $picked | wc -w | tr -d ' ') picked for this change (tests/test_map.py; all of them run nightly and in a release):"
-       sed 's/^# /  /' "$gdir/pick-$$.why"; pick_args=(--tests "$picked") ;;
-  esac
+  if [ -n "$reuse" ]; then
+    # 'by-reuse=' is the word nightly_gate.sh reads for full-runs.tsv's kind
+    echo "e2e/tmux tests: by-reuse=$reuse: $(echo $picked | wc -w | tr -d ' ') run (test_map's pick since ${reuse:0:12} and what it didn't pass), its other rows green on ${reuse:0:12} stand: ${picked:-none}"
+    pick_args=(--tests "$picked")
+  else
+    case "$picked" in
+      ALL*) echo "e2e/tmux tests: all (${picked#ALL })" ;;
+      *) echo "e2e/tmux tests: $(echo $picked | wc -w | tr -d ' ') picked for this change (tests/test_map.py; all of them run nightly and in a release):"
+         sed 's/^# /  /' "$gdir/pick-$$.why"; pick_args=(--tests "$picked") ;;
+    esac
+  fi
   rm -f "$gdir/pick-$$.why"
   # ${a[@]+...}: macOS /bin/bash 3.2 calls an empty array unbound under set -u
   # GATE_QUIET=<what> (the release's tip gate, nightly_gate.sh): the e2e/tmux part, timing-bound,
@@ -1036,6 +1055,10 @@ if [ "$mode" = full ]; then
   if [ $rc = 0 ] && [ ${#pick_args[@]} = 0 ] && [ -n "$dwhy" ] && clean_tree; then
     printf '%s\t%s\t%s\t%s\t%s\n' "$(git rev-parse HEAD)" "$(date +%s)" "$((SECONDS - s))" "${SB_AGENT:-${USER:-?}}" "${glog:-?}" >>"$green_file"
     echo "green sha recorded: $(git rev-parse --short HEAD) ($green_file)"
+  elif [ $rc = 0 ] && [ -n "$reuse" ] && clean_tree; then
+    # a recut's: green on R's green rows and its own; the typed 6th field says so (plan A step 8)
+    printf '%s\t%s\t%s\t%s\t%s\tby-reuse=%s\n' "$(git rev-parse HEAD)" "$(date +%s)" "$((SECONDS - s))" "${SB_AGENT:-${USER:-?}}" "${glog:-?}" "$reuse" >>"$green_file"
+    echo "green sha recorded: $(git rev-parse --short HEAD), by-reuse of ${reuse:0:12} ($green_file)"
   fi
   exit $rc
 fi

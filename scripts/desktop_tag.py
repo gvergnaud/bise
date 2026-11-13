@@ -54,15 +54,37 @@ def say(*a):
 
 # ---- pure ------------------------------------------------------------------------------------
 
-def last_run(tsv_text, sha):
+def last_run(tsv_text, sha, fresh=False):
     """The last run of exactly `sha` in desktop-runs.tsv ('<when>\\t<sha>\\t<verdict>\\t<out>'
-    lines): {'when', 'verdict', 'out'}, or None. Pure."""
+    lines, a 5th 'by-reuse=<R>' on a recut's reused one): {'when', 'verdict', 'out', 'reuse'},
+    or None. fresh: a reused line doesn't count (the full check after a by-reuse tag). Pure."""
     run = None
     for line in (tsv_text or "").splitlines():
         p = line.split("\t")
         if len(p) >= 4 and p[1].strip() == sha:
-            run = {"when": p[0].strip(), "verdict": p[2].strip(), "out": p[3].strip()}
+            reuse = p[4].strip()[len("by-reuse="):] if len(p) >= 5 and p[4].startswith("by-reuse=") else ""
+            if fresh and reuse:
+                continue
+            run = {"when": p[0].strip(), "verdict": p[2].strip(), "out": p[3].strip(), "reuse": reuse}
     return run
+
+
+def reuse_verdicts(bh, sha, r, now):
+    """A recut's app side (release-speed plan A step 8; release_cut.sh pass sets DESKTOP_TAG_REUSE
+    when scripts/release_reuse.py app says the change can't reach the app nor its checks): each of
+    R's GREEN verdicts (the end-to-end, the checks, the upgrade paths) stands for `sha`, a line
+    '<now>\\t<sha>\\tgreen\\t<R's out>\\tby-reuse=<R>' in its file; a red or missing one of R runs
+    again (marketing m_63313 a). The names reused."""
+    got = []
+    for name in ("desktop-runs", "checks-verdicts", "upgrade-verdicts"):
+        tsv = os.path.join(bh, "run", "nightly", name + ".tsv")
+        text = read(tsv)
+        rr = last_run(text, r, fresh=True)
+        if last_run(text, sha) is None and rr is not None and rr["verdict"] == "green":
+            with open(tsv, "a") as f:
+                f.write("%s\t%s\tgreen\t%s\tby-reuse=%s\n" % (now, sha, rr["out"], r))
+            got.append(name)
+    return got
 
 
 def judge(verdict, steps, reds, known):
@@ -170,7 +192,7 @@ def checks_run(bh, sha, repo, env):
     the nightly's or a tag's own); none there or one with no result: covmap.mts checks runs now,
     in heavy-run's release lane, and its line goes in the file."""
     tsv = os.path.join(bh, "run", "nightly", "checks-verdicts.tsv")
-    run = last_run(read(tsv), sha)
+    run = last_run(read(tsv), sha, fresh=bool(env.get("DESKTOP_TAG_NO_REUSE")))
     if run is not None and run["verdict"] != "none":
         return run
     out = os.path.join(bh, "run", "nightly", "desktop-tag-checks-%s-%s" % (sha[:8], datetime.datetime.now().strftime("%Y%m%d-%H%M%S")))
@@ -207,7 +229,7 @@ def upgrade_run(bh, sha, repo, env):
     in heavy-run's release lane (marketing m_58864). {'when', 'verdict', 'out'}: verdict green,
     red, network (a release that couldn't be fetched, never a red: fast-loop m_58863) or none."""
     tsv = os.path.join(bh, "run", "nightly", "upgrade-verdicts.tsv")
-    run = last_run(read(tsv), sha)
+    run = last_run(read(tsv), sha, fresh=bool(env.get("DESKTOP_TAG_NO_REUSE")))
     if run is not None and run["verdict"] == "green":
         return run
     when = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
@@ -268,7 +290,8 @@ def cut(tag, sha, notes, repo=REPO, env=None, why=None, checks_only=False):
     if not TAG_RE.match(tag):
         raise TagError("a desktop tag is desktop-vYYYY.M.N (got %r)" % tag)
     sha = git("rev-parse", "--verify", "%s^{commit}" % (sha or "HEAD"), repo=repo)
-    if git("rev-parse", "-q", "--verify", "refs/tags/%s" % tag, repo=repo, check=False):
+    # --checks-only never tags: it also runs after the tag (the full check of a by-reuse one)
+    if not checks_only and git("rev-parse", "-q", "--verify", "refs/tags/%s" % tag, repo=repo, check=False):
         raise TagError("%s exists already" % tag)
     # nightly_desktop.sh runs this checkout's as-he-does and test:land: it must be the sha's
     if git("rev-parse", "HEAD", repo=repo) != sha or git("status", "--porcelain", "--untracked-files=no", repo=repo):
@@ -283,8 +306,14 @@ def cut(tag, sha, notes, repo=REPO, env=None, why=None, checks_only=False):
         say(tg)
         if not ok:
             raise TagError(tg)
+    # a recut one fix from R (plan A step 8): R's green app verdicts stand for this sha
+    fresh = bool(env.get("DESKTOP_TAG_NO_REUSE"))
+    if env.get("DESKTOP_TAG_REUSE") and not fresh:
+        r = git("rev-parse", "--verify", "%s^{commit}" % env["DESKTOP_TAG_REUSE"], repo=repo)
+        got = reuse_verdicts(bh, sha, r, datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"))
+        say("a recut of %s: %s stand from it (green there); the rest runs" % (r[:12], ", ".join(got) or "no verdict"))
     tsv = os.path.join(bh, "run", "nightly", "desktop-runs.tsv")
-    run = last_run(read(tsv), sha)
+    run = last_run(read(tsv), sha, fresh=fresh)
     if run is None:
         out = os.path.join(bh, "run", "nightly", "desktop-tag-%s-%s" % (sha[:8], datetime.datetime.now().strftime("%Y%m%d-%H%M%S")))
         nightly = env.get("DESKTOP_TAG_NIGHTLY") or os.path.join(repo, "scripts", "nightly_desktop.sh")
@@ -295,7 +324,7 @@ def cut(tag, sha, notes, repo=REPO, env=None, why=None, checks_only=False):
         # runs (or reads) on this sha and judge_checks judges, always (release-speed A step 4)
         subprocess.run(heavy_argv(cmd, os.path.join(bh, "run", "heavy.lock"), prio=True), cwd=repo,
                        env=dict(env, NIGHTLY_DESKTOP_LAND_SPECS="checks"))
-        run = last_run(read(tsv), sha)
+        run = last_run(read(tsv), sha, fresh=fresh)
         if run is None:
             raise TagError("the end-to-end on %s left no run line (%s/summary.txt): no tag" % (sha[:12], out))
     known = K.parse(git("show", "%s:tests/known_reds.txt" % sha, repo=repo))
@@ -306,7 +335,11 @@ def cut(tag, sha, notes, repo=REPO, env=None, why=None, checks_only=False):
     # the tip runs none of them and nightly_desktop.sh only test:land's set, so a release with a
     # red check would pass whenever the night was red, skipped or never ran
     # the upgrade paths (update-safety A) run beside the checks: both need this tree's bise first
-    tree_bise(bh, repo, env)
+    # (not when both stand from a recut's R: no world to run)
+    cr = last_run(read(os.path.join(bh, "run", "nightly", "checks-verdicts.tsv")), sha, fresh=fresh)
+    ur = last_run(read(os.path.join(bh, "run", "nightly", "upgrade-verdicts.tsv")), sha, fresh=fresh)
+    if not (cr and cr["reuse"] and ur and ur["reuse"]):
+        tree_bise(bh, repo, env)
     upgrades = {}
     th = threading.Thread(target=lambda: upgrades.update(run=upgrade_run(bh, sha, repo, env)))
     th.start()
@@ -320,6 +353,10 @@ def cut(tag, sha, notes, repo=REPO, env=None, why=None, checks_only=False):
     if ckind != "green":
         kind, owned = "owned-reds", owned + cowned
     line = mark_line(kind, owned, sha, run["when"])
+    # the tag's internal line says a verdict stood from R (architect m_63312: 'by-reuse <R12>')
+    reused = sorted({x["reuse"] for x in (run, cr, ur) if x and x.get("reuse")})
+    if reused:
+        line += " by-reuse %s" % ",".join(x[:12] for x in reused)
     if checks_only:
         say("the app side of %s passes: %s (no tag: --checks-only)" % (sha[:12], line))
         return line

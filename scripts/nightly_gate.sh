@@ -336,7 +336,12 @@ if [ "${1:-}" = --tip ]; then
   fi
   if [ -n "$pin" ]; then
     tip="$pin"
-    grep -q "^$tip	" "$bh/gate/green-shas.tsv" 2>/dev/null && { echo "green already: $tip"; exit 0; }
+    # TIP_FULL=1 (the full check after a by-reuse tag, plan A step 8): only a full green line counts
+    if [ -n "${TIP_FULL:-}" ]; then
+      awk -F'\t' -v s="$tip" '$1 == s && $6 == "" { f = 1 } END { exit !f }' "$bh/gate/green-shas.tsv" 2>/dev/null && { echo "green already (a full run): $tip"; exit 0; }
+    else
+      grep -q "^$tip	" "$bh/gate/green-shas.tsv" 2>/dev/null && { echo "green already: $tip"; exit 0; }
+    fi
     [ -n "${TIP_LOCKED:-}" ] || TIP_LOCKED=1 exec /usr/bin/lockf "$out/tip.lock" /bin/bash "$here/scripts/nightly_gate.sh" --tip --sha "$pin"
   else
     tip="$(git -C "$main_tree" rev-parse --verify -q main)" || exit 0
@@ -359,6 +364,13 @@ if [ "${1:-}" = --tip ]; then
   if [ -z "$sha" ]; then state=infra; sha="$tip"
   else sha="$(git -C "$main_tree" rev-parse "$sha" 2>/dev/null || echo "$tip")"; [ $rc = 0 ] && state=green || state=red; fi
   echo "$sha $state $((SECONDS - s)) $log" >"$out/tip-last"
+  # each tip run that ran its tests, typed (scripts/release_reuse.py's R, plan A step 8): 'full'
+  # when every e2e/tmux test was asked, 'by-reuse=<R>' for a recut's, else 'partial'
+  if [ "$state" != infra ]; then
+    rr="$(sed -n 's/^e2e\/tmux tests: by-reuse=\([0-9a-f]*\):.*/\1/p' "$log" | head -1)"
+    if [ -n "$rr" ]; then kind="by-reuse=$rr"; elif grep -q '^e2e/tmux tests: all' "$log"; then kind=full; else kind=partial; fi
+    printf '%s\t%s\t%s\t%s\t%s\n' "$sha" "$(date +%s)" "$rc" "$kind" "$log" >>"$out/full-runs.tsv"
+  fi
   # red: who landed since the last green, told through tip-red (main forwards it, main m_36219)
   j=(); for f in ${TIP_JOURNALS:-"$bh"/hubs/*/journal.jsonl}; do [ -f "$f" ] && j+=(--journal "$f"); done
   if [ "$state" = red ]; then

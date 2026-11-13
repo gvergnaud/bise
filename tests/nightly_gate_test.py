@@ -421,6 +421,20 @@ def main():
               "--tip --sha: the pinned sha ran, not main's tip: rc %s, %r %r" % (p.returncode, log[-400:], p.stderr[-200:]))
         check("heavy-run: rank 0, the release lane, pass lane A" in log, "--tip --sha: in the release lane, its pass lane: %r" % log[-400:])
         check(open(os.path.join(out, "tip-last")).read().split()[:2] == [full, "green"], "--tip --sha: tip-last names the pinned sha")
+        # each tip run typed in full-runs.tsv (release_reuse.py's R, plan A step 8): the fake gate
+        # names no e2e/tmux set, so 'partial', never an R
+        fr = open(os.path.join(out, "full-runs.tsv")).read().splitlines()[-1].split("\t")
+        check(fr[0] == full and fr[2] == "0" and fr[3] == "partial", "--tip --sha: its full-runs.tsv line: %r" % fr)
+        # TIP_FULL (the full check after a by-reuse tag): a by-reuse green line doesn't count
+        with open(green, "w") as f:
+            f.write("%s\t1\t600\tx\tlog\tby-reuse=abc\n" % full)
+        p = subprocess.run(["bash", os.path.join(repo, "scripts", "nightly_gate.sh"), "--tip", "--sha", full],
+                           env=env0, capture_output=True, text=True, timeout=60)
+        check(p.returncode == 0 and "green already: " in p.stdout, "--tip --sha: green by reuse is green for a cut: %r" % p.stdout)
+        p = subprocess.run(["bash", os.path.join(repo, "scripts", "nightly_gate.sh"), "--tip", "--sha", full],
+                           env=dict(env0, TIP_FULL="1"), capture_output=True, text=True, timeout=60)
+        check(p.returncode == 0 and "green already" not in p.stdout, "TIP_FULL: a by-reuse line doesn't count, it runs: %r" % p.stdout)
+        os.remove(green)
         p = subprocess.run(["bash", os.path.join(repo, "scripts", "nightly_gate.sh"), "--tip", "--sha", "no-such-sha"],
                            env=env0, capture_output=True, text=True, timeout=60)
         check(p.returncode == 2 and "no commit 'no-such-sha'" in p.stderr, "--tip --sha: a bad sha, rc 2: %r" % p.stderr)
