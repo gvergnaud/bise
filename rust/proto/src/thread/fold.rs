@@ -649,7 +649,7 @@ impl Fold<'_> {
             }
             // BISE-86: his message didn't reach `to`; no cid here (the
             // hub's error to his window carries it, architect m_10348)
-            Hub::Undelivered { to, text } => {
+            Hub::Undelivered { to, text, .. } => {
                 let mut e = Entry::new(pos, ms, EntryKind::NotDelivered, text.clone());
                 e.not_delivered = Some(NotDelivered { to, text });
                 self.push(e);

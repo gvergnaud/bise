@@ -1273,3 +1273,31 @@ def Laws.empty_name_held(s):
 def Laws.empty_name_refused(o, cx, t, e):
   %Equal.sym(Bool, String.is_empty(HC.NewTask.base(t)), True{}, e) : {HC.create_task.go(o, _, cx, t) == (cx, HC.TErr{"a new task needs a name"}) : HX.Cx<o> & HC.TaskR}
   {==}
+
+# ---- a send to a task whose worktree is being deleted ----
+
+def hub_or_true_r(a: Bool) -> {Bool.or(a, True{}) == True{} : Bool}:
+  match a:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+def Laws.send_to_dropping_task_undelivered(o, cx, s, a, w, d):
+  +ws = HS.Agent.ws(a)
+  +why = HC.unavailable(o, cx, s, a)
+  +from = String.eq(HC.Snd.from(s), HM.USER())
+  %Equal.sym(Bool, HM.ws_worktree(ws), True{}, w) : {HC.send.revive(o, Bool.and(from, Bool.not(Bool.and(_, Bool.or(HM.ws_dropped(ws), HM.ws_dropping(ws))))), cx, s, why) == HC.serr(o, cx, why) : HX.Cx<o> & HC.SendR}
+  %Equal.sym(Bool, HM.ws_dropping(ws), True{}, d) : {HC.send.revive(o, Bool.and(from, Bool.not(Bool.or(HM.ws_dropped(ws), _))), cx, s, why) == HC.serr(o, cx, why) : HX.Cx<o> & HC.SendR}
+  %Equal.sym(Bool, Bool.or(HM.ws_dropped(ws), True{}), True{}, hub_or_true_r(HM.ws_dropped(ws))) : {HC.send.revive(o, Bool.and(from, Bool.not(_)), cx, s, why) == HC.serr(o, cx, why) : HX.Cx<o> & HC.SendR}
+  %Equal.sym(Bool, Bool.and(from, False{}), False{}, PL2.hub_and_false_r(from)) : {HC.send.revive(o, _, cx, s, why) == HC.serr(o, cx, why) : HX.Cx<o> & HC.SendR}
+  {==}
+
+def Laws.send_to_restored_task_revives(o, cx, s, a, u, p, q):
+  +ws = HS.Agent.ws(a)
+  +why = HC.unavailable(o, cx, s, a)
+  %Equal.sym(String, HC.Snd.from(s), HM.USER(), u) : {HC.send.revive(o, Bool.and(String.eq(_, HM.USER()), Bool.not(Bool.and(HM.ws_worktree(ws), Bool.or(HM.ws_dropped(ws), HM.ws_dropping(ws))))), cx, s, why) == HC.send.revive(o, True{}, cx, s, why) : HX.Cx<o> & HC.SendR}
+  %Equal.sym(Bool, HM.ws_dropped(ws), False{}, q) : {HC.send.revive(o, Bool.and(String.eq(HM.USER(), HM.USER()), Bool.not(Bool.and(HM.ws_worktree(ws), Bool.or(_, HM.ws_dropping(ws))))), cx, s, why) == HC.send.revive(o, True{}, cx, s, why) : HX.Cx<o> & HC.SendR}
+  %Equal.sym(Bool, HM.ws_dropping(ws), False{}, p) : {HC.send.revive(o, Bool.and(String.eq(HM.USER(), HM.USER()), Bool.not(Bool.and(HM.ws_worktree(ws), Bool.or(False{}, _)))), cx, s, why) == HC.send.revive(o, True{}, cx, s, why) : HX.Cx<o> & HC.SendR}
+  %Equal.sym(Bool, Bool.and(HM.ws_worktree(ws), False{}), False{}, PL2.hub_and_false_r(HM.ws_worktree(ws))) : {HC.send.revive(o, Bool.and(String.eq(HM.USER(), HM.USER()), Bool.not(_)), cx, s, why) == HC.send.revive(o, True{}, cx, s, why) : HX.Cx<o> & HC.SendR}
+  {==}

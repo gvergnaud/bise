@@ -201,6 +201,12 @@ cid?: number | null,
  */
 reason?: string | null, 
 /**
+ * with reason "undelivered": the agent's worktree state when that
+ * is why, "dropping" (being deleted) or "dropped" (deleted), from
+ * sb-core's undelivered line (architect m_64338); none otherwise
+ */
+ws?: string | null, 
+/**
  * draft: what kind of failure, for the window to draw (never its
  * text): the hub is older than this core (hub_older, amb-feed's
  * hub skew) or refused this core's connection (hub_refused)

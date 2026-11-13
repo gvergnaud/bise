@@ -1403,3 +1403,31 @@ law empty_name_refused:
   for +t: HC.NewTask
   for e: {String.is_empty(HC.NewTask.base(t)) == True{} : Bool}
   {HC.create_task(o, cx, t) == (cx, HC.TErr{"a new task needs a name"}) : HX.Cx<o> & HC.TaskR}
+
+# ---- a send to a task whose worktree is being deleted (architect m_64336) ----
+
+# LAW: a send to an archived task whose worktree the shell is removing now
+# (ws `dropping`, between drop.off and unplaced) is refused, recipient_unavailable
+# (his undelivered ✗ line), from anyone: never a revive that spawns into a
+# folder being deleted (proto_e2e_agents' race on 80b32224e).
+law send_to_dropping_task_undelivered:
+  for -o: HS.St
+  for +cx: HX.Cx<o>
+  for +s: HC.Snd
+  for +a: HS.Agent
+  for w: {HM.ws_worktree(HS.Agent.ws(a)) == True{} : Bool}
+  for d: {HM.ws_dropping(HS.Agent.ws(a)) == True{} : Bool}
+  {HC.send.life(o, HS.LArchived{}, cx, s, a) == HC.serr(o, cx, HC.unavailable(o, cx, s, a)) : HX.Cx<o> & HC.SendR}
+
+# LAW: the window can't stick: once its ws is neither dropping nor dropped
+# (a /restore's: restoring_ws sets state placing, dropped false), his send
+# to the archived task revives it, as before.
+law send_to_restored_task_revives:
+  for -o: HS.St
+  for +cx: HX.Cx<o>
+  for +s: HC.Snd
+  for +a: HS.Agent
+  for u: {HC.Snd.from(s) == HM.USER() : String}
+  for p: {HM.ws_dropping(HS.Agent.ws(a)) == False{} : Bool}
+  for q: {HM.ws_dropped(HS.Agent.ws(a)) == False{} : Bool}
+  {HC.send.life(o, HS.LArchived{}, cx, s, a) == HC.send.revive(o, True{}, cx, s, HC.unavailable(o, cx, s, a)) : HX.Cx<o> & HC.SendR}

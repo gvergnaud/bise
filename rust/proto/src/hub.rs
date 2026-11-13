@@ -628,6 +628,11 @@ pub enum HubEv {
         /// stands in for his row)
         #[serde(default, skip_serializing_if = "Option::is_none")]
         reason: Option<String>,
+        /// with reason "undelivered": the agent's worktree state when that
+        /// is why, "dropping" (being deleted) or "dropped" (deleted), from
+        /// sb-core's undelivered line (architect m_64338); none otherwise
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        ws: Option<String>,
         /// draft: what kind of failure, for the window to draw (never its
         /// text): the hub is older than this core (hub_older, amb-feed's
         /// hub skew) or refused this core's connection (hub_refused)

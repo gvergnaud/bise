@@ -40,7 +40,12 @@ reason?: string | null,
  * `retired_method`: the method it called (crate::RETIRED). For its
  * log and a support question; never in what he reads
  */
-field?: string | null, };
+field?: string | null, 
+/**
+ * reason "undelivered": the agent's worktree state when that is why,
+ * "dropping" (being deleted) or "dropped" (deleted) (architect m_64338)
+ */
+ws?: string | null, };
 
 /**
  * JSON-RPC's error object; `data.kind` lets a client draw a failure by

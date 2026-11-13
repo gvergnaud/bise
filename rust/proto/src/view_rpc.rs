@@ -355,7 +355,7 @@ impl ViewError {
 
     /// The JSON-RPC error a view's request gets.
     pub fn rpc(self, what: &str) -> RpcError {
-        let data = ErrorData { kind: None, reason: Some(self.reason().into()), field: None };
+        let data = ErrorData { reason: Some(self.reason().into()), ..Default::default() };
         RpcError { code: self.code(), message: self.words(what), data: Some(data) }
     }
 }

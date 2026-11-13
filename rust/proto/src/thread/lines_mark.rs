@@ -36,7 +36,7 @@ pub fn mark_of(rec: &Rec) -> Option<Mark> {
         Rec::Obs(Obs::Steered(t)) => text(t, Delivery::Read, true),
         Rec::Injected(t) => text(t, Delivery::Read, false),
         Rec::Obs(Obs::TurnStarted) => Some(Mark::Turn),
-        Rec::Hub(Hub::Undelivered { to, text }) => Some(Mark::Failed { to: to.clone(), text: text.clone() }),
+        Rec::Hub(Hub::Undelivered { to, text, .. }) => Some(Mark::Failed { to: to.clone(), text: text.clone() }),
         Rec::Hub(Hub::SteerRx(ids)) => Some(Mark::Ids { ids: ids.clone(), to: Delivery::Received }),
         Rec::Hub(Hub::Steered(ids)) => Some(Mark::Ids { ids: ids.clone(), to: Delivery::Read }),
         _ => None,

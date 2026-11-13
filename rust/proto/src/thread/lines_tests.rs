@@ -65,7 +65,10 @@ fn hub_lines_read_their_fields() {
         r => panic!("{r:?}"),
     };
     assert_eq!(h("you : a\\nb"), Hub::You("a\nb".into(), None));
-    assert_eq!(h("undelivered : fix : d'abord \\: les tests"), Hub::Undelivered { to: "fix".into(), text: "d'abord : les tests".into() });
+    assert_eq!(h("undelivered : fix : d'abord \\: les tests"), Hub::Undelivered { to: "fix".into(), text: "d'abord : les tests".into(), ws: None });
+    // its worktree being deleted: sb-core's typed ws, the send error's data.ws (architect m_64338)
+    assert_eq!(h(r#"undelivered :: {"sb":"undelivered","to":"t4","text":"still there?","ws":"dropping"}"#),
+        Hub::Undelivered { to: "t4".into(), text: "still there?".into(), ws: Some("dropping".into()) });
     assert_eq!(h("msg-in : docs m_3 : hi : there"), Hub::MsgIn { from: "docs".into(), id: "m_3".into(), body: "hi : there".into(), view: None });
     assert_eq!(h("msg : a → b m_9 : hello"), Hub::Msg { from: "a".into(), to: "b".into(), id: "m_9".into(), body: "hello".into() });
     assert_eq!(h("msg : a → b c : hello"), Hub::Msg { from: "a".into(), to: "b c".into(), id: String::new(), body: "hello".into() });

@@ -327,8 +327,9 @@ pub enum Hub {
     MsgParts { id: u64, raw: String },
     /// `sent-parts`: the parts of message `id` the feed's owner sent
     SentParts { id: u64, raw: String },
-    /// BISE-86: `undelivered : {name} : {text}`
-    Undelivered { to: String, text: String },
+    /// BISE-86: `undelivered : {name} : {text}`; `ws`: its worktree's state
+    /// when that is why (`dropping`, `dropped`), the send error's data.ws
+    Undelivered { to: String, text: String, ws: Option<String> },
     /// what the feed's owner received: `{from} m_<n> : {text}`; `from`
     /// keeps its `@` (an old direct reply to the user)
     /// `view`: the plugin whose MCP App view wrote it (from `view`)
@@ -759,7 +760,7 @@ pub fn view(f: Feed) -> Hub {
         Feed::Steered(r) => Hub::Steered(r.ids),
         Feed::SteerRx(r) => Hub::SteerRx(r.ids),
         Feed::Context(r) => Hub::Context(r.context.to_string()),
-        Feed::Undelivered(r) => Hub::Undelivered { to: r.to, text: r.text },
+        Feed::Undelivered(r) => Hub::Undelivered { to: r.to, text: r.text, ws: r.ws },
         Feed::MsgIn(r) => Hub::MsgIn { from: r.from, id: m(r.id), body: r.body, view: r.view },
         Feed::Msg(r) => Hub::Msg { from: r.from, to: r.to, id: m(r.id), body: r.body },
         Feed::Sent(r) => Hub::Sent { to: r.to, id: m(Some(r.id)), ask: r.ask, body: r.body },

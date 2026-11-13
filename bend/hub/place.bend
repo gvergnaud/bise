@@ -250,6 +250,18 @@ def undropped_text(+n: String, +err: String) -> String:
 def dropping_text(+n: String) -> String:
   String.concat(["@", n, " is still being archived: restore it in a moment"])
 
+# a send to an archived task refused for its worktree (core.bend's
+# unavailable): one def per ws state, sb-core picks it (architect m_64336,
+# m_64338; the catalog move of these drop texts is on the tech-debt list).
+# The shell removes it now (ws `dropping`): a revive there would spawn into
+# a folder being deleted
+def unavailable_dropping() -> String:
+  " (its worktree is being deleted: /restore when it's done)"
+
+# ...it was removed (ws `dropped`)
+def unavailable_dropped() -> String:
+  " (its worktree was deleted: /restore)"
+
 # ---- a restore off the loop (issue 32 3b): the task is active at once,
 # its ws placing while the shell makes its dropped worktree again (fx
 # worktree_restore); the shell's `placed` ends it (POk, PErr: BRestore)

@@ -541,7 +541,7 @@ pub fn is_sha(c: &str) -> bool {
 
 pub fn diff(ev: &Value, project: &str, agent: &str) -> HubEv {
     if let Some(e) = ev.get("error").and_then(Value::as_str) {
-        return HubEv::Error { project: Some(project.into()), cmd: Some("diff".into()), text: e.into(), cid: None, reason: None, kind: None };
+        return HubEv::Error { project: Some(project.into()), cmd: Some("diff".into()), text: e.into(), cid: None, reason: None, ws: None, kind: None };
     }
     let files = ev.get("files").and_then(Value::as_array).cloned().unwrap_or_default();
     let flag = |f: &Value, k: &str| f.get(k).and_then(Value::as_bool).unwrap_or(false);

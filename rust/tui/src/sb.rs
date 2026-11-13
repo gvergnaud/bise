@@ -1144,7 +1144,7 @@ pub(crate) fn hub_ev(h: Hub) -> Option<Ev> {
         // rule too); no row
         h @ (Hub::Steered(_) | Hub::SteerRx(_)) => Ev::MarkYou { mark: bise_proto::thread::lines::mark_of(&bise_proto::thread::lines::Rec::Hub(h))?, or: None },
         // BISE-86
-        Hub::Undelivered { to, text } => Ev::Undelivered { name: to, text, open: true },
+        Hub::Undelivered { to, text, .. } => Ev::Undelivered { name: to, text, open: true },
         // v1: what this feed's owner received (`@{from}`: an old direct
         // reply to the user)
         Hub::MsgIn { from, id, body, .. } => {

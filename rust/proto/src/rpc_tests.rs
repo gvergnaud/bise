@@ -128,6 +128,16 @@ fn an_error_keeps_its_kind_and_reason() {
     assert!(v.get("result").is_none());
 }
 
+/// an undelivered send to a task whose worktree is being deleted: its
+/// typed ws beside the reason (architect m_64338); none: no field
+#[test]
+fn an_undelivered_send_says_its_worktree_state() {
+    let e = RpcError::refused("@t4 is archived", Some("undelivered")).with_ws(Some("dropping"));
+    assert_eq!(serde_json::to_value(&e.data).unwrap(), serde_json::json!({"reason": "undelivered", "ws": "dropping"}));
+    let e = RpcError::refused("@t4 is archived", Some("undelivered")).with_ws(None);
+    assert_eq!(serde_json::to_value(&e.data).unwrap(), serde_json::json!({"reason": "undelivered"}));
+}
+
 /// A tiny xorshift: the law below runs the same every time.
 struct Rng(u64);
 impl Rng {

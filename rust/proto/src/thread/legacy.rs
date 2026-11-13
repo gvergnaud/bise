@@ -69,7 +69,7 @@ fn of(kind: &str, raw: &str) -> Option<Feed> {
         "context" => Feed::Context(feed::Context { context: json(raw) }),
         "undelivered" => {
             let [to, text] = fields(raw);
-            Feed::Undelivered(feed::Undelivered { to, text })
+            Feed::Undelivered(feed::Undelivered { to, text, ws: None })
         }
         // `{from} m_<n> : {text}`; an old direct reply `@{from} : {text}`
         // (its `@` kept: the reader knows it), no id

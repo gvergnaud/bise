@@ -37,8 +37,8 @@ def steer_rx(+ids: List<&2, Nat>) -> J.Json:
 def context(+context: J.Json) -> J.Json:
   J.obj([J.kv("sb", J.JStr{"context"}), J.kv("context", context)])
 
-def undelivered(+to: String, +text: K.Body) -> J.Json:
-  J.obj([J.kv("sb", J.JStr{"undelivered"}), J.kv("to", J.JStr{to}), J.kv("text", K.jbody(text))])
+def undelivered(+to: String, +text: K.Body, +ws: Maybe<&2, String>) -> J.Json:
+  J.obj(K.cat([[J.kv("sb", J.JStr{"undelivered"})], [J.kv("to", J.JStr{to})], [J.kv("text", K.jbody(text))], K.omit_ms("ws", ws)]))
 
 def msg_in(+from: String, +id: Maybe<&2, Nat>, +body: K.Body, +view: Maybe<&2, String>) -> J.Json:
   J.obj(K.cat([[J.kv("sb", J.JStr{"msg-in"})], [J.kv("from", J.JStr{from})], K.omit_mn("id", id), [J.kv("body", K.jbody(body))], K.omit_ms("view", view)]))

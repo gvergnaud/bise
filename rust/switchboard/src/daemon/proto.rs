@@ -94,6 +94,9 @@ struct Stepping {
     cid: Option<u64>,
     notices: Vec<String>,
     undelivered: bool,
+    /// that undelivered line's `ws` (sb-core's: the agent's worktree being
+    /// or already deleted), the error's data.ws
+    ws: Option<String>,
     /// its notices are plain lines (`notice`), not failures: a confirm's
     /// no ("@x stays: nothing archived", bar I9)
     as_notice: bool,
@@ -228,8 +231,9 @@ impl Shell {
             return;
         }
         let (cid, reason) = (s.cid, s.cid.map(|_| if s.undelivered { "undelivered" } else { "refused" }));
+        let ws = s.cid.and(s.ws);
         for text in s.notices {
-            self.proto_error_cid(id, &s.cmd, &text, cid, reason);
+            self.proto_error_ws(id, &s.cmd, &text, cid, reason, ws.clone());
         }
     }
 
@@ -284,7 +288,10 @@ impl Shell {
     /// line is read by the one parser of its kind (`thread::lines`).
     pub(super) fn typed_line(&mut self, line: &str) {
         if let Some(s) = self.proto.stepping.as_mut() {
-            s.undelivered |= matches!(pthread::lines::read(line), pthread::lines::Rec::Hub(pthread::lines::Hub::Undelivered { .. }));
+            if let pthread::lines::Rec::Hub(pthread::lines::Hub::Undelivered { ws, .. }) = pthread::lines::read(line) {
+                s.undelivered = true;
+                s.ws = s.ws.take().or(ws);
+            }
         }
     }
 
@@ -306,10 +313,15 @@ impl Shell {
     /// The one typed error, to connection `id` only (a send's cid is that
     /// window's: never another connection's, never journaled).
     fn proto_error_cid(&mut self, id: ClientId, cmd: &str, text: &str, cid: Option<u64>, reason: Option<&str>) {
+        self.proto_error_ws(id, cmd, text, cid, reason, None);
+    }
+
+    /// proto_error_cid with an undelivered send's worktree state (data.ws)
+    fn proto_error_ws(&mut self, id: ClientId, cmd: &str, text: &str, cid: Option<u64>, reason: Option<&str>, ws: Option<String>) {
         let project = Some(self.project());
         let cmd = Some(cmd.to_string()).filter(|c| !c.is_empty());
         let reason = reason.map(str::to_string);
-        self.proto_send(id, &HubEv::Error { project, cmd, text: text.to_string(), cid, reason, kind: None });
+        self.proto_send(id, &HubEv::Error { project, cmd, text: text.to_string(), cid, reason, ws, kind: None });
     }
 }
 

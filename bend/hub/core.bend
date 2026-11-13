@@ -768,12 +768,20 @@ def send.revive(-o: S.St, ok: Bool, +cx: X.Cx<o>, +s: Snd, +why: String) -> X.Cx
       +cx3 = set_r(o, cx2, X.R.with_crashes(r, KL.kn_del(X.R.crashes(r), to)))
       send.thread(o, Snd.reply_to(s), spawn(o, cx3, to, True{}), s)
 
+# a worktree task whose folder is gone or going: removed (ws `dropped`), or
+# the shell removing it now (ws `dropping`, between drop.off and unplaced).
+# A user's send to it never revives it there (law send_to_dropping_task_undelivered,
+# proto_e2e_agents' race on 80b32224e: a revive spawned into a folder being deleted)
 def dropped_wt(+a: S.Agent) -> Bool:
-  M.ws_worktree(S.Agent.ws(a)) && M.ws_dropped(S.Agent.ws(a))
+  M.ws_worktree(S.Agent.ws(a)) && (M.ws_dropped(S.Agent.ws(a)) || M.ws_dropping(S.Agent.ws(a)))
+
+# the refusal's tail for its worktree: place.bend's def for its ws state
+def unavailable.tail(+ws: J.Json) -> String:
+  Bool.pick(String, M.ws_worktree(ws) && M.ws_dropping(ws), PL.unavailable_dropping(),
+    Bool.pick(String, M.ws_worktree(ws) && M.ws_dropped(ws), PL.unavailable_dropped(), ""))
 
 def unavailable(-o: S.St, +cx: X.Cx<o>, +s: Snd, +a: S.Agent) -> String:
-  cat(["recipient_unavailable: @", Snd.to(s), " is ", ST.status_str(a, rt(o, cx, Snd.to(s))),
-    Bool.pick(String, dropped_wt(a), " (its worktree was deleted: /restore)", "")])
+  cat(["recipient_unavailable: @", Snd.to(s), " is ", ST.status_str(a, rt(o, cx, Snd.to(s))), unavailable.tail(S.Agent.ws(a))])
 
 def create.sent(-o: S.St, p: X.Cx<o> & SendR, +name: String) -> X.Cx<o> & TaskR:
   match p:
@@ -900,10 +908,25 @@ def send.user(-o: S.St, user: Bool, +cx: X.Cx<o>, +s: Snd) -> X.Cx<o> & SendR:
 # C2 amendment (BISE-86): a message from the user that cannot reach its
 # agent (stopped, dropped, archived) says so in the feed where the user
 # wrote it: an `undelivered` record {to, text} (the TUI marks it ✗)
+# the typed ws of a refusal for its worktree (architect m_64338): `dropping`
+# (the shell removes it now), `dropped` (removed), else none
+def unavailable.ws_of(+ws: J.Json) -> Maybe<&2, String>:
+  Bool.pick(Maybe<&2, String>, M.ws_worktree(ws) && M.ws_dropping(ws), Some{"dropping"},
+    Bool.pick(Maybe<&2, String>, M.ws_worktree(ws) && M.ws_dropped(ws), Some{"dropped"}, None{}))
+
+def unavailable.ws(m: Maybe<&2, S.Agent>) -> Maybe<&2, String>:
+  match m:
+    case None{}:
+      None{}
+    case Some{+a}:
+      unavailable.ws_of(S.Agent.ws(a))
+
+# (its `ws`: the agent's worktree state when that is why, the send error's
+# data.ws: unavailable.ws)
 def undelivered.if(-o: S.St, gone: Bool, +cx: X.Cx<o>, +view: String, +name: String, +text: K.Body) -> X.Cx<o>:
   match gone:
     case True{}:
-      feed(o, cx, view, FD.undelivered(name, text))
+      feed(o, cx, view, FD.undelivered(name, text, unavailable.ws(M.get_agent(st(o, cx), name))))
     case False{}:
       cx
 

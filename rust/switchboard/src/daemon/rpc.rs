@@ -393,10 +393,10 @@ impl Shell {
         let Some(init) = self.rpc.conns.get(&id).map(|c| c.init) else { return false };
         let tag = ev.tag().to_string();
         if answer {
-            if let HubEv::Error { cmd, text, reason, .. } = ev {
+            if let HubEv::Error { cmd, text, reason, ws, .. } = ev {
                 let cmd = cmd.clone().unwrap_or_default();
                 if let Some(p) = self.rpc_pending(id, |p| p.cmd == cmd) {
-                    let e = RpcError::refused(text.clone(), reason.as_deref());
+                    let e = RpcError::refused(text.clone(), reason.as_deref()).with_ws(ws.as_deref());
                     self.rpc_respond(id, Response::err(Some(p.id), e));
                     return true;
                 }

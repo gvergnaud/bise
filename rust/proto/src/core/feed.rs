@@ -51,8 +51,11 @@ core_kinds! {
         SteerRx = "steer-rx" => RSteerRx { ids: Nats },
         /// his fn context (S9), the FnContext JSON
         Context = "context" => RContext { context: Json },
-        /// his message could not reach `to` (stopped, dropped, archived)
-        Undelivered = "undelivered" => RUndelivered { to: Str, text: Body },
+        /// his message could not reach `to` (stopped, dropped, archived);
+        /// `ws`: its worktree's state when that is why, `dropping` (the
+        /// shell removes it now) or `dropped` (removed); the turn/send
+        /// error's data.ws (architect m_64338)
+        Undelivered = "undelivered" => RUndelivered { to: Str, text: Body, ws: OptStrOmit },
         /// what the feed's owner received (`id` none: older lines);
         /// `view`: the plugin whose MCP App view wrote it (from `view`)
         MsgIn = "msg-in" => RMsgIn { from: Str, id: OptNatOmit, body: Body, view: OptStrOmit },
