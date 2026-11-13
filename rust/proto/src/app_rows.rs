@@ -437,6 +437,26 @@ pub struct PluginPart {
     /// what he granted (docs/mcp-apps.md C8); none for every other kind
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub view: Option<PartView>,
+    /// a skill whose SKILL.md links into a folder macOS guards
+    /// (Documents, Desktop, Downloads, iCloud Drive): which, and whether
+    /// this list read it (his switch `skills.read_guarded`, off by
+    /// default: listed by its folder's name, read when used;
+    /// skills-scan-tcc). None for every other part
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub guarded: Option<PartGuarded>,
+}
+
+/// A skill reached by a link into a folder macOS guards
+/// (`PluginPart::guarded`, `bend_plugins::skills::Guarded`).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct PartGuarded {
+    /// the folder's name for him (`Documents`, `iCloud Drive`)
+    pub folder: String,
+    /// read by this list: his switch is on and macOS let it (false while
+    /// off, or when macOS said no)
+    #[serde(default)]
+    pub read: bool,
 }
 
 /// A view part's facts (MCP Apps, docs/mcp-apps.md C8): the plugins

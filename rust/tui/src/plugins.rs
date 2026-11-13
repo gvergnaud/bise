@@ -33,15 +33,21 @@ pub(crate) fn rows(workspace: &Path, pending: &[String]) -> Vec<bise_proto::app_
     let (sd, od) = (status::dir(), oauth::store_dir());
     let secrets = bise_home::Home::from_env().mcp_secrets_dir();
     // the skills folders main reads (the user's view), off ones too; a
-    // short wait per folder: a stuck one is skipped (bend_plugins::skills)
-    let home = std::env::var_os("HOME").filter(|h| !h.is_empty()).map(std::path::PathBuf::from);
+    // short wait per folder: a stuck one is skipped (bend_plugins::skills).
+    // Listed by his switch: a link into Documents is never read at launch
+    // while it is off (skills-scan-tcc); his own folders from Home, none
+    // under a throwaway BISE_HOME.
+    let home = bise_home::Home::from_env();
     let app = resolve::builtin_root().and_then(|r| r.parent().map(Path::to_path_buf));
     let bise = skills::BiseSkills::of(true, bise_home::projects::desktop_for(workspace));
-    let found = skills::scan(&skills::roots(home.as_deref(), workspace, app.as_deref(), bise), std::time::Duration::from_millis(300));
+    let roots = skills::roots(skills::user_home(&home), workspace, app.as_deref(), bise);
+    let mode = skills::mode_of(&home);
+    let found = skills::scan(&roots, std::time::Duration::from_millis(300), &mode, Some(home.user_home()));
     let inputs = catalog::Inputs {
         resolution: &res,
         catalog: &cat,
         skills: &found.skills,
+        guarded: &found.guarded,
         state: &st,
         grants: &grants,
         status_dir: Some(&sd),

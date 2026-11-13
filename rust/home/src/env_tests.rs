@@ -257,3 +257,45 @@ fn a_path_variable_is_read_through_home_only() {
     }
     assert!(around.is_empty(), "read around Home: {}; use bise_home::Home::from_env()", around.join(", "));
 }
+
+/// `$HOME` is read through Home only (architect m_64240): a read around
+/// it reaches his real home under a throwaway `$BISE_HOME` (the skills
+/// scan read his ~/.vibe/skills so, and its link into ~/Documents). The
+/// files that still do are in tests/home_reads.txt, a list that only
+/// shrinks: a new one fails, and so does a listed file that no longer
+/// reads it (drop its line).
+#[test]
+fn home_is_read_through_home_only() {
+    let rust = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let listed_text = std::fs::read_to_string(rust.join("../tests/home_reads.txt")).expect("tests/home_reads.txt");
+    let listed: Vec<&str> = listed_text.lines().filter(|l| !l.starts_with('#') && !l.trim().is_empty()).map(|l| l.split(" · ").next().unwrap_or(l).trim()).collect();
+    let mut files = Vec::new();
+    rust_sources(&rust, &mut files);
+    let mut reads = Vec::new();
+    for f in &files {
+        let rel = f.strip_prefix(&rust).unwrap_or(f).to_string_lossy().into_owned();
+        if rel.starts_with("home/") {
+            continue;
+        }
+        let src = std::fs::read_to_string(f).unwrap_or_default();
+        if home_read(&src) {
+            reads.push(rel);
+        }
+    }
+    let new: Vec<&String> = reads.iter().filter(|r| !listed.contains(&r.as_str())).collect();
+    let gone: Vec<&&str> = listed.iter().filter(|l| !reads.iter().any(|r| r == *l)).collect();
+    assert!(new.is_empty(), "HOME read around Home in {new:?}: use bise_home::Home::from_env().user_home()");
+    assert!(gone.is_empty(), "{gone:?} no longer read HOME: drop their lines from tests/home_reads.txt");
+}
+
+/// A `var("HOME")` or `var_os("HOME")` read (not a test's set_var).
+fn home_read(src: &str) -> bool {
+    ["var(\"HOME\")", "var_os(\"HOME\")"].iter().any(|r| src.match_indices(r).any(|(i, _)| !src[..i].ends_with(|c: char| c == '_' || c.is_alphanumeric())))
+}
+
+#[test]
+fn a_home_read_is_found_and_a_set_is_not() {
+    assert!(home_read("let h = std::env::var_os(\"HOME\");"));
+    assert!(home_read("std::env::var(\"HOME\").ok()"));
+    assert!(!home_read("std::env::set_var(\"HOME\", d); std::env::remove_var(\"HOME\");"));
+}

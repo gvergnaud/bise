@@ -383,8 +383,6 @@ fn protected_folders_are_read_only_once_entered() {
     // the `/` after it enters it: read now
     assert_eq!(paths(&outside_rows(&ws, h, "~/Desktop/")), ["~/Desktop/secret.txt"]);
     assert!(listed(&home.join("Desktop/")));
-    assert!(protected(None, Path::new("/Volumes/Backup")));
-    assert!(!protected(None, Path::new("/Volumes")) && !protected(h, &home.join("code")));
     let _ = std::fs::remove_dir_all(&home);
 }
 

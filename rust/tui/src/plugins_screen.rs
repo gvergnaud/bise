@@ -842,7 +842,9 @@ fn part_line(x: &PluginPart, selected: bool, folded: Option<bool>, width: usize)
         Some((s, c)) => left.push(plain(s, Style::default().fg(c))),
         None => {
             let off = x.tools.iter().filter(|t| !t.on).count();
-            let mut s = x.status.clone().or(x.what.clone()).unwrap_or_default();
+            // a skill linked into Documents, not read (his switch off, skills-scan-tcc)
+            let unread = x.guarded.as_ref().filter(|g| !g.read).map(|g| settings::plugins_skill_guarded(&g.folder));
+            let mut s = unread.or(x.status.clone()).or(x.what.clone()).unwrap_or_default();
             if off > 0 {
                 s = format!("{s} · {}", settings::plugins_n_off(off));
             }

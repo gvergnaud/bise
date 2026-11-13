@@ -39,7 +39,7 @@ fn row(id: &str, kind: PluginKind, scope: PluginScope, state: PluginState, on: b
 }
 
 fn part(id: &str, kind: PartKind) -> PluginPart {
-    PluginPart { id: id.into(), kind, name: id.into(), what: None, on: true, status: None, login: None, error: None, tools: Vec::new(), tool_count: None, path: None, view: None }
+    PluginPart { id: id.into(), kind, name: id.into(), what: None, on: true, status: None, login: None, error: None, tools: Vec::new(), tool_count: None, path: None, view: None, guarded: None }
 }
 
 fn plugin(id: &str, on: bool) -> Plugin {

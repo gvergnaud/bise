@@ -94,7 +94,7 @@ pub fn keep_days(prefs: Option<&Value>) -> u64 {
 
 /// The top keys of `prefs.json` the window may set (`prefs_set`,
 /// architect m_9130): anything else is refused, never written.
-pub const WINDOW_KEYS: &[&str] = &["onboarded", "theme", "voice", "context", "excluded_apps", "quiet", "shots_keep_days", "desktop_channel", "bims", "bim", "seen", AUTO_UPDATE, "pins", "pins_art", "pins_sched", "pins_proc", "models"];
+pub const WINDOW_KEYS: &[&str] = &["onboarded", "theme", "voice", "context", "excluded_apps", "quiet", "shots_keep_days", "desktop_channel", "bims", "bim", "seen", AUTO_UPDATE, "pins", "pins_art", "pins_sched", "pins_proc", "models", SKILLS];
 
 /// `models.news_seen`: the models whose news line he put off ("Not now",
 /// page models-settings, architect m_57407), as "provider/id" ids. Only
@@ -242,6 +242,27 @@ pub const WINDOW_HINTS: &[&str] = &["first_agent", "first_level3", "first_card",
 ///     privacy and in the capsule's state, never in this sheet again.
 pub const DESKTOP_HINTS: &[&str] = &["fn_perms"];
 
+/// `skills.read_guarded`: he lets the skills scans read through a link
+/// into a folder macOS guards (Documents, Desktop, Downloads, iCloud
+/// Drive: `crate::guarded`), the plugins page's switch (skills-scan-tcc,
+/// architect m_64243). Off unless he turned it on: the scans list those
+/// skills without reading them (bend_plugins::skills::mode_of).
+pub const SKILLS: &str = "skills";
+pub const READ_GUARDED: &str = "read_guarded";
+
+/// Whether he turned `skills.read_guarded` on, from `prefs.json`'s object.
+pub fn read_guarded(prefs: Option<&Value>) -> bool {
+    prefs.and_then(|p| p.get(SKILLS)).and_then(|s| s.get(READ_GUARDED)).and_then(Value::as_bool).unwrap_or(false)
+}
+
+fn skills_key(parts: &[&str], v: &Value) -> Result<(), String> {
+    match parts {
+        [SKILLS, READ_GUARDED] if v.is_boolean() || v.is_null() => Ok(()),
+        [SKILLS, READ_GUARDED] => Err(format!("{SKILLS}.{READ_GUARDED} can't be {v}")),
+        _ => Err(format!("{} is not a skills preference", parts.join("."))),
+    }
+}
+
 /// The type a typed key keeps (a wrong one is refused).
 fn typed(key: &str, v: &Value) -> Result<(), String> {
     let ok = match key {
@@ -292,6 +313,9 @@ pub fn set_dotted(obj: &Value, key: &str, value: Value) -> Result<Value, String>
     let value = if parts[..] == ["models", NEWS_SEEN] { news_seen_kept(value) } else { value };
     if top == "models" {
         models_key(&parts, &value)?;
+    }
+    if top == SKILLS {
+        skills_key(&parts, &value)?;
     }
     if parts.len() == 1 {
         if !value.is_null() {

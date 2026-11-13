@@ -1726,6 +1726,8 @@ export const settings = {
   plugins_project_title: (a: { project: string | number }): string => String(a.project) + " skills",
   /** Plugins list: where `skills:workspace` is */
   plugins_project_where: (a: { project: string | number }): string => String(a.project) + "/.agents/skills · this project only",
+  /** Plugins list: a skill whose SKILL.md links into a folder macOS guards, not read while his switch is off (skills-scan-tcc, designer m_64245) */
+  plugins_skill_guarded: (a: { folder: string | number }): string => "in " + String(a.folder) + " · read when used",
   /** Plugins list: bise's own skills (`skills:bise`, always on) */
   plugins_bise_title: "bise",
   /** Plugins list: what bise's own skills are */

@@ -26,6 +26,7 @@ use std::path::{Path, PathBuf};
 
 pub mod clock;
 pub mod env;
+pub mod guarded;
 pub mod hub_id;
 pub mod hub_state;
 pub mod library;

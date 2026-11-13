@@ -421,3 +421,16 @@ fn an_executable_in_a_version_bundle_finds_the_version_dir() {
     assert_eq!(exe_home_dir(&other), other, "only Contents/MacOS");
     let _ = std::fs::remove_dir_all(&d);
 }
+
+#[test]
+fn the_skills_switch_is_a_bool_off_by_default() {
+    use serde_json::json;
+    // the plugins page's 'Read skills in Documents...' (skills-scan-tcc)
+    assert!(!prefs::read_guarded(None) && !prefs::read_guarded(Some(&json!({}))));
+    let on = prefs::set_dotted(&json!({}), "skills.read_guarded", json!(true)).unwrap();
+    assert!(prefs::read_guarded(Some(&on)));
+    assert!(!prefs::read_guarded(Some(&prefs::set_dotted(&on, "skills.read_guarded", Value::Null).unwrap())));
+    assert!(prefs::set_dotted(&on, "skills.read_guarded", json!("yes")).is_err());
+    assert!(prefs::set_dotted(&on, "skills.other", json!(true)).is_err());
+    assert!(prefs::set_dotted(&on, "skills", json!({"read_guarded": true})).is_err(), "never whole");
+}

@@ -136,7 +136,7 @@ fn build(t: &Tmp, st: &StateV2, pending: &[String]) -> Vec<Plugin> {
     let res = resolve::resolve(&roots);
     let (cat, sk, sd) = (catalog(), skills(t), t.0.join("status"));
     let grants = crate::state::Grants::new();
-    rows(&Inputs { resolution: &res, catalog: &cat, skills: &sk, state: st, grants: &grants, status_dir: Some(&sd), oauth_dir: None, pending_logins: pending, secrets_dir: None })
+    rows(&Inputs { resolution: &res, catalog: &cat, skills: &sk, guarded: &[], state: st, grants: &grants, status_dir: Some(&sd), oauth_dir: None, pending_logins: pending, secrets_dir: None })
 }
 
 fn row<'a>(rows: &'a [Plugin], id: &str) -> &'a Plugin {

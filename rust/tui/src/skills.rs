@@ -65,11 +65,17 @@ const LIMIT: Duration = Duration::from_millis(300);
 struct Places {
     roots: Vec<skills::Root>,
     plugins: bend_plugins::resolve::Roots,
+    /// his switch (`skills::mode_of`): a link into Documents is listed,
+    /// never read, while it is off; picking it is his act
+    mode: skills::Mode,
+    /// his home, to name a skill linked into a guarded folder
+    home: Option<PathBuf>,
 }
 
 impl Places {
     fn standard(workspace: &Path) -> Places {
-        let home = std::env::var_os("HOME").filter(|h| !h.is_empty()).map(PathBuf::from);
+        let h = bise_home::Home::from_env();
+        let home = skills::user_home(&h).map(Path::to_path_buf);
         let app = bend_plugins::resolve::builtin_root().and_then(|r| r.parent().map(Path::to_path_buf));
         // bise-pages only where the desktop's rules are on (the hub's
         // agents get it under the same flag, architect m_12576)
@@ -77,6 +83,8 @@ impl Places {
         Places {
             roots: skills::roots(home.as_deref(), workspace, app.as_deref(), bise),
             plugins: bend_plugins::resolve::Roots::standard(Some(workspace)),
+            mode: skills::mode_of(&h),
+            home: Some(h.user_home().to_path_buf()),
         }
     }
 }
@@ -87,15 +95,15 @@ fn fingerprint(places: &Places, st: &StateV2) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
     bend_plugins::resolve::fingerprint(&places.plugins).hash(&mut h);
-    skills::fingerprint(&places.roots, st, LIMIT).0.hash(&mut h);
+    skills::fingerprint(&places.roots, st, LIMIT, &places.mode).0.hash(&mut h);
     h.finish()
 }
 
 /// Every skill the agents read, on now, in their order (first name kept).
 fn scan(places: &Places, st: &StateV2) -> Vec<Skill> {
-    let found = skills::scan(&places.roots, LIMIT);
+    let found = skills::scan(&places.roots, LIMIT, &places.mode, places.home.as_deref());
     let res = bend_plugins::resolve::resolve(&places.plugins);
-    skills::ordered(skills::on(found.skills, st), skills::of_plugins(res.loaded()))
+    skills::ordered(skills::on(found.listed, st), skills::of_plugins(res.loaded()))
         .into_iter()
         .map(|s| Skill { name: s.name, desc: short(s.description.trim()) })
         .collect()
@@ -239,6 +247,8 @@ mcp-builder\tGuide for MCP servers\t/a/m/SKILL.md
                 data: root.join("plugin-data"),
                 ..bend_plugins::resolve::Roots::for_test(&root)
             },
+            mode: skills::Mode::List { home: home.clone() },
+            home: Some(home.clone()),
         };
         let on = StateV2::default();
         let find = |st: &StateV2| scan(&places, st).into_iter().find(|s| s.name == "gamma");
@@ -271,9 +281,9 @@ mcp-builder\tGuide for MCP servers\t/a/m/SKILL.md
     /// bise_home::test_home), so even the real places read no user file.
     #[test]
     fn the_tests_never_see_the_real_home() {
-        assert!(bise_home::test_home::active(), "HOME = {:?}", std::env::var_os("HOME"));
+        assert!(bise_home::test_home::active(), "HOME = {:?}", bise_home::Home::from_env().user_home());
         let ws = std::env::temp_dir().join(format!("tui-skills-home-{}", std::process::id()));
-        let home = PathBuf::from(std::env::var_os("HOME").unwrap());
+        let home = bise_home::Home::from_env().user_home().to_path_buf();
         for r in Places::standard(&ws).roots.iter().filter(|r| r.scope != bend_plugins::id::SkillsScope::Workspace && r.scope != bend_plugins::id::SkillsScope::Bise) {
             assert!(r.dir.starts_with(&home), "{r:?}");
         }

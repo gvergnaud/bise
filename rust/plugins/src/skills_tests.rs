@@ -44,6 +44,33 @@ fn off(ids: &[&str]) -> StateV2 {
 
 const LIMIT: Duration = Duration::from_secs(3);
 
+/// Every path the scans listed or stat'd (a read stats first), in this
+/// test binary: the guarded-link tests look for theirs.
+static TOUCHED: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
+
+pub(super) fn touched(p: &Path) {
+    TOUCHED.lock().unwrap_or_else(|e| e.into_inner()).push(p.to_path_buf());
+}
+
+fn was_touched(under: &Path) -> Vec<PathBuf> {
+    TOUCHED.lock().unwrap_or_else(|e| e.into_inner()).iter().filter(|p| p.starts_with(under)).cloned().collect()
+}
+
+/// A fake home whose ~/.vibe/skills/x/SKILL.md links into
+/// <home>/Documents (his grill-me), next to a plain skill.
+fn linked_home(tag: &str) -> (Tmp, PathBuf, PathBuf) {
+    let t = Tmp::new(tag);
+    let home = t.0.join("home");
+    let target = skill(&home.join("Documents/ai"), "x", "x", "in his documents");
+    std::fs::create_dir_all(home.join(".vibe/skills/x")).unwrap();
+    let link = home.join(".vibe/skills/x/SKILL.md");
+    std::os::unix::fs::symlink(&target, &link).unwrap();
+    // a whole skill folder linked in too (relative)
+    std::os::unix::fs::symlink("../../Documents/ai/x", home.join(".agents/skills_y")).ok();
+    skill(&home.join(".agents/skills"), "plain", "plain", "his own");
+    (t, home, link)
+}
+
 /// Which folders each agent reads: the workspace and the user's two
 /// always; main bise's prompts/skills; prompts/skills-all only where the
 /// desktop is on (architect m_12576), main or task; a bare REPL none of
@@ -107,7 +134,7 @@ fn scan_owners_and_precedence() {
     std::fs::create_dir_all(home.join(".vibe/skills/spaced")).unwrap();
     std::fs::write(home.join(".vibe/skills/spaced/SKILL.md"), "name: a b\ndescription: d\n").unwrap();
     let rs = roots(Some(&home), &t.0.join("ws"), None, BiseSkills::None);
-    let s = scan(&rs, LIMIT);
+    let s = scan(&rs, LIMIT, &Mode::Read, None);
     assert!(s.stuck.is_empty());
     assert_eq!(names(&s.skills), ["beta", "alpha", "beta"]);
     assert_eq!(s.skills[1].owner.to_string(), "skills:personal");
@@ -133,7 +160,7 @@ fn off_skills_are_left_out_and_bise_is_locked() {
     skill(&t.0.join("home/.agents/skills"), "b", "b", "two");
     skill(&t.0.join("home/.vibe/skills"), "v", "v", "three");
     let rs = roots(Some(&t.0.join("home")), &t.0.join("ws"), Some(&app), BiseSkills::All);
-    let found = scan(&rs, LIMIT).skills;
+    let found = scan(&rs, LIMIT, &Mode::Read, None).skills;
     assert_eq!(names(&on(found.clone(), &StateV2::default())), ["bise-pages", "a", "b", "v"]);
     assert_eq!(names(&on(found.clone(), &off(&["skills:personal#skill:a"]))), ["bise-pages", "b", "v"]);
     assert_eq!(names(&on(found.clone(), &off(&["skills:vibe"]))), ["bise-pages", "a", "b"]);
@@ -149,7 +176,7 @@ fn the_fingerprint_moves_on_a_change_or_an_off_skill() {
     let t = Tmp::new("fp");
     let home = t.0.join("home");
     let rs = roots(Some(&home), &t.0.join("ws"), Some(&t.0.join("app")), BiseSkills::All);
-    let fp = |st: &StateV2| fingerprint(&rs, st, LIMIT).0;
+    let fp = |st: &StateV2| fingerprint(&rs, st, LIMIT, &Mode::Read).0;
     let none = StateV2::default();
     let empty = fp(&none);
     std::fs::create_dir_all(home.join(".agents/skills/notes")).unwrap();
@@ -183,7 +210,7 @@ fn a_fifo_skill_is_skipped_without_a_wait() {
     assert_eq!(unsafe { libc::mkfifo(c.as_ptr(), 0o600) }, 0);
     let rs = roots(None, &t.0.join("ws"), None, BiseSkills::None);
     let at = Instant::now();
-    let s = scan(&rs, LIMIT);
+    let s = scan(&rs, LIMIT, &Mode::Read, None);
     assert!(at.elapsed() < Duration::from_secs(1), "{:?}", at.elapsed());
     assert_eq!(names(&s.skills), ["ok"]);
     assert!(s.stuck.is_empty());
@@ -231,4 +258,77 @@ fn parse_reads_the_first_name_and_description() {
     assert_eq!(parse("name: a\n"), None);
     assert_eq!(parse("name: a b\ndescription: d\n"), None);
     assert_eq!(parse("name: a\ndescription: one\nname: b\ndescription: two\n"), Some(("a".into(), "one".into())));
+}
+
+/// His switch off (the default): a SKILL.md that links into Documents is
+/// never stat'd or read, by the scan or the fingerprint; the scan names
+/// it from its folder for the page, the agents and the `$` popup.
+/// Mutation: `guard` returning None turns this red (x/SKILL.md stat'd).
+#[test]
+fn list_mode_never_stats_or_reads_through_a_link_into_documents() {
+    let (t, home, link) = linked_home("list");
+    let mode = mode_for(None, &home);
+    assert_eq!(mode, Mode::List { home: home.clone() }, "off unless he turned it on");
+    let rs = roots(Some(&home), &t.0.join("ws"), None, BiseSkills::None);
+    let s = scan(&rs, LIMIT, &mode, Some(&home));
+    assert_eq!(names(&s.skills), ["plain"], "x is not read");
+    assert_eq!(s.guarded, [Guarded { name: "x".into(), path: link.clone(), owner: PluginId::Skills { scope: SkillsScope::Vibe }, folder: "Documents".into(), read: false }]);
+    assert_eq!(names(&s.listed), ["plain", "x"]);
+    assert_eq!(s.listed[1].description, unread_description("Documents"));
+    assert_eq!(s.listed[1].path, link);
+    let st = StateV2::default();
+    let fp = |m: &Mode| fingerprint(&rs, &st, LIMIT, m).0;
+    let before = fp(&mode);
+    std::fs::write(home.join("Documents/ai/x/SKILL.md"), "name: x\ndescription: edited, longer\n").unwrap();
+    assert_eq!(fp(&mode), before, "an edit inside Documents is not seen while off");
+    assert_eq!(was_touched(&link), Vec::<PathBuf>::new(), "no stat or read through the link");
+    assert_eq!(was_touched(&home.join("Documents")), Vec::<PathBuf>::new());
+}
+
+/// His switch on: read as before, and still named as linked (the
+/// switch's count line).
+#[test]
+fn read_mode_reads_through_the_link_and_names_it() {
+    let (t, home, link) = linked_home("read");
+    let on = serde_json::json!({"skills": {"read_guarded": true}});
+    let mode = mode_for(Some(&on), &home);
+    assert_eq!(mode, Mode::Read);
+    let rs = roots(Some(&home), &t.0.join("ws"), None, BiseSkills::None);
+    let s = scan(&rs, LIMIT, &mode, Some(&home));
+    assert_eq!(names(&s.skills), ["plain", "x"]);
+    assert_eq!(s.skills[1].description, "in his documents");
+    assert_eq!(s.listed, s.skills);
+    assert_eq!(s.guarded.len(), 1);
+    assert!(s.guarded[0].read && s.guarded[0].folder == "Documents" && s.guarded[0].path == link);
+    let st = StateV2::default();
+    let before = fingerprint(&rs, &st, LIMIT, &mode).0;
+    std::fs::write(home.join("Documents/ai/x/SKILL.md"), "name: x\ndescription: edited, longer\n").unwrap();
+    assert_ne!(fingerprint(&rs, &st, LIMIT, &mode).0, before, "on: an edit is seen");
+    assert_ne!(fingerprint(&rs, &st, LIMIT, &mode_for(None, &home)).0, before, "the switch itself moves it");
+}
+
+/// A whole skills folder linked into Documents is not listed while off.
+#[test]
+fn a_root_linked_into_documents_is_not_listed() {
+    let t = Tmp::new("root");
+    let home = t.0.join("home");
+    skill(&home.join("Documents/skills"), "z", "z", "zed");
+    std::fs::create_dir_all(home.join(".agents")).unwrap();
+    std::os::unix::fs::symlink(home.join("Documents/skills"), home.join(".agents/skills")).unwrap();
+    let rs = roots(Some(&home), &t.0.join("ws"), None, BiseSkills::None);
+    let s = scan(&rs, LIMIT, &Mode::List { home: home.clone() }, Some(&home));
+    assert!(s.skills.is_empty() && s.listed.is_empty());
+    assert_eq!(was_touched(&home.join(".agents/skills")), Vec::<PathBuf>::new());
+    assert_eq!(names(&scan(&rs, LIMIT, &Mode::Read, Some(&home)).skills), ["z"]);
+}
+
+/// A throwaway home (`$BISE_HOME` elsewhere) never reads his own folders.
+#[test]
+fn an_explicit_home_scans_no_user_folder() {
+    let env = |vars: &'static [(&'static str, &'static str)]| move |k: &str| vars.iter().find(|(n, _)| *n == k).map(|(_, v)| v.to_string());
+    let real = bise_home::Home::from_lookup(&env(&[("HOME", "/Users/g")]));
+    assert_eq!(user_home(&real), Some(Path::new("/Users/g")));
+    let throwaway = bise_home::Home::from_lookup(&env(&[("HOME", "/Users/g"), ("BISE_HOME", "/tmp/x")]));
+    assert_eq!(user_home(&throwaway), None);
+    assert_eq!(roots(user_home(&throwaway), Path::new("/w"), None, BiseSkills::None).len(), 1, "the workspace's only");
 }

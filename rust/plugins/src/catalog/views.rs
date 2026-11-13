@@ -66,6 +66,7 @@ pub fn view_part(plugin: &str, server: Option<&str>, name: &str, uri: &str, meta
             asked: granted.is_some(),
             granted: granted.unwrap_or_default(),
         }),
+        guarded: None,
     }
 }
 

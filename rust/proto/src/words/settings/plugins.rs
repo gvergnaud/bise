@@ -17,6 +17,9 @@ crate::words! { settings:
     plugins_project_title(project) = "{project} skills";
     /// Plugins list: where `skills:workspace` is
     plugins_project_where(project) = "{project}/.agents/skills · this project only";
+    /// Plugins list: a skill whose SKILL.md links into a folder macOS
+    /// guards, not read while his switch is off (skills-scan-tcc, designer m_64245)
+    plugins_skill_guarded(folder) = "in {folder} · read when used";
     /// Plugins list: bise's own skills (`skills:bise`, always on)
     plugins_bise_title = "bise";
     /// Plugins list: what bise's own skills are

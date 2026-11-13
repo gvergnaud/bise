@@ -25,7 +25,7 @@ use crate::model::{ConnectorAuth, ConnectorEntry, SkillEntry, StateV2};
 use crate::resolve::{self, HttpServer, StdioServer};
 use crate::title::display_name;
 use crate::{connectors, status};
-use bise_proto::app_rows::{ConnectorsProblem, LoginState, PartKind, Plugin, PluginAction, PluginKind, PluginPart, PluginScope, PluginSetting, PluginState};
+use bise_proto::app_rows::{ConnectorsProblem, LoginState, PartGuarded, PartKind, Plugin, PluginAction, PluginKind, PluginPart, PluginScope, PluginSetting, PluginState};
 use bise_proto::words::settings;
 use std::path::{Path, PathBuf};
 
@@ -42,6 +42,10 @@ pub struct Inputs<'a> {
     /// the skills of the skills folders, off ones too (the skills
     /// scanner); a plugin's own skills come from `resolution`
     pub skills: &'a [SkillEntry],
+    /// the skills folders' SKILL.md files reached by a link into a folder
+    /// macOS guards (`skills::Scan::guarded`): an unread one is a part
+    /// named by its folder ('in Documents · read when used')
+    pub guarded: &'a [crate::skills::Guarded],
     /// the on/off file (`state::read`)
     pub state: &'a StateV2,
     /// the views' grants (`state::grants`, the same file)
@@ -220,6 +224,7 @@ fn part(id: &PluginId, kind: PartKind, name: String, what: Option<&str>) -> Plug
         tool_count: None,
         path: None,
         view: None,
+        guarded: None,
     }
 }
 
@@ -411,12 +416,17 @@ fn folder_of(s: &SkillEntry) -> Option<PathBuf> {
     s.path.parent()?.parent().map(Path::to_path_buf)
 }
 
-/// A skills folder as one plugin (none when it has no skill).
+/// A skills folder as one plugin (none when it has no skill). A skill
+/// linked into a folder macOS guards carries `guarded`; an unread one
+/// (his switch off) is named by its folder, with no description.
 fn skills_row(i: &Inputs, scope: SkillsScope) -> Option<Plugin> {
     let id = PluginId::Skills { scope };
     let mine: Vec<&SkillEntry> = i.skills.iter().filter(|s| s.owner == id).collect();
-    let first = mine.first()?;
-    let folder = folder_of(first);
+    let unread: Vec<&crate::skills::Guarded> = i.guarded.iter().filter(|g| g.owner == id && !g.read).collect();
+    let folder = mine.first().and_then(|s| folder_of(s)).or_else(|| unread.first()?.path.parent()?.parent().map(Path::to_path_buf));
+    if mine.is_empty() && unread.is_empty() {
+        return None;
+    }
     // <project>/.agents/skills: the project is two folders up
     let project = || {
         folder.as_deref().and_then(|f| f.parent()?.parent()?.file_name()).map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
@@ -429,13 +439,22 @@ fn skills_row(i: &Inputs, scope: SkillsScope) -> Option<Plugin> {
     };
     let locked = StateV2::locked(&id);
     let on = i.state.is_on(&id, false);
-    let parts = mine
+    let read_guarded = |s: &SkillEntry| i.guarded.iter().find(|g| g.owner == id && g.read && g.name == s.name).map(|g| PartGuarded { folder: g.folder.clone(), read: true });
+    let mut parts: Vec<PluginPart> = mine
         .iter()
         .map(|s| {
             let pid = id.part(IdPart::Skill, None, s.name.clone());
-            PluginPart { on: on && i.state.is_on(&pid, false), path: Some(s.path.to_string_lossy().into_owned()), ..part(&pid, PartKind::Skill, s.name.clone(), Some(&s.description)) }
+            PluginPart { on: on && i.state.is_on(&pid, false), path: Some(s.path.to_string_lossy().into_owned()), guarded: read_guarded(s), ..part(&pid, PartKind::Skill, s.name.clone(), Some(&s.description)) }
         })
         .collect();
+    for g in unread {
+        if parts.iter().any(|p| p.name == g.name) {
+            continue;
+        }
+        let pid = id.part(IdPart::Skill, None, g.name.clone());
+        let guarded = Some(PartGuarded { folder: g.folder.clone(), read: false });
+        parts.push(PluginPart { on: on && i.state.is_on(&pid, false), path: Some(g.path.to_string_lossy().into_owned()), guarded, ..part(&pid, PartKind::Skill, g.name.clone(), None) });
+    }
     Some(Plugin {
         id: id.to_string(),
         name: id.to_string(),

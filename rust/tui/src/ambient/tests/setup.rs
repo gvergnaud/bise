@@ -216,6 +216,7 @@ fn setup_home(t: &mut T, home_dir: Option<PathBuf>) -> Rc<RefCell<World>> {
                 tool_count: None,
                 path: None,
                 view: None,
+        guarded: None,
             };
             let p = |name: &str, on: bool, parts: Vec<PluginPart>| Plugin {
                 id: name.into(),

@@ -15,7 +15,7 @@ fn part(owner: &str, kind: PartKind, name: &str, on: bool) -> PluginPart {
         PartKind::Mcp => "mcp",
         _ => "tool",
     };
-    PluginPart { id: format!("{owner}#{k}:{name}"), kind, name: name.into(), what: None, on, status: None, login: None, tools: vec![], tool_count: None, error: None, path: None, view: None }
+    PluginPart { id: format!("{owner}#{k}:{name}"), kind, name: name.into(), what: None, on, status: None, login: None, tools: vec![], tool_count: None, error: None, path: None, view: None, guarded: None }
 }
 
 fn plugin(id: &str, kind: PluginKind, scope: Scope, what: &str, parts: Vec<PluginPart>) -> Plugin {
@@ -723,4 +723,21 @@ fn a_connector_page_lists_its_accounts_and_their_keys() {
     assert_eq!(key(&mut sc, &rows, &[], &press(KeyCode::Char('x'))), Effect::Account { id, account: "account-2".into(), change: Some(AccountChange::Remove) });
     let bar: String = key_bar(&sc, &rows, 150).spans.iter().map(|s| s.content.to_string()).collect();
     assert!(bar.contains(settings::plugins_key_account_add) && bar.contains(settings::plugins_key_account_remove), "{bar}");
+}
+
+/// A skill linked into Documents and not read (his switch off) says so on
+/// its line; read, it shows its own words (skills-scan-tcc).
+#[test]
+fn a_skill_linked_into_documents_and_unread_says_so() {
+    use bise_proto::app_rows::PartGuarded;
+    let mut unread = part("skills:vibe", PartKind::Skill, "grill-me", true);
+    unread.guarded = Some(PartGuarded { folder: "Documents".into(), read: false });
+    let mut read = part("skills:vibe", PartKind::Skill, "notes", true);
+    read.what = Some("his notes".into());
+    read.guarded = Some(PartGuarded { folder: "Documents".into(), read: true });
+    let p = plugin("skills:vibe", PluginKind::Skills, Scope::User, "~/.vibe/skills", vec![unread, read]);
+    let t = texts(&page_body(&Screen::default(), &p, 120));
+    assert!(find(&t, "grill-me").contains(&settings::plugins_skill_guarded("Documents")), "{t:?}");
+    let notes = find(&t, "notes");
+    assert!(notes.contains("his notes") && !notes.contains(&settings::plugins_skill_guarded("Documents")), "{notes}");
 }

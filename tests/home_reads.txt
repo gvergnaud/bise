@@ -1,0 +1,27 @@
+# The Rust files that still read $HOME around bise_home::Home (architect m_64240).
+# rust/home/src/env_tests.rs (home_is_read_through_home_only) fails on a HOME read
+# in a file not listed here, and on a listed file that no longer reads it: this
+# list only shrinks. One per line: <path under rust/> · why it is still here.
+# The rest is on architect's tech-debt list; move a path to Home, drop its line.
+computer-use/src/e2e.rs · an e2e driver's ~/.bise/gate, outside the app
+harness/src/main.rs · the bend binary's ~/.bend/bin fallback (no bise_home in harness)
+jsrt/src/main.rs · bend-jsrt's own workspace, without bise_home
+secrets/src/keychain.rs · the keychain's file fallback path
+switchboard/examples/approvals_corpus.rs · a dev example
+switchboard/src/artifacts.rs · an artifact's ~/ path expanded
+switchboard/src/daemon/gate.rs · the gate's home for paths it prints
+switchboard/src/daemon/proto/emit.rs · ~ folded in emitted paths
+switchboard/src/feature.rs · ~ folded in a feature's paths
+switchboard/src/pages/mirror.rs · a page's ~/ path expanded
+switchboard/src/tools_env.rs · the tools' standard dirs ($HOME/$USER)
+tui/src/approvals_screen.rs · ~ folded in approvals
+tui/src/artifacts.rs · ~ folded in artifact paths
+tui/src/computer_use_rows.rs · ~ folded in computer-use rows
+tui/src/file_links.rs · ~/ links expanded
+tui/src/open_file.rs · ~ folded in opened paths
+tui/src/plugins_add.rs · ~ in a plugin's add source
+tui/src/plugins_screen.rs · ~ folded in plugin paths
+tui/src/running.rs · ~ folded in running commands
+tui/src/topedge.rs · ~ folded in the top edge
+tui/src/topedge_tests.rs · its test reads the same fold
+tui/src/voicemode/debug.rs · the voice debug dump's ~/.bise

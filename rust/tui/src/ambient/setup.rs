@@ -422,8 +422,8 @@ fn skipped(name: &str) -> bool {
 #[derive(Debug, Default, PartialEq)]
 pub struct Walked {
     pub entries: Vec<Entry>,
-    /// the folders macOS guards (`files::protected`) met and not entered,
-    /// in [`crate::files::GUARDED`]'s order
+    /// the folders macOS guards (`bise_home::guarded::protected`) met and not entered,
+    /// in [`bise_home::guarded::GUARDED`]'s order
     pub guarded: Vec<PathBuf>,
     /// `dir` itself could not be read: permission denied (his « Don't
     /// Allow », or Files & Folders off)
@@ -476,7 +476,7 @@ pub fn walk(dir: &Path, depth: usize, skip: &[PathBuf], home: Option<&Path>) -> 
         Ok(rd) => walk_in(rd, depth, skip, home, &mut out),
         Err(e) => out.refused = e.kind() == std::io::ErrorKind::PermissionDenied,
     }
-    let rank = |p: &PathBuf| crate::files::GUARDED.iter().position(|g| home.is_some_and(|h| p == &h.join(g))).unwrap_or(usize::MAX);
+    let rank = |p: &PathBuf| bise_home::guarded::GUARDED.iter().position(|g| home.is_some_and(|h| p == &h.join(g))).unwrap_or(usize::MAX);
     out.guarded.sort_by_key(rank);
     out
 }
@@ -489,7 +489,7 @@ fn walk_in(rd: std::fs::ReadDir, depth: usize, skip: &[PathBuf], home: Option<&P
         if skipped(&name) || !e.file_type().is_ok_and(|t| t.is_dir()) || skip.iter().any(|s| s == &path) {
             continue;
         }
-        if crate::files::protected(home, &path) {
+        if bise_home::guarded::protected(home, &path) {
             out.guarded.push(path);
             continue;
         }

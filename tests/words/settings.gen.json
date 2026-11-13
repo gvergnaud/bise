@@ -4620,6 +4620,13 @@
     "one": null,
     "text": "sign in again"
   },
+  "settings.plugins_skill_guarded": {
+    "args": [
+      "folder"
+    ],
+    "one": null,
+    "text": "in {folder} · read when used"
+  },
   "settings.plugins_staging": {
     "args": [],
     "one": null,

@@ -211,6 +211,10 @@ function PartRow({ x, lead, locked, owner, onSet, open }: { x: PluginPart; lead:
       <span className="plg-row-words">
         <span className="plg-row-name"><span className={lead === '$' ? 'plg-title plg-mono' : 'plg-title'}>{x.name}</span></span>
         {x.what != null && <span className="plg-row-what">{x.what}</span>}
+        {/* a skill linked into Documents, not read while his switch is off (skills-scan-tcc, designer m_64245) */}
+        {x.guarded != null && !x.guarded.read && (
+          <span className="plg-row-what plg-dim" data-testid={`plugins.part.${x.id}.guarded`}>{settings.plugins_skill_guarded({ folder: x.guarded.folder })}</span>
+        )}
       </span>
       <span className="plg-row-end">
         {!locked && owner && <Toggle on={x.on} label={x.name} onChange={(on) => { onSet(x.id, on); }} testId={`plugins.part.${x.id}.toggle`} />}

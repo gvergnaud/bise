@@ -367,7 +367,15 @@ path?: string | null,
  * an MCP App's view (kind `view`): its uri, what it declares and
  * what he granted (docs/mcp-apps.md C8); none for every other kind
  */
-view?: PartView | null, };
+view?: PartView | null, 
+/**
+ * a skill whose SKILL.md links into a folder macOS guards
+ * (Documents, Desktop, Downloads, iCloud Drive): which, and whether
+ * this list read it (his switch `skills.read_guarded`, off by
+ * default: listed by its folder's name, read when used;
+ * skills-scan-tcc). None for every other part
+ */
+guarded?: PartGuarded | null, };
 
 /**
  * A view part's facts (MCP Apps, docs/mcp-apps.md C8): the plugins
@@ -399,6 +407,21 @@ granted?: Array<string>,
  * he was asked (at the add or on its page): false is 'not granted'
  */
 asked: boolean, };
+
+/**
+ * A skill reached by a link into a folder macOS guards
+ * (`PluginPart::guarded`, `bend_plugins::skills::Guarded`).
+ */
+export type PartGuarded = { 
+/**
+ * the folder's name for him (`Documents`, `iCloud Drive`)
+ */
+folder: string, 
+/**
+ * read by this list: his switch is on and macOS let it (false while
+ * off, or when macOS said no)
+ */
+read: boolean, };
 
 /**
  * What a plugin will run on his Mac once added, shown before his click

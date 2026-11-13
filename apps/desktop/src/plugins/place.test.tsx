@@ -243,6 +243,18 @@ describe("a plugin's page", () => {
     delete (window as unknown as { bise?: unknown }).bise;
   });
 
+  it("a skill linked into Documents and not read says so on its row; a read one, a plain one, nothing (skills-scan-tcc)", () => {
+    const vibe = row('skills:vibe', { kind: 'skills', title: 'Vibe skills', parts: [
+      { id: 'skills:vibe#skill:grill-me', kind: 'skill', name: 'grill-me', on: true, path: '/h/.vibe/skills/grill-me/SKILL.md', guarded: { folder: 'Documents', read: false } },
+      { id: 'skills:vibe#skill:read', kind: 'skill', name: 'read', what: 'its own words', on: true, guarded: { folder: 'Desktop', read: true } },
+      { id: 'skills:vibe#skill:plain', kind: 'skill', name: 'plain', what: 'his own', on: true },
+    ] });
+    render(<PluginPage p={vibe} ports={{ send: () => {}, back: () => {}, tryIt: () => {}, setUpComputer: () => {} }} />);
+    expect(screen.getByTestId('plugins.part.skills:vibe#skill:grill-me.guarded').textContent).toBe(settings.plugins_skill_guarded({ folder: 'Documents' }));
+    expect(screen.queryByTestId('plugins.part.skills:vibe#skill:read.guarded')).toBeNull();
+    expect(screen.queryByTestId('plugins.part.skills:vibe#skill:plain.guarded')).toBeNull();
+  });
+
   it('no remove on a built-in, nor before the core has plugin_remove', () => {
     render(<PluginPage p={row('docs', { scope: 'built-in' })} ports={{ send: () => {}, back: () => {}, tryIt: () => {}, setUpComputer: () => {}, remove: () => {} }} />);
     expect(screen.queryByTestId('plugins.page.docs.more')).toBeNull();

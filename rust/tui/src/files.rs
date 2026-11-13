@@ -441,7 +441,7 @@ pub(crate) fn outside(query: &str) -> bool {
 }
 
 fn home() -> Option<PathBuf> {
-    std::env::var_os("HOME").filter(|h| !h.is_empty()).map(PathBuf::from)
+    Some(bise_home::Home::from_env().user_home().to_path_buf())
 }
 
 /// The file an outside path names: `~/` from `home`, `/` as is, the
@@ -467,18 +467,6 @@ fn sent_path_in(home: Option<&Path>, path: &str) -> String {
     }
 }
 
-/// The folders of his home macOS guards (TCC), in the order the setup
-/// offers them.
-pub(crate) const GUARDED: [&str; 5] = ["Documents", "Desktop", "Downloads", "Library/Mobile Documents", "Library/CloudStorage"];
-
-/// A folder macOS guards (TCC: « would like to access files in your
-/// Desktop folder »): shown as an entry, read only once entered.
-pub(crate) fn protected(home: Option<&Path>, path: &Path) -> bool {
-    let in_home = home.is_some_and(|h| GUARDED.iter().any(|g| path == h.join(g)));
-    let volume = path.parent() == Some(Path::new("/Volumes"));
-    in_home || volume
-}
-
 /// One folder read: its entries (not sorted), or None when it cannot
 /// be read (EPERM, gone, not a folder). A link is a folder when its
 /// target is, unless the target is guarded (no stat inside it).
@@ -493,9 +481,7 @@ fn list_dir(dir: &Path, home: Option<&Path>, cap: usize) -> Option<Vec<Entry>> {
         let mtime = e.metadata().map_or(0, |m| mtime_of(&m));
         let dir = if t.is_symlink() {
             let target = std::fs::read_link(e.path()).map(|t| dir.join(t));
-            let guarded = target.as_ref().map_or(true, |t| {
-                protected(home, t) || t.ancestors().any(|a| protected(home, a))
-            });
+            let guarded = target.as_ref().map_or(true, |t| bise_home::guarded::within(home, t).is_some());
             !guarded && std::fs::metadata(e.path()).is_ok_and(|m| m.is_dir())
         } else {
             t.is_dir()
@@ -572,7 +558,7 @@ fn search_outside_in(root: &Path, home: Option<&Path>, query: &str, limit: usize
         .into_iter()
         .map(|i| {
             let e = &entries[i];
-            let protected = e.dir && protected(home, &dir.join(&e.path));
+            let protected = e.dir && bise_home::guarded::protected(home, &dir.join(&e.path));
             Hit { path: format!("{typed}{}", e.path), dir: e.dir, protected }
         })
         .collect();

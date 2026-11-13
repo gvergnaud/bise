@@ -21,6 +21,16 @@
 //! on a thread of its own, waited at most `limit`; a path still stuck
 //! is skipped, named once ([`Scan::stuck`]), and never gets a second
 //! thread while its first one hangs.
+//!
+//! No scan follows a link into a folder macOS guards (Documents, Desktop,
+//! Downloads, iCloud Drive: `bise_home::guarded`) unless he said so
+//! (skills-scan-tcc, architect m_64243): listing is not his act, and a
+//! stat there makes macOS ask him at launch. [`mode_of`] reads his
+//! switch (`skills.read_guarded`, off by default); in [`Mode::List`] a
+//! SKILL.md reached by such a link is found by reading links only, never
+//! stat'd or read: [`Scan::guarded`] names it, [`Scan::listed`] gives
+//! it to the agents and the `$` popup as 'in Documents: read when used'.
+//! Loading a skill's text when an agent uses it, or he picks it, reads it.
 
 use std::collections::HashSet;
 use std::io::Read;
@@ -41,6 +51,56 @@ pub const SCAN_LIMIT: Duration = Duration::from_secs(3);
 
 /// How much of a SKILL.md the scan reads (its frontmatter is at the top).
 const READ_MAX: u64 = 64 * 1024;
+
+/// How a scan treats a SKILL.md it reaches by a link into a folder
+/// macOS guards ([`mode_of`] picks it; every scan takes it).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Mode {
+    /// read it like any other (he turned `skills.read_guarded` on)
+    Read,
+    /// never stat or read it: name it from its folder only. `home` is
+    /// his home, whose Documents, Desktop... are guarded
+    List { home: PathBuf },
+}
+
+/// The mode his prefs (`prefs.json`'s object) give, `user_home` his home:
+/// [`Mode::Read`] once he turned `skills.read_guarded` on, else
+/// [`Mode::List`]. Pure.
+pub fn mode_for(prefs: Option<&serde_json::Value>, user_home: &Path) -> Mode {
+    if bise_home::prefs::read_guarded(prefs) {
+        Mode::Read
+    } else {
+        Mode::List { home: user_home.to_path_buf() }
+    }
+}
+
+/// The mode of `home`'s prefs: the one reader of `skills.read_guarded`,
+/// every scan's caller asks it.
+pub fn mode_of(home: &bise_home::Home) -> Mode {
+    let prefs = std::fs::read_to_string(home.prefs_file()).ok().and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok());
+    mode_for(prefs.as_ref(), home.user_home())
+}
+
+/// What the agents and the `$` popup read as a guarded skill's
+/// description in [`Mode::List`] (`folder`: `Documents`): its text is
+/// read when used.
+pub fn unread_description(folder: &str) -> String {
+    format!("in {folder}: read when used. Its SKILL.md links into {folder}, a folder macOS guards; its text is read when you load it.")
+}
+
+/// A SKILL.md reached by a link into a folder macOS guards.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Guarded {
+    /// its folder's name (its frontmatter is not read in [`Mode::List`])
+    pub name: String,
+    /// the SKILL.md as listed (`~/.vibe/skills/x/SKILL.md`), not its target
+    pub path: PathBuf,
+    pub owner: PluginId,
+    /// the guarded folder's name for him (`Documents`, `iCloud Drive`)
+    pub folder: String,
+    /// read by this scan ([`Mode::Read`] and the read worked)
+    pub read: bool,
+}
 
 /// A loose skill folder and the plugin it is.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -96,6 +156,13 @@ pub fn roots(home: Option<&Path>, ws: &Path, app_root: Option<&Path>, bise: Bise
     out
 }
 
+/// The home whose `~/.agents/skills` and `~/.vibe/skills` the scans
+/// read: his, unless `$BISE_HOME` chose another root (a throwaway home
+/// never reads his real skills, architect m_64235).
+pub fn user_home(home: &bise_home::Home) -> Option<&Path> {
+    (!home.explicit()).then(|| home.user_home())
+}
+
 impl Root {
     /// The plugin this folder is (`skills:personal`).
     pub fn id(&self) -> PluginId {
@@ -135,15 +202,13 @@ impl Root {
     }
 
     /// The roots of this process: `$BISE_SKILL_ROOTS` as the hub set it;
-    /// without it (a bare REPL, no hub) the user's and `ws`'s folders,
-    /// none of bise's. A bad value is an error, never a guess.
+    /// without it (a bare REPL, no hub) the user's (none under a
+    /// throwaway home: [`user_home`]) and `ws`'s folders, none of bise's.
+    /// A bad value is an error, never a guess.
     pub fn from_env(ws: &Path) -> Result<Vec<Root>, String> {
         match std::env::var(ENV) {
             Ok(v) => Root::decode(&v),
-            Err(_) => {
-                let home = std::env::var_os("HOME").filter(|h| !h.is_empty()).map(PathBuf::from);
-                Ok(roots(home.as_deref(), ws, None, BiseSkills::None))
-            }
+            Err(_) => Ok(roots(user_home(&bise_home::Home::from_env()), ws, None, BiseSkills::None)),
         }
     }
 }
@@ -151,8 +216,16 @@ impl Root {
 /// What [`scan`] found.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Scan {
-    /// every skill of the roots, in root order then name order
+    /// every skill of the roots read, in root order then name order
     pub skills: Vec<SkillEntry>,
+    /// the SKILL.md files reached by a link into a guarded folder, in
+    /// the same order: in [`Mode::List`] never read (`read` false); in
+    /// [`Mode::Read`] read too, so in `skills` as well when it worked
+    pub guarded: Vec<Guarded>,
+    /// what the agents and the `$` popup list: `skills` with the unread
+    /// guarded ones as entries named by their folder, described by
+    /// [`unread_description`], in root order
+    pub listed: Vec<SkillEntry>,
     /// the paths this scan found stuck for the first time (a later scan
     /// skips them without a word while they still hang): name each once
     pub stuck: Vec<PathBuf>,
@@ -171,11 +244,12 @@ fn stuck_set<T>(f: impl FnOnce(&mut HashSet<PathBuf>) -> T) -> T {
 /// until `deadline`. A path already stuck is skipped (no new thread); a
 /// path whose job is not done at `deadline` becomes stuck (its thread
 /// clears it when it ends) and is returned in the second list.
-fn timed<T: Send + 'static>(
+fn timed<T: Send + 'static, F: Fn(&Path) -> T + Send + Sync + 'static>(
     paths: Vec<PathBuf>,
     deadline: Instant,
-    job: fn(&Path) -> T,
+    job: F,
 ) -> (Vec<(PathBuf, T)>, Vec<PathBuf>) {
+    let job = std::sync::Arc::new(job);
     let (tx, rx) = channel();
     let mut waiting: Vec<PathBuf> = Vec::new();
     for p in paths {
@@ -184,6 +258,7 @@ fn timed<T: Send + 'static>(
         }
         let tx = tx.clone();
         let q = p.clone();
+        let job = job.clone();
         let spawned = std::thread::Builder::new().name("skills-scan".into()).spawn(move || {
             let out = job(&q);
             stuck_set(|s| s.remove(&q));
@@ -222,6 +297,8 @@ fn timed<T: Send + 'static>(
 
 /// A folder's entries, sorted (a missing folder: none).
 fn list(dir: &Path) -> Vec<PathBuf> {
+    #[cfg(test)]
+    tests::touched(dir);
     let mut v: Vec<PathBuf> = std::fs::read_dir(dir).into_iter().flatten().flatten().map(|e| e.path()).collect();
     v.sort();
     v
@@ -230,9 +307,20 @@ fn list(dir: &Path) -> Vec<PathBuf> {
 /// A SKILL.md's size and mtime, only when it is a regular file (a FIFO,
 /// a socket, a folder named SKILL.md: no skill, never opened).
 fn stat(file: &Path) -> Option<(u64, Option<u128>)> {
+    #[cfg(test)]
+    tests::touched(file);
     let m = std::fs::metadata(file).ok().filter(std::fs::Metadata::is_file)?;
     let t = m.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_nanos());
     Some((m.len(), t))
+}
+
+/// A link's own size and mtime (its lstat, never through it), its
+/// target's length folded in so a relinked SKILL.md moves the number.
+fn link_stat(link: &Path) -> Option<(u64, Option<u128>)> {
+    let m = std::fs::symlink_metadata(link).ok()?;
+    let t = m.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_nanos());
+    let target = std::fs::read_link(link).map(|t| t.as_os_str().len() as u64).unwrap_or(0);
+    Some((m.len() ^ (target << 32), t))
 }
 
 /// A regular SKILL.md's head and its real path.
@@ -245,9 +333,12 @@ fn read(file: &Path) -> Option<(String, PathBuf)> {
 }
 
 /// The `<dir>/SKILL.md` of each root's entries, with the root's index.
-fn skill_files(roots: &[Root], deadline: Instant) -> (Vec<(usize, PathBuf)>, Vec<PathBuf>) {
+/// In [`Mode::List`], a root reached by a link into a guarded folder is
+/// not listed (nothing of it is shown: a listing there is a stat).
+fn skill_files(roots: &[Root], deadline: Instant, mode: &Mode) -> (Vec<(usize, PathBuf)>, Vec<PathBuf>) {
     let dirs: Vec<PathBuf> = roots.iter().map(|r| r.dir.clone()).collect();
-    let (listed, stuck) = timed(dirs, deadline, list);
+    let m = mode.clone();
+    let (listed, stuck) = timed(dirs, deadline, move |d| if guard(&m, d).is_some() { Vec::new() } else { list(d) });
     let mut files = Vec::new();
     for (i, r) in roots.iter().enumerate() {
         for (_, entries) in listed.iter().filter(|(d, _)| *d == r.dir) {
@@ -257,24 +348,77 @@ fn skill_files(roots: &[Root], deadline: Instant) -> (Vec<(usize, PathBuf)>, Vec
     (files, stuck)
 }
 
+/// Where `file`'s link leads into a guarded folder, in [`Mode::List`]
+/// only (links read, nothing inside the folder touched).
+fn guard(mode: &Mode, file: &Path) -> Option<bise_home::guarded::LinkInto> {
+    match mode {
+        Mode::Read => None,
+        Mode::List { home } => bise_home::guarded::link_into(Some(home), file),
+    }
+}
+
+/// What a scan learns of one SKILL.md.
+enum Found {
+    /// read (none: not a regular file, or the read failed)
+    Read(Option<(String, PathBuf)>),
+    /// reached by a link into this guarded folder: not read
+    Guarded(String),
+}
+
+/// One SKILL.md, by `mode`: a link into a guarded folder in
+/// [`Mode::List`] is named, never stat'd or read; in [`Mode::Read`] it
+/// is read and still named as linked (his switch's count).
+fn look(mode: &Mode, home: Option<&Path>, file: &Path) -> (Option<String>, Found) {
+    if let Some(into) = guard(mode, file) {
+        let Mode::List { home } = mode else { unreachable!() };
+        return (None, Found::Guarded(bise_home::guarded::label(Some(home), &into.folder)));
+    }
+    let linked = home.and_then(|h| bise_home::guarded::link_into(Some(h), file)).map(|i| bise_home::guarded::label(home, &i.folder));
+    (linked, Found::Read(read(file)))
+}
+
 /// Every skill of `roots`: the listings within `limit`, then the files
-/// within `limit` again. A root listed twice is read once.
-pub fn scan(roots: &[Root], limit: Duration) -> Scan {
-    let (files, mut stuck) = skill_files(roots, Instant::now() + limit);
+/// within `limit` again, by `mode` ([`mode_of`]). A root listed twice
+/// is read once. `home`: his home, to name the skills linked into a
+/// guarded folder in [`Mode::Read`] too (none: not named).
+pub fn scan(roots: &[Root], limit: Duration, mode: &Mode, home: Option<&Path>) -> Scan {
+    let (files, mut stuck) = skill_files(roots, Instant::now() + limit, mode);
     let paths: Vec<PathBuf> = files.iter().map(|(_, f)| f.clone()).collect();
-    let (read, more) = timed(paths, Instant::now() + limit, read);
+    let (m, h) = (mode.clone(), home.map(Path::to_path_buf));
+    let (found, more) = timed(paths, Instant::now() + limit, move |f| look(&m, h.as_deref(), f));
     stuck.extend(more);
-    let mut skills = Vec::new();
+    let mut out = Scan::default();
     let mut seen = HashSet::new();
     for (i, f) in &files {
         if !seen.insert(f) {
             continue;
         }
-        let Some((_, Some((text, real)))) = read.iter().find(|(p, _)| p == f) else { continue };
-        let Some((name, description)) = parse(text) else { continue };
-        skills.push(SkillEntry { name, description, path: real.clone(), owner: roots[*i].id() });
+        let Some((_, (linked, found))) = found.iter().find(|(p, _)| p == f) else { continue };
+        let owner = roots[*i].id();
+        let dir_name = || f.parent().and_then(Path::file_name).map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        match found {
+            Found::Guarded(folder) => {
+                let name = dir_name();
+                if name.is_empty() || name.contains(char::is_whitespace) {
+                    continue;
+                }
+                out.listed.push(SkillEntry { name: name.clone(), description: unread_description(folder), path: f.clone(), owner: owner.clone() });
+                out.guarded.push(Guarded { name, path: f.clone(), owner, folder: folder.clone(), read: false });
+            }
+            Found::Read(read) => {
+                let skill = read.as_ref().and_then(|(text, real)| parse(text).map(|(name, description)| SkillEntry { name, description, path: real.clone(), owner: owner.clone() }));
+                if let Some(folder) = linked {
+                    out.guarded.push(Guarded { name: skill.as_ref().map_or_else(dir_name, |s| s.name.clone()), path: f.clone(), owner, folder: folder.clone(), read: skill.is_some() });
+                }
+                if let Some(s) = skill {
+                    out.listed.push(s.clone());
+                    out.skills.push(s);
+                }
+            }
+        }
     }
-    Scan { skills, stuck }
+    out.stuck = stuck;
+    out
 }
 
 /// A SKILL.md's `name:` and `description:`: the first line that starts
@@ -354,8 +498,10 @@ pub fn of_plugins<'a>(plugins: impl IntoIterator<Item = &'a crate::resolve::Plug
 /// `D/skills-index.txt` (with the plugins' skills, [`ordered`]): the
 /// roots of `$BISE_SKILL_ROOTS` ([`Root::from_env`]; the workspace is
 /// `$BEND_WORKDIR`, else the cwd, as the bridge's), the state of
-/// `plugins.json`. A stuck path or a bad `$BISE_SKILL_ROOTS` goes to
-/// stderr (the bridge's log): no loose skill then, never a guess.
+/// `plugins.json`, his switch ([`mode_of`]: a skill linked into a guarded
+/// folder is listed, not read, while it is off). A stuck path or a bad
+/// `$BISE_SKILL_ROOTS` goes to stderr (the bridge's log): no loose skill
+/// then, never a guess.
 pub fn loose_on() -> Vec<SkillEntry> {
     let roots = match Root::from_env(&crate::cli::workspace(&[])) {
         Ok(r) => r,
@@ -364,24 +510,34 @@ pub fn loose_on() -> Vec<SkillEntry> {
             return Vec::new();
         }
     };
-    let found = scan(&roots, SCAN_LIMIT);
+    let home = bise_home::Home::from_env();
+    let found = scan(&roots, SCAN_LIMIT, &mode_of(&home), Some(home.user_home()));
     for p in &found.stuck {
         eprintln!("skills scan: skipped {} (no answer in {} s)", p.display(), SCAN_LIMIT.as_secs());
     }
-    on(found.skills, &crate::state::read(&crate::state::state_path()))
+    on(found.listed, &crate::state::read(&crate::state::state_path()))
 }
 
 /// What an agent's skills depend on, as one number, stats only: each
 /// root and the size and mtime of each `<root>/<skill>/SKILL.md`, and
 /// the on/off of each root and of the skills turned off or on in it (a
-/// skill toggle changes the prompt). A stuck path counts as absent; the
-/// second value names the paths stuck for the first time.
-pub fn fingerprint(roots: &[Root], st: &StateV2, limit: Duration) -> (u64, Vec<PathBuf>) {
+/// skill toggle changes the prompt), and the mode. A stuck path counts
+/// as absent; the second value names the paths stuck for the first time.
+/// In [`Mode::List`] a SKILL.md reached by a link into a guarded folder
+/// counts by the link's own lstat and target (architect m_64240): an
+/// edit inside Documents to a linked SKILL.md is not seen here, only
+/// when the skill is next loaded.
+pub fn fingerprint(roots: &[Root], st: &StateV2, limit: Duration, mode: &Mode) -> (u64, Vec<PathBuf>) {
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
-    let (files, mut stuck) = skill_files(roots, Instant::now() + limit);
+    matches!(mode, Mode::Read).hash(&mut h);
+    let (files, mut stuck) = skill_files(roots, Instant::now() + limit, mode);
     let paths: Vec<PathBuf> = files.iter().map(|(_, f)| f.clone()).collect();
-    let (stats, more) = timed(paths, Instant::now() + limit, stat);
+    let m = mode.clone();
+    let (stats, more) = timed(paths, Instant::now() + limit, move |f| match guard(&m, f) {
+        Some(into) => link_stat(&into.link),
+        None => stat(f),
+    });
     stuck.extend(more);
     for (i, r) in roots.iter().enumerate() {
         r.dir.hash(&mut h);
