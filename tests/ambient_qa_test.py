@@ -845,6 +845,32 @@ def real_shape_pure():
     open(os.path.join(lib, "DevToolsActivePort"), "w").write("9339")
     nd = [k.rsplit("/", 1)[1] for k in rs.lib_diff(b, rs.lib_snapshot(fake))]
     check("DevToolsActivePort" in nd and set(nd) <= {"DevToolsActivePort", "bise try"}, "a new file is a diff (its folder too): %s" % nd)
+    # gate B's call (cand.sh libgate, architect m_64344): 11.11 lane B's diff, his installed bise.app's
+    # and his try app's GPU caches and route.json while both run, is his apps' write, each path listed
+    # with its owner; a candidate folder in his, a candidate fd there, a folder of an app of his that
+    # does not run, a sibling folder or a test's file elsewhere in his home are a breach
+    AS = "/Users/g/Library/Application Support"
+    pref = "/Users/g/Library/Preferences/dev.bise.desktop.cand.plist"
+    rel, tri = "/Applications/bise.app", "/Users/g/.bise/dev/try-src/bise try.app"
+    lane_b = [AS + "/bise try/DawnGraphiteCache/data_1", AS + "/bise try/GPUCache/data_1", AS + "/bise/GPUCache/data_1",
+              AS + "/bise/DawnWebGPUCache/data_1", AS + "/bise/updates", AS + "/bise/updates/route.json", AS + "/bise"]
+    both = {AS + "/bise try": (tri, True), AS + "/bise": (rel, True)}
+    mine = rs.cand_dirs(["/x/bise cand.app/Contents/Frameworks/bise cand Helper.app/Contents/MacOS/bise cand Helper --type=gpu-process "
+                         "--user-data-dir=/Users/g/.bise/gate/real-shape/w/h/Library/Application Support/bise cand --gpu-preferences=x", "/x/bise cand"])
+    check(mine == ["/Users/g/.bise/gate/real-shape/w/h/Library/Application Support/bise cand"], "the candidate's own folder: %s" % mine)
+    v = rs.lib_verdict
+    check(v([pref], pref, both, []) == ("ok", []) and v([], pref, both, [])[0] == "ok", "only the candidate's prefs")
+    got = v(lane_b + [pref], pref, both, ["/Users/g/.bise/gate/x"], mine + ["/Users/g/.bise/gate/real-shape/w/h/.bise"])
+    check(got[0] == "his" and (AS + "/bise/updates/route.json", rel) in got[1] and (AS + "/bise try/GPUCache/data_1", tri) in got[1]
+          and len(got[1]) == len(lane_b), "lane B's diff is his apps' write, each listed with its owner: %s" % (got,))
+    check(v(lane_b, pref, both, [], [AS + "/bise"])[0] == "breach", "a candidate whose userData is his folder")
+    check(v(lane_b, pref, both, [], [AS + "/bise/Partitions"])[0] == "breach", "a candidate folder inside his folder")
+    check(v(lane_b, pref, {AS + "/bise try": (tri, True), AS + "/bise": (rel, False)}, [])[0] == "breach", "his release's folder while it does not run")
+    check(v(lane_b, pref, {AS + "/bise try": (tri, True)}, [])[0] == "breach", "a folder no app of his owns")
+    check(v(lane_b, pref, both, [AS + "/bise/updates/route.json"])[0] == "breach", "a candidate fd in his folder")
+    check(v([AS + "/bise/GPUCache/data_1", "/Users/g/Library/Caches/bise/x"], pref, both, [])[0] == "breach", "a write outside his folders")
+    check(v([AS + "/bise-other/x"], pref, both, [])[0] == "breach" and v([AS + "/bise trying"], pref, both, [])[0] == "breach",
+          "a sibling named like his folder is not his folder")
     info = rs.front_info('"LSDisplayName"="UserNotificationCenter"\n"pid"=15030 \n"CFBundleIdentifier"="com.apple.UserNotificationCenter"')
     check(info == {"name": "UserNotificationCenter", "pid": 15030, "bundle": "com.apple.UserNotificationCenter"}, info)
     check(rs.is_breach(info, False) and rs.is_breach({"name": "Slack"}, True) and not rs.is_breach({"name": "Slack"}, False), "breach rule")

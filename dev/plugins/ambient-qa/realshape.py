@@ -451,6 +451,48 @@ def lib_diff(before, after):
     return sorted(k for k in set(before) | set(after) if before.get(k) != after.get(k))
 
 
+def cand_dirs(cmdlines):
+    """The folders the candidate says are its own, from its processes' command lines (ps; Chromium's
+    helpers carry --user-data-dir=<its userData>; a path may hold spaces: it runs to the next ' --').
+    Pure."""
+    out = []
+    for c in cmdlines:
+        for m in re.finditer(r"--(?:user-data-dir|log-file|crash-dumps-dir)=(.+?)(?= --|$)", c):
+            if m.group(1).strip() and m.group(1).strip() not in out:
+                out.append(m.group(1).strip())
+    return out
+
+
+def lib_verdict(changed, cand_pref, his_apps, our_fds, cand_paths=()):
+    """Gate B's call on a Library diff (cand.sh libgate): (verdict, allowed). `changed`: the diff's
+    paths; `cand_pref`: the candidate's own preferences plist (allowed, logged); `his_apps`: {the
+    userData folder of one of his apps: (that app's bundle, does it run now)}; `our_fds`: the paths
+    the candidate's pids hold open now; `cand_paths`: the folders the candidate says are its own
+    (cand_dirs, its BISE_HOME). 'ok': nothing but the candidate's prefs; 'his': every other change is
+    under the folder of one of HIS apps that runs now (11.11 lane B: /Applications/bise.app's
+    Dawn*/GPUCache and updates/route.json under 'bise', 'bise try''s under its own), and `allowed`
+    lists each one as (path, its owner app) for the run's report; 'breach': anything else.
+    The order (architect m_64344): first the structural guard, any candidate folder inside or equal to
+    one of his folders (the candidate can then write there only through a hard-coded path); then a
+    change elsewhere or in the folder of an app of his that does not run; then lsof, a backstop
+    only: it sees the files open at check time, not one written and closed before. Pure."""
+    under = lambda p, d: p == d or p.startswith(d.rstrip("/") + "/")  # noqa: E731
+    rest = [p for p in changed if p and p != cand_pref]
+    if not rest:
+        return "ok", []
+    if any(under(c, d) for c in cand_paths for d in his_apps):
+        return "breach", []
+    allowed = []
+    for p in rest:
+        owner = next((app for d, (app, on) in his_apps.items() if on and under(p, d)), None)
+        if owner is None:
+            return "breach", []
+        allowed.append((p, owner))
+    if any(under(f, d) for f in our_fds for d in his_apps):
+        return "breach", []
+    return "his", allowed
+
+
 # what may never come front during the run (anything started after the run began counts too)
 FRONT_BAD = ("bise try", "bise cand", "bise", "UserNotificationCenter", "System Settings", "SecurityAgent", "CoreServicesUIAgent")
 
@@ -819,6 +861,12 @@ def _cli(argv):
     ls = sub.add_parser("libsnap", help="gate B: mtime+size of his Library's bise entries to a file (read only)")
     ls.add_argument("--out", required=True)
     ls.add_argument("--diff", help="a snapshot to compare with: exits 1 when anything differs")
+    lv = sub.add_parser("libverdict", help="gate B's call (lib_verdict) on the diff's paths on stdin, one per line: prints ok, his or breach")
+    lv.add_argument("--cand-pref", required=True)
+    lv.add_argument("--his", action="append", default=[], help="<his app's bundle>::<its userData folder>::1 when it runs, ::0 when not")
+    lv.add_argument("--fds", help="a file: the paths the candidate's pids hold open, one per line")
+    lv.add_argument("--cmds", help="a file: the candidate's processes' command lines (ps), one per line")
+    lv.add_argument("--cand-path", action="append", default=[], help="a folder the candidate owns (its BISE_HOME)")
     fr = sub.add_parser("front", help="gate A: the front app every 0.1 s until --stop-file exists")
     fr.add_argument("--out", required=True)
     fr.add_argument("--stop-file", required=True)
@@ -844,6 +892,15 @@ def _cli(argv):
             print("LIBRARY DIFF %d" % len(d) + "".join("\n  %s" % k for k in d[:20]))
             sys.exit(1 if d else 0)
         print("%d entries -> %s" % (len(snap), a.out))
+        return
+    if a.do == "libverdict":
+        his = {d: (app, on == "1") for app, d, on in (h.split("::") for h in a.his)}
+        lines = lambda f: open(f).read().splitlines() if f and os.path.exists(f) else []  # noqa: E731
+        mine = cand_dirs(lines(a.cmds)) + a.cand_path
+        v, allowed = lib_verdict(sys.stdin.read().splitlines(), a.cand_pref, his, lines(a.fds), mine)
+        # line 1 the verdict; then each path let through with its owner app; then the candidate's own folders
+        print(v)
+        print("".join("his\t%s\t%s\n" % pa for pa in allowed) + "".join("cand\t%s\n" % c for c in mine), end="")
         return
     if a.do == "front":
         front_gate(a.out, a.stop_file, a.bundle, pids_file=a.pids)

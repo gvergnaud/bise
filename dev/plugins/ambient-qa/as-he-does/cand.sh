@@ -206,11 +206,24 @@ opencand() {
 }
 endrun() { touch $O/stop; kill ${TPID:-} ${NPID:-} ${CPID:-} ${CCPID:-} 2>/dev/null; kill $(cat $G/fake/fake.pid 2>/dev/null) 2>/dev/null; }
 breach() { [ -e $O/BREACH ] && { say "BREACH: $(cat $O/BREACH)"; stopcand; endrun; say "his app after: $(hispids)"; exit 3; }; }
-# gate B with attribution (ambient-lead m_20102): a change in his real userData while HIS app runs
-# is read with lsof (read only) on the candidate's pids: any open file under his folder = ours, kill
-# as before; none = his own app's write, logged, the run goes on. Anything else changed = kill.
-HISDATA="$HOME/Library/Application Support/bise try"
+# gate B with attribution (ambient-lead m_20102, architect m_64344): a change in the userData of one
+# of HIS apps while that app runs is his app's write, logged with its owner (his-writes.txt), the run
+# goes on; anything else = kill. The call is realshape.py lib_verdict (its test: tests/ambient_qa_test.py),
+# in this order: a folder the candidate says is its own (its helpers' --user-data-dir, its BISE_HOME)
+# inside one of his folders; a change elsewhere, or in the folder of an app of his that does not
+# run; lsof (read only) on the candidate's pids, a backstop that sees open files at check time only.
+# His apps: the promoted try app and his installed release (/Applications/bise.app, userData 'bise':
+# 11.11 lane B stopped on its Dawn*/GPUCache and updates/route.json); each one's userData is
+# Application Support/<its bundle name>.
+HISREL=${AS_HE_DOES_HIS_RELEASE:-/Applications/bise.app}
 CANDPREF="$HOME/Library/Preferences/$CAND_ID.plist"
+# libverdict's args: --his <his app>::<its userData>::1 when it runs, ::0 when not; one per app
+hisdirs() {
+  local app; for app in "$HIS" "$HISREL"; do
+    echo "--his"
+    echo "$app::$HOME/Library/Application Support/$(basename "$app" .app)::$([ -n "$(pidsunder "$app/Contents/")" ] && echo 1 || echo 0)"
+  done
+}
 libgate() {
   local out; out=$($RS libsnap --out $O/after-$1.json --diff $O/before.json) && return 0
   echo "$out"
@@ -218,25 +231,23 @@ libgate() {
   # the candidate's OWN preferences domain is allowed and logged (main m_20867: Chromium writes 3 keys
   # through cfprefsd at startup, under his real home whatever HOME is); deleted at the run's end
   echo "$out" | sed -n 's/^  //p' | grep -xF "$CANDPREF" | sed "s|^|$1 |" >> $O/cand-prefs.txt
-  local other; other=$(echo "$out" | sed -n 's/^  //p' | grep -vxF "$CANDPREF" | grep -vF "$HISDATA/" | grep -vxF "$HISDATA" | grep -v '^$')
-  local his; his=$(echo "$out" | sed -n 's/^  //p' | grep -vxF "$CANDPREF" | grep -v '^$')
-  if [ -z "$his" ]; then
-    say "library $1: only the candidate's own $CANDPREF (allowed, logged)"
-    cp $O/after-$1.json $O/before.json
-    return 0
-  fi
-  if [ -z "$other" ] && [ -n "$(hispids)" ]; then
-    local pids; pids=$(sort -u $O/pids.txt | tr '\n' ',' | sed 's/,$//')
-    local ourfd; ourfd=$([ -n "$pids" ] && lsof -n -P -Fn -p "$pids" 2>/dev/null | sed -n 's/^n//p' | grep -F "$HISDATA/")
-    if [ -z "$ourfd" ]; then
-      say "library $1: only his userData changed while his app runs, no candidate fd there: his app's write, logged"
-      echo "$1 $(echo "$out" | head -1)" >> $O/his-writes.txt
-      cp $O/after-$1.json $O/before.json
-      return 0
-    fi
-    echo "$ourfd" > $O/our-fds-$1.txt
-  fi
-  echo "library $1" > $O/BREACH; breach
+  local pids; pids=$(sort -u $O/pids.txt 2>/dev/null | tr '\n' ',' | sed 's/,$//')
+  # the candidate's processes: their command lines (its own folders) and the files they hold open
+  : > $O/our-fds-$1.txt; : > $O/our-cmds-$1.txt
+  [ -n "$pids" ] && lsof -n -P -Fn -p "$pids" 2>/dev/null | sed -n 's/^n//p' > $O/our-fds-$1.txt
+  [ -n "$pids" ] && ps -o command= -p "$pids" > $O/our-cmds-$1.txt 2>/dev/null
+  local args=() a; while IFS= read -r a; do args+=("$a"); done < <(hisdirs)
+  local res; res=$(echo "$out" | sed -n 's/^  //p' | $RS libverdict --cand-pref "$CANDPREF" --fds $O/our-fds-$1.txt \
+    --cmds $O/our-cmds-$1.txt --cand-path "$H/.bise" "${args[@]}")
+  local v; v=$(echo "$res" | head -1)
+  case "$v" in
+    ok) say "library $1: only the candidate's own $CANDPREF (allowed, logged)"
+        cp $O/after-$1.json $O/before.json; return 0;;
+    his) say "library $1: only the userData of his apps that run changed, no candidate folder or fd there: his apps' write, logged in his-writes.txt"
+        echo "$res" | sed -n 's/^his	//p' | sed "s|^|$1	|" | tee -a $O/his-writes.txt
+        cp $O/after-$1.json $O/before.json; return 0;;
+  esac
+  { echo "library $1 ($v)"; echo "$res" | sed -n 's/^cand	/candidate folder: /p'; } > $O/BREACH; breach
 }
 # the candidate's own preferences domain, at the end of every mode (the quick one too: cand-e91f98d7
 # run): through cfprefsd first (it caches and writes back); an emptied domain can leave its file as

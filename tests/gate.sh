@@ -289,8 +289,8 @@ cu_check() {
 # types are apps/desktop's: skipped without its node_modules, like desktop_check)
 aqa_check() {
   local tsc="$root/apps/desktop/node_modules/.bin/tsc"; desktop_path
-  echo "node --test dev/plugins/ambient-qa/as-he-does/fx.test.ts"
-  NODE_OPTIONS="$TS_NODE_OPTIONS" node --test "$root/dev/plugins/ambient-qa/as-he-does/fx.test.ts" || return 1
+  echo "node --test dev/plugins/ambient-qa/as-he-does/{fx,artpage}.test.ts"
+  NODE_OPTIONS="$TS_NODE_OPTIONS" node --test "$root/dev/plugins/ambient-qa/as-he-does/fx.test.ts" "$root/dev/plugins/ambient-qa/as-he-does/artpage.test.ts" || return 1
   if [ -x "$tsc" ]; then echo "tsc -p dev/plugins/ambient-qa/tsconfig.json"; "$tsc" -p "$root/dev/plugins/ambient-qa/tsconfig.json" || return 1
   else echo "skipped ambient-qa types: no apps/desktop/node_modules (pnpm -C apps/desktop install)"; fi
 }
