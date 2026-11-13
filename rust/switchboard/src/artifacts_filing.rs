@@ -44,6 +44,33 @@ pub fn filing(brief: Option<&str>, last: Option<Option<&str>>, for_you: bool, re
     }
 }
 
+/// What the shell reads about a task for its add's default folder.
+#[derive(Clone, Debug, Default)]
+pub struct Task<'a> {
+    /// The folder main gave it at its spawn (`sb spawn --folder`, its
+    /// brief's), None or blank: none.
+    pub spawn_folder: Option<&'a str>,
+    /// Its derived theme (`derived_folder`), used when main gave none.
+    pub derived: Option<&'a str>,
+    /// The folder of its most recent artifact, any audience (None: it has none).
+    pub last_any: Option<Option<&'a str>>,
+    /// The folder of its most recent artifact for him.
+    pub last_for_you: Option<Option<&'a str>>,
+}
+
+/// The default folder of a task's add (folder-filing, the 11.11 fix of
+/// e5be4f426): main's `--folder` is his library's place for that task,
+/// so any add of it files there, the agents' ones too, and its last
+/// artifact of any audience carries the folder on (the rule before
+/// e5be4f426). Only the derived `<lead>/<task>` theme waits for an add
+/// for him and follows its last one for him (architect m_62392).
+pub fn task_filing(t: &Task, for_you: bool, resolve: impl Fn(&str) -> Option<String>) -> Filing {
+    match t.spawn_folder.map(str::trim).filter(|f| !f.is_empty()) {
+        Some(asked) => filing(Some(asked), t.last_any, true, resolve),
+        None => filing(t.derived, t.last_for_you, for_you, resolve),
+    }
+}
+
 /// The folder of a task main spawned with no `--folder` (architect
 /// m_62392, designer m_62289): its lead's theme, `<lead>/<task>`, when its
 /// parent is not main (a typed fact, never the spawn's free-text place);
@@ -132,6 +159,37 @@ mod tests {
         // an add for the agents: no folder yet, none made; once the task has one, it files there
         assert_eq!(filing(Some("t/x"), None, false, lib), Filing::Unfiled);
         assert_eq!(filing(Some("t/x"), Some(Some("f-a")), false, lib), Filing::Use("f-a".into()));
+    }
+
+    #[test]
+    fn a_spawn_folder_files_the_agents_adds_too() {
+        // proto_e2e_agents' lists_round (red since e5be4f426): main spawned it with
+        // --folder x/y, its first add is for the agents
+        let first = Task { spawn_folder: Some("x/y"), derived: Some("x/y"), last_any: None, last_for_you: None };
+        assert_eq!(task_filing(&first, false, lib), Filing::Ensure("x/y".into()));
+        // its next add for the agents follows that artifact, though none is for him yet
+        let next = Task { last_any: Some(Some("f-a")), ..first.clone() };
+        assert_eq!(task_filing(&next, false, lib), Filing::Use("f-a".into()));
+        // he renamed x/y (same id f-b, another name): its next agents' add keeps his name, never makes x/y again
+        let renamed = Task { last_any: Some(Some("f-b")), ..first.clone() };
+        assert_eq!(task_filing(&renamed, false, lib), Filing::Use("f-b".into()));
+        // his drag of it to unfiled moves its next adds with it
+        let dragged = Task { last_any: Some(None), last_for_you: Some(Some("f-b")), ..first.clone() };
+        assert_eq!(task_filing(&dragged, true, lib), Filing::Unfiled);
+        // a blank --folder is none: the derived theme's rule
+        let blank = Task { spawn_folder: Some("  "), derived: Some("lead/t"), ..Task::default() };
+        assert_eq!(task_filing(&blank, false, lib), Filing::Unfiled);
+    }
+
+    #[test]
+    fn a_derived_theme_waits_for_an_add_for_him() {
+        let t = Task { spawn_folder: None, derived: Some("lead/t"), last_any: Some(Some("f-a")), last_for_you: None };
+        assert_eq!(task_filing(&t, false, lib), Filing::Unfiled, "an agents' add makes no derived folder");
+        assert_eq!(task_filing(&t, true, lib), Filing::Ensure("lead/t".into()));
+        let made = Task { last_for_you: Some(Some("f-b")), ..t };
+        assert_eq!(task_filing(&made, false, lib), Filing::Use("f-b".into()));
+        // main: no folder at all
+        assert_eq!(task_filing(&Task::default(), true, lib), Filing::Unfiled);
     }
 
     #[test]

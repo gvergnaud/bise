@@ -298,25 +298,34 @@ impl Shell {
         Ok(Some(artifacts::Filed::Asked(self.agent_folder(agent, asked)?)))
     }
 
-    /// The folder main gave `agent` at its spawn (its brief's, by name):
-    /// made by main at its first add, then the one its last artifact is
-    /// in (artifacts_filing, pure). None: unfiled; a library it cannot
-    /// write files nothing rather than fail the add.
+    /// The folder main gave `agent` at its spawn (its brief's, by name),
+    /// else its derived theme: made by main at its first add (any add for
+    /// a spawn folder, one for him for a derived theme), then the one its
+    /// last artifact is in (artifacts_filing::task_filing, pure). None:
+    /// unfiled; a library it cannot write files nothing rather than fail
+    /// the add.
     fn task_folder(&mut self, agent: &str, for_you: bool) -> Option<String> {
-        use crate::artifacts_filing::{derived_folder, filing, Filing};
+        use crate::artifacts_filing::{derived_folder, task_filing, Filing, Task};
         let a = self.hub.st.agents.get(agent)?;
-        // the brief's folder, else its lead's theme or its own (architect m_62392)
-        let path = a.brief.folder.clone().or_else(|| derived_folder(agent, a.parent.as_deref()))?;
-        // its last artifact for him: what carries the folder on (an agents' one never makes it)
-        let last = self
-            .art_store()
-            .stored()
-            .into_iter()
-            .filter(|m| m.agent == agent && m.by == agent && m.audience() == crate::artifacts_marks::Audience::You)
-            .max_by_key(|m| m.created_ms)
-            .map(|m| m.folder);
+        let spawn_folder = a.brief.folder.clone();
+        // its lead's theme or its own (architect m_62392)
+        let derived = derived_folder(agent, a.parent.as_deref());
+        let mine: Vec<_> = self.art_store().stored().into_iter().filter(|m| m.agent == agent && m.by == agent).collect();
+        let last_of = |you_only: bool| {
+            mine.iter()
+                .filter(|m| !you_only || m.audience() == crate::artifacts_marks::Audience::You)
+                .max_by_key(|m| m.created_ms)
+                .map(|m| m.folder.clone())
+        };
+        let (last_any, last_for_you) = (last_of(false), last_of(true));
+        let task = Task {
+            spawn_folder: spawn_folder.as_deref(),
+            derived: derived.as_deref(),
+            last_any: last_any.as_ref().map(|f| f.as_deref()),
+            last_for_you: last_for_you.as_ref().map(|f| f.as_deref()),
+        };
         let lib = self.art_library();
-        match filing(Some(&path), last.as_ref().map(|f| f.as_deref()), for_you, |id| library::resolve(&lib, id).map(|f| f.id.clone())) {
+        match task_filing(&task, for_you, |id| library::resolve(&lib, id).map(|f| f.id.clone())) {
             Filing::Use(id) => Some(id),
             Filing::Ensure(path) => library::update(&self.opts.home, false, |l| library::make_path(l, &path, crate::model::MAIN)).ok(),
             Filing::Unfiled => None,
