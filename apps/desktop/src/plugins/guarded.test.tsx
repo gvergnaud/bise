@@ -38,8 +38,8 @@ describe('the skills switch', () => {
     const linked = guardedOf([personal]);
     expect(linked).toEqual({ n: 0, folders: [], roots: 1, rootFolders: ['Documents'] });
     render(<GuardedSwitch rows={[personal]} on={false} refused={[]} send={() => {}} />);
-    expect(screen.getByTestId('plugins.guarded.count').textContent).toBe(settings.plugins_guarded_roots({ n: 1, folders: 'Documents' }));
-    expect(linkedLine({ ...linked, n: 2, folders: ['Desktop'] })).toBe(`${settings.plugins_guarded_count({ n: 2, folders: 'Desktop' })} · ${settings.plugins_guarded_roots({ n: 1, folders: 'Documents' })}`);
+    expect(screen.getByTestId('plugins.guarded.count').textContent).toBe(settings.plugins_guarded_root({ folders: 'Documents' }));
+    expect(linkedLine({ ...linked, n: 2, folders: ['Desktop'] })).toBe(`${settings.plugins_guarded_count({ n: 2, folders: 'Desktop' })} · ${settings.plugins_guarded_root({ folders: 'Documents' })}`);
   });
 
   it('macOS said no: the line says so and Open Settings opens Files & Folders', () => {

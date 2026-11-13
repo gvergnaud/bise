@@ -40,7 +40,9 @@ export function guardedOf(rows: readonly Plugin[]): Linked {
 export function linkedLine(l: Linked): string {
   const parts: string[] = [];
   if (l.n > 0) parts.push(settings.plugins_guarded_count({ n: l.n, folders: folderList(l.folders) }));
-  if (l.roots > 0) parts.push(settings.plugins_guarded_roots({ n: l.roots, folders: folderList(l.rootFolders) }));
+  const where = folderList(l.rootFolders);
+  if (l.roots === 1) parts.push(settings.plugins_guarded_root({ folders: where }));
+  else if (l.roots > 1) parts.push(settings.plugins_guarded_roots({ n: l.roots, folders: where }));
   return parts.join(' · ');
 }
 
