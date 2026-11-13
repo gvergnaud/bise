@@ -15,6 +15,7 @@ export * from './caret';
 export * from './text';
 export * from './perf';
 export * from './inputs';
+export * from './load';
 export { FakeCore, FakeHelper } from './fakes/helper';
 export { Vm, freeBytes, FLOOR_BYTES, type VmOptions, type ExecResult } from './vm/vm';
 export { Rfb, parseCombo } from './vm/rfb';

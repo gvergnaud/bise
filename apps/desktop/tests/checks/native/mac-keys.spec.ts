@@ -11,7 +11,7 @@
 // (MenuItem.click); the native roles (quit, hide, close, minimize, undo...) can't be clicked from
 // here at all on macOS (Electron leaves them to NSMenu): their key and action, like every key
 // pressed for real, are the VM pass's (native/README.md).
-import { test, expect } from '../../harness';
+import { test, expect, underLoad } from '../../harness';
 import { appMenu, clickMenu, flat, ids, onWorld, sleep } from './world';
 
 /** every key ⛔2 names, where the menu bar must show it, its role and its accelerator */
@@ -63,11 +63,12 @@ test('native/mac-keys: Settings… and Inbox reach the window with no bise windo
     const menu = await appMenu(s);
     await clickMenu(s, `${menu[0]?.label ?? 'bise'}/Settings…`);
     await expect
-      .poll(async () => (await ids(s.page)).some((i) => i.startsWith('settings')), { message: 'bise › Settings… opens settings in the window', timeout: 1500 })
+      // 1.5 s on an idle Mac, stretched by the load (harness/load.ts: 11.11's pass timed out at load ~15)
+      .poll(async () => (await ids(s.page)).some((i) => i.startsWith('settings')), { message: 'bise › Settings… opens settings in the window', timeout: underLoad(1500) })
       .toBe(true);
     await clickMenu(s, 'Go/Inbox');
     await expect
-      .poll(async () => (await ids(s.page)).some((i) => i === 'inbox' || i.startsWith('inbox.') || i === 'app.notyet.inbox'), { message: 'Go › Inbox opens the inbox in the window', timeout: 1500 })
+      .poll(async () => (await ids(s.page)).some((i) => i === 'inbox' || i.startsWith('inbox.') || i === 'app.notyet.inbox'), { message: 'Go › Inbox opens the inbox in the window', timeout: underLoad(1500) })
       .toBe(true);
   });
 });

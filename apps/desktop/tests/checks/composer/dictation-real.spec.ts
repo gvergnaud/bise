@@ -9,7 +9,7 @@
 // mic on stops it without sending, and the next ⏎ sends the words to main.
 import { writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { test, expect, Recorder, flashes } from '../../harness';
+import { test, expect, Recorder, flashes, underLoad } from '../../harness';
 import { launchReal, realWorld, transcriptHas } from '../world';
 import { fieldText } from './target';
 
@@ -24,6 +24,9 @@ const HELD = 'bonjour à tous, on garde la file';
 const TAPPED = 'et on livre vendredi';
 
 test('composer/dictation (real core): ctrl+r held in the real thread, the core’s words land, nothing reaches main until sent', async () => {
+  // ~19 s on an idle Mac: its 60 s stretched by the load (harness/load.ts: the real core's launch
+  // and the fake voice's words ran past 60 s at load ~15 in 11.11's pass, main m_64400)
+  test.setTimeout(underLoad(60_000));
   const w = realWorld();
   const voice = path.join(w.home, 'tmp', 'qa-type-voice.txt');
   const s = await launchReal(w, { env: { BISE_AMBIENT_FAKE_VOICE: voice } });
