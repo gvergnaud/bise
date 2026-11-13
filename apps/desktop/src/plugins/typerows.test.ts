@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { common } from '@/proto/words_common.gen';
 import { settings } from '@/proto/words.gen';
-import { claimPicks, claimsView, openerSet, opensWords, typeLine, typeLines, typeName, type TypeOpener } from './typerows';
+import { claimPicks, claimsView, openerSet, opensWords, typeLine, typeLines, typeName, typesMatching, type TypeOpener } from './typerows';
 
 const sheets: TypeOpener = { plugin: 'sheets', tool: 'grid', app: 'Sheets' };
 const grid: TypeOpener = { plugin: 'grid', tool: 'open', app: 'Grid' };
@@ -79,5 +79,24 @@ describe("the add sheet's claims: what it would open, and Keep / Use for a type 
   it('Keep by default sends nothing; Use sends opener_set for that type alone', () => {
     expect(claimPicks('tables', claims, new Set())).toEqual([]);
     expect(claimPicks('tables', claims, new Set(['*.xlsx', '*.csv']))).toEqual([{ cmd: 'opener_set', type: '*.xlsx', plugin: 'tables', tool: 'table' }]);
+  });
+});
+
+describe("File types under the Plugins list's search", () => {
+  const rows = [
+    { type: '*.xlsx', title: 'Excel workbook', app: sheets, others: [] },
+    { type: '*.csv', title: 'CSV table', app: grid, others: [sheets] },
+    { type: '*/index.html', title: 'Website', others: [] },
+  ];
+  const found = (q: string) => typesMatching(rows, q).map((r) => r.type);
+
+  it('finds a type by its ending, its title or the app that opens it now, any case; no words: all', () => {
+    expect(found('')).toEqual(['*.xlsx', '*.csv', '*/index.html']);
+    expect(found('.XLS')).toEqual(['*.xlsx']);
+    expect(found('table')).toEqual(['*.csv']);
+    expect(found('grid')).toEqual(['*.csv']);
+    // no app: his Mac's word finds it
+    expect(found(common.your_mac)).toEqual(['*/index.html']);
+    expect(found('zzz')).toEqual([]);
   });
 });

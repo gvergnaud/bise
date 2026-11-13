@@ -285,4 +285,16 @@ describe("File types: the installed part's last group, where every pick is seen 
     expect(screen.queryByTestId('plugins.types')).toBeNull();
     expect(screen.queryByTestId('plugins.types.empty')).toBeNull();
   });
+
+  it('the search keeps the types it finds, even when no plugin matches; none found: no group', () => {
+    place({ fileTypes: TYPES });
+    const search = screen.getByTestId('plugins.search.input');
+    fireEvent.change(search, { target: { value: 'csv' } });
+    expect(screen.getByTestId('plugins.types.row.*.csv')).toBeTruthy();
+    expect(screen.queryByTestId('plugins.types.row.*.xlsx')).toBeNull();
+    expect(screen.queryByTestId('plugins.none')).toBeNull();
+    fireEvent.change(search, { target: { value: 'zzz-nothing' } });
+    expect(screen.queryByTestId('plugins.types')).toBeNull();
+    expect(screen.getByTestId('plugins.none')).toBeTruthy();
+  });
 });

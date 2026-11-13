@@ -85,6 +85,17 @@ export function typeLines(rows: readonly TypeRow[]): TypeLine[] {
   return rows.map(typeLine).sort((x, y) => Number(!x.name.startsWith('.')) - Number(!y.name.startsWith('.')) || x.name.localeCompare(y.name));
 }
 
+/**
+ * The types the Plugins list's search finds (any case): by the name he reads ('.xlsx',
+ * 'Website'), the title ('Excel workbook') or the app that opens it now ('Sheets'; none: 'your
+ * Mac'). No words: every type. Pure.
+ */
+export function typesMatching<R extends TypeRow>(rows: readonly R[], q: string): R[] {
+  const s = q.trim().toLowerCase();
+  if (s === '') return [...rows];
+  return rows.filter((r) => [typeName(r.type, r.title), r.title, r.app?.app ?? common.your_mac].some((w) => w.toLowerCase().includes(s)));
+}
+
 /** The command a pick sends (AppCmd opener_set); `id` none: Reset. Pure. */
 export function openerSet(type: string, id?: string): { readonly cmd: 'opener_set'; readonly type: string; readonly plugin?: string; readonly tool?: string } {
   if (id === undefined) return { cmd: 'opener_set', type };

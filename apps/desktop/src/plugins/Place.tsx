@@ -48,6 +48,7 @@ import { MonoTile, PluginIcon } from './PluginIcon';
 import { Room } from './Room';
 import { AddMenu, type AddItem } from './Add';
 import { FileTypes } from './FileTypes';
+import { typesMatching } from './typerows';
 import './plugins.css';
 
 /** What the place does (the shell's live ones, or a test's). */
@@ -101,6 +102,8 @@ export function PlaceView({ rows, summary, browse, problem, project, projectName
   const all = useMemo(() => rows ?? [], [rows]);
   const groups = useMemo(() => groupsOf(all, kind, q), [all, kind, q]);
   const avail = useMemo(() => availableOf(browse, all, kind, q), [browse, all, kind, q]);
+  // File types under All only (it isn't a kind), filtered by the same search
+  const types = useMemo(() => (kind === 'all' ? typesMatching(fileTypes, q) : []), [fileTypes, kind, q]);
   // nothing installed: the band's connector cards would repeat the Not installed rows just below
   // (designer m_63123 #2), so it keeps only its other lines
   const cards = rows === null || all.some(installed);
@@ -169,7 +172,7 @@ export function PlaceView({ rows, summary, browse, problem, project, projectName
         </ListBar>
         {rows === null ? (
           <div className="plg-empty" data-testid="plugins.loading">{settings.plugins_place_loading}</div>
-        ) : groups.length === 0 && avail.length === 0 ? (
+        ) : groups.length === 0 && avail.length === 0 && types.length === 0 ? (
           // nothing at all to show: nothing installed nor to add, or nothing matches the chip and the words
           <div className="plg-empty" data-testid="plugins.none">{kind === 'all' && q.trim() === '' ? settings.plugins_nothing_installed : settings.plugins_none_match}</div>
         ) : (
@@ -195,9 +198,9 @@ export function PlaceView({ rows, summary, browse, problem, project, projectName
               </div>
             ))}
             {/* File types at the installed part's end (designer m_62919, via apps-lead m_62920): it is
-                about the apps he has; under All only (it isn't a kind), and while no search runs
-                (FileTypes has no query of its own yet: apps-gallery's next sync) */}
-            {kind === 'all' && q.trim() === '' && fileTypes.length > 0 && <FileTypes rows={fileTypes} send={ports.send} {...at} />}
+                about the apps he has; under All only (it isn't a kind); a search keeps the types it
+                finds (typerows.ts typesMatching) */}
+            {types.length > 0 && <FileTypes rows={types} send={ports.send} {...at} />}
             {avail.length > 0 && (
               <NotInstalled groups={avail} project={project} lit={lit}
                 onConnect={(id) => { ports.send({ cmd: 'plugin_connect', ...at, id }); }}
