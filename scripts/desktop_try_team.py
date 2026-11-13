@@ -120,7 +120,7 @@ def sign_candidate(info, c, arch, name, app_id, say, run=subprocess.run, sign=de
     got = team_of(t["app"])
     if got != TEAM:
         raise TryError("the signed copy %s says team %s, not %s" % (t["app"], got, TEAM))
-    out = dict(info, app=t["app"], bise=info["bise"].replace(c["app"], t["app"], 1), team_signed=True, team=TEAM,
+    out = dict(info, app=t["app"], bise=os.path.join(t["app"], os.path.relpath(info["bise"], c["app"])), team_signed=True, team=TEAM,
                group=group, identity=identity, signed_ms=int(time.time() * 1000))
     with open(t["json"] + ".tmp", "w") as f:
         json.dump(out, f, indent=1)
