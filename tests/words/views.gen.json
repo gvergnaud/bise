@@ -157,10 +157,20 @@
     "one": null,
     "text": "the view didn't load"
   },
+  "views.files_busy": {
+    "args": [],
+    "one": null,
+    "text": "bise is still reading ~/bise: try again in a moment"
+  },
   "views.group": {
     "args": [],
     "one": null,
     "text": "views"
+  },
+  "views.hidden_not_listed": {
+    "args": [],
+    "one": null,
+    "text": "hidden files are not listed yet"
   },
   "views.in_panel": {
     "args": [],
@@ -212,6 +222,13 @@
     "args": [],
     "one": null,
     "text": "saving your file"
+  },
+  "views.new_nth": {
+    "args": [
+      "n"
+    ],
+    "one": null,
+    "text": "{n}"
   },
   "views.no_grant": {
     "args": [
