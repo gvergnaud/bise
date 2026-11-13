@@ -147,7 +147,9 @@ def main():
         wt = os.path.join(tree, "harness")
         # never the caller's night (NIGHTLY_END, NIGHTLY_NOW...): the nightly's gate runs this test
         # (TIP_RUN too: the tip gate's slot run carries it, and its gate runs this test)
-        env0 = {k: v for k, v in os.environ.items() if not k.startswith(("GIT_", "FAKE_", "NIGHTLY_", "TIP_"))}
+        # hermetic: none of the run it may sit in (a release pass's lane A: its gate's GATE_*, its
+        # heavy job's HEAVY_*, the pass lane)
+        env0 = {k: v for k, v in os.environ.items() if not k.startswith(("GIT_", "FAKE_", "NIGHTLY_", "TIP_", "GATE_", "HEAVY_"))}
         clock, args_log = os.path.join(t, "now"), os.path.join(t, "args")
         env0.update(BISE_HOME=home, NIGHTLY_HEAVY_RUN=heavy, NIGHTLY_NOW=clock, FAKE_ARGS=args_log,
                     HEAVY_LOG=os.path.join(t, "heavy.log"))
@@ -411,11 +413,13 @@ def main():
         # --tip --sha <sha> (a release pass's lane A, plan A step 7): that sha, pinned, though main
         # moved on; in the release lane; tried already (tip-last): it runs again
         git(repo, "commit", "-q", "--allow-empty", "-m", "after the pin")
-        before = set(f for f in os.listdir(out) if f.startswith("tip-") and f.endswith(".log"))
         p = subprocess.run(["bash", os.path.join(repo, "scripts", "nightly_gate.sh"), "--tip", "--sha", full],
                            env=dict(env0, HEAVY_PASS_LANE="A"), capture_output=True, text=True, timeout=60)
-        new = sorted(set(f for f in os.listdir(out) if f.startswith("tip-") and f.endswith(".log")) - before)
-        log = open(os.path.join(out, new[-1])).read() if new else ""
+        # its log by tip-last's 4th field, never by a new file name: the log is named to the second,
+        # so a run in the same second as the one before wrote over its file (11.11's lane A red,
+        # marketing m_63874)
+        tl = open(os.path.join(out, "tip-last")).read().split() if os.path.exists(os.path.join(out, "tip-last")) else []
+        log = open(tl[3]).read() if len(tl) > 3 and os.path.exists(tl[3]) else ""
         started = [l.split()[-1] for l in log.splitlines() if l.startswith("START ")]
         check(p.returncode == 0 and started and full.startswith(started[0]) and short() != started[0],
               "--tip --sha: the pinned sha ran, not main's tip: rc %s, %r %r" % (p.returncode, log[-400:], p.stderr[-200:]))
