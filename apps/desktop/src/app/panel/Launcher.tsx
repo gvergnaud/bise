@@ -29,7 +29,8 @@ import { scopeOf } from './scope';
 import { useTabLooks } from './look';
 import { tabOf } from './model';
 import { makesOf, makeKey, newRows, usesOf, type MakeOpt } from './make';
-import { enterRow, firstAt, isListing, latestArtifacts, launchMatches, launchRows, NO_ROW, openRows, recentIn, walkAt, type LaunchRow, type OpenRow } from './launch';
+import { enterRow, firstAt, isListing, latestArtifacts, launchRows, NO_ROW, openRows, recentIn, walkAt, type LaunchRow, type OpenRow } from './launch';
+import { OmniList, useOmni } from './Omnibox';
 
 /** Each Open row: its label, its icon, its key when it has one. */
 const ROW: Readonly<Record<OpenRow, { readonly label: string; readonly icon: AppIconName | 'head'; readonly keys?: string }>> = {
@@ -97,10 +98,10 @@ export function Launcher({ tabId, shown, artifacts = false }: { tabId: string; s
     setWasPicker(artifacts);
     setAt(firstAt('', artifacts));
   }
-  const found = useMemo(() => (artifacts ? latestArtifacts(arts, q) : launchMatches(arts, q)), [arts, q, artifacts]);
+  const found = useMemo(() => (artifacts ? latestArtifacts(arts, q) : []), [arts, q, artifacts]);
   const listing = isListing(q, artifacts);
   const makes = newRows(makesOf(plugins ?? []), isListing(q, artifacts) ? q : '', usesOf(arts.filter((x) => x.project === newIn).map((x) => x.a)));
-  const rows = launchRows({ q, picker: artifacts, found, open: opens, recent, makes });
+  const rows = launchRows({ picker: artifacts, found, open: opens, recent, makes });
   const pick = (e: Entity) => {
     openWhat({ kind: 'thing', e }, tabId);
   };
@@ -121,9 +122,11 @@ export function Launcher({ tabId, shown, artifacts = false }: { tabId: string; s
     if (r.kind === 'new') make(r.make);
     else if (r.kind === 'open') doPanelKey(r.row, ctx, tabId);
     else if (r.kind === 'recent') pick(r.e);
-    else if (r.kind === 'found') open(r.item);
-    else void bise?.openExternal(r.url);
+    else open(r.item);
   };
+  // his words in the New tab's field: the omnibox (Omnibox.tsx; page newtab-omnibox-flow)
+  const omni = useOmni({ tabId, ref: field, typed: q, setTyped: setQ, makes: artifacts ? [] : makes, make });
+  const omniOn = !artifacts && listing;
   const enter = () => {
     const r = enterRow(rows, at, listing);
     if (r !== undefined) go(r);
@@ -150,18 +153,20 @@ export function Launcher({ tabId, shown, artifacts = false }: { tabId: string; s
         <Input
           ref={field}
           look="pn-search-in"
-          value={q}
+          value={omniOn ? omni.value : q}
           placeholder={label}
           aria-label={label}
           role="combobox"
           aria-expanded={listing}
           aria-controls={`${tabId}.list`}
-          aria-activedescendant={rows[at] !== undefined ? optId(at) : undefined}
+          aria-activedescendant={omniOn ? optId(omni.field.at) : rows[at] !== undefined ? optId(at) : undefined}
           onChange={(e) => {
-            setQ(e.target.value);
+            if (artifacts) setQ(e.target.value);
+            else omni.input(e.target.value, e.nativeEvent as InputEvent);
             setAt(firstAt(e.target.value, artifacts));
           }}
           onKeyDown={(e) => {
+            if (omniOn && omni.key(e)) return;
             if (e.key === 'Enter') {
               e.preventDefault();
               enter();
@@ -180,43 +185,19 @@ export function Launcher({ tabId, shown, artifacts = false }: { tabId: string; s
       </label>
       {/* every row is an option of one list the field walks (aria-activedescendant); display: contents */}
       <div role="listbox" id={`${tabId}.list`} aria-label={label} className="pn-rows" data-keyed={keyed || undefined} onPointerMove={pointed}>
-        {listing ? (
+        {omniOn ? (
+          <OmniList omni={omni} prefix="app.panel.launcher" optId={optId} />
+        ) : listing ? (
           <>
-            {artifacts && <h3 className="pn-lh">{panel.launch_latest}</h3>}
+            <h3 className="pn-lh">{panel.launch_latest}</h3>
             {rows.length === 0 ? (
               <p className="pn-none" data-testid="app.panel.launcher.nomatch">
-                {artifacts && q.trim() === '' ? panel.launch_no_artifact : panel.launch_no_match}
+                {q.trim() === '' ? panel.launch_no_artifact : panel.launch_no_match}
               </p>
             ) : (
               <div className="pn-found">
                 {rows.map((r, i) =>
-                  r.kind === 'url' ? (
-                    <PickRow
-                      key="url"
-                      id={optId(i)}
-                      on={i === at}
-                      icon={<AppIcon name="browser" size={16} />}
-                      title={r.url}
-                      sub={panel.addr_out}
-                      onPick={() => {
-                        go(r);
-                      }}
-                      testId="app.panel.launcher.url"
-                    />
-                  ) : r.kind === 'new' ? (
-                    <PickRow
-                      key={`new:${makeKey(r.make)}`}
-                      id={optId(i)}
-                      on={i === at}
-                      icon={<AppIcon name="file" size={16} />}
-                      title={r.make.title}
-                      sub={r.make.app}
-                      onPick={() => {
-                        go(r);
-                      }}
-                      testId={`app.panel.launcher.new.${makeKey(r.make)}`}
-                    />
-                  ) : r.kind === 'found' ? (
+                  r.kind === 'found' ? (
                     <PickRow
                       key={`${r.item.project}/${r.item.a.id}`}
                       id={optId(i)}
@@ -224,7 +205,7 @@ export function Launcher({ tabId, shown, artifacts = false }: { tabId: string; s
                       icon={<KindIcon kind={iconKindOf(r.item.a)} size={16} />}
                       title={r.item.a.title}
                       sub={panel.launch_kind_by({ kind: r.item.a.kind, who: r.item.a.agent })}
-                      {...(artifacts ? { when: ago(r.item.a.at_ms, now) } : {})}
+                      when={ago(r.item.a.at_ms, now)}
                       onPick={() => {
                         go(r);
                       }}
@@ -323,7 +304,8 @@ export function PickRow({ icon, title, sub, when, onPick, onHover, testId, id, o
   sub: string;
   /** its age at the row's end (the Artifacts picker's) */
   when?: string;
-  onPick: () => void;
+  /** its click; `mod`: ⌘ (⌃) held, the omnibox's 'open behind' */
+  onPick: (mod: boolean) => void;
   onHover?: () => void;
   testId: string;
   /** a list's option: its id (the field's aria-activedescendant) */
@@ -338,7 +320,9 @@ export function PickRow({ icon, title, sub, when, onPick, onHover, testId, id, o
       aria-selected={id === undefined ? undefined : on === true}
       tabIndex={id === undefined ? undefined : -1}
       data-on={on === true || undefined}
-      onClick={onPick}
+      onClick={(e) => {
+        onPick(e.metaKey || e.ctrlKey);
+      }}
       onPointerMove={onHover}
       data-testid={testId}
     >

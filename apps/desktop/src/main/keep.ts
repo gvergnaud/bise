@@ -3,7 +3,7 @@
 // written whole at each of the keep's writes (tmp + rename: a crash mid-write leaves the old one).
 // Chromium's localStorage writes lazily and was lost by a quit right after a change (the update
 // swap's relaunch), so the keep never relies on it. Owner: amb-win.
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { closeSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
 import { ipcMain } from 'electron';
 import { IPC } from '../shared/api';
@@ -22,16 +22,32 @@ export function readKeep(file: string): string | null {
   }
 }
 
-/** Written whole, atomically; a write that fails keeps the old file. */
-export function writeKeep(file: string, text: string): void {
+/**
+ * Written whole, atomically (tmp, fsync, rename; 0600); a write that fails keeps the old file and
+ * says false. The keep's and the web history's one write (webhistoryipc.ts, architect m_64583).
+ */
+export function writeAtomic(file: string, text: string): boolean {
   try {
     mkdirSync(join(file, '..'), { recursive: true });
     const tmp = `${file}.tmp`;
-    writeFileSync(tmp, text, { mode: 0o600 });
+    const fd = openSync(tmp, 'w', 0o600);
+    try {
+      writeSync(fd, text);
+      fsyncSync(fd);
+    } finally {
+      closeSync(fd);
+    }
     renameSync(tmp, file);
+    return true;
   } catch {
-    // a full or read-only disk: the renderer still holds his words for this run
+    return false;
   }
+}
+
+/** Written whole, atomically; a write that fails keeps the old file. */
+export function writeKeep(file: string, text: string): void {
+  // a full or read-only disk: the renderer still holds his words for this run
+  writeAtomic(file, text);
 }
 
 /** Answers the preload's keep.read (sync) and keep.write, in `dir` (userData). */

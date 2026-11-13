@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Item } from '@/artifacts/model';
 import type { Agent } from '@/proto';
-import { FOUND_MAX, NO_ROW, PICK_MAX, enterRow, firstAt, hasChanges, latestArtifacts, launchEnter, launchMatches, launchRows, looksLikeUrl, openRows, recentIn, stepAt, walkAt } from './launch';
+import { FOUND_MAX, NO_ROW, PICK_MAX, enterRow, firstAt, hasChanges, latestArtifacts, launchMatches, launchRows, openRows, recentIn, walkAt } from './launch';
 import { RECENT_MAX } from './model';
 import { changesInView, panelKeyOf, PANEL_KEYS } from './keys';
 
@@ -20,29 +20,11 @@ describe("the launcher's search (New tab, mockup 3)", () => {
     const many = Array.from({ length: 20 }, (_, i) => item(String(i), 'perf', i));
     expect(launchMatches(many, 'perf')).toHaveLength(FOUND_MAX);
   });
-  it('tells an address from a search', () => {
-    for (const u of ['localhost:5173', 'https://bise.dev', 'bise.dev/docs', 'http://127.0.0.1:4000/x']) expect(looksLikeUrl(u), u).toBe(true);
-    for (const q of ['perf notes', 'perf', '', 'launch deck v2']) expect(looksLikeUrl(q), q).toBe(false);
-  });
   it("the Artifacts picker (⌘P): the 10 newest with no words, else what they find", () => {
     const many = Array.from({ length: 14 }, (_, i) => item(String(i), i % 2 === 0 ? 'perf' : 'deck', i, 'page', 'docs'));
     expect(latestArtifacts(many, '').map((x) => x.a.id)).toEqual(['13', '12', '11', '10', '9', '8', '7', '6', '5', '4']);
     expect(latestArtifacts(many, '')).toHaveLength(PICK_MAX);
     expect(latestArtifacts(many, 'perf').map((x) => x.a.id)).toEqual(['12', '10', '8', '6', '4', '2', '0']);
-  });
-  it('⏎ opens the highlighted artifact, else an address in his browser, else nothing', () => {
-    const found = launchMatches(items, 'perf');
-    expect(launchEnter(found, 1, 'perf')).toEqual({ artifact: found[1] });
-    expect(launchEnter(found, 9, 'perf')).toEqual({ artifact: found[0] });
-    expect(launchEnter([], 0, 'bise.dev/docs')).toEqual({ url: 'https://bise.dev/docs' });
-    expect(launchEnter([], 0, 'http://localhost:5173')).toEqual({ url: 'http://localhost:5173' });
-    expect(launchEnter([], 0, 'perf notes')).toBeUndefined();
-  });
-  it('↑/↓ walk the rows and stop at the ends', () => {
-    expect(stepAt(0, 3, 1)).toBe(1);
-    expect(stepAt(2, 3, 1)).toBe(2);
-    expect(stepAt(0, 3, -1)).toBe(0);
-    expect(stepAt(0, 0, 1)).toBe(0);
   });
 });
 
@@ -50,22 +32,18 @@ describe("the New tab's rows (his m_46444, designer m_46449)", () => {
   const items = [item('a', 'Perf notes', 1), item('c', 'perf bench', 2)];
   const open = ['artifacts', 'terminal'] as const;
   const recent = [{ kind: 'office' as const, project: 'acme' }];
-  it('Open then Recent with no words; an address first, then the matches, as he types', () => {
-    expect(launchRows({ q: '', picker: false, found: [], open, recent })).toEqual([
+  it('Open, New, then Recent; the picker: its artifacts only (his words are the omnibox\'s: omni.test.ts)', () => {
+    expect(launchRows({ picker: false, found: [], open, recent })).toEqual([
       { kind: 'open', row: 'artifacts' },
       { kind: 'open', row: 'terminal' },
       { kind: 'recent', e: recent[0] },
     ]);
     const found = launchMatches(items, 'perf');
-    expect(launchRows({ q: 'perf', picker: false, found, open, recent }).map((r) => r.kind)).toEqual(['found', 'found']);
-    expect(launchRows({ q: 'bise.dev', picker: false, found: [], open, recent })).toEqual([{ kind: 'url', url: 'https://bise.dev' }]);
-    // New › (docs/plugin-apps.md A6b): between Open and Recent; typing keeps the ones it matches, before the artifacts; never in the picker
+    // New › (docs/plugin-apps.md A6b): between Open and Recent; never in the picker
     const make = { plugin: 'sheets', app: 'Sheets', ending: '.xlsx', title: 'Sheet' };
-    expect(launchRows({ q: '', picker: false, found: [], open, recent, makes: [make] }).map((r) => r.kind)).toEqual(['open', 'open', 'new', 'recent']);
-    expect(launchRows({ q: 'perf', picker: false, found, open, recent, makes: [make] }).map((r) => r.kind)).toEqual(['new', 'found', 'found']);
-    expect(launchRows({ q: '', picker: true, found, open, recent, makes: [make] }).map((r) => r.kind)).toEqual(['found', 'found']);
-    // the picker searches artifacts only
-    expect(launchRows({ q: 'bise.dev', picker: true, found: [], open, recent })).toEqual([]);
+    expect(launchRows({ picker: false, found: [], open, recent, makes: [make] }).map((r) => r.kind)).toEqual(['open', 'open', 'new', 'recent']);
+    expect(launchRows({ picker: true, found, open, recent, makes: [make] }).map((r) => r.kind)).toEqual(['found', 'found']);
+    expect(launchRows({ picker: true, found: [], open, recent })).toEqual([]);
   });
   it('nothing highlighted with an empty field; the first row as he types, and in the picker', () => {
     expect(firstAt('', false)).toBe(NO_ROW);
@@ -81,11 +59,11 @@ describe("the New tab's rows (his m_46444, designer m_46449)", () => {
     expect(walkAt(NO_ROW, 3, -1)).toBe(NO_ROW);
     expect(walkAt(NO_ROW, 0, 1)).toBe(NO_ROW);
   });
-  it('⏎: the highlighted row; none highlighted: the first of a filtered list, nothing on Open/Recent', () => {
-    const rows = launchRows({ q: '', picker: false, found: [], open, recent });
+  it('⏎: the highlighted row; none highlighted: the picker\'s first, nothing on Open/Recent', () => {
+    const rows = launchRows({ picker: false, found: [], open, recent });
     expect(enterRow(rows, 1, false)).toEqual({ kind: 'open', row: 'terminal' });
     expect(enterRow(rows, NO_ROW, false)).toBeUndefined();
-    const typed = launchRows({ q: 'perf', picker: false, found: launchMatches(items, 'perf'), open, recent });
+    const typed = launchRows({ picker: true, found: launchMatches(items, 'perf'), open, recent });
     expect(enterRow(typed, NO_ROW, true)).toEqual(typed[0]);
   });
   it("Recent: only the front project's things (and those of no project), eight at most", () => {

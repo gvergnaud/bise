@@ -454,6 +454,25 @@
   background: var(--c-sunken);
   color: var(--c-text-2);
 }
+/* the omnibox's web page row: its × at the row's end, shown on hover or when highlighted
+   (Remove from history; page newtab-omnibox-flow) */
+.pn-omni-web {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+.pn-omni-x {
+  position: absolute;
+  top: 50%;
+  right: var(--s-2);
+  transform: translateY(-50%);
+  opacity: 0;
+}
+.pn-omni-web:hover .pn-omni-x,
+.pn-omni-web:has([data-on]) .pn-omni-x,
+.pn-omni-x:focus-within {
+  opacity: 1;
+}
 .pn-rec-w {
   display: flex;
   flex-direction: column;

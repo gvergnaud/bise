@@ -452,6 +452,25 @@
     "one": null,
     "text": "no archived agent"
   },
+  "panel.omni_remove": {
+    "args": [],
+    "one": null,
+    "text": "Remove from history"
+  },
+  "panel.omni_search": {
+    "args": [
+      "q"
+    ],
+    "one": null,
+    "text": "Search Google for \"{q}\""
+  },
+  "panel.omni_web": {
+    "args": [
+      "host"
+    ],
+    "one": null,
+    "text": "Web · {host}"
+  },
   "panel.on_trial": {
     "args": [
       "rev"

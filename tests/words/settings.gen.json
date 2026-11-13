@@ -5129,6 +5129,38 @@
     "one": null,
     "text": "Usage counts"
   },
+  "settings.privacy_web": {
+    "args": [],
+    "one": null,
+    "text": "Web history"
+  },
+  "settings.privacy_web_clear": {
+    "args": [],
+    "one": null,
+    "text": "Clear"
+  },
+  "settings.privacy_web_keep": {
+    "args": [],
+    "one": null,
+    "text": "Keep the links I open"
+  },
+  "settings.privacy_web_keep_sub": {
+    "args": [],
+    "one": null,
+    "text": "on this Mac only, for New tab's search"
+  },
+  "settings.privacy_web_pages": {
+    "args": [
+      "n"
+    ],
+    "one": "{n} page",
+    "text": "{n} pages"
+  },
+  "settings.privacy_web_pages_sub": {
+    "args": [],
+    "one": null,
+    "text": "never sent to agents or to bise"
+  },
   "settings.privacy_window_text": {
     "args": [],
     "one": null,

@@ -6,10 +6,11 @@
 // replaces the thread in the centre
 // (ArtifactView's centre and column modes are gone, rule 7): the centre keeps the thread, the
 // maker's composer is the centre's. A browser tab with no page yet (the launcher's Browser, ⌘L:
-// BlankBrowser) has the same bar, its address a field, focused: an artifact's name lists what it
-// finds under it (↑/↓ the highlighted row, ⏎ opens it in this tab), a URL goes to his browser on ⏎
-// (no web page loads in the app: main/guard.ts), esc clears it, then closes the tab. Owner: nm-panel.
-import { useEffect, useMemo, useRef, useState } from 'react';
+// BlankBrowser) has the same bar, its address a field, focused: the omnibox's (Omnibox.tsx, as
+// ⌘T's): his artifacts and web pages his words find under it, ⏎ opens the highlighted row (an
+// artifact in this tab; a page, an address or a search in his browser: no web page loads in the
+// app, main/guard.ts), esc drops the inline, clears it, then closes the tab. Owner: nm-panel.
+import { useEffect, useRef, useState } from 'react';
 import { AppIcon, IconButton, Input, Kbd, KindIcon, Press, iconKindOf, tipAttrs } from '@/ds';
 import { ds } from '@/proto/words_ds.gen';
 import { panel } from '@/proto/words_panel.gen';
@@ -19,9 +20,8 @@ import { PRIMARY_KEY } from '@/artifacts/front';
 import { useModHeld } from '@/app/held';
 import { useEntityMenu } from '@/app/menus/use';
 import { artifactGesture, countGesture } from '@/app/usage';
-import { closeTabId, openWhat, takeOpened } from './state';
-import { launchEnter, launchMatches, stepAt } from './launch';
-import { PickRow } from './Launcher';
+import { closeTabId, takeOpened } from './state';
+import { OmniList, useOmni } from './Omnibox';
 import { isFrameEsc } from '@/app/ArtifactView';
 import { frameEsc } from '@/app/escape';
 
@@ -156,25 +156,17 @@ export function Browser({ project, id, tabId }: { project: string; id: string; t
   );
 }
 
-/** A browser tab with no page yet: the bar, its address field focused, what his words find under it. */
+/** A browser tab with no page yet: the bar, its address field focused, the omnibox's list under it (Omnibox.tsx, designer m_64584 (4)). */
 export function BlankBrowser({ tabId, shown }: { tabId: string; shown: boolean }) {
-  const arts = useAllArtifacts();
   const [q, setQ] = useState('');
-  const [at, setAt] = useState(0);
   // ↑/↓ moved the highlight: no hover tint under a resting pointer until it moves (as the launcher)
   const [keyed, setKeyed] = useState(false);
   const field = useRef<HTMLInputElement>(null);
-  const found = useMemo(() => launchMatches(arts, q), [arts, q]);
+  const omni = useOmni({ tabId, ref: field, typed: q, setTyped: setQ });
   // just opened (⌘L, the launcher's Browser): the field takes the keys; never at a project switch (his m_46543)
   useEffect(() => {
     if (shown && takeOpened(tabId)) field.current?.focus();
   }, [shown, tabId]);
-  const enter = () => {
-    const p = launchEnter(found, at, q);
-    if (p === undefined) return;
-    if ('artifact' in p) openWhat({ kind: 'thing', e: { kind: 'artifact', project: p.artifact.project, id: p.artifact.a.id } }, tabId);
-    else void (window as Partial<Window>).bise?.openExternal(p.url);
-  };
   const optId = (i: number) => `${tabId}.opt.${String(i)}`;
   return (
     <div className="pn-browser" data-testid="app.panel.browser.blank">
@@ -190,32 +182,24 @@ export function BlankBrowser({ tabId, shown }: { tabId: string; shown: boolean }
           <Input
             ref={field}
             look="pn-url-in"
-            value={q}
+            value={omni.value}
             placeholder={panel.addr_enter}
             aria-label={panel.addr_enter}
             role="combobox"
-            aria-expanded={q.trim() !== ''}
+            aria-expanded={omni.rows.length > 0}
             aria-controls={`${tabId}.list`}
-            aria-activedescendant={found[at] === undefined ? undefined : optId(at)}
+            aria-activedescendant={omni.rows[omni.field.at] === undefined ? undefined : optId(omni.field.at)}
             onChange={(e) => {
-              setQ(e.target.value);
-              setAt(0);
+              omni.input(e.target.value, e.nativeEvent as InputEvent);
             }}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                enter();
-              } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-                e.preventDefault();
-                setKeyed(true);
-                setAt((i) => stepAt(i, found.length, e.key === 'ArrowDown' ? 1 : -1));
-              } else if (e.key === 'Escape') {
+              if (e.key === 'ArrowDown' || e.key === 'ArrowUp') setKeyed(true);
+              if (q.trim() !== '' && omni.key(e)) return;
+              if (e.key === 'Escape') {
                 e.preventDefault();
                 e.stopPropagation();
-                if (q !== '') {
-                  setQ('');
-                  setAt(0);
-                } else closeTabId(tabId);
+                if (q !== '') setQ('');
+                else closeTabId(tabId);
               }
             }}
             data-testid="app.panel.addr.field"
@@ -232,23 +216,7 @@ export function BlankBrowser({ tabId, shown }: { tabId: string; shown: boolean }
           setKeyed(false);
         }}
       >
-        {found.map((x, i) => (
-          <PickRow
-            key={`${x.project}/${x.a.id}`}
-            id={optId(i)}
-            on={i === at}
-            icon={<KindIcon kind={iconKindOf(x.a)} size={16} />}
-            title={x.a.title}
-            sub={panel.launch_kind_by({ kind: x.a.kind, who: x.a.agent })}
-            onPick={() => {
-              openWhat({ kind: 'thing', e: { kind: 'artifact', project: x.project, id: x.a.id } }, tabId);
-            }}
-            onHover={() => {
-              setAt(i);
-            }}
-            testId={`app.panel.browser.found.${x.project}/${x.a.id}`}
-          />
-        ))}
+        <OmniList omni={omni} prefix="app.panel.browser" optId={optId} />
       </div>
     </div>
   );

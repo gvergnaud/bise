@@ -9,7 +9,7 @@
 // Dock icon, userData is BISE_DESKTOP_USER_DATA or a temp folder (never his
 // Application Support), and main prints READY_LINE on stdout once the page
 // has loaded.
-import { mkdtempSync, rmSync } from 'node:fs';
+import { appendFile, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -31,6 +31,7 @@ import { Looks } from './helper/look';
 import { installIpc, panelShown, sendClip, sendMenu, setLooks, setProjectRoots } from './ipc';
 import { installViewFrames } from './viewframes';
 import { installKeepIpc } from './keep';
+import { installWebHistory } from './webhistoryipc';
 import { projectRoots } from './reveal';
 import { hasTestNotify } from './menu';
 import { installAppMenu } from './agentmenu';
@@ -134,6 +135,10 @@ void app.whenReady().then(() => {
   installViewFrames();
   // what he typed or opened, on disk for a reload, a relaunch or a crash (src/main/keep.ts)
   installKeepIpc(app.getPath('userData'));
+  // the web pages he opened from bise, for ⌘T's omnibox (webhistoryipc.ts): userData only, never a hub
+  installWebHistory(app.getPath('userData'), (line) => {
+    appendFile(join(app.getPath('userData'), 'app.log'), `${new Date().toISOString()} ${line}\n`, () => undefined);
+  });
   const helper = startHelper(testMode);
   // the helper's permissions reach the core (settings · Setup's gauge): main relays them, at each
   // change and again when a core comes up; an off-screen run relays GRANTED, as its pages see (perms.ts)

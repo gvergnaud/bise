@@ -6,7 +6,7 @@ import { appendFile, existsSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, extname, isAbsolute, join } from 'node:path';
 import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, session, shell, type OpenDialogOptions } from 'electron';
-import { COPY_LINE, EXTERNAL_LINE, IPC, PRIVACY_URLS, type PrivacyPane, OPEN_PATH_LINE, QUICKLOOK_LINE, REVEAL_LINE, SAVE_COPY_LINE, TEST_CLIP_FILE_ENV, TEST_CLIP_HOOK, TEST_CLIP_TEXT_ENV, TEST_PICK_FILES_ENV, TEST_PICK_FOLDER_ENV, TEST_SAVE_TO_ENV, type A11y, type FileFacts, type MenuAction, type PopupAt, type PopupItem, type SaveResult, type SkillRead, type ThumbAnswer } from '../shared/api';
+import { COPY_LINE, EXTERNAL_LINE, IPC, PRIVACY_URLS, type PrivacyPane, OPEN_PATH_LINE, QUICKLOOK_LINE, REVEAL_LINE, SAVE_COPY_LINE, TEST_CLIP_FILE_ENV, TEST_CLIP_HOOK, TEST_CLIP_TEXT_ENV, TEST_PICK_FILES_ENV, TEST_PICK_FOLDER_ENV, TEST_SAVE_TO_ENV, type A11y, type FileFacts, type MenuAction, type OpenOpts, type PopupAt, type PopupItem, type SaveResult, type SkillRead, type ThumbAnswer } from '../shared/api';
 import { saveCopy } from './savecopy';
 import { a11yNow } from './a11y';
 import { popupMenu } from './menu-popup';
@@ -15,6 +15,7 @@ import { cleanLine, cleanPath, openPlan } from './openpath';
 import type { ClipFile, ClipOp, ClipSeed } from './clipfence';
 import { menuTarget } from './menu';
 import { externalUrl } from './external';
+import { noteLink } from './webhistoryipc';
 import { isOffscreen, noAsks, offscreenGrants } from './offscreen';
 import { imageDir, saveImage } from './images';
 import { pickedFilesInTest, pickedInTest } from './pick';
@@ -126,7 +127,7 @@ export function installIpc(testMode: boolean): void {
   s.setPermissionRequestHandler((wc, permission, done, d) => {
     done(viewPermissionIn(wc, permission, d) ?? base(permission));
   });
-  ipcMain.handle(IPC.openExternal, (_e, raw: unknown): Promise<boolean> => openLink(raw, testMode));
+  ipcMain.handle(IPC.openExternal, (_e, raw: unknown, opts: unknown): Promise<boolean> => openLink(raw, testMode, openOpts(opts)));
   // a Privacy & Security pane (voice mode's Microphone, the projects scan's Files & Folders): the only settings URLs a window may open
   ipcMain.on(IPC.privacySettings, (_e, pane: unknown) => {
     const url = typeof pane === 'string' && Object.hasOwn(PRIVACY_URLS, pane) ? PRIVACY_URLS[pane as PrivacyPane] : null;
@@ -208,15 +209,24 @@ export function appLogLine(raw: unknown, at: Date): string | null {
   return `${at.toISOString()} ${raw.replace(/\s+/gu, ' ').trim().slice(0, 300)}\n`;
 }
 
-export async function openLink(raw: unknown, testMode: boolean): Promise<boolean> {
+export async function openLink(raw: unknown, testMode: boolean, opts: OpenOpts = {}): Promise<boolean> {
   const url = externalUrl(raw);
   if (url === null) return false;
+  // bise's web history (webhistory.ts): an http(s) link noted, whatever opened it
+  noteLink(url, opts.typed === true);
   if (testMode) {
     process.stdout.write(`${EXTERNAL_LINE} ${url}\n`);
     return true;
   }
-  await shell.openExternal(url);
+  await shell.openExternal(url, { activate: opts.background !== true });
   return true;
+}
+
+/** The window's openExternal options, checked: booleans only, anything else dropped. Pure. */
+export function openOpts(raw: unknown): OpenOpts {
+  if (raw === null || typeof raw !== 'object') return {};
+  const r = raw as Record<string, unknown>;
+  return { ...(r['typed'] === true ? { typed: true } : {}), ...(r['background'] === true ? { background: true } : {}) };
 }
 
 /**

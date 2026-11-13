@@ -60,9 +60,24 @@ export interface BiseApi {
   /**
    * Opens a link in his browser or mail app: http, https and mailto only
    * (src/main/external.ts). Resolves false when refused. In test mode nothing
-   * opens: main prints `EXTERNAL_LINE <url>` on stdout instead.
+   * opens: main prints `EXTERNAL_LINE <url>` on stdout instead. An http(s) link is noted in
+   * bise's web history (main/webhistory.ts); `opts.typed`: he typed it in the bar;
+   * `opts.background`: his browser stays behind (⌘⏎).
    */
-  readonly openExternal: (url: string) => Promise<boolean>;
+  readonly openExternal: (url: string, opts?: OpenOpts) => Promise<boolean>;
+  /**
+   * The web pages he opened from bise, for ⌘T's omnibox (main/webhistoryipc.ts, the one
+   * writer; kept in this app's userData, never in a hub). list(): the whole of it; onChange():
+   * each change, whole; remove() one page, clear() all, keep() his switch 'Keep the links I
+   * open' (off clears it). Optional: a test's fake window may leave it out.
+   */
+  readonly webHistory?: {
+    readonly list: () => Promise<WebHistory>;
+    readonly onChange: (cb: (h: WebHistory) => void) => () => void;
+    readonly remove: (url: string) => Promise<void>;
+    readonly clear: () => Promise<void>;
+    readonly keep: (on: boolean) => Promise<void>;
+  };
   /**
    * MCP Apps views (docs/mcp-apps.md C5, C6; src/views): call() asks the hub one view command
    * (view_resource, view_call, view_message, view_context) and gives its answer, result or
@@ -560,9 +575,41 @@ export type SkillRead =
   | { readonly text: string; readonly cut: boolean; readonly files: readonly { readonly name: string; readonly dir: boolean }[]; readonly more: number; readonly folder: string }
   | { readonly error: 'gone' | 'not_allowed' };
 
+/** One time he opened a web page from bise; `typed`: he typed it in ⌘T's or ⌘L's bar. */
+export interface WebVisit {
+  readonly at: number;
+  readonly typed: boolean;
+}
+
+/** A web page he opened from bise (main/webhistory.ts): its URL, how many times, its last visits newest first. */
+export interface WebPage {
+  readonly url: string;
+  readonly n: number;
+  readonly visits: readonly WebVisit[];
+}
+
+/** bise's web history (main/webhistory.ts): his switch 'Keep the links I open' and the pages, newest first. */
+export interface WebHistory {
+  readonly keep: boolean;
+  readonly pages: readonly WebPage[];
+}
+
+/** How a link leaves (openExternal): `typed` in the bar (a typed visit), `background` behind his windows (⌘⏎). */
+export interface OpenOpts {
+  readonly typed?: boolean;
+  readonly background?: boolean;
+}
+
 /** The IPC channels between the preload and main (owner: amb-mac). */
 export const IPC = {
   openExternal: 'bise:open-external',
+  /** window -> main: the web history (webhistoryipc.ts) */
+  webHistoryList: 'bise:web-history-list',
+  webHistoryRemove: 'bise:web-history-remove',
+  webHistoryClear: 'bise:web-history-clear',
+  webHistoryKeep: 'bise:web-history-keep',
+  /** main -> every window: the web history changed (the whole of it) */
+  webHistoryChanged: 'bise:web-history-changed',
   viewsCall: 'bise:views-call',
   viewsFrames: 'bise:views-frames',
   viewsGesture: 'bise:views-gesture',

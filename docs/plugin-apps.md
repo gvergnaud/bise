@@ -474,7 +474,14 @@ Owner: desktop `apps/desktop/src/views/` and `app/panel/`
 - A plugin's documents show in its own home (the launcher's New tab ›
   Boards) and in a folder tab, not as gallery cards; one the agent adds
   is one card, deduped by path.
-- Search (the gallery and ⌘T): name, type and app, from A2. Content
+- Search (the gallery and ⌘T): name, type and app, from A2. ⌘T's and ⌘L's
+  bar is an omnibox (page newtab-omnibox-flow, designer m_64584): his
+  artifacts and the web pages he opened from bise in one list, ranked as
+  Chrome's (prefix, word start, inside; then frecency), the first prefix
+  hit completed inline (Tab takes it), else his words as an address or a
+  Google search. The web history is the app's own (main/webhistory.ts,
+  userData only, never a hub; architect m_64583), cleared in Settings ›
+  Privacy; his Chrome history is not read (an opt-in for him to decide). Content
   search inside a plugin-only type needs a declared reader: not this
   round.
 

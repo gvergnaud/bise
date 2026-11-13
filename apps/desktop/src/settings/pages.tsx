@@ -21,6 +21,7 @@ import { appName, excludedApps, flag, getPref, knownApps, num, str, type Prefs }
 import type { SettingsData, SettingsPorts } from './Settings';
 import type { NotifyAuth } from '@/shared/api';
 import { settings } from '@/proto/words.gen';
+import { clearWebHistory, keepWebHistory, useWebHistory } from '@/app/panel/webpages';
 
 export type Page = 'setup' | 'general' | 'voice' | 'privacy' | 'quiet' | 'approvals' | 'projects' | 'computer' | 'keys';
 
@@ -341,6 +342,7 @@ function Privacy({ prefs, setPref, tg }: { prefs: Prefs | null; setPref: (key: s
           },
         ]}
       />
+      <WebHistoryGroup />
       <Group
         title={settings.privacy_apps}
         testId="settings.privacy.apps"
@@ -373,6 +375,48 @@ function Privacy({ prefs, setPref, tg }: { prefs: Prefs | null; setPref: (key: s
         ]}
       />
     </>
+  );
+}
+
+/**
+ * The web pages he opened from bise, for New tab's search (page newtab-omnibox-flow; architect
+ * m_64583): his switch 'Keep the links I open' (off clears it and records nothing) and how many
+ * pages, with Clear. Kept by the app on this Mac only (main/webhistoryipc.ts).
+ */
+function WebHistoryGroup() {
+  const h = useWebHistory();
+  return (
+    <Group
+      title={settings.privacy_web}
+      testId="settings.privacy.web"
+      items={[
+        {
+          id: 'web.keep',
+          label: settings.privacy_web_keep,
+          sub: settings.privacy_web_keep_sub,
+          control: (
+            <Toggle
+              on={h.keep}
+              label={settings.privacy_web_keep}
+              onChange={() => {
+                keepWebHistory(!h.keep);
+              }}
+              testId="settings.privacy.web.keep"
+            />
+          ),
+        },
+        {
+          id: 'web.pages',
+          label: settings.privacy_web_pages({ n: h.pages.length }),
+          sub: settings.privacy_web_pages_sub,
+          control: (
+            <Button disabled={h.pages.length === 0} onClick={clearWebHistory} testId="settings.privacy.web.clear">
+              {settings.privacy_web_clear}
+            </Button>
+          ),
+        },
+      ]}
+    />
   );
 }
 

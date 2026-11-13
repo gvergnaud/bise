@@ -466,6 +466,12 @@ export const panel = {
   launch_latest: "Latest artifacts",
   /** the artifacts picker with no artifact at all */
   launch_no_artifact: "no artifact yet",
+  /** the omnibox's row for his words when they aren't an address (page newtab-omnibox-flow, designer m_64584) */
+  omni_search: (a: { q: string | number }): string => "Search Google for \"" + String(a.q) + "\"",
+  /** a web page's line under it in the omnibox: the kind mark and its host */
+  omni_web: (a: { host: string | number }): string => "Web · " + String(a.host),
+  /** a web page row's ×: out of bise's web history */
+  omni_remove: "Remove from history",
   /** its tab's title */
   tab_browser: "Browser",
   /** its address field: placeholder and VoiceOver name */

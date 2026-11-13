@@ -216,6 +216,18 @@ crate::words! { settings:
     privacy_window_text = "The text of the window";
     /// privacy: the window's text's line
     privacy_window_text_sub = "mails, docs, tickets: bise sees what you see";
+    /// privacy: the web history's group (page newtab-omnibox-flow): the links he opened from bise, for ⌘T
+    privacy_web = "Web history";
+    /// privacy: its switch (on by default; off clears it and records nothing)
+    privacy_web_keep = "Keep the links I open";
+    /// privacy: its switch's line
+    privacy_web_keep_sub = "on this Mac only, for New tab's search";
+    /// privacy: how many pages it holds, its Clear's row
+    privacy_web_pages(n) = one "{n} page" | "{n} pages";
+    /// privacy: the Clear row's line
+    privacy_web_pages_sub = "never sent to agents or to bise";
+    /// privacy: its Clear
+    privacy_web_clear = "Clear";
     /// privacy: the second group's title
     privacy_kept = "Kept";
     /// privacy: the images row (D14: every image of the store, designer m_23410)

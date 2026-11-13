@@ -490,6 +490,12 @@ crate::words! { panel:
     launch_latest = "Latest artifacts";
     /// the artifacts picker with no artifact at all
     launch_no_artifact = "no artifact yet";
+    /// the omnibox's row for his words when they aren't an address (page newtab-omnibox-flow, designer m_64584)
+    omni_search(q) = "Search Google for \"{q}\"";
+    /// a web page's line under it in the omnibox: the kind mark and its host
+    omni_web(host) = "Web · {host}";
+    /// a web page row's ×: out of bise's web history
+    omni_remove = "Remove from history";
 
     // ---- a browser tab with no page yet (the launcher's Browser, ⌘L)
     /// its tab's title

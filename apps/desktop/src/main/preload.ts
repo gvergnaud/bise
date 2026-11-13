@@ -5,7 +5,7 @@
 // ⌘V and the menu's clipboard items play on a private buffer, never his.
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
 import type { HelperEv } from '../proto';
-import { HOME_ARG, IPC, OFFSCREEN_ARG, SURFACE_ARG, TEST_ENV, type A11y, type AppSwapResult, type AppUpdate, type ArtifactLink, type BiseApi, type CrashReport, type CapsuleState, type FileFacts, type MenuAction, type NotifyAuth, type SaveResult, type SkillRead, type Surface, type ThumbAnswer, type TermOpened, type UpdateInfo, type UpdateState, type ViewAnswerWire } from '../shared/api';
+import { HOME_ARG, IPC, OFFSCREEN_ARG, SURFACE_ARG, TEST_ENV, type A11y, type AppSwapResult, type AppUpdate, type ArtifactLink, type BiseApi, type CrashReport, type CapsuleState, type FileFacts, type MenuAction, type NotifyAuth, type SaveResult, type SkillRead, type Surface, type ThumbAnswer, type TermOpened, type UpdateInfo, type UpdateState, type ViewAnswerWire, type WebHistory } from '../shared/api';
 import { argValue } from './args';
 import { installClipFence, type ClipOp, type ClipSeed, type WinLike } from './clipfence';
 import { coreBridge } from './core/bridge';
@@ -95,7 +95,28 @@ const api: BiseApi = {
     swap: (route) => ipcRenderer.invoke(IPC.appSwap, route) as Promise<AppSwapResult>,
     restartLog: () => ipcRenderer.invoke(IPC.appRestartLog) as Promise<CrashReport | null>,
   },
-  openExternal: async (url) => (await ipcRenderer.invoke(IPC.openExternal, url)) === true,
+  openExternal: async (url, opts) => (await ipcRenderer.invoke(IPC.openExternal, url, opts)) === true,
+  webHistory: {
+    list: () => ipcRenderer.invoke(IPC.webHistoryList) as Promise<WebHistory>,
+    onChange: (cb) => {
+      const h = (_e: unknown, x: WebHistory): void => {
+        cb(x);
+      };
+      ipcRenderer.on(IPC.webHistoryChanged, h);
+      return () => {
+        ipcRenderer.removeListener(IPC.webHistoryChanged, h);
+      };
+    },
+    remove: async (url) => {
+      await ipcRenderer.invoke(IPC.webHistoryRemove, url);
+    },
+    clear: async () => {
+      await ipcRenderer.invoke(IPC.webHistoryClear);
+    },
+    keep: async (on) => {
+      await ipcRenderer.invoke(IPC.webHistoryKeep, on);
+    },
+  },
   views: {
     call: (cmd) => ipcRenderer.invoke(IPC.viewsCall, cmd) as Promise<ViewAnswerWire>,
     frames: (list) => {
