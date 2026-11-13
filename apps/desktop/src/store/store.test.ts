@@ -114,6 +114,17 @@ describe("store", () => {
     expect(store.apply({ ev: "orb", phase: "idle" })).toBe(false);
   });
 
+  it("the fake world's plugins list keeps the rows plugins/place.spec names (a plugins event is its project's whole list: a later fixture line with no project replaces it)", () => {
+    const { store } = fake();
+    replay(store);
+    const rows = store.plugins() ?? [];
+    // the spec's Blender row (its easel icon, its page and its mcp part) and the x row's switch
+    const blender = rows.find((p) => p.id === "blender");
+    expect(blender?.state).toBe("loaded");
+    expect(blender?.parts?.map((p) => p.id)).toContain("blender#mcp:blender");
+    expect(rows.map((p) => p.id)).toContain("x");
+  });
+
   it("knows every tag of the fixtures (TAGS is the generated unions)", () => {
     for (const ev of [...core_ev, ...hub_ev])
       expect(Object.hasOwn(TAGS, ev.ev)).toBe(true);
