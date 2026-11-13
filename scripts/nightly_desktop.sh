@@ -86,6 +86,16 @@ on_battery() { [ -n "${NIGHTLY_DESKTOP_BATTERY:-}" ] && { [ "$NIGHTLY_DESKTOP_BA
 
 note "nightly desktop: $sha in $here, $(date)${until:+, nothing new after $until}"
 steps=(candidate quick land mcp-apps full dmg)
+# NIGHTLY_DESKTOP_STEPS: some of them only, in this order (the tip check's as-he-does quick when he is
+# away: 'candidate quick', release-speed plan B2); an unknown name refuses the run
+if [ -n "${NIGHTLY_DESKTOP_STEPS:-}" ]; then
+  for s in $NIGHTLY_DESKTOP_STEPS; do
+    case " ${steps[*]} " in *" $s "*) ;; *) echo "NIGHTLY_DESKTOP_STEPS: no step '$s' (one of: ${steps[*]})" >&2; exit 2 ;; esac
+  done
+  only=() 
+  for s in "${steps[@]}"; do case " $NIGHTLY_DESKTOP_STEPS " in *" $s "*) only+=("$s") ;; esac; done
+  steps=("${only[@]}")
+fi
 if on_battery; then
   for s in "${steps[@]}"; do record "$s" none "on battery"; done
   verdict; return $?

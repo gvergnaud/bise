@@ -50,13 +50,14 @@ def parse_verdicts(text):
         if len(f) < 8 or not f[3].isdigit():
             continue
         out.append({"tip": f[0], "base": f[1], "state": f[2], "start": int(f[3]), "secs": int(float(f[4] or 0)),
-                    "cpu": float(f[5] or 0), "commits": int(f[6] or 0), "log": f[7], "named": f[8] if len(f) > 8 else ""})
+                    "cpu": float(f[5] or 0), "commits": int(f[6] or 0), "log": f[7], "named": f[8] if len(f) > 8 else "",
+                    "e2e": f[9] if len(f) > 9 else "", "ahd": f[10] if len(f) > 10 else ""})
     return out
 
 
 def verdict_line(v):
     return "\t".join(str(x) for x in (v["tip"], v["base"], v["state"], v["start"], v["secs"], round(v["cpu"], 1),
-                                       v["commits"], v["log"], v.get("named", ""))) + "\n"
+                                       v["commits"], v["log"], v.get("named", ""), v.get("e2e", ""), v.get("ahd", ""))) + "\n"
 
 
 def day_of(epoch):
@@ -98,6 +99,31 @@ def first_red(commits, red):
         else:
             lo = mid + 1
     return commits[hi] if commits else None
+
+
+# the e2e/tmux rows after a green quick (release-speed plan B1, architect m_63540): at most this many
+E2E_MAX = 8
+
+
+def e2e_picks(select_out, tests, cap=E2E_MAX):
+    """([tests] to run, None), or ([], 'none:<why>'): test_map.py select's stdout for the range,
+    against run_all.sh's tests. ALL or over the cap: none (the nightly and a release run them). Pure."""
+    s = (select_out or "").strip()
+    if s.startswith("ALL"):
+        return [], "none:ALL %s (the nightly and a release run every test)" % s[3:].strip()
+    picks = [t for t in s.split() if t in tests]
+    if not picks:
+        return [], "none:no e2e/tmux test picked"
+    if len(picks) > cap:
+        return [], "none:%d picked, over the cap %d (the nightly and a release run them)" % (len(picks), cap)
+    return picks, None
+
+
+def candidates(red, commit_picks):
+    """The commits, oldest first, whose own diff selects a red test (architect m_63540): one is named,
+    several are candidates main decides between, none (only ALL picked it) is a flake to own, never a
+    guess. commit_picks: [(sha, set of tests, or None for ALL)]. Pure."""
+    return [c for c, p in commit_picks if p and set(red) & set(p)]
 
 
 # ---- the shell --------------------------------------------------------------
@@ -151,6 +177,51 @@ def quick(home, wt, sha, base, log):
     return rc == 0, int(time.time() - t0), cpu
 
 
+def run_all_tests(wt):
+    """run_all.sh's e2e/tmux tests in that tree"""
+    try:
+        s = open(os.path.join(wt, "tests", "run_all.sh")).read()
+        return s.split('TESTS="', 1)[1].split('"', 1)[0].split()
+    except (OSError, IndexError):
+        return []
+
+
+def select_in(wt, paths):
+    """test_map.py select's stdout in that tree for those paths ('ALL <why>' or the tests)"""
+    if not paths:
+        return ""
+    r = subprocess.run([sys.executable, "-B", "tests/test_map.py", "select", *paths], cwd=wt, capture_output=True, text=True)
+    return r.stdout if r.returncode == 0 else "ALL test_map.py failed"
+
+
+def e2e(home, wt, tests, log):
+    """(green, secs, cpu secs, red tests) of those e2e/tmux tests on the tree's checkout: what run_all
+    needs built (as gate.sh full: sb-core and the scripted repls through bins.sh, bise), then
+    run_all.sh --only, through heavy-run --low at nice 15 like the quick gate"""
+    hr = os.environ.get("TIP_CHECK_HEAVY_RUN") or os.path.join(home, "run", "heavy-run")
+    red = tempfile.NamedTemporaryFile("w", suffix=".red", delete=False)
+    red.close()
+    env = dict(os.environ, SB_AGENT="tip-check", SB_RED_FILE=red.name, SB_RUN_KIND="tip-check-e2e")
+    for k in ("SB_SOCKET", "CARGO_TARGET_DIR", "HEAVY_SLOT"):
+        env.pop(k, None)
+    # TIP_CHECK_E2E_SCRIPT: the tests' fake build and run ($1 the tests)
+    script = os.environ.get("TIP_CHECK_E2E_SCRIPT") or (
+        'scripts/bins.sh sb-core repl-live repl-scripted && (cd rust && cargo build -q -p bend-harness) '
+        '&& tests/run_all.sh --only "$1"')
+    t0, c0 = time.time(), resource.getrusage(resource.RUSAGE_CHILDREN)
+    with open(log, "a") as out:
+        out.write("== %s e2e/tmux on %s: %s\n" % (time.strftime("%F %T"), git(wt, "rev-parse", "--short", "HEAD"), " ".join(tests)))
+        out.flush()
+        rc = subprocess.run([hr, "--low", "nice", "-n", str(NICE_MORE), "bash", "-c", script, "_", " ".join(tests)],
+                            cwd=wt, env=env, stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL).returncode
+    c1 = resource.getrusage(resource.RUSAGE_CHILDREN)
+    try:
+        reds = [t for t in open(red.name).read().split() if t in tests]
+    finally:
+        os.unlink(red.name)
+    return rc == 0, int(time.time() - t0), (c1.ru_utime - c0.ru_utime) + (c1.ru_stime - c0.ru_stime), reds
+
+
 def save_seed(wt, log):
     """main's tip is green here: its target becomes the warm seed of its deps when they have none yet
     (a land changed Cargo.lock or a Cargo.toml), so new task targets clone their deps warm instead of
@@ -163,7 +234,37 @@ def save_seed(wt, log):
             return
 
 
-def blame(home, main_tree, named, log, agent_journals):
+def blame_candidates(home, main_tree, tip, cands, red, log, agent_journals):
+    """tip-red naming several commits (each one's own diff picks a red e2e test): one line with a typed
+    candidates=<shas> field, main decides (architect m_63540)"""
+    sys.path.insert(0, HERE)
+    import tip_blame
+    own = tip_blame.owners(main_tree, tip_blame.landed(tip_blame.journal_texts(agent_journals)))
+    agents = []
+    rows = []
+    for c in cands:
+        who = own.get(c)
+        rows.append("  %s %s (%s)" % (c[:9], (git(main_tree, "log", "-1", "--format=%s", c) or "")[:100], who or "no land line"))
+        if who and who not in agents:
+            agents.append(who)
+    text = "\n".join([
+        "to: %s" % " ".join(agents + ["main"]),
+        "tip check (e2e) red on main %s (%s): %s; candidates=%s (each one's own diff picks a red test: main decides)"
+        % (tip[:9], time.strftime("%Y-%m-%d %H:%M"), " ".join(red), ",".join(c[:9] for c in cands)),
+        *rows,
+        "log: %s" % log,
+    ]) + "\n"
+    out = os.path.join(home, "run", "nightly")
+    os.makedirs(out, exist_ok=True)
+    dst = os.path.join(out, "tip-red")
+    if os.path.exists(dst):
+        text = tip_blame.merged(open(dst).read(), text)
+    with open(dst + ".tmp", "w") as f:
+        f.write(text)
+    os.replace(dst + ".tmp", dst)
+
+
+def blame(home, main_tree, named, log, agent_journals, what="tip check (quick)"):
     """tip-red for the named commit, through tip_blame (its parent as the last green)"""
     sys.path.insert(0, HERE)
     import tip_blame
@@ -173,7 +274,7 @@ def blame(home, main_tree, named, log, agent_journals):
     with tempfile.NamedTemporaryFile("w", suffix=".tsv", delete=False) as g:
         g.write("%s\t0\t0\ttip-check\t-\n" % parent)
     try:
-        _, text = tip_blame.report(main_tree, named, g.name, log, agent_journals, what="tip check (quick)")
+        _, text = tip_blame.report(main_tree, named, g.name, log, agent_journals, what=what)
     finally:
         os.unlink(g.name)
     dst = os.path.join(out, "tip-red")
@@ -207,6 +308,186 @@ def flaky(home, sha, log):
     with open(dst + ".tmp", "w") as f:
         f.write(text)
     os.replace(dst + ".tmp", dst)
+
+
+def e2e_step(home, main_tree, wt, tip, base, log, v, journals):
+    """After a green quick (plan B1, architect m_63540): the e2e/tmux tests test_map picks for
+    base..tip, up to E2E_MAX; a red runs alone once more; red again: the commits whose own diff picks
+    a red test are named (one: tip-red on it; several: candidates=; none: flaky-open); green the
+    second time: flaky-open. v gets e2e=<what>, its cpu and secs, and state red on a confirmed red."""
+    changed = (git(main_tree, "diff", "--name-only", base, tip) or "").split()
+    picks, why = e2e_picks(select_in(wt, changed), run_all_tests(wt))
+    if not picks:
+        v["e2e"] = why
+        with open(log, "a") as out:
+            out.write("== e2e/tmux: %s\n" % why)
+        return
+    g, s, c, reds = e2e(home, wt, picks, log)
+    v["secs"] += s
+    v["cpu"] += c
+    if g:
+        v["e2e"] = "green:" + ",".join(picks)
+        return
+    reds = reds or picks
+    g2, s2, c2, reds2 = e2e(home, wt, reds, log)
+    v["secs"] += s2
+    v["cpu"] += c2
+    if g2:
+        v["e2e"] = "flaky:" + ",".join(reds)
+        flaky(home, tip, log)
+        return
+    red = reds2 or reds
+    commits = (git(main_tree, "rev-list", "--first-parent", "--reverse", base + ".." + tip) or "").split()
+    cp = []
+    for c_ in commits:
+        got = select_in(wt, (git(main_tree, "diff-tree", "--no-commit-id", "--name-only", "-r", c_) or "").split())
+        cp.append((c_, None if got.strip().startswith("ALL") else set(got.split())))
+    cands = candidates(red, cp)
+    v["e2e"] = "red:" + ",".join(red)
+    if len(cands) == 1:
+        v["state"], v["named"] = "red", cands[0]
+        blame(home, main_tree, cands[0], log, journals, what="tip check (e2e %s)" % " ".join(red))
+    elif cands:
+        v["state"] = "red"
+        v["e2e"] += " candidates=" + ",".join(c_[:9] for c_ in cands)
+        blame_candidates(home, main_tree, tip, cands, red, log, journals)
+    else:
+        # picked only by an ALL rule: no commit to name, a flake to own (never a guess)
+        v["e2e"] += " candidates=none"
+        flaky(home, tip, log)
+
+
+# as-he-does quick after a desktop land while he is away (plan B2, architect m_63540)
+AWAY_IDLE = 15 * 60   # his idle seconds before it starts
+BACK_IDLE = 60        # under this, he is back: the run stops
+AWAY_GAP = 2 * 3600   # at most one run per 2 h
+
+
+def idle_secs():
+    """His idle seconds: HIDIdleTime (IOHIDSystem). as-he-does drives the candidate over CDP (no
+    CGEvent, no HID) and opens and quits it with open -g and an Apple Event, so our own run never
+    moves it (architect m_63540). TIP_CHECK_IDLE_FILE: the tests' fake."""
+    f = os.environ.get("TIP_CHECK_IDLE_FILE")
+    if f:
+        try:
+            return float(open(f).read().strip())
+        except (OSError, ValueError):
+            return 0.0
+    r = subprocess.run(["/usr/sbin/ioreg", "-c", "IOHIDSystem"], capture_output=True, text=True)
+    for l in r.stdout.splitlines():
+        if "HIDIdleTime" in l:
+            try:
+                return int(l.rsplit("=", 1)[1].strip()) / 1e9
+            except (IndexError, ValueError):
+                break
+    return 0.0
+
+
+def reaches_desktop(wt, paths):
+    """test_map.py desktop: whether those paths reach the desktop app"""
+    if not paths:
+        return False
+    r = subprocess.run([sys.executable, "-B", "tests/test_map.py", "desktop", *paths], cwd=wt, capture_output=True, text=True)
+    return r.returncode == 0 and r.stdout.startswith("desktop ")
+
+
+def away_verdict(steps, reds, known):
+    """('green'|'none'|'owned'|'red', [new reds]) of a candidate+quick run: its steps.tsv states and
+    reds.txt, split by known_reds at the tip. Pure."""
+    q = steps.get("quick", "none")
+    if steps.get("candidate") != "green" and q == "none":
+        return ("red", reds or ["desktop/candidate"]) if steps.get("candidate") == "red" else ("none", [])
+    if q == "green" and not reds:
+        return "green", []
+    if q == "none":
+        return "none", []
+    new = [r for r in reds if r not in known]
+    return ("red", new) if new else ("owned", [])
+
+
+def away_step(home, main_tree, wt, tip, base, log, v, journals, now=time.time, sleep=time.sleep):
+    """After a green quick on a range that reaches the desktop, while he's away (idle >= 15 min, on
+    AC: the runner waits for AC already), at most once per 2 h: nightly_desktop.sh's candidate and
+    as-he-does quick on the tip (its as-he-does in a quiet window), on a throwaway BISE_HOME under
+    its out dir (never his hubs or ~/bise; the candidate's build dir stays the shared one). He comes
+    back (idle < 60 s): its process group stopped, 'none:he came back', never a red. A new red (not
+    in known_reds at the tip): tip-red, the commits whose own diff reaches the desktop named (one),
+    candidates (several) or flaky-open (none). v gets ahd=<what>."""
+    changed = (git(main_tree, "diff", "--name-only", base, tip) or "").split()
+    if not reaches_desktop(wt, changed):
+        v["ahd"] = "none:no desktop change"
+        return
+    lastf = os.path.join(home, "run", "tip-check", "away-last")
+    try:
+        last = float(open(lastf).read().strip())
+    except (OSError, ValueError):
+        last = 0.0
+    if now() - last < float(os.environ.get("TIP_CHECK_AWAY_GAP", AWAY_GAP)):
+        v["ahd"] = "none:one ran %d min ago (at most one per 2 h)" % ((now() - last) // 60)
+        return
+    idle = idle_secs()
+    if idle < AWAY_IDLE:
+        v["ahd"] = "none:he is here (idle %d s)" % idle
+        return
+    with open(lastf, "w") as f:
+        f.write("%d\n" % now())
+    out = os.path.join(home, "run", "tip-check", "away-%s-%s" % (time.strftime("%Y%m%d-%H%M%S"), tip[:9]))
+    os.makedirs(os.path.join(out, "home"), exist_ok=True)
+    hr = os.environ.get("TIP_CHECK_HEAVY_RUN") or os.path.join(home, "run", "heavy-run")
+    nd = os.environ.get("TIP_CHECK_DESKTOP") or "scripts/nightly_desktop.sh"
+    env = dict(os.environ, BISE_HOME=os.path.join(out, "home"), NIGHTLY_DESKTOP_STEPS="candidate quick", SB_AGENT="tip-check",
+               SB_BUILD_DIR=os.environ.get("SB_BUILD_DIR") or os.path.join(home, "dev", "build"))
+    for k in ("SB_SOCKET", "CARGO_TARGET_DIR", "HEAVY_SLOT"):
+        env.pop(k, None)
+    poll = float(os.environ.get("TIP_CHECK_AWAY_POLL", 20))
+    with open(log, "a") as o:
+        o.write("== %s as-he-does quick on %s (he's away, idle %d s), its out %s\n" % (time.strftime("%F %T"), tip[:12], idle, out))
+        o.flush()
+        p = subprocess.Popen([hr, "--low", "nice", "-n", str(NICE_MORE), "bash", nd, out, tip], cwd=wt, env=env,
+                             stdout=o, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True)
+        while p.poll() is None:
+            sleep(poll)
+            if p.poll() is None and idle_secs() < BACK_IDLE:
+                o.write("== he came back: the run stopped\n")
+                for sig, wait in ((15, 10), (9, 5)):
+                    try:
+                        os.killpg(p.pid, sig)
+                    except OSError:
+                        break
+                    try:
+                        p.wait(wait)
+                        break
+                    except subprocess.TimeoutExpired:
+                        continue
+                p.wait()
+                v["ahd"] = "none:he came back"
+                return
+    rd = lambda n: open(os.path.join(out, n)).read() if os.path.exists(os.path.join(out, n)) else ""  # noqa: E731
+    steps = dict(l.split("\t", 2)[:2] for l in rd("steps.tsv").splitlines() if "\t" in l)
+    reds = [l.strip() for l in rd("reds.txt").splitlines() if l.strip()]
+    sys.path.insert(0, os.path.join(HERE, "..", "tests"))
+    import known_reds
+    try:
+        known = known_reds.parse(git(main_tree, "show", "%s:tests/known_reds.txt" % tip) or "")
+    except ValueError:
+        known = {}
+    kind, new = away_verdict(steps, reds, known)
+    v["ahd"] = {"green": "green", "none": "none:no result (%s)" % out, "owned": "owned:%d" % len(reds)}.get(kind, "red:" + ";".join(new))
+    if kind != "red":
+        return
+    commits = (git(main_tree, "rev-list", "--first-parent", "--reverse", base + ".." + tip) or "").split()
+    cands = [c for c in commits if reaches_desktop(wt, (git(main_tree, "diff-tree", "--no-commit-id", "--name-only", "-r", c) or "").split())]
+    v["state"] = "red"
+    if len(cands) == 1:
+        v["named"] = cands[0]
+        blame(home, main_tree, cands[0], log, journals, what="tip check (as-he-does quick: %s)" % "; ".join(new))
+    elif cands:
+        v["ahd"] += " candidates=" + ",".join(c[:9] for c in cands)
+        blame_candidates(home, main_tree, tip, cands, new, log, journals)
+    else:
+        v["state"] = "flaky"
+        v["ahd"] += " candidates=none"
+        flaky(home, tip, log)
 
 
 def run(home, main_tree, hook_base, now=time.time, sleep=time.sleep):
@@ -273,6 +554,10 @@ def run(home, main_tree, hook_base, now=time.time, sleep=time.sleep):
                     v["state"] = "flaky"
                     flaky(home, v["named"], log)
                     v["named"] = ""
+            if green:
+                e2e_step(home, main_tree, wt, tip, base, log, v, journals)
+            if green and v["state"] == "green":
+                away_step(home, main_tree, wt, tip, base, log, v, journals, now, sleep)
         with open(vfile, "a") as f:
             f.write(verdict_line(v))
         hook_base = None

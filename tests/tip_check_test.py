@@ -14,6 +14,16 @@ import tempfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
 import tip_check as T  # noqa: E402
+import threading  # noqa: E402
+sys.path.insert(0, os.path.join(ROOT, "tests"))
+import wait  # noqa: E402
+
+
+def wait_for(pred, secs=30, what="the state"):
+    try:
+        return bool(wait.until(pred, secs, what))
+    except Exception:  # noqa: BLE001 (a timeout is a False here)
+        return False
 
 FAILS = []
 GIT_ENV = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
@@ -75,6 +85,30 @@ def pure():
     line = T.verdict_line(dict(v("t1", now, cpu=12.34), named="n1"))
     back = T.parse_verdicts(line + "short\tline\n")
     check(len(back) == 1 and back[0]["cpu"] == 12.3 and back[0]["named"] == "n1" and back[0]["start"] == now, "verdict %r" % back)
+    # plan B1 (architect m_63540): the e2e/tmux picks after a green quick, typed in the 10th field
+    line = T.verdict_line(dict(v("t1", now), e2e="green:a_e2e,b_tmux"))
+    check(T.parse_verdicts(line)[0]["e2e"] == "green:a_e2e,b_tmux" and T.parse_verdicts(T.verdict_line(v("t1", now)))[0]["e2e"] == "",
+          "the e2e field reads back, empty on an old line")
+    tests = ["a_e2e", "b_e2e", "c_tmux"] + ["t%d_e2e" % i for i in range(10)]
+    check(T.e2e_picks("a_e2e c_tmux PROOFX\n", tests) == (["a_e2e", "c_tmux"], None), "picks: test_map's, run_all's only")
+    picks, why = T.e2e_picks("ALL rust/x.rs (shared code or no rule)\n", tests)
+    check(picks == [] and why.startswith("none:ALL rust/x.rs"), "ALL: none, said %r" % why)
+    picks, why = T.e2e_picks(" ".join("t%d_e2e" % i for i in range(9)), tests)
+    check(picks == [] and "9 picked, over the cap 8" in why, "over the cap: none %r" % why)
+    check(T.e2e_picks("", tests) == ([], "none:no e2e/tmux test picked"), "nothing picked")
+    cp = [("c1", {"a_e2e"}), ("c2", None), ("c3", {"b_e2e", "a_e2e"}), ("c4", set())]
+    check(T.candidates(["a_e2e"], cp) == ["c1", "c3"], "candidates: each commit whose own diff picks a red test")
+    check(T.candidates(["b_e2e"], cp) == ["c3"], "one candidate: named")
+    check(T.candidates(["c_tmux"], cp) == [], "picked only by ALL: no candidate (a flake to own)")
+    # plan B2: the away run's verdict from nightly_desktop.sh's steps and reds, split by known_reds
+    known = {"as-he-does/quick: old": ("x", "o", "w")}
+    check(T.away_verdict({"candidate": "green", "quick": "green"}, [], known) == ("green", []), "away: green")
+    check(T.away_verdict({"candidate": "green", "quick": "red"}, ["as-he-does/quick: old"], known) == ("owned", []), "away: a known red is owned")
+    check(T.away_verdict({"candidate": "green", "quick": "red"}, ["as-he-does/quick: old", "as-he-does/quick: new"], known)
+          == ("red", ["as-he-does/quick: new"]), "away: a new red")
+    check(T.away_verdict({"candidate": "red", "quick": "none"}, ["desktop/candidate"], known) == ("red", ["desktop/candidate"]), "away: the candidate red")
+    check(T.away_verdict({"candidate": "green", "quick": "none"}, [], known) == ("none", []), "away: no quick result, never red")
+    check(T.parse_verdicts(T.verdict_line(dict(v("t1", now), e2e="none:x", ahd="green")))[0]["ahd"] == "green", "the ahd field reads back")
 
 
 def fake_world(t):
@@ -88,6 +122,8 @@ def fake_world(t):
         f.write(FAKE_GATE)
     for s in ("tip_check.py", "tip_blame.py"):
         shutil.copy(os.path.join(ROOT, "scripts", s), os.path.join(repo, "scripts", s))
+    # the away run splits its reds by known_reds (plan B2)
+    shutil.copy(os.path.join(ROOT, "tests", "known_reds.py"), os.path.join(repo, "tests", "known_reds.py"))
     g("add", ".")
     g("-c", "commit.gpgsign=false", "commit", "-q", "-m", "base")
     heavy = os.path.join(t, "heavy-run")
@@ -186,6 +222,121 @@ def world():
         check(r.returncode == 0 and "a runner is on it" in r.stdout and len(verdicts()) == 4, "a second runner: %r" % r.stdout)
         heavy = open(os.path.join(t, "heavy.log")).read().splitlines()
         check(all(l.startswith("--low nice -n 5 bash tests/gate.sh quick") for l in heavy), "every run --low, +5: %r" % heavy)
+        # 7. plan B1 (architect m_63540): after a green quick, the e2e/tmux tests test_map picks for
+        # the range (a fake test_map: a changed tests/<name>.py picks <name>; a fake build and run:
+        # a test with a file E2EBAD_<name> in the tree is red)
+        with open(os.path.join(repo, "tests", "test_map.py"), "w") as f:
+            f.write("import sys\nprint(' '.join(p[6:-3] for p in sys.argv[2:] if p.startswith('tests/') and p.endswith('_e2e.py')))\n")
+        with open(os.path.join(repo, "tests", "run_all.sh"), "w") as f:
+            f.write('TESTS="one_e2e two_e2e"\n')
+        g("add", "tests")
+        g("-c", "commit.gpgsign=false", "commit", "-q", "-m", "the fake map")
+        fake = 'for t in $1; do echo "ran $t"; if [ -e "E2EBAD_$t" ]; then echo "$t" >>"$SB_RED_FILE"; f=1; fi; done; exit ${f:-0}'
+        e2e_env = dict(TIP_CHECK_E2E_SCRIPT=fake)
+        n0 = len(verdicts())
+
+        def land_file(name, agent, path, bad=False):
+            open(os.path.join(repo, path), "w").write("%s\n" % name)
+            if bad:
+                open(os.path.join(repo, "E2EBAD_" + os.path.basename(path)[:-3]), "w").close()
+            g("add", "-A")
+            g("-c", "commit.gpgsign=false", "commit", "-q", "-m", "feat: %s" % name)
+            sha = g("rev-parse", "HEAD")
+            with open(os.path.join(home, "hubs", "h1", "journal.jsonl"), "a") as f:
+                f.write('{"msg":{"text":"✓ %s landed 1 commit on main (%s)"}}\n' % (agent, sha[:9]))
+            return sha
+        f1 = land_file("f1", "iota", "tests/one_e2e.py")
+        r = tip_check(f1 + "^", f1, "iota", **e2e_env)
+        vs = verdicts()
+        check(len(vs) == n0 + 1 and vs[-1]["state"] == "green" and vs[-1]["e2e"] == "green:one_e2e", "e2e green after quick %s %s" % (vs[-1:], r.stderr[-300:]))
+        if os.path.exists(tr):
+            os.remove(tr)
+        # red twice, one commit whose own diff picks it: named, tip-red on its lander
+        f2 = land_file("f2", "kappa", "tests/two_e2e.py", bad=True)
+        r = tip_check(f2 + "^", f2, "kappa", **e2e_env)
+        vs = verdicts()
+        text = open(tr).read() if os.path.exists(tr) else ""
+        check(vs[-1]["state"] == "red" and vs[-1]["named"] == f2 and vs[-1]["e2e"] == "red:two_e2e" and text.startswith("to: kappa main"),
+              "e2e red twice: its one commit named %s %r" % (vs[-1:], text))
+        # two commits in the range both pick the red test: candidates=, main decides
+        os.remove(tr)
+        f3 = land_file("f3", "lambda", "tests/two_e2e.py", bad=True)
+        open(os.path.join(repo, "tests", "two_e2e.py"), "w").write("y\n")
+        g("-c", "commit.gpgsign=false", "commit", "-q", "-am", "feat: f4")
+        f4 = g("rev-parse", "HEAD")
+        r = tip_check(f2, f4, "lambda", **e2e_env)
+        vs = verdicts()
+        text = open(tr).read() if os.path.exists(tr) else ""
+        check(vs[-1]["state"] == "red" and vs[-1]["named"] == "" and "candidates=%s,%s" % (f3[:9], f4[:9]) in vs[-1]["e2e"]
+              and "candidates=%s,%s" % (f3[:9], f4[:9]) in text, "two candidates, one tip-red line %s %r" % (vs[-1:], text))
+        # over the cap or ALL: none, said
+        check(all(v["e2e"] for v in vs[n0:]), "every new verdict has its e2e field")
+        # (step 7's red test fixed: its marker gone)
+        os.remove(os.path.join(repo, "E2EBAD_two_e2e"))
+        g("add", "-A")
+        g("-c", "commit.gpgsign=false", "commit", "-q", "-m", "fix: two_e2e")
+        if os.path.exists(tr):
+            os.remove(tr)
+        # 8. plan B2 (architect m_63540): a desktop land while he's away: the candidate and as-he-does
+        # quick (a fake nightly_desktop.sh) on a throwaway BISE_HOME under its out dir; he comes back:
+        # stopped, 'none:he came back', never red. The fake test_map: apps/desktop/ reaches the desktop.
+        with open(os.path.join(repo, "tests", "test_map.py"), "w") as f:
+            f.write("import sys\nif sys.argv[1] == 'desktop':\n"
+                    "    print('desktop x' if any(p.startswith('apps/desktop/') for p in sys.argv[2:]) else 'none')\n"
+                    "else:\n    print(' '.join(p[6:-3] for p in sys.argv[2:] if p.startswith('tests/') and p.endswith('_e2e.py')))\n")
+        g("-c", "commit.gpgsign=false", "commit", "-q", "-am", "the fake desktop map")
+        os.makedirs(os.path.join(repo, "apps", "desktop"), exist_ok=True)
+        idlef, nd, ndlog = os.path.join(t, "idle"), os.path.join(t, "fake_nd.sh"), os.path.join(t, "nd.log")
+        with open(nd, "w") as f:
+            f.write('echo "steps=$NIGHTLY_DESKTOP_STEPS home=$BISE_HOME out=$1 sha=$2" >>"%s"\n'
+                    'i=0; while [ -e "%s.slow" ] && [ $i -lt 100 ]; do i=$((i+1)); [ "$(cat %s)" = 0 ] && break; '
+                    'perl -e "select(undef,undef,undef,0.1)"; done\n'
+                    'printf "candidate\\tgreen\\nquick\\t%%s\\n" "${FAKE_Q:-green}" >"$1/steps.tsv"\n'
+                    '[ -n "${FAKE_RED:-}" ] && echo "$FAKE_RED" >"$1/reds.txt"; exit 0\n' % (ndlog, idlef, idlef))
+        away_env = dict(e2e_env, TIP_CHECK_IDLE_FILE=idlef, TIP_CHECK_DESKTOP=nd, TIP_CHECK_AWAY_POLL="0.2", TIP_CHECK_AWAY_GAP="0")
+        open(idlef, "w").write("3600")
+        h1 = land_file("h1", "mu", "apps/desktop/a.ts")
+        r = tip_check(h1 + "^", h1, "mu", **away_env)
+        vs = verdicts()
+        nl = open(ndlog).read().splitlines() if os.path.exists(ndlog) else []
+        check(vs[-1]["ahd"] == "green" and nl and "steps=candidate quick" in nl[-1], "away, a desktop land: candidate + quick, green %s %s %s" % (vs[-1:], nl, r.stderr[-300:]))
+        home_of = nl[-1].split("home=")[1].split()[0] if nl else ""
+        out_of = nl[-1].split("out=")[1].split()[0] if nl else "?"
+        check(home_of.startswith(out_of + "/") and not home_of.startswith(os.path.join(home, ".bise")) and home_of != home,
+              "its BISE_HOME is a throwaway under its out dir, never his: %r (out %r)" % (home_of, out_of))
+        # here (idle 10 s): nothing runs
+        open(idlef, "w").write("10")
+        h2 = land_file("h2", "nu", "apps/desktop/b.ts")
+        n_before = len(nl)
+        tip_check(h2 + "^", h2, "nu", **away_env)
+        check(verdicts()[-1]["ahd"].startswith("none:he is here") and len(open(ndlog).read().splitlines()) == n_before, "he's here: no run")
+        # away, then back mid-run (the fake idle file drops; our run doesn't move it): stopped, none
+        open(idlef, "w").write("3600")
+        open(idlef + ".slow", "w").close()
+        h3 = land_file("h3", "xi", "apps/desktop/c.ts")
+        n_before = len(open(ndlog).read().splitlines())
+
+        def comes_back():
+            # once the fake run started: he touches the Mac
+            if wait_for(lambda: len(open(ndlog).read().splitlines()) > n_before, 30, "the away run's start"):
+                open(idlef, "w").write("0")
+        th = threading.Thread(target=comes_back)
+        th.start()
+        r = tip_check(h3 + "^", h3, "xi", **away_env)
+        th.join()
+        os.remove(idlef + ".slow")
+        vs = verdicts()
+        check(vs[-1]["ahd"] == "none:he came back" and vs[-1]["state"] == "green", "he came back mid-run: stopped, none, never red %s %s" % (vs[-1:], r.stderr[-300:]))
+        # a new red away: its one desktop commit named (tip-red)
+        if os.path.exists(tr):
+            os.remove(tr)
+        open(idlef, "w").write("3600")
+        h4 = land_file("h4", "omicron", "apps/desktop/d.ts")
+        r = tip_check(h4 + "^", h4, "omicron", FAKE_Q="red", FAKE_RED="as-he-does/quick: a new red", **away_env)
+        vs = verdicts()
+        text = open(tr).read() if os.path.exists(tr) else ""
+        check(vs[-1]["state"] == "red" and vs[-1]["named"] == h4 and vs[-1]["ahd"] == "red:as-he-does/quick: a new red"
+              and text.startswith("to: omicron main"), "away, a new red: its commit named %s %r" % (vs[-1:], text))
     finally:
         shutil.rmtree(t, ignore_errors=True)
 

@@ -255,6 +255,14 @@ def main():
         check("STEP land: green (pnpm build; test:land's specs run in the release's desktop checks)" in o, "release land: why " + o)
         rc, o, calls = run(NIGHTLY_DESKTOP_LAND_SPECS="checks", FAKE_BUILD_RED="1")
         check(rc == 1 and facts()[0] == ["desktop/build"] and facts()[1].get("land") == "red", "release land: build red %s %s" % (facts(), o))
+        # NIGHTLY_DESKTOP_STEPS (plan B2: the tip check's away run): those steps only, in order; a
+        # name it doesn't know refuses the run
+        rc, o, calls = run(NIGHTLY_DESKTOP_STEPS="quick candidate")
+        st = facts()[1]
+        check(rc == 0 and set(st) == {"candidate", "quick"} and not [c for c in calls if c.startswith("pnpm") or c.startswith("dmg")],
+              "steps knob: candidate and quick only %s %s" % (st, calls))
+        rc, o, calls = run(NIGHTLY_DESKTOP_STEPS="candidate nope")
+        check(rc == 2 and "no step 'nope'" in o and not calls, "steps knob: an unknown step refuses the run %s" % o[-200:])
         # one app build per sha (plan A step 5, architect m_63479): the candidate built this sha with
         # this tree's key: no second build; another key (or none): the build as before
         sys.path.insert(0, os.path.join(ROOT, "scripts"))
