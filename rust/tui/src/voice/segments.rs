@@ -48,21 +48,6 @@ pub fn cut_at(clip: &[i16]) -> Option<usize> {
     }
 }
 
-/// A whole clip's segments, in order (the TUI's retry of a kept clip).
-pub fn split(clip: &[i16]) -> Vec<&[i16]> {
-    let mut out = Vec::new();
-    let mut rest = clip;
-    while let Some(at) = cut_at(rest) {
-        let (head, tail) = rest.split_at(at);
-        out.push(head);
-        rest = tail;
-    }
-    if !rest.is_empty() {
-        out.push(rest);
-    }
-    out
-}
-
 enum Seg<T> {
     Waiting(Vec<i16>),
     Heard(T, Vec<i16>),
@@ -129,11 +114,6 @@ impl<T> Segments<T> {
             }
         }
         (out, err)
-    }
-
-    /// Nothing cut is left (every segment went out).
-    pub fn all_out(&self) -> bool {
-        self.queue.is_empty()
     }
 
     /// The sound not yet handed out, in order: a failed take's kept clip.
@@ -206,16 +186,6 @@ mod tests {
         assert_eq!(cut_at(&clip), Some(SEGMENT_MAX));
     }
 
-    #[test]
-    fn split_keeps_every_sample_in_order() {
-        let clip: Vec<i16> = (0..(SEGMENT_MAX * 3 + 5)).map(|i| (i % 7) as i16 * 1000).collect();
-        let parts = split(&clip);
-        assert_eq!(parts.len(), 4);
-        assert!(parts.iter().all(|p| p.len() <= SEGMENT_MAX));
-        assert_eq!(parts.concat(), clip);
-        assert!(split(&[]).is_empty());
-    }
-
     /// Ten minutes in 100 ms blocks: every segment out, every sample once.
     #[test]
     fn a_ten_minute_take_goes_out_whole() {
@@ -237,7 +207,7 @@ mod tests {
         let (heard, err) = s.hear(|pcm| -> Result<usize, ()> { Ok(pcm.len()) });
         assert!(err.is_none());
         out.extend(heard);
-        assert!(s.all_out());
+        assert!(s.unheard().is_empty());
         assert!(n >= 3, "cut while he talks, {n} segments");
         assert_eq!(out.iter().map(|(len, _)| len).sum::<usize>(), 6000 * BLOCK);
         let back: Vec<i16> = out.into_iter().flat_map(|(_, pcm)| pcm).collect();
@@ -265,7 +235,7 @@ mod tests {
         let (out, err) = s.hear(|_| Ok::<_, &str>("one"));
         assert_eq!(err, None);
         assert_eq!(out.iter().map(|(t, _)| *t).collect::<Vec<_>>(), ["one", "two"]);
-        assert!(s.all_out());
+        assert!(s.unheard().is_empty());
         assert!(s.unheard().is_empty());
     }
 
@@ -275,7 +245,7 @@ mod tests {
         s.push(&speech(SEGMENT_MAX + 10));
         assert_eq!(s.unheard().len(), SEGMENT_MAX + 10);
         s.clear();
-        assert!(s.all_out());
+        assert!(s.unheard().is_empty());
         assert!(s.unheard().is_empty());
     }
 }

@@ -81,6 +81,7 @@ pub fn load(dir: &Path, id: &str) -> Option<VecDeque<i16>> {
 }
 
 /// Its file is there.
+#[cfg(test)]
 pub fn has(dir: &Path, id: &str) -> bool {
     file(dir, id).is_some_and(|p| p.is_file())
 }
