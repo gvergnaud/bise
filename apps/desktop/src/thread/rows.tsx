@@ -31,7 +31,8 @@ export interface RowCtx {
   readonly agent: string;
   /** bise's own main (the pearl, 'bise') */
   readonly bise: boolean;
-  readonly onLink: (url: string) => void;
+  /** a link's click; `mod`: ⌘ held (WebTab: his browser, page newtab-browser) */
+  readonly onLink: (url: string, mod?: boolean) => void;
   /** an artifact named in a row (its chip, an `artifact:` link, a note's page): its view */
   readonly onArtifact: (id: string) => void;
   /** a file path named in an answer, relative to the agent's folder (M4, B14) */

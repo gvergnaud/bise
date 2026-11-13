@@ -224,6 +224,14 @@ export const settings = {
   privacy_web_pages_sub: "never sent to agents or to bise",
   /** privacy: its Clear */
   privacy_web_clear: "Clear",
+  /** privacy: the web tabs' cookies and site data, its row */
+  privacy_web_cookies: "Cookies and site data",
+  /** privacy: that row's line */
+  privacy_web_cookies_sub: "what the sites you open in bise keep: logins, preferences",
+  /** privacy: the sites he always opens in his browser (designer m_64680), its row when there are some */
+  privacy_web_out: "Always in your browser",
+  /** privacy: a listed site's remove act */
+  privacy_web_out_remove: "Remove",
   /** privacy: the second group's title */
   privacy_kept: "Kept",
   /** privacy: the images row (D14: every image of the store, designer m_23410) */

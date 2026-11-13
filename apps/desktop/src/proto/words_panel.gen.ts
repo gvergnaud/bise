@@ -472,6 +472,26 @@ export const panel = {
   omni_web: (a: { host: string | number }): string => "Web · " + String(a.host),
   /** a web page row's ×: out of bise's web history */
   omni_remove: "Remove from history",
+  /** the address bar's × while the page loads */
+  web_stop: "Stop",
+  /** the address bar's ⋯ */
+  web_more: "More",
+  /** ⋯'s per-site item (checked while on): the site always opens in his browser */
+  web_out_site: (a: { site: string | number }): string => "Always open " + String(a.site) + " in your browser",
+  /** a download he saved, the line under the bar: its name and the folder he picked */
+  web_saved: (a: { name: string | number; folder: string | number }): string => String(a.name) + " saved to " + String(a.folder),
+  /** that line's act */
+  web_show: "Show in Finder",
+  /** a page that didn't load, the line under the bar */
+  web_failed: "This page didn't load",
+  /** that line's act */
+  web_retry: "Try again",
+  /** ⌘F in a web tab: the field's placeholder and name */
+  web_find: "Find in page",
+  /** find's count: the match in front and how many */
+  web_found: (a: { at: string | number; n: string | number }): string => String(a.at) + " of " + String(a.n),
+  /** find with nothing found */
+  web_no_match: "no match",
   /** its tab's title */
   tab_browser: "Browser",
   /** its address field: placeholder and VoiceOver name */

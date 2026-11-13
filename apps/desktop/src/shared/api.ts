@@ -77,6 +77,26 @@ export interface BiseApi {
     readonly remove: (url: string) => Promise<void>;
     readonly clear: () => Promise<void>;
     readonly keep: (on: boolean) => Promise<void>;
+    /** 'Always open <site> in your browser' on or off: a page's URL or a host */
+    readonly out: (site: string, on: boolean) => Promise<void>;
+    /** the web tabs' cookies and site data (their session only) */
+    readonly clearCookies: () => Promise<void>;
+  };
+  /**
+   * The web tabs (page newtab-browser; main/webview/views.ts their one owner): the window sends
+   * each tab's key with facts (its rect, shown or not) and verbs; main sends back its page's state
+   * and events. A page never sees window.bise. Optional: a test's fake window may leave it out.
+   */
+  readonly web?: {
+    readonly open: (key: string, start: WebStart) => void;
+    readonly rect: (key: string, rect: WebRect) => void;
+    readonly go: (key: string, url: string, typed: boolean) => void;
+    readonly act: (key: string, verb: WebVerb) => void;
+    /** find `text` in the page ('' stops); `back` ⇧⏎, `next` the same words again */
+    readonly find: (key: string, text: string, back: boolean, next: boolean) => void;
+    readonly focus: (key: string) => void;
+    readonly close: (key: string) => void;
+    readonly onEvent: (cb: (ev: WebEvent) => void) => () => void;
   };
   /**
    * MCP Apps views (docs/mcp-apps.md C5, C6; src/views): call() asks the hub one view command
@@ -581,18 +601,70 @@ export interface WebVisit {
   readonly typed: boolean;
 }
 
-/** A web page he opened from bise (main/webhistory.ts): its URL, how many times, its last visits newest first. */
+/** A web page he opened from bise (main/webhistory.ts): its URL, its title once a web tab loaded it, how many times, its last visits newest first. */
 export interface WebPage {
   readonly url: string;
+  readonly title?: string;
   readonly n: number;
   readonly visits: readonly WebVisit[];
 }
 
-/** bise's web history (main/webhistory.ts): his switch 'Keep the links I open' and the pages, newest first. */
+/**
+ * bise's web history (main/webhistory.ts): his switch 'Keep the links I open', the pages newest
+ * first, and the sites he always opens in his browser ('Always open <site> in your browser': hosts).
+ */
 export interface WebHistory {
   readonly keep: boolean;
   readonly pages: readonly WebPage[];
+  readonly out: readonly string[];
 }
+
+/** A web tab's back/forward entry (URL and title only, never form data: architect m_64682 rule 5). */
+export interface WebEntry {
+  readonly url: string;
+  readonly title: string;
+}
+
+/** How a web tab starts: a URL (`typed`: he typed it in the bar), or its kept entries and the one in front. */
+export type WebStart = { readonly url: string; readonly typed?: boolean } | { readonly entries: readonly WebEntry[]; readonly index: number };
+
+/** A web tab's rect in the window's CSS pixels, and whether it shows (its tab in front, nothing over it). */
+export interface WebRect {
+  readonly x: number;
+  readonly y: number;
+  readonly w: number;
+  readonly h: number;
+  readonly visible: boolean;
+}
+
+/** What the window asks of a web tab's page. */
+export type WebVerb = 'back' | 'forward' | 'reload' | 'stop' | 'zoom-in' | 'zoom-out' | 'zoom-reset';
+
+/** A web tab's page as main last saw it (main/webview/views.ts): its favicon a data URL. */
+export interface WebTabState {
+  readonly url: string;
+  readonly title: string;
+  readonly favicon: string | null;
+  readonly back: boolean;
+  readonly forward: boolean;
+  readonly loading: boolean;
+  readonly failed: boolean;
+  readonly zoom: number;
+  readonly entries: readonly WebEntry[];
+  readonly index: number;
+}
+
+/** What main tells the window of its web tabs, each by its key. */
+export type WebEvent =
+  | { readonly kind: 'state'; readonly key: string; readonly state: WebTabState }
+  /** a page asked for a new window (target=_blank, window.open): a web tab next to it */
+  | { readonly kind: 'new-tab'; readonly key: string; readonly url: string }
+  /** a key the panel owns, pressed in the page (⌘T, ⌘L, ⌘P...): the window plays it */
+  | { readonly kind: 'key'; readonly key: string; readonly code: string; readonly k: string; readonly meta: boolean; readonly ctrl: boolean; readonly alt: boolean; readonly shift: boolean }
+  /** a download he saved where he picked (the save panel) */
+  | { readonly kind: 'saved'; readonly key: string; readonly name: string; readonly path: string; readonly folder: string }
+  /** find in the page: the match in front and how many */
+  | { readonly kind: 'found'; readonly key: string; readonly at: number; readonly n: number };
 
 /** How a link leaves (openExternal): `typed` in the bar (a typed visit), `background` behind his windows (⌘⏎). */
 export interface OpenOpts {
@@ -608,8 +680,20 @@ export const IPC = {
   webHistoryRemove: 'bise:web-history-remove',
   webHistoryClear: 'bise:web-history-clear',
   webHistoryKeep: 'bise:web-history-keep',
+  webHistoryOut: 'bise:web-history-out',
+  webHistoryCookies: 'bise:web-history-cookies',
   /** main -> every window: the web history changed (the whole of it) */
   webHistoryChanged: 'bise:web-history-changed',
+  /** window -> main: its web tabs (main/webview/views.ts) */
+  webOpen: 'bise:web-open',
+  webRect: 'bise:web-rect',
+  webGo: 'bise:web-go',
+  webAct: 'bise:web-act',
+  webFind: 'bise:web-find',
+  webFocus: 'bise:web-focus',
+  webClose: 'bise:web-close',
+  /** main -> the window: its web tabs' states and events */
+  webEvent: 'bise:web-event',
   viewsCall: 'bise:views-call',
   viewsFrames: 'bise:views-frames',
   viewsGesture: 'bise:views-gesture',

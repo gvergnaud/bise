@@ -5285,6 +5285,16 @@
     "one": null,
     "text": "Clear"
   },
+  "settings.privacy_web_cookies": {
+    "args": [],
+    "one": null,
+    "text": "Cookies and site data"
+  },
+  "settings.privacy_web_cookies_sub": {
+    "args": [],
+    "one": null,
+    "text": "what the sites you open in bise keep: logins, preferences"
+  },
   "settings.privacy_web_keep": {
     "args": [],
     "one": null,
@@ -5294,6 +5304,16 @@
     "args": [],
     "one": null,
     "text": "on this Mac only, for New tab's search"
+  },
+  "settings.privacy_web_out": {
+    "args": [],
+    "one": null,
+    "text": "Always in your browser"
+  },
+  "settings.privacy_web_out_remove": {
+    "args": [],
+    "one": null,
+    "text": "Remove"
   },
   "settings.privacy_web_pages": {
     "args": [

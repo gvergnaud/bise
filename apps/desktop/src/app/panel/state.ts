@@ -17,7 +17,7 @@ import { useLeftWidth } from '@/app/frame-state';
 import { iconKindOf } from '@/ds';
 import { useAllArtifacts } from '@/artifacts';
 import { armHandoff } from '@/composer/handoff';
-import { activate, boxOf, clampShare, closeBackKept, closeKept, closeOthers, fitOf, launcherToReuse, moveIn, nextBrowser, nextLauncher, nextShell, openKept, pushClosed, reopenIn, stepIn, clampW, withOpen, FOLDED, dropGone, dropGoneArts, type Before, type Closed, type PanelBox, type PanelFit, type PanelKept, type TabWhat, type Tabs } from './model';
+import { activate, boxOf, clampShare, closeBackKept, closeKept, closeOthers, fitOf, launcherToReuse, moveIn, nextBrowser, nextLauncher, nextShell, openKept, pushClosed, reopenIn, stepIn, clampW, withOpen, FOLDED, dropGone, dropGoneArts, type Before, type Closed, type PanelBox, type PanelFit, type PanelKept, type TabWhat, type Tabs, type WebPageOf } from './model';
 import { parseRec, pruneScopes, putView, scopeOf, switchTo, viewOf, type PanelRec } from './scope';
 import { focusBackOf, noteFocus } from './focusback';
 import { parseSnap, restoreKept, sameSnap, snapOf, type PanelStep } from './steps';
@@ -391,6 +391,46 @@ export function launcherHome(id: string): void {
 /** ⌘L and the launcher's Browser: a browser tab, its address field focused (Browser.tsx). */
 export function openBrowser(instead?: string): void {
   openWhat(nextBrowser(state.tabs), instead);
+}
+
+/**
+ * A web page in a browser tab (page newtab-browser): in the tab `instead`'s place (a New tab or a
+ * blank browser becomes the page, as Chrome's), else a new tab after the one in front; `behind`:
+ * the tab in front stays in front (⌘⏎, ⌘click). `typed`: he typed it in the bar.
+ */
+export function openWebPage(url: string, o: { readonly instead?: string; readonly behind?: boolean; readonly typed?: boolean } = {}): void {
+  const was = state.tabs.active;
+  const at = o.instead === undefined ? undefined : state.tabs.list.find((t) => t.id === o.instead);
+  const n = at?.what.kind === 'browser' ? at.what.n : (nextBrowser(state.tabs) as { readonly n: number }).n;
+  openWhat({ kind: 'browser', n, page: { url, ...(o.typed === true ? { typed: true } : {}) } }, o.instead);
+  if (o.behind === true && was !== '') activateTab(was);
+}
+
+/** A web tab's page as main last said it: the tab's what in place (no step, no reorder, no front). */
+export function setWebPage(id: string, page: WebPageOf): void {
+  const t = state.tabs.list.find((x) => x.id === id);
+  if (t?.what.kind !== 'browser') return;
+  const what: TabWhat = { kind: 'browser', n: t.what.n, page };
+  set({ ...state, tabs: { ...state.tabs, list: state.tabs.list.map((x) => (x.id === id ? { id, what } : x)) } });
+}
+
+/** Every web tab's key across the window's panels ('<project>|<tab id>'), for main's views (web.ts). */
+export function webTabKeys(): ReadonlySet<string> {
+  const out = new Set<string>();
+  const add = (project: string, list: readonly { readonly id: string; readonly what: TabWhat }[]) => {
+    for (const t of list) if (t.what.kind === 'browser') out.add(`${project}|${t.id}`);
+  };
+  for (const [project, k] of Object.entries(rec.byProject)) if (project !== rec.at) add(project, k.tabs.list);
+  add(rec.at, state.tabs.list);
+  return out;
+}
+
+/** Called at each change of the panel (web.ts closes the views of tabs gone). */
+export function onPanelChange(l: () => void): () => void {
+  listeners.add(l);
+  return () => {
+    listeners.delete(l);
+  };
 }
 
 /** A new shell of `project` in a tab (the launcher's Terminal, a terminal's '+'). */

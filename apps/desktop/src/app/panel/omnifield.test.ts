@@ -7,7 +7,7 @@ import { clampAt, fieldOf, onInput, onKey, shownOf, type OmniField, type OmniKey
 
 const NOW = 1_800_000_000_000;
 const page = (url: string, n: number): WebPage => ({ url, n, visits: Array.from({ length: n }, () => ({ at: NOW, typed: false })) });
-const WEB: WebHistory = { keep: true, pages: [page('https://github.com/gvergnaud/bise', 3), page('https://gist.github.com/x', 1), page('https://news.ycombinator.com/', 1)] };
+const WEB: WebHistory = { keep: true, out: [], pages: [page('https://github.com/gvergnaud/bise', 3), page('https://gist.github.com/x', 1), page('https://news.ycombinator.com/', 1)] };
 
 /** The list and the field's text for `f`. */
 function view(f: OmniField) {

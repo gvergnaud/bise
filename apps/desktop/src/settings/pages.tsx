@@ -21,7 +21,7 @@ import { appName, excludedApps, flag, getPref, knownApps, num, str, type Prefs }
 import type { SettingsData, SettingsPorts } from './Settings';
 import type { NotifyAuth } from '@/shared/api';
 import { settings } from '@/proto/words.gen';
-import { clearWebHistory, keepWebHistory, useWebHistory } from '@/app/panel/webpages';
+import { clearWebCookies, clearWebHistory, keepWebHistory, outWebSite, useWebHistory } from '@/app/panel/webpages';
 
 export type Page = 'setup' | 'general' | 'voice' | 'privacy' | 'quiet' | 'approvals' | 'projects' | 'computer' | 'keys';
 
@@ -380,8 +380,8 @@ function Privacy({ prefs, setPref, tg }: { prefs: Prefs | null; setPref: (key: s
 
 /**
  * The web pages he opened from bise, for New tab's search (page newtab-omnibox-flow; architect
- * m_64583): his switch 'Keep the links I open' (off clears it and records nothing) and how many
- * pages, with Clear. Kept by the app on this Mac only (main/webhistoryipc.ts).
+ * m_64583): his switch 'Keep the links I open' (off clears it and records nothing), how many
+ * pages with Clear, the web tabs' cookies with Clear, and the sites he always opens in his browser. Kept by the app on this Mac only (main/webhistoryipc.ts).
  */
 function WebHistoryGroup() {
   const h = useWebHistory();
@@ -415,6 +415,33 @@ function WebHistoryGroup() {
             </Button>
           ),
         },
+        // the web tabs' own cookies and site data (their session only: architect m_64682 rule 3)
+        {
+          id: 'web.cookies',
+          label: settings.privacy_web_cookies,
+          sub: settings.privacy_web_cookies_sub,
+          control: (
+            <Button onClick={clearWebCookies} testId="settings.privacy.web.cookies">
+              {settings.privacy_web_clear}
+            </Button>
+          ),
+        },
+        // the sites he always opens in his browser (designer m_64680), each removable
+        ...h.out.map((site) => ({
+          id: `web.out.${site}`,
+          label: site,
+          sub: settings.privacy_web_out,
+          control: (
+            <Button
+              onClick={() => {
+                outWebSite(site, false);
+              }}
+              testId={`settings.privacy.web.out.${site}`}
+            >
+              {settings.privacy_web_out_remove}
+            </Button>
+          ),
+        })),
       ]}
     />
   );

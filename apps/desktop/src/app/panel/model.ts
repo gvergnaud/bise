@@ -4,14 +4,20 @@
 // rest in the overflow menu), the panel's width for what is in front, and how the kept record reads
 // back. No React, no store, no words: state.ts keeps one of these per window, the views draw it.
 // Owner: nm-panel.
+import type { WebEntry } from '@/shared/api';
 import { entityKey, type Entity } from '@/shared/entity';
 
 /** What a tab shows. */
 export type TabWhat =
   /** New tab: the launcher (search, Open, Recent); `artifacts`: its picker of the latest artifacts (⌘P) */
   | { readonly kind: 'launcher'; readonly n: number; readonly artifacts?: true }
-  /** a browser tab with no page yet: its address field takes an artifact's name or a URL (⌘L) */
-  | { readonly kind: 'browser'; readonly n: number }
+  /**
+   * a browser tab (⌘L): no `page` yet, its address field takes an artifact's name or a URL; with
+   * one, a web page in the tab (WebTab.tsx, page newtab-browser): its URL and title as main last
+   * said, its back/forward (URL and title only, architect m_64682 rule 5), `typed` while its first
+   * load is one he typed
+   */
+  | { readonly kind: 'browser'; readonly n: number; readonly page?: WebPageOf }
   /** a shell in a project's folder; n 0 is the project's first (the bottom panel's too) */
   | { readonly kind: 'terminal'; readonly project: string; readonly n: number }
   /** a thing he opened: an artifact, a PR, a commit, a diff, a process, a plugin, an agent's thread */
@@ -22,6 +28,15 @@ export type TabWhat =
    * tab's title before the next. A folder row opens in place (the tab takes the new what).
    */
   | { readonly kind: 'folder'; readonly entry: string | null; readonly name: string };
+
+/** A web tab's page as its tab keeps it (main/webview/views.ts says it). */
+export interface WebPageOf {
+  readonly url: string;
+  readonly title?: string;
+  readonly typed?: boolean;
+  readonly entries?: readonly WebEntry[];
+  readonly index?: number;
+}
 
 export interface Tab {
   /** one per thing: 'new:2', 'term:<project>#1', or the entity's key */
@@ -520,6 +535,18 @@ function entityOf(x: unknown): Entity | undefined {
   }
 }
 
+/** A web tab's page read back (URL and title entries only), or undefined. Pure. */
+function pageOf(x: unknown): WebPageOf | undefined {
+  if (!isObj(x) || typeof x['url'] !== 'string' || x['url'] === '') return undefined;
+  const entries = (Array.isArray(x['entries']) ? (x['entries'] as unknown[]) : []).flatMap((e) => (isObj(e) && typeof e['url'] === 'string' ? [{ url: e['url'], title: typeof e['title'] === 'string' ? e['title'] : '' }] : []));
+  const index = typeof x['index'] === 'number' && x['index'] >= 0 && x['index'] < entries.length ? x['index'] : undefined;
+  return {
+    url: x['url'],
+    ...(typeof x['title'] === 'string' && x['title'] !== '' ? { title: x['title'] } : {}),
+    ...(entries.length > 0 && index !== undefined ? { entries, index } : {}),
+  };
+}
+
 /** A tab's what read back, or undefined. Pure. */
 function whatOf(x: unknown): TabWhat | undefined {
   if (!isObj(x)) return undefined;
@@ -527,8 +554,11 @@ function whatOf(x: unknown): TabWhat | undefined {
     case 'launcher':
       if (typeof x['n'] !== 'number') return undefined;
       return x['artifacts'] === true ? { kind: 'launcher', n: x['n'], artifacts: true } : { kind: 'launcher', n: x['n'] };
-    case 'browser':
-      return typeof x['n'] === 'number' ? { kind: 'browser', n: x['n'] } : undefined;
+    case 'browser': {
+      if (typeof x['n'] !== 'number') return undefined;
+      const page = pageOf(x['page']);
+      return page === undefined ? { kind: 'browser', n: x['n'] } : { kind: 'browser', n: x['n'], page };
+    }
     case 'terminal':
       return typeof x['project'] === 'string' && x['project'] !== '' && typeof x['n'] === 'number' ? { kind: 'terminal', project: x['project'], n: x['n'] } : undefined;
     case 'thing': {

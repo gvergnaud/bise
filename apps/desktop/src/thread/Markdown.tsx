@@ -126,7 +126,8 @@ export const Markdown = memo(function Markdown({
   slotLabel,
 }: {
   text: string;
-  onLink?: (url: string) => void;
+  /** a link's click; `mod`: ⌘ (⌃) held, his browser (page newtab-browser) */
+  onLink?: (url: string, mod?: boolean) => void;
   /** an `artifact:` link's click: the artifact's view */
   onArtifact?: (id: string) => void;
   onPath?: (path: string, line?: number) => void;
@@ -196,7 +197,7 @@ export const Markdown = memo(function Markdown({
       if (!openable(href)) return <span className="th-link-off">{children}</span>;
       const open = (e: MouseEvent) => {
         e.preventDefault();
-        onLink?.(href);
+        onLink?.(href, e.metaKey || e.ctrlKey);
       };
       return (
         <a href={href} onClick={open} title={href} rel="noreferrer" data-testid="thread.link">
@@ -296,7 +297,8 @@ export function Answer({
   text: string;
   live?: boolean;
   still?: boolean;
-  onLink?: (url: string) => void;
+  /** a link's click; `mod`: ⌘ (⌃) held, his browser (page newtab-browser) */
+  onLink?: (url: string, mod?: boolean) => void;
   onArtifact?: (id: string) => void;
   onPath?: (path: string, line?: number) => void;
 }) {

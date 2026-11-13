@@ -12,6 +12,9 @@ import { useAllArtifacts } from '@/artifacts';
 import { useAllProcesses } from '@/running';
 import { useProjects, useStore } from '@/store';
 import type { Tab } from './model';
+import { shownUrl } from './omni';
+import { panelAt } from './state';
+import { useWebSide, webKey } from './web';
 import { viewTitle } from '@/views/Tab';
 import { viewsStore } from '@/views/window';
 
@@ -40,7 +43,10 @@ function lookOf(tab: Tab, projects: ReturnType<typeof useProjects>, arts: Return
     case 'launcher':
       return { title: panel.tab_new, icon: <AppIcon name="browser" size={14} /> };
     case 'browser':
-      return { title: panel.tab_browser, icon: <AppIcon name="browser" size={14} /> };
+      // a web page: its title cut at a word, its favicon (the page's colours: designer m_64680), else the globe
+      return what.page === undefined
+        ? { title: panel.tab_browser, icon: <AppIcon name="browser" size={14} /> }
+        : { title: webTitle(what.page.title ?? shownUrl(what.page.url)), icon: <WebIcon tabId={tab.id} /> };
     case 'terminal':
       return {
         title: what.n === 0 ? panel.tab_terminal({ project: name }) : panel.tab_terminal_n({ n: what.n + 1, project: name }),
@@ -104,4 +110,22 @@ function lookOf(tab: Tab, projects: ReturnType<typeof useProjects>, arts: Return
     case 'tab':
       return { title: e.id, icon: null };
   }
+}
+
+/** The longest web page title a tab shows, cut at a word. */
+const WEB_TITLE_MAX = 40;
+
+/** A web page's title for its tab: whole, else cut at the last word that fits, with '…'. Pure. */
+export function webTitle(t: string): string {
+  if (t.length <= WEB_TITLE_MAX) return t;
+  const cut = t.slice(0, WEB_TITLE_MAX);
+  const sp = cut.lastIndexOf(' ');
+  return `${(sp > WEB_TITLE_MAX / 2 ? cut.slice(0, sp) : cut).trimEnd()}…`;
+}
+
+/** A web tab's favicon at 14, as main fetched it (a data URL); the globe until it comes. */
+function WebIcon({ tabId }: { tabId: string }) {
+  const side = useWebSide(webKey(panelAt(), tabId));
+  const f = side.state?.favicon ?? null;
+  return f === null ? <AppIcon name="browser" size={14} /> : <img className="pn-favicon" src={f} alt="" width={14} height={14} />;
 }

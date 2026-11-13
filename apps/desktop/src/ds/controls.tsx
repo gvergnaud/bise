@@ -5,6 +5,7 @@
 // anywhere else. Radix (headless) is used here only, for the Sheet's dialog and the Select's
 // listbox: focus trap, esc, typeahead and the a11y wiring are theirs, the look is the ds's.
 // Pure renders of their props, like every ds component (index.ts's rules); css/controls.css.
+import { useCoverWhile } from "./cover";
 import * as Dialog from "@radix-ui/react-dialog";
 import type { ButtonHTMLAttributes, InputHTMLAttributes, KeyboardEvent, MouseEventHandler, ReactNode, Ref, TextareaHTMLAttributes } from "react";
 import { cx, st, type UiState } from "./cx";
@@ -167,6 +168,8 @@ export interface SheetProps {
  * primary, and focus goes back to what opened it (Radix Dialog).
  */
 export function Sheet({ open, onClose, title, sub, children, foot, onPrimary, testId }: SheetProps) {
+  // a native view over the page (a web tab) hides while it shows (cover.ts)
+  useCoverWhile(open);
   const enter = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key !== "Enter" || e.shiftKey || e.metaKey || e.altKey || e.ctrlKey || e.nativeEvent.isComposing) return;
     const t = e.target as HTMLElement;

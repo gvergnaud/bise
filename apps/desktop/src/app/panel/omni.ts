@@ -85,9 +85,9 @@ function classOf(q: string, prefixes: readonly string[], hay: string): number {
   return ws.every((w) => l.includes(w)) ? 1 : 0;
 }
 
-/** What a page completes from: its shown URL, then with www., then whole. Pure. */
+/** What a page completes from: its shown URL, then with www., then whole, then its title (a web tab read it). Pure. */
 function pagePrefixes(p: WebPage): readonly string[] {
-  return [shownUrl(p.url), noScheme(p.url), p.url];
+  return [shownUrl(p.url), noScheme(p.url), p.url, ...(p.title === undefined ? [] : [p.title])];
 }
 
 /** The whole text a hit completes `q` to (his letters kept, the rest the hit's), or null: no prefix match. Pure. */
@@ -104,7 +104,7 @@ export function completionOf(q: string, hit: OmniHit | undefined): string | null
 export function omniHits(q: string, web: WebHistory, items: readonly Item[], recent: ReadonlySet<string>, now: number, max = HITS_MAX): readonly OmniHit[] {
   if (q.trim() === '') return [];
   const pages: OmniHit[] = web.pages.flatMap((page) => {
-    const cls = classOf(q, pagePrefixes(page), page.url);
+    const cls = classOf(q, pagePrefixes(page), `${page.url} ${page.title ?? ''}`);
     return cls === 0 ? [] : [{ kind: 'web' as const, page, cls, score: frecency(page.visits, now) }];
   });
   const arts: OmniHit[] = items.flatMap((item) => {

@@ -1496,6 +1496,64 @@
     "one": null,
     "text": "{n} watching"
   },
+  "panel.web_failed": {
+    "args": [],
+    "one": null,
+    "text": "This page didn't load"
+  },
+  "panel.web_find": {
+    "args": [],
+    "one": null,
+    "text": "Find in page"
+  },
+  "panel.web_found": {
+    "args": [
+      "at",
+      "n"
+    ],
+    "one": null,
+    "text": "{at} of {n}"
+  },
+  "panel.web_more": {
+    "args": [],
+    "one": null,
+    "text": "More"
+  },
+  "panel.web_no_match": {
+    "args": [],
+    "one": null,
+    "text": "no match"
+  },
+  "panel.web_out_site": {
+    "args": [
+      "site"
+    ],
+    "one": null,
+    "text": "Always open {site} in your browser"
+  },
+  "panel.web_retry": {
+    "args": [],
+    "one": null,
+    "text": "Try again"
+  },
+  "panel.web_saved": {
+    "args": [
+      "name",
+      "folder"
+    ],
+    "one": null,
+    "text": "{name} saved to {folder}"
+  },
+  "panel.web_show": {
+    "args": [],
+    "one": null,
+    "text": "Show in Finder"
+  },
+  "panel.web_stop": {
+    "args": [],
+    "one": null,
+    "text": "Stop"
+  },
   "panel.wt_feature": {
     "args": [
       "g"

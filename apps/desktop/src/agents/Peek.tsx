@@ -2,6 +2,8 @@
 // space on a panel selection, sb.rs draw_sb preview). Its last entries,
 // read only, drawn by the thread's own rows; the thread is followed while
 // the preview is open. Owner: amb-win.
+import { openWebLink } from '@/app/panel/web';
+import { webHistoryNow } from '@/app/panel/webpages';
 import { useEffect, useMemo } from 'react';
 import { threadKey, useStore, useThreadOrder } from '@/store';
 import { EntryRow, type RowCtx } from '@/thread/rows';
@@ -33,8 +35,8 @@ export function Peek({ project, agent }: { project: string; agent: string }) {
       project,
       agent,
       bise: false,
-      onLink: (url) => {
-        void (window as Partial<Window>).bise?.openExternal(url);
+      onLink: (url, mod) => {
+        openWebLink(url, mod === true, webHistoryNow().out);
       },
       onArtifact: (id) => {
         goArtifact(project, id);

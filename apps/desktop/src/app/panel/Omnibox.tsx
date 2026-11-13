@@ -1,9 +1,9 @@
 // src/app/panel · the omnibox ⌘T's New tab and ⌘L's blank browser share (page newtab-omnibox-flow,
 // designer m_64584): the hook that ranks his web pages and artifacts for his words (omni.ts) and
 // keeps the field's state (omnifield.ts), the field's text and its inline part selected, its keys,
-// what a row opens (a page or a search in his browser, noted as typed: ⏎ brings it to the front
-// and closes the tab, ⌘⏎ leaves it behind and keeps the tab; an artifact in this tab, or with ⌘⏎
-// in a new tab behind this one), and the list's rows (a page's × takes it out of his history).
+// what a row opens (a page, an address or a search in a web tab of bise in this tab's place, ⌘⏎
+// in one behind (page newtab-browser); his browser for a site he always opens there; an artifact in
+// this tab, or with ⌘⏎ in a new tab behind this one), and the list's rows (a page's × takes it out of his history).
 // Owner: newtab-omnibox.
 import { useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { AppIcon, IconButton, KindIcon, iconKindOf } from '@/ds';
@@ -11,7 +11,8 @@ import { panel } from '@/proto/words_panel.gen';
 import { useAllArtifacts } from '@/artifacts';
 import { sayOpened } from '@/artifacts/opened';
 import { getAppStore } from '@/store';
-import { activateTab, closeTabId, openWhat, usePanelState } from './state';
+import { activateTab, closeTabId, openWebPage, openWhat, usePanelState } from './state';
+import { linkGoes } from './web';
 import { hostOf, omniHits, omniRows, shownUrl, type OmniHit, type OmniRow } from './omni';
 import { clampAt, onInput, onKey, shownOf, type OmniField } from './omnifield';
 import { removeWebPage, useWebHistory } from './webpages';
@@ -52,6 +53,8 @@ export function useOmni(o: {
   readonly setTyped: (q: string) => void;
   readonly makes?: readonly MakeOpt[];
   readonly make?: (m: MakeOpt) => void;
+  /** a web tab's own: a page, an address or a search goes on in it; false leaves it to the default */
+  readonly page?: (url: string, behind: boolean) => boolean;
 }): Omni {
   const arts = useAllArtifacts();
   const web = useWebHistory();
@@ -83,6 +86,13 @@ export function useOmni(o: {
       case 'url':
       case 'search': {
         const url = r.kind === 'web' ? r.page.url : r.url;
+        if (o.page?.(url, behind) === true) return;
+        // a web tab of bise (page newtab-browser, designer m_64680): in this tab's place, or behind
+        // with ⌘; his browser for a site he always opens there, or with no web tabs (an older app)
+        if (bise?.web !== undefined && linkGoes(url, false, web.out) === 'tab') {
+          openWebPage(url, behind ? { behind: true, typed: true } : { instead: o.tabId, typed: true });
+          return;
+        }
         void bise?.openExternal(url, { typed: true, ...(behind ? { background: true } : {}) });
         // the page went to his browser: the New tab's job is done (designer m_64584 (1))
         if (!behind) closeTabId(o.tabId);
@@ -138,7 +148,7 @@ export function useOmni(o: {
 function rowLook(r: OmniRow): { readonly icon: ReactNode; readonly title: string; readonly sub: string; readonly key: string } {
   switch (r.kind) {
     case 'web':
-      return { icon: <AppIcon name="browser" size={16} />, title: shownUrl(r.page.url), sub: panel.omni_web({ host: hostOf(r.page.url) }), key: `web.${r.page.url}` };
+      return { icon: <AppIcon name="browser" size={16} />, title: r.page.title ?? shownUrl(r.page.url), sub: panel.omni_web({ host: r.page.title === undefined ? hostOf(r.page.url) : shownUrl(r.page.url) }), key: `web.${r.page.url}` };
     case 'found':
       return { icon: <KindIcon kind={iconKindOf(r.item.a)} size={16} />, title: r.item.a.title, sub: panel.launch_kind_by({ kind: r.item.a.kind, who: r.item.a.agent }), key: `found.${r.item.project}/${r.item.a.id}` };
     case 'url':
