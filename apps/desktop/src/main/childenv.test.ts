@@ -36,7 +36,8 @@ describe('childEnv', () => {
   it('in test mode: the test settings pass too (the harness configures its core and shells by env), never an internal one', () => {
     const env = childEnv(agentShell(), true);
     for (const k of INTERNAL_VARS) expect(env[k], k).toBeUndefined();
-    for (const k of TEST_VARS) expect(env[k], k).toBe('junk');
+    // the app's own knobs (BISE_DESKTOP_*) are test names too (5083da9db), but main reads them and no child gets them
+    for (const k of TEST_VARS) expect(env[k], k).toBe(k.startsWith('BISE_DESKTOP_') ? undefined : 'junk');
     expect(env).toMatchObject(HIS);
   });
 
