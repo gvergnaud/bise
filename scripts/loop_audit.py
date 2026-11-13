@@ -624,7 +624,7 @@ def tip_check_section(h, since):
         states[v["state"]] = states.get(v["state"], 0) + 1
     return {"runs": len(vs), "states": states, "cpu_min_per_day": per_day,
             "cpu_min_max_day": max(per_day.values(), default=0.0), "bound_min": tip_check.CPU_BOUND / 60,
-            "secs_p50": med([v["secs"] for v in vs]), "named": [v["named"][:9] for v in vs if v["named"]]}
+            "secs_p50": med([v["secs"] for v in vs]), "named": [v["named"] if v["named"].startswith("candidates=") else v["named"][:9] for v in vs if v["named"]]}
 
 
 # a test flaky (red, then green alone) in more than this share of its full gates over 14 days is

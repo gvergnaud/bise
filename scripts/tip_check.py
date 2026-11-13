@@ -15,7 +15,13 @@ newest tip each round, so close lands share one run over their range). His CPU f
   - heavy-run --low (rank 3, behind every agent's job) at nice 15 (heavy-run's 10, + 5 here);
   - never on battery: it waits for AC (pmset), the backlog stays one run;
   - the quick gate only: never a test the quick gate doesn't run;
-  - red: the quick gate again on the range's commits, by halves, to name the first red one.
+  - red (architect m_63969): only the red steps run again (a cargo test's 'to rerun pass' args, a
+    self-test's own command; the quick gate only for a step with none, like desktop_check). The
+    range's commits whose own diff reaches a red step (tests/gate_plan.py on that commit's files:
+    its crates, the crates using them, its flags, self-tests and desktop): exactly one is
+    confirmed on itself, red: tip-red on it; else the red steps by halves over the range. Past
+    CPU_BOUND today the halving stops: tip-red with candidates=<shas> (the diff-named commits,
+    else the range), main decides. Red, then green on the same commit: flaky-open.
 Its tree: ~/.bise/run/tip-check/tree/<repo> (a worktree, never an agent's; rust/target cloned
 from the warm seed: tests/gate.sh seed). No checked tip yet: the newest land's range only (its
 <base>, else tip^), never main's history.
@@ -25,7 +31,9 @@ scripts/loop_audit.py sums the CPU per day from it. A red writes ~/.bise/run/nig
 (scripts/tip_blame.py: the named commit and its agent), which main forwards, as the tip gate's.
 Tests: tests/tip_check_test.py (pure parts, then a fake repo, gate, heavy-run and power)."""
 import fcntl
+import json
 import os
+import re
 import resource
 import subprocess
 import sys
@@ -91,14 +99,7 @@ def plan(tip, verdicts, hook_base, now, is_ancestor, base_spacing=SPACING, bound
 def first_red(commits, red):
     """the first commit of `commits` (oldest first, the last one known red) that is red, by
     halves: red(c) runs the check on c. Assumes a red stays red after it (one break)."""
-    lo, hi = 0, len(commits) - 1
-    while lo < hi:
-        mid = (lo + hi) // 2
-        if red(commits[mid]):
-            hi = mid
-        else:
-            lo = mid + 1
-    return commits[hi] if commits else None
+    return halve(commits, red, lambda: False)[0]
 
 
 # the e2e/tmux rows after a green quick (release-speed plan B1, architect m_63540): at most this many
@@ -117,6 +118,106 @@ def e2e_picks(select_out, tests, cap=E2E_MAX):
     if len(picks) > cap:
         return [], "none:%d picked, over the cap %d (the nightly and a release run them)" % (len(picks), cap)
     return picks, None
+
+
+# a red quick gate (architect m_63969): only its red steps run again, on the named commit to confirm
+# it and on the range's commits to halve it, never the whole quick gate unless a red step has no
+# command of its own (desktop_check, clippy, PROOF...). A gate.sh step's plan flag (tests/gate_plan.py):
+STEP_FLAG = {"proto_ts": "proto_ts", "mcp_apps_plugins": "mcpapps", "office_skills": "office_skills",
+             "test_crossterm": "crossterm_changed", "gallery_plugins": "gallery", "office_check": "office",
+             "kit": "kit", "computer_use": "cu", "ambient_qa": "aqa", "core_gen_laws": "core_gen"}
+# the gate.sh steps a recheck runs alone, gate.sh's own command (tests/tip_check_test.py checks
+# each one is still gate.sh's); a self-test's comes from gate_plan's SELFTESTS
+STEP_CMD = {"proto_ts": "cd rust && cargo test --offline -q -p bise-proto --features ts --test ts",
+            "mcp_apps_plugins": "python3 tests/fixtures/mcp-apps/check.py",
+            "office_skills": "python3 tests/office_skills_check.py",
+            "test_crossterm": "cd rust && cargo test --offline -q --manifest-path vendor/crossterm/Cargo.toml --lib event::sys::unix::parse"}
+
+
+def red_steps(text):
+    """The last quick run's red steps in a tip-check log: (the FAIL step names, cargo's rerun args
+    like '-p switchboard --lib' from its 'to rerun pass' lines). Pure."""
+    sec = (text or "").rsplit("\n== ", 1)[-1]
+    steps = list(dict.fromkeys(re.split(r" \(|:", l[5:], 1)[0].strip() for l in sec.splitlines() if l.startswith("FAIL ")))
+    cargo = list(dict.fromkeys(re.findall(r"to rerun pass `([^`]+)`", sec)))
+    return steps, cargo
+
+
+def is_cargo(step, selfnames):
+    """gate.sh's cargo test step: 'test<crate>_<crate>...'. Pure."""
+    return step.startswith("test") and len(step) > 4 and step not in ("test-build", "test_crossterm") \
+        and step not in selfnames and step not in STEP_FLAG
+
+
+def step_crates(step, cargo):
+    """the crates of a red cargo step: its rerun lines' -p, else its name's. Pure."""
+    return [m for a in cargo for m in re.findall(r"-p (\S+)", a)] or [c for c in step[4:].split("_") if c]
+
+
+def recheck_cmds(steps, cargo, selfcmds):
+    """The shell commands (from the repo root) that run only these red steps again, or None when one
+    has no command of its own (the caller runs the quick gate). selfcmds: gate_plan's SELFTESTS
+    {name: cmd}. Pure."""
+    out = []
+    for s in steps:
+        if s in selfcmds:
+            out.append(selfcmds[s])
+        elif s in STEP_CMD:
+            out.append(STEP_CMD[s])
+        elif is_cargo(s, selfcmds):
+            out += ["cd rust && cargo test --offline -q " + a for a in cargo] \
+                or ["cd rust && cargo test --offline -q " + " ".join("-p " + c for c in step_crates(s, []))]
+        else:
+            return None
+    return list(dict.fromkeys(out)) or None
+
+
+def reaches(steps, cargo, p, selfnames):
+    """Whether a commit's own gate plan p (tests/gate_plan.py's JSON for its diff) runs one of these
+    red steps: a red cargo step's crates in its pkgs (gate_plan's pkgs already hold the crates using
+    a changed one: a dependency-only commit reaches them), desktop_check with its desktop, a red
+    self-test among its selftests, a flag step with its flag; clippy and test-build with any crate.
+    A step it can't map (shims_check, a FAIL with no step name) reaches no commit. Pure."""
+    p = p or {}
+    pkgs = set(p.get("pkgs") or [])
+    for s in steps:
+        if s == "desktop_check" and p.get("desktop"):
+            return True
+        if s in selfnames:
+            if s in (p.get("selftests") or []):
+                return True
+        elif s in STEP_FLAG:
+            f = STEP_FLAG[s]
+            if (p.get("flags") or {}).get(f) or p.get(f):
+                return True
+        elif s in ("clippy", "test-build"):
+            if pkgs:
+                return True
+        elif is_cargo(s, selfnames) and set(step_crates(s, cargo)) & pkgs:
+            return True
+    return False
+
+
+def named_by_diff(steps, cargo, commit_plans, selfnames):
+    """The commits, oldest first, whose own diff reaches a red step (architect m_63969).
+    commit_plans: [(sha, gate plan or None)]; a commit with no plan is never named. Pure."""
+    return [c for c, p in commit_plans if p is not None and reaches(steps, cargo, p, selfnames)]
+
+
+def halve(commits, red, over):
+    """(the first red commit, None) by first_red's halving, or (None, the window still open) when it
+    stops before a check once over() (the day's CPU bound). commits oldest first, the last one known
+    red."""
+    lo, hi = 0, len(commits) - 1
+    while lo < hi:
+        if over():
+            return None, commits[lo:hi + 1]
+        mid = (lo + hi) // 2
+        if red(commits[mid]):
+            hi = mid
+        else:
+            lo = mid + 1
+    return (commits[hi] if commits else None), None
 
 
 def candidates(red, commit_picks):
@@ -177,6 +278,60 @@ def quick(home, wt, sha, base, log):
     return rc == 0, int(time.time() - t0), cpu
 
 
+def gate_plan_in(wt, paths):
+    """tests/gate_plan.py's plan (a dict) in that tree for those paths, {} for none, None when it fails"""
+    if not paths:
+        return {}
+    r = subprocess.run([sys.executable, "-B", "tests/gate_plan.py", "--", *paths], cwd=wt, capture_output=True, text=True)
+    try:
+        return json.loads(r.stdout) if r.returncode == 0 else None
+    except ValueError:
+        return None
+
+
+def self_cmds(wt):
+    """gate_plan's SELFTESTS {name: cmd} in that tree's checkout, {} when it can't be read"""
+    r = subprocess.run([sys.executable, "-B", "-c", "import json, sys; sys.path.insert(0, 'tests'); import gate_plan; "
+                        "print(json.dumps({n: c for n, c, _ in gate_plan.SELFTESTS}))"], cwd=wt, capture_output=True, text=True)
+    try:
+        return json.loads(r.stdout) if r.returncode == 0 else {}
+    except ValueError:
+        return {}
+
+
+def recheck(home, wt, sha, base, log, steps, cargo):
+    """(green, secs, cpu secs) of only these red steps on sha (recheck_cmds), through heavy-run --low
+    at nice 15 like the quick gate, with the gate's cargo target (the tree's <dir>/target) and the
+    tests' sb-core; the quick gate when a step has no command of its own"""
+    if subprocess.run(["git", "-C", wt, "checkout", "-q", "-f", "--detach", sha], capture_output=True).returncode:
+        return None, 0, 0.0
+    subprocess.run(["git", "-C", wt, "clean", "-qfd"], capture_output=True)
+    cmds = recheck_cmds(steps, cargo, self_cmds(wt))
+    if cmds is None:
+        return quick(home, wt, sha, base, log)
+    hr = os.environ.get("TIP_CHECK_HEAVY_RUN") or os.path.join(home, "run", "heavy-run")
+    env = dict(os.environ, GATE_BASE=base, SB_AGENT="tip-check")
+    for k in ("SB_SOCKET", "CARGO_TARGET_DIR", "HEAVY_SLOT"):
+        env.pop(k, None)
+    tdir = os.path.join(os.path.dirname(wt), "target")
+    if os.path.exists(os.path.join(os.path.dirname(wt), "owner")) and os.path.isdir(tdir):
+        env["CARGO_TARGET_DIR"] = tdir  # gate.sh's for a tree with an owner file
+    env.setdefault("CARGO_BUILD_JOBS", str(((os.cpu_count() or 2) + 1) // 2))
+    # one line (heavy.log and heavy-run's reserve file show the command)
+    script = 'rc=0; '
+    if any("cargo test" in c for c in cmds):
+        script += '{ SB_CORE_BIN="$(scripts/bins.sh path sb-core 2>/dev/null)" && export SB_CORE_BIN || unset SB_CORE_BIN; }; '
+    script += "".join("(%s) || { echo 'FAIL %s'; rc=1; }; " % (c, c.replace("'", "")) for c in cmds) + "exit $rc"
+    t0, c0 = time.time(), resource.getrusage(resource.RUSAGE_CHILDREN)
+    with open(log, "a") as out:
+        out.write("== %s recheck on %s: %s\n" % (time.strftime("%F %T"), sha[:12], " ".join(steps)))
+        out.flush()
+        rc = subprocess.run([hr, "--low", "nice", "-n", str(NICE_MORE), "bash", "-c", script],
+                            cwd=wt, env=env, stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL).returncode
+    c1 = resource.getrusage(resource.RUSAGE_CHILDREN)
+    return rc == 0, int(time.time() - t0), (c1.ru_utime - c0.ru_utime) + (c1.ru_stime - c0.ru_stime)
+
+
 def run_all_tests(wt):
     """run_all.sh's e2e/tmux tests in that tree"""
     try:
@@ -234,9 +389,11 @@ def save_seed(wt, log):
             return
 
 
-def blame_candidates(home, main_tree, tip, cands, red, log, agent_journals):
-    """tip-red naming several commits (each one's own diff picks a red e2e test): one line with a typed
-    candidates=<shas> field, main decides (architect m_63540)"""
+def blame_candidates(home, main_tree, tip, cands, red, log, agent_journals, what="tip check (e2e)",
+                     why="each one's own diff picks a red test"):
+    """tip-red naming several commits (each one's own diff picks a red e2e test, or the quick gate's
+    halving stopped at the CPU bound): one line with a typed candidates=<shas> field, main decides
+    (architect m_63540, m_63969)"""
     sys.path.insert(0, HERE)
     import tip_blame
     own = tip_blame.owners(main_tree, tip_blame.landed(tip_blame.journal_texts(agent_journals)))
@@ -249,8 +406,8 @@ def blame_candidates(home, main_tree, tip, cands, red, log, agent_journals):
             agents.append(who)
     text = "\n".join([
         "to: %s" % " ".join(agents + ["main"]),
-        "tip check (e2e) red on main %s (%s): %s; candidates=%s (each one's own diff picks a red test: main decides)"
-        % (tip[:9], time.strftime("%Y-%m-%d %H:%M"), " ".join(red), ",".join(c[:9] for c in cands)),
+        "%s red on main %s (%s): %s; candidates=%s (%s: main decides)"
+        % (what, tip[:9], time.strftime("%Y-%m-%d %H:%M"), " ".join(red), ",".join(c[:9] for c in cands), why),
         *rows,
         "log: %s" % log,
     ]) + "\n"
@@ -308,6 +465,59 @@ def flaky(home, sha, log):
     with open(dst + ".tmp", "w") as f:
         f.write(text)
     os.replace(dst + ".tmp", dst)
+
+
+def quick_red(home, main_tree, wt, tip, base, log, v, journals, today_cpu, bound=CPU_BOUND):
+    """After a red quick gate on tip (architect m_63969): only its red steps again (recheck). The
+    range's commits whose own diff reaches a red step: exactly one is confirmed on itself first
+    (red: tip-red on it). Else the red steps by halves over the range, stopped once today's CPU
+    passes the bound: tip-red with candidates= (the diff-named commits in the open window, else the
+    window), main decides. The commit the halving names, red once more on itself: tip-red on it;
+    green: flaky-open (the halving assumes one steady break, architect m_55231). v gets named
+    (a sha, or candidates=<shas>), state flaky on a flake, the rechecks' cpu and secs."""
+    try:
+        steps, cargo = red_steps(open(log).read())
+    except OSError:
+        steps, cargo = [], []
+    commits = (git(main_tree, "rev-list", "--first-parent", "--reverse", base + ".." + tip) or "").split() or [tip]
+    if len(commits) > 1:
+        selfnames = set(self_cmds(wt))
+        cp = [(c, gate_plan_in(wt, (git(main_tree, "diff-tree", "--no-commit-id", "--name-only", "-r", c) or "").split()))
+              for c in commits]
+        named = named_by_diff(steps, cargo, cp, selfnames)
+    else:
+        named = list(commits)
+    checked = {}
+
+    def red(c):
+        if c not in checked:
+            g, s, c_ = recheck(home, wt, c, base, log, steps, cargo)
+            v["cpu"] += c_
+            v["secs"] += s
+            checked[c] = g
+        return checked[c] is False
+
+    with open(log, "a") as out:
+        out.write("== red steps: %s%s; named by their diff: %s\n" % (" ".join(steps) or "none", "".join(" [%s]" % a for a in cargo),
+                                                                  " ".join(c[:9] for c in named) or "none"))
+    if len(named) == 1 and red(named[0]):
+        v["named"] = named[0]
+        blame(home, main_tree, named[0], log, journals)
+        return
+    x, window = halve(commits, red, lambda: today_cpu + v["cpu"] > bound)
+    if window is not None:
+        cands = [c for c in named if c in window] or window
+        v["named"] = "candidates=" + ",".join(c[:9] for c in cands)
+        why = "the halving stopped at the day's CPU bound (%d min)" % (bound // 60)
+        blame_candidates(home, main_tree, tip, cands, steps, log, journals, what="tip check (quick)",
+                         why=why + ("; each one's own diff reaches a red step" if cands is not window else ""))
+        return
+    if red(x):
+        v["named"] = x
+        blame(home, main_tree, x, log, journals)
+    else:
+        v["state"] = "flaky"
+        flaky(home, x, log)
 
 
 def e2e_step(home, main_tree, wt, tip, base, log, v, journals):
@@ -541,30 +751,9 @@ def run(home, main_tree, hook_base, now=time.time, sleep=time.sleep):
             if green:
                 save_seed(wt, log)
             v.update(state="infra" if green is None else "green" if green else "red", secs=secs, cpu=cpu)
-            if green is False and v["commits"] > 1:
-                # one red over several lands: the quick gate on their commits, by halves
-                commits = (git(main_tree, "rev-list", "--first-parent", "--reverse", base + ".." + tip) or "").split()
-                spent = [0.0]
-
-                def red(c):
-                    g, s, c_ = quick(home, wt, c, base, log)
-                    spent[0] += c_
-                    return g is False
-                v["named"] = first_red(commits, red)
-                v["cpu"] += spent[0]
-            elif green is False:
-                v["named"] = tip
-            if v["named"]:
-                # the halving assumes one steady break (architect m_55231): the named commit once
-                # more; green that time is a flake (flaky-open), never a tip-red on an innocent lander
-                g, _, c_ = quick(home, wt, v["named"], base, log)
-                v["cpu"] += c_
-                if g is False:
-                    blame(home, main_tree, v["named"], log, journals)
-                else:
-                    v["state"] = "flaky"
-                    flaky(home, v["named"], log)
-                    v["named"] = ""
+            if green is False:
+                quick_red(home, main_tree, wt, tip, base, log, v, journals, cpu_today(verdicts, now()),
+                          int(os.environ.get("TIP_CHECK_CPU_BOUND", CPU_BOUND)))
             if green:
                 e2e_step(home, main_tree, wt, tip, base, log, v, journals)
             if green and v["state"] == "green":

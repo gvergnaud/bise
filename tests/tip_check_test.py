@@ -33,6 +33,8 @@ FAKE_GATE = """#!/usr/bin/env bash
 echo "fake quick $(git rev-parse --short HEAD) base=${GATE_BASE:0:7} nice=$(ps -o nice= -p $$ | tr -d ' ') slot=${FAKE_SLOT:-}"
 [ "${1:-}" = seed ] && exit 0
 [ -e BAD ] && { echo "FAIL fake_test"; exit 1; }
+# a red self-test (world_recheck's fake gate_plan maps it to a command of its own)
+[ -e SELFBAD ] && { echo "ok   gate self-tests"; echo "FAIL sel_test"; exit 1; }
 # a flake: red once, while the file is there
 [ -n "${FAKE_FLAKY_FILE:-}" ] && [ -e "$FAKE_FLAKY_FILE" ] && { rm -f "$FAKE_FLAKY_FILE"; echo "FAIL flaky_test"; exit 1; }
 exit 0
@@ -109,6 +111,58 @@ def pure():
     check(T.away_verdict({"candidate": "red", "quick": "none"}, ["desktop/candidate"], known) == ("red", ["desktop/candidate"]), "away: the candidate red")
     check(T.away_verdict({"candidate": "green", "quick": "none"}, [], known) == ("none", []), "away: no quick result, never red")
     check(T.parse_verdicts(T.verdict_line(dict(v("t1", now), e2e="none:x", ahd="green")))[0]["ahd"] == "green", "the ahd field reads back")
+    recheck_pure()
+
+
+def recheck_pure():
+    """a red quick gate (architect m_63969): its red steps from the log, their own commands, the
+    commits whose own diff reaches them, the halving stopped at the CPU bound"""
+    log = ("== 2026-11-13 quick on aaa\nFAIL old_step\n== 2026-11-13 quick on bbb\nok   x\nFAIL mcp_apps_plugins (3s)\n"
+           "FAIL testbise-proto_bend-tui_switchboard\ntest foo ... FAILED\n"
+           "error: test failed, to rerun pass `-p switchboard --lib`\nFAIL desktop_check: 2 files\n")
+    steps, cargo = T.red_steps(log)
+    check(steps == ["mcp_apps_plugins", "testbise-proto_bend-tui_switchboard", "desktop_check"] and cargo == ["-p switchboard --lib"],
+          "red steps of the last run only %r %r" % (steps, cargo))
+    selfcmds = {"sel_test": "python3 tests/sel_test.py", "test_map_self": "python3 tests/test_map.py --self"}
+    check(T.recheck_cmds(["sel_test", "mcp_apps_plugins", "testbise-proto_bend-tui_switchboard"], cargo, selfcmds)
+          == ["python3 tests/sel_test.py", "python3 tests/fixtures/mcp-apps/check.py", "cd rust && cargo test --offline -q -p switchboard --lib"],
+          "recheck: a self-test's, a step's and cargo's rerun commands")
+    check(T.recheck_cmds(["testbend-tui_switchboard"], [], selfcmds) == ["cd rust && cargo test --offline -q -p bend-tui -p switchboard"],
+          "a cargo step with no rerun line (a build error): its crates")
+    check(T.recheck_cmds(["test_map_self"], [], selfcmds) == ["python3 tests/test_map.py --self"], "a self-test named test_*: not cargo")
+    check(T.recheck_cmds(["sel_test", "desktop_check"], [], selfcmds) is None and T.recheck_cmds(["clippy"], [], selfcmds) is None
+          and T.recheck_cmds([], [], selfcmds) is None, "a step with no command of its own: None (the quick gate)")
+    # each STEP_CMD is still gate.sh's own command
+    gate = open(os.path.join(ROOT, "tests", "gate.sh")).read()
+    check(all(c in gate or c.replace("cd rust && ", 'bash -c "cd rust && ') in gate for c in T.STEP_CMD.values()),
+          "STEP_CMD's commands are gate.sh's: %r" % [c for c in T.STEP_CMD.values() if c not in gate])
+    for s in T.STEP_CMD:
+        check(("step %s " % s) in gate, "gate.sh has the step %s" % s)
+    # the commits whose own diff reaches a red step
+    plans = [("c1", {"pkgs": [], "selftests": []}), ("c2", {"pkgs": ["bise-home", "switchboard"], "selftests": []}),
+             ("c3", {"pkgs": [], "selftests": ["sel_test"], "flags": {"mcpapps": 1}}), ("c4", None), ("c5", {"desktop": {"why": "x"}})]
+    check(T.named_by_diff(["testswitchboard"], ["-p switchboard --lib"], plans, set(selfcmds)) == ["c2"],
+          "one commit named: its plan tests the red crate (a dependency-only change: gate_plan's pkgs hold its users)")
+    check(T.named_by_diff(["sel_test"], [], plans, set(selfcmds)) == ["c3"] and T.named_by_diff(["mcp_apps_plugins"], [], plans, set()) == ["c3"],
+          "a red self-test, a red flag step")
+    check(T.named_by_diff(["desktop_check"], [], plans, set()) == ["c5"], "desktop_check: the commit reaching the desktop")
+    check(T.named_by_diff(["shims_check"], [], plans, set()) == [] and T.named_by_diff(["testbend-tui"], [], plans, set()) == [],
+          "none named: the halving")
+    check(T.named_by_diff(["clippy"], [], plans, set()) == ["c2"], "clippy: any crate")
+    # the real gate_plan: a proto change and a dependency-only change reach bend-tui's red tests and the desktop
+    for f in ("rust/proto/src/lib.rs", "rust/home/src/lib.rs"):
+        p = T.gate_plan_in(ROOT, [f])
+        check(p is not None and T.reaches(["testbend-tui_bend-harness"], ["-p bend-tui --lib"], p, set())
+              and T.reaches(["desktop_check"], [], p, set()), "the real gate_plan: %s reaches bend-tui and the desktop" % f)
+    # the halving stopped at the bound: the window still open
+    asked = []
+
+    def red(c):
+        asked.append(c)
+        return c >= 6
+    check(T.halve([1, 2, 3, 4, 5, 6, 7, 8], red, lambda: False) == (6, None), "halve: the first red")
+    asked.clear()
+    check(T.halve([1, 2, 3, 4, 5, 6, 7, 8], red, lambda: len(asked) >= 2) == (None, [5, 6]), "halve stopped: the open window %r" % asked)
 
 
 def fake_world(t):
@@ -343,9 +397,120 @@ def world():
         shutil.rmtree(t, ignore_errors=True)
 
 
+# world_recheck's fake gate_plan: a changed sel/ path picks the self-test sel_test, whose own command
+# is red while the tree has SELFBAD
+FAKE_PLAN = """import json, sys
+SELFTESTS = [("sel_test", "test ! -e SELFBAD", ("sel/*",))]
+if __name__ == "__main__":
+    paths = [a for a in sys.argv[1:] if a not in ("--sh", "--")]
+    print(json.dumps({"pkgs": [], "flags": {}, "desktop": None,
+                      "selftests": ["sel_test"] if any(p.startswith("sel/") for p in paths) else []}))
+"""
+
+
+def world_recheck():
+    """a red quick gate (architect m_63969): only its red step runs again, never the quick gate; one
+    commit named by its diff and confirmed; a confirm that comes back green (the halving names the
+    other one); none named (the halving); past the CPU bound (candidates=)"""
+    t = os.path.realpath(tempfile.mkdtemp(prefix="tip-check-recheck-", dir=os.environ.get("TMPDIR")))
+    try:
+        repo, home, g, land, tip_check, verdicts = fake_world(t)
+        with open(os.path.join(repo, "tests", "gate_plan.py"), "w") as f:
+            f.write(FAKE_PLAN)
+        os.makedirs(os.path.join(repo, "sel"))
+        g("add", "tests")
+        g("-c", "commit.gpgsign=false", "commit", "-q", "-m", "the fake plan")
+        tr = os.path.join(home, "run", "nightly", "tip-red")
+        hlog = os.path.join(t, "heavy.log")
+        n = [0]
+
+        def commit(name, agent, sel=False, bad=None):
+            n[0] += 1
+            open(os.path.join(repo, "sel" if sel else ".", "f%d" % n[0]), "w").write(name)
+            if bad is True:
+                open(os.path.join(repo, "SELFBAD"), "w").close()
+            elif bad is False:
+                os.remove(os.path.join(repo, "SELFBAD"))
+            g("add", "-A")
+            g("-c", "commit.gpgsign=false", "commit", "-q", "-m", "feat: %s" % name)
+            sha = g("rev-parse", "HEAD")
+            with open(os.path.join(home, "hubs", "h1", "journal.jsonl"), "a") as f:
+                f.write('{"msg":{"text":"✓ %s landed 1 commit on main (%s)"}}\n' % (agent, sha[:9]))
+            return sha
+
+        def reset():
+            for p in (tr, hlog):
+                if os.path.exists(p):
+                    os.remove(p)
+
+        def heavy():
+            return open(hlog).read().splitlines() if os.path.exists(hlog) else []
+        b0 = commit("b0", "a0")
+        tip_check(b0 + "^", b0, "a0")
+        # 1. one commit whose own diff reaches the red self-test: confirmed on itself, named; the
+        # rechecks run the self-test's command, never the quick gate again
+        reset()
+        commit("x1", "alpha")
+        x2, x3 = commit("x2", "beta", sel=True, bad=True), commit("x3", "gamma")
+        r = tip_check(b0, x3, "gamma")
+        vs, hv = verdicts(), heavy()
+        text = open(tr).read() if os.path.exists(tr) else ""
+        check(vs[-1]["state"] == "red" and vs[-1]["named"] == x2 and text.startswith("to: beta main"),
+              "diff-named x2, confirmed, tip-red %s %r %s" % (vs[-1:], text, r.stderr[-300:]))
+        check(len(hv) == 2 and hv[0].endswith("tests/gate.sh quick") and "bash -c" in hv[1] and "SELFBAD" in hv[1],
+              "one quick, then the red step alone on x2: %r" % hv)
+        # 2. the confirm comes back green (the diff-named commit isn't the break): the halving runs
+        # and names the other one, never a tip-red on the innocent
+        reset()
+        commit("fix", "delta", bad=False)
+        b1 = g("rev-parse", "HEAD")
+        tip_check(b1 + "^", b1, "delta")
+        reset()
+        commit("y1", "eps", sel=True)
+        y2, y3 = commit("y2", "zeta", bad=True), commit("y3", "eta")
+        r = tip_check(b1, y3, "eta")
+        vs, hv = verdicts(), heavy()
+        text = open(tr).read() if os.path.exists(tr) else ""
+        check(vs[-1]["state"] == "red" and vs[-1]["named"] == y2 and text.startswith("to: zeta main") and "eps" not in text.split("\n")[0],
+              "confirm green on y1: the halving names y2 %s %r %s" % (vs[-1:], text, r.stderr[-300:]))
+        check(sum(l.endswith("tests/gate.sh quick") for l in hv) == 1, "the halving reruns the red step only: %r" % hv)
+        # 3. none named (no commit's diff reaches the step): the halving names the break
+        reset()
+        commit("fix2", "theta", bad=False)
+        b2 = g("rev-parse", "HEAD")
+        tip_check(b2 + "^", b2, "theta")
+        reset()
+        commit("z1", "iota")
+        commit("z2", "kappa")
+        z3, z4 = commit("z3", "lambda", bad=True), commit("z4", "mu")
+        r = tip_check(b2, z4, "mu")
+        vs, hv = verdicts(), heavy()
+        text = open(tr).read() if os.path.exists(tr) else ""
+        check(vs[-1]["state"] == "red" and vs[-1]["named"] == z3 and text.startswith("to: lambda main") and "none" in open(vs[-1]["log"]).read(),
+              "none named: the halving names z3 %s %r %s" % (vs[-1:], text, r.stderr[-300:]))
+        check(sum(l.endswith("tests/gate.sh quick") for l in hv) == 1 and len(hv) >= 3, "the halving: red step only %r" % hv)
+        # 4. past the CPU bound: no halving, candidates= the diff-named commits, main decides
+        reset()
+        commit("fix3", "nu", bad=False)
+        b3 = g("rev-parse", "HEAD")
+        tip_check(b3 + "^", b3, "nu")
+        reset()
+        w1, w2, w3 = commit("w1", "xi", sel=True), commit("w2", "omicron", sel=True, bad=True), commit("w3", "pi")
+        r = tip_check(b3, w3, "pi", TIP_CHECK_CPU_BOUND="0")
+        vs, hv = verdicts(), heavy()
+        text = open(tr).read() if os.path.exists(tr) else ""
+        want = "candidates=%s,%s" % (w1[:9], w2[:9])
+        check(vs[-1]["state"] == "red" and vs[-1]["named"] == want and want in text and "CPU bound" in text
+              and text.startswith("to: xi omicron main"), "past the bound: %s %s %r %s" % (want, vs[-1:], text, r.stderr[-300:]))
+        check(len(hv) == 1, "past the bound: no recheck %r" % hv)
+    finally:
+        shutil.rmtree(t, ignore_errors=True)
+
+
 def main():
     pure()
     world()
+    world_recheck()
     for f in FAILS:
         print("FAIL", f)
     print("tip_check_test: %s" % ("ok" if not FAILS else "%d failed" % len(FAILS)))
