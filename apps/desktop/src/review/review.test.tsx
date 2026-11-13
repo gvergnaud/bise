@@ -95,7 +95,7 @@ describe('a change in the panel (page pr-guided V2)', () => {
     v = refuse('gh_signed_out');
     expect(v.getByTestId('review.failed.cmd').textContent).toBe(pages.review_gh_login);
     expect(v.getByTestId('review.failed.why').textContent).toBe(pages.review_gh_signed_out({ cmd: pages.review_gh_login }));
-    expect(v.getByTestId('review.failed.why').textContent?.endsWith(pages.review_gh_login)).toBe(true);
+    expect(v.getByTestId('review.failed.why').textContent.endsWith(pages.review_gh_login)).toBe(true);
     cleanup();
     v = refuse('gh_not_found');
     expect(v.getByTestId('review.failed.why').textContent).toBe(pages.review_gh_no_pr);
