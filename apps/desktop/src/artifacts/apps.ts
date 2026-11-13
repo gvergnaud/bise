@@ -65,6 +65,8 @@ function sentence(w: string): string {
 export function appOf(a: AppRow): AppTag {
   if (a.pr != null) return PRS;
   const o = a.opener ?? null;
+  // an empty app_id (a row from an older hub): A1's fallback, Rust's app_id_fallback, pinned on
+  // both sides by the shared fixture's opener row (architect m_63779)
   if (o !== null) return { id: o.app_id != null && o.app_id !== '' ? o.app_id : `${o.plugin}-${o.tool ?? ''}`, word: o.app };
   return isLink(a) ? LINKS : MAC;
 }

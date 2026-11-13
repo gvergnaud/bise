@@ -36,7 +36,11 @@ fn law_every_case_of_the_shared_table() {
                 let s = |k: &str| r[k].as_str().unwrap_or_default();
                 // the row's app as the hub reads it (app_of): `app` an opener's app id with
                 // its `app_word`, or `prs` / `links`; none: his Mac
-                let (app, app_word) = match s("app") {
+                // an `opener` row: the key from its plugin, tool and app id (an empty id: the fallback)
+                let o = &r["opener"];
+                let key = |k: &str| o[k].as_str().unwrap_or_default();
+                let from_opener = o.is_object().then(|| opener_key(key("plugin"), key("tool"), key("app_id")));
+                let (app, app_word) = match from_opener.as_deref().unwrap_or(s("app")) {
                     "" | APP_MAC => app_of(false, None, false),
                     APP_PRS => app_of(true, None, false),
                     APP_LINKS => app_of(false, None, true),

@@ -57,6 +57,14 @@ pub fn app_of(pr: bool, opener: Option<(&str, &str)>, link: bool) -> (String, St
     (k.to_string(), w.to_string())
 }
 
+/// An opener's key: its app id, else (a row from an older hub, an empty
+/// id) A1's fallback `<plugin>-<tool>` (bend_plugins::opens::app_id_fallback,
+/// the one owner); the desktop's apps.ts appOf reads the same, pinned by
+/// the shared fixture's opener row. Pure.
+pub fn opener_key(plugin: &str, tool: &str, app_id: &str) -> String {
+    if app_id.is_empty() { bend_plugins::opens::app_id_fallback(plugin, tool) } else { app_id.to_string() }
+}
+
 /// What he typed after `app:` as a key: a key of `tags` (key, word), or
 /// the word of one ('your mac' → `mac`), any case; none: what he typed,
 /// lowercased. The desktop's apps.ts appKeyFor. Pure.

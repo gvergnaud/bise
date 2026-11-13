@@ -727,6 +727,21 @@
    ]
   },
   {
+   "name": "app: an opener with no app id (a row from an older hub) keys as <plugin>-<tool>, its word still reads as that key",
+   "now": 1794405600000,
+   "offset_min": 60,
+   "rows": [
+    {"id": "old", "title": "old", "agent": "perf", "kind": "doc", "by": "perf", "new": false, "touched_ms": 1794400000000, "opener": {"plugin": "media", "tool": "open", "app_id": ""}, "app_word": "Preview"},
+    {"id": "new", "title": "new", "agent": "perf", "kind": "doc", "by": "perf", "new": false, "touched_ms": 1794400000000, "opener": {"plugin": "media", "tool": "open", "app_id": "preview"}, "app_word": "Preview"}
+   ],
+   "filter": {
+    "apps": ["media-open"]
+   },
+   "want": [
+    "old"
+   ]
+  },
+  {
    "name": "app and by: AND across dimensions",
    "now": 1794405600000,
    "offset_min": 60,

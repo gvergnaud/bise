@@ -20,6 +20,8 @@ interface Row {
   /** its app's key (an opener's app id, `prs`, `links`; none: his Mac) and an opener's word */
   app?: string;
   app_word?: string;
+  /** an opener as the hub sends it (an empty app_id: a row from an older hub) */
+  opener?: { plugin: string; tool: string; app_id: string };
 }
 interface Case {
   name: string;
@@ -33,6 +35,7 @@ interface Case {
 
 /** The row's app as the hub sends it: a PR's state, a link's address, else its opener; none: his Mac. */
 const appFields = (r: Row): Partial<Artifact> => {
+  if (r.opener !== undefined) return { opener: { ...r.opener, app: r.app_word ?? r.opener.plugin, type: '*.x', type_title: 'X' } };
   if (r.app === 'prs') return { pr: { number: 1 } as never, url: 'https://github.com/a/b/pull/1' };
   if (r.app === 'links') return { url: 'https://example.com' };
   if (r.app === undefined || r.app === 'mac') return {};
