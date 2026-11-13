@@ -336,11 +336,16 @@ fn read(file: &Path) -> Option<(String, PathBuf)> {
     Some((String::from_utf8_lossy(&buf).into_owned(), real))
 }
 
+/// [`skill_files`]' answer: each SKILL.md with its root's index, the
+/// roots linked into a guarded folder (index, folder name), the paths
+/// stuck.
+type Files = (Vec<(usize, PathBuf)>, Vec<(usize, String)>, Vec<PathBuf>);
+
 /// The `<dir>/SKILL.md` of each root's entries, with the root's index,
 /// and the roots not listed. In [`Mode::List`], a root reached by a link
 /// into a guarded folder is not listed (a listing there is a read): it
 /// comes back with that folder's name instead.
-fn skill_files(roots: &[Root], deadline: Instant, mode: &Mode) -> (Vec<(usize, PathBuf)>, Vec<(usize, String)>, Vec<PathBuf>) {
+fn skill_files(roots: &[Root], deadline: Instant, mode: &Mode) -> Files {
     let guarded: Vec<(usize, String)> = roots
         .iter()
         .enumerate()
