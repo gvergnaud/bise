@@ -77,5 +77,8 @@ events.jsonl
 /docs/brand/readme/preview.html
 /docs/brand/video/
 
-# heavy-run's disk_reclaim locks next to a worktree's target (0 bytes, never source)
+# heavy-run's disk_reclaim locks and own-cap marks next to a worktree's target (never source)
 *.own-lock
+*.own-checked
+# the Sheets bundle scripts/bins.sh builds, never committed (4731b3142)
+/office/dist/office-sheet.js

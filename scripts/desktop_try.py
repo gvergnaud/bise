@@ -534,7 +534,14 @@ def try_module(checkout):
     import importlib.util
     spec = importlib.util.spec_from_file_location("desktop_try_at_try_src", os.path.join(checkout, "scripts", "desktop_try.py"))
     m = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(m)
+    # a module it imports that this run hasn't loaded comes from ITS scripts/ (try-all m_63887:
+    # --promote from an fd7e3a42d checkout failed 'No module named build_key', added in a442912b7)
+    sd = os.path.join(checkout, "scripts")
+    sys.path.insert(0, sd)
+    try:
+        spec.loader.exec_module(m)
+    finally:
+        sys.path.remove(sd)
     return m
 
 
