@@ -80,11 +80,12 @@ def live(tmp, armed_on_dead):
     os.makedirs(os.path.join(world, "w", "h"))
     py = sys.executable
     cand = start("/bin/sleep", "300", as_exe=os.path.join(app, "Contents", "MacOS", "bise cand"))
-    hub = start(py, "-c", "import time; time.sleep(300)", os.path.join(world, "w", "h", "sbd"))
-    stubborn = start(py, "-c", "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(300)",
+    # (the fakes block in signal.pause(): TERM ends them, KILL ends the one that ignores TERM)
+    hub = start(py, "-c", "import signal; signal.pause()", os.path.join(world, "w", "h", "sbd"))
+    stubborn = start(py, "-c", "import signal; signal.signal(signal.SIGTERM, signal.SIG_IGN); signal.pause()",
                      os.path.join(world, "w", "h", "repl-live"))
     keep = [start("/bin/sleep", "300", as_exe=os.path.join(his, "Contents", "MacOS", "bise try")),
-            start(py, "-c", "import time; time.sleep(300)", os.path.join(tmp, "gate", "real-shape-22", "w", "h", "sbd"))]
+            start(py, "-c", "import signal; signal.pause()", os.path.join(tmp, "gate", "real-shape-22", "w", "h", "sbd"))]
     doomed = [cand, hub, stubborn]
     log = os.path.join(tmp, "reaper.log")
     runner = subprocess.Popen(["/bin/sleep", "300"])
