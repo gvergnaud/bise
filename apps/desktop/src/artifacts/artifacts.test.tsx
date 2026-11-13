@@ -509,7 +509,8 @@ describe('artifacts screens', () => {
 describe('archived artifacts (art-archive archived_at, the TUI artifacts screen)', () => {
   const archivedWorld = () => {
     const store = world();
-    store.apply({ ev: 'artifacts', project: 'shop-1', items: [art('notes', 'page'), art('old-deck', 'page', { archived_at: at(1, 9, 0) }), art('old-doc', 'file', { archived_at: at(2, 9, 0), at_ms: at(2, 8, 0) })] });
+    // the hub reads an archived one as Done (artifacts_marks): the Archived place shows it all the same (ui-review m_63514)
+    store.apply({ ev: 'artifacts', project: 'shop-1', items: [art('notes', 'page'), art('old-deck', 'page', { archived_at: at(1, 9, 0), section: 'done', done: true }), art('old-doc', 'file', { archived_at: at(2, 9, 0), at_ms: at(2, 8, 0), section: 'done', done: true })] });
     return store;
   };
   const mountWith = (store: Store, node: React.ReactNode) => {
@@ -522,26 +523,26 @@ describe('archived artifacts (art-archive archived_at, the TUI artifacts screen)
     expect(archived.map((it) => it.a.id)).toEqual(['b']);
   });
 
-  it("the screen leaves them behind a faint '2 archived' row; a (or a click) shows them alone, esc goes back", () => {
-    mountWith(archivedWorld(), <ArtifactsScreen />);
+  it("the screen leaves them in the column's grey Archived place (his q-library pick); a shows them alone, esc goes back", () => {
+    const router = createRouter({ screen: 'artifacts', project: '' });
+    render(<StoreProvider store={archivedWorld()}><RouterContext.Provider value={router}><ArtifactsScreen /></RouterContext.Provider></StoreProvider>);
     const ids = () => [...screen.getByTestId('artifacts.screen').querySelectorAll('[data-row]')].map((r) => r.getAttribute('data-row'));
     expect(ids()).not.toContain('shop-1/old-deck');
-    // a toggle in the filters' row (its archive icon, its count), pressed while they show
-    const toggle = () => screen.getByTestId('artifacts.archived');
-    expect(toggle().textContent).toBe('2 archived');
-    expect(toggle().getAttribute('aria-pressed')).toBe('false');
+    // the column's Archived row, current while they show (the faint toggle row under the list is gone)
+    const place = () => screen.getByTestId('artifacts.col.archived');
+    expect(place().getAttribute('aria-current')).toBeNull();
     fireEvent.keyDown(screen.getByTestId('artifacts.screen'), { key: 'a' });
-    expect(toggle().getAttribute('aria-pressed')).toBe('true');
     expect(ids()).toEqual(['shop-1/old-deck', 'shop-1/old-doc']);
     fireEvent.keyDown(screen.getByTestId('artifacts.screen'), { key: 'Escape' });
     expect(ids()).not.toContain('shop-1/old-deck');
-    fireEvent.click(toggle());
-    expect(ids()).toEqual(['shop-1/old-deck', 'shop-1/old-doc']);
+    expect(screen.queryByTestId('artifacts.archived')).toBeNull();
+    // a click on it is the archived place's route
+    fireEvent.click(place());
+    expect(router.get()).toEqual({ screen: 'artifacts', project: '', at: 'archived' });
   });
 
-  it("nothing archived: no row, and the archived view says the TUI's words", () => {
+  it("nothing archived: the archived view says the TUI's words", () => {
     mountWith(world(), <ArtifactsScreen />);
-    expect(screen.queryByTestId('artifacts.archived')).toBeNull();
     fireEvent.keyDown(screen.getByTestId('artifacts.screen'), { key: 'a' });
     expect(screen.getByTestId('artifacts.none').textContent).toBe('nothing archived. esc goes back.');
   });

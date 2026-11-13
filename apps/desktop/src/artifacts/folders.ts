@@ -11,6 +11,7 @@ import { hero } from '@/proto/words_hero.gen';
 import type { Folder } from '@/proto';
 import type { Item } from './model';
 import { prSettled } from './pr';
+import { sectionOf } from './sections';
 
 /** One folder of the library (bise_proto Folder): a theme (no parent) or a task folder in one, two levels at most. */
 export type { Folder } from '@/proto';
@@ -28,18 +29,30 @@ export type At =
   | { readonly at: 'unfiled' }
   | { readonly at: 'folder'; readonly id: string }
   /** the archived ones, every folder's ('a' toggles it; an artifact gone from the list links here, gone.ts) */
-  | { readonly at: 'archived' };
+  | { readonly at: 'archived' }
+  /** what he or an agent kept (◆), any folder: the hub's Kept section (his q-library pick, column views) */
+  | { readonly at: 'kept' }
+  /** a place a column slot owns (slots.ts: Shared · <org>, bise): its key opaque, its body the slot's */
+  | { readonly at: 'ext'; readonly key: string };
 
 export const AT_ALL: At = { at: 'all' };
 
-/** The route's tail for a place ('', 'recent', 'unfiled', 'archived', 'f/<id>') and back. Pure. */
+/** The route's tail for a place ('', 'recent', 'kept', 'unfiled', 'archived', 'f/<id>', 'x/<key>') and back. Pure. */
 export function atPath(at: At): string {
-  return at.at === 'all' ? '' : at.at === 'folder' ? `f/${at.id}` : at.at;
+  return at.at === 'all' ? '' : at.at === 'folder' ? `f/${at.id}` : at.at === 'ext' ? `x/${at.key}` : at.at;
 }
 export function atOfPath(p: string): At {
-  if (p === 'recent' || p === 'unfiled' || p === 'archived') return { at: p };
+  if (p === 'recent' || p === 'unfiled' || p === 'archived' || p === 'kept') return { at: p };
   if (p.startsWith('f/') && p.length > 2) return { at: 'folder', id: p.slice(2) };
+  if (p.startsWith('x/') && p.length > 2) return { at: 'ext', key: p.slice(2) };
   return AT_ALL;
+}
+
+/** Two places are the same place. Pure. */
+export function samePlace(a: At, b: At): boolean {
+  if (a.at === 'folder') return b.at === 'folder' && a.id === b.id;
+  if (a.at === 'ext') return b.at === 'ext' && a.key === b.key;
+  return a.at === b.at;
 }
 
 /** The library: the folders by id, their themes and tasks, each item's folder. Built once per render. */
@@ -118,11 +131,35 @@ export function itemsAt(lib: Library, items: readonly Item[], at: At): Item[] {
       return sorted;
     case 'recent':
       return sorted.slice(0, RECENT_N);
+    case 'kept':
+      return sorted.filter((it) => sectionOf(it.a) === 'kept');
     case 'unfiled':
       return sorted.filter((it) => lib.folderOf(it) === null);
     case 'folder':
       return sorted.filter((it) => inFolder(lib, it, at.id));
+    case 'ext':
+      // a slot's place: its body draws its own list (slots.ts)
+      return [];
   }
+}
+
+/** His files: anything but an agent's file for the agents (the hub's From agents section). Pure. */
+export const isHis = (it: Item): boolean => sectionOf(it.a) !== 'agents';
+
+/**
+ * A theme's task folders whose work is all done (each artifact in it done, at least one): the
+ * column folds them into the theme's quiet 'N done ▸' (designer m_62289). Pure.
+ */
+export function doneFolders(lib: Library, items: readonly Item[]): ReadonlySet<string> {
+  const live = new Set<string>();
+  const any = new Set<string>();
+  for (const it of items) {
+    const id = lib.folderOf(it);
+    if (id === null || (lib.byId.get(id)?.parent ?? null) === null) continue;
+    any.add(id);
+    if (it.a.done !== true) live.add(id);
+  }
+  return new Set([...any].filter((id) => !live.has(id)));
 }
 
 /** How many cards 'recent' shows (all artifacts' recent row shows the first ones). */
@@ -191,6 +228,14 @@ export function nameOf(lib: Library, id: string): string {
   return lib.byId.get(id)?.name ?? '';
 }
 
+/** A folder's place on a card's line, as every crumb says it: 'desktop › onboarding' (designer m_63517). Pure. */
+export function placeWords(lib: Library, id: string): string {
+  const f = lib.byId.get(id);
+  if (f === undefined) return '';
+  const p = f.parent ?? null;
+  return p === null ? f.name : `${nameOf(lib, p)} › ${f.name}`;
+}
+
 /** A folder's path, 'desktop app / agent view'. Pure. */
 export function pathOf(lib: Library, id: string): string {
   const f = lib.byId.get(id);
@@ -207,6 +252,11 @@ export function crumbOf(lib: Library, at: At): { name: string; at: At }[] {
       return [];
     case 'recent':
       return [{ name: library.recent, at }];
+    case 'kept':
+      return [{ name: library.sect_kept, at }];
+    case 'ext':
+      // a slot draws its own crumb (slots.ts)
+      return [];
     case 'unfiled':
       return [{ name: sentenceCase(library.unfiled), at }];
     case 'folder': {

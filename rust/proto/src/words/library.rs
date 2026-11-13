@@ -37,6 +37,22 @@ crate::words! { library:
     new_folder_tip = "new folder";
     /// a theme's folded task rows, `11 more`
     n_more(n) = "{n} more";
+    // his q-library pick (artifacts-signal v13, designer m_62289): the column's views on top, the
+    // tree, then grey From agents · Unfiled · Archived
+    /// the column's first view: what is for him (Kept, then Open work)
+    for_you = "For you";
+    /// the column's grey place of the archived ones
+    archived_place = "Archived";
+    /// a theme's quiet row folding its done tasks' folders, `3 done`
+    n_done(n) = "{n} done";
+    /// the folder switch's other side: every file in place, the agents' too
+    everything = "Everything";
+    /// the folder switch's VoiceOver name
+    folder_switch = "what the folder shows";
+    /// in a folder on For you: what the switch hides, `14 from agents`
+    n_from_agents(n) = "{n} from agents";
+    /// its way to them: flips the switch to Everything
+    show_everything = "Show everything";
     /// a folder's count under a project filter, `14 of 74`
     of_total(n, total) = "{n} of {total}";
     /// the new-folder field's placeholder
@@ -103,10 +119,6 @@ crate::words! { library:
     no_unfiled_say = "what you add yourself waits here until you give it one.";
     /// the archived ones (a), none
     none_archived = "nothing archived. esc goes back.";
-    /// the archived ones' toggle under the lead, `3 archived`
-    archived_n(n) = "{n} archived";
-    /// the same toggle's tip, with its key
-    archived_tip = "show the archived ones · a";
 
     // ---- the sections (his pick D+C+A+B on page artifacts-signal v3; designer m_60689)
     /// what he or an agent kept (◆): it never goes to Done

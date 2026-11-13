@@ -59,17 +59,10 @@
     "one": null,
     "text": "Archive"
   },
-  "library.archived_n": {
-    "args": [
-      "n"
-    ],
-    "one": null,
-    "text": "{n} archived"
-  },
-  "library.archived_tip": {
+  "library.archived_place": {
     "args": [],
     "one": null,
-    "text": "show the archived ones · a"
+    "text": "Archived"
   },
   "library.back_for_you": {
     "args": [],
@@ -186,6 +179,11 @@
     "one": null,
     "text": "empty for now"
   },
+  "library.everything": {
+    "args": [],
+    "one": null,
+    "text": "Everything"
+  },
   "library.expired_thread": {
     "args": [
       "agent"
@@ -235,10 +233,20 @@
     "one": null,
     "text": "folder name"
   },
+  "library.folder_switch": {
+    "args": [],
+    "one": null,
+    "text": "what the folder shows"
+  },
   "library.folders": {
     "args": [],
     "one": null,
     "text": "Folders"
+  },
+  "library.for_you": {
+    "args": [],
+    "one": null,
+    "text": "For you"
   },
   "library.found": {
     "args": [
@@ -484,6 +492,20 @@
     ],
     "one": "{n} artifact",
     "text": "{n} artifacts"
+  },
+  "library.n_done": {
+    "args": [
+      "n"
+    ],
+    "one": null,
+    "text": "{n} done"
+  },
+  "library.n_from_agents": {
+    "args": [
+      "n"
+    ],
+    "one": null,
+    "text": "{n} from agents"
   },
   "library.n_more": {
     "args": [
@@ -754,6 +776,11 @@
     ],
     "one": null,
     "text": "{who} saved {n} {what} in one turn · {day}"
+  },
+  "library.show_everything": {
+    "args": [],
+    "one": null,
+    "text": "Show everything"
   },
   "library.sort_with_main": {
     "args": [],

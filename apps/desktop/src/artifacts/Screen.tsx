@@ -13,8 +13,8 @@
 // Folders: + new folder in the column, F2 or a double-click renames, the folder menu merges or
 // deletes (a dialog). Every move and folder edit has its undo (⌘Z, and the toast's). The grid, the
 // cards, the stacks and the list view are art-grid's (Grid.tsx, Sheet.tsx). Owner: art-folders.
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
-import { Button, Empty, Filters, GroupLabel, MoreButton, PageBanner, Press, sentenceCase, Sheet, tipAttrs, Toast, type EntityMenu } from '@/ds';
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
+import { Button, Empty, Filters, GroupLabel, MoreButton, PageBanner, Press, sentenceCase, Sheet, Toast, type EntityMenu } from '@/ds';
 import { hero } from '@/proto/words_hero.gen';
 import { library } from '@/proto/words_library.gen';
 import { useFolders, useProjects, useStore } from '@/store';
@@ -38,10 +38,12 @@ import { itemsOf, ownerOf, topOf, whenOf, type Card, type HeadOf, type Place, ty
 import { Thumb } from './thumbs';
 import { keyOf, revealPathOf, splitArchived, type Item } from './model';
 import {
-  AT_ALL, atOfPath, atPath, countsOf, coverOf, crumbOf, folderLine, inFolder, itemsAt, libraryFacts, libraryOf,
-  nameOf, pathOf, prSideItems, projectOfTyped, rememberMove, searchItems, titlePath, type At, type Library,
+  AT_ALL, atOfPath, atPath, countsOf, coverOf, crumbOf, doneFolders, folderLine, inFolder, isHis, itemsAt, libraryFacts, libraryOf,
+  nameOf, placeWords, prSideItems, projectOfTyped, rememberMove, searchItems, titlePath, type At, type Library,
   type PrSide,
 } from './folders';
+import { FolderSwitch, folderView, HiddenRow, type FolderMode } from './FolderSwitch';
+import { SLOTS, slotOf } from './slots';
 import { FolderColumn, type Editing } from './Column';
 import { appTabsOf, keyOfTag, PRS } from './apps';
 import { FoldCrumb, useNarrow } from './Fold';
@@ -89,6 +91,20 @@ const readScope = (): string => {
 };
 const keepScope = (p: string) => {
   try { window.localStorage.setItem(SCOPE_KEY, p); } catch { /* private window */ }
+};
+
+// a folder's For you · Everything switch (his condition on his q-library pick): For you by default,
+// kept from folder to folder and visit to visit
+const FOLDER_MODE_KEY = 'bise.artifacts.folderMode';
+const readFolderMode = (): FolderMode => {
+  try {
+    return window.localStorage.getItem(FOLDER_MODE_KEY) === 'all' ? 'all' : 'you';
+  } catch {
+    return 'you';
+  }
+};
+const keepFolderMode = (m: FolderMode) => {
+  try { window.localStorage.setItem(FOLDER_MODE_KEY, m); } catch { /* private window */ }
 };
 
 /** What floats over the page: one at a time. */
@@ -140,6 +156,11 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
   const [anchorKey, setAnchorKey] = useState<string | null>(null);
   const [open, setOpenRaw] = useState<ReadonlySet<string>>(mem.open);
   const [full, setFullRaw] = useState<ReadonlySet<string>>(mem.full);
+  // a folder's For you · Everything (FolderSwitch.tsx), kept across folders and visits
+  const [folderMode, setFolderModeRaw] = useState<FolderMode>(readFolderMode);
+  const setFolderMode = (m: FolderMode) => { keepFolderMode(m); setFolderModeRaw(m); };
+  // the themes whose done tasks' folders are open in the column ('N done')
+  const [doneOpen, setDoneOpen] = useState<ReadonlySet<string>>(new Set());
   const setView = (v: View) => { keepView(v); setViewRaw(v); };
   const setOpen = (o: ReadonlySet<string>) => { keepOpen(o); setOpenRaw(o); };
   const setFull = (f: ReadonlySet<string>) => { keepFull(f); setFullRaw(f); };
@@ -210,7 +231,8 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
     setWalked(null);
     searchRef.current?.focus();
   };
-  const counts = countsOf(lib, base, inScope);
+  // a folder's count is his files only, never the agents' (designer m_62289)
+  const counts = countsOf(lib, base.filter(isHis), inScope.filter(isHis));
   const searching = parsed.words.length > 0;
   // the title bar's path says the search while there is one ('artifacts › search · dark')
   const searchWords = parsed.words.join(' ');
@@ -229,12 +251,20 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
   const anyPr = (searching || sect === 'you') && hereAll.some((it) => it.a.pr != null);
   // the place's items by section (sections.ts: the hub's section, ordered by last touch): For you
   // is Kept then Open work, Done and Between agents one list each; a search keeps every section
-  const inView = itemsIn(here, searching ? 'all' : sect);
+  // in a folder (not a search, not the archived): the switch's For you (his files, every section of
+  // his) or Everything (every file in place); the agents' it hides are one row under the list
+  const inFolderView = atNow.at === 'folder' && !searching && !archivedOn;
+  // the Archived place shows every archived one, whatever its section (the hub reads an archived one as
+  // Done: under For you's Kept · Open work it drew nothing, ui-review m_63514)
+  const viewOf = (items: readonly Item[]) =>
+    inFolderView ? itemsIn(folderView(items, folderMode).shown, 'all') : itemsIn(items, searching || archivedOn ? 'all' : sect);
+  const fview = inFolderView ? folderView(here, folderMode) : null;
+  const inView = viewOf(here);
   // the app tabs (apps.ts, docs/plugin-apps.md A6b, his pick A): the `app:` token's keys, OR inside;
   // their counts faceted (every other filter applied, the app one left out)
   const appsPicked = [...(parsed.keys.get('app') ?? [])];
   const scopedNoApp = applyFilters(inScope, parsed, fctx, 'app');
-  const inViewNoApp = itemsIn(searching ? searchItems(lib, scopedNoApp, parsed.words) : itemsAt(lib, scopedNoApp, atNow), searching ? 'all' : sect);
+  const inViewNoApp = viewOf(searching ? searchItems(lib, scopedNoApp, parsed.words) : itemsAt(lib, scopedNoApp, atNow));
   const appTabs = appTabsOf(inViewNoApp.map((it) => it.a), new Set(appsPicked), anyPr);
   // Pull requests alone: its second side (open & draft, merged & closed one click away)
   const prsOnly = appsPicked.length === 1 && appsPicked[0] === keyOfTag(PRS);
@@ -487,6 +517,17 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
     onGo: (a) => { setQ(''); setAt(a); }, onToggle: (t) => { setOpen(toggled(open, t)); }, onMore: (t) => { setFull(new Set([...full, t])); },
     onNew: () => { setEditing({ kind: 'new', parent: null }); }, onRename: (id) => { setEditing({ kind: 'rename', id }); }, onEdited,
     onMenu: (id, e: MouseEvent) => { setOver({ k: 'folder', id, at: { x: e.clientX, y: e.clientY } }); },
+    // his q-library pick: For you and From agents at the library's top, the done tasks' fold, Unfiled
+    // while something is in it, the slots after the tree (slots.ts)
+    sect: atNow.at === 'all' ? sect : 'you',
+    onSect: (v) => {
+      setQ('');
+      const path = sectionPath(v, '');
+      router.go(path === '' ? { screen: 'artifacts', project: scope } : { screen: 'artifacts', project: scope, at: path });
+    },
+    done: doneFolders(lib, base), doneOpen, onDone: (t) => { setDoneOpen(toggled(doneOpen, t)); },
+    unfiledAny: base.some((it) => lib.folderOf(it) === null),
+    slots: SLOTS.map((s) => <Fragment key={s.id}>{s.rows({ at: atNow, onGo: (a) => { setQ(''); setAt(a); }, digits: false, project: scope })}</Fragment>),
   };
   // what this page published last: its leave clears the library only if no newer page published since
   const published = useRef<ColumnBits | null>(null);
@@ -532,15 +573,7 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
       completion={comp === null ? null : <WhoCompletion c={comp} active={compActive} field={searchRef} onPick={pickCompletion} onClose={() => { setCaret(null); }} />}
       add={<AddButton place={place_} tip={library.add_tip} testId="artifacts.add" />} />
   );
-  // the archived ones: a faint row under the list, as the window's panel and the TUI (designer m_45148)
-  const archivedRow = stack === null && archived.length > 0 && (
-    <div className="art-archived-row">
-      <Press look="art-archived" aria-pressed={archivedOn} onClick={() => { setArchivedOn(!archivedOn); setPicked(new Set()); }} data-testid="artifacts.archived"
-        {...tipAttrs(library.archived_tip)}>
-        {library.archived_n({ n: archived.length })}
-      </Press>
-    </div>
-  );
+  // the archived ones are the column's grey Archived place now (his q-library pick); 'a' still toggles it
   // the place's folder: its '…' (the folder's own menu: rename, a folder inside, merge, delete)
   const folderMenu: EntityMenu | null = current === undefined ? null : {
     onContextMenu: (e) => { e.preventDefault(); setOver({ k: 'folder', id: current.id, at: { x: e.clientX, y: e.clientY } }); },
@@ -551,6 +584,8 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
   };
 
   const body = (() => {
+    // a slot's place (slots.ts): its own list, no sections or filters of ours
+    if (atNow.at === 'ext') return slotOf(atNow.key)?.body(atNow.key, scope) ?? <Empty title={library.empty_folder_title} testId="artifacts.none" />;
     if (all.length === 0) return <FirstRun place={place_} />;
     if (archivedOn && base.length === 0) return <Empty title={library.none_archived} testId="artifacts.none" />;
     if (stack !== null) {
@@ -673,7 +708,9 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
   })();
   // over Done or Between agents: back to For you; under For you: those two, one click away
   const backRow = stack === null && !searching && <BackRow view={sect} n={inView.length} onBack={() => { setSect('you'); }} testId="artifacts.back" />;
-  const quietRows = stack === null && !searching && sect === 'you' && !archivedOn && <QuietRows n={sectN} onGo={setSect} testId="artifacts.quiet" />;
+  const quietRows = stack === null && !searching && sect === 'you' && !archivedOn && (fview === null
+    ? <QuietRows n={sectN} onGo={setSect} testId="artifacts.quiet" />
+    : fview.hidden > 0 && <HiddenRow n={fview.hidden} onShow={() => { setFolderMode('all'); }} testId="artifacts.hidden" />);
   // From agents' foot (designer m_62438): what their copies weigh and how long bise keeps them
   // in one project its hub's count, in All projects the sum of those that said one
   const agentsBytes = bytesIn(scope === '' ? projects.map((p) => p.project) : [scope], (p) => store.agentsBytes(p));
@@ -691,7 +728,10 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
         {atNow.at === 'unfiled' && here.length > 0 && (
           <> <Press look="art-link" onClick={() => { router.go({ screen: 'bise' }); }} data-testid="artifacts.sort">{library.sort_with_main}</Press></>
         )}
+        {atNow.at === 'ext' && slotOf(atNow.key)?.crumb(atNow.key)}
       </p>
+      {/* the switch at the right of the place's line (designer m_62289 3b), in a folder only */}
+      {inFolderView && <FolderSwitch mode={folderMode} onMode={setFolderMode} testId="artifacts.fswitch" />}
     </header>
   );
   // a stack open: its path alone, 'desktop app / agent view / agent view step 2' (the sheet has its
@@ -716,8 +756,11 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
       <div className="art-scroll" data-testid="artifacts.scroll">
         {/* the lead (designer's rule on #5): no card; the bims still stays beside it as a vignette */}
         {/* the banner (designer m_42762): a full-width page, its title 32 in, the filing desk right */}
-        <PageBanner title={hero.artifacts_title} sentence={library.say} facts={libraryFacts(lib, inScope, projectName)}
-          visual={<LiveVignette page="artifacts" />} icon="artifacts" edge="page" gutter={gutter} testId="artifacts.lead" />
+        {/* on For you only: in a folder the crumb names the place, the library's card would repeat (designer m_63517) */}
+        {atNow.at === 'all' && !archivedOn && sect === 'you' && (
+          <PageBanner title={hero.artifacts_title} sentence={library.say} facts={libraryFacts(lib, inScope, projectName)}
+            visual={<LiveVignette page="artifacts" />} icon="artifacts" edge="page" gutter={gutter} testId="artifacts.lead" />
+        )}
         <div className={`art-lib${narrow || sideLib ? ' bare' : ''}`}>
           {!narrow && !sideLib && column}
           <div className="art-main">
@@ -736,7 +779,6 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
             <AddDrop place={place_} testId="artifacts.drop">{body}</AddDrop>
             {quietRows}
             {agentsFoot}
-            {archivedRow}
           </div>
         </div>
       </div>
@@ -824,8 +866,10 @@ function placeOf(lib: Library, at: At, searching: boolean, items: readonly Item[
   switch (at.at) {
     case 'all':
     case 'recent':
+    case 'kept':
     case 'archived':
-      return { kind: 'recent', folderOf: (it) => { const f = lib.folderOf(it); return f === null ? '' : pathOf(lib, f); } };
+    case 'ext':
+      return { kind: 'recent', folderOf: (it) => { const f = lib.folderOf(it); return f === null ? '' : placeWords(lib, f); } };
     case 'unfiled':
       return { kind: 'unfiled' };
     case 'folder': {

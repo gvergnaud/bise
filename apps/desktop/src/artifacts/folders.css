@@ -22,6 +22,18 @@
 .art-col-row .nm{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .art-col-row .end{position:relative;flex:none;display:flex;align-items:center;justify-content:flex-end;min-width:var(--s-6);color:var(--c-text-3);font:400 var(--f-meta)}
 .art-col-more .nm{color:var(--c-text-3)}
+/* his q-library pick (designer m_62289): a done task's folder in its theme's 'N done', its name text-2;
+   the grey places at the column's end (From agents, Unfiled, Archived) */
+.art-col-row.done .nm{color:var(--c-text-2)}
+.art-col-grey{margin-top:var(--s-3)}
+.art-col-grey .art-col-row{color:var(--c-text-3)}
+.art-col-grey .art-col-row > .b-app-icon{color:var(--c-text-3)}
+.art-col-grey .art-col-row[aria-current]{color:var(--c-text)}
+/* a folder's For you · Everything switch, at the right of the place's line (designer m_62289 3b) */
+.art-head:has(.art-fswitch){display:flex;align-items:center;gap:var(--s-3)}
+.art-head:has(.art-fswitch) .art-head-s{flex:1;min-width:0}
+.art-fswitch{flex:none;margin-left:auto}
+.art-hidden-n{font:var(--t-12) var(--font-ui);color:var(--c-text-3)}
 .art-col-head{display:flex;align-items:center;gap:var(--s-2);height:var(--h-row-tight);margin-top:var(--s-3);padding:0 var(--s-2);font:500 var(--f-meta);color:var(--c-text-3)}
 .art-col-head:first-child{margin-top:0}
 .art-col-head .nm{flex:1;min-width:0}

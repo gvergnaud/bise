@@ -30,6 +30,20 @@ export const library = {
   new_folder_tip: "new folder",
   /** a theme's folded task rows, `11 more` */
   n_more: (a: { n: string | number }): string => String(a.n) + " more",
+  /** the column's first view: what is for him (Kept, then Open work) */
+  for_you: "For you",
+  /** the column's grey place of the archived ones */
+  archived_place: "Archived",
+  /** a theme's quiet row folding its done tasks' folders, `3 done` */
+  n_done: (a: { n: string | number }): string => String(a.n) + " done",
+  /** the folder switch's other side: every file in place, the agents' too */
+  everything: "Everything",
+  /** the folder switch's VoiceOver name */
+  folder_switch: "what the folder shows",
+  /** in a folder on For you: what the switch hides, `14 from agents` */
+  n_from_agents: (a: { n: string | number }): string => String(a.n) + " from agents",
+  /** its way to them: flips the switch to Everything */
+  show_everything: "Show everything",
   /** a folder's count under a project filter, `14 of 74` */
   of_total: (a: { n: string | number; total: string | number }): string => String(a.n) + " of " + String(a.total),
   /** the new-folder field's placeholder */
@@ -88,10 +102,6 @@ export const library = {
   no_unfiled_say: "what you add yourself waits here until you give it one.",
   /** the archived ones (a), none */
   none_archived: "nothing archived. esc goes back.",
-  /** the archived ones' toggle under the lead, `3 archived` */
-  archived_n: (a: { n: string | number }): string => String(a.n) + " archived",
-  /** the same toggle's tip, with its key */
-  archived_tip: "show the archived ones · a",
   /** what he or an agent kept (◆): it never goes to Done */
   sect_kept: "Kept",
   /** what is for him and still at work: its task lives or its PR is open */

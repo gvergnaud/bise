@@ -10,10 +10,16 @@
 // opens the folder's menu. A row takes a drop (drag.ts: holding 600 ms on a closed theme opens it).
 // Under 900 px the same rows sit in the crumb's popover (Fold.tsx). A pure render of its props:
 // Screen.tsx holds the state. Owner: nm-pages-a (art-folders' before).
-import type { DragEvent, KeyboardEvent, MouseEvent } from 'react';
+//
+// His q-library pick (artifacts-signal v13, designer m_62289): the views on top (For you, Recent,
+// Kept), the folder tree (a done task's folder folds into its theme's quiet 'N done', its name
+// text-2), the slots (slots.ts: Shared · <org>, bise), then grey From agents · Unfiled (only while
+// something is in it) · Archived. A folder's count is his files only, never the agents'.
+import type { DragEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react';
 import { AppIcon, Input, Press, sentenceCase, tipAttrs, type AppIconName } from '@/ds';
 import { library } from '@/proto/words_library.gen';
-import { countWords, type At, type Count, type Folder, type Library } from './folders';
+import { countWords, samePlace, type At, type Count, type Folder, type Library } from './folders';
+import type { SectionView } from './sections';
 
 /** How many task folders an open theme shows before its 'N more'. */
 export const TASKS_SHOWN = 4;
@@ -54,20 +60,45 @@ export interface ColumnProps {
   readonly side?: boolean;
   /** ⌘ held (app/held.ts): each of the first 9 rows shows its ⌘1-9 in its end (rail-keys, designer m_45492) */
   readonly digits?: boolean;
+  /** the section view he is on (For you, Done, From agents): For you and From agents are column rows */
+  readonly sect?: SectionView;
+  /** the column's For you and From agents rows: that view at the library's top (route '' or 'agents') */
+  readonly onSect?: (v: SectionView) => void;
+  /** the task folders whose work is all done (folders.ts doneFolders): in their theme's 'N done' */
+  readonly done?: ReadonlySet<string>;
+  /** the themes whose 'N done' is open */
+  readonly doneOpen?: ReadonlySet<string>;
+  readonly onDone?: (theme: string) => void;
+  /** something is unfiled (any section): the Unfiled row shows */
+  readonly unfiledAny?: boolean;
+  /** the slots' rows after the tree (slots.ts: Shared · <org>, then bise) */
+  readonly slots?: ReactNode;
   readonly testId: string;
 }
 
-/** The places the column draws, top to bottom: All artifacts, Recent, Unfiled, then each theme and,
- *  open, the tasks it shows. ⌘1-9 go to the first nine (app/keys.ts); the column numbers them the
- *  same way. Pure. */
-export function columnPlaces(p: Pick<ColumnProps, 'lib' | 'open' | 'full'>): At[] {
-  const out: At[] = [{ at: 'all' }, { at: 'recent' }, { at: 'unfiled' }];
+/** A theme's task folders as the column draws them: the live ones (4, then 'N more'), and its done ones
+ *  behind 'N done' (drawn when open). Pure. */
+export function tasksOf(p: Pick<ColumnProps, 'lib' | 'full' | 'done' | 'doneOpen'>, theme: string): { shown: Folder[]; more: number; done: Folder[]; doneShown: boolean } {
+  const tasks = p.lib.tasks.get(theme) ?? [];
+  const isDone = (f: Folder) => p.done?.has(f.id) === true;
+  const live = tasks.filter((f) => !isDone(f));
+  const shown = p.full.has(theme) ? live : live.slice(0, TASKS_SHOWN);
+  return { shown, more: live.length - shown.length, done: tasks.filter(isDone), doneShown: p.doneOpen?.has(theme) === true };
+}
+
+/** The places the column draws, top to bottom: For you, Recent, Kept, then each theme and, open, the
+ *  tasks it shows, then Unfiled (when something is in it) and Archived. ⌘1-9 go to the first nine
+ *  (app/keys.ts); the column numbers them the same way. Pure. */
+export function columnPlaces(p: Pick<ColumnProps, 'lib' | 'open' | 'full' | 'done' | 'doneOpen' | 'unfiledAny'>): At[] {
+  const out: At[] = [{ at: 'all' }, { at: 'recent' }, { at: 'kept' }];
   for (const t of p.lib.themes) {
     out.push({ at: 'folder', id: t.id });
     if (!p.open.has(t.id)) continue;
-    const tasks = p.lib.tasks.get(t.id) ?? [];
-    for (const f of p.full.has(t.id) ? tasks : tasks.slice(0, TASKS_SHOWN)) out.push({ at: 'folder', id: f.id });
+    const ts = tasksOf(p, t.id);
+    for (const f of [...ts.shown, ...(ts.doneShown ? ts.done : [])]) out.push({ at: 'folder', id: f.id });
   }
+  if (p.unfiledAny !== false) out.push({ at: 'unfiled' });
+  out.push({ at: 'archived' });
   return out;
 }
 
@@ -85,7 +116,7 @@ function Digit({ n, testId }: { n: number | undefined; testId: string }) {
   );
 }
 
-const same = (a: At, b: At) => a.at === b.at && (a.at !== 'folder' || (b.at === 'folder' && a.id === b.id));
+const same = samePlace;
 
 export function FolderColumn(p: ColumnProps) {
   const { lib, counts, at, testId } = p;
@@ -94,14 +125,16 @@ export function FolderColumn(p: ColumnProps) {
   const digit = (a: At) => (p.digits === true ? digitOf(places, a) : undefined);
   const field = (parent: string | null) =>
     p.editing?.kind === 'new' && p.editing.parent === parent ? <EditRow key={`new:${parent ?? ''}`} indent={parent !== null} initial="" onEdited={p.onEdited} testId={`${testId}.field`} /> : null;
-  const folderRow = (f: Folder, indent: boolean) => {
+  const sect = p.sect ?? 'you';
+  const toSect = (v: SectionView) => { if (p.onSect) p.onSect(v); else p.onGo({ at: 'all' }); };
+  const folderRow = (f: Folder, indent: boolean, done = false) => {
     if (p.editing?.kind === 'rename' && p.editing.id === f.id) {
       return <EditRow key={f.id} indent={indent} initial={f.name} onEdited={p.onEdited} testId={`${testId}.field`} />;
     }
     const tasks = lib.tasks.get(f.id) ?? [];
     const isOpen = p.open.has(f.id);
     return (
-      <FolderRow key={f.id} id={f.id} name={f.name} indent={indent} theme={!indent} hasTasks={tasks.length > 0} isOpen={isOpen}
+      <FolderRow key={f.id} id={f.id} name={f.name} indent={indent} theme={!indent} done={done} hasTasks={tasks.length > 0} isOpen={isOpen}
         on={same(at, { at: 'folder', id: f.id })} digit={digit({ at: 'folder', id: f.id })} count={counts.get(f.id)} flash={p.flash === f.id} over={p.drop?.over === f.id}
         onGo={() => { p.onGo({ at: 'folder', id: f.id }); }} onToggle={() => { p.onToggle(f.id); }} onRename={() => { p.onRename(f.id); }}
         onMenu={(e) => { p.onMenu(f.id, e); }} drop={p.drop} testId={`${testId}.f.${f.id}`} />
@@ -110,11 +143,11 @@ export function FolderColumn(p: ColumnProps) {
   return (
     <nav className={`art-col${p.side === true ? ' side' : ''}`} aria-label={library.library_head} data-testid={testId}>
       <div className="art-col-head">{library.library_head}</div>
-      <PlaceRow icon="artifacts" name={sentenceCase(library.all_artifacts)} on={at.at === 'all'} digit={digit({ at: 'all' })} onGo={() => { p.onGo({ at: 'all' }); }} testId={`${testId}.all`} />
+      {/* the views (his q-library pick): For you, Recent, Kept */}
+      <PlaceRow icon="artifacts" name={library.for_you} on={at.at === 'all' && sect === 'you'} digit={digit({ at: 'all' })}
+        onGo={() => { toSect('you'); }} testId={`${testId}.all`} />
       <PlaceRow icon="scheduled" name={library.recent} on={at.at === 'recent'} digit={digit({ at: 'recent' })} onGo={() => { p.onGo({ at: 'recent' }); }} testId={`${testId}.recent`} />
-      <PlaceRow icon="inbox" name={sentenceCase(library.unfiled)} on={at.at === 'unfiled'} digit={digit({ at: 'unfiled' })} count={counts.get('unfiled')} countAtRest
-        over={p.drop?.over === 'unfiled'} drop={p.drop} dropId="unfiled" flash={p.flash === 'unfiled'}
-        onGo={() => { p.onGo({ at: 'unfiled' }); }} testId={`${testId}.unfiled`} />
+      <PlaceRow icon="pin" name={library.sect_kept} on={at.at === 'kept'} digit={digit({ at: 'kept' })} onGo={() => { p.onGo({ at: 'kept' }); }} testId={`${testId}.kept`} />
       {/* the folders' label, its + at its end (mockup 7): a field for a new folder's name */}
       <div className="art-col-head">
         <span className="nm">{library.folders}</span>
@@ -123,9 +156,7 @@ export function FolderColumn(p: ColumnProps) {
         </Press>
       </div>
       {lib.themes.map((t) => {
-        const tasks = lib.tasks.get(t.id) ?? [];
-        const shown = p.full.has(t.id) ? tasks : tasks.slice(0, TASKS_SHOWN);
-        const more = tasks.length - shown.length;
+        const { shown, more, done, doneShown } = tasksOf(p, t.id);
         return [
           folderRow(t, false),
           ...(p.open.has(t.id)
@@ -137,11 +168,30 @@ export function FolderColumn(p: ColumnProps) {
                   </Press>
                 ) : null,
                 field(t.id),
+                // the done tasks' folders at the theme's end, quiet (designer m_62289)
+                done.length > 0 ? (
+                  <Press key={`${t.id}:done`} look="art-col-row art-col-more in" aria-expanded={doneShown} onClick={() => { p.onDone?.(t.id); }} data-testid={`${testId}.done.${t.id}`}>
+                    <span className="nm">{`${library.n_done({ n: done.length })} ${doneShown ? '▾' : '▸'}`}</span>
+                  </Press>
+                ) : null,
+                ...(doneShown ? done.map((f) => folderRow(f, true, true)) : []),
               ]
             : []),
         ];
       })}
       {field(null)}
+      {p.slots}
+      {/* grey, one click each: From agents, Unfiled (while something is in it), Archived */}
+      <div className="art-col-grey" data-testid={`${testId}.grey`}>
+        <PlaceRow icon="thread" name={library.sect_agents} on={at.at === 'all' && sect === 'agents'}
+          onGo={() => { toSect('agents'); }} testId={`${testId}.agents`} />
+        {p.unfiledAny !== false && (
+          <PlaceRow icon="inbox" name={sentenceCase(library.unfiled)} on={at.at === 'unfiled'} digit={digit({ at: 'unfiled' })} count={counts.get('unfiled')} countAtRest
+            over={p.drop?.over === 'unfiled'} drop={p.drop} dropId="unfiled" flash={p.flash === 'unfiled'}
+            onGo={() => { p.onGo({ at: 'unfiled' }); }} testId={`${testId}.unfiled`} />
+        )}
+        <PlaceRow icon="archive" name={library.archived_place} on={at.at === 'archived'} digit={digit({ at: 'archived' })} onGo={() => { p.onGo({ at: 'archived' }); }} testId={`${testId}.archived`} />
+      </div>
     </nav>
   );
 }
@@ -166,7 +216,7 @@ function dropAttrs(drop: DropTarget | undefined, id: string) {
   };
 }
 
-function PlaceRow(p: { icon: AppIconName; name: string; on: boolean; digit?: number | undefined; count?: Count | undefined; countAtRest?: boolean; over?: boolean; flash?: boolean; drop?: DropTarget | undefined; dropId?: string; onGo: () => void; testId: string }) {
+export function PlaceRow(p: { icon: AppIconName; name: string; on: boolean; digit?: number | undefined; count?: Count | undefined; countAtRest?: boolean; over?: boolean; flash?: boolean; drop?: DropTarget | undefined; dropId?: string; onGo: () => void; testId: string }) {
   return (
     <Press look="art-col-row" aria-current={p.on || undefined} data-over={p.over || undefined} onClick={p.onGo} data-testid={p.testId}
       {...(p.dropId === undefined ? {} : dropAttrs(p.drop, p.dropId))}>
@@ -177,11 +227,13 @@ function PlaceRow(p: { icon: AppIconName; name: string; on: boolean; digit?: num
   );
 }
 
-interface FolderRowProps {
+export interface FolderRowProps {
   id: string;
   name: string;
   indent: boolean;
   theme: boolean;
+  /** a done task's folder, behind its theme's 'N done': its name text-2 */
+  done?: boolean;
   hasTasks: boolean;
   isOpen: boolean;
   on: boolean;
@@ -197,7 +249,7 @@ interface FolderRowProps {
   testId: string;
 }
 
-function FolderRow(p: FolderRowProps) {
+export function FolderRow(p: FolderRowProps) {
   const key = (e: KeyboardEvent) => {
     if (e.key === 'F2') {
       e.preventDefault();
@@ -205,7 +257,7 @@ function FolderRow(p: FolderRowProps) {
     }
   };
   return (
-    <Press look={`art-col-row${p.indent ? ' in' : ''}`} aria-current={p.on || undefined} aria-expanded={p.hasTasks ? p.isOpen : undefined}
+    <Press look={`art-col-row${p.indent ? ' in' : ''}${p.done === true ? ' done' : ''}`} aria-current={p.on || undefined} aria-expanded={p.hasTasks ? p.isOpen : undefined}
       data-over={p.over || undefined} data-folder={p.id}
       onClick={() => {
         if (p.hasTasks && (!p.isOpen || p.on)) p.onToggle();

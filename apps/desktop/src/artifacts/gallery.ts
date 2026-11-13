@@ -134,6 +134,12 @@ export function lineOf(c: Card, place: Place, now: number): string {
   // an agent's keep says which agent (designer m_60689): 'kept by perf · 14:02'
   if (top.a.kept != null && !keptByHim(top.a)) return `${library.kept_by({ agent: top.a.kept.by })} · ${when}`;
   const lead = leadOf(top.a);
+  // an agent's file for the agents names its agent first, wherever it shows (Everything, From agents;
+  // designer m_63517, his lib1-switch block): 'perf · Preview · 2 d', 'perf · desktop › onboarding · 2 d'
+  if (sectionOf(top.a) === 'agents') {
+    const what = lead ?? (place.kind === 'recent' || place.kind === 'theme' ? (place.folderOf?.(top) ?? '') : '');
+    return [top.a.agent, what, when].filter((x) => x !== '').join(' · ');
+  }
   // a card leads with its app, then who made it (docs/plugin-apps.md A6b, designer m_61626):
   // 'Sheets · perf · oct 4'; what no app opens says so, without who ('opens on your Mac · 3 d');
   // a PR or a link keeps the place's line
