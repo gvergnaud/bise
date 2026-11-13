@@ -426,6 +426,8 @@ fn a_provider_not_set_up_goes_through_its_key_step_then_its_models() {
 
 #[test]
 fn voice_lists_only_the_providers_that_listen() {
+    // the voice picks write the one VOICE_OUT: one test at a time (a parallel one read another's)
+    let _one = serial();
     let (e, _hm) = home("voice", "", &["OPENAI_API_KEY"]);
     let mut o = open(&e, Open::Pick("voice"));
     let sc = screen(&o);
@@ -451,6 +453,10 @@ fn voice_lists_only_the_providers_that_listen() {
 
 #[test]
 fn no_key_at_all_preselects_mistral_and_esc_leaves_voice_off() {
+    // its Esc writes VoiceOut::Off into the one VOICE_OUT: without the lock, a parallel voice test
+    // took it (a_voice_provider_is_set_up_then_its_model_picked_without_a_second_check red under
+    // load in gallery-f4's quick gate, 11-13: main's loop audit)
+    let _one = serial();
     let (e, _hm) = home("novoice", "", &[]);
     let mut o = Onb::provider_panel(&e, Ask { open: Open::Pick("voice"), voice_on: true, ..Ask::default() });
     o.checker = fake_check;
