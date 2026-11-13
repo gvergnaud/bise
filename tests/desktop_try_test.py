@@ -745,6 +745,8 @@ def candidate_then_promote():
         check(git("rev-parse", "HEAD", cwd=trysrc) == a, "the try checkout never moved")
         check(open(T.stamp_path(paths)).read() == before and not os.path.exists(paths["staged_dir"]), "the try stamp and staged dir untouched")
         check(json.load(open(c["json"]))["root"] == c["root"], "cand.json says where the root is")
+        check(json.load(open(c["json"]))["team_signed"] is False and info["team_signed"] is False,
+              "a candidate without --team-sign is the build's own signing: team_signed false")
         T.candidate(env, paths, b, repo=repo)
         check(len(builds) == 1, "built once: %d builds" % len(builds))
         # ambient-lead m_20670: a candidate is its own bundle, never his id (LaunchServices mixed them)
@@ -1005,8 +1007,91 @@ def work_checkout_never_stale():
         shutil.rmtree(w, ignore_errors=True)
 
 
+def team_sign_cases():
+    """--candidate <sha> --team-sign (architect m_63935, Gabriel's go m_63930): a copy of a candidate
+    that carries the kb appex, signed with his team's identity found by team id; a fake `security`
+    and a fake signer, never his keychain. No appex, no identity or the wrong team: it fails, nothing
+    signed, no ad hoc fallback; the candidate's own bundle and cand.json stay as built."""
+    import desktop_try_team as K
+    sha = "ab" * 20
+    other = "1) %s \"Developer ID Application: Someone Else (ZZZZZZZZZZ)\"" % ("C" * 40)
+    dev = "2) %s \"Apple Development: Gabriel (9G5B2RTD6U)\"" % ("D" * 40)
+    ours = "3) %s \"Developer ID Application: Gabriel Vergnaud (9G5B2RTD6U)\"" % ("E" * 40)
+    found = "  %s\n  %s\n  %s\n     3 valid identities found\n" % (other, dev, ours)
+    check(K.identity_of(found, K.TEAM) == "E" * 40, "the identity is the Developer ID Application one of his team: %s" % K.identity_of(found, K.TEAM))
+    check(K.identity_of("  %s\n  %s\n     2 valid identities found\n" % (other, dev), K.TEAM) is None, "no Developer ID of his team: none")
+    group = K.kb_group(K.TEAM, T.CAND_ID)
+    check(group == "9G5B2RTD6U.dev.bise.desktop.cand.kb", "the candidate keeps its own group: %s" % group)
+    ent = K.team_entitlements({"com.apple.security.cs.allow-jit": True}, group)
+    check(ent == {"com.apple.security.cs.allow-jit": True, K.GROUPS: [group]}, "desktop.plist's keys plus the group: %s" % ent)
+    team_argv, adhoc = K.outer_codesign("/c/x.app", "E" * 40, "/c/e.plist"), K.outer_codesign("/c/x.app", "-", "/c/e.plist")
+    check(team_argv[team_argv.index("--sign") + 1] == "E" * 40 and "--timestamp" in team_argv and "--options" in team_argv,
+          "--team-sign's codesign: his team's identity, hardened, timestamped: %s" % team_argv)
+    check(adhoc[adhoc.index("--sign") + 1] == "-" and "--timestamp=none" in adhoc, "without it, the ad hoc command: %s" % adhoc)
+
+    w = tempfile.mkdtemp(prefix="dt-team-")
+    try:
+        c = T.cand_paths({"cand": w, "arch": "mac-arm64"}, sha)
+        os.makedirs(os.path.join(c["app"], "Contents", "Resources", "bin"))
+        with open(os.path.join(c["app"], "Contents", "Info.plist"), "wb") as f:
+            plistlib.dump({"CFBundleIdentifier": T.CAND_ID}, f)
+        open(T.packed_bise(c["app"]), "w").close()
+        info = {"sha": sha, "app": c["app"], "root": c["root"], "bise": T.packed_bise(c["app"]), "dir": c["dir"], "team_signed": False}
+        with open(c["json"], "w") as f:
+            json.dump(info, f)
+        own = open(c["json"]).read()
+        signed, asked = [], []
+
+        def security(cmd, **kw):
+            asked.append(cmd)
+            return subprocess.CompletedProcess(cmd, 0, found, "")
+
+        def sign(app, identity, entitlements, say):
+            with open(entitlements, "rb") as f:
+                signed.append((app, identity, plistlib.load(f)))
+        quiet = lambda *x: None  # noqa: E731
+        go = lambda run=security, team="9G5B2RTD6U": K.sign_candidate(info, c, "mac-arm64", T.CAND_NAME, T.CAND_ID, quiet,  # noqa: E731
+                                                                     run=run, sign=sign, team_of=lambda a: team, base={"jit": True})
+        try:
+            go()
+            check(False, "a candidate with no appex is refused")
+        except T.TryError as e:
+            check("bise-kb.appex" in str(e) and not signed and not asked, "no appex: refused before the keychain, nothing signed: %s" % e)
+        os.makedirs(os.path.join(c["app"], K.APPEX, "Contents"))
+        try:
+            go(run=lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, "     0 valid identities found\n", ""))
+            check(False, "no identity of his team: refused")
+        except T.TryError as e:
+            check("no ad hoc fallback" in str(e) and not signed, "no identity: fails loudly, nothing signed: %s" % e)
+        out = go()
+        t = K.team_paths(c, "mac-arm64", T.CAND_NAME)
+        check(asked == [K.FIND], "the identity is looked up by team in the keychain: %s" % asked)
+        check(len(signed) == 1 and signed[0][0] == t["app"] and signed[0][1] == "E" * 40 and signed[0][2] == {"jit": True, K.GROUPS: [group]},
+              "the copy is signed with his team's identity and the group: %s" % signed)
+        check(t["app"] != c["app"] and t["app"].startswith(c["dir"] + "/team/") and T.bundle_id(t["app"]) == T.CAND_ID
+              and os.path.isdir(os.path.join(t["app"], K.APPEX)), "a copy apart, with the candidate's own id and its appex: %s" % t["app"])
+        saved = json.load(open(t["json"]))
+        check(saved == out and out["team_signed"] is True and out["app"] == t["app"] and out["bise"] == T.packed_bise(t["app"])
+              and out["group"] == group and out["sha"] == sha, "the copy's cand.json: team_signed true, its app and bise: %s" % out)
+        check(open(c["json"]).read() == own, "the candidate's own cand.json (what --promote reads) is untouched")
+        try:
+            go(team=None)
+            check(False, "a copy that does not say his team is refused")
+        except T.TryError as e:
+            check("not 9G5B2RTD6U" in str(e), "the signed copy must say his team: %s" % e)
+    finally:
+        shutil.rmtree(w, ignore_errors=True)
+    for argv in (["--team-sign"], ["--promote", sha, "--team-sign"], ["--try", "--team-sign"], ["--candidate", sha, "--team-sign", "--real"]):
+        try:
+            T.main(argv)
+            check(False, "%s is refused" % argv)
+        except T.TryError as e:
+            check("--team-sign goes with --candidate" in str(e), "%s: --team-sign with --candidate only: %s" % (argv, e))
+
+
 if __name__ == "__main__":
     pure()
+    team_sign_cases()
     work_checkout_never_stale()
     root_ships_what_a_version_dir_has()
     stamp_skips_build()

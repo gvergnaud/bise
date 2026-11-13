@@ -6,6 +6,7 @@
 #   scripts/desktop-try.sh --try [repo…] [--fresh] [--replace]
 #   scripts/desktop-try.sh --try --stop
 #   scripts/desktop-try.sh --candidate <sha>   (a gate candidate in its own dir)
+#   scripts/desktop-try.sh --candidate <sha> --team-sign   (+ a copy signed by his team, for a Finder check)
 #   scripts/desktop-try.sh --promote <sha>     (the gate passed: it becomes his try)
 #
 # ~/.local/bin/bise-ambient (scripts/bise-ambient) runs the try checkout's copy for

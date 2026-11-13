@@ -13,6 +13,10 @@
                                                      (app, root, bise) for the gate's off-screen launcher
                                                      (or BISE_TRY_CANDIDATE=<sha>). Its own bundle 'bise cand'
                                                      (dev.bise.desktop.cand), so its own userData: never his id
+  scripts/desktop-try.sh --candidate <sha> --team-sign   then a copy of it signed with his Developer ID team
+                                                     (<cand dir>/team/, team_signed: true), only when it carries
+                                                     bise-kb.appex, for a Finder check; never notarized or
+                                                     promoted (desktop_try_team.py)
   scripts/desktop-try.sh --promote <sha>             the gate passed: the candidate's build is repacked as 'bise
                                                      try' (dev.bise.desktop.try: electron-builder --dir only, no
                                                      rebuild), the try checkout moves to <sha>, and that bundle
@@ -522,6 +526,8 @@ def candidate(env, paths, sha, repo=REPO, sign=None):
     # matches; and the cargo command of its packed bise (tree_bise.sh takes it only for its own)
     info["build_key"] = build_key(c["src"], sha, env)
     info["bise_cargo"] = BISE_CARGO
+    # this bundle is the build's own signing (stable or ad hoc); a --team-sign copy is apart (desktop_try_team)
+    info["team_signed"] = False
     with open(c["json"] + ".tmp", "w") as f:
         json.dump(info, f, indent=1)
     os.replace(c["json"] + ".tmp", c["json"])
@@ -930,11 +936,13 @@ def stop(real, tryh, app=None):
 def main(argv):
     args = [a for a in argv if not a.startswith("--")]
     flags = {a for a in argv if a.startswith("--")}
-    bad = flags - {"--try", "--real", "--stop", "--fresh", "--replace", "--no-build", "--no-open", "--candidate", "--promote"}
+    bad = flags - {"--try", "--real", "--stop", "--fresh", "--replace", "--no-build", "--no-open", "--candidate", "--promote", "--team-sign"}
     if bad:
-        raise TryError("unknown option %s (--real, --try [repo…] [--fresh|--replace], --try --stop, --candidate <sha>, --promote <sha>)"
-                       % ", ".join(sorted(bad)))
+        raise TryError("unknown option %s (--real, --try [repo…] [--fresh|--replace], --try --stop, --candidate <sha> [--team-sign], "
+                       "--promote <sha>)" % ", ".join(sorted(bad)))
     cand = os.environ.get("BISE_TRY_CANDIDATE") if "--promote" not in flags else None
+    if "--team-sign" in flags and ("--candidate" not in flags or flags - {"--candidate", "--team-sign"}):
+        raise TryError("--team-sign goes with --candidate <sha> only")
     if "--candidate" in flags or cand:
         # a gate candidate: its own dir, never the try checkout, stamp or staged dir (ambient-lead m_14320)
         sha = args[0] if args else cand
@@ -943,7 +951,11 @@ def main(argv):
         mine = his_env(os.environ)
         paths = try_paths(mine)
         sign = os.environ.get("BISE_TRY_SIGN_DIR") or (paths["sign"] if os.path.isdir(paths["sign"]) else None)
-        print(json.dumps(candidate(mine, paths, sha, sign=sign)))
+        info = candidate(mine, paths, sha, sign=sign)
+        if "--team-sign" in flags:
+            import desktop_try_team  # Gabriel's go for his team (architect m_63935): a signed copy, apart
+            info = desktop_try_team.sign_candidate(info, cand_paths(paths, info["sha"]), paths["arch"], CAND_NAME, CAND_ID, say)
+        print(json.dumps(info))
         return 0
     if "--promote" in flags:
         if not args:
