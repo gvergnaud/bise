@@ -46,6 +46,7 @@ describe('the skills switch', () => {
     let opened = 0;
     render(<GuardedSwitch rows={[folder([skill('a', 'Documents')])]} on={false} refused={['Documents']} send={() => {}} openSettings={() => { opened += 1; }} />);
     expect(screen.getByTestId('plugins.guarded.refused').textContent).toContain(settings.onb_refused_in({ folder: 'Documents' }));
+    expect(screen.getByTestId('plugins.guarded.settings').parentElement?.getAttribute('data-tip')).toBe(settings.plugins_open_settings_tip);
     fireEvent.click(screen.getByTestId('plugins.guarded.settings'));
     expect(opened).toBe(1);
   });

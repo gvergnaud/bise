@@ -30,6 +30,8 @@ crate::words! { settings:
     plugins_guarded_root(folders) = "a skills folder is in {folders}";
     /// Plugins list: the same line for several such skills folders
     plugins_guarded_roots(n, folders) = "{n} skills folders are in {folders}";
+    /// Plugins list: the tip of the refused line's Open Settings (designer m_64307)
+    plugins_open_settings_tip = "opens Privacy & Security › Files & Folders";
     /// Plugins list: the last two folders of that line (`Documents and Desktop`)
     plugins_and(a, b) = "{a} and {b}";
     /// Plugins list: bise's own skills (`skills:bise`, always on)

@@ -1736,6 +1736,8 @@ export const settings = {
   plugins_guarded_root: (a: { folders: string | number }): string => "a skills folder is in " + String(a.folders),
   /** Plugins list: the same line for several such skills folders */
   plugins_guarded_roots: (a: { n: string | number; folders: string | number }): string => String(a.n) + " skills folders are in " + String(a.folders),
+  /** Plugins list: the tip of the refused line's Open Settings (designer m_64307) */
+  plugins_open_settings_tip: "opens Privacy & Security › Files & Folders",
   /** Plugins list: the last two folders of that line (`Documents and Desktop`) */
   plugins_and: (a: { a: string | number; b: string | number }): string => String(a.a) + " and " + String(a.b),
   /** Plugins list: bise's own skills (`skills:bise`, always on) */

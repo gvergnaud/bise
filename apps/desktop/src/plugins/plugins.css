@@ -242,3 +242,4 @@
    its count line text-2; after a refusal, 'macOS said no to Documents' and its quiet 'Open Settings' */
 .plg-guarded .plg-row-words { display: flex; flex-direction: column; min-width: 0; }
 .plg-guarded-said { display: inline-flex; align-items: baseline; gap: var(--s-2); }
+.plg-guarded-act .b-act { padding: 0; font: inherit; line-height: inherit; }

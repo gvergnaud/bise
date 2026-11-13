@@ -4249,6 +4249,11 @@
     "one": null,
     "text": "{on} of {n} tools"
   },
+  "settings.plugins_open_settings_tip": {
+    "args": [],
+    "one": null,
+    "text": "opens Privacy & Security › Files & Folders"
+  },
   "settings.plugins_opens": {
     "args": [],
     "one": null,

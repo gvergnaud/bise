@@ -5,7 +5,7 @@
 // (macOS may ask him then) and, when macOS says no, turns it back off: the line says 'macOS said no to
 // Documents' with 'Open Settings' (Privacy & Security › Files & Folders), the setup's words.
 import type { AppCmd, Plugin } from '@/proto';
-import { Act, Toggle } from '@/ds';
+import { Act, Toggle, tipAttrs } from '@/ds';
 import { settings } from '@/proto/words.gen';
 import { openFilesSettings } from '@/settings/picker';
 
@@ -79,7 +79,10 @@ export function GuardedSwitch({ rows, on, refused, project, send, openSettings =
         {refused.length > 0 ? (
           <span className="plg-row-what plg-guarded-said" data-testid="plugins.guarded.refused">
             {settings.onb_refused_in({ folder: folderList(refused) })}
-            <Act onClick={openSettings} testId="plugins.guarded.settings">{settings.onb_open_settings}</Act>
+            {/* the compact act: the row keeps the group's 48 px (designer m_64307) */}
+            <span className="plg-guarded-act" {...tipAttrs(settings.plugins_open_settings_tip)}>
+              <Act onClick={openSettings} testId="plugins.guarded.settings">{settings.onb_open_settings}</Act>
+            </span>
           </span>
         ) : (
           <span className="plg-row-what" data-testid="plugins.guarded.count">{linkedLine(linked)}</span>
