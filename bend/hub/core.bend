@@ -698,7 +698,7 @@ def pump.batch(-o: S.St, batch: List<&2, S.Msg>, +cx: X.Cx<o>, +name: String, +b
       +notes = Bool.pick(List<&2, String>, is_main, S.St.notes(st(o, cx)), Nil{})
       +cx2 = pump.flush(o, Bool.not(List.is_empty(&2, String, notes)), cx)
       +status = is_main && M.any_from_user(b)
-      +cx3 = work_turn(o, WO.turn_change(works_of_agent(M.get_agent(st(o, cx2), name)), WO.batch_works(b), busy), cx2, name, busy)
+      +cx3 = work_turn(o, WO.turn_change(works_of_agent(M.get_agent(st(o, cx2), name)), WO.retarget(WO.batch_works(b), S.St.works(st(o, cx2))), busy), cx2, name, busy)
       pump.send(o, busy, deliver_each(o, b, cx3, name, Nil{}), name, ids_of(b), notes, status)
 
 def pump.run(-o: S.St, run: S.Run, +cx: X.Cx<o>, +name: String, +queued: List<&2, S.Msg>, +is_main: Bool) -> X.Cx<o>:
@@ -1364,8 +1364,11 @@ def timer_ready(-o: S.St, +cx: X.Cx<o>, +n: String) -> Bool:
 
 # a paused project fires no timer (law timer_held_while_paused): a due
 # one fires at the first tick after /resume
+# tasks: a timer whose works are all paused waits too; a missed every
+# fires once at the resume (its next is from the tick's now: TM.next_of;
+# tasks-ux m_64703)
 def timer_may(-o: S.St, +cx: X.Cx<o>, +t: S.Timer, +due: Bool) -> Bool:
-  Bool.not(P.is_paused(st(o, cx))) && TM.may_fire(bise_queued(st(o, cx), S.Timer.agent(t)), due, t, timer_ready(o, cx, S.Timer.agent(t)), now(o, cx))
+  Bool.not(P.is_paused(st(o, cx))) && (TM.may_fire(bise_queued(st(o, cx), S.Timer.agent(t)), due, t, timer_ready(o, cx, S.Timer.agent(t)), now(o, cx)) && Bool.not(WO.all_paused(S.Timer.works(t), S.St.works(st(o, cx)))))
 
 def timer_spent(-o: S.St, spent: Bool, +cx: X.Cx<o>, +id: Nat, +at: Nat) -> X.Cx<o>:
   match spent:
@@ -3855,6 +3858,12 @@ def req_task.after(-o: S.St, op: S.WOp, +cx: X.Cx<o>, +was: Bool, +id: String, +
       work_pause.until(o, cx2, id, until, by)
     case S.WResume{}:
       work_resumed(o, cx)
+    # a paused work closed: its pause ended with it, what it held goes
+    # (law a_closed_work_holds_nothing)
+    case S.WDone{}:
+      LZ.pick(X.Cx<o>, was, u => work_resumed(o, cx), u => cx)
+    case S.WMerge{_}:
+      LZ.pick(X.Cx<o>, was, u => work_resumed(o, cx), u => cx)
     case _:
       cx
 

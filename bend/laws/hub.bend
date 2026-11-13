@@ -22,6 +22,7 @@ import ../hub/pause.bend as HP
 import ../hub/reach.bend as HR
 import ../hub/answers.bend as HA
 import ../hub/cold.bend as CO
+import ../hub/work.bend as HWO
 
 # ---- Switchboard hub (hub/*.bend, the sb-core process) ----
 # The laws quantify over EVERY hub state, EVERY input (any JSON line the
@@ -312,8 +313,9 @@ law timer_reaches_busy:
 
 # LAW: a due wake of a timer whose agent it reaches (idle or busy:
 # timer_reaches_busy), in a project not paused, with no wake from bise
-# still queued for it, fires on the timer's own terms only: due and under
-# its times.
+# still queued for it, and tasks not all paused (a timer of paused tasks
+# waits: tasks-ux m_64703), fires on the timer's own terms only: due and
+# under its times.
 law timer_fires_busy:
   for -o: HS.St
   for +cx: HX.Cx<o>
@@ -321,7 +323,29 @@ law timer_fires_busy:
   for p: {HP.is_paused(HX.d(o, cx)) == False{} : Bool}
   for q: {HC.bise_queued(HX.d(o, cx), HS.Timer.agent(t)) == False{} : Bool}
   for r: {HC.timer_ready(o, cx, HS.Timer.agent(t)) == True{} : Bool}
+  for s: {HWO.all_paused(HS.Timer.works(t), HS.St.works(HX.d(o, cx))) == False{} : Bool}
   {HC.timer_may(o, cx, t, True{}) == HTM.may_fire.go(True{}, t, True{}, HC.now(o, cx)) : Bool}
+
+# LAW: the old case unchanged: a timer that serves no task fires on the
+# same terms as before tasks (architect m_64727).
+law timer_fires_busy_with_no_work:
+  for -o: HS.St
+  for +cx: HX.Cx<o>
+  for +t: HS.Timer
+  for p: {HP.is_paused(HX.d(o, cx)) == False{} : Bool}
+  for q: {HC.bise_queued(HX.d(o, cx), HS.Timer.agent(t)) == False{} : Bool}
+  for r: {HC.timer_ready(o, cx, HS.Timer.agent(t)) == True{} : Bool}
+  for s: {HS.Timer.works(t) == Nil{} : List<&2, String>}
+  {HC.timer_may(o, cx, t, True{}) == HTM.may_fire.go(True{}, t, True{}, HC.now(o, cx)) : Bool}
+
+# LAW: a timer whose end passed (while its tasks were paused or not)
+# ends at the tick and fires nothing: the tick reads end_why before it
+# may fire (timers_tick.end), so a resume never fires it.
+law until_passed_while_paused_never_fires:
+  for +x: HS.Timer
+  for +now: Nat
+  for q: {HTM.past_until(x, now) == True{} : Bool}
+  {HTM.end_why(x, False{}, now) == Some{"its end time passed"} : Maybe<&2, String>}
 
 # LAW: a paused project steers nothing into a busy agent's turn either:
 # pump (the only step that steers: pump.send.go's "steer") leaves the

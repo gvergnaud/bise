@@ -185,6 +185,31 @@ law moved_by_you_sticks:
   for +ws: List<&2, String>
   {HM.card_moved([c], HS.Card.id(c), ws) == [HS.Card.with_moved(HS.Card.with_works(c, ws), True{})] : List<&2, HS.Card>}
 
+# LAW: a work closed by done has no pause left: held() needs every work
+# of a message paused, so nothing waits on it any more (architect
+# m_64704; core.bend pumps what it held in the same step).
+law a_closed_work_holds_nothing:
+  for +w: HS.Work
+  for +by: String
+  for +at: Nat
+  {HS.Work.paused(HWO.change.op(HS.WDone{}, w, by, at)) == None{} : Maybe<&2, Nat>}
+
+# LAW: the same for a merge: the held messages go, to its target
+# (retarget at the delivery: merge_redirects).
+law a_merged_work_holds_nothing:
+  for +into: String
+  for +w: HS.Work
+  for +by: String
+  for +at: Nat
+  {HS.Work.paused(HWO.change.op(HS.WMerge{into}, w, by, at)) == None{} : Maybe<&2, Nat>}
+
+# LAW: his own words are never held by a pause: they reach the agent
+# (tasks-ux m_64703: his word beats the pause).
+law his_words_are_never_held:
+  for +ids: List<&2, String>
+  for +xs: List<&2, HS.Work>
+  {HWO.held.by(True{}, ids, xs) == False{} : Bool}
+
 # ---- the fold (architect m_64423 Q3) ----
 
 # LAW: a done work folds to its tomb once DONE_KEEP_MS (7 days) passed

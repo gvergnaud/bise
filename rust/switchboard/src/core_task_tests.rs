@@ -293,3 +293,92 @@ fn a_pause_until_a_time_resumes_by_itself_and_a_stale_end_does_nothing() {
     assert_eq!((ch["op"].as_str(), ch["by"].as_str()), (Some("resume"), Some("switchboard")), "by bise: {ch}");
     assert_ne!(t.hub.st.works[&a].status, "paused");
 }
+
+fn his_words(t: &mut T, to: &str, text: &str) {
+    t.go(Input::ClientInput { client: 1, focus: to.into(), text: text.into(), queued: false, parts: String::new(), from: String::new() });
+}
+
+#[test]
+fn his_words_reach_a_paused_tasks_agent_and_a_closed_task_releases_what_it_held() {
+    let mut t = T::new();
+    let a = new(&mut t, MAIN, "Native mac", &[]);
+    t.spawn_task("docs");
+    t.go(Input::ClientWorkAct { client: 7, req: Task::Pause { id: a.clone(), until_ms: None } });
+    // his word on it goes, paused or not (law his_words_are_never_held)
+    his_words(&mut t, "docs", "one more thing");
+    let his = sent_to(&t, "docs").last().unwrap().clone();
+    assert_eq!((his["text"].as_str(), his["works"].clone()), (Some("one more thing"), json!([a])), "{his}");
+    assert_eq!(t.hub.st.msg_state()[&his["id"].as_u64().unwrap()], MsgState::Delivered);
+    // main's word on it waits; done on the paused task: what it held goes
+    t.req(MAIN, send("docs", "and the icon", &[&a]));
+    let held = sent_to(&t, "docs").last().unwrap()["id"].as_u64().unwrap();
+    assert!(matches!(t.hub.st.msg_state()[&held], MsgState::Queued { .. }));
+    assert_eq!(task(&mut t, MAIN, Task::Done { id: a.clone() })["ok"], true);
+    assert_eq!(t.hub.st.works[&a].work.paused, None, "law a_closed_work_holds_nothing");
+    assert_eq!(t.hub.st.msg_state()[&held], MsgState::Delivered);
+}
+
+#[test]
+fn a_merged_paused_task_sends_what_it_held_to_its_target() {
+    let mut t = T::new();
+    let a = new(&mut t, MAIN, "Native mac", &[]);
+    t.spawn_task("docs");
+    let b = new(&mut t, MAIN, "Mac app", &[]);
+    t.go(Input::ClientWorkAct { client: 7, req: Task::Pause { id: a.clone(), until_ms: None } });
+    t.req(MAIN, send("docs", "and the icon", &[&a]));
+    let held = sent_to(&t, "docs").last().unwrap()["id"].as_u64().unwrap();
+    assert_eq!(task(&mut t, MAIN, Task::Merge { id: a.clone(), into: b.clone() })["ok"], true);
+    assert_eq!(t.hub.st.msg_state()[&held], MsgState::Delivered, "law a_merged_work_holds_nothing");
+    // delivered, it serves the target (merge_redirects at the delivery)
+    let turn = lines(&t, "work_turn").last().unwrap()["turn"].clone();
+    assert_eq!(turn["agent"], "docs");
+    assert!(turn["works"].as_array().unwrap().contains(&json!(b)), "{turn}");
+}
+
+#[test]
+fn a_timer_of_a_paused_task_waits_and_fires_once_at_its_resume() {
+    use crate::every::MIN_MS;
+    let mut t = T::new();
+    let a = new(&mut t, MAIN, "Digest", &[]);
+    t.spawn_task("docs");
+    // main's timer carries its turn's work (law timer_carries_turn_works)
+    let (tok, fx) = t.req(MAIN, AgentReq::Every(EveryReq::Add { to: "docs".into(), text: "the digest".into(), every_ms: Some(MIN_MS), daily_min: None, until_ms: None, times: Some(2), page: None, name: None }));
+    assert_eq!(reply(&fx, tok).unwrap()["ok"], true);
+    t.go(Input::ClientWorkAct { client: 7, req: Task::Pause { id: a.clone(), until_ms: None } });
+    let fired = |t: &T| lines(t, "every_fired");
+    for k in 1..=3 {
+        t.env.now += MIN_MS + 1;
+        t.go(Input::Tick);
+        assert_eq!(fired(&t).len(), 0, "tick {k}: held while its task is paused");
+    }
+    t.go(Input::ClientWorkAct { client: 7, req: Task::Resume { id: a.clone() } });
+    t.env.now += 1_000;
+    t.go(Input::Tick);
+    assert_eq!(fired(&t).len(), 1, "the missed ones fire once");
+    assert_eq!(fired(&t)[0]["fired"], 1, "--times counts the catch-up as one");
+    t.env.now += 1_000;
+    t.go(Input::Tick);
+    assert_eq!(fired(&t).len(), 1);
+}
+
+#[test]
+fn a_timer_whose_end_passed_while_paused_ends_and_never_fires() {
+    use crate::every::MIN_MS;
+    let mut t = T::new();
+    let a = new(&mut t, MAIN, "Digest", &[]);
+    t.spawn_task("docs");
+    let end = t.env.now + 2 * MIN_MS + 500;
+    let (tok, fx) = t.req(MAIN, AgentReq::Every(EveryReq::Add { to: "docs".into(), text: "the digest".into(), every_ms: Some(MIN_MS), daily_min: None, until_ms: Some(end), times: None, page: None, name: None }));
+    assert_eq!(reply(&fx, tok).unwrap()["ok"], true);
+    t.go(Input::ClientWorkAct { client: 7, req: Task::Pause { id: a.clone(), until_ms: None } });
+    for _ in 0..4 {
+        t.env.now += MIN_MS + 1;
+        t.go(Input::Tick);
+    }
+    let stop = lines(&t, "every_stop");
+    assert_eq!(stop.last().map(|s| s["why"].clone()), Some(json!("its end time passed")), "{stop:?}");
+    t.go(Input::ClientWorkAct { client: 7, req: Task::Resume { id: a.clone() } });
+    t.env.now += 1_000;
+    t.go(Input::Tick);
+    assert!(lines(&t, "every_fired").is_empty(), "law until_passed_while_paused_never_fires");
+}

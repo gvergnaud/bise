@@ -81,6 +81,15 @@ def Laws.until_follows_the_last_pause(p, at, now):
 def Laws.pause_without_end_never_resumes(p, now):
   {==}
 
+def Laws.a_closed_work_holds_nothing(w, by, at):
+  HSL.Work.paused.get_with(HS.Work.with_until(HS.Work.with_until_timer(HS.Work.with_done(w, Some{HWO.fin(at, by)}), None{}), None{}), None{})
+
+def Laws.a_merged_work_holds_nothing(into, w, by, at):
+  HSL.Work.paused.get_with(HS.Work.with_until(HS.Work.with_until_timer(HS.Work.with_done(HS.Work.with_merged_into(w, Some{into}), Some{HWO.fin(at, by)}), None{}), None{}), None{})
+
+def Laws.his_words_are_never_held(ids, xs):
+  {==}
+
 def Laws.a_done_work_folds_after_seven_days(f, now):
   {==}
 

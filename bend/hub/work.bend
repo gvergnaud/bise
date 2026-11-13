@@ -104,6 +104,12 @@ def opt(+n: Nat) -> Maybe<&2, Nat>:
     case 1n+p:
       Some{1n+p}
 
+# a closed work holds nothing: done or merged, its pause ends with it,
+# so the messages it held go (law a_closed_work_holds_nothing; architect
+# m_64704)
+def unpaused(+w: S.Work) -> S.Work:
+  S.Work.with_paused(S.Work.with_until(S.Work.with_until_timer(w, None{}), None{}), None{})
+
 # `w` after the change `op` made by `by` at `at` (a rename by him names
 # it for good; a pause keeps when it began and its end; a done or a
 # reopen; a merge marks it done into its target)
@@ -126,11 +132,11 @@ def change.op(op: S.WOp, +w2: S.Work, +by: String, +at: Nat) -> S.Work:
     case S.WResume{}:
       S.Work.with_until_timer(S.Work.with_until(S.Work.with_paused(w2, None{}), None{}), None{})
     case S.WDone{}:
-      S.Work.with_done(w2, Some{fin(at, by)})
+      unpaused(S.Work.with_done(w2, Some{fin(at, by)}))
     case S.WReopen{}:
       S.Work.with_done(w2, None{})
     case S.WMerge{+into}:
-      S.Work.with_done(S.Work.with_merged_into(w2, Some{into}), Some{fin(at, by)})
+      unpaused(S.Work.with_done(S.Work.with_merged_into(w2, Some{into}), Some{fin(at, by)}))
     case S.WAddAgent{+agent}:
       S.Work.over_agents(w2, xs => add(xs, agent))
     case S.WUntilTimer{+timer}:
@@ -317,8 +323,37 @@ def all_paused(ids: List<&2, String>, +xs: List<&2, S.Work>) -> Bool:
 
 # a message held by its works' pause: it waits in the queue, in its
 # order, until one of them resumes (law paused_work_holds_its_deliveries)
+def held.by(him: Bool, ids: List<&2, String>, +xs: List<&2, S.Work>) -> Bool:
+  match him:
+    case True{}:
+      False{}
+    case False{}:
+      all_paused(ids, xs)
+
+# his own words are never held: they reach the agent, paused or not (his
+# word beats the pause; law his_words_are_never_held, tasks-ux m_64703)
 def held(+m: S.Msg, +xs: List<&2, S.Work>) -> Bool:
-  all_paused(S.Msg.works(m), xs)
+  held.by(String.eq(S.Msg.from(m), "user"), S.Msg.works(m), xs)
+
+# a delivery's works read as the live ones they name: a merged work's
+# held message serves its target (law merge_redirects)
+def retarget.one(m: Maybe<&2, String>, +id: String) -> String:
+  match m:
+    case None{}:
+      id
+    case Some{+t}:
+      t
+
+def retarget.go(ids: List<&2, String>, +xs: List<&2, S.Work>, +acc: List<&2, String>) -> List<&2, String>:
+  match ids:
+    case Nil{}:
+      acc
+    case Con{+h, +t}:
+      retarget.go(t, xs, add(acc, retarget.one(target(xs, h), h)))
+
+# in their order, once each
+def retarget(ids: List<&2, String>, +xs: List<&2, S.Work>) -> List<&2, String>:
+  retarget.go(ids, xs, Nil{})
 
 def unheld.pick(h: Bool, +m: S.Msg, +rest: List<&2, S.Msg>) -> List<&2, S.Msg>:
   match h:

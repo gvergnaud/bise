@@ -23,6 +23,7 @@ import ../hub/names.bend as HN
 import ../hub/gen/fx.bend as HF
 import ../hub/gen/feed.bend as HFD
 import ../hub/viewctx.bend as HVC
+import ../hub/work.bend as HWO
 import ./lib/hub-1.bend as PL1
 import ./lib/absurd.bend as AB
 import ./lib/hub-2.bend as PL2
@@ -235,7 +236,7 @@ def Laws.fire_is_a_message(o, p, t, due, next):
       PL3.hub_count_journal(o, due, cx, t, next)
 
 def Laws.wake_never_stacked(o, cx, t, text, due, next, q):
-  %Equal.sym(Bool, HC.bise_queued(HX.d(o, cx), HS.Timer.agent(t)), True{}, q) : {HC.timer_fire.go(o, Bool.and(Bool.not(HP.is_paused(HX.d(o, cx))), HTM.may_fire(_, due, t, HC.timer_ready(o, cx, HS.Timer.agent(t)), HC.now(o, cx))), cx, t, text, due, next) == cx : HX.Cx<o>}
+  %Equal.sym(Bool, HC.bise_queued(HX.d(o, cx), HS.Timer.agent(t)), True{}, q) : {HC.timer_fire.go(o, Bool.and(Bool.not(HP.is_paused(HX.d(o, cx))), Bool.and(HTM.may_fire(_, due, t, HC.timer_ready(o, cx, HS.Timer.agent(t)), HC.now(o, cx)), Bool.not(HWO.all_paused(HS.Timer.works(t), HS.St.works(HX.d(o, cx)))))), cx, t, text, due, next) == cx : HX.Cx<o>}
   %Equal.sym(Bool, Bool.and(Bool.not(HP.is_paused(HX.d(o, cx))), False{}), False{}, PL2.hub_and_false_r(Bool.not(HP.is_paused(HX.d(o, cx))))) : {HC.timer_fire.go(o, _, cx, t, text, due, next) == cx : HX.Cx<o>}
   {==}
 
@@ -278,7 +279,7 @@ def Laws.paused_delivers_nothing(o, cx, n, q):
   {==}
 
 def Laws.timer_held_while_paused(o, cx, t, due, q):
-  %Equal.sym(Bool, HP.is_paused(HX.d(o, cx)), True{}, q) : {Bool.and(Bool.not(_), HTM.may_fire(HC.bise_queued(HX.d(o, cx), HS.Timer.agent(t)), due, t, HC.timer_ready(o, cx, HS.Timer.agent(t)), HC.now(o, cx))) == False{} : Bool}
+  %Equal.sym(Bool, HP.is_paused(HX.d(o, cx)), True{}, q) : {Bool.and(Bool.not(_), Bool.and(HTM.may_fire(HC.bise_queued(HX.d(o, cx), HS.Timer.agent(t)), due, t, HC.timer_ready(o, cx, HS.Timer.agent(t)), HC.now(o, cx)), Bool.not(HWO.all_paused(HS.Timer.works(t), HS.St.works(HX.d(o, cx)))))) == False{} : Bool}
   {==}
 
 def Laws.pause_idempotent(o, cx, q):
@@ -352,10 +353,31 @@ def Laws.timer_reaches_busy(o, cx, a, p, q):
   %Equal.sym(HS.Run, HX.Rt.run(HC.rt(o, cx, HS.Agent.name(a))), HS.RBusy{}, q) : {Bool.and(True{}, HR.reachable(_)) == True{} : Bool}
   {==}
 
-def Laws.timer_fires_busy(o, cx, t, p, q, r):
-  %Equal.sym(Bool, HP.is_paused(HX.d(o, cx)), False{}, p) : {Bool.and(Bool.not(_), HTM.may_fire(HC.bise_queued(HX.d(o, cx), HS.Timer.agent(t)), True{}, t, HC.timer_ready(o, cx, HS.Timer.agent(t)), HC.now(o, cx))) == HTM.may_fire.go(True{}, t, True{}, HC.now(o, cx)) : Bool}
-  %Equal.sym(Bool, HC.bise_queued(HX.d(o, cx), HS.Timer.agent(t)), False{}, q) : {Bool.and(True{}, HTM.may_fire(_, True{}, t, HC.timer_ready(o, cx, HS.Timer.agent(t)), HC.now(o, cx))) == HTM.may_fire.go(True{}, t, True{}, HC.now(o, cx)) : Bool}
-  %Equal.sym(Bool, HC.timer_ready(o, cx, HS.Timer.agent(t)), True{}, r) : {Bool.and(True{}, HTM.may_fire(False{}, True{}, t, _, HC.now(o, cx))) == HTM.may_fire.go(True{}, t, True{}, HC.now(o, cx)) : Bool}
+# a and True is a
+def and_true_r(a: Bool) -> {Bool.and(a, True{}) == a : Bool}:
+  match a:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+def Laws.timer_fires_busy(o, cx, t, p, q, r, s):
+  %Equal.sym(Bool, HP.is_paused(HX.d(o, cx)), False{}, p) : {Bool.and(Bool.not(_), Bool.and(HTM.may_fire(HC.bise_queued(HX.d(o, cx), HS.Timer.agent(t)), True{}, t, HC.timer_ready(o, cx, HS.Timer.agent(t)), HC.now(o, cx)), Bool.not(HWO.all_paused(HS.Timer.works(t), HS.St.works(HX.d(o, cx)))))) == HTM.may_fire.go(True{}, t, True{}, HC.now(o, cx)) : Bool}
+  %Equal.sym(Bool, HC.bise_queued(HX.d(o, cx), HS.Timer.agent(t)), False{}, q) : {Bool.and(True{}, Bool.and(HTM.may_fire(_, True{}, t, HC.timer_ready(o, cx, HS.Timer.agent(t)), HC.now(o, cx)), Bool.not(HWO.all_paused(HS.Timer.works(t), HS.St.works(HX.d(o, cx)))))) == HTM.may_fire.go(True{}, t, True{}, HC.now(o, cx)) : Bool}
+  %Equal.sym(Bool, HC.timer_ready(o, cx, HS.Timer.agent(t)), True{}, r) : {Bool.and(True{}, Bool.and(HTM.may_fire(False{}, True{}, t, _, HC.now(o, cx)), Bool.not(HWO.all_paused(HS.Timer.works(t), HS.St.works(HX.d(o, cx)))))) == HTM.may_fire.go(True{}, t, True{}, HC.now(o, cx)) : Bool}
+  %Equal.sym(Bool, HWO.all_paused(HS.Timer.works(t), HS.St.works(HX.d(o, cx))), False{}, s) : {Bool.and(True{}, Bool.and(HTM.may_fire(False{}, True{}, t, True{}, HC.now(o, cx)), Bool.not(_))) == HTM.may_fire.go(True{}, t, True{}, HC.now(o, cx)) : Bool}
+  and_true_r(HTM.may_fire.go(True{}, t, True{}, HC.now(o, cx)))
+
+# a timer with no work: none of its works is paused
+def no_work_none_paused(-o: HS.St, +cx: HX.Cx<o>, +t: HS.Timer, s: {HS.Timer.works(t) == Nil{} : List<&2, String>}) -> {HWO.all_paused(HS.Timer.works(t), HS.St.works(HX.d(o, cx))) == False{} : Bool}:
+  %Equal.sym(List<&2, String>, HS.Timer.works(t), Nil{}, s) : {HWO.all_paused(_, HS.St.works(HX.d(o, cx))) == False{} : Bool}
+  {==}
+
+def Laws.timer_fires_busy_with_no_work(o, cx, t, p, q, r, s):
+  Laws.timer_fires_busy(o, cx, t, p, q, r, no_work_none_paused(o, cx, t, s))
+
+def Laws.until_passed_while_paused_never_fires(x, now, q):
+  %Equal.sym(Bool, HTM.past_until(x, now), True{}, q) : {Bool.pick(Maybe<&2, String>, False{}, Some{String.concat(["@", HS.Timer.agent(x), " is gone"])}, Bool.pick(Maybe<&2, String>, _, Some{"its end time passed"}, None{})) == Some{"its end time passed"} : Maybe<&2, String>}
   {==}
 
 def Laws.paused_steers_nothing(o, cx, n, q, r):
