@@ -13,11 +13,11 @@
 // Folders: + new folder in the column, F2 or a double-click renames, the folder menu merges or
 // deletes (a dialog). Every move and folder edit has its undo (⌘Z, and the toast's). The grid, the
 // cards, the stacks and the list view are art-grid's (Grid.tsx, Sheet.tsx). Owner: art-folders.
-import { Fragment, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { Button, Empty, Filters, GroupLabel, MoreButton, PageBanner, Press, sentenceCase, Sheet, Toast, type EntityMenu } from '@/ds';
 import { hero } from '@/proto/words_hero.gen';
 import { library } from '@/proto/words_library.gen';
-import { useFolders, useProjects, useStore } from '@/store';
+import { useFolders, usePlugins, useProjects, useStore } from '@/store';
 import { DEPTH, useRouter } from '@/app/router';
 import { libraryExit } from '@/app/escape';
 import { usePageSearchKeys } from '@/app/searchkeys';
@@ -45,7 +45,7 @@ import {
 import { AudienceToggle, audienceView, HiddenRow, type Audience } from './Audience';
 import { SLOTS, slotOf } from './slots';
 import { FolderColumn, type Editing } from './Column';
-import { appKeyFor, appOf, appTabsOf, FIXED_TAGS, keyOfTag, PRS } from './apps';
+import { appKeyFor, appOf, appTabsOf, FIXED_TAGS, keyOfTag, MAX_TABS, PRS } from './apps';
 import { FoldCrumb, useNarrow } from './Fold';
 import { sayCrumbSearch } from './crumb';
 import { MovePicker } from './MovePicker';
@@ -135,6 +135,9 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
     [...artPins].flatMap(([p, ids]) => ids.flatMap((id) => items.filter((it) => it.project === p && it.a.id === id)));
   const folders = useFolders();
   const projects = useProjects();
+  // the built-in plugins: a shared app id's tab takes their title (apps.ts appWords)
+  const plugins = usePlugins();
+  const firstParty = useMemo(() => new Set((plugins ?? []).filter((p) => p.scope === 'built-in').map((p) => p.name)), [plugins]);
   useKeptScroll(`artifacts:${project}:${atRoute}`, () => document.querySelector<HTMLElement>('[data-testid="artifacts.scroll"]'));
   const [now] = useState(() => Date.now());
   // the scope and the place are the route's (the title bar's path follows the place)
@@ -272,7 +275,7 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
   const appsPicked = [...new Set([...(parsed.keys.get('app') ?? [])].map((k) => appKeyFor(k, scopeTags)))];
   const scopedNoApp = applyFilters(inScope, parsed, fctx, 'app');
   const inViewNoApp = viewOf(searching ? searchItems(lib, scopedNoApp, parsed.words) : itemsAt(lib, scopedNoApp, atNow));
-  const appTabs = appTabsOf(inViewNoApp.map((it) => it.a), new Set(appsPicked), anyPr);
+  const appTabs = appTabsOf(inViewNoApp.map((it) => it.a), new Set(appsPicked), anyPr, MAX_TABS, firstParty);
   // Pull requests alone: its second side (open & draft, merged & closed one click away)
   const prsOnly = appsPicked.length === 1 && appsPicked[0] === keyOfTag(PRS);
   const shown = prsOnly ? prSideItems(hereAll, prSide) : inView;

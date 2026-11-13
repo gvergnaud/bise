@@ -64,7 +64,7 @@ mod tests {
     use bise_proto::files::OpenTarget;
 
     fn op(plugin: &str, tool: &str) -> Opener {
-        Opener { plugin: plugin.into(), tool: tool.into(), app: plugin.into(), type_key: "*.xlsx".into(), type_title: "Excel workbook".into(), icon: None, builtin: false }
+        Opener { plugin: plugin.into(), tool: tool.into(), app: plugin.into(), app_id: plugin.into(), type_key: "*.xlsx".into(), type_title: "Excel workbook".into(), icon: None, builtin: false }
     }
 
     /// His Open with's pick wins when it is still a candidate; an app

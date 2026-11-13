@@ -24,6 +24,7 @@
       ]
     },
     "dev.bise/ui": {
+      "app_id": "writer",
       "files": [
         { "match": ["*.docx"], "title": "Word document", "rank": "owner" },
         { "match": ["*.md", "*.markdown"], "title": "Markdown document", "rank": "owner" }

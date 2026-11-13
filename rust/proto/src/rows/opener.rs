@@ -15,6 +15,11 @@ pub struct Opener {
     pub tool: String,
     /// the app's title, what he reads (`Sheets`)
     pub app: String,
+    /// the app's own id, the `app:` filter's key (`sheets`): declared
+    /// beside its title (A1 `dev.bise/ui.app_id`), else `<plugin>-<tool>`;
+    /// never a word (architect m_63530)
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub app_id: String,
     /// the canonical type key of the entry that matched (`*.xlsx`):
     /// his pick's key in `opener_set`
     #[serde(rename = "type")]

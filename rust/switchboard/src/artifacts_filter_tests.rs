@@ -34,7 +34,7 @@ fn law_every_case_of_the_shared_table() {
             .iter()
             .filter(|r| {
                 let s = |k: &str| r[k].as_str().unwrap_or_default();
-                // the row's app as the hub reads it (app_of): `app` an opener's plugin with
+                // the row's app as the hub reads it (app_of): `app` an opener's app id with
                 // its `app_word`, or `prs` / `links`; none: his Mac
                 let (app, app_word) = match s("app") {
                     "" | APP_MAC => app_of(false, None, false),
@@ -75,13 +75,13 @@ fn an_app_reads_by_its_key_or_its_word_never_a_word_alone() {
     let fixed = [app_of(true, None, false), app_of(false, None, true), app_of(false, None, false)];
     let keys: Vec<&str> = fixed.iter().map(|(k, _)| k.as_str()).collect();
     assert_eq!(keys, [APP_PRS, APP_LINKS, APP_MAC], "the fixed keys, the desktop's apps.ts FIXED_TAGS");
-    let tags: Vec<(&str, &str)> = fixed.iter().map(|(k, w)| (k.as_str(), w.as_str())).chain([("office", "Sheets")]).collect();
+    let tags: Vec<(&str, &str)> = fixed.iter().map(|(k, w)| (k.as_str(), w.as_str())).chain([("office-grid", "Sheets")]).collect();
     assert_eq!(app_key_for(common::your_mac, &tags), APP_MAC);
     assert_eq!(app_key_for(&library::kind_prs.to_uppercase(), &tags), APP_PRS);
     assert_eq!(app_key_for(" mac ", &tags), APP_MAC);
-    assert_eq!(app_key_for("sheets", &tags), "office", "a word reads as its plugin's key");
-    assert_eq!(app_key_for("Office", &tags), "office");
+    assert_eq!(app_key_for("sheets", &tags), "office-grid", "a word reads as its app's key");
+    assert_eq!(app_key_for("Office-Grid", &tags), "office-grid");
     assert_eq!(app_key_for("Writer", &tags), "writer", "unknown: what he typed, lowercased");
     // a PR wins over its opener, like the window's
-    assert_eq!(app_of(true, Some(("office", "Sheets")), false).0, APP_PRS);
+    assert_eq!(app_of(true, Some(("office-grid", "Sheets")), false).0, APP_PRS);
 }

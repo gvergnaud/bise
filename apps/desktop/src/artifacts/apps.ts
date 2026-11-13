@@ -11,6 +11,10 @@ import { library } from '@/proto/words_library.gen';
 /** What the filter and the card read of a row's opener (bise_proto `Opener`, A3). */
 export interface AppOpener {
   readonly plugin: string;
+  /** its tool, for the id's fallback */
+  readonly tool?: string;
+  /** the app's own id, the `app:` key (A1's app_id; none: `<plugin>-<tool>`) */
+  readonly app_id?: string | null;
   /** the app's title, 'Sheets' */
   readonly app: string;
   /** the matched entry's title, 'Excel workbook' */
@@ -53,14 +57,15 @@ function sentence(w: string): string {
 
 /**
  * The app a row follows: its opener's app, else a PR's review, a link's browser, his Mac. Its id
- * is the `app:` key, stable (architect m_63490): the opener's plugin, else `prs`, `links`, `mac`,
- * never a word a rewording changes; the hub's `sb artifact list --app` keys the same
- * (artifacts_filter.rs app_key_of, both on tests/fixtures/artifacts-filter.json). Pure.
+ * is the `app:` key, stable (architect m_63490, m_63530): the opener's app id (A1's app_id, else
+ * `<plugin>-<tool>`), else `prs`, `links`, `mac`, never a word a rewording changes; the hub's
+ * `sb artifact list --app` keys the same (artifacts_filter.rs app_of, both on
+ * tests/fixtures/artifacts-filter.json). Pure.
  */
 export function appOf(a: AppRow): AppTag {
   if (a.pr != null) return PRS;
   const o = a.opener ?? null;
-  if (o !== null) return { id: o.plugin, word: o.app };
+  if (o !== null) return { id: o.app_id != null && o.app_id !== '' ? o.app_id : `${o.plugin}-${o.tool ?? ''}`, word: o.app };
   return isLink(a) ? LINKS : MAC;
 }
 
@@ -130,15 +135,33 @@ export const keyOfTag = (t: AppTag): string => t.id;
  * keeps (the facet), `picked` the keys in the field (kept at 0 so he can take them off),
  * `keepPrs` the Pull requests tab even at 0 (archived PRs one click away). Pure.
  */
-export function appTabsOf(rows: readonly AppRow[], picked: ReadonlySet<string>, keepPrs: boolean, max = MAX_TABS): { tabs: AppTab[]; more: AppTab[] } {
+export function appTabsOf(rows: readonly AppRow[], picked: ReadonlySet<string>, keepPrs: boolean, max = MAX_TABS, firstParty: ReadonlySet<string> = new Set()): { tabs: AppTab[]; more: AppTab[] } {
+  const words = appWords(rows, firstParty);
   const tags = rows.map((r) => {
-    const t = appOf(r);
-    return { id: keyOfTag(t), word: t.word };
+    const id = keyOfTag(appOf(r));
+    return { id, word: words.get(id) ?? id };
   });
-  const words = new Map(tags.map((t) => [t.id, t.word]));
   const keep: AppTag[] = [...picked].map((k) => ({ id: k, word: words.get(k) ?? k }));
   if (keepPrs) keep.push({ id: keyOfTag(PRS), word: PRS.word });
   return appTabs(tags, keep, max);
+}
+
+/**
+ * Each app key's word, its tab's label: two plugins may declare the same app id (they share a tab,
+ * designer m_63527), whose label is a first-party opener's title when one of them is first-party
+ * (`firstParty`: the built-in plugins' names), else the first in plugin order (architect m_63530).
+ * Pure.
+ */
+export function appWords(rows: readonly AppRow[], firstParty: ReadonlySet<string>): Map<string, string> {
+  const best = new Map<string, { word: string; first: boolean; plugin: string }>();
+  for (const r of rows) {
+    const t = appOf(r);
+    const plugin = r.pr == null ? (r.opener?.plugin ?? '') : '';
+    const c = { word: t.word, first: firstParty.has(plugin), plugin };
+    const was = best.get(t.id);
+    if (was === undefined || (c.first && !was.first) || (c.first === was.first && c.plugin < was.plugin)) best.set(t.id, c);
+  }
+  return new Map([...best].map(([id, c]) => [id, c.word]));
 }
 
 /** The rows of the apps he picked: one of them (OR inside the dimension); none picked: every row. Pure. */

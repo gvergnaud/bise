@@ -11,7 +11,8 @@ import type { Item } from './model';
 import { nextStage } from './Toolbar';
 
 const ctx: Ctx = { now: 1_794_405_600_000, tz: () => 0 };
-const opener = (plugin: string, app: string) => ({ plugin, tool: 'open', app, type: '*.x', type_title: 'X' });
+// each app declares its own id (A1's app_id): its name's slug
+const opener = (plugin: string, app: string) => ({ plugin, tool: 'open', app, app_id: app.toLowerCase(), type: '*.x', type_title: 'X' });
 
 function item(id: string, over: Partial<Artifact> = {}, agent = 'perf'): Item {
   return { project: 'p', projectName: 'p', a: { id, kind: 'file', title: id, agent, by: agent, new: false, version: 1, at_ms: ctx.now, touched_ms: ctx.now, url: '', ...over } };
@@ -28,14 +29,17 @@ const items: Item[] = [
 const ids = (xs: readonly Item[]) => xs.map((x) => x.a.id);
 
 describe('the app: token, one dimension of the bar', () => {
-  it("keys an item by a stable key, never a word: the opener's plugin, a PR's review, his Mac (architect m_63490)", () => {
-    expect(items.map(appKeyOf)).toEqual(['sheets', 'sheets', 'media', 'mac', 'prs']);
+  it("keys an item by a stable key, never a word: the opener's app id, a PR's review, his Mac (architect m_63490, m_63530)", () => {
+    expect(items.map(appKeyOf)).toEqual(['sheets', 'sheets', 'preview', 'mac', 'prs']);
+    // an app that declares no id: <plugin>-<tool>
+    expect(appKeyOf(item('x', { opener: { plugin: 'media', tool: 'open', app: 'Preview', type: '*.x', type_title: 'X' } }))).toBe('media-open');
   });
 
   it('OR inside (two apps), AND across (by:), quoted values, any case; a word reads as its key', () => {
     expect(ids(applyFilters(items, parseFilters('app:sheets'), ctx))).toEqual(['q3', 'budget']);
     expect(ids(applyFilters(items, parseFilters('app:Sheets app:preview'), ctx))).toEqual(['q3', 'budget', 'deck']);
-    expect(ids(applyFilters(items, parseFilters('app:media'), ctx))).toEqual(['deck']);
+    // the plugin's name is not the app's key (designer m_63527: one plugin may hold several apps)
+    expect(ids(applyFilters(items, parseFilters('app:media'), ctx))).toEqual([]);
     expect(ids(applyFilters(items, parseFilters('app:sheets by:main'), ctx))).toEqual(['budget']);
     expect(ids(applyFilters(items, parseFilters(`app:"${common.your_mac}"`), ctx))).toEqual(['logs']);
     expect(ids(applyFilters(items, parseFilters('app:mac'), ctx))).toEqual(['logs']);
@@ -63,12 +67,23 @@ describe('the app: token, one dimension of the bar', () => {
   });
 });
 
+describe('a shared app id (architect m_63530)', () => {
+  // two plugins declare app_id 'sheets'; zsheets is first-party (built-in)
+  const a = item('a', { opener: { plugin: 'asheets', tool: 'open', app: 'A Sheets', app_id: 'sheets', type: '*.x', type_title: 'X' } }).a;
+  const z = item('z', { opener: { plugin: 'zsheets', tool: 'open', app: 'Sheets', app_id: 'sheets', type: '*.x', type_title: 'X' } }).a;
+
+  it("one tab; its label the first-party opener's title, else the first in plugin order", () => {
+    expect(appTabsOf([a, z], new Set(), false, 5, new Set(['zsheets'])).tabs.map((t) => [t.id, t.word, t.n])).toEqual([['sheets', 'Sheets', 2]]);
+    expect(appTabsOf([z, a], new Set(), false, 5, new Set()).tabs.map((t) => [t.id, t.word, t.n])).toEqual([['sheets', 'A Sheets', 2]]);
+  });
+});
+
 describe('the tabs', () => {
   it("one per app, the most first, by the token's keys; a picked app at 0 stays so he can take it off", () => {
     const { tabs } = appTabsOf(items.map((x) => x.a), new Set(['writer']), false);
     expect(tabs.map((t) => [t.id, t.word, t.n])).toEqual([
       ['sheets', 'Sheets', 2],
-      ['media', 'Preview', 1],
+      ['preview', 'Preview', 1],
       ['prs', library.kind_prs, 1],
       ['mac', common.your_mac, 1],
       ['writer', 'writer', 0],

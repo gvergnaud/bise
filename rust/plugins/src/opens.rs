@@ -81,6 +81,9 @@ pub struct OpenerDecl {
     /// the app's title (`Sheets`): its first file entrypoint's, else the
     /// plugin's name
     pub app: String,
+    /// the app's own id (`sheets`), the `app:` filter's key: A1's
+    /// `dev.bise/ui.app_id`, else [`app_id_fallback`] (architect m_63530)
+    pub app_id: String,
     pub entries: Vec<Entry>,
     pub makes: Vec<Make>,
     /// its view may save (A1's `write`: a grant he gives at the add)
@@ -355,7 +358,34 @@ pub fn parse(plugin: &str, server: &str, tool: &Value) -> (Option<OpenerDecl>, V
         return (None, diags);
     }
     let app = app.unwrap_or_else(|| plugin.to_string());
-    (Some(OpenerDecl { server: server.to_string(), tool: name.to_string(), uri, app, entries, makes, write, isolate, icon, thumbnail }), diags)
+    let app_id = match bise.and_then(|b| b.get("app_id")) {
+        None => app_id_fallback(plugin, name),
+        Some(v) => match v.as_str().filter(|s| app_id_ok(s)) {
+            Some(id) => id.to_string(),
+            None => {
+                diags.push(invalid(plugin, name, format!("dev.bise/ui.app_id {v} must be a slug [a-z0-9-] of 1-32 characters, not mac, prs or links; dropped")));
+                app_id_fallback(plugin, name)
+            }
+        },
+    };
+    (Some(OpenerDecl { server: server.to_string(), tool: name.to_string(), uri, app, app_id, entries, makes, write, isolate, icon, thumbnail }), diags)
+}
+
+/// The `app:` keys bise keeps for rows with no opener (a PR, a link, his
+/// Mac): an app may not declare them.
+pub const APP_IDS_RESERVED: [&str; 3] = ["mac", "prs", "links"];
+
+/// A declared app id: a slug `[a-z0-9-]{1,32}`, none of
+/// [`APP_IDS_RESERVED`], never `~…` (bise's own servers). Pure.
+pub fn app_id_ok(id: &str) -> bool {
+    (1..=32).contains(&id.len()) && id.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-') && !APP_IDS_RESERVED.contains(&id) && !id.starts_with('~')
+}
+
+/// An app's id when it declares none (or a bad one): `<plugin>-<tool>`,
+/// always, so a plugin that adds a second app never moves the first's
+/// key (architect m_63530). Pure.
+pub fn app_id_fallback(plugin: &str, tool: &str) -> String {
+    format!("{plugin}-{tool}")
 }
 
 /// A plugin's openers from one server's tools as its `tools/list` lists
@@ -645,7 +675,7 @@ pub fn pick(target: &Target, openers: &Openers, picks: &Picks) -> Opened {
             if let Some((spec, rank, key, e)) = best {
                 // the type's own icon (a design-system name), else its app's
                 let icon = e.icon.clone().or_else(|| po.icon.as_ref().map(|_| format!("{ICON_ROUTE}{}", po.plugin)));
-                let opener = Opener { plugin: po.plugin.clone(), tool: o.tool.clone(), app: o.app.clone(), type_key: key, type_title: e.title.clone(), icon, builtin: false };
+                let opener = Opener { plugin: po.plugin.clone(), tool: o.tool.clone(), app: o.app.clone(), app_id: o.app_id.clone(), type_key: key, type_title: e.title.clone(), icon, builtin: false };
                 cands.push(Candidate { opener, rank, spec, first_party: po.first_party });
             }
         }
@@ -658,7 +688,8 @@ pub fn pick(target: &Target, openers: &Openers, picks: &Picks) -> Opened {
             if cands.iter().any(|c| c.opener.plugin == bi.plugin) {
                 continue;
             }
-            let opener = Opener { plugin: bi.plugin.into(), tool: bi.kind.into(), app: bi.app.into(), type_key: key.clone(), type_title: bi.type_title.into(), icon: Some(bi.icon.into()), builtin: true };
+            // a built-in app's id is its plugin's (sites, pages): first-party, declared here
+            let opener = Opener { plugin: bi.plugin.into(), tool: bi.kind.into(), app: bi.app.into(), app_id: bi.plugin.into(), type_key: key.clone(), type_title: bi.type_title.into(), icon: Some(bi.icon.into()), builtin: true };
             cands.push(Candidate { opener, rank: OpenRank::Owner, spec, first_party: true });
         }
     }

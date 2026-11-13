@@ -24,6 +24,7 @@
       ]
     },
     "dev.bise/ui": {
+      "app_id": "preview",
       "files": [
         { "match": ["*.png", "*.jpg", "*.jpeg", "*.gif", "*.webp"], "title": "Image", "rank": "owner", "icon": "image" },
         { "match": ["*.pdf"], "title": "PDF document", "rank": "owner", "icon": "doc" },

@@ -24,6 +24,7 @@
       ]
     },
     "dev.bise/ui": {
+      "app_id": "sheets",
       "files": [
         { "match": ["*.xlsx"], "title": "Excel workbook", "rank": "owner" },
         { "match": ["*.csv"], "title": "CSV table", "rank": "default" }

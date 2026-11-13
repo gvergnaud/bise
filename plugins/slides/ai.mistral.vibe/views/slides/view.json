@@ -24,6 +24,7 @@
       ]
     },
     "dev.bise/ui": {
+      "app_id": "slides",
       "files": [
         { "match": ["*.pptx"], "title": "PowerPoint deck", "rank": "owner" }
       ]

@@ -17,7 +17,7 @@ interface Row {
   by: string;
   new: boolean;
   touched_ms: number;
-  /** its app's key (an opener's plugin, `prs`, `links`; none: his Mac) and an opener's word */
+  /** its app's key (an opener's app id, `prs`, `links`; none: his Mac) and an opener's word */
   app?: string;
   app_word?: string;
 }
@@ -36,7 +36,7 @@ const appFields = (r: Row): Partial<Artifact> => {
   if (r.app === 'prs') return { pr: { number: 1 } as never, url: 'https://github.com/a/b/pull/1' };
   if (r.app === 'links') return { url: 'https://example.com' };
   if (r.app === undefined || r.app === 'mac') return {};
-  return { opener: { plugin: r.app, tool: 'open', app: r.app_word ?? r.app, type: '*.x', type_title: 'X' } };
+  return { opener: { plugin: 'p', tool: 'open', app: r.app_word ?? r.app, app_id: r.app, type: '*.x', type_title: 'X' } };
 };
 
 const item = (r: Row): Item => ({

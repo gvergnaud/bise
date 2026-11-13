@@ -1650,6 +1650,12 @@ tool: string,
  */
 app: string, 
 /**
+ * the app's own id, the `app:` filter's key (`sheets`): declared
+ * beside its title (A1 `dev.bise/ui.app_id`), else `<plugin>-<tool>`;
+ * never a word (architect m_63530)
+ */
+app_id?: string, 
+/**
  * the canonical type key of the entry that matched (`*.xlsx`):
  * his pick's key in `opener_set`
  */

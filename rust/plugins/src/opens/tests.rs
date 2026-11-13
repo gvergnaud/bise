@@ -171,6 +171,7 @@ fn op(tool: &str, app: &str, entries: &[(&str, OpenRank, bool)]) -> OpenerDecl {
         tool: tool.into(),
         uri: format!("ui://x/{tool}"),
         app: app.into(),
+        app_id: app_id_fallback("x", tool),
         entries: entries.iter().map(|(k, r, f)| Entry { keys: vec![k.to_string()], title: format!("{k} file"), rank: *r, folder: *f, icon: None }).collect(),
         makes: vec![],
         write: false,
@@ -297,9 +298,34 @@ fn which_app_opens_a_file() {
 fn the_row_says_the_matched_type() {
     let o = openers(vec![("sheets", op("open_sheet", "Sheets", &[("*.csv", D, false), ("*.xlsx", W, false)]))]);
     let got = pick(&Target::file("q.CSV"), &o, &Picks::new()).opener.unwrap();
-    assert_eq!(got, Opener { plugin: "sheets".into(), tool: "open_sheet".into(), app: "Sheets".into(), type_key: "*.csv".into(), type_title: "*.csv file".into(), icon: None, builtin: false });
+    assert_eq!(got, Opener { plugin: "sheets".into(), tool: "open_sheet".into(), app: "Sheets".into(), app_id: "x-open_sheet".into(), type_key: "*.csv".into(), type_title: "*.csv file".into(), icon: None, builtin: false });
     let b = pick(&Target::file("a.page"), &Openers::default(), &Picks::new()).opener.unwrap();
     assert!(b.builtin && b.app == "Pages" && b.type_title == "bise page");
+    assert_eq!(b.app_id, "pages", "a built-in app's id is its plugin's");
+}
+
+/// A1's `app_id` (architect m_63530): a slug declared beside the title;
+/// a bad or reserved one is dropped with a warning and the app keeps the
+/// fallback `<plugin>-<tool>`, never the title.
+#[test]
+fn an_app_id_is_a_declared_slug_else_plugin_dash_tool() {
+    let tool = |id: Option<Value>| {
+        let mut ui = json!({"files": [{"match": ["*.xlsx"], "title": "Excel workbook"}]});
+        if let Some(id) = id {
+            ui["app_id"] = id;
+        }
+        json!({"name": "grid", "_meta": {"ui": {"resourceUri": "ui://office/grid"}, "dev.bise/ui": ui}})
+    };
+    let id_of = |id: Option<Value>| {
+        let (o, d) = parse("office", crate::views::SERVER, &tool(id));
+        (o.unwrap().app_id, d.iter().filter(|x| x.code == "plugin.opener.invalid").count())
+    };
+    assert_eq!(id_of(Some(json!("sheets"))), ("sheets".into(), 0));
+    assert_eq!(id_of(Some(json!("pdf-2"))), ("pdf-2".into(), 0));
+    assert_eq!(id_of(None), ("office-grid".into(), 0), "none: <plugin>-<tool>, whatever the app's count");
+    for bad in [json!("mac"), json!("prs"), json!("links"), json!("~views"), json!("Sheets"), json!("a b"), json!(""), json!("x".repeat(33)), json!(3)] {
+        assert_eq!(id_of(Some(bad.clone())), ("office-grid".into(), 1), "{bad}: dropped, warned, the fallback");
+    }
 }
 
 /// The fixtures resolved as his plugins, `off` turned off.

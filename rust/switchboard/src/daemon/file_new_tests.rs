@@ -13,6 +13,7 @@ fn openers(makes: Vec<PluginMake>) -> Openers {
         tool: "open".into(),
         uri: "ui://sheets/view".into(),
         app: "Sheets".into(),
+        app_id: "sheets".into(),
         entries: Vec::new(),
         makes,
         write: true,

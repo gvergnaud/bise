@@ -3,16 +3,17 @@ import { common } from '@/proto/words_common.gen';
 import { library } from '@/proto/words_library.gen';
 import { appCompletions, appOf, appTabs, appWord, endingOf, inApps, leadOf, opensTip, pickApp, PRS, type AppRow, type AppTag } from './apps';
 
-const sheets = { plugin: 'sheets', app: 'Sheets', type_title: 'Excel workbook' };
-const boards = { plugin: 'boards', app: 'Boards', type_title: 'Board' };
+const sheets = { plugin: 'office', tool: 'grid', app: 'Sheets', app_id: 'sheets', type_title: 'Excel workbook' };
+const boards = { plugin: 'boards', tool: 'board', app: 'Boards', app_id: 'boards', type_title: 'Board' };
 const row = (extra: Partial<AppRow> = {}): AppRow => ({ url: '', ...extra });
 const tag = (id: string, word = id): AppTag => ({ id, word });
 const many = (t: AppTag, n: number): AppTag[] => Array.from({ length: n }, () => t);
 const words = (tabs: readonly { word: string; n: number }[]) => tabs.map((t) => `${t.word} ${String(t.n)}`);
 
 describe('which app a row follows (the hub picked it, A2: the window never matches)', () => {
-  it("its opener's app, keyed by its plugin (a stable key, never the word: architect m_63490)", () => {
+  it("its opener's app, keyed by the app's own id, never its plugin nor its word (architect m_63490, m_63530)", () => {
     expect(appOf(row({ opener: sheets, path: '/p/pricing.xlsx' }))).toEqual({ id: 'sheets', word: 'Sheets' });
+    expect(appOf(row({ opener: { ...sheets, app_id: null } })).id).toBe('office-grid');
   });
 
   it("a PR is bise's review whatever its opener; a link his browser; nothing else his Mac", () => {

@@ -120,7 +120,7 @@ pub struct AppKeys {
 }
 
 impl AppKeys {
-    /// A store row's app: its key (the opener's plugin, else `prs`,
+    /// A store row's app: its key (the opener's app id, else `prs`,
     /// `links`, `mac`) and its word.
     pub fn of(&self, m: &crate::artifacts::Meta) -> (String, String) {
         let cur = m.current().cloned().unwrap_or_default();
@@ -130,7 +130,10 @@ impl AppKeys {
         });
         let opener = target_of(&row).and_then(|t| opens::pick(&t, &self.openers, &self.picks).opener);
         let pr = crate::forge::pr_link(&cur.target).is_some();
-        crate::artifacts_filter::app_of(pr, opener.as_ref().map(|o| (o.plugin.as_str(), o.app.as_str())), crate::artifacts::is_link(&cur.target))
+        // the app's own id (A1 app_id, the picker always sets it; an empty one: the fallback)
+        let id = opener.as_ref().map(|o| if o.app_id.is_empty() { opens::app_id_fallback(&o.plugin, &o.tool) } else { o.app_id.clone() });
+        let app = opener.as_ref().zip(id.as_deref()).map(|(o, id)| (id, o.app.as_str()));
+        crate::artifacts_filter::app_of(pr, app, crate::artifacts::is_link(&cur.target))
     }
 }
 

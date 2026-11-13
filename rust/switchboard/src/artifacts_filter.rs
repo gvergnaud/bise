@@ -12,8 +12,9 @@
 //! - by: a typed field of the row, never a display name: an agent is its
 //!   `agent`; `you` is what he added himself (`by` = `you`).
 //! - words: every word in its title, agent, kind or id.
-//! - app: a stable key, never a word (architect m_63490): the opener's
-//!   plugin the hub picked for the row (A2, app_openers::AppKeys), else
+//! - app: a stable key, never a word (architect m_63490, m_63530): the
+//!   app id of the opener the hub picked for the row (A1 `app_id`, else
+//!   `<plugin>-<tool>`; A2, app_openers::AppKeys), else
 //!   `prs`, `links`, `mac`; what he types is a key or an app's word, read
 //!   as its key ([`app_key_for`], the desktop's apps.ts appKeyFor).
 //!
@@ -42,14 +43,14 @@ pub const APP_PRS: &str = "prs";
 pub const APP_LINKS: &str = "links";
 pub const APP_MAC: &str = "mac";
 
-/// A row's app as `app:` reads it: its stable key (the opener's plugin,
+/// A row's app as `app:` reads it: its stable key (the opener's app id,
 /// else [`APP_PRS`], [`APP_LINKS`], [`APP_MAC`]) and its word, for what
 /// he types. The desktop's apps.ts appOf, the same rule. Pure.
 pub fn app_of(pr: bool, opener: Option<(&str, &str)>, link: bool) -> (String, String) {
     use bise_proto::words::{common, library};
     let (k, w) = match (pr, opener, link) {
         (true, _, _) => (APP_PRS, library::kind_prs),
-        (false, Some((plugin, app)), _) => (plugin, app),
+        (false, Some((id, app)), _) => (id, app),
         (false, None, true) => (APP_LINKS, library::kind_links),
         (false, None, false) => (APP_MAC, common::your_mac),
     };
