@@ -9,6 +9,9 @@
 {"cmd":"sign_in_cancel","id":"chatgpt"}
 {"cmd":"provider_use","id":"anthropic","key":"sk-fake-0000"}
 {"cmd":"provider_use","id":"chatgpt"}
+{"cmd":"provider_use","id":"litellm","base_url":"https://gw.test/v1","model":"litellm/azure_ai/claude-opus-5-5"}
+{"cmd":"gateway_find"}
+{"cmd":"gateway_models","url":"https://gw.test","key":"sk-fake-gw"}
 {"cmd":"key_remove","id":"anthropic-key"}
 {"cmd":"found_scan","dir":"/Users/camille/code"}
 {"cmd":"found_scan"}
