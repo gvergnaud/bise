@@ -5,7 +5,7 @@
 // command(any typed AppCmd | HubCmd). Tests: new Store(fakePort),
 // StoreProvider, replay(store, fixtures) from './replay'.
 export { prDiffKey, rangeDiffKey, type PrActState } from './types';
-export { Store, MARKS, TAGS, typed, threadKey, diffKey, branchDiffKey, takeKey, toolOutKey, type QueuedTake, type ToolOut, type Ev, type EvOf, type Pending, type ThreadHits, type ThreadMarks, type ThreadOrder, type Diff, type GuideEv, type Away, type Dictation, type HubLine, type FilesAnswer, type PrsList, type InboxList, type BranchesList, type VersionsList, type PagesList, type VoiceModeState } from './store';
+export { Store, MARKS, TAGS, typed, threadKey, diffKey, branchDiffKey, takeKey, toolOutKey, type QueuedTake, type ToolOut, type Ev, type EvOf, type Pending, type ThreadHits, type ThreadMarks, type ThreadOrder, type Diff, type DiffErr, type GuideEv, type Away, type Dictation, type HubLine, type FilesAnswer, type PrsList, type InboxList, type BranchesList, type VersionsList, type PagesList, type VoiceModeState } from './store';
 export * from './hooks';
 export type { AnswerAt, AnswerFrom, AnsweredFrom } from './answered';
 export type { AnswerJump } from './store';
