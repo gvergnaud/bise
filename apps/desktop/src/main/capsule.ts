@@ -7,7 +7,9 @@
 // visibleOnFullScreen, the screen-saver level). A card shows with
 // showInactive (never the keys); the spotlight with show (the keys, still not
 // activating the app); it hides when it loses the keys. Its page is the same
-// renderer, surface 'capsule' (window.bise.capsule drives it). Whether macOS
+// renderer, surface 'capsule' (window.bise.capsule drives it). It shows and
+// hides with no AppKit animation (the addon's stillWindow, TrayBadge.m): macOS
+// otherwise pops every show open over ~170 ms. Whether macOS
 // really keeps his app active is qa-native's VM check: it can't be proven on
 // his screen.
 //
@@ -15,6 +17,7 @@
 // only change its state and print CAPSULE_LINE on stdout.
 import { BrowserWindow, ipcMain, screen, type Tray } from 'electron';
 import { CAPSULE_LINE, IPC, type CapsuleAt, type CapsuleFit, type CapsuleState } from '../shared/api';
+import { a11yNow } from './a11y';
 import { appendCapsuleFrame, capsuleFrame } from './capsuleframe';
 import { glassOf } from './glass';
 import { capsuleBounds, fitBounds, OFF_DISPLAY, onScreen, pinnedBounds, pinOf, type Anchor, type DisplayBox, type Pin, type Rect } from './place';
@@ -22,7 +25,8 @@ import { loadRenderer, OFF, webPreferences } from './windows';
 
 const START = { width: 640, height: 120 };
 /** a corner card's way out: the window's alpha 1 → 0, paired with the page's
- *  CORNER_OUT_MS fade (capsule/machine.ts), since the native glass doesn't fade with the page */
+ *  CORNER_OUT_MS fade (capsule/machine.ts), since the native glass doesn't fade with the page;
+ *  the tray menu's too, alone (no scale: designer m_64430) */
 const CORNER_FADE_MS = 120;
 const FADE_STEPS = 8;
 
@@ -47,11 +51,14 @@ export class Capsule {
   /**
    * `offscreen`: BISE_DESKTOP_OFFSCREEN (offscreen.ts): placed off every display, never shown.
    * `framesDir`: off-screen, where each show and move is recorded (capsuleFramesDir); null records none.
+   * `still`: makes its native window show and hide with no AppKit animation (tray.ts stillWith);
+   * null in a test or off-screen run.
    */
   constructor(
     private readonly testMode: boolean,
     private readonly offscreen = false,
     private readonly framesDir: string | null = null,
+    still: ((handle: Buffer) => boolean) | null = null,
   ) {
     const mac = process.platform === 'darwin';
     const glass = glassOf('capsule', process.platform, testMode);
@@ -79,6 +86,10 @@ export class Capsule {
     if (glass.vibrancy !== undefined) {
       process.stderr.write(`bise-desktop: glass: capsule vibrancy=${glass.vibrancy} state=${String(glass.visualEffectState)} background=${win.getBackgroundColor()}\n`);
     }
+    // no AppKit pop on show (~170 ms) nor fade on hide (~250 ms): the tray's dropdown is there at
+    // once, as macOS's own menus (tray-instant); the corner card and the tray menu fade out
+    // on their own (hide, fadeOut)
+    if (mac && still !== null) still(win.getNativeWindowHandle());
     if (!testMode) {
       win.setAlwaysOnTop(true, 'screen-saver');
       win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
@@ -117,17 +128,20 @@ export class Capsule {
 
   hide(why: CapsuleState['why'] = 'asked'): void {
     if (!this.state.shown) return;
-    const corner = this.state.at === 'corner';
+    // the corner card fades with its page; the tray menu fades as macOS's status menus do, but
+    // not under reduced motion (designer m_64430); the rest goes at once
+    const at = this.state.at;
+    const fades = (): boolean => at === 'corner' || (at === 'menu' && !a11yNow().reduceMotion);
     this.state = { ...this.state, shown: false, keys: false, why };
     this.pin = null;
     this.would = null;
     if (this.testMode) process.stdout.write(`${CAPSULE_LINE} hide\n`);
-    else if (corner && !this.offscreen) this.fadeOut();
+    else if (!this.offscreen && fades()) this.fadeOut();
     else this.win.hide();
     this.tell();
   }
 
-  /** the corner card goes out with its page: alpha 1 → 0 in CORNER_FADE_MS, then hidden at 1 again */
+  /** the corner card (with its page) or the tray menu goes out: alpha 1 → 0 in CORNER_FADE_MS, then hidden at 1 again */
   private fadeOut(): void {
     this.stopFade();
     let n = 0;

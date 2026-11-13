@@ -1,10 +1,18 @@
-// tray-badge.node: a dot over bise's menu bar icon (in-process, Electron's main), the way a
-// native app badges its status item: the icon stays a template image (macOS tints it for the
-// bar, which follows the wallpaper), and one named CALayer draws the dot over it in its own
-// colour. One call, setBadge(dot | null); it decides nothing: where the dot goes, its size and
-// its colour come from src/main/traylook.ts (trayDot), the caller (src/main/traybadge.ts)
-// decides when. It finds the button of each status item of this process (bise has one tray)
-// and returns whether it found one: false lets the caller fall back (the tray's title).
+// tray-badge.node: the in-process AppKit addon (Electron's main), for what Electron has no API
+// for. Two calls; it decides nothing, src/main/traybadge.ts and its callers do.
+//
+// setBadge(dot | null): a dot over bise's menu bar icon, the way a native app badges its status
+// item: the icon stays a template image (macOS tints it for the bar, which follows the
+// wallpaper), and one named CALayer draws the dot over it in its own colour. Where the dot goes,
+// its size and its colour come from src/main/traylook.ts (trayDot). It finds the button of each
+// status item of this process (bise has one tray) and returns whether it found one: false lets
+// the caller fall back (the tray's title).
+//
+// stillWindow(handle): the window of that view (BrowserWindow.getNativeWindowHandle(), an
+// NSView*) shows and hides with no AppKit animation (NSWindowAnimationBehaviorNone). The
+// capsule's: without it macOS pops it open (its frame 98% -> 101% -> 100%, ~170 ms) and fades it
+// out (~250 ms) on every show and hide, which made the tray's dropdown feel slow (tray-instant).
+// Returns false, touching nothing, when the handle isn't a pointer to a view in a window.
 //
 // N-API only (ABI stable, no node-gyp, no Electron headers): the few functions it needs are
 // declared below as node_api.h declares them, resolved from the host at load
@@ -24,6 +32,7 @@ extern napi_status napi_get_boolean(napi_env, bool, napi_value *);
 extern napi_status napi_create_function(napi_env, const char *, size_t, napi_callback, void *, napi_value *);
 extern napi_status napi_set_named_property(napi_env, napi_value, const char *, napi_value);
 extern napi_status napi_typeof(napi_env, napi_value, int *);
+extern napi_status napi_get_buffer_info(napi_env, napi_value, void **, size_t *);
 
 static NSString *const kBadge = @"bise.tray.badge";
 enum { napi_object_type = 6 };
@@ -99,11 +108,33 @@ static napi_value setBadge(napi_env env, napi_callback_info info) {
   return result;
 }
 
+static napi_value stillWindow(napi_env env, napi_callback_info info) {
+  size_t argc = 1;
+  napi_value argv[1] = {0};
+  napi_value result;
+  napi_get_cb_info(env, info, &argc, argv, NULL, NULL);
+  void *data = NULL;
+  size_t len = 0;
+  bool ok = argc >= 1 && napi_get_buffer_info(env, argv[0], &data, &len) == 0 && data != NULL && len == sizeof(void *);
+  void *ptr = ok ? *(void **)data : NULL;
+  ok = ok && ptr != NULL;
+  if (ok) {
+    id obj = (__bridge id)ptr;
+    NSWindow *w = [obj isKindOfClass:[NSView class]] ? ((NSView *)obj).window : nil;
+    ok = w != nil;
+    if (ok) w.animationBehavior = NSWindowAnimationBehaviorNone;
+  }
+  napi_get_boolean(env, ok, &result);
+  return result;
+}
+
 __attribute__((visibility("default"))) int32_t node_api_module_get_api_version_v1(void) { return 8; }
 
 __attribute__((visibility("default"))) napi_value napi_register_module_v1(napi_env env, napi_value exports) {
   napi_value fn;
   napi_create_function(env, "setBadge", (size_t)-1, setBadge, NULL, &fn);
   napi_set_named_property(env, exports, "setBadge", fn);
+  napi_create_function(env, "stillWindow", (size_t)-1, stillWindow, NULL, &fn);
+  napi_set_named_property(env, exports, "stillWindow", fn);
   return exports;
 }

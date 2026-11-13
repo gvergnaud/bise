@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { BADGE_ENV, badgePath, loadBadge, TrayBadge } from './traybadge';
+import { BADGE_ENV, badgePath, loadBadge, stillWindow, TrayBadge } from './traybadge';
 import { TRAY_DOT } from './traylook';
 
 describe('the tray badge addon', () => {
@@ -46,5 +46,21 @@ describe('the tray badge addon', () => {
     expect(logs).toHaveLength(1);
     const boom = new TrayBadge({ setBadge: () => { throw new Error('x'); } }, (w) => { logs.push(w); });
     expect(boom.set(TRAY_DOT)).toBe(false);
+  });
+
+  it('stillWindow: passes the handle, and fails soft with one log line (no addon, an older one, no window, a throw)', () => {
+    const logs: string[] = [];
+    const log = (w: string): void => { logs.push(w); };
+    const h = Buffer.alloc(8);
+    const seen: Buffer[] = [];
+    expect(stillWindow({ setBadge: () => true, stillWindow: (b) => { seen.push(b); return true; } }, h, log)).toBe(true);
+    expect(seen).toEqual([h]);
+    expect(logs).toEqual([]);
+    expect(stillWindow(null, h, log)).toBe(false);
+    expect(stillWindow({ setBadge: () => true }, h, log)).toBe(false);
+    expect(stillWindow({ setBadge: () => true, stillWindow: () => false }, h, log)).toBe(false);
+    expect(stillWindow({ setBadge: () => true, stillWindow: () => { throw new Error('y'); } }, h, log)).toBe(false);
+    expect(logs).toHaveLength(4);
+    expect(logs[3]).toContain('failed (y)');
   });
 });

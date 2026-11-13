@@ -35,7 +35,7 @@ import { projectRoots } from './reveal';
 import { hasTestNotify } from './menu';
 import { installAppMenu } from './agentmenu';
 import { startTerms, type TermHost } from './term/host';
-import { BiseTray } from './tray';
+import { appAddon, BiseTray, stillWith } from './tray';
 import { testHomeProblem } from './testhome';
 import { standInPaths } from './userdata';
 import { themeSourceOf } from './theme';
@@ -232,8 +232,11 @@ void app.whenReady().then(() => {
   });
   // its frame kept in userData (windows.ts FRAMES_FILE): a test's or a stand-in's, never his under a test
   const main = new MainWindow(testMode, offscreen, app.getPath('userData'));
+  // the in-process AppKit addon (tray.ts appAddon): the tray's dot, the capsule's still window;
+  // never in a test or off-screen run (no tray there, a capsule never shown)
+  const addon = testMode || offscreen ? null : appAddon();
   // off-screen: where the capsule would sit, in userData/capsule-frames.jsonl (capsuleframe.ts)
-  const capsule = new Capsule(testMode, offscreen, capsuleFramesDir(offscreen, testMode, app.getPath('userData')));
+  const capsule = new Capsule(testMode, offscreen, capsuleFramesDir(offscreen, testMode, app.getPath('userData')), testMode || offscreen ? null : stillWith(addon));
   installCapsuleIpc(capsule);
   // fn space's spotlight (the capsule at the top) asks for the front window's still (spot-shot)
   capsule.onState((st) => {
@@ -260,7 +263,7 @@ void app.whenReady().then(() => {
     for (const w of [main.window, ...own.all()]) if (w !== null) applyGlass(w, a, testMode);
   });
   // the menu bar's ':*' (tray.ts), its look from the counts below
-  const tray = testMode ? null : new BiseTray(capsule, main);
+  const tray = testMode ? null : new BiseTray(capsule, main, addon);
   // his questions as macOS notifications when no bise window has the keys (notify/, card #476)
   const notifier = new Notifier({
     testMode,

@@ -3,6 +3,8 @@
 // draws what it is given). darwin only, loaded once and lazily, never in the renderer. It fails
 // soft: no addon (a dev run, another OS, a load error) or no status item found, and set() says
 // false, so the tray shows its fallback (the title dot) with one log line, never a crash.
+// The same addon makes the capsule's window show and hide with no AppKit animation
+// (stillWindow, tray-instant), failing soft the same way: the animation stays.
 // Where it is: BISE_DESKTOP_TRAY_BADGE, else the packed app's Contents/Resources/tray-badge.node
 // (electron-builder.mjs, built next to the helper by native/mac/build.sh).
 import { existsSync } from 'node:fs';
@@ -12,8 +14,33 @@ import type { TrayDot } from './traylook';
 export const BADGE_ENV = 'BISE_DESKTOP_TRAY_BADGE';
 export const BADGE_FILE = 'tray-badge.node';
 
-interface Addon {
+export interface Addon {
   setBadge(dot: TrayDot | null): boolean;
+  /** the window of that NSView* shows and hides with no AppKit animation; absent in an older build */
+  stillWindow?(handle: Buffer): boolean;
+}
+
+/**
+ * The capsule shows and hides at once, with no AppKit pop or fade (TrayBadge.m stillWindow);
+ * false when it couldn't, with one log line: no addon (a dev run), an older addon, no window.
+ */
+export function stillWindow(addon: Addon | null, handle: Buffer, log: (why: string) => void): boolean {
+  if (addon === null) {
+    log('appkit addon: none in this run, the capsule keeps macOS open animation');
+    return false;
+  }
+  if (typeof addon.stillWindow !== 'function') {
+    log('appkit addon: no stillWindow in this build, the capsule keeps macOS open animation');
+    return false;
+  }
+  try {
+    const ok = addon.stillWindow(handle);
+    if (!ok) log('appkit addon: stillWindow found no window, the capsule keeps macOS open animation');
+    return ok;
+  } catch (e) {
+    log(`appkit addon: stillWindow failed (${e instanceof Error ? e.message : String(e)})`);
+    return false;
+  }
 }
 
 /** Where the addon is for this run, or null (see the header). Pure. */
