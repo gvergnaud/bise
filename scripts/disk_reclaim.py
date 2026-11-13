@@ -203,6 +203,7 @@ def _self_test():
         " 1600  1518   1.0 /bin/bash        /bin/bash -c cd /Users/u/.bise/worktrees/h-1/tasks-build/harness && x",
         " 1601  1600 400.0 cargo            cargo test -p bend-tui",
         " 1602  1601 200.0 rustc            rustc --crate-name a",
+        " 1603  1602  10.0 build-script-bui ./build-script-build",
         " 1700  1518 150.0 node             node vite build",
         " 2000     1   1.0 /bin/bash        /bin/bash /Users/u/.bise/run/heavy-run tests/gate.sh quick",
         " 2001  2000 500.0 cargo            cargo test -p switchboard",
@@ -211,7 +212,7 @@ def _self_test():
         "junk line",
     ])
     rows = ps_rows(text)
-    assert len(rows) == 13 and rows[2][3].startswith("/Applications/Google Chrome.app/Contents/Frameworks"), rows[2]
+    assert len(rows) == 14 and rows[2][3].startswith("/Applications/Google Chrome.app/Contents/Frameworks"), rows[2]
     assert ps_rows("") == [] and ps_rows("no header\n 1 0 1.0 x x") == [], "no header: no rows"
     assert exe_name(rows[2][3]) == "Google Chrome Helper (GPU)", "a Mac app's binary keeps its spaces"
     assert exe_name("/L/Python.app/Contents/MacOS/Python /Users/him/secret/x.py --t=1") == "Python", "never his args"
@@ -225,7 +226,14 @@ def _self_test():
     assert bise_tag("cargo test", paths) is None and bise_tag("/x/repl-live --y", paths) == "repl-live"
     pr = load_probe(rows, [2000], paths)
     assert pr["ours"] == (501.0, [("cargo", 500.0), ("bash", 1.0)]), pr["ours"]
-    assert pr["bise"][0] == 816.0, "its shell's cargo by ancestry, a build under a known tree: %r" % (pr["bise"],)
+    assert pr["bise"][0] == 826.0, "its shell's cargo by ancestry, a build under a known tree: %r" % (pr["bise"],)
+    cl = probe_classes(rows, [2000], paths)
+    assert cl[1603] == ("bise", "build-script-build@tasks-build"), \
+        "3 deep under the agent's shell (cargo, rustc, its build script): the agent's, by ancestry: %r" % (cl[1603],)
+    assert cl[1700] == ("bise", "node") and cl[2100] == ("his", "-zsh"), (cl[1700], cl[2100])
+    assert cl[1] == ("his", "launchd") and cl[2001] == ("ours", "cargo"), "launchd ends the walk: his"
+    deep = [(i, i - 1, 1.0, "x%d" % i) for i in range(2, 200)] + [(1, 0, 0.0, "/Users/u/.bise/run/heavy-run")]
+    assert probe_classes(deep, [], paths)[199] == ("his", "x199"), "past PROBE_DEPTH: his, no endless walk"
     assert pr["bise"][1] == [("cargo@tasks-build", 400.0), ("rustc@tasks-build", 200.0), ("node", 150.0)], pr["bise"]
     assert pr["his"] == (554.0, [("someapp", 300.0), ("Google Chrome Helper (GPU)", 120.0), ("Google Chrome", 80.0)]), pr["his"]
     line = probe_line(pr)
@@ -545,12 +553,18 @@ def bise_tag(args, paths):
     return name
 
 
-def load_probe(rows, job_pids, paths):
-    """{class: (total %CPU, [(label, %CPU)] top 3)} for 'ours', 'bise', 'his', pure. ours: the
-    heavy-run jobs' trees by ppid; bise: a process whose args show bise (bise_tag) or whose
-    parent is bise's (an agent's cargo has no bise path, its shell's parent has), labelled like
-    its nearest tagged ancestor when it has none of its own; his: the rest, its basename only,
-    never args (they can hold URLs, paths, tokens). Labels summed, the top 3 by CPU."""
+PROBE_DEPTH = 64  # the ppid walk's cap: a deeper chain (or a cycle) stops there, his
+
+
+def probe_classes(rows, job_pids, paths):
+    """{pid: (class, label)}, pure. ours: the heavy-run jobs' trees by ppid. bise: a process whose
+    args show bise (bise_tag), or any of whose ancestors' do, walking ppid up to launchd (pid 1),
+    PROBE_DEPTH at most (architect m_64774: ancestry is a fact; an agent's cargo, its rustc and
+    their build scripts have no bise path, the agent's shell above them has); labelled
+    <basename>@<agent> from the nearest ancestor that names one. his: the rest, its basename only,
+    never args (they can hold URLs, paths, tokens). One honest edge: his bise.app and its Electron
+    helpers count as bise (labels 'bise', 'bise try Helper (Renderer)'), though using the app is
+    his act: when bise= is high, read its top 3 (the app's, or agents' @<agent>) before acting."""
     kids, by = {}, {}
     for r in rows:
         kids.setdefault(r[1], []).append(r[0])
@@ -561,27 +575,35 @@ def load_probe(rows, job_pids, paths):
         if p not in ours:
             ours.add(p)
             todo += kids.get(p, [])
-    tags = {}
-
-    def tag(pid, depth=0):
-        if pid in tags:
-            return tags[pid]
-        r = by.get(pid)
-        t = None
-        if r is not None and depth < 64:
-            t = bise_tag(r[3], paths)
-            if t is None and r[1] != pid and r[1] > 1:
-                up = tag(r[1], depth + 1)
-                t = up and (exe_name(r[3]) + "@" + up.split("@", 1)[1] if "@" in up else exe_name(r[3]))
-        tags[pid] = t
-        return t
-    sums = {"ours": {}, "bise": {}, "his": {}}
-    for pid, _, cpu, args in rows:
+    out = {}
+    for pid, _, _, args in rows:
+        name = exe_name(args)
         if pid in ours:
-            c, label = "ours", exe_name(args)
+            out[pid] = ("ours", name)
+            continue
+        tag, p, seen = None, pid, set()
+        while p in by and p not in seen and len(seen) < PROBE_DEPTH:
+            seen.add(p)
+            tag = bise_tag(by[p][3], paths)
+            if tag is not None or by[p][1] <= 1:
+                break
+            p = by[p][1]
+        if tag is None:
+            out[pid] = ("his", name)
+        elif p == pid:
+            out[pid] = ("bise", tag)
         else:
-            t = tag(pid)
-            c, label = ("bise", t) if t else ("his", exe_name(args))
+            out[pid] = ("bise", name + "@" + tag.split("@", 1)[1] if "@" in tag else name)
+    return out
+
+
+def load_probe(rows, job_pids, paths):
+    """{class: (total %CPU, [(label, %CPU)] top 3)} for 'ours', 'bise', 'his' (probe_classes'),
+    pure: labels summed, the top 3 by CPU."""
+    cls = probe_classes(rows, job_pids, paths)
+    sums = {"ours": {}, "bise": {}, "his": {}}
+    for pid, _, cpu, _ in rows:
+        c, label = cls[pid]
         sums[c][label] = sums[c].get(label, 0.0) + cpu
     return {c: (sum(d.values()), sorted(d.items(), key=lambda x: (-x[1], x[0]))[:3]) for c, d in sums.items()}
 
