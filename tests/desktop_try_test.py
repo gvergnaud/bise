@@ -384,8 +384,16 @@ def real_opens_with_nothing():
     with BISE_APP_ROOT. Then one run through the open hook on a stand-in: the legacy .old is
     retired and the app gets exactly HOME and BISE_HOME."""
     his = os.path.expanduser("~/.bise")
-    check(T.real_app_env({"BISE_DESKTOP_OFFSCREEN": "1", "BISE_APP_ROOT": "/x", "BISE_DESKTOP_TEST": "1"}, his, his) == [],
-          "his own home: no variable, not even the off-screen knob or a test one")
+    check(T.real_app_env({"BISE_APP_ROOT": "/x", "BISE_DESKTOP_TEST": "1"}, his, his) == [],
+          "his own home: no variable, not even a test one")
+    # the knob on his own home is refused: 'open' hands the caller's env to the app, which put his
+    # window on no display (real-onscreen: keep-current's relaunch, pid 30078)
+    for v in ("1", "0"):
+        try:
+            T.real_app_env({"BISE_DESKTOP_OFFSCREEN": v}, his, his)
+            check(False, "his own home with BISE_DESKTOP_OFFSCREEN=%s refused" % v)
+        except T.TryError as e:
+            check("--background" in str(e), "his own home with the knob: refused, the way named: %s" % e)
     stand = os.path.join(T.GATE, "real-shape", "w", "h", ".bise")
     check(T.real_app_env({}, stand, his) == ["HOME=%s" % os.path.dirname(stand), "BISE_HOME=%s" % stand],
           "a stand-in home: HOME and BISE_HOME, the projects scan stays in it")
@@ -452,6 +460,18 @@ def real_open_fronts_a_running_app():
     check(T.real_plan([4242], True, False) == "restart", "a staged build waits: restart to swap it in")
     check(T.real_plan([4242], False, True) == "restart", "the try is open: it stops, then the real one opens")
     check(T.real_plan([], False, False) == "restart", "not running: it opens")
+    # open on no display (its env says BISE_DESKTOP_OFFSCREEN=1): the front would show him nothing
+    # (real-onscreen: 12:50, pid 30078), so it restarts on screen
+    check(T.real_plan([4242], False, False, True) == "restart", "open off every display: restart, never 'front'")
+    exe = "/Users/g/Applications/bise try.app/Contents/MacOS/bise try"
+    check(T.ps_env_offscreen("30078 %s PATH=/usr/bin BISE_DESKTOP_OFFSCREEN=1 HOME=/Users/g" % exe), "the knob mid-env")
+    check(T.ps_env_offscreen("30078 %s HOME=/Users/g BISE_DESKTOP_OFFSCREEN=1\n" % exe), "the knob last")
+    check(not T.ps_env_offscreen("30078 %s HOME=/Users/g BISE_DESKTOP_OFFSCREEN=0" % exe), "'0' is not the knob")
+    check(not T.ps_env_offscreen("30078 %s HOME=/Users/g XBISE_DESKTOP_OFFSCREEN=1 BISE_DESKTOP_OFFSCREEN=10" % exe),
+          "another variable that ends or starts like it is not the knob")
+    check(T.offscreen_apps([]) == [], "no running app: none off-screen, no ps")
+    check(T.offscreen_apps([os.getpid()]) == ([os.getpid()] if os.environ.get("BISE_DESKTOP_OFFSCREEN") == "1" else []),
+          "a live pid's own env is read (ps -E)")
     # `running` is bundle_apps(<the applet's bundle path>): an older bundle at another path running
     # on his home counts as none here, so the restart path, never 'front' on the wrong version
     other = os.path.join(tempfile.mkdtemp(dir=os.environ.get("TMPDIR")), "bise try.app")
@@ -469,6 +489,14 @@ def real_open_in_background_offscreen():
     check(off[:5] == ["open", "-g", "-n", "-a", app], "the knob: open -g: %r" % off)
     check(off[5:] == ["--env", "HOME=/g/h", "--env", "BISE_HOME=/g/h/.bise", "--env", "BISE_DESKTOP_OFFSCREEN=1"], "its env passes")
     check(T.real_open_cmd(app, [], {"BISE_DESKTOP_OFFSCREEN": "0"})[1] == "-n", "'0' is not the knob")
+    # --background (keep-current's relaunch): behind his windows, on screen: -g and no variable
+    check(T.real_open_cmd(app, [], {}, background=True) == ["open", "-g", "-n", "-a", app], "--background: open -g only")
+    for argv in (["--background"], ["--try", "--background"], ["--real", "--stop", "--background"], ["--real", "--background", "x"]):
+        try:
+            T.main(argv)
+            check(False, "%s refused" % argv)
+        except T.TryError:
+            check(True, "%s refused" % argv)
 
 
 def real_stop_never_his_hubs():

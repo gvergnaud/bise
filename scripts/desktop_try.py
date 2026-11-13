@@ -3,7 +3,10 @@
 
   bise-ambient --real                                the promoted bundle on YOUR bise home and hubs (no build, no
                                                      try world): stops any open try or instance first, opens it
-                                                     with no variable, says the sha, the bundle and the home
+                                                     with no variable, says the sha, the bundle and the home;
+                                                     never BISE_DESKTOP_OFFSCREEN on your home (refused)
+  bise-ambient --real --background                   the same behind your windows (open -g, window on screen):
+                                                     keep-current's relaunch; already open: left as it is
   bise-ambient --real --stop                         quits it; on a stand-in home (a test's) also its hubs
   bise-ambient --try [repo…] [--fresh] [--replace]   build, set up the try home, open the app on it (internal
                                                      fallback until --real is proven: ambient-lead m_18348)
@@ -781,8 +784,14 @@ def real_app_env(environ, real, default_real):
     A proof on a stand-in home (BISE_TRY_REAL=<home>/.bise, under ~/.bise/gate only: amb-tools'
     real-shaped world) adds HOME=<home> and BISE_HOME=<home>/.bise (BISE_HOME alone would let the
     projects scan walk his real folders: amb-tools m_18370), and BISE_DESKTOP_OFFSCREEN=1 when the
-    caller set it (the off-screen run); never another variable. Pure."""
+    caller set it (the off-screen run); never another variable. His own home with
+    BISE_DESKTOP_OFFSCREEN set is refused: 'open' hands the caller's environment to the app, which
+    then put his window on no display (real-onscreen: keep-current's relaunch, pid 30078); 'behind
+    his windows' is --background (open -g). Pure."""
     if os.path.realpath(real) == os.path.realpath(default_real):
+        if environ.get("BISE_DESKTOP_OFFSCREEN"):
+            raise TryError("--real on your own home never opens off every display: BISE_DESKTOP_OFFSCREEN is for a "
+                           "stand-in home under ~/.bise/gate (BISE_TRY_REAL); to open it behind your windows: --real --background")
         return []
     if not under(real, GATE) or os.path.basename(real) != ".bise":
         raise TryError("--real on a stand-in home: BISE_TRY_REAL=<home>/.bise under ~/.bise/gate only (got %s)" % real)
@@ -792,17 +801,19 @@ def real_app_env(environ, real, default_real):
     return out
 
 
-def real_open_cmd(app, extra, environ):
-    """The 'open' of --real (pure). With BISE_DESKTOP_OFFSCREEN=1 (amb-tools' as-he-does runs) it adds
-    -g: LaunchServices never brings the app to the front (amb-tools m_18713: 'bise try' took his focus
-    for ~4 s); his own --real opens as any app does."""
-    cmd = ["open"] + (["-g"] if environ.get("BISE_DESKTOP_OFFSCREEN") == "1" else []) + ["-n", "-a", app]
+def real_open_cmd(app, extra, environ, background=False):
+    """The 'open' of --real (pure). -g (LaunchServices never brings the app to the front) for
+    --background (keep-current's relaunch at idle: his window on screen, behind his own) and with
+    BISE_DESKTOP_OFFSCREEN=1 (amb-tools' as-he-does runs on a stand-in: amb-tools m_18713, 'bise try'
+    took his focus for ~4 s); his own --real opens as any app does."""
+    g = background or environ.get("BISE_DESKTOP_OFFSCREEN") == "1"
+    cmd = ["open"] + (["-g"] if g else []) + ["-n", "-a", app]
     for e in extra:
         cmd += ["--env", e]
     return cmd
 
 
-def open_bundle(real, app, extra, environ):
+def open_bundle(real, app, extra, environ, background=False):
     """--real's open of `app` on his home `real` (or a stand-in's), `extra` its variables
     (real_app_env): BISE_TRY_OPEN's hook in tests on a stand-in, else real_open_cmd. The app's
     failed swap reopens the bundle it left the same way (desktop_try_swap.reopen)."""
@@ -812,15 +823,31 @@ def open_bundle(real, app, extra, environ):
             raise TryError("BISE_TRY_OPEN: for tests on a stand-in home under ~/.bise/gate only")
         run([hook, app] + extra, his_env(environ))
     else:
-        run(real_open_cmd(app, extra, environ), his_env(environ))
+        run(real_open_cmd(app, extra, environ, background), his_env(environ))
 
 
-def real_plan(running, staged, try_open):
+def real_plan(running, staged, try_open, offscreen=False):
     """What --real does (pure): 'front' when the bundle already runs on his home with no staged build
-    to swap in and no try open: it is brought to the front, never quit (app-quits: his '~/Applications/
-    bise (try)' click at 08:28 on 2026-11-13 quit and reopened the same dd93c388 for nothing);
-    else 'restart' (quit, swap the staged build in, open)."""
-    return "front" if running and not staged and not try_open else "restart"
+    to swap in, no try open, and its window placed on a display: it is brought to the front, never
+    quit (app-quits: his '~/Applications/bise (try)' click at 08:28 on 2026-11-13 quit and reopened
+    the same dd93c388 for nothing); else 'restart' (quit, swap the staged build in, open). `offscreen`:
+    a running instance carries BISE_DESKTOP_OFFSCREEN=1 (offscreen_apps): its window is on no display,
+    so the front shows him nothing (real-onscreen: 12:50, pid 30078) and it restarts."""
+    return "front" if running and not staged and not try_open and not offscreen else "restart"
+
+
+def ps_env_offscreen(line):
+    """One 'ps -E' line (pid, command, then its environment) carries BISE_DESKTOP_OFFSCREEN=1. Pure."""
+    return (" BISE_DESKTOP_OFFSCREEN=1 " in " %s " % line.strip())
+
+
+def offscreen_apps(pids):
+    """The pids among `pids` (bundle_apps) whose own environment says BISE_DESKTOP_OFFSCREEN=1 (ps -E)."""
+    if not pids:
+        return []
+    out = subprocess.run(["ps", "-wwE", "-o", "pid=,command=", "-p", ",".join(str(p) for p in pids)],
+                         capture_output=True, text=True).stdout
+    return [int(l.split()[0]) for l in out.splitlines() if l.split() and l.split()[0].isdigit() and ps_env_offscreen(l)]
 
 
 def real_front_cmd(app):
@@ -829,20 +856,24 @@ def real_front_cmd(app):
     return ["open", "-a", app]
 
 
-def open_real(real, tryh, paths, environ=None, timeout=20):
+def open_real(real, tryh, paths, environ=None, timeout=20, background=False):
     """bise-ambient --real (ambient-lead m_18348): the promoted bundle on his real bise home, his
-    running hubs; no build, no try world. Already open with nothing staged: brought to the front
-    (real_plan). Else any open try is stopped and any instance of the bundle quits first; the bundle
-    is opened with no variable (real_app_env). Says what it opened."""
+    running hubs; no build, no try world. Already open with nothing staged and on a display: brought
+    to the front (real_plan), or with `background` (--background) left as it is. Else any open try is
+    stopped and any instance of the bundle quits first; the bundle is opened with no variable
+    (real_app_env), behind his windows with `background` (open -g). Says what it opened."""
     environ = os.environ if environ is None else environ
     app = paths["app"]
     extra = real_app_env(environ, real, his_bise())
     try_open = os.path.isdir(tryh) and (app_running(app, tryh) or any(os.path.exists(s) for s in hub_socks(tryh)))
     running = bundle_apps(app)
-    if not extra and real_plan(running, (read_stamp(paths) or {}).get("where") == "staged", try_open) == "front":
-        run(real_front_cmd(app), his_env(environ))
-        say("bise desktop was already open on your home %s: %s (%s, pid %d): brought to the front, not restarted"
-            % (real, app, live_build(app).get("commit", "")[:8] or "unknown build", running[0]))
+    staged = (read_stamp(paths) or {}).get("where") == "staged"
+    if not extra and real_plan(running, staged, try_open, bool(offscreen_apps(running))) == "front":
+        if not background:
+            run(real_front_cmd(app), his_env(environ))
+        say("bise desktop was already open on your home %s: %s (%s, pid %d): %s, not restarted"
+            % (real, app, live_build(app).get("commit", "")[:8] or "unknown build", running[0],
+               "left as it is" if background else "brought to the front"))
         return running[0]
     if try_open:
         r = stop(real, tryh, app)
@@ -859,7 +890,7 @@ def open_real(real, tryh, paths, environ=None, timeout=20):
     if missing:
         raise TryError("the promoted bundle %s needs its runtime inside (Contents/Resources/bin lacks %s): "
                        "promote a candidate built with amb-core's self-contained pack" % (app, ", ".join(missing)))
-    open_bundle(real, app, extra, environ)
+    open_bundle(real, app, extra, environ, background)
     t0, pids = time.time(), []
     while not pids and time.time() - t0 < timeout:
         pids = bundle_apps(app)
@@ -958,9 +989,10 @@ def stop(real, tryh, app=None):
 def main(argv):
     args = [a for a in argv if not a.startswith("--")]
     flags = {a for a in argv if a.startswith("--")}
-    bad = flags - {"--try", "--real", "--stop", "--fresh", "--replace", "--no-build", "--no-open", "--candidate", "--promote", "--team-sign"}
+    bad = flags - {"--try", "--real", "--stop", "--background", "--fresh", "--replace", "--no-build", "--no-open", "--candidate",
+                   "--promote", "--team-sign"}
     if bad:
-        raise TryError("unknown option %s (--real, --try [repo…] [--fresh|--replace], --try --stop, --candidate <sha> [--team-sign], "
+        raise TryError("unknown option %s (--real [--background], --try [repo…] [--fresh|--replace], --try --stop, --candidate <sha> [--team-sign], "
                        "--promote <sha>)" % ", ".join(sorted(bad)))
     cand = os.environ.get("BISE_TRY_CANDIDATE") if "--promote" not in flags else None
     if "--team-sign" in flags and ("--candidate" not in flags or flags - {"--candidate", "--team-sign"}):
@@ -984,9 +1016,11 @@ def main(argv):
             raise TryError("--promote <sha>")
         print(json.dumps(promote(his_env(os.environ), args[0])))
         return 0
+    if "--background" in flags and ("--real" not in flags or "--stop" in flags):
+        raise TryError("--background goes with --real only (it opens the bundle behind your windows)")
     if "--real" in flags:
-        if flags - {"--real", "--stop"} or args:
-            raise TryError("--real [--stop] takes nothing else: it opens (or stops) the promoted bundle on your home")
+        if flags - {"--real", "--stop", "--background"} or args:
+            raise TryError("--real [--background|--stop] takes nothing else: it opens (or stops) the promoted bundle on your home")
         real, tryh = homes()
         paths = try_paths(his_env(os.environ))
         if "--stop" in flags:
@@ -994,7 +1028,7 @@ def main(argv):
             say("stopped bise desktop (%d instances, %d hubs, %d processes left killed)%s"
                 % (len(r["app"]), len(r["hubs"]), len(r["killed"]), "" if r["hubs"] or r["killed"] else "; your hubs weren't touched"))
             return 0
-        open_real(real, tryh, paths)
+        open_real(real, tryh, paths, background="--background" in flags)
         return 0
     real, tryh = homes()
     guard(real, tryh)
