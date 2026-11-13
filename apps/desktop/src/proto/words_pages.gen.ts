@@ -149,7 +149,7 @@ export const pages = {
   /** the command that signs gh in */
   review_gh_login: "gh auth login",
   /** a PR's diff: GitHub has no such PR, or his gh login can't see it */
-  review_gh_no_pr: "GitHub has no such pull request · or your gh login can't see it",
+  review_gh_no_pr: "GitHub can't find this pull request · it was deleted, or your gh login can't see it",
   /** a refused diff's action: ask it again */
   review_retry: "Try again",
   /** the review's action when the agent has an open PR: its page in the browser */

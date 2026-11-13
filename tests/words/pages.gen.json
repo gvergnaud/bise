@@ -279,7 +279,7 @@
   "pages.review_gh_no_pr": {
     "args": [],
     "one": null,
-    "text": "GitHub has no such pull request · or your gh login can't see it"
+    "text": "GitHub can't find this pull request · it was deleted, or your gh login can't see it"
   },
   "pages.review_gh_signed_out": {
     "args": [
