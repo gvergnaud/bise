@@ -85,7 +85,9 @@ def main():
         flog = os.path.join(t, "flaky.log")
         with open(flog, "w") as f:
             f.write("FLAKY e2e partial_e2e (red, then green alone)\nFLAKY cargo sb::a::b (red, then green alone)\n"
-                    "FLAKY e2e partial_e2e (red, then green alone)\n")
+                    "FLAKY e2e partial_e2e (red, then green alone)\n"
+                    # run_all.sh's other FLAKY line: never a flake of a test 'its' (main m_64333)
+                    "FLAKY partial_e2e: its red kept in /x/flaky-logs/1-abc-partial_e2e\n")
         now = 100 * 86400
         timings = os.path.join(t, "timings.tsv")
         with open(timings, "w") as f:

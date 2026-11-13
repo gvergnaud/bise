@@ -103,7 +103,9 @@ def report(repo, tested, green_tsv, log, journals, now=None, what="tip gate"):
     return agents, text
 
 
-FLAKY = re.compile(r"^FLAKY (\S+) (\S+) ")
+# the whole line run_all.sh writes: its other FLAKY lines ('FLAKY <test>: its red kept in <dir>')
+# read as kind '<test>:' and test 'its' (main m_64333: a bogus 'its (proto_e2e_agents:)' row, 0 of 0)
+FLAKY = re.compile(r"^FLAKY (\S+) (\S+) \(red, then green alone\)")
 FLAKE_DAYS = 14
 
 
