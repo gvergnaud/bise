@@ -1,6 +1,7 @@
 /* the folders macOS guards, under the projects list (Guarded.tsx, designer m_64068): the line text-2, the
-   buttons small secondary in a row that wraps; a look's answer text-2 ('none' text-3); ds tokens only */
-.setup-guarded { display: flex; flex-direction: column; gap: var(--s-2); width: 100%; margin-top: var(--s-3); text-align: left; }
+   buttons small secondary in a row that wraps; a look's answer text-2 ('none' text-3); 12 px above, the
+   section gap under (the add sheet's next group sat on it: designer m_64134); ds tokens only */
+.setup-guarded { display: flex; flex-direction: column; gap: var(--s-2); width: 100%; margin: var(--s-3) 0 var(--gap-section); text-align: left; }
 .setup-guarded-line { font: var(--t-13)/var(--s-5) var(--font-ui); color: var(--c-text-2); }
 .setup-guarded-rows { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); }
 .setup-guarded-say { display: inline-flex; align-items: baseline; gap: var(--s-2); font: var(--t-13)/var(--s-5) var(--font-ui); color: var(--c-text-2); }

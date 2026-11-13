@@ -2632,7 +2632,7 @@
   "settings.onb_guarded": {
     "args": [],
     "one": null,
-    "text": "macOS keeps these folders private: bise looks in them only when you ask."
+    "text": "macOS keeps these private; bise looks only when you ask."
   },
   "settings.onb_hello_sub": {
     "args": [],

@@ -127,7 +127,7 @@ crate::words! { settings:
     /// onboarding: no repo matches the filter
     onb_no_match(q) = "no repo matches “{q}”. choose a folder…, or clear the filter.";
     /// onboarding and the add sheet: the line over the folders macOS guards that the scan skipped (designer m_64068)
-    onb_guarded = "macOS keeps these folders private: bise looks in them only when you ask.";
+    onb_guarded = "macOS keeps these private; bise looks only when you ask.";
     /// a guarded folder's button: his click scans it (macOS asks then)
     onb_look_in(folder) = "Look in {folder}";
     /// a guarded folder's button while it is scanned
