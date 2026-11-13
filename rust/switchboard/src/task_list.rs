@@ -71,17 +71,28 @@ fn line(w: &VWork, now: u64) -> String {
     )
 }
 
-/// `sb task list`: the open works (`all`: with the done and ongoing ones,
-/// and how many were folded).
-pub fn list(st: &State, all: bool, now: u64) -> String {
+/// The lines of the works whose status `keep` takes, what needs him
+/// first; never a merged one.
+fn lines(st: &State, keep: impl Fn(&str) -> bool, now: u64) -> Vec<String> {
     let mut ws: Vec<&VWork> = st
         .works
         .values()
-        .filter(|w| w.work.merged_into.is_none())
-        .filter(|w| all || !matches!(w.status.as_str(), "done" | "ongoing"))
+        .filter(|w| w.work.merged_into.is_none() && keep(&w.status))
         .collect();
     ws.sort_by_key(|w| (rank(&w.status), w.work.created_ms));
-    let mut out: Vec<String> = ws.iter().map(|w| line(w, now)).collect();
+    ws.iter().map(|w| line(w, now)).collect()
+}
+
+/// main's `<open_tasks>` (board.rs): the works it may put new work on,
+/// the ongoing ones too (a standing order takes work), never a done one.
+pub fn open_lines(st: &State, now: u64) -> Vec<String> {
+    lines(st, |s| s != "done", now)
+}
+
+/// `sb task list`: the open works (`all`: with the done and ongoing ones,
+/// and how many were folded).
+pub fn list(st: &State, all: bool, now: u64) -> String {
+    let mut out = lines(st, |s| all || !matches!(s, "done" | "ongoing"), now);
     if out.is_empty() {
         out.push(if all {
             "no task yet".into()

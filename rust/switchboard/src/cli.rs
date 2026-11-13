@@ -53,6 +53,11 @@ pub const COMMANDS: &[CmdDoc] = &[
     ),
     cmd("sb tasks", Who::Everyone, "every task in detail: what it is doing now, its last report, its open questions."),
     cmd(
+        "sb task new \"<name>\" [--why \"<why>\"] [--done-when \"<item>\"]... | sb task list [--all] | sb task show <id> | sb task tick <id> <n>",
+        Who::Everyone,
+        "the user's tasks: his units of work, many agents each. Every message, turn and what it makes (messages, agents, pages, artifacts, cards, timers, lands) carries its tasks by itself. `new`: a task for new work his direct message sends you on (main makes the others), in his words. `tick <id> <n>` (or `sb report … --done-when <n>`): done-when item n of your turn's task is done. `--task <id>[,<id>]` on send, ask, spawn, notify or report: the tasks it carries instead of your turn's. A task is done only by his word: your report done never makes it done.",
+    ),
+    cmd(
         "sb send <agent> \"<text>\" [--expect-reply] [--reply-to <id>] [--mode steer|queued] [--attach <path|m_<n>>]... | sb send <agent> --forward m_<n> [\"<note>\"] [...]",
         Who::Everyone,
         "send a message (never blocks). `--mode steer` (default): a busy recipient gets it at once, mid-turn. `--mode queued`: it waits until the recipient's turn ends, then starts its next turn. `--attach` (10 at most): an image its model sees, a file it reads by its path (one in your $TMPDIR is copied to its own), or `m_<n>`: the images and files of a message you got. `--forward m_<n>`: a message you got or sent (the user's too), whole, with its images and files, who wrote it to whom and when, and where to open it; your note (optional) goes first. Never retype a message you can forward.",
@@ -174,6 +179,11 @@ pub const COMMANDS: &[CmdDoc] = &[
         "sb flow [pr|trunk]",
         Who::Main,
         "how this repo ships code: PRs or straight to main, why, and the question to ask the user when it is not set; with `pr` or `trunk`, save the user's answer (never your own pick).",
+    ),
+    cmd(
+        "sb task done|reopen|resume|ongoing <id> | sb task pause <id> [--until <18:00|tomorrow 09:00|2h>] | sb task rename|why|goal <id> \"<text>\" | sb task untick <id> <n> | sb task merge <id> --into <id>",
+        Who::Main,
+        "the user's tasks (`<open_tasks>` in your state). In the turn where you start work for him (a spawn, a forward, a delegation), make its task first: `sb task new \"<his words>\" --why \"…\" --done-when \"…\"`, or put the work on an open task with `--task <id>`; a plain answer makes none. His words on a task are these verbs (\"pause WhatsApp until Monday\", \"that one is done\", \"merge X into Y\"): `done` only on his word, never on an agent's done; `pause` stops its agents' turns cleanly after a grace and holds their messages until `resume`; `ongoing`: a task that never ends.",
     ),
     cmd("sb rename <task> <new-name>", Who::Main, "rename a task (unique name; the old name still works)."),
     cmd(

@@ -128,8 +128,13 @@ fn list_and_show_read_the_status_sb_core_computed() {
     assert!(text.starts_with("native-mac · Native mac · working · docs"), "{text}");
     let r = task(&mut t, MAIN, Task::Show { id: a.clone() });
     assert!(r["text"].as_str().unwrap().contains("1. [ ] it builds"), "{r}");
+    // main sees it in its state, to put new work on it
+    let ctx = crate::board::main_context(&t.hub.st, t.env.now, &[], &[]);
+    assert!(ctx.contains("<open_tasks>\nnative-mac · Native mac · working · docs · main, docs\n</open_tasks>"), "{ctx}");
     // done: out of the list, in --all
     assert_eq!(task(&mut t, MAIN, Task::Done { id: a.clone() })["ok"], true);
+    let ctx = crate::board::main_context(&t.hub.st, t.env.now, &[], &[]);
+    assert!(!ctx.contains("<open_tasks>"), "a done task is not open: {ctx}");
     assert_eq!(t.hub.st.works[&a].status, "done");
     let open = task(&mut t, MAIN, Task::List { all: false })["text"].as_str().unwrap().to_string();
     assert!(!open.contains("native-mac"), "{open}");

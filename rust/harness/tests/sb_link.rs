@@ -97,6 +97,13 @@ fn cases() -> Vec<Vec<&'static str>> {
         vec!["follow", "t1"],
         vec!["follow", "acme/t1", "--off"],
         vec!["follow"],
+        // tasks (docs/tasks.md): an absolute --until, like every's
+        vec!["task", "new", "Native mac", "--why", "his ask", "--done-when", "it builds"],
+        vec!["task", "list", "--all"],
+        vec!["task", "tick", "native-mac", "1"],
+        vec!["task", "pause", "native-mac", "--until", "2030-01-01 09:00"],
+        vec!["task", "merge", "digest", "--into", "native-mac"],
+        vec!["task", "nope"],
         vec!["version"],
         vec!["version", "switch", "HEAD"],
         vec!["restart", "current"],

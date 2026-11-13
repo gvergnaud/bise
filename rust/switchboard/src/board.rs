@@ -219,6 +219,9 @@ pub fn main_context(st: &State, now: u64, threads: &[String], questions: &[Strin
         ));
     }
     s.push_str("</task_board>\n");
+    // tasks: the user's open tasks, for main to put new work on one
+    // (`--task <id>`) or make a new one (`sb task new`)
+    push_block(&mut s, "open_tasks", &crate::task_list::open_lines(st, now));
     push_block(&mut s, "agent_threads", threads);
     let cards: Vec<String> = st
         .open_cards()

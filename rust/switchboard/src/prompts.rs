@@ -663,7 +663,8 @@ mod tests {
     /// the projects registry) gets main's prompt as main rendered it at
     /// 28cd0f46, byte for byte, but for the command rows of the commands
     /// that came with the desktop (page, taste, people, follow new; report
-    /// and every with new options). The fixture is main 28cd0f46's
+    /// and every with new options; task new with tasks, its birth rule in
+    /// main's row). The fixture is main 28cd0f46's
     /// main_role("/w", "/t", main_section(None, None)), with msg-forward's
     /// rules in it (architect m_41072: `--forward m_<n>` replaces "forward
     /// the user's words verbatim", every agent reads his message ids).
@@ -676,7 +677,7 @@ mod tests {
         let rows = |t: &str| t.lines().filter(|l| row_cmd(l).is_some()).map(String::from).collect::<std::collections::BTreeSet<_>>();
         let (old, new) = (rows(main), rows(&now));
         let changed: std::collections::BTreeSet<String> = old.symmetric_difference(&new).filter_map(|l| row_cmd(l)).collect();
-        let want: std::collections::BTreeSet<String> = ["every", "feature", "follow", "page", "people", "report", "send", "show", "spawn", "taste", "wake"].into_iter().map(String::from).collect();
+        let want: std::collections::BTreeSet<String> = ["every", "feature", "follow", "page", "people", "report", "send", "show", "spawn", "task", "taste", "wake"].into_iter().map(String::from).collect();
         assert_eq!(changed, want, "the command rows that differ from main's");
         // a plain project's tasks never read the @bise paragraph either
         assert!(!messages(false).contains("@bise") && messages(true).contains("@bise"));
