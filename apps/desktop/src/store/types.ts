@@ -2,7 +2,7 @@
 // checked complete at compile time), the slices' list types, and the key and
 // compare helpers. Pure, no state. Split out of store.ts (pure move). Owner:
 // amb-core (the hub slices with amb-win).
-import type { AwayProject, CoreEv, FindHit, GuideTarget, HubEv, InboxRecord, Mark, Mode, Part, Pr, PickFile, PickFolder, BranchRow, Page, VersionItem } from '@/proto';
+import type { AwayProject, CoreEv, FindHit, GuideTarget, HubEv, InboxRecord, Mark, Mode, Part, Pr, PickFile, PickFolder, BranchRow, Page, TakeStop, VersionItem } from '@/proto';
 export type Ev = HubEv | CoreEv;
 export type EvOf<T extends Ev['ev']> = Extract<Ev, { ev: T }>;
 
@@ -318,6 +318,8 @@ export interface Dictation {
   /** a final's one line about its words (the voice model is gone, another of its provider's
    *  heard them): said like an error, the words land */
   readonly note?: string;
+  /** a final whose mic stopped by itself, and why (a mic left on: the core's quiet stop) */
+  readonly stopped?: TakeStop;
 }
 /** Voice mode's state (core/voice_mode.rs), only in the window that turned it on. */
 export type VoiceModeState = EvOf<'voice_mode'>;

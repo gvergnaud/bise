@@ -177,6 +177,10 @@ pub enum Heard {
     Text(String),
     /// every word of the audio sent before the Flush is in
     Flushed,
+    /// the first this many samples not yet handed out are heard (their
+    /// words, if any, came before): a long turn's segment
+    /// (voice::segments), in order. Its sound is no longer needed.
+    Segment(usize),
     /// the one-line reason (voice::fail_lines' wording)
     Failed(String),
     /// one line about the words just sent (their model fell back:

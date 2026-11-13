@@ -125,6 +125,129 @@ fn the_listener_stops_when_the_controller_goes_or_on_cancel() {
     assert!(matches!(run.heard.recv_timeout(WAIT), Err(mpsc::RecvTimeoutError::Disconnected)));
 }
 
+// ---- a take of any length (dictate-nocap) ----
+
+/// A fake provider for [`run_batch`]: each request's sample count; its
+/// words are "w<n>" (n its order), or a 503 while `down`.
+struct Provider {
+    sizes: std::sync::Mutex<Vec<usize>>,
+    down: AtomicBool,
+}
+
+impl Provider {
+    fn new() -> Provider {
+        Provider { sizes: Default::default(), down: AtomicBool::new(false) }
+    }
+    fn send(&self, r: &http::Request) -> Result<http::Response, String> {
+        if self.down.load(Ordering::SeqCst) {
+            return Ok(http::Response { status: 503, body: b"{}".to_vec() });
+        }
+        let riff = r.body.windows(4).position(|w| w == b"RIFF").expect("a WAV");
+        let len = u32::from_le_bytes(r.body[riff + 40..riff + 44].try_into().unwrap()) as usize / 2;
+        let mut sizes = self.sizes.lock().unwrap();
+        sizes.push(len);
+        Ok(http::Response { status: 200, body: format!(r#"{{"text":"w{}"}}"#, sizes.len()).into_bytes() })
+    }
+}
+
+/// `secs` of speech in 100 ms blocks, then a flush, through run_batch.
+fn take(p: &Provider, secs: usize) -> Vec<Heard> {
+    let job = VoiceJob { language: Some("en".into()), ..crate::voice::fakes::job() };
+    let (audio, rx) = mpsc::channel();
+    let (tx, heard) = mpsc::channel();
+    for _ in 0..secs * 10 {
+        audio.send(ListenMsg::Audio(vec![3000; BLOCK])).unwrap();
+    }
+    audio.send(ListenMsg::Flush).unwrap();
+    drop(audio);
+    let mut langs = Langs::new(vec!["en-US".into()]);
+    run_batch(&job, &rx, &tx, &AtomicBool::new(false), &mut langs, &|r| p.send(r));
+    heard.try_iter().collect()
+}
+
+/// No cap (dictate-nocap, mutation-checked): a 10-minute take keeps
+/// every word: heard in segments of 3 min at most while he talks, every
+/// sample in exactly one request, the words in order, each segment but
+/// the last said heard (its sound no longer needed), then Flushed.
+#[test]
+fn a_ten_minute_take_keeps_every_word() {
+    let p = Provider::new();
+    let heard = take(&p, 600);
+    let sizes = p.sizes.lock().unwrap().clone();
+    assert_eq!(sizes.iter().sum::<usize>(), 600 * MIC_RATE as usize, "every sample heard once: {sizes:?}");
+    assert!(sizes.iter().all(|&n| n <= crate::voice::segments::SEGMENT_MAX), "{sizes:?}");
+    assert_eq!(sizes.len(), 4);
+    let max = crate::voice::segments::SEGMENT_MAX;
+    assert_eq!(
+        heard,
+        vec![
+            Heard::Text(" w1".into()),
+            Heard::Segment(max),
+            Heard::Text(" w2".into()),
+            Heard::Segment(max),
+            Heard::Text(" w3".into()),
+            Heard::Segment(max),
+            Heard::Text(" w4".into()),
+            Heard::Flushed,
+        ]
+    );
+}
+
+/// A segment that fails while he talks is never dropped: it goes again
+/// at the flush, and its words land before the ones heard after it.
+#[test]
+fn a_segment_that_failed_goes_again_its_words_in_order() {
+    let p = Provider::new();
+    let job = VoiceJob { language: Some("en".into()), ..crate::voice::fakes::job() };
+    let (audio, rx) = mpsc::channel();
+    let (tx, heard) = mpsc::channel();
+    let max_secs = crate::voice::segments::SEGMENT_MAX / MIC_RATE as usize;
+    // the provider is down for the first cut, back for the second
+    let calls = std::sync::atomic::AtomicUsize::new(0);
+    let send = |r: &http::Request| {
+        let n = calls.fetch_add(1, Ordering::SeqCst);
+        p.down.store(n == 0, Ordering::SeqCst);
+        p.send(r)
+    };
+    for _ in 0..(2 * max_secs + 30) * 10 {
+        audio.send(ListenMsg::Audio(vec![3000; BLOCK])).unwrap();
+    }
+    audio.send(ListenMsg::Flush).unwrap();
+    drop(audio);
+    let mut langs = Langs::new(vec!["en-US".into()]);
+    run_batch(&job, &rx, &tx, &AtomicBool::new(false), &mut langs, &send);
+    let words: String = heard.try_iter().filter_map(|h| if let Heard::Text(t) = h { Some(t) } else { None }).collect();
+    // the 2nd cut heard segment 1 (w1) then 2 (w2); the flush the rest (w3)
+    assert_eq!(words, " w1 w2 w3");
+    assert_eq!(p.sizes.lock().unwrap().iter().sum::<usize>(), (2 * max_secs + 30) * MIC_RATE as usize);
+}
+
+/// Still down at the flush: Failed, after the words heard so far.
+#[test]
+fn a_take_still_failing_at_the_flush_says_it_after_its_words() {
+    let p = Provider::new();
+    let max_secs = crate::voice::segments::SEGMENT_MAX / MIC_RATE as usize;
+    let job = VoiceJob { language: Some("en".into()), ..crate::voice::fakes::job() };
+    let (audio, rx) = mpsc::channel();
+    let (tx, heard) = mpsc::channel();
+    let send = |r: &http::Request| {
+        let out = p.send(r);
+        p.down.store(true, Ordering::SeqCst);
+        out
+    };
+    for _ in 0..(max_secs + 10) * 10 {
+        audio.send(ListenMsg::Audio(vec![3000; BLOCK])).unwrap();
+    }
+    audio.send(ListenMsg::Flush).unwrap();
+    drop(audio);
+    let mut langs = Langs::new(vec!["en-US".into()]);
+    run_batch(&job, &rx, &tx, &AtomicBool::new(false), &mut langs, &send);
+    let got: Vec<Heard> = heard.try_iter().collect();
+    assert_eq!(got[..2], [Heard::Text(" w1".into()), Heard::Segment(crate::voice::segments::SEGMENT_MAX)]);
+    assert!(matches!(got.last(), Some(Heard::Failed(_))), "{got:?}");
+    assert_eq!(got.len(), 3);
+}
+
 // ---- live (by hand, no sound) ----
 
 /// The 16 kHz mono PCM of a WAV file (its "data" chunk).
@@ -174,6 +297,7 @@ fn live_transcribe_3_hears_a_spoken_sentence() {
     loop {
         match run.heard.recv_timeout(Duration::from_secs(30)).expect("no Flushed") {
             Heard::Text(t) => text.push_str(&t),
+            Heard::Segment(_) => {}
             Heard::Flushed => break,
             Heard::Failed(l) => panic!("{}", l),
             Heard::Note(l) => eprintln!("note: {l}"),

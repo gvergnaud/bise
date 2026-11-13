@@ -555,6 +555,20 @@
     "one": null,
     "text": " try it · or just type your own"
   },
+  "composer.dictate_quiet_stop": {
+    "args": [
+      "min"
+    ],
+    "one": null,
+    "text": "the mic stopped after {min} min of silence · your words are in"
+  },
+  "composer.dictate_quiet_stop_none": {
+    "args": [
+      "min"
+    ],
+    "one": null,
+    "text": "the mic stopped after {min} min of silence · nothing was heard"
+  },
   "composer.divider_working": {
     "args": [],
     "one": null,
@@ -1083,6 +1097,20 @@
     ],
     "one": null,
     "text": "ψ worktree, on {branch}"
+  },
+  "composer.talk_quiet_stop": {
+    "args": [
+      "min"
+    ],
+    "one": null,
+    "text": "fn talk ended · the mic stopped after {min} min of silence"
+  },
+  "composer.talk_quiet_stop_sent": {
+    "args": [
+      "min"
+    ],
+    "one": null,
+    "text": "sent to main · the mic stopped after {min} min of silence"
   },
   "composer.talking_directly": {
     "args": [

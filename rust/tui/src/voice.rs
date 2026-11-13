@@ -41,7 +41,6 @@ pub const SAMPLE_RATE: u32 = 16_000;
 /// TUI and in the ambient core (its dictation and fn's talk, architect
 /// m_22168).
 pub(crate) const TRANSCRIBE_TIMEOUT: Duration = Duration::from_secs(120);
-const MAX_DURATION: Duration = Duration::from_secs(300);
 /// Shorter than this, a recording has no audio blocks yet: silence then
 /// means "stopped too early", not "the microphone is muted".
 const MIN_SIGNAL_DURATION: Duration = Duration::from_millis(500);
@@ -469,6 +468,9 @@ struct Run {
     cancel: Arc<AtomicBool>,
     started: Instant,
     stopped: Option<Instant>,
+    /// the transcriber's last sign (a segment's words): once stopped,
+    /// the wait counts from the later of it and the stop
+    progress: Option<Instant>,
     has_signal: bool,
     text_len: usize,
     /// the job's names, for the lines of a failure
@@ -555,6 +557,7 @@ impl Voice {
                 cancel,
                 started: now,
                 stopped: Some(now),
+                progress: None,
                 has_signal: true,
                 text_len: 0,
                 names,
@@ -574,6 +577,7 @@ impl Voice {
             cancel,
             started: now,
             stopped: None,
+            progress: None,
             has_signal: false,
             text_len: 0,
             names,
@@ -603,13 +607,16 @@ impl Voice {
         self.state = VoiceState::Idle;
     }
 
-    /// Drain the transcription events; checks the flush timeout and the
-    /// maximum duration. Call it on every UI tick.
+    /// Drain the transcription events; checks the flush timeout (from
+    /// the transcriber's last sign: a long clip's segments each get
+    /// their time). No time limit while he records (dictate-nocap). Call
+    /// it on every UI tick.
     pub fn poll(&mut self, now: Instant) -> Vec<VoiceOutput> {
         let mut out = Vec::new();
         while let Some(run) = self.run.as_mut() {
             match run.events.try_recv() {
                 Ok(TranscribeEvent::Delta(t)) => {
+                    run.progress = Some(now);
                     run.text_len += t.chars().count();
                     if !t.is_empty() {
                         out.push(VoiceOutput::Insert(t));
@@ -630,11 +637,8 @@ impl Voice {
             }
         }
         match (self.state, self.run.as_ref()) {
-            (VoiceState::Recording, Some(r)) if now.duration_since(r.started) >= MAX_DURATION => {
-                self.stop(now)
-            }
             (VoiceState::Flushing, Some(r))
-                if r.stopped.is_some_and(|s| now.duration_since(s) >= TRANSCRIBE_TIMEOUT) =>
+                if r.stopped.max(r.progress).is_some_and(|s| now.duration_since(s) >= TRANSCRIBE_TIMEOUT) =>
             {
                 self.cancel();
                 out.push(VoiceOutput::Error(
@@ -843,49 +847,68 @@ where
 
 // ---- the batch transcription (one HTTP request per clip) ----
 
-/// Collects the clip, then sends it to the voice model in one request.
+/// The clip in segments ([`segments`]): a long recording is heard while
+/// he talks, one request per segment, in order; the rest at the end. A
+/// failed segment waits for the next cut; still failing at the end, the
+/// sound not yet heard is kept for ctrl+r.
 pub struct BatchTranscriber;
 
 impl Transcriber for BatchTranscriber {
     fn start(&self, job: VoiceJob, audio: Receiver<AudioMsg>, events: Sender<TranscribeEvent>, cancel: Arc<AtomicBool>) {
-        std::thread::spawn(move || {
-            let Some(samples) = collect_clip(&audio, &cancel) else { return };
-            let result = transcribe(&job, &samples, &cancel, &|req| http::send(req, TRANSCRIBE_TIMEOUT));
-            if cancel.load(Ordering::SeqCst) {
-                return;
-            }
-            match result {
-                Ok(w) => {
-                    if !w.text.is_empty() {
-                        let _ = events.send(TranscribeEvent::Delta(w.text));
-                    }
-                    if let Some(line) = w.fell_back.and_then(|used| fell_back_line(&job, &used)) {
-                        let _ = events.send(TranscribeEvent::Note(line));
-                    }
-                    let _ = events.send(TranscribeEvent::Done);
-                }
-                Err(f) => {
-                    let _ = events.send(TranscribeEvent::Failed(f, samples));
-                }
-            }
-        });
+        std::thread::spawn(move || run_segments(&job, &audio, &events, &cancel, &|req| http::send(req, TRANSCRIBE_TIMEOUT)));
     }
 }
 
-/// The whole recording: every chunk until [`AudioMsg::End`] (or the
-/// recorder gone). None: cancelled.
-pub fn collect_clip(audio: &Receiver<AudioMsg>, cancel: &AtomicBool) -> Option<Vec<i16>> {
-    let mut clip = Vec::new();
+/// [`BatchTranscriber`]'s thread. `send`: the HTTP call.
+pub fn run_segments(
+    job: &VoiceJob,
+    audio: &Receiver<AudioMsg>,
+    events: &Sender<TranscribeEvent>,
+    cancel: &AtomicBool,
+    send: &dyn Fn(&http::Request) -> Result<http::Response, String>,
+) {
+    let mut segs: segments::Segments<Words> = segments::Segments::default();
+    let mut said = false;
+    // the heard segments out, in order: a space between two segments' words
+    let mut hand_out = |heard: Vec<(Words, Vec<i16>)>| {
+        for (w, _) in heard {
+            let text = if said && !w.text.is_empty() { format!(" {}", w.text) } else { w.text };
+            said |= !text.is_empty();
+            // an empty one too: the controller's wait starts again
+            let _ = events.send(TranscribeEvent::Delta(text));
+            if let Some(line) = w.fell_back.and_then(|used| fell_back_line(job, &used)) {
+                let _ = events.send(TranscribeEvent::Note(line));
+            }
+        }
+    };
     loop {
         if cancel.load(Ordering::SeqCst) {
-            return None;
+            return;
         }
         match audio.recv_timeout(Duration::from_millis(50)) {
-            Ok(AudioMsg::Chunk(c)) => clip.extend(c),
-            Ok(AudioMsg::End) | Err(mpsc::RecvTimeoutError::Disconnected) => return Some(clip),
+            Ok(AudioMsg::Chunk(c)) => {
+                if segs.push(&c) {
+                    let (heard, _) = segs.hear(|clip| transcribe(job, clip, cancel, send));
+                    if cancel.load(Ordering::SeqCst) {
+                        return;
+                    }
+                    hand_out(heard);
+                }
+            }
+            Ok(AudioMsg::End) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
             Err(mpsc::RecvTimeoutError::Timeout) => {}
         }
     }
+    segs.end();
+    let (heard, failed) = segs.hear(|clip| transcribe(job, clip, cancel, send));
+    if cancel.load(Ordering::SeqCst) {
+        return;
+    }
+    hand_out(heard);
+    let _ = match failed {
+        None => events.send(TranscribeEvent::Done),
+        Some(f) => events.send(TranscribeEvent::Failed(f, segs.unheard())),
+    };
 }
 
 /// A clip shorter than this is a slip of the key: no request.
@@ -980,6 +1003,7 @@ pub use bise_catalog::voice::VoiceJob;
 
 pub mod http;
 pub(crate) mod chip;
+pub mod segments;
 pub mod stt;
 
 #[cfg(test)]

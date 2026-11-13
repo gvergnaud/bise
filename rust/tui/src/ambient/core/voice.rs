@@ -25,8 +25,8 @@ pub(super) enum TalkEnd {
     FnUp,
     /// the window's mic took it: a lost fn up (amb-tools H3)
     Dictation,
-    /// no fn up in DICTATE_MAX
-    Limit,
+    /// no fn up, and no sound for QUIET_STOP: a lost fn up
+    Silence,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -42,21 +42,22 @@ pub(super) enum TalkRule {
 }
 
 /// The fn talk's one end rule (architect m_22291): `talk` is (listening,
-/// fn down at), None with no talk. A lost fn up reads as a fn up: a
-/// press on the window's mic or DICTATE_MAX ends a listening talk, its
-/// words to main, never a mic held forever. A cancel takes only a
-/// listening talk: one past its end (fn up, a take, the limit) was
-/// promised to main, its flush finishes and its words go (amb-tools
-/// m_22412: the helper's exit cancel came during a take's flush).
+/// its last sound at), None with no talk. A lost fn up reads as a fn up:
+/// a press on the window's mic, or QUIET_STOP with no sound, ends a
+/// listening talk, its words to main, never a mic held forever; no time
+/// limit while he talks (dictate-nocap). A cancel takes only a listening
+/// talk: one past its end (fn up, a take, the quiet stop) was promised
+/// to main, its flush finishes and its words go (amb-tools m_22412: the
+/// helper's exit cancel came during a take's flush).
 pub(super) fn talk_rule(talk: Option<(bool, Instant)>, ev: TalkEv, now: Instant) -> TalkRule {
-    let Some((listening, started)) = talk else { return TalkRule::Keep };
+    let Some((listening, sound)) = talk else { return TalkRule::Keep };
     match ev {
         TalkEv::Start => TalkRule::Refuse,
         _ if !listening => TalkRule::Keep,
         TalkEv::Cancel => TalkRule::Cancel,
         TalkEv::FnUp => TalkRule::End(TalkEnd::FnUp),
         TalkEv::DictateStart => TalkRule::End(TalkEnd::Dictation),
-        TalkEv::Tick if now.duration_since(started) >= DICTATE_MAX => TalkRule::End(TalkEnd::Limit),
+        TalkEv::Tick if now.duration_since(sound) >= QUIET_STOP => TalkRule::End(TalkEnd::Silence),
         TalkEv::Tick => TalkRule::Keep,
     }
 }
@@ -65,10 +66,12 @@ pub(super) fn talk_rule(talk: Option<(bool, Instant)>, ev: TalkEv, now: Instant)
 /// silent, architect m_22291); `sent`: its words went to main.
 pub(super) fn talk_end_words(end: TalkEnd, sent: bool) -> Option<String> {
     let head = if sent { "fn talk sent to main" } else { "fn talk ended" };
+    let min = QUIET_STOP.as_secs() / 60;
     match end {
         TalkEnd::FnUp => None,
         TalkEnd::Dictation => Some(format!("{head}: the mic went to dictation")),
-        TalkEnd::Limit => Some(format!("{head} after {} min with no fn up", DICTATE_MAX.as_secs() / 60)),
+        TalkEnd::Silence if sent => Some(bise_proto::words::composer::talk_quiet_stop_sent(min)),
+        TalkEnd::Silence => Some(bise_proto::words::composer::talk_quiet_stop(min)),
     }
 }
 
@@ -133,16 +136,16 @@ impl Core {
     fn tick_talk(&mut self, now: Instant) {
         // a talk still listening with no talk_end (fn up missed, the
         // capsule hidden): its mic would refuse every dictation after it
-        // (ambient-lead m_22196). Past the mic's time limit it ends like
-        // fn up: his words go, the mic is free.
-        if talk_rule(self.talk.as_ref().map(Talk::state), TalkEv::Tick, now) == TalkRule::End(TalkEnd::Limit) {
-            eprintln!("ambient-core: talk: the time limit, no talk_end in {} s", DICTATE_MAX.as_secs());
-            self.talk_end_by(now, TalkEnd::Limit);
+        // (ambient-lead m_22196). After QUIET_STOP with no sound it ends
+        // like fn up: his words go, the mic is free. Never while he talks.
+        if let Some(t) = self.talk.as_mut() {
+            t.pump(now);
+        }
+        if talk_rule(self.talk.as_ref().map(Talk::state), TalkEv::Tick, now) == TalkRule::End(TalkEnd::Silence) {
+            eprintln!("ambient-core: talk: no talk_end and no sound in {} s, the mic stops", QUIET_STOP.as_secs());
+            self.talk_end_by(now, TalkEnd::Silence);
         }
         let Some(t) = self.talk.as_mut() else { return };
-        while let Ok(b) = t.blocks.try_recv() {
-            let _ = t.audio.send(ListenMsg::Audio(b.pcm));
-        }
         let mut evs = Vec::new();
         let mut flushed = false;
         let mut failed = None;
@@ -151,11 +154,14 @@ impl Core {
             match t.heard.try_recv() {
                 Ok(Heard::Text(w)) => {
                     t.text.push_str(&w);
+                    t.progress = now;
                     words = true;
                     if t.ending.is_none() {
                         evs.push(heard(t.text.trim(), false));
                     }
                 }
+                // a long talk's segment heard: the listener is alive
+                Ok(Heard::Segment(_)) => t.progress = now,
                 Ok(Heard::Flushed) => {
                     flushed = true;
                     break;
@@ -178,9 +184,11 @@ impl Core {
         }
         // fn up: his words come at the listener's flush, however long a
         // batch request takes (the TUI's wait; it was 1.5 s and a slower
-        // request lost them, m_22120); past it, what was heard goes, and
-        // nothing heard is said as a failure, never a silent idle
-        let late = t.ending.is_some_and(|e| now.duration_since(e) >= TRANSCRIBE_TIMEOUT);
+        // request lost them, m_22120); the wait counts from the
+        // listener's last sign (fn up, a segment heard), so a long talk
+        // gets its time; past it, what was heard goes, and nothing heard
+        // is said as a failure, never a silent idle
+        let late = t.ending.is_some() && now.duration_since(t.progress) >= TRANSCRIBE_TIMEOUT;
         let timed_out = late && !flushed && failed.is_none() && t.text.trim().is_empty();
         let ending = t.ending.is_some();
         let page = t.page.clone();
@@ -286,7 +294,7 @@ impl Core {
             return self.emit(json!({"ev": "error", "cmd": "talk_start", "text": why}));
         }
         // fn wins over the composer's mic: the dictation ends first
-        self.dictate_yield();
+        self.dictate_yield(now);
         // fn down while main speaks: the voice stops (the app sends
         // cut_in first; a talk_start alone does the same)
         self.stop_voice();
@@ -310,7 +318,7 @@ impl Core {
         let (htx, heard) = mpsc::channel();
         let cancel = Arc::new(AtomicBool::new(false));
         (self.ports.listener)(&job).start(job, arx, htx, cancel.clone());
-        self.talk = Some(Talk { stream: Some(stream), blocks, audio, heard, cancel, text: String::new(), started: now, ending: None, ended_by: TalkEnd::FnUp, page: page.clone() });
+        self.talk = Some(Talk { stream: Some(stream), blocks, audio, heard, cancel, text: String::new(), started: now, sound: now, ending: None, progress: now, ended_by: TalkEnd::FnUp, page: page.clone() });
         let Some(id) = page else { return self.set_phase(Phase::Listening, None) };
         // a note talk: the page shows the words at its mouse, the
         // capsule says where they go
@@ -343,20 +351,19 @@ impl Core {
 
     /// The listening talk ends as at fn up ([`talk_rule`]'s End): the mic
     /// off, its words to come; `by`: what ended it (fn up, the window's
-    /// mic, the time limit).
+    /// mic, the quiet stop).
     pub(super) fn talk_end_by(&mut self, now: Instant, by: TalkEnd) {
         let Some(t) = self.talk.as_mut() else { return };
         if t.ending.is_some() {
             return;
         }
         t.ended_by = by;
-        while let Ok(b) = t.blocks.try_recv() {
-            let _ = t.audio.send(ListenMsg::Audio(b.pcm));
-        }
+        t.pump(now);
         // the mic goes off now (the macOS mic indicator too)
         t.stream = None;
         let _ = t.audio.send(ListenMsg::Flush);
         t.ending = Some(now);
+        t.progress = now;
         let note = t.page.is_some();
         self.emit(json!({"ev": "level", "who": "you", "v": 0.0}));
         // a note talk never shows main's phases
@@ -466,17 +473,20 @@ mod rule_tests {
     use super::*;
 
     /// The talk's end rule on its three ways (architect m_22291): fn up,
-    /// the window's mic, the time limit; a talk_start while one runs is
-    /// refused; a talk past fn up is left to its flush.
+    /// the window's mic, the quiet stop (never a time limit while he
+    /// talks); a talk_start while one runs is refused; a talk past fn up
+    /// is left to its flush.
     #[test]
-    fn a_listening_talk_ends_at_fn_up_a_dictation_or_the_limit() {
+    fn a_listening_talk_ends_at_fn_up_a_dictation_or_a_long_silence() {
         let now = Instant::now();
-        let Some(long_ago) = now.checked_sub(DICTATE_MAX) else { return };
+        let Some(long_ago) = now.checked_sub(QUIET_STOP) else { return };
+        let Some(just_under) = now.checked_sub(QUIET_STOP - Duration::from_secs(1)) else { return };
         let fresh = Some((true, now));
         assert_eq!(talk_rule(fresh, TalkEv::FnUp, now), TalkRule::End(TalkEnd::FnUp));
         assert_eq!(talk_rule(fresh, TalkEv::DictateStart, now), TalkRule::End(TalkEnd::Dictation));
         assert_eq!(talk_rule(fresh, TalkEv::Tick, now), TalkRule::Keep);
-        assert_eq!(talk_rule(Some((true, long_ago)), TalkEv::Tick, now), TalkRule::End(TalkEnd::Limit));
+        assert_eq!(talk_rule(Some((true, just_under)), TalkEv::Tick, now), TalkRule::Keep);
+        assert_eq!(talk_rule(Some((true, long_ago)), TalkEv::Tick, now), TalkRule::End(TalkEnd::Silence));
         assert_eq!(talk_rule(fresh, TalkEv::Start, now), TalkRule::Refuse);
         assert_eq!(talk_rule(fresh, TalkEv::Cancel, now), TalkRule::Cancel);
         // past fn up: its words are on their way, nothing ends it again,
@@ -496,6 +506,7 @@ mod rule_tests {
         assert_eq!(talk_end_words(TalkEnd::FnUp, true), None);
         assert_eq!(talk_end_words(TalkEnd::Dictation, true).as_deref(), Some("fn talk sent to main: the mic went to dictation"));
         assert_eq!(talk_end_words(TalkEnd::Dictation, false).as_deref(), Some("fn talk ended: the mic went to dictation"));
-        assert_eq!(talk_end_words(TalkEnd::Limit, true).as_deref(), Some("fn talk sent to main after 2 min with no fn up"));
+        assert_eq!(talk_end_words(TalkEnd::Silence, true).as_deref(), Some("sent to main · the mic stopped after 5 min of silence"));
+        assert_eq!(talk_end_words(TalkEnd::Silence, false).as_deref(), Some("fn talk ended · the mic stopped after 5 min of silence"));
     }
 }

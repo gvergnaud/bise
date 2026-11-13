@@ -5,6 +5,7 @@
 // message, so the composer doesn't change when the protocol does.
 
 import { IMAGE_EXTS } from '@/proto/chips.gen';
+import type { TakeStop } from '@/proto';
 
 export interface PickAgent {
   readonly name: string;
@@ -120,7 +121,7 @@ export interface ComposerSources {
 }
 
 /** One dictation's words so far: `text` is the WHOLE text (it replaces the dictated part, never
- *  appended); one `final` ends it (stopped, fn's talk, the time limit, cancelled, an error). */
+ *  appended); one `final` ends it (stopped, fn's talk, the quiet stop, cancelled, an error). */
 export interface DictateState {
   readonly text: string;
   readonly final: boolean;
@@ -132,6 +133,8 @@ export interface DictateState {
   /** a final's one line about its words (his voice model is gone, another of its provider's
    *  heard them): said like an error, the words land */
   readonly note?: string;
+  /** a final whose mic stopped by itself, and why (a mic left on: 5 min of silence) */
+  readonly stopped?: TakeStop;
 }
 
 /** The mic, as the composer sees it (the store's dictateStart/Stop/Cancel and its dictation slice). */

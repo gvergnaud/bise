@@ -7,22 +7,27 @@
 //!
 //! Each `dictation` carries the WHOLE text so far (replace, never
 //! append), and exactly one `final: true` ends a dictation: stop (after
-//! the listener's flush, at most [`TRANSCRIBE_TIMEOUT`]), the time limit
-//! ([`DICTATE_MAX`]: no silent hot mic), fn's talk (the mic is his talk's
-//! now), a listener failure (`error`, the words heard so far), cancel
-//! (`cancelled`, an empty text), or a refused start (`error`: the mic is
-//! busy, no mic, no voice model). One mic user at a time: a dictate_start
-//! while a talk or a dictation holds the mic is refused; fn wins over a
-//! dictation. A stopped take no longer holds the mic: its words come at
-//! the listener's flush, however long that takes (up to the TUI's
-//! [`TRANSCRIBE_TIMEOUT`]), while the next take records. It was 1.5 s:
-//! a batch listener sends every word at the flush, after one HTTP request
-//! (two with the language guard); a slower one ended the take with no
-//! words and the listener threw them away, one take in two (m_22120).
+//! the listener's flush), the quiet stop ([`QUIET_STOP`] with nothing
+//! above the meter's floor: a forgotten mic; `stopped: silence`), fn's
+//! talk (the mic is his talk's now), a listener failure (`error`, the
+//! words heard so far), cancel (`cancelled`, an empty text), or a refused
+//! start (`error`: the mic is busy, no mic, no voice model). No time
+//! limit on a take he talks in (dictate-nocap): the listener hears a long
+//! take in segments while he talks (voice::segments), each a partial.
+//! One mic user at a time: a dictate_start while a talk or a dictation
+//! holds the mic is refused; fn wins over a dictation. A stopped take no
+//! longer holds the mic: its words come at the listener's flush, however
+//! long that takes (the wait, [`TRANSCRIBE_TIMEOUT`], counts from the
+//! listener's last sign: the stop or a segment heard; each segment heard
+//! once stopped is a partial too, so the window's wait restarts), while
+//! the next take records. It was 1.5 s: a batch listener sends every word
+//! at the flush, after one HTTP request (two with the language guard); a
+//! slower one ended the take with no words and the listener threw them
+//! away, one take in two (m_22120).
 //!
-//! Each take's sound ([`KEPT_MAX`] at most, the oldest goes) is kept on
-//! disk once it stops (core/takes.rs: at the stop, and at a final that
-//! came while the mic was on), until the window says it has the take:
+//! Each take's sound not yet heard (a heard segment's goes: architect
+//! m_64474) is kept on disk once it stops (core/takes.rs: at the stop,
+//! and again at its final), until the window says it has the take:
 //! `dictate_cancel {id}` (his esc, or its words landed in a draft), or the
 //! prune (7 days, 200 MB). So a take survives a chat switch, a window
 //! reload and a quit (dictation-keep, architect m_49881). A final that
@@ -38,23 +43,38 @@
 
 use super::*;
 use crate::voice::{SAMPLE_RATE, TRANSCRIBE_TIMEOUT};
+use bise_proto::core_ev::TakeStop;
 use std::collections::VecDeque;
 
-/// A dictation left running (the window lost focus, he forgot) stops by
-/// itself after this long, its final out.
-pub const DICTATE_MAX: Duration = Duration::from_secs(120);
+/// A mic left on (the window lost focus, he forgot) stops by itself
+/// after this long with no sound above the meter's floor ([`loud`]): a
+/// dictation and a fn talk alike, their words kept (designer m_64473,
+/// architect m_64474). Never a cap on a take he talks in.
+pub const QUIET_STOP: Duration = Duration::from_secs(300);
 
-/// The most sound kept per take: past it, the oldest goes.
-pub const KEPT_MAX: Duration = Duration::from_secs(600);
-const KEPT_SAMPLES: usize = KEPT_MAX.as_secs() as usize * SAMPLE_RATE as usize;
 /// A retry feeds the listener the sound as the mic would: 100 ms blocks.
 const RETRY_BLOCK: usize = SAMPLE_RATE as usize / 10;
 
-/// The take's sound, its oldest gone past [`KEPT_MAX`].
-fn record(pcm: &mut VecDeque<i16>, block: &[i16]) {
-    pcm.extend(block.iter().copied());
-    let over = pcm.len().saturating_sub(KEPT_SAMPLES);
-    pcm.drain(..over);
+/// A block with sound above the meter's floor (voice::METER_FLOOR_DB,
+/// where the chip's bars are flat): a room's hiss is not.
+pub(super) fn loud(block: &[i16]) -> bool {
+    crate::voice::loudness(crate::voice::peak(block)) > 0.0
+}
+
+/// When the sound was last above the floor, after `block` came at `now`.
+pub(super) fn sound_at(last: Instant, block: &[i16], now: Instant) -> Instant {
+    if loud(block) {
+        now
+    } else {
+        last
+    }
+}
+
+/// The heard segment's sound goes: the first `n` samples not yet heard
+/// (the listener's [`Heard::Segment`], in order). What stays is what a
+/// retry needs, never more (architect m_64474).
+fn heard(pcm: &mut VecDeque<i16>, n: usize) {
+    pcm.drain(..n.min(pcm.len()));
 }
 
 fn seconds(pcm: &VecDeque<i16>) -> f32 {
@@ -74,7 +94,16 @@ pub(super) struct Dictation {
     started: Instant,
     /// stopped at
     ending: Option<Instant>,
-    /// the sound sent to the listener, kept if the final has no words
+    /// the listener's last sign of life once stopped (the stop, a
+    /// segment's words): the wait for the rest counts from it, so it
+    /// grows with the take's length
+    progress: Instant,
+    /// the mic's last block above the floor ([`loud`]): [`QUIET_STOP`]
+    sound: Instant,
+    /// the mic stopped by itself (the final's `stopped`)
+    stopped_by: Option<TakeStop>,
+    /// the sound sent to the listener and not yet heard (a heard
+    /// segment's goes): kept if the final has no words
     pcm: VecDeque<i16>,
     /// the listener's line about the words (the model fell back): the
     /// final's `note`
@@ -91,32 +120,60 @@ impl Drop for Dictation {
 #[derive(Debug, PartialEq)]
 enum Step {
     Quiet,
-    /// new words while the mic is on: a partial
+    /// new words while the mic is on, or a segment heard once stopped
+    /// (the window's wait starts again): a partial
     Words,
     /// its final, with what went wrong
     Over(Option<String>),
 }
 
 impl Dictation {
+    fn new(id: String, stream: Option<Box<dyn MicStream>>, blocks: Receiver<MicBlock>, audio: Sender<ListenMsg>, heard: Receiver<Heard>, cancel: Arc<AtomicBool>, now: Instant) -> Dictation {
+        Dictation {
+            id,
+            stream,
+            blocks,
+            audio,
+            heard,
+            cancel,
+            text: String::new(),
+            started: now,
+            ending: None,
+            progress: now,
+            sound: now,
+            stopped_by: None,
+            pcm: VecDeque::new(),
+            note: None,
+        }
+    }
+
     /// The mic's blocks to the listener, and to the take's sound.
-    fn pump(&mut self) {
+    fn pump(&mut self, now: Instant) {
         while let Ok(b) = self.blocks.try_recv() {
-            record(&mut self.pcm, &b.pcm);
+            self.sound = sound_at(self.sound, &b.pcm, now);
+            self.pcm.extend(b.pcm.iter().copied());
             let _ = self.audio.send(ListenMsg::Audio(b.pcm));
         }
     }
 
     /// The mic's blocks to the listener, its words in. A stopped take is
     /// over at the listener's flush (or failure), or after
-    /// [`TRANSCRIBE_TIMEOUT`]: never before its words came.
+    /// [`TRANSCRIBE_TIMEOUT`] with no sign of the listener: never before
+    /// its words came, however long the take.
     fn step(&mut self, now: Instant) -> Step {
-        self.pump();
+        self.pump(now);
         let mut words = false;
         loop {
             match self.heard.try_recv() {
                 Ok(Heard::Text(w)) => {
                     self.text.push_str(&w);
+                    self.progress = now;
                     words = true;
+                }
+                Ok(Heard::Segment(n)) => {
+                    heard(&mut self.pcm, n);
+                    self.progress = now;
+                    words |= self.ending.is_some();
                 }
                 Ok(Heard::Flushed) if self.ending.is_some() => return Step::Over(None),
                 Ok(Heard::Flushed) => {}
@@ -127,10 +184,10 @@ impl Dictation {
                 Err(TryRecvError::Disconnected) => break,
             }
         }
-        if self.ending.is_some_and(|e| now.duration_since(e) >= TRANSCRIBE_TIMEOUT) {
+        if self.ending.is_some() && now.duration_since(self.progress) >= TRANSCRIBE_TIMEOUT {
             return Step::Over(Some("the transcription timed out.".into()));
         }
-        if words && self.ending.is_none() {
+        if words {
             Step::Words
         } else {
             Step::Quiet
@@ -196,7 +253,7 @@ impl Core {
         let (htx, heard) = mpsc::channel();
         let cancel = Arc::new(AtomicBool::new(false));
         (self.ports.listener)(&job).start(job, arx, htx, cancel.clone());
-        self.dictation = Some(Dictation { id, stream: Some(stream), blocks, audio, heard, cancel, text: String::new(), started: now, ending: None, pcm: VecDeque::new(), note: None });
+        self.dictation = Some(Dictation::new(id, Some(stream), blocks, audio, heard, cancel, now));
     }
 
     /// The mic off now, free for the next take; this take's final comes
@@ -208,10 +265,11 @@ impl Core {
             }
             return;
         };
-        d.pump();
+        d.pump(now);
         d.stream = None;
         let _ = d.audio.send(ListenMsg::Flush);
         d.ending = Some(now);
+        d.progress = now;
         eprintln!("ambient-core: dictate {id}: stop after {} ms, transcribing", now.duration_since(d.started).as_millis());
         // on disk now: a quit while it is transcribed loses nothing
         let pcm = std::mem::take(&mut d.pcm);
@@ -242,9 +300,9 @@ impl Core {
     /// fn down during a dictation: the mic is his talk's now. The take
     /// holding the mic ends with the words it has (no flush wait); a
     /// stopped take still transcribing goes on.
-    pub(super) fn dictate_yield(&mut self) {
+    pub(super) fn dictate_yield(&mut self, now: Instant) {
         let Some(mut d) = self.dictation.take() else { return };
-        d.pump();
+        d.pump(now);
         let (id, text, pcm) = (d.id.clone(), d.text.clone(), std::mem::take(&mut d.pcm));
         drop(d);
         eprintln!("ambient-core: dictate {id}: fn took the mic, final with {} chars", text.trim().chars().count());
@@ -254,26 +312,28 @@ impl Core {
     /// A take's one final, and its line in core.log (length, time after
     /// the stop, error: never its words).
     fn dictate_final(&mut self, mut d: Dictation, error: Option<String>, now: Instant) {
-        let (id, text, pcm, note) = (d.id.clone(), d.text.clone(), std::mem::take(&mut d.pcm), d.note.take());
+        let (id, text, pcm, note, by) = (d.id.clone(), d.text.clone(), std::mem::take(&mut d.pcm), d.note.take(), d.stopped_by);
         let after = d.ending.map(|e| format!(", {} ms after the stop", now.duration_since(e).as_millis())).unwrap_or_default();
         drop(d);
         let n = text.trim().chars().count();
         let err = error.as_deref().map(|e| format!(", error: {e}")).unwrap_or_default();
         let said = note.as_deref().map(|l| format!(", note: {l}")).unwrap_or_default();
         eprintln!("ambient-core: dictate {id}: final with {n} chars{after}{err}{said}");
-        self.dictation_final_note(&id, &text, error.as_deref(), pcm, note.as_deref());
+        self.dictation_final_note(&id, &text, error.as_deref(), pcm, note.as_deref(), by);
     }
 
     /// The final `dictation`: with no words (an error, or nothing heard)
     /// the take's sound is kept for a retry and the final says `kept`.
     fn dictation_final_ev(&mut self, id: &str, text: &str, error: Option<&str>, pcm: VecDeque<i16>) {
-        self.dictation_final_note(id, text, error, pcm, None)
+        self.dictation_final_note(id, text, error, pcm, None, None)
     }
 
     /// [`Self::dictation_final_ev`] with the listener's `note`: the one
     /// line the window shows with the words (their model fell back).
-    fn dictation_final_note(&mut self, id: &str, text: &str, error: Option<&str>, pcm: VecDeque<i16>, note: Option<&str>) {
-        // on disk until the window has the take (its words may reach no window: a reload)
+    fn dictation_final_note(&mut self, id: &str, text: &str, error: Option<&str>, pcm: VecDeque<i16>, note: Option<&str>, by: Option<TakeStop>) {
+        // on disk until the window has the take (its words may reach no
+        // window: a reload): the sound not yet heard, the file of its stop
+        // replaced (segments heard since went)
         let on_disk = self.dictate_keep(id, &pcm);
         let kept = (error.is_some() || text.trim().is_empty()) && on_disk;
         let mut v = json!({"ev": "dictation", "id": id, "text": text.trim(), "final": true});
@@ -286,15 +346,21 @@ impl Core {
         if kept {
             v["kept"] = json!(true);
         }
+        if let Some(by) = by {
+            v["stopped"] = json!(by);
+        }
         self.emit(v);
     }
 
-    /// Keeps a take's sound on disk (core/takes.rs) until the window has
-    /// it. False: no sound to keep, or the disk refused (core.log says).
+    /// Keeps a take's sound not yet heard on disk (core/takes.rs) until
+    /// the window has it, replacing what its stop kept; all of it heard,
+    /// its file goes. False: no sound to keep, or the disk refused
+    /// (core.log says).
     fn dictate_keep(&mut self, id: &str, pcm: &VecDeque<i16>) -> bool {
         let dir = &self.ports.dictation_dir;
-        if takes::has(dir, id) {
-            return true;
+        if pcm.is_empty() {
+            takes::remove(dir, id);
+            return false;
         }
         match takes::save(dir, id, pcm) {
             Ok(true) => {
@@ -341,11 +407,14 @@ impl Core {
         let _ = audio.send(ListenMsg::Flush);
         // no mic: an empty, closed block channel
         let (_, blocks) = mpsc::channel();
-        self.dictations_ending.push(Dictation { id, stream: None, blocks, audio, heard, cancel, text: String::new(), started: now, ending: Some(now), pcm, note: None });
+        let mut d = Dictation::new(id, None, blocks, audio, heard, cancel, now);
+        d.ending = Some(now);
+        d.pcm = pcm;
+        self.dictations_ending.push(d);
     }
 
     /// The clock: the mic to the listener, its words to the window, the
-    /// time limit, the final.
+    /// quiet stop, the final.
     pub(super) fn tick_dictation(&mut self, now: Instant) {
         // the takes no window came back for: at the start, then once a day
         if self.dictations_pruned.is_none_or(|t| now.duration_since(t) >= takes::PRUNE_EVERY) {
@@ -355,9 +424,14 @@ impl Core {
                 eprintln!("ambient-core: dictate: {gone} old take(s) pruned");
             }
         }
-        if self.dictation.as_ref().is_some_and(|d| now.duration_since(d.started) >= DICTATE_MAX) {
-            let id = self.dictation.as_ref().map(|d| d.id.clone()).unwrap_or_default();
-            eprintln!("ambient-core: dictate {id}: the time limit");
+        // a mic left on: nothing above the floor for QUIET_STOP
+        if let Some(d) = self.dictation.as_mut() {
+            d.pump(now);
+        }
+        if let Some(d) = self.dictation.as_mut().filter(|d| now.duration_since(d.sound) >= QUIET_STOP) {
+            d.stopped_by = Some(TakeStop::Silence);
+            let id = d.id.clone();
+            eprintln!("ambient-core: dictate {id}: no sound in {} s, the mic stops", QUIET_STOP.as_secs());
             self.dictate_stop(&id, now);
         }
         // the take holding the mic: its level, its words, a failure
@@ -380,7 +454,8 @@ impl Core {
                 Step::Quiet => {}
             }
         }
-        // the stopped takes: each final at its own flush
+        // the stopped takes: a partial per segment heard (the window's
+        // wait starts again), each final at its own flush
         let mut i = 0;
         while i < self.dictations_ending.len() {
             match self.dictations_ending[i].step(now) {
@@ -388,7 +463,12 @@ impl Core {
                     let d = self.dictations_ending.remove(i);
                     self.dictate_final(d, error, now);
                 }
-                Step::Words | Step::Quiet => i += 1,
+                Step::Words => {
+                    let (id, text) = (self.dictations_ending[i].id.clone(), self.dictations_ending[i].text.clone());
+                    self.dictation_ev(&id, &text, false, false);
+                    i += 1;
+                }
+                Step::Quiet => i += 1,
             }
         }
     }
@@ -398,16 +478,25 @@ impl Core {
 mod tests {
     use super::*;
 
-    /// A take longer than KEPT_MAX keeps its last KEPT_MAX: the oldest goes.
+    /// A heard segment's sound goes from the front; never more than there is.
     #[test]
-    fn the_kept_sound_is_capped_its_oldest_gone() {
-        let mut pcm = VecDeque::new();
-        record(&mut pcm, &[1; 5]);
-        record(&mut pcm, &vec![2; KEPT_SAMPLES]);
-        assert_eq!(pcm.len(), KEPT_SAMPLES);
-        assert!(pcm.iter().all(|&s| s == 2));
-        record(&mut pcm, &[3; 3]);
-        assert_eq!(pcm.len(), KEPT_SAMPLES);
-        assert_eq!(pcm.back(), Some(&3));
+    fn a_heard_segment_drops_its_sound_from_the_front() {
+        let mut pcm: VecDeque<i16> = (0..10).collect();
+        heard(&mut pcm, 4);
+        assert_eq!(pcm.iter().copied().collect::<Vec<_>>(), (4..10).collect::<Vec<_>>());
+        heard(&mut pcm, 99);
+        assert!(pcm.is_empty());
+    }
+
+    /// The quiet clock moves only on a block above the meter's floor.
+    #[test]
+    fn only_sound_above_the_floor_resets_the_quiet_clock() {
+        let t0 = Instant::now();
+        let later = t0 + Duration::from_secs(9);
+        // a room's hiss (~-55 dBFS) and silence: not sound
+        assert_eq!(sound_at(t0, &[58, -58, 0], later), t0);
+        assert_eq!(sound_at(t0, &[0; 160], later), t0);
+        // a voice (~-20 dBFS)
+        assert_eq!(sound_at(t0, &[3000, -3000], later), later);
     }
 }

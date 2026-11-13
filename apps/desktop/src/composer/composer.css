@@ -153,11 +153,16 @@
 .b-composer .b-field .b-dictation .mt[data-phase="transcribing"] i {
   background: var(--c-text-3);
 }
+/* the take's time, past its first minute (meter.ts timeOf; designer m_64473): text-3, never a
+   warning colour as it grows (a long take isn't an error) */
 .b-composer .b-field .b-dictation .t::before {
   content: attr(data-t);
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  color: var(--c-text-2);
+  color: var(--c-text-3);
+}
+.b-composer .b-field .b-dictation .t[data-t=""] {
+  display: none;
 }
 /* narrow (fitFor): less than 160 px of free text, the time drops, then 3 bars (listening: the
    newest 3; transcribing: the first 3) */

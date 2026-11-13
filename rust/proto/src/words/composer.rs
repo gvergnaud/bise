@@ -342,6 +342,15 @@ crate::words! { composer:
     voice_no_speech = "no speech detected";
     /// voice on Linux
     voice_no_linux = "voice input is not available on Linux yet";
+    /// a dictation's mic left on stopped by itself (no sound for `min`
+    /// minutes), its words in the composer (designer m_64473)
+    dictate_quiet_stop(min) = "the mic stopped after {min} min of silence · your words are in";
+    /// the same, nothing was heard
+    dictate_quiet_stop_none(min) = "the mic stopped after {min} min of silence · nothing was heard";
+    /// a fn talk with no fn up stopped by itself, its words sent to main
+    talk_quiet_stop_sent(min) = "sent to main · the mic stopped after {min} min of silence";
+    /// the same, nothing went to main (no words, or a note talk)
+    talk_quiet_stop(min) = "fn talk ended · the mic stopped after {min} min of silence";
 
     // ---- the composer's placeholder, the first run, the divider (sb/panel.rs, chrome.rs)
 

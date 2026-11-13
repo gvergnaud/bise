@@ -142,6 +142,18 @@ describe("store: voice", () => {
         cancelled: false,
         error: "the mic didn't answer.",
       });
+      // a long take (dictate-nocap): each segment heard after the stop starts the wait again,
+      // so the window waits as long as the core still says something
+      const long = store.dictateStart();
+      store.dictateStop(long);
+      for (let i = 1; i <= 4; i++) {
+        vi.advanceTimersByTime(DICTATE_STOP_WAIT_MS - 1);
+        store.apply({ ev: "dictation", id: long, text: `w${String(i)}`, final: false });
+      }
+      expect(store.dictation(long)).toEqual({ text: "w4", final: false, cancelled: false, error: null });
+      store.apply({ ev: "dictation", id: long, text: "w1 w5", final: true, stopped: "silence" });
+      vi.advanceTimersByTime(DICTATE_STOP_WAIT_MS);
+      expect(store.dictation(long)).toEqual({ text: "w1 w5", final: true, cancelled: false, error: null, stopped: "silence" });
       // a stop the core answers in time: its final, the wait does nothing after
       const c = store.dictateStart();
       store.dictateStop(c);

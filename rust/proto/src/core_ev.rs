@@ -188,8 +188,9 @@ pub enum CoreEv {
     /// to main, never journaled, never in a log. `text` is the WHOLE text
     /// so far (replace, never append): a dropped or late partial can't
     /// duplicate words; the composer's text is the last event's. Partials
-    /// have `final: false`; exactly one `final: true` ends it (stop, the
-    /// time limit, fn's talk, `cancelled` with an empty text, or `error`:
+    /// have `final: false` (a stopped long take's still come, one per
+    /// segment heard); exactly one `final: true` ends it (stop, the quiet
+    /// stop, fn's talk, `cancelled` with an empty text, or `error`:
     /// the start refused (the mic is busy, no mic, no voice model) or the
     /// listener failed, with the words heard so far)
     /// each role's model and effort (V17): at the start, after each
@@ -274,8 +275,8 @@ pub enum CoreEv {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         error: Option<String>,
         /// on a final that failed, timed out or came back empty: the core
-        /// keeps this take's sound (memory only, its last 3 takes, 10 min
-        /// each) and `dictate_retry {id}` transcribes it again
+        /// keeps the take's sound not yet heard (on disk, core/takes.rs)
+        /// and `dictate_retry {id}` transcribes it again
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         kept: bool,
         /// on a final with words: one line about them (the voice model
@@ -283,6 +284,9 @@ pub enum CoreEv {
         /// error but the words land
         #[serde(default, skip_serializing_if = "Option::is_none")]
         note: Option<String>,
+        /// on a final: the mic stopped by itself (not his stop), and why
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        stopped: Option<TakeStop>,
     },
     /// bar S.6: a newer desktop app on bise's release channel than the one
     /// running (`app_version`), read from `latest.json` by
@@ -484,6 +488,16 @@ pub enum CoreEv {
     },
     #[serde(skip)]
     Unknown { tag: String, raw: Value },
+}
+
+/// Why a take's mic stopped by itself (a dictation's final `stopped`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum TakeStop {
+    /// nothing above the meter's floor for the core's quiet stop (a mic
+    /// left on: the window lost focus, he forgot)
+    Silence,
 }
 
 /// Why bise shares no usage counts now (bise_usage's `Off`, by name).

@@ -1,9 +1,12 @@
 //! Speech to text for voice mode (owner: voice-models; plan §4.3, §8):
 //! the voice role's batch model (Voxtral Transcribe 3 by default), one
-//! request per turn. The controller's VAD ends the turn
-//! ([`ListenMsg::Flush`]); the turn's audio goes to
-//! `voice::transcribe_clip`, its words come back as one [`Heard::Text`],
-//! then [`Heard::Flushed`]. [`ListenMsg::Clear`] drops the half turn.
+//! request per turn, or per segment of a long one (voice::segments: cut
+//! at a pause every 2-3 min and heard while he talks, each its
+//! [`Heard::Text`] then [`Heard::Segment`], in order; dictate-nocap).
+//! The controller's VAD ends the turn ([`ListenMsg::Flush`]); the rest of
+//! the turn's audio goes to `voice::transcribe`, its words come back as
+//! one [`Heard::Text`], then [`Heard::Flushed`]. [`ListenMsg::Clear`]
+//! drops the half turn.
 //!
 //! Round 2 (the user's notes on 699f710): no realtime listener. The only
 //! realtime model was Voxtral Mini's, and it got too many words wrong;
@@ -14,17 +17,15 @@
 //! turn (no `Flushed` for it).
 
 use super::{Heard, ListenJob, ListenMsg, Listener, MIC_RATE};
+use crate::voice::segments::Segments;
 use crate::voice::{self, http, Failure, VoiceJob};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::Arc;
 use std::time::Duration;
 
-/// One batch request.
+/// One batch request (a segment: voice::segments, 3 min at most).
 const BATCH_TIMEOUT: Duration = Duration::from_secs(60);
-/// The batch clip keeps the last this many samples (5 min, ~9.6 MB):
-/// the mic sends audio while nobody talks too.
-const MAX_CLIP: usize = 5 * 60 * MIC_RATE as usize;
 
 /// The listener for `job`: the batch one (no provider has a realtime
 /// model we offer).
@@ -203,8 +204,92 @@ fn fail_line(f: &Failure, provider: &str, model: &str, billing: &str) -> String 
     voice::fail_lines(f, provider, model, billing, false).head
 }
 
-/// One `voice::transcribe_clip` per Flush over the audio since the last
-/// one, until the controller goes or `cancel`. `send`: the HTTP call.
+/// One segment's words, and the line about them (its model fell back),
+/// with the language guards. `send`: the HTTP call.
+fn hear_segment(
+    job: &VoiceJob,
+    clip: &[i16],
+    cancel: &AtomicBool,
+    langs: &mut Langs,
+    send: &dyn Fn(&http::Request) -> Result<http::Response, String>,
+) -> Result<(String, Option<String>), Failure> {
+    // the job's model gone: the fallback heard it, and says so
+    let mut used = None;
+    let mut result = voice::transcribe(job, clip, cancel, send).map(|w| {
+        used = w.fell_back;
+        w.text
+    });
+    let note = used.as_deref().and_then(|u| voice::fell_back_line(job, u));
+    // the guards' calls go to the model that heard it
+    let job = &match used {
+        Some(u) => VoiceJob { model: u, fallback: None, ..job.clone() },
+        None => job.clone(),
+    };
+    // auto language, and the words came in a script you never
+    // use: again, with your language
+    let auto = job.language.as_deref().is_none_or(|l| l.trim().is_empty());
+    if let (true, Ok(text)) = (auto, &result) {
+        if let Some(lang) = langs.redo(text) {
+            let again = VoiceJob { language: Some(lang.clone()), ..job.clone() };
+            let first = text.clone();
+            if let Ok(t) = voice::transcribe_clip(&again, clip, cancel, send) {
+                super::debug::log(|| format!("language guard · \"{}\" redone in {} · \"{}\"", first, lang, t));
+                result = Ok(t);
+            }
+        }
+    }
+    // auto language, and the words came back English where you
+    // likely spoke yours (the session's first words, a short
+    // clip): heard again in yours, kept when it reads as not
+    // English (an English ask stays English)
+    let secs = clip.len() as f32 / MIC_RATE as f32;
+    if let (true, Ok(text)) = (auto, &result) {
+        if let Some(lang) = langs.recheck(text, secs) {
+            let again = VoiceJob { language: Some(lang.clone()), ..job.clone() };
+            if let Ok(t) = voice::transcribe_clip(&again, clip, cancel, send) {
+                let keep = !t.is_empty() && super::speak::language(&t) != Some("en");
+                super::debug::log(|| format!("language recheck · \"{}\" heard in {} · \"{}\" · {}", text, lang, t, if keep { "kept" } else { "dropped" }));
+                if keep {
+                    result = Ok(t);
+                }
+            }
+        }
+    }
+    if let Ok(text) = &result {
+        langs.heard(text);
+    }
+    result.map(|text| (text, note))
+}
+
+/// What one segment gave: its words and its line.
+type SegWords = (String, Option<String>);
+
+/// The heard segments out, in order: their words, their line, then
+/// [`Heard::Segment`] with their length, but for the turn's last one
+/// (`last`: the flush heard it whole): its Flushed says it, and its
+/// sound stays the controller's (a take that came back empty is kept
+/// for a retry). False: the controller is gone.
+fn hand_out(events: &Sender<Heard>, heard: Vec<(SegWords, Vec<i16>)>, last: bool) -> bool {
+    let n = heard.len();
+    for (i, ((text, note), pcm)) in heard.into_iter().enumerate() {
+        if !text.is_empty() && events.send(Heard::Text(format!(" {}", text))).is_err() {
+            return false;
+        }
+        if let Some(line) = note {
+            let _ = events.send(Heard::Note(line));
+        }
+        if !(last && i + 1 == n) && events.send(Heard::Segment(pcm.len())).is_err() {
+            return false;
+        }
+    }
+    true
+}
+
+/// The turn's audio in segments (voice::segments): a long turn is heard
+/// while he talks, each segment once it is cut, in order; a segment that
+/// failed waits for the next cut, never dropped. At Flush: the rest, then
+/// [`Heard::Flushed`], or [`Heard::Failed`] with what still failed.
+/// Until the controller goes or `cancel`. `send`: the HTTP call.
 fn run_batch(
     job: &VoiceJob,
     audio: &Receiver<ListenMsg>,
@@ -213,80 +298,32 @@ fn run_batch(
     langs: &mut Langs,
     send: &dyn Fn(&http::Request) -> Result<http::Response, String>,
 ) {
-    let mut clip: Vec<i16> = Vec::new();
+    let mut segs: Segments<SegWords> = Segments::default();
     loop {
         if cancel.load(Ordering::SeqCst) {
             return;
         }
         match audio.recv_timeout(Duration::from_millis(50)) {
             Ok(ListenMsg::Audio(pcm)) => {
-                clip.extend(pcm);
-                if clip.len() > MAX_CLIP + MAX_CLIP / 4 {
-                    clip.drain(..clip.len() - MAX_CLIP);
+                if segs.push(&pcm) {
+                    // while he talks: a failure waits for the next cut or the flush
+                    let (heard, _) = segs.hear(|clip| hear_segment(job, clip, cancel, langs, send));
+                    if cancel.load(Ordering::SeqCst) || !hand_out(events, heard, false) {
+                        return;
+                    }
                 }
             }
-            Ok(ListenMsg::Clear) => clip.clear(),
+            Ok(ListenMsg::Clear) => segs.clear(),
             Ok(ListenMsg::Flush) => {
-                // the job's model gone: the fallback heard it, and says so
-                let mut used = None;
-                let mut result = voice::transcribe(job, &clip, cancel, send).map(|w| {
-                    used = w.fell_back;
-                    w.text
-                });
-                let note = used.as_deref().and_then(|u| voice::fell_back_line(job, u));
-                // the guards' calls go to the model that heard it
-                let job = &match used {
-                    Some(u) => VoiceJob { model: u, fallback: None, ..job.clone() },
-                    None => job.clone(),
-                };
-                // auto language, and the words came in a script you never
-                // use: again, with your language
-                let auto = job.language.as_deref().is_none_or(|l| l.trim().is_empty());
-                if let (true, Ok(text)) = (auto, &result) {
-                    if let Some(lang) = langs.redo(text) {
-                        let again = VoiceJob { language: Some(lang.clone()), ..job.clone() };
-                        let first = text.clone();
-                        if let Ok(t) = voice::transcribe_clip(&again, &clip, cancel, send) {
-                            super::debug::log(|| format!("language guard · \"{}\" redone in {} · \"{}\"", first, lang, t));
-                            result = Ok(t);
-                        }
-                    }
-                }
-                // auto language, and the words came back English where you
-                // likely spoke yours (the session's first words, a short
-                // clip): heard again in yours, kept when it reads as not
-                // English (an English ask stays English)
-                let secs = clip.len() as f32 / MIC_RATE as f32;
-                if let (true, Ok(text)) = (auto, &result) {
-                    if let Some(lang) = langs.recheck(text, secs) {
-                        let again = VoiceJob { language: Some(lang.clone()), ..job.clone() };
-                        if let Ok(t) = voice::transcribe_clip(&again, &clip, cancel, send) {
-                            let keep = !t.is_empty() && super::speak::language(&t) != Some("en");
-                            super::debug::log(|| format!("language recheck · \"{}\" heard in {} · \"{}\" · {}", text, lang, t, if keep { "kept" } else { "dropped" }));
-                            if keep {
-                                result = Ok(t);
-                            }
-                        }
-                    }
-                }
-                if let Ok(text) = &result {
-                    langs.heard(text);
-                }
-                clip.clear();
-                if cancel.load(Ordering::SeqCst) {
+                segs.end();
+                let (heard, failed) = segs.hear(|clip| hear_segment(job, clip, cancel, langs, send));
+                segs.clear();
+                if cancel.load(Ordering::SeqCst) || !hand_out(events, heard, failed.is_none()) {
                     return;
                 }
-                let _ = match result {
-                    Ok(text) => {
-                        if !text.is_empty() {
-                            let _ = events.send(Heard::Text(format!(" {}", text)));
-                        }
-                        if let Some(line) = note {
-                            let _ = events.send(Heard::Note(line));
-                        }
-                        events.send(Heard::Flushed)
-                    }
-                    Err(f) => events.send(Heard::Failed(fail_line(&f, &job.provider_name, &job.model, &job.billing_url))),
+                let _ = match failed {
+                    None => events.send(Heard::Flushed),
+                    Some(f) => events.send(Heard::Failed(fail_line(&f, &job.provider_name, &job.model, &job.billing_url))),
                 };
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {}

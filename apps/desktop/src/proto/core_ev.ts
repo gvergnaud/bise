@@ -52,8 +52,8 @@ connectors?: ConnectorsProblem | null, } | { "ev": "plugin_preview", token: stri
 profiles?: Array<CuProfile>, said?: string | null, flash?: string | null, } | { "ev": "level", who: string, v: number, } | { "ev": "heard", text: string, final: boolean, } | { "ev": "shot", file: string | null, id?: number | null, app?: string | null, title?: string | null, } | { "ev": "roles", items: Array<RoleRow>, } | { "ev": "setup_gauge", gauge: SetupGauge, } | { "ev": "library_folders", folders: Array<Folder>, made?: string, notice?: string, } | { "ev": "commands", items: Array<PickCommand>, } | { "ev": "skills", project: string, items: Array<PickSkill>, } | { "ev": "files", project: string, rid: number, q: string, items: Array<PickFile>, folder?: PickFolder | null, partial?: boolean, } | { "ev": "voice_answer", project: string, card: number, n: number, line: string, ms: number, } | { "ev": "voice_mode", project: string, agent: string, on: boolean, state: string, heard?: string | null, said?: string | null, muted?: boolean, note?: string | null, fail?: string | null, lit?: VoiceLit | null, } | { "ev": "dictation", id: string, text: string, final: boolean, cancelled?: boolean, error?: string | null, 
 /**
  * on a final that failed, timed out or came back empty: the core
- * keeps this take's sound (memory only, its last 3 takes, 10 min
- * each) and `dictate_retry {id}` transcribes it again
+ * keeps the take's sound not yet heard (on disk, core/takes.rs)
+ * and `dictate_retry {id}` transcribes it again
  */
 kept?: boolean, 
 /**
@@ -61,7 +61,11 @@ kept?: boolean,
  * is gone, another of its provider's heard them), said like an
  * error but the words land
  */
-note?: string | null, } | { "ev": "app_update", version: string, url: string, sha256: string, } | { "ev": "machine_update", update: BiseUpdate | null, } | { "ev": "hub_refused", project: string, error: string, } | { "ev": "index", projects: Array<IndexRow>, } | { "ev": "setup_first", project: string, agent: string, provider: string, name: string, model: string, cid?: number | null, } | { "ev": "computer_live", items: Array<ComputerAgent>, } | { "ev": "computer_peek", key: string, shot?: PeekShot | null, why?: string | null, } | { "ev": "keychain", store: string, moving: boolean, lines?: Array<string>, failed?: boolean, } | { "ev": "broken", reason: string, } | { "ev": "state", agents: Array<StateAgent>, cards: Array<StateCard>, pages: Array<Page>, pages_url?: string | null, timers?: Array<ScheduledTask>, } | { "ev": "main", text: string, turn: number, from?: string | null, } | { "ev": "hub", up: boolean, workspace: string, project?: string | null, note?: string | null, } | { "ev": "sent", text: string, voice: boolean, shot: boolean, } | { "ev": "agent_sent", agent: string, mode: Mode, } | { "ev": "send_answered", project: string, agent: string, cid: number, result?: SendResult | null, } | { "ev": "word", turn: number, i: number, } | { "ev": "phase", phase: string, line?: string | null, page?: PhasePage | null, } | { "ev": "page", front: boolean, id: string, title: string, agent: string, version: number, url: string, at_ms: number, state: string, 
+note?: string | null, 
+/**
+ * on a final: the mic stopped by itself (not his stop), and why
+ */
+stopped?: TakeStop | null, } | { "ev": "app_update", version: string, url: string, sha256: string, } | { "ev": "machine_update", update: BiseUpdate | null, } | { "ev": "hub_refused", project: string, error: string, } | { "ev": "index", projects: Array<IndexRow>, } | { "ev": "setup_first", project: string, agent: string, provider: string, name: string, model: string, cid?: number | null, } | { "ev": "computer_live", items: Array<ComputerAgent>, } | { "ev": "computer_peek", key: string, shot?: PeekShot | null, why?: string | null, } | { "ev": "keychain", store: string, moving: boolean, lines?: Array<string>, failed?: boolean, } | { "ev": "broken", reason: string, } | { "ev": "state", agents: Array<StateAgent>, cards: Array<StateCard>, pages: Array<Page>, pages_url?: string | null, timers?: Array<ScheduledTask>, } | { "ev": "main", text: string, turn: number, from?: string | null, } | { "ev": "hub", up: boolean, workspace: string, project?: string | null, note?: string | null, } | { "ev": "sent", text: string, voice: boolean, shot: boolean, } | { "ev": "agent_sent", agent: string, mode: Mode, } | { "ev": "send_answered", project: string, agent: string, cid: number, result?: SendResult | null, } | { "ev": "word", turn: number, i: number, } | { "ev": "phase", phase: string, line?: string | null, page?: PhasePage | null, } | { "ev": "page", front: boolean, id: string, title: string, agent: string, version: number, url: string, at_ms: number, state: string, 
 /**
  * his notes not answered yet
  */
@@ -110,6 +114,11 @@ sent?: Array<TelemetrySent>,
  * what the act it answers did (none: a show)
  */
 done?: TelemetryDone, };
+
+/**
+ * Why a take's mic stopped by itself (a dictation's final `stopped`).
+ */
+export type TakeStop = "silence";
 
 /**
  * Why bise shares no usage counts now (bise_usage's `Off`, by name).

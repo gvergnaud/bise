@@ -26,9 +26,17 @@ import { DOUBLE_CTRL_R_MS } from "@/voicemode/model";
 import { dictationAt, nodeType, offsetOf, plainText, posOf, takesOf } from "./pmtext";
 import { RETRY_EVENT, shortReason } from "./schema";
 import type { Store } from "../drafts";
+import { composer } from "../../proto/words.gen";
 import { park as parkTake, unpark } from "../parked";
 
 /** A transaction kept out of the undo history (the dictation's live node). */
+/** The core's quiet stop, in minutes (ambient core/dictate.rs QUIET_STOP). */
+export const QUIET_STOP_MIN = 5;
+
+/** A mic left on stopped by itself: the line, with or without his words (designer m_64473). */
+export const quietStopLine = (text: string): string =>
+  text.trim() === "" ? composer.dictate_quiet_stop_none({ min: QUIET_STOP_MIN }) : composer.dictate_quiet_stop({ min: QUIET_STOP_MIN });
+
 const offHistory = (tr: Transaction): Transaction =>
   tr.setMeta("addToHistory", false);
 
@@ -177,6 +185,8 @@ export function useDictation(c: DictationCtx): Dictation {
       if (words !== "") c.dispatch(closeHistory(st.tr.insertText(words, from)));
     }
     if (s.error !== null) c.say(s.error);
+    // a mic left on stopped by itself: one line where the chip was, until his next act (designer m_64473)
+    else if (s.stopped === "silence" && !s.cancelled) c.say(quietStopLine(s.text));
     // the words came from another model of his provider (his is gone): one line, they landed
     else if (s.note !== undefined && !s.cancelled) c.say(s.note);
   };

@@ -1,10 +1,11 @@
 //! Dictation (bar I, core/dictate.rs): the composer's mic on the fake
 //! mic and listener. Laws: the whole text in each event (the last one is
 //! the composer's text), exactly one final, never a hub op or a main
-//! phase, cancel, one mic user (fn wins), the time limit.
+//! phase, cancel, one mic user (fn wins), the quiet stop (never a time
+//! limit), a long take's segments.
 
 use super::*;
-use super::super::core::DICTATE_MAX;
+use super::super::core::QUIET_STOP;
 use crate::voice::TRANSCRIBE_TIMEOUT;
 
 fn dictations(out: &[Value]) -> Vec<Value> {
@@ -143,13 +144,14 @@ fn one_mic_user_and_fn_wins_over_a_dictation() {
     assert!(dictations(&t.take()).is_empty());
 }
 
-/// Law (architect m_10537): no silent hot mic: a dictation left running
-/// stops by itself after DICTATE_MAX, its final out.
+/// Law (architect m_10537, m_64474): no silent hot mic: a dictation left
+/// on (the fake mic's quiet blocks: nothing above the floor) stops by
+/// itself after QUIET_STOP, its words kept, its final out and saying why.
 #[test]
-fn a_forgotten_dictation_stops_by_itself() {
+fn a_forgotten_dictation_stops_after_a_long_silence() {
     let mut t = T::new();
     t.ready();
-    let Some(long_ago) = Instant::now().checked_sub(DICTATE_MAX + Duration::from_secs(1)) else { return };
+    let Some(long_ago) = Instant::now().checked_sub(QUIET_STOP + Duration::from_secs(1)) else { return };
     t.core.cmd(Cmd::DictateStart { id: "d1".into() }, long_ago);
     let heard = t.fakes.listen.lock().unwrap()[0].heard.clone();
     heard.send(Heard::Text(" left on".into())).unwrap();
@@ -158,8 +160,27 @@ fn a_forgotten_dictation_stops_by_itself() {
     heard.send(Heard::Flushed).unwrap();
     t.until(|o| dictations(o).iter().any(|v| v["final"] == true));
     let d = dictations(&t.take());
-    assert_eq!(d.last().unwrap(), &json!({"ev": "dictation", "id": "d1", "text": "left on", "final": true}));
+    assert_eq!(d.last().unwrap(), &json!({"ev": "dictation", "id": "d1", "text": "left on", "final": true, "stopped": "silence"}));
     assert_eq!(d.iter().filter(|v| v["final"] == true).count(), 1);
+}
+
+/// No time limit (dictate-nocap): a take he talks in (loud blocks) runs
+/// far past the old 2 minutes, the mic stays his until his stop.
+#[test]
+fn a_take_he_talks_in_has_no_time_limit() {
+    let mut t = T::new();
+    t.ready();
+    let Some(long_ago) = Instant::now().checked_sub(QUIET_STOP * 4) else { return };
+    t.core.cmd(Cmd::DictateStart { id: "d1".into() }, long_ago);
+    // his voice, now: the quiet clock is fresh
+    t.fakes.mic.lock().unwrap().blocks.as_ref().unwrap().send(crate::voicemode::MicBlock { pcm: vec![3000; 1600], at: Instant::now() }).unwrap();
+    for _ in 0..5 {
+        t.core.tick(Instant::now());
+        t.out.extend(t.core.take_out());
+    }
+    let listen = t.fakes.listen.clone();
+    assert!(!listen.lock().unwrap()[0].audio.try_iter().any(|m| m == ListenMsg::Flush), "his take was cut");
+    assert!(dictations(&t.take()).iter().all(|v| v["final"] != true));
 }
 
 /// His hot cut (m_22120): a batch listener sends every word at the flush,

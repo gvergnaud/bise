@@ -29,10 +29,18 @@ export const flat = (): number[] => Array.from({ length: BARS }, () => 0);
 /** The bars after one more level: the oldest goes left, the newest comes in on the right. */
 export const push = (bars: readonly number[], v: number): number[] => [...bars.slice(1 - BARS), step(v)].slice(-BARS);
 
-/** The chip's time, m:ss (the TUI's timer). */
+/** The take's time shows once it runs past this: a long take stays visible, never cut
+ *  (dictate-nocap, designer m_64473). */
+export const TIME_FROM_MS = 60_000;
+
+/** The chip's time: none under TIME_FROM_MS, then m:ss, h:mm:ss past an hour. */
 export const timeOf = (ms: number): string => {
-  const s = Math.max(0, Math.floor(ms / 1000));
-  return `${String(Math.floor(s / 60))}:${String(s % 60).padStart(2, '0')}`;
+  if (!(ms >= TIME_FROM_MS)) return '';
+  const s = Math.floor(ms / 1000);
+  const two = (n: number): string => String(n).padStart(2, '0');
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  return h > 0 ? `${String(h)}:${two(m)}:${two(s % 60)}` : `${String(m)}:${two(s % 60)}`;
 };
 
 /** The chip's forms, widest first: all, no timer, 3 bars (the TUI's Fit). */

@@ -38,7 +38,7 @@ pub use self::voice_mode::OpenVoiceMode;
 pub use self::hubs::{not_started, HUB_LACKS, LINGER, START};
 #[cfg(test)]
 pub use self::leases::LISTS_LEASE;
-pub use self::dictate::DICTATE_MAX;
+pub use self::dictate::QUIET_STOP;
 #[cfg(test)]
 pub use self::shot::SHOT_GONE;
 #[cfg(test)]
@@ -139,11 +139,17 @@ struct Talk {
     heard: Receiver<Heard>,
     cancel: Arc<AtomicBool>,
     text: String,
-    /// fn down at: a talk never ended (a lost talk_end) stops at
-    /// DICTATE_MAX, never a mic held forever
+    /// fn down at (core.log: a double fn down from a lost talk_end)
     started: Instant,
+    /// the mic's last block above the floor (fn down at, first): a talk
+    /// never ended (a lost talk_end) stops after QUIET_STOP with no
+    /// sound, never a mic held forever; never while he talks
+    sound: Instant,
     /// fn up at
     ending: Option<Instant>,
+    /// the listener's last sign once fn is up (fn up, a segment heard):
+    /// the wait for the rest counts from it
+    progress: Instant,
     /// what ended it: anything but fn up gets a notice in the window
     ended_by: voice::TalkEnd,
     /// a note talk: the page its words go to (never main)
@@ -151,9 +157,17 @@ struct Talk {
 }
 
 impl Talk {
-    /// (listening, fn down at), for [`voice::talk_rule`]
+    /// (listening, its last sound at), for [`voice::talk_rule`]
     fn state(&self) -> (bool, Instant) {
-        (self.ending.is_none(), self.started)
+        (self.ending.is_none(), self.sound)
+    }
+
+    /// The mic's blocks to the listener, the quiet clock moved.
+    fn pump(&mut self, now: Instant) {
+        while let Ok(b) = self.blocks.try_recv() {
+            self.sound = dictate::sound_at(self.sound, &b.pcm, now);
+            let _ = self.audio.send(ListenMsg::Audio(b.pcm));
+        }
     }
 }
 

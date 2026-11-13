@@ -306,6 +306,14 @@ export const composer = {
   voice_no_speech: "no speech detected",
   /** voice on Linux */
   voice_no_linux: "voice input is not available on Linux yet",
+  /** a dictation's mic left on stopped by itself (no sound for `min` minutes), its words in the composer (designer m_64473) */
+  dictate_quiet_stop: (a: { min: string | number }): string => "the mic stopped after " + String(a.min) + " min of silence · your words are in",
+  /** the same, nothing was heard */
+  dictate_quiet_stop_none: (a: { min: string | number }): string => "the mic stopped after " + String(a.min) + " min of silence · nothing was heard",
+  /** a fn talk with no fn up stopped by itself, its words sent to main */
+  talk_quiet_stop_sent: (a: { min: string | number }): string => "sent to main · the mic stopped after " + String(a.min) + " min of silence",
+  /** the same, nothing went to main (no words, or a note talk) */
+  talk_quiet_stop: (a: { min: string | number }): string => "fn talk ended · the mic stopped after " + String(a.min) + " min of silence",
   /** the empty composer, to main; the first run's first line */
   placeholder_main: "what's on your mind?",
   /** the empty composer in a sub-agent's view, after `placeholder_to` and ' · ': where esc goes up, the name the surface gives main ('bise' in the window, 'main' in the terminal); the first part dropped when the line doesn't fit, never the name cut (designer m_41726, his ask) */

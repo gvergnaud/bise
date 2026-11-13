@@ -4,9 +4,11 @@ import {
 } from "./types";
 import { StoreReads } from "./reads";
 
-/** A stopped dictation's final is the core's once its listener flushed, up to DICTATE_FLUSH_MAX
- *  (120 s, amb-core m_22162: a batch listener gives every word then); past this, the window ends
- *  it. Never shorter than the core's wait: a 5 s cut threw his words away (ambient-lead m_22121). */
+/** A stopped dictation's final is the core's once its listener flushed, up to TRANSCRIBE_TIMEOUT
+ *  (120 s) after the listener's last sign; past this with no word from the core, the window ends
+ *  it. Each `dictation` of a stopped take (a long take's segment heard) starts the wait again, so
+ *  it grows with the take's length (dictate-nocap, architect m_64474). Never shorter than the
+ *  core's wait: a 5 s cut threw his words away (ambient-lead m_22121). */
 export const DICTATE_STOP_WAIT_MS = 125_000;
 
 export class StoreVoice extends StoreReads {
@@ -98,16 +100,30 @@ export class StoreVoice extends StoreReads {
     this.command({ cmd: "dictate_cancel", id });
   }
   private dictateWait(id: string): void {
-    setTimeout(() => {
-      if (!this.dictating.has(id)) return;
-      this.dictating.delete(id);
-      this.put(`dictation:${id}`, {
-        text: this.dictation(id)?.text ?? "",
-        final: true,
-        cancelled: false,
-        error: "the mic didn't answer.",
-      } satisfies Dictation);
-    }, DICTATE_STOP_WAIT_MS);
+    clearTimeout(this.dictateWaits.get(id));
+    this.dictateWaits.set(
+      id,
+      setTimeout(() => {
+        this.dictateWaits.delete(id);
+        if (!this.dictating.has(id)) return;
+        this.dictating.delete(id);
+        this.put(`dictation:${id}`, {
+          text: this.dictation(id)?.text ?? "",
+          final: true,
+          cancelled: false,
+          error: "the mic didn't answer.",
+        } satisfies Dictation);
+      }, DICTATE_STOP_WAIT_MS),
+    );
+  }
+  /** @internal for apply.ts: the core said something of a stopped take (a segment heard, its
+   *  final): its wait starts again, or ends with the final. A take still recording has none. */
+  dictateHeard(id: string, final: boolean): void {
+    if (!this.dictateWaits.has(id)) return;
+    if (final) {
+      clearTimeout(this.dictateWaits.get(id));
+      this.dictateWaits.delete(id);
+    } else this.dictateWait(id);
   }
   /** esc: the dictation is over at once, here; the core is told, its late answer is ignored
    *  (a core that never answers leaves nothing up). */

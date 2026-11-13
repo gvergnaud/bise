@@ -344,6 +344,8 @@ export function applyTyped(s: Store, ev: Ev): void {
       // this store never started, or one already over, is ignored
       if (!s.dictating.has(ev.id)) return;
       if (ev.final) s.dictating.delete(ev.id);
+      // a stopped take's segment heard: the window's wait starts again (dictate-nocap)
+      s.dictateHeard(ev.id, ev.final);
       s.put(`dictation:${ev.id}`, {
         text: ev.text,
         final: ev.final,
@@ -351,6 +353,7 @@ export function applyTyped(s: Store, ev: Ev): void {
         error: ev.error ?? null,
         ...(ev.final && ev.kept === true ? { kept: true } : {}),
         ...(ev.final && typeof ev.note === "string" && ev.note !== "" ? { note: ev.note } : {}),
+        ...(ev.final && ev.stopped != null ? { stopped: ev.stopped } : {}),
       } satisfies Dictation);
       return;
     case "error":

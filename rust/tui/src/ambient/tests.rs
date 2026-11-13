@@ -613,12 +613,13 @@ fn a_slow_transcription_after_fn_up_still_sends_his_words() {
 
 /// A fn talk with no talk_end (fn up missed, the capsule hidden) stopped
 /// nothing: it kept the mic and refused every dictation after it
-/// (ambient-lead m_22196). Past the mic's time limit it ends as at fn up.
+/// (ambient-lead m_22196). After QUIET_STOP with no sound (the fake mic's
+/// quiet blocks) it ends as at fn up; never a time limit while he talks.
 #[test]
-fn a_talk_never_ended_stops_at_the_time_limit_and_sends_his_words() {
+fn a_talk_never_ended_stops_after_a_long_silence_and_sends_his_words() {
     let mut t = T::new();
     t.ready();
-    let Some(long_ago) = Instant::now().checked_sub(super::core::DICTATE_MAX + Duration::from_secs(1)) else { return };
+    let Some(long_ago) = Instant::now().checked_sub(super::core::QUIET_STOP + Duration::from_secs(1)) else { return };
     t.core.cmd(Cmd::TalkStart, long_ago);
     let (heard, audio) = {
         let l = t.fakes.listen.lock().unwrap();
@@ -633,7 +634,7 @@ fn a_talk_never_ended_stops_at_the_time_limit_and_sends_his_words() {
     // never silent: one notice in the window says why (architect m_22291)
     let notices: Vec<Value> = t.take().into_iter().filter(|v| v["ev"] == "notice").collect();
     assert_eq!(notices.len(), 1, "{notices:#?}");
-    assert_eq!(notices[0]["text"], "fn talk sent to main after 2 min with no fn up");
+    assert_eq!(notices[0]["text"], "sent to main · the mic stopped after 5 min of silence");
 }
 
 #[test]

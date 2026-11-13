@@ -293,17 +293,35 @@ fn the_transcription_times_out_after_two_minutes() {
     assert!(tr.cancelled());
 }
 
+/// No time limit (dictate-nocap): an hour in, it still records.
 #[test]
-fn recording_stops_itself_after_five_minutes() {
+fn recording_has_no_time_limit() {
     let (rec, tr) = (FakeRecorder::ok(true), FakeTranscriber::default());
     let mut v = voice(&rec, &tr);
     let t0 = Instant::now();
     v.start(key(), t0).unwrap();
-    assert!(v.poll(t0 + Duration::from_secs(299)).is_empty());
+    assert!(v.poll(t0 + Duration::from_secs(3600)).is_empty());
     assert_eq!(v.state(), VoiceState::Recording);
-    v.poll(t0 + Duration::from_secs(300));
+    assert!(tr.audio().is_empty());
+}
+
+/// The wait for a stopped clip's words counts from the transcriber's
+/// last sign: a long clip's segments each get their time.
+#[test]
+fn the_flush_wait_starts_again_at_each_segment() {
+    let (rec, tr) = (FakeRecorder::ok(true), FakeTranscriber::default());
+    let mut v = voice(&rec, &tr);
+    let t0 = Instant::now();
+    v.start(key(), t0).unwrap();
+    v.stop(t0);
+    let later = t0 + TRANSCRIBE_TIMEOUT - Duration::from_secs(1);
+    tr.send(TranscribeEvent::Delta("w1".into()));
+    assert_eq!(v.poll(later), vec![VoiceOutput::Insert("w1".into())]);
+    // past the stop's wait, within the segment's: still waiting
+    assert!(v.poll(t0 + TRANSCRIBE_TIMEOUT + Duration::from_secs(5)).is_empty());
     assert_eq!(v.state(), VoiceState::Flushing);
-    assert_eq!(tr.audio(), vec![AudioMsg::End]);
+    let out = v.poll(later + TRANSCRIBE_TIMEOUT);
+    assert_eq!(out, vec![VoiceOutput::Error("voice transcription failed: the transcription timed out".into())]);
 }
 
 #[test]
@@ -330,21 +348,109 @@ fn a_wav_header_says_16k_mono_s16() {
     assert_eq!(&w[44..], &[1, 0, 0xfe, 0xff]);
 }
 
+/// The fake HTTP of [`run_segments`]: each request's sample count, and
+/// its words ("w<n>", n its order) or a failure while `down` says so.
+struct Seg {
+    sizes: std::cell::RefCell<Vec<usize>>,
+    down: std::cell::Cell<bool>,
+}
+
+impl Seg {
+    fn new() -> Seg {
+        Seg { sizes: Default::default(), down: Default::default() }
+    }
+    fn send(&self, r: &http::Request) -> Result<http::Response, String> {
+        if self.down.get() {
+            return Ok(http::Response { status: 503, body: b"{}".to_vec() });
+        }
+        // the WAV's data chunk: its length is the sample count x 2
+        let riff = r.body.windows(4).position(|w| w == b"RIFF").expect("a WAV");
+        let at = riff + 36;
+        assert_eq!(&r.body[at..at + 4], b"data");
+        let len = u32::from_le_bytes(r.body[at + 4..at + 8].try_into().unwrap()) as usize / 2;
+        let mut sizes = self.sizes.borrow_mut();
+        sizes.push(len);
+        Ok(http::Response { status: 200, body: format!(r#"{{"text":"w{}"}}"#, sizes.len()).into_bytes() })
+    }
+}
+
+fn events_of(rx: &mpsc::Receiver<TranscribeEvent>) -> Vec<TranscribeEvent> {
+    rx.try_iter().collect()
+}
+
+/// Every chunk until End (even queued behind it: not after), the recorder
+/// gone is the end too; cancel sends nothing.
 #[test]
-fn the_clip_is_every_chunk_until_end_even_queued_behind_them() {
+fn the_clip_is_every_chunk_until_end_one_request_when_short() {
+    let s = Seg::new();
     let (tx, rx) = mpsc::channel();
-    tx.send(AudioMsg::Chunk(vec![1, 2])).unwrap();
-    tx.send(AudioMsg::Chunk(vec![3])).unwrap();
+    let (etx, erx) = mpsc::channel();
+    tx.send(AudioMsg::Chunk(speech())).unwrap();
+    tx.send(AudioMsg::Chunk(speech())).unwrap();
     tx.send(AudioMsg::End).unwrap();
-    tx.send(AudioMsg::Chunk(vec![9])).unwrap();
-    assert_eq!(collect_clip(&rx, &AtomicBool::new(false)), Some(vec![1, 2, 3]));
-    // the recorder gone is the end too; cancel drops the clip
+    tx.send(AudioMsg::Chunk(speech())).unwrap();
+    run_segments(&job(), &rx, &etx, &AtomicBool::new(false), &|r| s.send(r));
+    assert_eq!(*s.sizes.borrow(), vec![32_000]);
+    assert_eq!(events_of(&erx), vec![TranscribeEvent::Delta("w1".into()), TranscribeEvent::Done]);
     let (tx, rx) = mpsc::channel();
-    tx.send(AudioMsg::Chunk(vec![4])).unwrap();
+    tx.send(AudioMsg::Chunk(speech())).unwrap();
     drop(tx);
-    assert_eq!(collect_clip(&rx, &AtomicBool::new(false)), Some(vec![4]));
+    run_segments(&job(), &rx, &etx, &AtomicBool::new(false), &|r| s.send(r));
+    assert_eq!(events_of(&erx).last(), Some(&TranscribeEvent::Done));
     let (_tx, rx) = mpsc::channel::<AudioMsg>();
-    assert_eq!(collect_clip(&rx, &AtomicBool::new(true)), None);
+    run_segments(&job(), &rx, &etx, &AtomicBool::new(true), &|r| s.send(r));
+    assert!(events_of(&erx).is_empty());
+}
+
+/// No time limit (dictate-nocap): a 10-minute clip is heard in segments
+/// of 3 min at most, every sample once, its words in order, one space
+/// between two segments'.
+#[test]
+fn a_ten_minute_clip_keeps_every_word() {
+    let s = Seg::new();
+    let (tx, rx) = mpsc::channel();
+    let (etx, erx) = mpsc::channel();
+    for _ in 0..600 {
+        tx.send(AudioMsg::Chunk(speech())).unwrap();
+    }
+    tx.send(AudioMsg::End).unwrap();
+    run_segments(&job(), &rx, &etx, &AtomicBool::new(false), &|r| s.send(r));
+    let sizes = s.sizes.borrow().clone();
+    assert_eq!(sizes.iter().sum::<usize>(), 600 * 16_000, "every sample heard once");
+    assert!(sizes.iter().all(|&n| n <= segments::SEGMENT_MAX), "{sizes:?}");
+    assert_eq!(sizes.len(), 4);
+    let words: String = events_of(&erx)
+        .into_iter()
+        .filter_map(|e| match e {
+            TranscribeEvent::Delta(t) => Some(t),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(words, "w1 w2 w3 w4");
+}
+
+/// A long clip whose provider is down at the end: the words heard so far
+/// came, the failure keeps only the sound not yet heard (for ctrl+r).
+#[test]
+fn a_failure_keeps_only_the_sound_not_yet_heard() {
+    let s = Seg::new();
+    let (tx, rx) = mpsc::channel();
+    let (etx, erx) = mpsc::channel();
+    for _ in 0..200 {
+        tx.send(AudioMsg::Chunk(speech())).unwrap();
+    }
+    tx.send(AudioMsg::End).unwrap();
+    // down once the first segment is heard
+    let send = |r: &http::Request| {
+        let out = s.send(r);
+        s.down.set(true);
+        out
+    };
+    run_segments(&job(), &rx, &etx, &AtomicBool::new(false), &send);
+    let evs = events_of(&erx);
+    assert_eq!(evs[0], TranscribeEvent::Delta("w1".into()));
+    let Some(TranscribeEvent::Failed(_, kept)) = evs.last() else { panic!("{evs:?}") };
+    assert_eq!(kept.len(), 200 * 16_000 - segments::SEGMENT_MAX);
 }
 
 fn speech() -> Vec<i16> {

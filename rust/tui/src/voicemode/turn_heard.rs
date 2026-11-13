@@ -31,6 +31,8 @@ impl VoiceMode {
                         self.finish_turn(now);
                     }
                 }
+                // a long turn's segment: its words came as Text
+                Heard::Segment(_) => {}
                 // shown FAIL_SHOWN, like a failure's line
                 Heard::Note(line) => self.failed = Some((line, now)),
                 Heard::Failed(line) => {

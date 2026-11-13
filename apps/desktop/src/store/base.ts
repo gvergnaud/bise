@@ -85,6 +85,8 @@ export class StoreBase {
   }
   /** the dictations this window started and not over yet (bar I) */
   /** @internal for apply.ts */ readonly dictating = new Set<string>();
+  /** the stopped dictations' waits for their final (voice.ts dictateWait), by id */
+  protected readonly dictateWaits = new Map<string, ReturnType<typeof setTimeout>>();
   /** the `@` queries on their way: rid -> its project and resolve; each project's newest rid */
   protected rid = 0;
   protected readonly asked = new Map<
