@@ -452,6 +452,11 @@ def real_open_fronts_a_running_app():
     check(T.real_plan([4242], True, False) == "restart", "a staged build waits: restart to swap it in")
     check(T.real_plan([4242], False, True) == "restart", "the try is open: it stops, then the real one opens")
     check(T.real_plan([], False, False) == "restart", "not running: it opens")
+    # `running` is bundle_apps(<the applet's bundle path>): an older bundle at another path running
+    # on his home counts as none here, so the restart path, never 'front' on the wrong version
+    other = os.path.join(tempfile.mkdtemp(dir=os.environ.get("TMPDIR")), "bise try.app")
+    check(T.real_plan(T.bundle_apps(other), False, False) == "restart",
+          "an older bundle path running elsewhere: restart, never 'front' on it")
     check(T.real_front_cmd("/A/bise try.app") == ["open", "-a", "/A/bise try.app"], "the front: no -n, no second instance")
 
 
