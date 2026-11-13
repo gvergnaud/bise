@@ -121,18 +121,25 @@ case "$G" in "$HOME/.bise/gate/"*) ;; *) echo "the world must be under ~/.bise/g
 CAND_ID=$([ -f "$A/Contents/Info.plist" ] && /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$A/Contents/Info.plist" 2>/dev/null)
 HIS_ID=$([ -f "$HIS/Contents/Info.plist" ] && /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$HIS/Contents/Info.plist" 2>/dev/null)
 [ -n "$CAND_ID" ] && [ "$CAND_ID" != "$HIS_ID" ] || { echo "the candidate's bundle id ($CAND_ID) is his app's ($HIS_ID): build it with its own id"; exit 2; }
+# the end of the candidate and its world on EVERY exit of this run (app-quits): the app is opened
+# by 'open' (launchd's child, never ours), so a kill of this script's tree never reached it, and
+# three stopped 11.11 passes left 'bise cand' in his menu bar. reaper.py, detached and armed on
+# this pid's exit (green, red, timeout, TERM or KILL), stops what is left, one line per process in
+# $O/reaper.log and here. TERM/INT/HUP: our own watchers and fake provider go first, then the exit.
+"$P" -B "$HERE/reaper.py" watch $$ "$A" "$G" "$O/reaper.log" || { echo "the reaper did not arm: no run without it"; exit 2; }
+trap 'endrun; exit 143' TERM; trap 'endrun; exit 130' INT; trap 'endrun; exit 129' HUP
 HISR=$(cd "$HIS" 2>/dev/null && pwd -P || echo "$HIS")
 # pids by fixed strings on the process table (no regex on a path with spaces and dots)
 # (the awk itself carries the string: skipped; ps shows it as 'awk -v p <path>', no '=': every
 # 'stop left 1 + 1' of c28260a9's runs was this awk counting itself)
 pidsunder() { ps -axo pid=,command= | awk -v p="$1" 'index($0, p) && index($0, "awk -v p") == 0 { print $1 }'; }
 hispids() { { pidsunder "$HIS/Contents/"; pidsunder "$HISR/Contents/"; } | sort -nu | tr '\n' ' '; }
-# the processes that RUN from a path: their command starts with it. A command that only names it is
-# not one: the DMG's repack (scripts/desktop_dmg.py) is a bash -c whose text names the candidate's
-# bise-mac-helper; read as a helper, it was a breach and the pass killed it (desktop-tag-37dd2ac2's
-# dmg red: 'the repack as dev.bise.desktop failed', its pnpm install left running alone)
-runsfrom() { ps -axo pid=,command= | awk -v p="$1" '{ pid = $1; sub(/^ *[0-9]+ /, ""); if (index($0, p) == 1) print pid }'; }
-ours() { runsfrom "$A/Contents/" | sort -nu; }
+# the candidate's processes (they RUN from its path: the DMG's repack only names its helper,
+# desktop-tag-37dd2ac2's dmg red) and its world's (they name $G/w): reaper.py's one matcher, for
+# stopcand here and for the reaper (below) that stops them when this run ends any other way
+REAP="$P -B $HERE/reaper.py"
+ours() { $REAP list app "$A" "$G" | sort -nu; }
+worldpids() { $REAP list world "$A" "$G"; }
 mainpid() { ps -axo pid=,command= | awk -v m="$MAIN" '{ pid = $1; sub(/^ *[0-9]+ /, ""); if ($0 == m || index($0, m " ") == 1) { print pid; exit } }'; }
 killpids() { for p in "$@"; do kill -"${SIG:-TERM}" "$p" 2>/dev/null; done; }
 # hubs outside the app (amb-mac e043678b, ambient-lead m_21810 (a)): every hub, REPL and plugin bridge
@@ -172,23 +179,23 @@ stopcand() {
   # (a): the app is gone, its hubs not yet stopped
   [ -z "$(ours)" ] && hubsafter "stop ${STOPN:=0}" && STOPN=$((STOPN + 1))
   killpids $(ours); sleep 2; SIG=KILL killpids $(ours)
-  local w; w=$(pidsunder "$G/w")
+  local w; w=$(worldpids)
   [ -n "$w" ] && killpids $w; sleep 1
-  w=$(pidsunder "$G/w"); [ -n "$w" ] && { sleep 2; SIG=KILL killpids $w; sleep 1; }
+  w=$(worldpids); [ -n "$w" ] && { sleep 2; SIG=KILL killpids $w; sleep 1; }
   # a process seen in the count can be gone a moment later (c28260a9's runs: 1 + 1 left, nothing
   # by the time ps named them): counted again for up to 10 s, named at the first nonzero count
   local lc lw left=""
   for i in $(seq 20); do
-    lc=$(ours | wc -l | tr -d ' '); lw=$(pidsunder "$G/w" | wc -l | tr -d ' ')
+    lc=$(ours | wc -l | tr -d ' '); lw=$(worldpids | wc -l | tr -d ' ')
     [ "$lc" = 0 ] && [ "$lw" = 0 ] && break
-    [ -z "$left" ] && left=$(ps -o pid=,ppid=,stat=,etime=,command= -p "$(echo $(ours) $(pidsunder "$G/w") | tr ' ' ',')" 2>/dev/null | cut -c1-240)
+    [ -z "$left" ] && left=$(ps -o pid=,ppid=,stat=,etime=,command= -p "$(echo $(ours) $(worldpids) | tr ' ' ',')" 2>/dev/null | cut -c1-240)
     sleep 0.5
   done
   [ -n "$left" ] && echo "$left" > $O/left-$(date +%H%M%S).txt
   say "stopped: left under the candidate $lc, naming the world $lw"
   [ "$lc" = 0 ] && [ "$lw" = 0 ] || {
     # which ones (c28260a9's first run left 1 + 1 that were gone a minute later: say what they were)
-    { echo "the stop left $lc + $lw processes (10 s after)"; echo "$left"; ps -o pid=,ppid=,stat=,etime=,command= -p "$(echo $(ours) $(pidsunder "$G/w") | tr ' ' ',')" 2>/dev/null | cut -c1-240; } > $O/BREACH
+    { echo "the stop left $lc + $lw processes (10 s after)"; echo "$left"; ps -o pid=,ppid=,stat=,etime=,command= -p "$(echo $(ours) $(worldpids) | tr ' ' ',')" 2>/dev/null | cut -c1-240; } > $O/BREACH
     cat $O/BREACH; return 1; }
 }
 opencand() {
@@ -197,7 +204,7 @@ opencand() {
   for i in $(seq 120); do [ -n "$(mainpid)" ] && break; sleep 0.25; done
   say "open: $A ($(grep commit= "$A/Contents/Resources/bin/VERSION")), pid $(mainpid), home $H/.bise"
 }
-endrun() { touch $O/stop; kill $TPID $NPID $CPID $CCPID 2>/dev/null; kill $(cat $G/fake/fake.pid) 2>/dev/null; }
+endrun() { touch $O/stop; kill ${TPID:-} ${NPID:-} ${CPID:-} ${CCPID:-} 2>/dev/null; kill $(cat $G/fake/fake.pid 2>/dev/null) 2>/dev/null; }
 breach() { [ -e $O/BREACH ] && { say "BREACH: $(cat $O/BREACH)"; stopcand; endrun; say "his app after: $(hispids)"; exit 3; }; }
 # gate B with attribution (ambient-lead m_20102): a change in his real userData while HIS app runs
 # is read with lsof (read only) on the candidate's pids: any open file under his folder = ours, kill
@@ -359,8 +366,8 @@ log stream --style compact --predicate 'process == "tccd"' > $O/tccd.log 2>&1 & 
 log stream --level debug --style ndjson --predicate 'process == "tccd" OR subsystem == "com.apple.TCC"' > $O/tcc-debug.ndjson 2>&1 & NPID=$!
 touch $O/pids.txt
 ( while [ ! -e $O/stop ]; do
-    ours >> $O/pids.txt 2>/dev/null
-    h=$(runsfrom "$A/Contents/MacOS/bise-mac-helper")
+    o=$(ours 2>/dev/null); [ -n "$o" ] && echo "$o" >> $O/pids.txt
+    h=$(for p in $o; do case "$(ps -o command= -p "$p")" in ("$A/Contents/MacOS/bise-mac-helper"*) echo "$p";; esac; done)
     [ -n "$h" ] && { echo "helper $h" > $O/BREACH; SIG=KILL killpids $(sort -u $O/pids.txt); }
     sleep 0.3
   done ) & CPID=$!
