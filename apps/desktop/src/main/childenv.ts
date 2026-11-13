@@ -23,9 +23,11 @@ const TEST: ReadonlySet<string> = new Set(TEST_VARS);
 const OFFSCREEN_CORE: ReadonlySet<string> = new Set(OFFSCREEN_CORE_VARS);
 
 /**
- * Names that are not bise's (so not in env::VARS) and never go to a child:
- * the launching terminal's, the Bend runtime's per-command stdin fifo,
- * Electron's and the app's own config (BISE_DESKTOP_*, read by main only).
+ * Names that never go to a child, in test mode too: the launching
+ * terminal's, the Bend runtime's per-command stdin fifo, Electron's (none of
+ * them bise's, so not in env::VARS) and the app's own knobs (BISE_DESKTOP_*,
+ * read by main only; in env::VARS as test names, so a launch of his app
+ * scrubs them).
  */
 function launchers(k: string): boolean {
   return k === 'TERM' || k === 'TERM_PROGRAM' || k === 'TERM_PROGRAM_VERSION' || k === 'BEND_STDIN' || k.startsWith('GHOSTTY_') || k.startsWith('ELECTRON_') || k.startsWith('BISE_DESKTOP_');

@@ -384,16 +384,13 @@ def real_opens_with_nothing():
     with BISE_APP_ROOT. Then one run through the open hook on a stand-in: the legacy .old is
     retired and the app gets exactly HOME and BISE_HOME."""
     his = os.path.expanduser("~/.bise")
-    check(T.real_app_env({"BISE_APP_ROOT": "/x", "BISE_DESKTOP_TEST": "1"}, his, his) == [],
-          "his own home: no variable, not even a test one")
-    # the knob on his own home is refused: 'open' hands the caller's env to the app, which put his
-    # window on no display (real-onscreen: keep-current's relaunch, pid 30078)
-    for v in ("1", "0"):
-        try:
-            T.real_app_env({"BISE_DESKTOP_OFFSCREEN": v}, his, his)
-            check(False, "his own home with BISE_DESKTOP_OFFSCREEN=%s refused" % v)
-        except T.TryError as e:
-            check("--background" in str(e), "his own home with the knob: refused, the way named: %s" % e)
+    check(T.real_app_env({"BISE_DESKTOP_OFFSCREEN": "1", "BISE_APP_ROOT": "/x", "BISE_DESKTOP_TEST": "1"}, his, his) == [],
+          "his own home: no variable, not even the off-screen knob or a test one")
+    # 'open' hands the caller's env to the app: his_env (the env of every open) scrubs the desktop's
+    # knobs, so a relaunch from a shell that carries one never puts his window on no display
+    # (real-onscreen: keep-current's relaunch, pid 30078)
+    mine = E.his_env({"BISE_DESKTOP_OFFSCREEN": "1", "BISE_DESKTOP_TEST": "1", "BISE_DESKTOP_USER_DATA": "/x", "PATH": "/usr/bin"})
+    check(mine == {"PATH": "/usr/bin"}, "his_env: no BISE_DESKTOP_ knob reaches his app: %r" % mine)
     stand = os.path.join(T.GATE, "real-shape", "w", "h", ".bise")
     check(T.real_app_env({}, stand, his) == ["HOME=%s" % os.path.dirname(stand), "BISE_HOME=%s" % stand],
           "a stand-in home: HOME and BISE_HOME, the projects scan stays in it")

@@ -784,14 +784,12 @@ def real_app_env(environ, real, default_real):
     A proof on a stand-in home (BISE_TRY_REAL=<home>/.bise, under ~/.bise/gate only: amb-tools'
     real-shaped world) adds HOME=<home> and BISE_HOME=<home>/.bise (BISE_HOME alone would let the
     projects scan walk his real folders: amb-tools m_18370), and BISE_DESKTOP_OFFSCREEN=1 when the
-    caller set it (the off-screen run); never another variable. His own home with
-    BISE_DESKTOP_OFFSCREEN set is refused: 'open' hands the caller's environment to the app, which
-    then put his window on no display (real-onscreen: keep-current's relaunch, pid 30078); 'behind
-    his windows' is --background (open -g). Pure."""
+    caller set it (the off-screen run); never another variable. On his own home the knob never
+    reaches the app: 'open' hands it the caller's environment, which his_env scrubs of every test
+    variable (BISE_DESKTOP_* among them: real-onscreen, keep-current's relaunch with
+    BISE_DESKTOP_OFFSCREEN=1 put his window on no display); 'behind his windows' is --background
+    (open -g). Pure."""
     if os.path.realpath(real) == os.path.realpath(default_real):
-        if environ.get("BISE_DESKTOP_OFFSCREEN"):
-            raise TryError("--real on your own home never opens off every display: BISE_DESKTOP_OFFSCREEN is for a "
-                           "stand-in home under ~/.bise/gate (BISE_TRY_REAL); to open it behind your windows: --real --background")
         return []
     if not under(real, GATE) or os.path.basename(real) != ".bise":
         raise TryError("--real on a stand-in home: BISE_TRY_REAL=<home>/.bise under ~/.bise/gate only (got %s)" % real)
