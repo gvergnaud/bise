@@ -35,8 +35,8 @@
 .setup-list .b-gi .l span.setup-row-failed { font-family: var(--font-ui); color: var(--c-text-2); }
 .setup-list .b-gi .l span.setup-row-failed span { display: inline; font: inherit; }
 .setup-list .b-gi .l span.setup-row-failed .setup-mark { color: var(--c-err); }
-/* the gateway's model list: a model bise doesn't know, its line in text-3 (designer m_64550) */
-.setup-list .b-gi .l span.setup-unknown { display: inline; font-family: var(--font-ui); color: var(--c-text-3); }
+/* the gateway's model list: every row's sub the same, UI font, text-3, one line cut with '…' (designer m_64688 b) */
+.setup-list .b-gi .l span.setup-gw-sub { display: block; font-family: var(--font-ui); color: var(--c-text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @media (max-height: 640px) {
   .setup { padding-top: var(--s-3); padding-bottom: var(--s-3); }
   .setup .b-onb { padding-top: var(--s-3); padding-bottom: var(--s-3); }
@@ -83,6 +83,9 @@
 .setup-key { width: 100%; text-align: left; }
 .setup-key .b-field { width: 100%; box-sizing: border-box; }
 .setup-key .b-help { font-size: var(--t-12); color: var(--c-text-2); }
+/* the gateway's URL with its own help 4 px under it, then the form's 12 px gap (designer m_64688 a) */
+.setup-gw-url { display: flex; flex-direction: column; gap: var(--s-1); margin-bottom: var(--s-3); }
+.setup-gw-url .b-help { margin: 0; }
 .setup-mark { color: var(--c-err); }
 /* A, the island (page onboarding v6, his pick): the island on the left, the step's column on the
    right, its words left-aligned beside it; a narrow window stacks them, the island on top */

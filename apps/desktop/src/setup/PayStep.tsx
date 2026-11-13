@@ -119,10 +119,12 @@ export function PayStep({ frame, accounts, claudePlan = false, check, s, set, se
 
   // "it works": whichever way it came (a pasted key, a key found, a sign-in)
   if (ph === 'works' && check !== null) {
-    const model = check.label != null && check.label !== '' ? check.label : shortModel(check.model ?? '');
+    // its name as its lines say it (designer m_64688 c): a gateway's route never in it ('azure_ai/…'), the id in the tip
+    const bare = check.id === GATEWAY ? (check.model ?? '').split('/').at(-1) ?? '' : shortModel(check.model ?? '');
+    const model = check.label != null && check.label !== '' ? check.label : bare;
     // the model's name whole on one line, never broken inside it (designer m_49293 #4)
     const [before = '', after = ''] = settings.first_works({ model: MODEL_AT }).split(MODEL_AT);
-    const title = <>{before}<span className="setup-model">{model}</span>{after}</>;
+    const title = <>{before}<span className="setup-model" title={check.id === GATEWAY ? (check.model ?? '').replace(`${GATEWAY}/`, '') : undefined}>{model}</span>{after}</>;
     const secs = check.ms != null ? (check.ms / 1000).toFixed(1) : null;
     // the island's bubble says the model's words: here only how long it took; no island, the words here
     const bubble = hasWebGL();
@@ -171,8 +173,11 @@ export function PayStep({ frame, accounts, claudePlan = false, check, s, set, se
     return (
       <Onb {...frame} title={settings.first_gateway_title} sub={settings.first_gateway_line} cta={{ text: settings.first_gateway_connect, onClick: connect, ...(listing ? { state: 'loading' as const } : {}), testId: 'setup.pay.gw.connect' }}>
         <div className="setup-key">
-          <Field ref={urlField} autoFocus defaultValue={url} placeholder={settings.first_gateway_url} state={failed?.at === 'url' ? 'error' : undefined} testId="setup.pay.gw.url" onKeyDown={enter} />
-          {gwFound?.from != null && url === gwUrl && <Help testId="setup.pay.gw.from">{inMono(settings.first_gateway_url_from({ at: gwFound.from }), gwFound.from)}</Help>}
+          {/* the URL field and its own help, 4 px under it; the form's 12 px gap before the key (designer m_64688 a) */}
+          <div className="setup-gw-url">
+            <Field ref={urlField} autoFocus defaultValue={url} placeholder={settings.first_gateway_url} state={failed?.at === 'url' ? 'error' : undefined} testId="setup.pay.gw.url" onKeyDown={enter} />
+            {gwFound?.from != null && url === gwUrl && <Help testId="setup.pay.gw.from">{inMono(settings.first_gateway_url_from({ at: gwFound.from }), gwFound.from)}</Help>}
+          </div>
           <Field
             ref={field}
             type="password"
@@ -235,15 +240,14 @@ export function PayStep({ frame, accounts, claudePlan = false, check, s, set, se
     const failed = mine && ph === 'failed' && check !== null ? failedWords(check, null, false) : null;
     const items = shown.map((m, i): GroupItem => {
       const here = mine && check !== null ? s.sent !== null && `${GATEWAY}/${m.id}` === (check.model ?? '') : false;
-      const line = m.known !== true ? settings.first_gateway_unknown : [m.recommended === true ? settings.first_gateway_recommended : null, m.context != null ? settings.first_gateway_context({ ctx: tokens(m.context) }) : null].filter((x) => x !== null).join(' · ');
+      // every row's sub the same (designer m_64688 b): UI font, text-3, one line: its name, context, recommended
+      const line = m.known !== true ? settings.first_gateway_unknown : [m.label, m.context != null ? tokens(m.context) : null, m.recommended === true ? settings.first_gateway_recommended : null].filter((x) => x !== null).join(' · ');
       return {
         id: m.id,
-        label: m.label,
+        label: m.id,
         sub: (
           <>
-            {m.label !== m.id && <code>{m.id}</code>}
-            {m.label !== m.id && line !== '' && ' · '}
-            <span className={m.known !== true ? 'setup-unknown' : undefined}>{line}</span>
+            <span className="setup-gw-sub" title={line}>{line}</span>
             {here && ph === 'checking' && <span className="setup-row-failed"> {settings.first_checking_key}</span>}
             {here && failed !== null && (
               <span className="setup-row-failed" data-testid={`setup.pay.gw.failed.${m.id}`}>

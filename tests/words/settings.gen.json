@@ -1080,13 +1080,6 @@
     "one": null,
     "text": "connect"
   },
-  "settings.first_gateway_context": {
-    "args": [
-      "ctx"
-    ],
-    "one": null,
-    "text": "{ctx} context"
-  },
   "settings.first_gateway_down": {
     "args": [
       "host"

@@ -1294,8 +1294,6 @@ export const settings = {
   first_gateway_models_sub: (a: { host: string | number; n: number }): string => a.n === 1 ? String(a.host) + " serves " + String(a.n) + " model." : String(a.host) + " serves " + String(a.n) + " models.",
   /** the gateway's model list: its filter */
   first_gateway_filter: "filter",
-  /** the gateway's model list: a known model's line (its context) */
-  first_gateway_context: (a: { ctx: string | number }): string => String(a.ctx) + " context",
   /** the gateway's model list: a provider's own pick */
   first_gateway_recommended: "recommended",
   /** the gateway's model list: a model bise doesn't know (designer m_64550) */

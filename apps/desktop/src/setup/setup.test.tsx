@@ -220,9 +220,10 @@ describe('Onboarding', () => {
     rerender(ui({ gwFound: found, gwList: list }));
     // known first, recommended selected; the unknown one says so in text-3
     const models = screen.getByTestId('setup.pay.gw.models');
-    expect(models.textContent).toContain('recommended · 1M context');
-    expect(screen.getByTestId('setup.pay.gw.models.my-own-model').textContent).toContain('unknown to bise · 128k assumed');
-    expect(screen.getByTestId('setup.pay.gw.models.my-own-model').querySelector('.setup-unknown')).not.toBeNull();
+    // every row's sub the same: its name, context, recommended, one UI-font line (designer m_64688 b)
+    expect(screen.getByTestId('setup.pay.gw.models.azure_ai/claude-opus-5-5').querySelector('.setup-gw-sub')?.textContent).toBe('opus 5.5 · 1M · recommended');
+    expect(models.querySelector('code')).toBeNull();
+    expect(screen.getByTestId('setup.pay.gw.models.my-own-model').querySelector('.setup-gw-sub')?.textContent).toBe('unknown to bise · 128k assumed');
     // ↓ then ⏎ in the filter: the other one; the button names the selected
     const filter = screen.getByTestId<HTMLInputElement>('setup.pay.gw.filter');
     expect(screen.getByTestId('setup.pay.gw.use').textContent).toBe('use opus 5.5');

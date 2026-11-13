@@ -299,8 +299,6 @@ crate::words! { settings:
     first_gateway_models_sub(host, n) = one "{host} serves {n} model." | "{host} serves {n} models.";
     /// the gateway's model list: its filter
     first_gateway_filter = "filter";
-    /// the gateway's model list: a known model's line (its context)
-    first_gateway_context(ctx) = "{ctx} context";
     /// the gateway's model list: a provider's own pick
     first_gateway_recommended = "recommended";
     /// the gateway's model list: a model bise doesn't know (designer m_64550)
