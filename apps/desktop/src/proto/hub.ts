@@ -211,7 +211,12 @@ ws?: string | null,
  * text): the hub is older than this core (hub_older, amb-feed's
  * hub skew) or refused this core's connection (hub_refused)
  */
-kind?: ErrorKind | null, };
+kind?: ErrorKind | null, 
+/**
+ * what the window shows on hover of the error's line, never in it
+ * (gh_missing: the PATH looked in; designer m_64591)
+ */
+tip?: string | null, };
 
 export type Mode = "now" | "queued";
 
@@ -305,9 +310,10 @@ keep_undo?: boolean, } | { "cmd": "artifacts_folders", project: string, op: Fold
 /**
  * draft: the kind of an [`HubEv::Error`], one enum for every typed
  * failure the window draws by kind (architect m_11379): a kind this
- * version doesn't know reads as Unknown. Only the desktop core sets
- * these, about a hub (a hub never says it is older or refused: its own
- * errors carry none); the window draws by kind, and falls back to the
- * text for Unknown or none, never matching the text.
+ * version doesn't know reads as Unknown. The desktop core sets the
+ * hub_* ones, about a hub (a hub never says it is older or refused); a
+ * hub sets the gh_* ones, on a refused PR diff; the window draws by
+ * kind, and falls back to the text for Unknown or none, never matching
+ * the text.
  */
-export type ErrorKind = "hub_older" | "hub_refused" | "unknown";
+export type ErrorKind = "hub_older" | "hub_refused" | "gh_missing" | "gh_signed_out" | "gh_not_found" | "unknown";

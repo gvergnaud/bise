@@ -100,7 +100,7 @@ pub enum Read {
     /// state again after `hub/read`)
     Evs(Vec<HubEv>),
     /// a request refused: the window's `error`
-    Error { tag: String, text: String, cid: Option<u64>, reason: Option<String>, kind: Option<ErrorKind> },
+    Error { tag: String, text: String, cid: Option<u64>, reason: Option<String>, kind: Option<ErrorKind>, tip: Option<String> },
     /// a gap or a new epoch: send [`RpcConn::read_again`]
     Resync,
     /// the hub refused this connection (REFUSED, docs/issues/16)
@@ -274,7 +274,7 @@ impl RpcConn {
                 self.replies.push(Response::err(Some(app), e.clone()));
             }
             let data = e.data.unwrap_or_default();
-            return Read::Error { tag: w.tag, text: e.message, cid: w.cid, reason: data.reason, kind: data.kind };
+            return Read::Error { tag: w.tag, text: e.message, cid: w.cid, reason: data.reason, kind: data.kind, tip: data.tip };
         }
         let result = r.result.unwrap_or(Value::Null);
         let read = self.result(project, &w, result.clone());
@@ -399,11 +399,11 @@ mod tests {
         assert_eq!(req["method"], "turn/send");
         let id = req["id"].as_u64().unwrap();
         let mut e = RpcError::refused("no agent main", Some("undelivered"));
-        e = e.with_kind(ErrorKind::HubOlder);
+        e = e.with_kind(ErrorKind::HubOlder).with_tip(Some("looked in /usr/bin"));
         let resp = serde_json::to_value(Response::err(Some(Id::Num(id)), e)).unwrap();
         assert_eq!(
             c.read("shop", resp),
-            Read::Error { tag: "send".into(), text: "no agent main".into(), cid: Some(12), reason: Some("undelivered".into()), kind: Some(ErrorKind::HubOlder) }
+            Read::Error { tag: "send".into(), text: "no agent main".into(), cid: Some(12), reason: Some("undelivered".into()), kind: Some(ErrorKind::HubOlder), tip: Some("looked in /usr/bin".into()) }
         );
         let req = c.request(&json!({"cmd": "slash", "project": "shop", "agent": "main", "line": "/help", "cid": 3}), None, Instant::now()).unwrap();
         let resp = serde_json::to_value(Response::ok(Id::Num(req["id"].as_u64().unwrap()), json!({"notice": "the help"}))).unwrap();

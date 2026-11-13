@@ -67,6 +67,34 @@ describe('a change in the panel (page pr-guided V2)', () => {
     expect(v.getByTestId('review.loading')).toBeTruthy();
   });
 
+  // pr-view-gh: a refused PR diff is drawn by its kind (architect m_64593), never by its text: the
+  // command in mono with a Copy, the PATH looked in only as the line's tip (designer m_64591)
+  it('a gh refusal says what to do by its kind, the PATH in its tip', () => {
+    const { store, wrap } = setup();
+    const refuse = (kind: 'gh_missing' | 'gh_signed_out' | 'gh_not_found', tip?: string) => {
+      const v = render(wrap(<ChangeTab project={P} change={{ agent: 'ghost' }} />));
+      act(() => {
+        store.apply({ ev: 'error', project: P, cmd: 'diff', text: 'the hub line', kind, ...(tip === undefined ? {} : { tip }) });
+      });
+      return v;
+    };
+    let v = refuse('gh_missing', 'looked in /usr/bin:/bin');
+    const why = v.getByTestId('review.failed.why');
+    expect(why.textContent).toBe(pages.review_gh_missing({ cmd: pages.review_gh_install }) + pages.copy);
+    expect(why.textContent).not.toContain('/usr/bin');
+    expect(why.getAttribute('data-tip')).toBe('looked in /usr/bin:/bin');
+    expect(v.getByTestId('review.failed.cmd').textContent).toBe(pages.review_gh_install);
+    expect(v.getByTestId('review.failed.copy')).toBeTruthy();
+    cleanup();
+    v = refuse('gh_signed_out');
+    expect(v.getByTestId('review.failed.cmd').textContent).toBe(pages.review_gh_login);
+    expect(v.getByTestId('review.failed.why').textContent).toBe(pages.review_gh_signed_out({ cmd: pages.review_gh_login }).replace(pages.review_gh_login, pages.review_gh_login + pages.copy));
+    cleanup();
+    v = refuse('gh_not_found');
+    expect(v.getByTestId('review.failed.why').textContent).toBe(pages.review_gh_no_pr);
+    expect(v.queryByTestId('review.failed.cmd')).toBeNull();
+  });
+
   it("another command's refusal, or a diff this window never asked, leaves it loading", () => {
     const { store, wrap } = setup();
     const v = render(wrap(<ChangeTab project={P} change={{ agent: 'ghost' }} />));

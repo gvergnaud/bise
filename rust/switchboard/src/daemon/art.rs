@@ -1050,7 +1050,12 @@ fn diff_answer(ask: Ask, shared: &Path, how: &BaseHow, req: Value, gh_path: &str
                 Some(l) => {
                     ev["title"] = json!(format!("PR #{}", l.number));
                     ev["pr"] = json!(l.number);
-                    diff::pr(&l.url, local.as_ref(), gh_path)
+                    diff::pr(&l.url, local.as_ref(), gh_path).map_err(|e| {
+                        // typed for the window: proto_view::diff reads them back
+                        ev["error_kind"] = json!(e.kind);
+                        ev["error_tip"] = json!(e.tip);
+                        e.text
+                    })
                 }
                 None => Err("this PR isn't on this project's forge".into()),
             }

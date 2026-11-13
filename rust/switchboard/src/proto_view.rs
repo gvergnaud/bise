@@ -541,7 +541,10 @@ pub fn is_sha(c: &str) -> bool {
 
 pub fn diff(ev: &Value, project: &str, agent: &str) -> HubEv {
     if let Some(e) = ev.get("error").and_then(Value::as_str) {
-        return HubEv::Error { project: Some(project.into()), cmd: Some("diff".into()), text: e.into(), cid: None, reason: None, ws: None, kind: None };
+        // a PR's refused diff says its kind (gh missing, signed out, no such PR) and its tip
+        let kind = ev.get("error_kind").cloned().and_then(|k| serde_json::from_value(k).ok());
+        let tip = ev.get("error_tip").and_then(Value::as_str).map(String::from);
+        return HubEv::Error { project: Some(project.into()), cmd: Some("diff".into()), text: e.into(), cid: None, reason: None, ws: None, kind, tip };
     }
     let files = ev.get("files").and_then(Value::as_array).cloned().unwrap_or_default();
     let flag = |f: &Value, k: &str| f.get(k).and_then(Value::as_bool).unwrap_or(false);
@@ -1039,7 +1042,10 @@ mod tests {
         assert!(is_sha("e0f3df5") && is_sha(&"a".repeat(40)));
         assert!(!is_sha("abc") && !is_sha("--output=x") && !is_sha("a..b") && !is_sha("HEAD") && !is_sha(&"a".repeat(41)));
         let e = diff(&json!({"error": "no agent x", "files": []}), "acme", "x");
-        assert!(matches!(e, HubEv::Error { cmd: Some(ref c), .. } if c == "diff"));
+        assert!(matches!(e, HubEv::Error { cmd: Some(ref c), kind: None, tip: None, .. } if c == "diff"));
+        // a PR's: its kind and tip, typed (pr-view-gh)
+        let e = diff(&json!({"error": "no gh", "error_kind": "gh_missing", "error_tip": "looked in /usr/bin", "files": []}), "acme", "x");
+        assert!(matches!(e, HubEv::Error { kind: Some(bise_proto::hub::ErrorKind::GhMissing), tip: Some(ref t), .. } if t == "looked in /usr/bin"));
     }
 
     #[test]

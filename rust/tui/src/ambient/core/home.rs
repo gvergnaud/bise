@@ -131,8 +131,8 @@ impl Core {
                 self.home_evs(state);
             }
             Read::Evs(evs) => self.home_evs(evs),
-            Read::Error { tag, text, cid, reason, kind } => {
-                self.home_ev(HubEv::Error { project: Some(project), cmd: Some(tag), text, cid, reason, ws: None, kind });
+            Read::Error { tag, text, cid, reason, kind, tip } => {
+                self.home_ev(HubEv::Error { project: Some(project), cmd: Some(tag), text, cid, reason, ws: None, kind, tip });
             }
             Read::Resync => {
                 let req = self.home.rpc.read_again();

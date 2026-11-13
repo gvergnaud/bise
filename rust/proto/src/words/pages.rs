@@ -158,10 +158,18 @@ crate::words! { pages:
     review_loading_diff(title) = "loading {title}…";
     /// the hub refused the diff (no such agent, git failed): the title over its words
     review_failed = "couldn't load these changes";
-    /// a PR's diff needs the GitHub CLI and the hub found none: what to do, and the PATH it looked in
-    review_gh_missing(path) = "the GitHub CLI (gh) isn't installed or wasn't found: brew install gh (looked in {path})";
-    /// a PR's diff: gh runs but has no GitHub login
-    review_gh_signed_out = "the GitHub CLI (gh) isn't signed in: run gh auth login in a terminal";
+    /// a PR's diff needs the GitHub CLI and the hub found none (designer m_64591): {cmd} is review_gh_install, in mono with a Copy
+    review_gh_missing(cmd) = "bise couldn't find the GitHub CLI (gh) · install it: {cmd}";
+    /// the command that installs gh
+    review_gh_install = "brew install gh";
+    /// review_gh_missing's tip on hover, never in the line: the PATH the hub looked in
+    review_gh_looked_in(path) = "looked in {path}";
+    /// a PR's diff: gh runs but has no GitHub login; {cmd} is review_gh_login, in mono with a Copy
+    review_gh_signed_out(cmd) = "the GitHub CLI (gh) isn't signed in · run {cmd} in a terminal";
+    /// the command that signs gh in
+    review_gh_login = "gh auth login";
+    /// a PR's diff: GitHub has no such PR, or his gh login can't see it
+    review_gh_no_pr = "GitHub has no such pull request · or your gh login can't see it";
     /// a refused diff's action: ask it again
     review_retry = "Try again";
     /// the review's action when the agent has an open PR: its page in the browser

@@ -13,7 +13,7 @@ import { panel } from '@/proto/words_panel.gen';
 import { diffRuns, langOfPath } from './syntax';
 import { lineRows, lineWindow, rowStarts, type Span } from './lineWindow';
 import { useRouter } from '@/app/router';
-import type { Diff as DiffEv } from '@/store';
+import type { Diff as DiffEv, DiffErr } from '@/store';
 import type { GuideTarget } from '@/proto';
 import type { Kind } from './parts';
 import { guideColumn, kindColumn, numberOf, shownCards, viewedCount, type Card, type Section, type Words } from './column';
@@ -28,7 +28,7 @@ export interface DiffFilesProps {
   /** the words while it comes ('loading perf's changes…') */
   readonly loading: string;
   /** the hub refused it (useDiffError): its words in place of 'loading…', with `onRetry` */
-  readonly error?: string | null;
+  readonly error?: DiffErr | null;
   readonly onRetry?: () => void;
   /** the empty state's title when nothing differs */
   readonly none: string;
@@ -239,7 +239,7 @@ export function DiffFiles({ project, diff, loading, error, onRetry, none, to, fr
           title={pages.review_failed}
           action={onRetry && <Button kind="ghost" onClick={onRetry} testId={`${testId}.retry`}>{pages.review_retry}</Button>}
         >
-          {error}
+          <DiffErrLine err={error} testId={`${testId}.failed`} />
         </Empty>
       ) : diff === null ? (
         <p className="rv-wait" data-testid={`${testId}.loading`}>{loading}</p>
@@ -305,6 +305,36 @@ interface FileDiffProps {
  * COLOR_WHOLE lines is colored block by block, the blocks the window shows, each kept until its
  * lines change.
  */
+/** A refused diff's line, drawn by its kind, never by its text (architect m_64593): gh missing or
+ *  signed out say what to do with the command in mono and a Copy (designer m_64591), the PATH the
+ *  hub looked in only as the line's tip; no such PR its own words; any other the hub's text. */
+function DiffErrLine({ err, testId }: { err: DiffErr; testId: string }) {
+  const tip = tipAttrs(err.tip ?? undefined);
+  const withCmd = (words: (a: { cmd: string }) => string, cmd: string) => {
+    // the catalog's one template, cut at its {cmd} hole: the command goes in mono
+    const hole = '\u0000';
+    const [before = '', after = ''] = words({ cmd: hole }).split(hole);
+    return (
+      <span data-testid={`${testId}.why`} {...tip}>
+        {before}
+        <code className="rv-cmd" data-testid={`${testId}.cmd`}>{cmd}</code>
+        <Button kind="ghost" size="sm" onClick={() => { copyText(cmd); }} testId={`${testId}.copy`}>{pages.copy}</Button>
+        {after}
+      </span>
+    );
+  };
+  switch (err.kind) {
+    case 'gh_missing':
+      return withCmd(pages.review_gh_missing, pages.review_gh_install);
+    case 'gh_signed_out':
+      return withCmd(pages.review_gh_signed_out, pages.review_gh_login);
+    case 'gh_not_found':
+      return <span data-testid={`${testId}.why`}>{pages.review_gh_no_pr}</span>;
+    default:
+      return <span data-testid={`${testId}.why`} {...tip}>{err.text}</span>;
+  }
+}
+
 function FileDiff({ path, head, tip, add, rm, lines, picked, pop, scroller, testId }: FileDiffProps) {
   const box = useRef<HTMLDivElement>(null);
   const digits = useMemo(() => lineDigits(lines), [lines]);

@@ -102,6 +102,10 @@ pub struct ErrorData {
     /// "dropping" (being deleted) or "dropped" (deleted) (architect m_64338)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ws: Option<String>,
+    /// what the window shows on hover of the error's line, never in it
+    /// (kind gh_missing: the PATH looked in; HubEv::Error's tip)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tip: Option<String>,
 }
 
 /// The error codes: JSON-RPC's own, then bise's (-32000..-32099).
@@ -155,6 +159,14 @@ impl RpcError {
 
     pub fn with_kind(mut self, kind: ErrorKind) -> RpcError {
         self.data.get_or_insert_with(ErrorData::default).kind = Some(kind);
+        self
+    }
+
+    /// with the line's hover tip (data.tip), when there is one
+    pub fn with_tip(mut self, tip: Option<&str>) -> RpcError {
+        if let Some(t) = tip {
+            self.data.get_or_insert_with(ErrorData::default).tip = Some(t.to_string());
+        }
         self
     }
 }

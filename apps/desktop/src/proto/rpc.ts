@@ -45,7 +45,12 @@ field?: string | null,
  * reason "undelivered": the agent's worktree state when that is why,
  * "dropping" (being deleted) or "dropped" (deleted) (architect m_64338)
  */
-ws?: string | null, };
+ws?: string | null, 
+/**
+ * what the window shows on hover of the error's line, never in it
+ * (kind gh_missing: the PATH looked in; HubEv::Error's tip)
+ */
+tip?: string | null, };
 
 /**
  * JSON-RPC's error object; `data.kind` lets a client draw a failure by

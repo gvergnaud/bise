@@ -295,6 +295,12 @@
   padding-left: var(--s-3);
 }
 
+/* a refused PR diff's command (brew install gh, gh auth login): mono, then its Copy (designer m_64591) */
+.rv-cmd {
+  font-family: var(--font-mono);
+  color: var(--c-text-2);
+}
+
 /* the diff on its way: its words, dim, never a bare bar (designer m_15244) */
 .rv-wait {
   /* the same left edge as the head's title above it (designer's pixel nit on 5f70331d) */

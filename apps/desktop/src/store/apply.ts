@@ -5,6 +5,7 @@
 import {
   type BranchesList,
   type Dictation,
+  type DiffErr,
   diffKey,
   diffErrKey,
   artDiffKey,
@@ -367,7 +368,8 @@ export function applyTyped(s: Store, ev: Ev): void {
       // (pr-changes-blank); one this window never asked is not its own
       if (ev.cmd === "diff") {
         const key = ev.project == null ? undefined : s.diffAsked.get(ev.project);
-        if (key !== undefined) s.put(diffErrKey(key), ev.text);
+        // a PR's says its kind and its tip (gh missing, signed out, no such PR): the view draws by kind
+        if (key !== undefined) s.put(diffErrKey(key), { text: ev.text, kind: ev.kind ?? null, tip: ev.tip ?? null } satisfies DiffErr);
         return;
       }
       // a refused subscribe (no such agent): no page comes, its thread's cue goes (thread-loading)

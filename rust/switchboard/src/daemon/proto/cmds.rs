@@ -261,7 +261,7 @@ impl Shell {
                     let (sessions, blobs) = (home.sessions_dir(), home.blobs_dir());
                     let v = match super::tool_out::answer(&transcript, &adir, pos, &super::tool_out::Logs { sessions: &sessions, blobs: &blobs }) {
                         Ok((out, cut, total)) => HubEv::ToolOut { project, agent, pos, out, cut, total }.to_value(),
-                        Err(text) => HubEv::Error { project: Some(project), cmd: Some(tag), text, cid: None, reason: None, ws: None, kind: None }.to_value(),
+                        Err(text) => HubEv::Error { project: Some(project), cmd: Some(tag), text, cid: None, reason: None, ws: None, kind: None, tip: None }.to_value(),
                     };
                     let _ = tx.send(Msg::Typed { to: super::super::rpc::Typed::Answer(id), v });
                 });
@@ -280,7 +280,7 @@ impl Shell {
                         .and_then(|s| super::log::answer(&home.sessions_dir().join(s), &home.blobs_dir(), &redact, before, find.as_deref()));
                     let v = match got {
                         Ok((items, more, hits)) => HubEv::Log { project, agent, items, more, hits }.to_value(),
-                        Err(text) => HubEv::Error { project: Some(project), cmd: Some(tag), text, cid: None, reason: None, ws: None, kind: None }.to_value(),
+                        Err(text) => HubEv::Error { project: Some(project), cmd: Some(tag), text, cid: None, reason: None, ws: None, kind: None, tip: None }.to_value(),
                     };
                     let _ = tx.send(Msg::Typed { to: super::super::rpc::Typed::Answer(id), v });
                 });
@@ -305,7 +305,7 @@ impl Shell {
                     let project = ask.project.clone();
                     let v = match super::completion::answer(&ask, &req_dir, &home.images_dir(), &models, &render, &redact) {
                         Ok(c) => HubEv::Completion(Box::new(c)).to_value(),
-                        Err(text) => HubEv::Error { project: Some(project), cmd: Some(tag), text, cid: None, reason: None, ws: None, kind: None }.to_value(),
+                        Err(text) => HubEv::Error { project: Some(project), cmd: Some(tag), text, cid: None, reason: None, ws: None, kind: None, tip: None }.to_value(),
                     };
                     let _ = tx.send(Msg::Typed { to: super::super::rpc::Typed::Answer(id), v });
                 });
@@ -338,7 +338,7 @@ impl Shell {
                     };
                     let v = match got {
                         Ok((text, cut, total)) => HubEv::LogBody { project, agent, of, text, cut, total }.to_value(),
-                        Err(text) => HubEv::Error { project: Some(project), cmd: Some(tag), text, cid: None, reason: None, ws: None, kind: None }.to_value(),
+                        Err(text) => HubEv::Error { project: Some(project), cmd: Some(tag), text, cid: None, reason: None, ws: None, kind: None, tip: None }.to_value(),
                     };
                     let _ = tx.send(Msg::Typed { to: super::super::rpc::Typed::Answer(id), v });
                 });

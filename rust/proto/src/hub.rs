@@ -638,6 +638,10 @@ pub enum HubEv {
         /// hub skew) or refused this core's connection (hub_refused)
         #[serde(default, skip_serializing_if = "Option::is_none")]
         kind: Option<ErrorKind>,
+        /// what the window shows on hover of the error's line, never in it
+        /// (gh_missing: the PATH looked in; designer m_64591)
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        tip: Option<String>,
     },
     /// a tag this version doesn't know (a newer hub): kept whole, ignored
     #[serde(skip)]
@@ -1462,10 +1466,11 @@ impl HubCmd {
 
 /// draft: the kind of an [`HubEv::Error`], one enum for every typed
 /// failure the window draws by kind (architect m_11379): a kind this
-/// version doesn't know reads as Unknown. Only the desktop core sets
-/// these, about a hub (a hub never says it is older or refused: its own
-/// errors carry none); the window draws by kind, and falls back to the
-/// text for Unknown or none, never matching the text.
+/// version doesn't know reads as Unknown. The desktop core sets the
+/// hub_* ones, about a hub (a hub never says it is older or refused); a
+/// hub sets the gh_* ones, on a refused PR diff; the window draws by
+/// kind, and falls back to the text for Unknown or none, never matching
+/// the text.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
@@ -1476,6 +1481,13 @@ pub enum ErrorKind {
     /// the project's hub refused this core's connection (issue 16: a
     /// process an agent started); nothing is sent until he retries
     HubRefused,
+    /// a hub's: a PR's diff needs the GitHub CLI and none was found (the
+    /// PATH looked in: the error's `tip`); pr-view-gh, architect m_64593
+    GhMissing,
+    /// a hub's: gh runs but has no GitHub login
+    GhSignedOut,
+    /// a hub's: GitHub has no such PR (or this login can't see it)
+    GhNotFound,
     #[serde(other)]
     Unknown,
 }

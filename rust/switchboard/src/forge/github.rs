@@ -523,28 +523,56 @@ pub fn check_tail(log: &str, name: &str) -> String {
     }
 }
 
+/// What a failed gh's stderr means, by gh's own phrases (lowercase),
+/// first row that matches wins. gh's stderr is the only signal: exact
+/// phrases, never a loose word ('Could not resolve to a PullRequest' is
+/// a PR that isn't there, 'could not resolve host' a network down;
+/// architect m_64590).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum GhSays {
+    Auth,
+    RateLimited,
+    NotFound,
+    Offline,
+}
+
+const GH_PHRASES: &[(&str, GhSays)] = &[
+    ("http 401", GhSays::Auth),
+    ("bad credentials", GhSays::Auth),
+    ("gh auth login", GhSays::Auth),
+    ("not logged into", GhSays::Auth),
+    ("rate limit", GhSays::RateLimited),
+    ("could not resolve to a pullrequest", GhSays::NotFound),
+    ("could not resolve to a repository", GhSays::NotFound),
+    ("no pull requests found", GhSays::NotFound),
+    ("http 404", GhSays::NotFound),
+    ("could not resolve host", GhSays::Offline),
+    ("no such host", GhSays::Offline),
+    ("connection refused", GhSays::Offline),
+    ("network is unreachable", GhSays::Offline),
+    ("i/o timeout", GhSays::Offline),
+    ("tls handshake timeout", GhSays::Offline),
+    ("error connecting to", GhSays::Offline),
+    ("http 502", GhSays::Offline),
+    ("http 503", GhSays::Offline),
+];
+
+fn gh_says(stderr: &str) -> Option<GhSays> {
+    let s = stderr.to_lowercase();
+    GH_PHRASES.iter().find(|(p, _)| s.contains(p)).map(|(_, k)| *k)
+}
+
 /// What gh's failure says (its stderr, never printed whole: a short
 /// reason for hub.log).
 pub fn error_of(stderr: &str) -> ForgeError {
-    let s = stderr.to_lowercase();
     let first = stderr.lines().find(|l| !l.trim().is_empty()).unwrap_or("gh failed").trim();
     let short: String = first.chars().take(120).collect();
-    if s.contains("http 401") || s.contains("bad credentials") || s.contains("gh auth login") || s.contains("not logged") {
-        ForgeError::Auth(short)
-    } else if s.contains("rate limit") {
-        ForgeError::RateLimited(short)
-    } else if s.contains("could not resolve")
-        || s.contains("no such host")
-        || s.contains("connection refused")
-        || s.contains("network is unreachable")
-        || s.contains("timeout")
-        || s.contains("error connecting")
-        || s.contains("http 502")
-        || s.contains("http 503")
-    {
-        ForgeError::Offline(short)
-    } else {
-        ForgeError::Other(short)
+    match gh_says(stderr) {
+        Some(GhSays::Auth) => ForgeError::Auth(short),
+        Some(GhSays::RateLimited) => ForgeError::RateLimited(short),
+        Some(GhSays::NotFound) => ForgeError::NotFound(short),
+        Some(GhSays::Offline) => ForgeError::Offline(short),
+        None => ForgeError::Other(short),
     }
 }
 
@@ -937,6 +965,38 @@ mod tests {
         assert!(matches!(error_of("error connecting to api.github.com"), ForgeError::Offline(_)));
         assert!(matches!(error_of("HTTP 403: API rate limit exceeded for user"), ForgeError::RateLimited(_)));
         assert!(matches!(error_of("something else"), ForgeError::Other(_)));
+    }
+
+    /// gh's own stderr lines, one row each, as gh prints them: a PR that
+    /// isn't there is NotFound, never Offline (architect m_64590); only a
+    /// host that doesn't resolve is the network.
+    #[test]
+    fn gh_phrases_are_read_exactly() {
+        let rows: &[(&str, Option<GhSays>)] = &[
+            ("GraphQL: Could not resolve to a PullRequest with the number of 7. (repository.pullRequest)", Some(GhSays::NotFound)),
+            ("GraphQL: Could not resolve to a Repository with the name 'o/r'. (repository)", Some(GhSays::NotFound)),
+            ("no pull requests found for branch \"x\"", Some(GhSays::NotFound)),
+            ("HTTP 404: Not Found (https://api.github.com/repos/o/r/pulls/7)", Some(GhSays::NotFound)),
+            ("curl: (6) Could not resolve host: api.github.com", Some(GhSays::Offline)),
+            ("dial tcp: lookup api.github.com: no such host", Some(GhSays::Offline)),
+            ("error connecting to api.github.com", Some(GhSays::Offline)),
+            ("dial tcp 140.82.112.6:443: i/o timeout", Some(GhSays::Offline)),
+            ("net/http: TLS handshake timeout", Some(GhSays::Offline)),
+            ("dial tcp: connect: network is unreachable", Some(GhSays::Offline)),
+            ("dial tcp 127.0.0.1:443: connect: connection refused", Some(GhSays::Offline)),
+            ("HTTP 502: Bad Gateway", Some(GhSays::Offline)),
+            ("HTTP 503: Service Unavailable", Some(GhSays::Offline)),
+            ("HTTP 401: Bad credentials (https://api.github.com/graphql)", Some(GhSays::Auth)),
+            ("To get started with GitHub CLI, please run:  gh auth login", Some(GhSays::Auth)),
+            ("You are not logged into any GitHub hosts. Run gh auth login to authenticate.", Some(GhSays::Auth)),
+            ("HTTP 403: API rate limit exceeded for user ID 1.", Some(GhSays::RateLimited)),
+            ("could not resolve something unknown", None),
+            ("unknown flag: --colour", None),
+        ];
+        for (line, want) in rows {
+            assert_eq!(gh_says(line), *want, "{line}");
+        }
+        assert_eq!(error_of("GraphQL: Could not resolve to a PullRequest with the number of 7.\nmore"), ForgeError::NotFound("GraphQL: Could not resolve to a PullRequest with the number of 7.".into()));
         assert!(matches!(parse(r#"{"data": {"repository": null}}"#, &repo(), &[], &[]), Err(ForgeError::Other(_))));
     }
 

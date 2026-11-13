@@ -15,7 +15,7 @@ import type { FoundFolders } from './reads';
 import type { Refused } from './refused';
 import type { InboxItem } from '@/inbox/listed';
 import { guideForKey, guideKey, prActKey, prDetailKey, prDiffKey, prLogKey, rangeDiffKey, type GuideEv, type PrActState } from './types';
-import { artDiffKey, branchDiffKey, diffErrKey, diffKey, toolOutKey, Store, type ToolOut, type Away, type Dictation, type HubLine, type Diff, type FilesAnswer, type Ev, type EvOf, type Pending, type PrsList, type BranchesList, type VersionsList, type PagesList, type ThreadHits, type ThreadMarks, type ThreadOrder, type VoiceModeState, type TalkShot } from './store';
+import { artDiffKey, branchDiffKey, diffErrKey, diffKey, toolOutKey, Store, type ToolOut, type Away, type Dictation, type HubLine, type Diff, type DiffErr, type FilesAnswer, type Ev, type EvOf, type Pending, type PrsList, type BranchesList, type VersionsList, type PagesList, type ThreadHits, type ThreadMarks, type ThreadOrder, type VoiceModeState, type TalkShot } from './store';
 
 /**
  * Feeds a store from a core port: its live events, then the state events
@@ -173,8 +173,8 @@ export const usePrCheckLog = (project: string, url: string, check: string): EvOf
 export const usePrActed = (project: string, url: string): PrActState | null =>
   useSlice(prActKey(project, url), (s) => s.prActed(project, url));
 /** The hub's words when it refused that diff (`diffKey` or `artDiffKey`); null while none. */
-export const useDiffError = (key: string): string | null =>
-  useSlice(diffErrKey(key), (s) => (s.slices.get(diffErrKey(key)) as string | null | undefined) ?? null);
+export const useDiffError = (key: string): DiffErr | null =>
+  useSlice(diffErrKey(key), (s) => (s.slices.get(diffErrKey(key)) as DiffErr | null | undefined) ?? null);
 /** A tool call's real output once its open row asked (askToolOut), or the hub's refusal; null until then. */
 export const useToolOut = (project: string, agent: string, pos: number): ToolOut | null =>
   useSlice(toolOutKey(project, agent, pos), (s) => s.toolOut(project, agent, pos));
