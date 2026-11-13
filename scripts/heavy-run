@@ -494,6 +494,8 @@ export -f gate_kind kind_dirs free_kb disk_under free_gb tell_hub tree reclaim c
 # the battery's charge in % (HEAVY_BATTERY_PCT: tests); 100 when unknown
 battery_pct() {
   [ -n "${HEAVY_BATTERY_PCT:-}" ] && { echo "$HEAVY_BATTERY_PCT"; return; }
+  # tests: a file read at each look, so a waiting job sees the charge change
+  [ -n "${HEAVY_BATTERY_PCT_FILE:-}" ] && { cat "$HEAVY_BATTERY_PCT_FILE"; return; }
   /usr/bin/pmset -g batt 2>/dev/null | grep -oE '[0-9]+%' | head -1 | tr -d % | grep . || echo 100
 }
 on_battery() {
@@ -792,6 +794,12 @@ while :; do
   if on_battery && [ "$(battery_pct)" -lt "${HEAVY_BATTERY_MIN:-30}" ] 2>/dev/null; then
     [ -n "${battwait:-}" ] || { m="heavy-run: waiting: on battery at $(battery_pct) %, under ${HEAVY_BATTERY_MIN:-30} %: plug the Mac in: $(printf '%s ' "$@" | cut -c1-80)"; echo "$m" >&2; tell_hub "$m"; battwait=1; }
     why=batt; sleep "${HEAVY_DISK_POLL:-10}"; continue
+  fi
+  # the wait over: said, so the agent's status no longer says 'plug the Mac in' (on 11-13 three
+  # agents showed it for hours after the Mac was back on AC)
+  if [ -n "${battwait:-}" ]; then
+    m="heavy-run: power back ($(on_battery && echo "battery at $(battery_pct) %" || echo "on AC")), the job goes on: $(printf '%s ' "$@" | cut -c1-80)"
+    echo "$m" >&2; tell_hub "$m"
   fi
   battwait=""
   if on_battery; then n=15; slots="$S1 $S2"; else n=10; slots="$S1 $S2 $S3 $S4"; fi

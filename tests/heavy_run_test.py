@@ -747,6 +747,20 @@ with tempfile.TemporaryDirectory() as home:
     r = subprocess.run([HEAVY, "sh", "-c", 'touch "$0"', ranb], env=dict(envr, HEAVY_ON_BATTERY="1", HEAVY_BATTERY_PCT="80"),
                        capture_output=True, timeout=30)
     check(r.returncode == 0 and os.path.exists(ranb), "on battery at 80 %: it runs")
+    # a job that waited on the battery says when the power is back, so the agent's status no
+    # longer says 'plug the Mac in' (11-13: three agents showed it for hours after)
+    pctf = os.path.join(home, "batt_pct")
+    open(pctf, "w").write("12")
+    ranc = os.path.join(home, "ranc")
+    ec = open(os.path.join(home, "errc"), "w+")
+    wc = subprocess.Popen([HEAVY, "sh", "-c", 'touch "$0"', ranc], env=dict(envr, HEAVY_ON_BATTERY="1", HEAVY_BATTERY_PCT_FILE=pctf,
+                          HEAVY_DISK_POLL="1"), stderr=ec)
+    check(stays(lambda: not os.path.exists(ranc), 2, "it waits"), "on battery at 12 % (a file): the job waits")
+    open(pctf, "w").write("45")
+    check(wait_for(lambda: os.path.exists(ranc), 20, "the charge back"), "the charge back over 30 %: the job runs")
+    job_ends(wc, 30)
+    ec.seek(0)
+    check("heavy-run: power back (battery at 45 %), the job goes on" in ec.read(), "it says the power is back")
     # the per-slot threads, and an --alone job keeps the defaults
     r = subprocess.run([HEAVY, "sh", "-c", 'echo "$RUST_TEST_THREADS/$SB_TEST_JOBS/$CARGO_BUILD_JOBS"'],
                        env={k: v for k, v in envr.items() if k not in ("RUST_TEST_THREADS", "SB_TEST_JOBS", "CARGO_BUILD_JOBS")},
