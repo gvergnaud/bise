@@ -56,8 +56,10 @@ export const tasks = {
   section: "Tasks",
   /** the head's loud part: how many tasks wait on him */
   head_needs: (a: { n: number }): string => a.n === 1 ? String(a.n) + " needs you" : String(a.n) + " need you",
-  /** no open task in the scope */
-  none_open: "No open task",
+  /** no open task in the scope, only ongoing or done ones (its fold line follows) */
+  none_open: "Nothing in progress",
+  /** the right bar's Tasks section when the scope has none at all, done or not ('· Ask bise' follows) */
+  none_yet: "No tasks yet",
   /** a row's done-when count, ticked of all */
   goals_of: (a: { done: string | number; all: string | number }): string => String(a.done) + "/" + String(a.all),
   /** a row's done-when count's tip */
@@ -100,12 +102,28 @@ export const tasks = {
   since_needs: (a: { n: number }): string => a.n === 1 ? String(a.n) + " needs you" : String(a.n) + " need you",
   /** the since line's end: the tasks working now */
   since_moving: (a: { n: string | number }): string => String(a.n) + " moving",
-  /** the Board with no task at all */
-  board_empty: "No task yet. main makes one when you ask for something that takes more than a turn.",
+  /** the Board with no task at all: its title (designer m_65123, tasks-ux m_65124: 'bise', never 'main' or 'a turn') */
+  board_empty: "No tasks yet",
+  /** its 3 steps: 1 */
+  board_step_ask: "You ask bise for work.",
+  /** its 3 steps: 2 */
+  board_step_shows: "It shows up here as a task: its agents, its questions, where it stands.",
+  /** its 3 steps: 3 */
+  board_step_moves: "It moves column to column until it's done.",
+  /** its one action, and the right bar's: his composer, on main's thread */
+  ask_bise: "Ask bise",
+  /** the Board with tasks only in the past (done more than a week ago): 'No tasks yet' would lie */
+  board_past: "Nothing in progress",
+  /** its detail: where they went */
+  board_past_more: "Done tasks stay in search (⌘K).",
   /** its meta line: the project, its agents, when it started */
   tab_meta: (a: { project: string | number; agents: string | number; when: string | number }): string => String(a.project) + " · " + String(a.agents) + " · started " + String(a.when),
   /** its meta line's agents part */
   tab_agents: (a: { n: number }): string => a.n === 1 ? String(a.n) + " agent" : String(a.n) + " agents",
+  /** its meta line's middle with no agent on it yet (never '0 agents') */
+  tab_no_agents: "no agent yet",
+  /** its Agents section with none yet: how one comes */
+  agents_none: "No agent on it yet. + Agent asks bise for one.",
   /** the quoted origin's tip */
   origin_tip: "your message that started it · open it in the thread",
   /** a section head */

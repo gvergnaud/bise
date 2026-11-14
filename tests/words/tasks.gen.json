@@ -88,12 +88,22 @@
     "one": null,
     "text": "waits for you"
   },
+  "tasks.agents_none": {
+    "args": [],
+    "one": null,
+    "text": "No agent on it yet. + Agent asks bise for one."
+  },
   "tasks.arts_all": {
     "args": [
       "n"
     ],
     "one": null,
     "text": "All {n} in Library →"
+  },
+  "tasks.ask_bise": {
+    "args": [],
+    "one": null,
+    "text": "Ask bise"
   },
   "tasks.block_paused": {
     "args": [
@@ -105,7 +115,32 @@
   "tasks.board_empty": {
     "args": [],
     "one": null,
-    "text": "No task yet. main makes one when you ask for something that takes more than a turn."
+    "text": "No tasks yet"
+  },
+  "tasks.board_past": {
+    "args": [],
+    "one": null,
+    "text": "Nothing in progress"
+  },
+  "tasks.board_past_more": {
+    "args": [],
+    "one": null,
+    "text": "Done tasks stay in search (⌘K)."
+  },
+  "tasks.board_step_ask": {
+    "args": [],
+    "one": null,
+    "text": "You ask bise for work."
+  },
+  "tasks.board_step_moves": {
+    "args": [],
+    "one": null,
+    "text": "It moves column to column until it's done."
+  },
+  "tasks.board_step_shows": {
+    "args": [],
+    "one": null,
+    "text": "It shows up here as a task: its agents, its questions, where it stands."
   },
   "tasks.board_title": {
     "args": [],
@@ -278,7 +313,12 @@
   "tasks.none_open": {
     "args": [],
     "one": null,
-    "text": "No open task"
+    "text": "Nothing in progress"
+  },
+  "tasks.none_yet": {
+    "args": [],
+    "one": null,
+    "text": "No tasks yet"
   },
   "tasks.origin_tip": {
     "args": [],
@@ -464,6 +504,11 @@
     ],
     "one": null,
     "text": "{project} · {agents} · started {when}"
+  },
+  "tasks.tab_no_agents": {
+    "args": [],
+    "one": null,
+    "text": "no agent yet"
   },
   "tasks.today": {
     "args": [],

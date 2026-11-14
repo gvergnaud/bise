@@ -126,7 +126,7 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
         ) : (
           <h2 className="tk-tab-name">{w.name}</h2>
         )}
-        <p className="tk-meta">{tasks.tab_meta({ project: x.projectName, agents: tasks.tab_agents({ n: names.length }), when: started(w.created_ms, now) })}</p>
+        <p className="tk-meta">{tasks.tab_meta({ project: x.projectName, agents: names.length === 0 ? tasks.tab_no_agents : tasks.tab_agents({ n: names.length }), when: started(w.created_ms, now) })}</p>
       </header>
 
       {origin !== null && (
@@ -196,6 +196,14 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
         <section className="tk-sec">
           <h3 className="tk-h">{tasks.sec_now}</h3>
           <p className="tk-why" data-testid={`${t}.now`}>{said}</p>
+        </section>
+      )}
+
+      {crew.length === 0 && (
+        // none yet (a task main named before it started any): how one comes, never a blank under the meta
+        <section className="tk-sec" data-testid={`${t}.agents.none`}>
+          <h3 className="tk-h">{tasks.sec_agents}</h3>
+          <p className="tk-none">{tasks.agents_none}</p>
         </section>
       )}
 
@@ -318,7 +326,8 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
             act(project, 'resume', w.id);
           }} data-testid={`${t}.resume`}>{tasks.act_resume}</Press>
         ) : (
-          w.status !== 'done' && (
+          // no agent on it: Pause would pause nothing (tasks-ux m_65124)
+          w.status !== 'done' && names.length > 0 && (
             <Press look="b-btn sm" onClick={() => {
               act(project, 'pause', w.id);
             }} data-testid={`${t}.pause`}>{tasks.act_pause}</Press>

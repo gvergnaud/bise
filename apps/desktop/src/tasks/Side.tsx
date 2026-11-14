@@ -2,7 +2,8 @@
 // task in the Board's order (its mark, the pink dot when it needs him; its name; its done-when n/m),
 // then one fold line for the ongoing ones and the ones done this week (it opens the Board, where they
 // sit at the right end). Head: `Tasks 9 · 2 need you` and `all ›` (the Board as a panel tab). A row
-// opens its Task tab. Owner: tasks.
+// opens its Task tab. None ever: 'No tasks yet · Ask bise'; only ongoing or done: 'Nothing in
+// progress' and the fold. Owner: tasks.
 import { Press, tipAttrs } from '@/ds';
 import { OuterList } from '@/app/side3d/OuterCard';
 import { Empty } from '@/app/side3d/Flyout';
@@ -12,6 +13,8 @@ import { dayWords, timeOf } from '@/artifacts/model';
 import { barRows, cutAtWord, goalsOf, needsHim, type ProjWork } from './model';
 import { openBoard, openTask, StatusMark } from './Marks';
 import { whatOf } from './what';
+import { askBise } from './BoardEmpty';
+import { useRouter } from '@/app/router';
 
 /** how a past and a coming time read in a row's line: the hour, a date past a day */
 function clock(ms: number, now: number): string {
@@ -48,6 +51,7 @@ function TaskRow({ x, now, group }: { x: ProjWork; now: number; group: string | 
 
 /** The section: `scope` the bar's project ('' every project's: bise's own); `groupOf` a project's group words. */
 export function OuterTasks({ all, scope, now, groupOf }: { all: readonly ProjWork[]; scope: string; now: number; groupOf: (project: string) => string | undefined }) {
+  const router = useRouter();
   const { open, ongoing, done } = barRows(all, now);
   const needs = open.filter((x) => needsHim(x.w)).length;
   const rest = ongoing.length + done.length;
@@ -56,7 +60,14 @@ export function OuterTasks({ all, scope, now, groupOf }: { all: readonly ProjWor
       onAll={() => {
         openBoard(scope);
       }}
-      total={open.length} empty={<Empty>{tasks.none_open}</Empty>}
+      total={open.length} empty={all.length === 0 ? (
+        // none ever: one quiet line and its way in (tasks-ux m_65124)
+        <Empty>
+          {tasks.none_yet} · <Press look="tk-more" onClick={() => {
+            askBise(router, scope);
+          }} data-testid="app.outer.tasks.ask">{tasks.ask_bise}</Press>
+        </Empty>
+      ) : <Empty>{tasks.none_open}</Empty>}
       rows={(n) => open.slice(0, n).map((x) => <TaskRow key={`${x.project}/${x.w.id}`} x={x} now={now} group={groupOf(x.project)} />)}
       after={rest > 0 && (
         <Press look="tk-fold" data-testid="app.outer.tasks.rest" onClick={() => {

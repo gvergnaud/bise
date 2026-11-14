@@ -4,7 +4,7 @@
 // its Task tab (over the Board, one click back); a stalled card has Restart, a paused one Resume.
 // Its top line: 'since you looked: 3 done, 1 needs you, 2 moving' (the last time he opened it, kept;
 // his first look counts the last day), on a 40 px head, its 24 px padding the columns' edge.
-// Owner: tasks.
+// Nothing on it: BoardEmpty, no since line. Owner: tasks.
 import { useEffect, useRef, useState } from 'react';
 import { Press, tipAttrs } from '@/ds';
 import { keep } from '@/app/keep';
@@ -17,6 +17,7 @@ import { useAllWorks } from './hooks';
 import { openTask, StatusMark } from './Marks';
 import { lineAt } from './Side';
 import { sinceLooked } from './since';
+import { BoardEmpty } from './BoardEmpty';
 
 /** a column's head */
 function colWord(s: WorkStatus): string {
@@ -148,6 +149,13 @@ export function BoardTab({ project }: { project: string }) {
   const shown = [...all.filter((x) => x.w.status !== 'done'), ...done];
   // his first look counts the last day (designer m_64839: the line is always there)
   const n = sinceLooked(all, since > 0 ? since : now - DAY_MS);
+  // nothing on it: no since line (nothing to compare), the empty says what a task is (m_65104)
+  if (shown.length === 0)
+    return (
+      <div className="tk-board" data-testid="tasks.board">
+        <BoardEmpty project={project} past={all.length > 0} />
+      </div>
+    );
   return (
     <div className="tk-board" data-testid="tasks.board">
       <header className="tk-board-head">
@@ -165,10 +173,7 @@ export function BoardTab({ project }: { project: string }) {
           )}
         </p>
       </header>
-      {shown.length === 0 ? (
-        <p className="tk-board-empty">{tasks.board_empty}</p>
-      ) : (
-        <div className="tk-cols" ref={box}>
+      <div className="tk-cols" ref={box}>
           {STATUS_ORDER.filter((s) => s !== 'unknown' || shown.some((x) => x.w.status === 'unknown')).map((s) => {
             const list = shown.filter((x) => x.w.status === s).sort((a, b) => b.w.last_ms - a.w.last_ms);
             const label = colWord(s);
@@ -195,8 +200,7 @@ export function BoardTab({ project }: { project: string }) {
               </div>
             );
           })}
-        </div>
-      )}
+      </div>
     </div>
   );
 }

@@ -302,7 +302,9 @@ export function Skel() {
 
 /** an empty state, the one for every page and panel (ui-review-app #3): what is empty, one sentence
  *  (t-15 text-2), an optional detail line, then at most one action; on the content's left edge,
- *  --gap-page under a hero. Never centered, never a 12 px line of its own */
+ *  --gap-page under a hero. Never centered, never a 12 px line of its own; a whole place with nothing
+ *  in it (the tasks Board) centres the block and keeps its lines on one left edge, a list or a panel
+ *  section keeps it at its edge (designer m_65132) */
 export function Empty({ title, children, action, testId }: { title: ReactNode; children?: ReactNode; action?: ReactNode; testId?: string }) {
   return (
     <div className="b-empty" data-testid={testId}>
