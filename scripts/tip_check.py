@@ -90,7 +90,8 @@ def plan(tip, verdicts, hook_base, now, is_ancestor, base_spacing=SPACING, bound
     the spacing (doubled past the CPU bound)."""
     if any(v["tip"] == tip for v in verdicts):
         return None
-    base = next((v["tip"] for v in reversed(verdicts) if v["state"] != "infra" and is_ancestor(v["tip"], tip)), None) or hook_base
+    base = next((v["tip"] for v in reversed(verdicts) if v["state"] not in ("infra", "stopped") and is_ancestor(v["tip"], tip)),
+                None) or hook_base
     last = max((v["start"] for v in verdicts), default=None)
     gap = spacing(cpu_today(verdicts, now), base_spacing, bound)
     return base, 0 if last is None else max(0, last + gap - now)
@@ -141,6 +142,15 @@ def red_steps(text):
     steps = list(dict.fromkeys(re.split(r" \(|:", l[5:], 1)[0].strip() for l in sec.splitlines() if l.startswith("FAIL ")))
     cargo = list(dict.fromkeys(re.findall(r"to rerun pass `([^`]+)`", sec)))
     return steps, cargo
+
+
+def stopped_by(text):
+    """heavy-run's stop line ('heavy-run: stopped "...": it ran 120 min, over its limit') in the
+    last quick run of a tip-check log, else None. Pure. A stopped gate is no red: no step failed,
+    so no recheck and no flaky-open (main m_65100: 32e68bb8f's quick stopped at HEAVY_MAX_MIN,
+    then green in 205 s, came out as a flake)."""
+    sec = (text or "").rsplit("\n== ", 1)[-1]
+    return next((l.strip() for l in sec.splitlines() if l.startswith("heavy-run: stopped ")), None)
 
 
 def is_cargo(step, selfnames):
@@ -751,7 +761,16 @@ def run(home, main_tree, hook_base, now=time.time, sleep=time.sleep):
             if green:
                 save_seed(wt, log)
             v.update(state="infra" if green is None else "green" if green else "red", secs=secs, cpu=cpu)
-            if green is False:
+            try:
+                stop = stopped_by(open(log).read()) if green is False else None
+            except OSError:
+                stop = None
+            if stop:
+                # no base for the next run (like infra): its range gets checked again
+                v["state"] = "stopped"
+                with open(log, "a") as out:
+                    out.write("== stopped, not red (no recheck, no flaky-open): %s\n" % stop)
+            elif green is False:
                 quick_red(home, main_tree, wt, tip, base, log, v, journals, cpu_today(verdicts, now()),
                           int(os.environ.get("TIP_CHECK_CPU_BOUND", CPU_BOUND)))
             if green:

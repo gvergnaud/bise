@@ -60,6 +60,15 @@ def pure():
     now = 1_000_000
     # a tip with a verdict: nothing; the first run: the hook's base (the newest land), no wait
     check(T.plan("t1", [v("t1", now)], "h", now, anc) is None, "a checked tip runs nothing")
+    # a quick gate heavy-run stopped (HEAVY_MAX_MIN) is no red, and no base for the next run
+    stop = ('heavy-run: stopped "nice -n 5 bash tests/gate.sh quick ": it ran 120 min, over its limit '
+            '(HEAVY_MAX_MIN=120): a stuck job holds a slot')
+    log = "== 1 quick on a\nok   x\n" + stop + "\n== 2 quick on b\nok   y\nGATE quick GREEN (5s)\n"
+    check(T.stopped_by(log) is None, "an earlier section's stop doesn't count")
+    check(T.stopped_by("== 1 quick on a\nok   x\n" + stop + "\n") == stop, "the last section's stop line")
+    check(T.stopped_by("== 1\nFAIL desktop_check\n") is None and T.stopped_by("") is None, "a plain red: none")
+    check(T.plan("t3", [v("t1", now - 900), v("t2", now - 700, state="stopped")], "h", now, anc)[0] == "t1",
+          "a stopped run is no base: its range runs again")
     check(T.plan("t3", [], "h", now, anc) == ("h", 0), "first run: the newest land's base, now")
     check(T.plan("t3", [], None, now, anc) == (None, 0), "first run, no hook base: None (tip^)")
     # the base is the newest checked tip main still has; a red or green one, never an infra

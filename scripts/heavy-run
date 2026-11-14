@@ -249,6 +249,12 @@ disk_watch() {
     elif disk_under "${HEAVY_RECLAIM_UNDER_GB:-20}"; then reclaim $(( ${HEAVY_RECLAIM_UNDER_GB:-20} + 10 ))
     fi
     if [ -n "$why" ]; then
+      # a hang's only trace: where its processes were (main m_65100: a quick gate stopped at
+      # 120 min left no step log, its run dir only .owner); printed with the stop's line
+      case "$why" in time*|idle*)
+        ps -o pid=,ppid=,etime=,pcpu=,args= -p "$(tree "$1" "$me" | tr '\n' ',' | sed 's/,$//')" 2>/dev/null \
+          | cut -c1-200 | head -40 >"$2.ps" ;;
+      esac
       echo "$why" >"$2"
       kill -TERM $(tree "$1" "$me") 2>/dev/null
       sleep 5
@@ -682,6 +688,8 @@ if [ -e "$stop" ]; then
        printf "%s\tdisk-stop\t%s\t%s\t%s\t%s\n" "$(date +%s)" "${2##*/}" "${why#disk }" "${sh:-none}" "$c" >>"$L" 2>/dev/null ;;
   esac
   echo "$m" >&2; tell_hub "$m"; rm -f "$stop"
+  [ -s "$stop.ps" ] && { echo "heavy-run: its processes at the stop (pid ppid elapsed %cpu command):" >&2; sed "s/^/  /" "$stop.ps" >&2; }
+  rm -f "$stop.ps"
 fi
 lane=""; [ "$2" = all ] && [ "$(lane_during "$t0" "$L")" = busy ] && lane="	lane=busy"
 printf "%s\t%s\t%s\t%s\t%s\t%s\trc=%s%s\n" "$HEAVY_SUBMIT" "$t0" "$(date +%s)" "${2##*/}" "$PWD" "$c" "$rc" "$lane" >>"$L" 2>/dev/null

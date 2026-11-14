@@ -729,6 +729,8 @@ with tempfile.TemporaryDirectory() as home:
                        capture_output=True, text=True, timeout=40)
     check(r.returncode == 124 and "over its limit (HEAVY_MAX_MIN=1)" in r.stderr,
           "a job over its time limit is stopped, rc=124: %r %r" % (r.returncode, r.stderr[-200:]))
+    check("its processes at the stop" in r.stderr and "sleep 60" in r.stderr.split("its processes at the stop", 1)[-1],
+          "a stopped job's processes are printed (a hang's only trace): %r" % r.stderr[-400:])
     check(lines()[-1].endswith("rc=124"), "heavy.log ends it with rc=124")
     # an --alone job that uses no CPU (main m_36953: a hung caffeinate held every slot 3 h at 0 %):
     # stopped past HEAVY_IDLE_MIN, rc=124, said; one that burns CPU runs on (0.1 s a window here: the
