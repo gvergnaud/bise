@@ -4,7 +4,7 @@
 // The records are inbox-record's (bise_proto::inbox, one per answered or withdrawn card); a row's
 // second line is the record's own words (line2, words::second_line), so the terminal and the window
 // agree (architect m_24257); the day heads are words::day_head's. Owner: inbox-screen.
-import type { Card } from '@/proto';
+import type { Card, WorkRow } from '@/proto';
 import type { InboxRecord, Where } from '@/proto/inbox';
 import { inbox } from '@/proto/words_inbox.gen';
 import { hero } from '@/proto/words_hero.gen';
@@ -30,6 +30,31 @@ export interface Filter {
 }
 
 export const ALL: Filter = { project: '', agent: '', state: 'all', q: '' };
+
+/** Which waiting cards a paused task holds (`is`), and whether their folded group is open (`shown`:
+ *  its rows join the list keys' order). */
+export interface Held {
+  readonly is: (c: Card) => boolean;
+  readonly shown: boolean;
+}
+
+export const NONE_HELD: Held = { is: () => false, shown: false };
+
+/** The cards his pause holds, `project\u0000card`: every task that lists the card is paused (a
+ *  card on a paused task and a live one stays on top). From the works rows (WorkRow.cards). Pure. */
+export function heldCards(rows: readonly { readonly project: string; readonly w: Pick<WorkRow, 'status' | 'cards'> }[]): ReadonlySet<string> {
+  const live = new Set<string>();
+  const paused = new Set<string>();
+  for (const r of rows) {
+    for (const c of r.w.cards ?? []) (r.w.status === 'paused' ? paused : live).add(`${r.project}\u0000${String(c)}`);
+  }
+  return new Set([...paused].filter((k) => !live.has(k)));
+}
+
+/** `held` (heldCards) as a card test. Pure. */
+export function heldBy(held: ReadonlySet<string>): (c: Pick<Card, 'project' | 'id'>) => boolean {
+  return (c) => held.has(`${c.project}\u0000${String(c.id)}`);
+}
 
 /** A row that waits on him: an open card. */
 export interface WaitRow {
@@ -57,6 +82,9 @@ export interface Day {
 
 export interface Lists {
   readonly waiting: readonly WaitRow[];
+  /** what waits on a task he paused (every task it serves is paused): folded under the live ones,
+   *  out of 'waiting for you' (tasks-center: a paused task's questions leave the inbox top) */
+  readonly paused: readonly WaitRow[];
   readonly days: readonly Day[];
   /** every row's key in the order they show (the list keys' order) */
   readonly order: readonly string[];
@@ -87,16 +115,16 @@ export function heroFacts(cards: readonly Pick<Card, 'since_ms'>[], now: number)
 }
 
 /** The rows the filter keeps: what waits (in the hub's order, given), then the past by day, newest first. Pure. */
-export function listsOf(cards: readonly Card[], records: readonly InboxRecord[], names: Readonly<Record<string, string>>, f: Filter, now: number): Lists {
+export function listsOf(cards: readonly Card[], records: readonly InboxRecord[], names: Readonly<Record<string, string>>, f: Filter, now: number, held: Held = NONE_HELD): Lists {
   const pname = (p: string) => names[p] ?? p;
   // '567' or '#567' that is a notification's number: that row alone (notif-id, designer m_27855)
   const id = idOf(f.q);
   if (id !== null && (cards.some((c) => c.id === id) || records.some((r) => r.card === id))) {
-    return listsOf(cards.filter((c) => c.id === id), records.filter((r) => r.card === id), names, { ...f, q: '' }, now);
+    return listsOf(cards.filter((c) => c.id === id), records.filter((r) => r.card === id), names, { ...f, q: '' }, now, held);
   }
   const ws = words(f.q);
   const keepWait = f.state === 'all' || f.state === 'waiting';
-  const waiting: WaitRow[] = keepWait
+  const open: WaitRow[] = keepWait
     ? cards
         .filter((c) => (f.project === '' || c.project === f.project) && (f.agent === '' || c.agent === f.agent))
         .filter((c) => ws.length === 0 || hasAll(`${c.question} ${shownName(c.agent)} ${c.agent} ${pname(c.project)}`, ws))
@@ -118,7 +146,10 @@ export function listsOf(cards: readonly Card[], records: readonly InboxRecord[],
     // a group label: sentence case (designer m_43052); the day word itself is the TUI's too
     else days.push({ day: d, title: sentenceCase(dayHead(ms, now)), rows: [row] });
   }
-  return { waiting, days, order: [...waiting.map((w) => w.key), ...days.flatMap((d) => d.rows.map((r) => r.key))] };
+  const waiting = open.filter((w) => !held.is(w.card));
+  const paused = open.filter((w) => held.is(w.card));
+  const shown = held.shown ? paused : [];
+  return { waiting, paused, days, order: [...waiting.map((w) => w.key), ...shown.map((w) => w.key), ...days.flatMap((d) => d.rows.map((r) => r.key))] };
 }
 
 /** Where he gave it: 'in the inbox', 'on a page', "in perf's thread" (words::where_words: the detail's, and what 800 cuts off a row). Pure. */

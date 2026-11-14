@@ -4,7 +4,7 @@ import type { WorkRow, WorkStatus } from '@/proto';
 import { barRows, cutAtWord, goalsOf, type ProjWork } from './model';
 import { sinceLooked } from './since';
 import { tasksOf } from './chips';
-import { resolveMerged } from './model';
+import { artsOf, resolveMerged } from './model';
 import { originText } from './TaskTab';
 
 const NOW = 1_700_000_000_000;
@@ -89,5 +89,22 @@ describe("his message quoted on the Task tab", () => {
     const es = [undefined, { kind: 'agent', msg_id: 7, text: 'not his' }, { kind: 'you', msg_id: 7, text: ' make the app feel native ' }] as const;
     expect(originText(es as never, 7)).toBe('make the app feel native');
     expect(originText(es as never, 8)).toBeNull();
+  });
+});
+
+describe('artsOf: a task\'s artifacts in its tab', () => {
+  it('the newest first, archived out, a merged task\'s read as its target, his before the agents\'', () => {
+    const tombs = [{ id: 'old', merged_into: 'kb' }];
+    const arts = [
+      { id: 'a', works: ['kb'], at_ms: 1, audience: 'you' as const },
+      { id: 'b', works: ['old'], at_ms: 3, audience: 'agents' as const },
+      { id: 'c', works: ['kb'], at_ms: 2, archived: true },
+      { id: 'd', works: ['other'], at_ms: 4 },
+      { id: 'e', works: ['kb'], at_ms: 5 },
+    ];
+    const r = artsOf(arts, 'kb', tombs);
+    expect(r.all.map((a) => a.id)).toEqual(['e', 'b', 'a']);
+    expect(r.mine.map((a) => a.id)).toEqual(['e', 'a']);
+    expect(artsOf(arts.slice(1, 2), 'kb', tombs).mine.map((a) => a.id)).toEqual(['b']);
   });
 });

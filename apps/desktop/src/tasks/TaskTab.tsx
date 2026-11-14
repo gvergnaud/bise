@@ -1,14 +1,17 @@
 // The Task tab (brief "Task tab", content approved by him as drawn; designer's look rules: 384 wide):
 // its status pill, name, project · agents · started; his origin (a link to his message); why;
 // done-when; Needs you answered in place (its cards' options); Now (its line); Agents (live dot,
-// archived greyed); a paused task's line 'this task is paused · Resume' (tasks-ux); footer Mark done
+// archived greyed); Artifacts (3 newest for him, 'All n in Library →' on task:<id>); Changes (its agents' branches); a paused task's line 'this task is paused · Resume' (tasks-ux); footer Mark done
 // · Pause/Resume (Reopen when done, Restart when stalled). A merged or folded one says where it went.
 // Gestures go through the hub's task_act. Owner: tasks.
 import { useState } from 'react';
 import { Dropdown, Input, Press, tipAttrs } from '@/ds';
 import { sentenceCase } from '@/ds/case';
 import type { Entry } from '@/proto';
-import { threadKey, useAgents, useCards, useProjects, useStore, useThreadOrder } from '@/store';
+import { threadKey, useAgents, useArtifacts, useCards, useProjects, useStore, useThreadOrder } from '@/store';
+import { openTab } from '@/app/panel/tabs';
+import { presetLibraryQuery } from '@/artifacts/preset';
+import { changeDoor } from '@/review/openChange';
 import { useRouter } from '@/app/router';
 import { MAIN } from '@/app/route';
 import { useNowFor } from '@/app/clock';
@@ -16,7 +19,7 @@ import { OptButton } from '@/app/side3d/FlyoutAgents';
 import { askButtons, pickIntent } from '@/app/side3d/model';
 import { tasks } from '@/proto/words_tasks.gen';
 import { useWorks } from '@/store';
-import { cutAtWord, goalsOf, isOpen } from './model';
+import { artsOf, cutAtWord, goalsOf, isOpen } from './model';
 import { openTask, StatusMark, statusWord } from './Marks';
 import { lineAt } from './Side';
 import { useTaskAct, useTaskReq } from './Board';
@@ -39,6 +42,7 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
   const projects = useProjects();
   const agents = useAgents(project);
   const cards = useCards(project);
+  const allArts = useArtifacts(project);
   const store = useStore();
   const router = useRouter();
   const act = useTaskAct();
@@ -78,6 +82,12 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
   // the tasks it can merge into: the other open ones of its project
   const others = works.works.filter((o) => o.id !== w.id && isOpen(o));
   const t = `tasks.tab.${w.id}`;
+  const arts = artsOf(allArts, w.id, works.tombs);
+  // its agents that work on a branch of their own (a worktree)
+  const changes = names.flatMap((n) => {
+    const a = live(n);
+    return a?.branch == null || a.branch === '' ? [] : [{ name: n, branch: a.branch }];
+  });
   return (
     <div className="tk-tab" data-testid={t}>
       <header className="tk-tab-head">
@@ -176,6 +186,49 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
                 </li>
               );
             })}
+          </ul>
+        </section>
+      )}
+
+      {arts.all.length > 0 && (
+        // the 3 newest for him, then the Library on this task (`task:<id>`, brief "Task tab")
+        <section className="tk-sec" data-testid={`${t}.arts`}>
+          <h3 className="tk-h">{tasks.sec_artifacts} <span className="tk-count">{arts.all.length}</span></h3>
+          <ul className="tk-rows">
+            {arts.mine.slice(0, 3).map((a) => (
+              <li key={a.id}>
+                <Press look="tk-row" {...tipAttrs(a.title)} onClick={() => {
+                  openTab({ kind: 'artifact', project, id: a.id });
+                }} data-testid={`${t}.art.${a.id}`}>
+                  <span className="tk-row-name">{a.title}</span>
+                  <span className="tk-agent-state">{a.agent}</span>
+                </Press>
+              </li>
+            ))}
+          </ul>
+          <Press look="tk-origin" onClick={() => {
+            presetLibraryQuery(`task:${w.id}`);
+            router.go({ screen: 'artifacts', project });
+          }} data-testid={`${t}.arts.all`}>{tasks.arts_all({ n: arts.all.length })}</Press>
+        </section>
+      )}
+
+      {changes.length > 0 && (
+        // its agents' branches; a PR opens instead when one is open (review/openChange changeDoor)
+        <section className="tk-sec" data-testid={`${t}.changes`}>
+          <h3 className="tk-h">{tasks.sec_changes}</h3>
+          <ul className="tk-rows">
+            {changes.map((a) => (
+              <li key={a.name}>
+                <Press look="tk-row" {...tipAttrs(tasks.change_tip)} onClick={() => {
+                  const door = changeDoor(project, { agent: a.name }, { agents, places: store.places(project), worktrees: store.worktrees(project) });
+                  openTab(door.tab);
+                }} data-testid={`${t}.change.${a.name}`}>
+                  <span className="tk-row-name">{a.branch}</span>
+                  <span className="tk-agent-state">{a.name}</span>
+                </Press>
+              </li>
+            ))}
           </ul>
         </section>
       )}

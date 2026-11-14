@@ -17,7 +17,8 @@ import { useWaitingList } from './waiting';
 import { InboxView } from './List';
 import { openAnswer } from '@/thread/answerlink';
 import { useInboxRecords } from './records';
-import type { Jump } from './past';
+import { heldCards, type Jump } from './past';
+import { useAllWorks } from '@/tasks/hooks';
 
 export function InboxScreen() {
   const rows = useProjects();
@@ -30,6 +31,9 @@ export function InboxScreen() {
   useKeptScroll('inbox', () => document.querySelector<HTMLElement>('[data-testid="inbox.list"]'));
   // the block's own list, bise's notifications ask included: one inbox, one number (designer m_25639)
   const cards = useWaitingList();
+  // the tasks he paused: their questions fold out of 'Waiting for you' (tasks-center)
+  const works = useAllWorks();
+  const paused = useMemo(() => heldCards(works), [works]);
   const names = useMemo(() => Object.fromEntries(rows.map((r) => [r.project, r.name])), [rows]);
   const projects = useMemo(() => rows.map((r) => ({ project: r.project, name: r.name })), [rows]);
   const optAct = useOptAct();
@@ -51,6 +55,7 @@ export function InboxScreen() {
       {...(records.more ? { onEnd: records.older } : {})}
       names={names}
       projects={projects}
+      paused={paused}
       pageOf={(project, page) => {
         const a = store.artifacts(project).find((x) => x.id === page);
         return a === undefined ? undefined : { title: a.title, version: a.version };

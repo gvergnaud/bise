@@ -78,6 +78,13 @@
     "one": null,
     "text": "ask bise for one more agent on this task"
   },
+  "tasks.arts_all": {
+    "args": [
+      "n"
+    ],
+    "one": null,
+    "text": "All {n} in Library →"
+  },
   "tasks.board_empty": {
     "args": [],
     "one": null,
@@ -87,6 +94,11 @@
     "args": [],
     "one": null,
     "text": "Tasks"
+  },
+  "tasks.change_tip": {
+    "args": [],
+    "one": null,
+    "text": "open its changes"
   },
   "tasks.chip_tip": {
     "args": [
@@ -207,6 +219,21 @@
     "one": "{n} needs you",
     "text": "{n} need you"
   },
+  "tasks.inbox_paused": {
+    "args": [],
+    "one": null,
+    "text": "On paused tasks"
+  },
+  "tasks.inbox_paused_hide": {
+    "args": [],
+    "one": null,
+    "text": "fold them away"
+  },
+  "tasks.inbox_paused_show": {
+    "args": [],
+    "one": null,
+    "text": "show the questions of the tasks you paused"
+  },
   "tasks.merge_head": {
     "args": [],
     "one": null,
@@ -255,6 +282,16 @@
     "args": [],
     "one": null,
     "text": "Agents"
+  },
+  "tasks.sec_artifacts": {
+    "args": [],
+    "one": null,
+    "text": "Artifacts"
+  },
+  "tasks.sec_changes": {
+    "args": [],
+    "one": null,
+    "text": "Changes"
   },
   "tasks.sec_done_when": {
     "args": [],

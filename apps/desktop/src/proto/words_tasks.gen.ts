@@ -110,6 +110,14 @@ export const tasks = {
   sec_now: "Now",
   /** a section head */
   sec_agents: "Agents",
+  /** a section head: the 3 newest artifacts for him that serve it */
+  sec_artifacts: "Artifacts",
+  /** the link under them: the Library filtered on this task (`task:<id>`) */
+  arts_all: (a: { n: string | number }): string => "All " + String(a.n) + " in Library →",
+  /** a section head: its agents' branches (a PR opens instead when one is open) */
+  sec_changes: "Changes",
+  /** a change row's tip */
+  change_tip: "open its changes",
   /** an agent of it in a turn */
   agent_live: "in a turn",
   /** an agent of it, idle */
@@ -150,4 +158,10 @@ export const tasks = {
   tab_gone: "This task is not here anymore.",
   /** a merged task's tab: where it went */
   tab_merged: (a: { name: string | number }): string => "Merged into " + String(a.name) + ".",
+  /** the inbox's folded group under 'Waiting for you': the questions of tasks he paused (they wait until he resumes one) */
+  inbox_paused: "On paused tasks",
+  /** its fold's tip while folded */
+  inbox_paused_show: "show the questions of the tasks you paused",
+  /** its fold's tip while open */
+  inbox_paused_hide: "fold them away",
 } as const;

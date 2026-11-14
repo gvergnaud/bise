@@ -85,6 +85,11 @@
 .tk-live[data-on]{border:0;background:var(--c-text)}
 .tk-agent{font-weight:500}
 .tk-agent-state{margin-left:auto;color:var(--c-text-3);font-size:var(--t-12)}
+/* the Task tab's Artifacts and Changes rows: a name, then who (an agent) at the end */
+.tk-rows{display:flex;flex-direction:column;gap:var(--s-1);margin:0;padding:0;list-style:none}
+.tk-row{display:flex;align-items:center;gap:var(--s-2);width:100%;height:var(--s-7);padding:0 var(--s-2);border:0;border-radius:var(--r-1);background:none;color:var(--c-text);font:inherit;text-align:left}
+.tk-row:hover{background:var(--c-hover)}
+.tk-row-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tk-q{display:flex;flex-direction:column;gap:var(--s-2);padding:var(--s-2) var(--s-3);border-radius:var(--r-2);background:var(--c-sunken)}
 .tk-q-text{margin:0;line-height:1.5}
 .tk-q-opts{display:flex;flex-wrap:wrap;gap:var(--s-2)}

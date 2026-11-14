@@ -28,7 +28,10 @@ import { idTip, InboxCard } from './InboxCard';
 import { blockOf } from './about';
 import { idOf } from './id';
 import { timeOf } from '@/artifacts/model';
-import { ALL, askersOf, closedMs, heroFacts, jumpOf, listsOf, saidWords, STATES, waitEnd, type Filter, type StateFilter, type InboxRecord, type Jump, type PastRow, type WaitRow } from './past';
+import { ALL, askersOf, closedMs, heldBy, heroFacts, jumpOf, listsOf, saidWords, STATES, waitEnd, type Filter, type Held, type StateFilter, type InboxRecord, type Jump, type PastRow, type WaitRow } from './past';
+import { tasks } from '@/proto/words_tasks.gen';
+
+const NO_PAUSED: ReadonlySet<string> = new Set();
 import { aboutOfRecord, alsoPage, footWords, jumpWords, pickedN, settledCard, whenOf } from './settled';
 import { ArtText } from './artWords';
 import { barFit, type BarFit } from './barfit';
@@ -56,13 +59,15 @@ export interface InboxViewProps {
   /** the projects, in the sidebar's order, for the menu */
   readonly projects: readonly { readonly project: string; readonly name: string }[];
   readonly ports: InboxPorts;
+  /** the cards a paused task holds, `project\u0000card` (heldCards): they fold under 'On paused tasks' */
+  readonly paused?: ReadonlySet<string>;
   /** a page's title and version, for the pane's chip ('↗ <title> · page · v3'; none: its id) */
   readonly pageOf?: (project: string, page: string) => PageMeta | undefined;
   /** now (a test or a shot pins it) */
   readonly now?: number;
 }
 
-export function InboxView({ cards, records, onEnd, names, projects, ports, pageOf, now: pinned }: InboxViewProps) {
+export function InboxView({ cards, records, onEnd, names, projects, ports, pageOf, now: pinned, paused = NO_PAUSED }: InboxViewProps) {
   const [opened] = useState(() => Date.now());
   const now = pinned ?? opened;
   const [f, setF] = useState<Filter>(ALL);
@@ -74,7 +79,10 @@ export function InboxView({ cards, records, onEnd, names, projects, ports, pageO
   const startRef = useRef<HTMLSpanElement>(null);
   const fitAt = useBarFit(barRef, startRef);
   const gutter = useBannerGutter();
-  const lists = listsOf(cards, records, names, f, now);
+  // a paused task's questions: out of 'Waiting for you', folded under it until he opens them
+  const [showPaused, setShowPaused] = useState(false);
+  const held: Held = { is: heldBy(paused), shown: showPaused };
+  const lists = listsOf(cards, records, names, f, now, held);
   const pastBy = new Map(lists.days.flatMap((d) => d.rows.map((r) => [r.key, r] as const)));
   const waitBy = new Map(lists.waiting.map((w) => [w.key, w] as const));
   // ⏎ (the first action): a waiting item opens above the composer; a past one, whole, in the pane
@@ -140,13 +148,16 @@ export function InboxView({ cards, records, onEnd, names, projects, ports, pageO
     setF(g);
     const id = idOf(q);
     if (id === null) return;
-    const l = listsOf(cards, records, names, g, now);
+    const l = listsOf(cards, records, names, g, now, { ...held, shown: true });
     const p = l.days.flatMap((d) => d.rows).find((r) => r.r.card === id);
-    const w = l.waiting.find((x) => x.card.id === id);
+    const w = [...l.waiting, ...l.paused].find((x) => x.card.id === id);
     if (p !== undefined) {
       setSel(p.key);
       setPaned(true);
-    } else if (w !== undefined) setSel(w.key);
+    } else if (w !== undefined) {
+      if (l.paused.includes(w)) setShowPaused(true);
+      setSel(w.key);
+    }
   };
   const set = (g: Partial<Filter>) => {
     setF({ ...f, ...g });
@@ -216,6 +227,21 @@ export function InboxView({ cards, records, onEnd, names, projects, ports, pageO
             <div role="group" aria-label={inbox.group_waiting}>
               <GroupLabel count={lists.waiting.length} waits tip={hero.waiting({ n: lists.waiting.length })} testId="inbox.waiting.head">{inbox.group_waiting}</GroupLabel>
               {lists.waiting.map((w) => (
+                <WaitLine key={w.key} w={w} on={w.key === sel} end={waitEnd(w, names, now)}
+                  onPick={() => { pick(w.key); }} onAnswer={() => { pick(w.key); ports.answer(w.card.project, w.card.id); }} />
+              ))}
+            </div>
+          )}
+          {lists.paused.length > 0 && (
+            <div role="group" aria-label={tasks.inbox_paused} data-testid="inbox.paused">
+              <GroupLabel count={lists.paused.length} testId="inbox.paused.head">
+                <Press look="ip-fold" onClick={() => { setShowPaused((v) => !v); }} {...tipAttrs(showPaused ? tasks.inbox_paused_hide : tasks.inbox_paused_show)}
+                  aria-expanded={showPaused} data-testid="inbox.paused.fold">
+                  <AppIcon name={showPaused ? 'down' : 'right'} size={14} />
+                  {tasks.inbox_paused}
+                </Press>
+              </GroupLabel>
+              {showPaused && lists.paused.map((w) => (
                 <WaitLine key={w.key} w={w} on={w.key === sel} end={waitEnd(w, names, now)}
                   onPick={() => { pick(w.key); }} onAnswer={() => { pick(w.key); ports.answer(w.card.project, w.card.id); }} />
               ))}

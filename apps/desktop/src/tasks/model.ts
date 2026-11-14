@@ -1,7 +1,7 @@
 // The tasks' pure model for the desktop: the order of the statuses (the Board's columns, signed by
 // designer and tasks-ux), the right bar's rows (open first, then a fold for the ongoing ones and the
 // ones done this week), its counts, a row's done-when count, a name cut at a word. Pure. Owner: tasks.
-import type { WorkRow, WorkStatus, WorkTomb } from '@/proto';
+import type { Artifact, WorkRow, WorkStatus, WorkTomb } from '@/proto';
 
 /** A task with its project (the bar lists every project's on bise's own). */
 export interface ProjWork {
@@ -76,4 +76,12 @@ export function cutAtWord(name: string, max: number): string {
   const head = name.slice(0, max);
   const at = head.lastIndexOf(' ');
   return `${(at > 8 ? head.slice(0, at) : head).trimEnd()}…`;
+}
+
+/** The artifacts that serve task `id` (a merged task's read as the one it went into), archived ones out,
+ *  newest first; `mine` the ones for him (an older hub's, none said: his), else all of them. Pure. */
+export function artsOf<A extends Pick<Artifact, 'works' | 'at_ms' | 'archived' | 'audience'>>(arts: readonly A[], id: string, tombs: readonly Pick<WorkTomb, 'id' | 'merged_into'>[]): { readonly all: readonly A[]; readonly mine: readonly A[] } {
+  const all = arts.filter((a) => a.archived !== true && (a.works ?? []).some((w) => resolveMerged(tombs, w) === id)).sort((a, b) => b.at_ms - a.at_ms);
+  const his = all.filter((a) => a.audience !== 'agents');
+  return { all, mine: his.length > 0 ? his : all };
 }

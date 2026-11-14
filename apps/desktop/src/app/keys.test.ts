@@ -14,6 +14,12 @@ const ctx = (over: Partial<KeyCtx> = {}): KeyCtx => ({ route: { screen: 'thread'
 const k = (code: string, mods: Partial<KeyLike> = {}): KeyLike => ({ key: '', code, metaKey: false, altKey: false, ctrlKey: false, shiftKey: false, ...mods });
 
 describe("the window's keys", () => {
+  it('⌥⌘0 with the Board in front is its focus (the panel full width); else the panel, as ever (tasks-center)', () => {
+    expect(keyAction(k('Digit0', { altKey: true, metaKey: true }), ctx({ panelOpen: true, boardFront: true }))).toEqual({ frame: 'panelFull' });
+    expect(keyAction(k('Digit0', { altKey: true, metaKey: true }), ctx({ panelOpen: true }))).toEqual({ frame: 'panel' });
+    expect(keyAction(k('KeyB', { altKey: true, metaKey: true }), ctx({ panelOpen: true, boardFront: true }))).toEqual({ frame: 'panel' });
+  });
+
   it('⌘0 bise, ⌘1-9 his projects in his order, nothing past the last', () => {
     expect(keyAction(k('Digit0', { metaKey: true }), ctx())).toEqual({ go: { screen: 'bise' } });
     expect(keyAction(k('Digit1', { metaKey: true }), ctx())).toEqual({ go: { screen: 'thread', project: 'a', agent: 'main' } });

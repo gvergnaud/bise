@@ -228,6 +228,13 @@ export function setFull(on: boolean): void {
   set({ ...state, open: state.open || on, full: on });
 }
 
+/** The Board (a project's tasks) is the tab in front: ⌥⌘0 is its focus (app/keys.ts). Pure. */
+export function boardInFront(p: Pick<PanelKept, 'open' | 'tabs'>): boolean {
+  if (!p.open) return false;
+  const w = p.tabs.list.find((t) => t.id === p.tabs.active)?.what;
+  return w?.kind === 'thing' && w.e.kind === 'tasks';
+}
+
 /** ⇧⌥⌘B and View › Panel Full Width: full width or back beside the thread. */
 export function toggleFull(): void {
   setFull(!(state.open && state.full));

@@ -106,3 +106,16 @@ describe('waitingCount: one number', () => {
     expect(waitingCount([], [{ cards: [], waits: 0 }])).toBe(0);
   });
 });
+
+describe('a paused task holds its questions (tasks-center)', () => {
+  it('a card every listing task paused is held; one a live task lists too stays on top', async () => {
+    const { heldCards, heldBy } = await import('./past');
+    const held = heldCards([
+      { project: 'shop', w: { status: 'paused', cards: [3, 5] } },
+      { project: 'shop', w: { status: 'working', cards: [5] } },
+    ]);
+    expect([...held]).toEqual(['shop\u00003']);
+    expect(heldBy(held)({ project: 'shop', id: 3 })).toBe(true);
+    expect(heldBy(held)({ project: 'shop', id: 5 })).toBe(false);
+  });
+});
