@@ -162,6 +162,8 @@ export const tasks = {
   agent_lead: (a: { name: string | number; words: string | number }): string => "new agent on " + String(a.name) + ": " + String(a.words),
   /** the line under Agents until the new agent's row comes */
   agent_asked: "asked bise for an agent · just now",
+  /** that line when main answered instead (it asks him something): a link to its reply */
+  agent_answered: "bise answered · see its reply →",
   /** the task gone (merged, folded, unknown here) */
   tab_gone: "This task is not here anymore.",
   /** a merged task's tab: where it went */

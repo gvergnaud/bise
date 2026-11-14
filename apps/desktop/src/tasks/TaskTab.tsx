@@ -54,12 +54,17 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
   const [renaming, setRenaming] = useState(false);
   // '+ Agent': the field open; asked: how many agents it had when he asked (its line goes when one more comes)
   const [asking, setAsking] = useState(false);
-  const [asked, setAsked] = useState<{ readonly n: number } | null>(null);
+  const [asked, setAsked] = useState<{ readonly n: number; readonly at: number } | null>(null);
   const w = works.works.find((x) => x.id === id);
   // his message that started it, quoted from main's thread when this window holds it (by its id)
   const mainKey = threadKey(project, MAIN);
   const order = useThreadOrder(mainKey);
   const origin = w?.origin == null ? null : originText(order.order.map((p) => store.entry(mainKey, p)), w.origin);
+  // after his '+ Agent' words: main's reply in its thread (an entry of main's after he asked)
+  const replied = asked !== null && order.order.some((p) => {
+    const e = store.entry(mainKey, p);
+    return e !== undefined && e.kind === 'agent' && e.at_ms > asked.at;
+  });
   if (w === undefined) {
     const tomb = works.tombs.find((x) => x.id === id);
     const into = tomb?.merged_into ?? null;
@@ -263,7 +268,14 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
       )}
 
       {asked !== null && names.length <= asked.n && (
-        <p className="tk-meta" data-testid={`${t}.asked`}>{tasks.agent_asked}</p>
+        // main answered instead of spawning (it asks him something): the line says so and links to its reply (tasks-ux m_64875)
+        replied ? (
+          <Press look="tk-more" onClick={() => {
+            router.go({ screen: 'thread', project, agent: MAIN });
+          }} data-testid={`${t}.answered`}>{tasks.agent_answered}</Press>
+        ) : (
+          <p className="tk-meta" data-testid={`${t}.asked`}>{tasks.agent_asked}</p>
+        )
       )}
 
       </div>
@@ -279,7 +291,7 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
               if (words === '') return;
               // his message to main, carrying the task (architect m_64887): an unknown task refuses it, his row stays
               store.send({ project, agent: MAIN, text: tasks.agent_lead({ name: w.name, words }), works: [w.id] });
-              setAsked({ n: names.length });
+              setAsked({ n: names.length, at: Date.now() });
               setAsking(false);
             }} />
         </footer>

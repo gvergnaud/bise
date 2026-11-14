@@ -40,6 +40,11 @@
     "one": null,
     "text": "Resume"
   },
+  "tasks.agent_answered": {
+    "args": [],
+    "one": null,
+    "text": "bise answered · see its reply →"
+  },
   "tasks.agent_archived": {
     "args": [],
     "one": null,
