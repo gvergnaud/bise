@@ -892,13 +892,15 @@ fn an_agents_save_stamps_its_turns_works_and_his_move_sticks() {
         let a = Add { target: "notes.md".into(), agent: "docs".into(), by: "docs".into(), cwd: work.to_string_lossy().to_string(), works: works.iter().map(|w| w.to_string()).collect(), ..Default::default() };
         s.add(&a, now).unwrap().meta
     };
-    // made under login, revised under pricing: it serves both
+    // made under login, revised under pricing: it serves both. Each save a new size: a version is
+    // told by `<bytes>:<mtime ms>`, and two writes in the same ms with one size read as one (a flake
+    // under the gate's load: "one" then "two")
     assert_eq!(save("one", &["login"], 10).works.works(), ["login"]);
-    let m = save("two", &["pricing"], 20);
+    let m = save("second", &["pricing"], 20);
     assert_eq!(m.works.works(), ["login", "pricing"]);
     // his move: exactly his works, never stamped again
     assert!(s.move_works(&m.id, vec!["digest".into()]).unwrap());
-    let m = save("three", &["login"], 30);
+    let m = save("third save", &["login"], 30);
     assert_eq!((m.works.works(), m.works.moved()), (&["digest".to_string()][..], true), "law moved_by_you_sticks");
     // an unknown or archived artifact: nothing written, never a create
     assert!(!s.move_works("nope", vec!["login".into()]).unwrap());

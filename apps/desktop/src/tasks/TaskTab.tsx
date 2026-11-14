@@ -4,9 +4,11 @@
 // archived greyed); a paused task's line 'this task is paused · Resume' (tasks-ux); footer Mark done
 // · Pause/Resume (Reopen when done, Restart when stalled). A merged or folded one says where it went.
 // Gestures go through the hub's task_act. Owner: tasks.
-import { Press, tipAttrs } from '@/ds';
+import { useState } from 'react';
+import { Dropdown, Input, Press, tipAttrs } from '@/ds';
 import { sentenceCase } from '@/ds/case';
-import { useAgents, useCards, useProjects, useStore } from '@/store';
+import type { Entry } from '@/proto';
+import { threadKey, useAgents, useCards, useProjects, useStore, useThreadOrder } from '@/store';
 import { useRouter } from '@/app/router';
 import { MAIN } from '@/app/route';
 import { useNowFor } from '@/app/clock';
@@ -14,10 +16,17 @@ import { OptButton } from '@/app/side3d/FlyoutAgents';
 import { askButtons, pickIntent } from '@/app/side3d/model';
 import { tasks } from '@/proto/words_tasks.gen';
 import { useWorks } from '@/store';
-import { goalsOf } from './model';
+import { cutAtWord, goalsOf, isOpen } from './model';
 import { openTask, StatusMark, statusWord } from './Marks';
 import { lineAt } from './Side';
-import { useTaskAct } from './Board';
+import { useTaskAct, useTaskReq } from './Board';
+
+/** His message's words by its id among a thread's entries; null when this window doesn't hold it. Pure. */
+export function originText(entries: readonly (Pick<Entry, 'kind' | 'msg_id' | 'text'> | undefined)[], id: number): string | null {
+  const e = entries.find((x) => x !== undefined && x.kind === 'you' && x.msg_id === id);
+  const text = e?.text.trim() ?? '';
+  return text === '' ? null : text;
+}
 
 /** a start's words: today's hour, else the date */
 function started(ms: number, now: number): string {
@@ -33,8 +42,14 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
   const store = useStore();
   const router = useRouter();
   const act = useTaskAct();
+  const req = useTaskReq();
   const now = useNowFor(() => false);
+  const [renaming, setRenaming] = useState(false);
   const w = works.works.find((x) => x.id === id);
+  // his message that started it, quoted from main's thread when this window holds it (by its id)
+  const mainKey = threadKey(project, MAIN);
+  const order = useThreadOrder(mainKey);
+  const origin = w?.origin == null ? null : originText(order.order.map((p) => store.entry(mainKey, p)), w.origin);
   if (w === undefined) {
     const tomb = works.tombs.find((x) => x.id === id);
     const into = tomb?.merged_into ?? null;
@@ -57,6 +72,8 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
   const mine = new Set(w.cards ?? []);
   const asks = cards.filter((c) => mine.has(c.id));
   const live = (name: string) => agents.find((a) => a.name === name);
+  // the tasks it can merge into: the other open ones of its project
+  const others = works.works.filter((o) => o.id !== w.id && isOpen(o));
   const t = `tasks.tab.${w.id}`;
   return (
     <div className="tk-tab" data-testid={t}>
@@ -65,14 +82,28 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
           <StatusMark status={w.status} />
           {sentenceCase(statusWord(w.status))}
         </span>
-        <h2 className="tk-tab-name">{w.name}</h2>
+        {renaming ? (
+          <Input look="tk-tab-name tk-rename" defaultValue={w.name} autoFocus aria-label={tasks.act_rename} data-testid={`${t}.rename`}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setRenaming(false);
+              if (e.key !== 'Enter') return;
+              const name = e.currentTarget.value.trim();
+              if (name !== '' && name !== w.name) req(project, { step: 'rename', id: w.id, name });
+              setRenaming(false);
+            }}
+            onBlur={() => {
+              setRenaming(false);
+            }} />
+        ) : (
+          <h2 className="tk-tab-name">{w.name}</h2>
+        )}
         <p className="tk-meta">{tasks.tab_meta({ project: x.projectName, agents: tasks.tab_agents({ n: names.length }), when: started(w.created_ms, now) })}</p>
       </header>
 
       {w.origin != null && (
         <Press look="tk-origin" {...tipAttrs(tasks.origin_tip)} onClick={() => {
           router.go({ screen: 'thread', project, agent: MAIN });
-        }} data-testid={`${t}.origin`}>{tasks.origin_open}</Press>
+        }} data-testid={`${t}.origin`}>{origin === null ? tasks.origin_open : `“${cutAtWord(origin, 160)}”`}</Press>
       )}
       {(w.why ?? '') !== '' && <p className="tk-why">{w.why}</p>}
 
@@ -174,6 +205,21 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
             }} data-testid={`${t}.pause`}>{tasks.act_pause}</Press>
           )
         )}
+        <Dropdown look="pop" label="⋯" name={tasks.act_more} tip={tasks.act_more} testId={`${t}.more`}
+          groups={[
+            { id: 'acts', rows: [{ id: 'rename', name: tasks.act_rename, testId: `${t}.more.rename` }] },
+            {
+              id: 'merge',
+              head: tasks.merge_head,
+              rows: others.length === 0
+                ? [{ id: 'none', name: tasks.merge_none, disabled: true }]
+                : others.map((o) => ({ id: `merge:${o.id}`, name: o.name, glyph: <StatusMark status={o.status} />, testId: `${t}.more.merge.${o.id}` })),
+            },
+          ]}
+          onPick={(pick) => {
+            if (pick === 'rename') setRenaming(true);
+            else if (pick.startsWith('merge:')) req(project, { step: 'merge', id: w.id, into: pick.slice('merge:'.length) });
+          }} />
       </footer>
     </div>
   );

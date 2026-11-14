@@ -91,3 +91,4 @@
 .tk-paused{display:flex;align-items:center;gap:var(--s-2);margin:0;color:var(--c-text-2)}
 .tk-foot{position:sticky;bottom:0;display:flex;align-items:center;gap:var(--s-2);margin-top:auto;padding:var(--s-3) 0;border-top:1px solid var(--c-line);background:var(--c-surface)}
 .tk-gone{margin:0;padding:var(--s-4);color:var(--c-text-3)}
+.tk-rename{width:100%;box-sizing:border-box}

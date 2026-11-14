@@ -5,10 +5,20 @@
     "one": null,
     "text": "Mark done"
   },
+  "tasks.act_more": {
+    "args": [],
+    "one": null,
+    "text": "More: Rename, Merge into…"
+  },
   "tasks.act_pause": {
     "args": [],
     "one": null,
     "text": "Pause"
+  },
+  "tasks.act_rename": {
+    "args": [],
+    "one": null,
+    "text": "Rename"
   },
   "tasks.act_reopen": {
     "args": [],
@@ -168,6 +178,16 @@
     ],
     "one": "{n} needs you",
     "text": "{n} need you"
+  },
+  "tasks.merge_head": {
+    "args": [],
+    "one": null,
+    "text": "Merge into"
+  },
+  "tasks.merge_none": {
+    "args": [],
+    "one": null,
+    "text": "No other open task"
   },
   "tasks.needs_questions": {
     "args": [

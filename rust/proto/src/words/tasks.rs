@@ -142,6 +142,14 @@ crate::words! { tasks:
     act_restart = "Restart";
     /// a done task's button
     act_reopen = "Reopen";
+    /// the footer's ⋯: its tip
+    act_more = "More: Rename, Merge into…";
+    /// the ⋯ menu: rename the task (his name: an agent never renames it after)
+    act_rename = "Rename";
+    /// the merge picker's head
+    merge_head = "Merge into";
+    /// the merge picker with no other open task
+    merge_none = "No other open task";
     /// the task gone (merged, folded, unknown here)
     tab_gone = "This task is not here anymore.";
     /// a merged task's tab: where it went

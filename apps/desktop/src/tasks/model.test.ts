@@ -5,6 +5,7 @@ import { barRows, cutAtWord, goalsOf, type ProjWork } from './model';
 import { sinceLooked } from './since';
 import { tasksOf } from './chips';
 import { resolveMerged } from './model';
+import { originText } from './TaskTab';
 
 const NOW = 1_700_000_000_000;
 const H = 3_600_000;
@@ -80,5 +81,13 @@ describe('a merged task read as the one it went into', () => {
     expect(resolveMerged(tombs, 'x')).toBe('x');
     expect(resolveMerged(tombs, 'live')).toBe('live');
     expect(['p', 'q']).toContain(resolveMerged([{ id: 'p', merged_into: 'q' }, { id: 'q', merged_into: 'p' }], 'p'));
+  });
+});
+
+describe("his message quoted on the Task tab", () => {
+  it('reads his message by its id, none when this window does not hold it', () => {
+    const es = [undefined, { kind: 'agent', msg_id: 7, text: 'not his' }, { kind: 'you', msg_id: 7, text: ' make the app feel native ' }] as const;
+    expect(originText(es as never, 7)).toBe('make the app feel native');
+    expect(originText(es as never, 8)).toBeNull();
   });
 });

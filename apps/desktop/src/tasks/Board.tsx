@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Press, tipAttrs } from '@/ds';
 import { keep } from '@/app/keep';
 import { useStore } from '@/store';
-import type { WorkStatus } from '@/proto';
+import type { Task as TaskReq, WorkStatus } from '@/proto';
 import { tasks } from '@/proto/words_tasks.gen';
 import { useNowFor } from '@/app/clock';
 import { barRows, cutAtWord, goalsOf, STATUS_ORDER, type ProjWork } from './model';
@@ -60,9 +60,17 @@ function setLooked(project: string, at: number): void {
 
 /** a task's gesture on the Board or its tab: through the hub's task_act (sb task's own steps) */
 export function useTaskAct(): (project: string, step: 'done' | 'reopen' | 'pause' | 'resume', id: string) => void {
-  const store = useStore();
+  const req = useTaskReq();
   return (project, step, id) => {
-    store.command({ cmd: 'task_act', project, req: { step, id } });
+    req(project, { step, id });
+  };
+}
+
+/** any of sb task's steps (rename, merge...) as his gesture */
+export function useTaskReq(): (project: string, req: TaskReq) => void {
+  const store = useStore();
+  return (project, req) => {
+    store.command({ cmd: 'task_act', project, req });
   };
 }
 
