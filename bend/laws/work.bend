@@ -366,3 +366,57 @@ law blocked_answer_carries_its_cards_works:
   for +text: String
   for +parts: String
   {HC.answer.blocked.snd(c, text, parts) == HC.Snd{HM.USER(), HS.Card.agent(c), text, False{}, None{}, False{}, False{}, False{}, None{}, parts, None{}, Some{HS.Card.works(c)}} : HC.Snd}
+
+# ---- a task's birth (architect, owed before tasks merges) ----
+
+# LAW: a birth never takes a taken id (architect m_64989): an id a work or a
+# tomb holds is refused, the work never emitted. Births are the only step
+# that adds to works (a rename keeps the id, a merge or a fold makes a tomb,
+# tombs keep their ids), so works and tombs stay unique by construction.
+# WO.free's fuel is why the refusal never fires (liveness), not why ids are unique.
+law work_birth_never_takes_a_taken_id:
+  for -o: HS.St
+  for +cx: HX.Cx<o>
+  for +a: HC.TAsk
+  for +by: String
+  for +w: HS.Work
+  for e: {HWO.taken(HC.st(o, cx), HS.Work.id(w)) == True{} : Bool}
+  {HC.req_task.born(o, cx, a, by, w) == HC.task_err(o, a, cx, HC.cat(["task id ", HS.Work.id(w), " is taken: try another name"])) : HX.Cx<o>}
+
+# LAW: the other case: a free id is born (EWorkCreated, then its turn).
+law work_birth_of_a_free_id:
+  for -o: HS.St
+  for +cx: HX.Cx<o>
+  for +a: HC.TAsk
+  for +by: String
+  for +w: HS.Work
+  for e: {HWO.taken(HC.st(o, cx), HS.Work.id(w)) == False{} : Bool}
+  {HC.req_task.born(o, cx, a, by, w) == HC.req_task.born.go(o, cx, a, by, w) : HX.Cx<o>}
+
+# LAW (free's own row, not the uniqueness law): the walk past a taken slug
+# keeps the first `slug-n` it finds free.
+law work_id_unique_next:
+  for +st: HS.St
+  for +slug: String
+  for +n: Nat
+  for +f: Nat
+  for +e: {HWO.taken(st, HWO.free.id(slug, n)) == False{} : Bool}
+  {HWO.taken(st, HWO.free.go(1n+f, st, slug, n)) == False{} : Bool}
+
+# LAW: an agent's new task (sb task new) takes its turn in the same step:
+# its turn serves it from then (a work_turn line, its agent, that id).
+law work_birth_takes_turn:
+  for -o: HS.St
+  for +cx: HX.Cx<o>
+  for +token: Nat
+  for +by: String
+  for +id: String
+  {HC.req_task.turn(o, HC.TAReq{token}, cx, by, id) == HX.emit(o, cx, HM.EWorkTurn{HWO.wturn(by, [id], True{}, HC.now(o, cx))}, Unit{}, Unit{}, Unit{}) : HX.Cx<o>}
+
+# LAW: his own new task (the Board's, the Task tab's) takes no turn: he has none.
+law his_work_birth_takes_no_turn:
+  for -o: HS.St
+  for +cx: HX.Cx<o>
+  for +by: String
+  for +id: String
+  {HC.req_task.turn(o, HC.TAHim{}, cx, by, id) == cx : HX.Cx<o>}

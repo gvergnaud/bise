@@ -22,6 +22,10 @@ export const tasks = {
   status_unknown: "quiet",
   /** how many of his questions wait on it */
   needs_questions: (a: { n: number }): string => a.n === 1 ? "needs you · " + String(a.n) + " question" : "needs you · " + String(a.n) + " questions",
+  /** needs you, a card of it on a page: that page (tasks-ux: Waiting is never blank) */
+  needs_page: (a: { page: string | number }): string => "needs you · a pick on page " + String(a.page),
+  /** to review, its agents' place has an open PR: its number */
+  review_pr: (a: { n: string | number }): string => "to review · PR #" + String(a.n),
   /** the agent in a turn of it */
   working_who: (a: { who: string | number }): string => "working · " + String(a.who),
   /** it waits for an agent's reply */

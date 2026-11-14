@@ -115,6 +115,15 @@ pub struct WorkRow {
     /// its open cards
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub cards: Vec<u64>,
+    /// to review: the open PR of its agents' place, its number (the hub
+    /// joins it from the places at its snapshot; tasks-ux: Waiting is
+    /// never blank); none when no place has one
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pr: Option<u64>,
+    /// needs you: the page of a card of it (its title, else its id); none
+    /// when no card of it is on a page
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page: Option<String>,
 }
 
 impl WorkRow {
@@ -128,6 +137,7 @@ impl WorkRow {
         let next = || self.at_ms.map(&next).unwrap_or_default();
         let who = self.who.as_str();
         match (self.status, self.about.as_str()) {
+            (WorkStatus::NeedsYou, _) if self.page.is_some() => tasks::needs_page(self.page.as_deref().unwrap_or_default()),
             (WorkStatus::NeedsYou, _) if self.needs > 0 => tasks::needs_questions(self.needs),
             (WorkStatus::NeedsYou, _) => tasks::status_needs_you.into(),
             (WorkStatus::Working, _) if !who.is_empty() => tasks::working_who(who),
@@ -140,6 +150,7 @@ impl WorkRow {
             (WorkStatus::Stalled, "crash") => tasks::stalled_crash(who, past()),
             (WorkStatus::Stalled, _) if self.at_ms.is_some() => tasks::stalled_quiet(past()),
             (WorkStatus::Stalled, _) => tasks::status_stalled.into(),
+            (WorkStatus::ToReview, _) if self.pr.is_some() => tasks::review_pr(self.pr.unwrap_or_default()),
             (WorkStatus::ToReview, _) => tasks::status_to_review.into(),
             (WorkStatus::Paused, "until") if self.at_ms.is_some() => tasks::paused_until(next()),
             (WorkStatus::Paused, _) => tasks::paused_by_you.into(),

@@ -247,7 +247,10 @@ def free.go(fuel: Nat, +st: S.St, +slug: String, +n: Nat) -> String:
       LZ.pick(String, taken(st, free.id(slug, n)), u => free.go(f, st, slug, 1n+n), u => free.id(slug, n))
 
 # a new work's id: its slug, else the first free `slug-2`, `slug-3`...
-# (law work_id_unique)
+# Its fuel (one more than the works and tombs) leaves one `slug-n` free
+# among the tries: why the birth's guard (core.bend req_task.born, law
+# work_birth_never_takes_a_taken_id) never refuses; the guard, not this
+# count, is what keeps ids unique.
 def free(+st: S.St, +slug: String) -> String:
   +fuel = Nat.add(1n, Nat.add(List.length(&2, S.Work, S.St.works(st)), List.length(&2, S.Tomb, S.St.tombs(st))))
   LZ.pick(String, taken(st, slug), u => free.go(fuel, st, slug, 2n), u => slug)

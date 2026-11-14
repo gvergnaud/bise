@@ -28,6 +28,10 @@ crate::words! { tasks:
     // ---- a status and what it is about
     /// how many of his questions wait on it
     needs_questions(n) = one "needs you · {n} question" | "needs you · {n} questions";
+    /// needs you, a card of it on a page: that page (tasks-ux: Waiting is never blank)
+    needs_page(page) = "needs you · a pick on page {page}";
+    /// to review, its agents' place has an open PR: its number
+    review_pr(n) = "to review · PR #{n}";
     /// the agent in a turn of it
     working_who(who) = "working · {who}";
     /// it waits for an agent's reply

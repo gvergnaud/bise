@@ -20,3 +20,5 @@
 {"now":1791100000000,"want":"done","row":{"id":"a","name":"A","by":"main","created_ms":1,"last_ms":1,"status":"done"}}
 {"now":1791100000000,"want":"ongoing","row":{"id":"a","name":"A","ongoing":true,"by":"main","created_ms":1,"last_ms":1,"status":"ongoing"}}
 {"now":1791100000000,"want":"quiet","row":{"id":"a","name":"A","by":"main","created_ms":1,"last_ms":1,"status":"a_newer_status"}}
+{"now":1791100000000,"want":"to review · PR #412","row":{"id":"a","name":"A","by":"main","created_ms":1,"last_ms":1,"status":"to_review","pr":412}}
+{"now":1791100000000,"want":"needs you · a pick on page launch plan","row":{"id":"a","name":"A","by":"main","created_ms":1,"last_ms":1,"status":"needs_you","needs":1,"cards":[4],"page":"launch plan"}}

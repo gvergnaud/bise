@@ -173,3 +173,28 @@ def Laws.his_answer_on_a_blocked_card_reaches_its_agent(o, cx, c, id, text, part
 
 def Laws.blocked_answer_carries_its_cards_works(c, text, parts):
   {==}
+
+# ---- a task's birth ----
+
+def Laws.work_birth_never_takes_a_taken_id(o, cx, a, by, w, e):
+  %Equal.sym(Bool, HWO.taken(HC.st(o, cx), HS.Work.id(w)), True{}, e)
+    : {HLZ.pick(HX.Cx<o>, _, u => HC.task_err(o, a, cx, HC.cat(["task id ", HS.Work.id(w), " is taken: try another name"])), u => HC.req_task.born.go(o, cx, a, by, w))
+      == HC.task_err(o, a, cx, HC.cat(["task id ", HS.Work.id(w), " is taken: try another name"])) : HX.Cx<o>}
+  {==}
+
+def Laws.work_birth_of_a_free_id(o, cx, a, by, w, e):
+  %Equal.sym(Bool, HWO.taken(HC.st(o, cx), HS.Work.id(w)), False{}, e)
+    : {HLZ.pick(HX.Cx<o>, _, u => HC.task_err(o, a, cx, HC.cat(["task id ", HS.Work.id(w), " is taken: try another name"])), u => HC.req_task.born.go(o, cx, a, by, w))
+      == HC.req_task.born.go(o, cx, a, by, w) : HX.Cx<o>}
+  {==}
+
+def Laws.work_id_unique_next(st, slug, n, f, e):
+  %Equal.sym(Bool, HWO.taken(st, HWO.free.id(slug, n)), False{}, e)
+    : {HWO.taken(st, HLZ.pick(String, _, u => HWO.free.go(f, st, slug, 1n+n), u => HWO.free.id(slug, n))) == False{} : Bool}
+  e
+
+def Laws.work_birth_takes_turn(o, cx, token, by, id):
+  {==}
+
+def Laws.his_work_birth_takes_no_turn(o, cx, by, id):
+  {==}

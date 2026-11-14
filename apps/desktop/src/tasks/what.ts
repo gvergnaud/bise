@@ -26,6 +26,8 @@ export function whatOf(r: WorkRow, now: number, past: (ms: number) => string, ne
   const needs = r.needs ?? 0;
   switch (r.status) {
     case 'needs_you':
+      // a card of it on a page: that page (the hub joins it; tasks-ux: Waiting is never blank)
+      if (r.page != null) return tasks.needs_page({ page: r.page });
       return needs > 0 ? tasks.needs_questions({ n: needs }) : tasks.status_needs_you;
     case 'working':
       return who !== '' ? tasks.working_who({ who }) : tasks.status_working;
@@ -38,7 +40,8 @@ export function whatOf(r: WorkRow, now: number, past: (ms: number) => string, ne
       if (about === 'crash') return tasks.stalled_crash({ who, at: p() });
       return at !== undefined ? tasks.stalled_quiet({ at: p() }) : tasks.status_stalled;
     case 'to_review':
-      return tasks.status_to_review;
+      // its agents' open PR (the hub joins it from the places)
+      return r.pr != null ? tasks.review_pr({ n: r.pr }) : tasks.status_to_review;
     case 'paused':
       return about === 'until' && at !== undefined ? tasks.paused_until({ at: n() }) : tasks.paused_by_you;
     case 'done':

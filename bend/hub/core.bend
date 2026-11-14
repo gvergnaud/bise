@@ -3974,10 +3974,20 @@ def req_task.turn(-o: S.St, a: TAsk, +cx: X.Cx<o>, +by: String, +id: String) -> 
     case TAHim{}:
       cx
 
-def req_task.born(-o: S.St, +cx: X.Cx<o>, +a: TAsk, +by: String, +w: S.Work) -> X.Cx<o>:
+def req_task.born.go(-o: S.St, +cx: X.Cx<o>, +a: TAsk, +by: String, +w: S.Work) -> X.Cx<o>:
   +id = S.Work.id(w)
   +cx2 = emit(o, cx, M.EWorkCreated{w}, Unit{}, Unit{}, Unit{})
   task_ok(o, a, req_task.turn(o, a, cx2, by, id), ok_body([J.kv("id", J.JStr{id}), J.kv("name", J.JStr{S.Work.name(w)})]))
+
+# the one place a work is born (the only step that adds to works: a rename
+# keeps its id, a merge or a fold makes a tomb, tombs keep their ids): an id
+# a work or a tomb holds is refused (law work_birth_never_takes_a_taken_id;
+# architect m_64989). WO.free's fuel is why this never fires (liveness), the
+# guard why ids stay unique (safety).
+def req_task.born(-o: S.St, +cx: X.Cx<o>, +a: TAsk, +by: String, +w: S.Work) -> X.Cx<o>:
+  LZ.pick(X.Cx<o>, WO.taken(st(o, cx), S.Work.id(w)),
+    u => task_err(o, a, cx, cat(["task id ", S.Work.id(w), " is taken: try another name"])),
+    u => req_task.born.go(o, cx, a, by, w))
 
 # `slug`: the shell's of the name (router's rules), "" when it has none
 def req_task.new(-o: S.St, +cx: X.Cx<o>, +a: TAsk, +by: String, +q: J.Json) -> X.Cx<o>:

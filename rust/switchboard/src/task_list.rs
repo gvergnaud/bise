@@ -45,6 +45,9 @@ pub fn row(w: &VWork) -> WorkRow {
         at_ms: w.at,
         needs: w.needs,
         cards: w.cards.clone(),
+        // joined at the snapshot, which has the places and the cards (core_snapshot::with_reasons)
+        pr: None,
+        page: None,
     }
 }
 

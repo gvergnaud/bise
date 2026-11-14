@@ -75,7 +75,7 @@ impl Hub {
     /// The snapshot around its agent rows: the cards, the places, the flow.
     fn snapshot_with(&self, agents: Vec<AgentRow>, now: u64) -> Snapshot {
         let running = self.running_cards();
-        let cards = self.st.open_cards().map(|c| self.card_row(c, now, &running)).collect();
+        let cards: Vec<CardRow> = self.st.open_cards().map(|c| self.card_row(c, now, &running)).collect();
         let places = crate::place::places(&self.st, &self.prs);
         let (mut lids, stale) = self.pr_views(now);
         // a feature's lid: the land queue's (`landing`) wins
@@ -83,7 +83,8 @@ impl Hub {
             lids.entry(id.clone()).or_insert_with(|| l.clone());
         }
         let places = crate::place::views(&places, &lids, &self.landing, &stale, &self.trying, &self.pr_ahead);
-        let (works, tombs) = crate::task_list::rows(&self.st);
+        let (mut works, tombs) = crate::task_list::rows(&self.st);
+        with_reasons(&mut works, &places, &cards);
         Snapshot { agents, cards, places, flow: self.flow, works, tombs, ..Snapshot::default() }
     }
 
@@ -141,5 +142,30 @@ impl Hub {
             .take_while(|m| m.created_ms >= c.created_ms)
             .find(|m| m.from == MAIN && m.to == c.agent && m.reply_to != c.for_msg)
             .map(|m| m.id)
+    }
+}
+
+/// tasks-ux (Waiting is never blank): what a task's line names when the
+/// data exists, joined here where the places and the cards are. To
+/// review: the open PR of a place one of its agents works in; needs you:
+/// the page a card of it is on. The pick of the words stays
+/// `rows::WorkRow::what`'s.
+pub(crate) fn with_reasons(works: &mut [bise_proto::rows::WorkRow], places: &[crate::place::PlaceView], cards: &[CardRow]) {
+    use bise_proto::rows::WorkStatus;
+    for w in works.iter_mut() {
+        match w.status {
+            WorkStatus::ToReview => {
+                w.pr = places
+                    .iter()
+                    .filter(|p| p.agents.iter().any(|a| w.agents.contains(a)))
+                    .filter_map(|p| p.pr.as_ref())
+                    .find(|pr| matches!(pr.state, crate::place::PrState::Open | crate::place::PrState::Draft))
+                    .map(|pr| pr.number);
+            }
+            WorkStatus::NeedsYou => {
+                w.page = cards.iter().filter(|c| w.cards.contains(&c.id)).find_map(|c| c.page.as_ref()).map(|p| p.id.clone());
+            }
+            _ => {}
+        }
     }
 }

@@ -261,6 +261,13 @@
     "one": null,
     "text": "No other open task"
   },
+  "tasks.needs_page": {
+    "args": [
+      "page"
+    ],
+    "one": null,
+    "text": "needs you · a pick on page {page}"
+  },
   "tasks.needs_questions": {
     "args": [
       "n"
@@ -301,6 +308,13 @@
     "args": [],
     "one": null,
     "text": "type your answer, ⏎ sends it"
+  },
+  "tasks.review_pr": {
+    "args": [
+      "n"
+    ],
+    "one": null,
+    "text": "to review · PR #{n}"
   },
   "tasks.sec_agents": {
     "args": [],

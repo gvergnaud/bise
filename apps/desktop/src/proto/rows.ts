@@ -1848,7 +1848,18 @@ needs?: number,
 /**
  * its open cards
  */
-cards?: Array<number>, };
+cards?: Array<number>, 
+/**
+ * to review: the open PR of its agents' place, its number (the hub
+ * joins it from the places at its snapshot; tasks-ux: Waiting is
+ * never blank); none when no place has one
+ */
+pr?: number | null, 
+/**
+ * needs you: the page of a card of it (its title, else its id); none
+ * when no card of it is on a page
+ */
+page?: string | null, };
 
 /**
  * A task done more than 7 days ago, folded: its id stays taken and its
