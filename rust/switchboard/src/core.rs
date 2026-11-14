@@ -1200,6 +1200,7 @@ impl Hub {
             checks: std::path::PathBuf::new(),
             lands: std::path::PathBuf::new(),
             works: a.turn_works.clone().unwrap_or_default(),
+            task_trailers: true, // the daemon reads [land] task_trailers at the trunk's tip
         })
     }
 

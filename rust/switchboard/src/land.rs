@@ -80,12 +80,20 @@ pub struct Job {
     /// the request): its commit names them (`Bise-Task:`,
     /// [`crate::land_trailer`])
     pub works: Vec<String>,
+    /// `[land] task_trailers` at the trunk's tip ([`crate::flow::land_task_trailers`],
+    /// the daemon sets it): false, the commit names no task
+    pub task_trailers: bool,
 }
 
 impl Job {
-    /// The commit's message: his words, then a trailer per work.
+    /// The commit's message: his words, then a trailer per work, unless
+    /// the repo turned them off.
     fn commit_message(&self) -> String {
-        crate::land_trailer::with_tasks(&self.message, &self.works)
+        if self.task_trailers {
+            crate::land_trailer::with_tasks(&self.message, &self.works)
+        } else {
+            self.message.clone()
+        }
     }
 }
 
@@ -599,6 +607,19 @@ mod tests {
         ws.canonicalize().unwrap()
     }
 
+    /// Gabriel m_65054 (architect m_65056): `[land] task_trailers = false`,
+    /// the commit's message is his words alone; on (the default), a
+    /// trailer per task its turn serves.
+    #[test]
+    fn task_trailers_off_leaves_the_message_unchanged() {
+        let mut j = job("docs", Path::new("/nowhere"), Path::new("/nowhere"), &[], &[]);
+        j.message = "feat: the icon".into();
+        j.works = vec!["native-mac".into()];
+        assert_eq!(j.commit_message(), "feat: the icon\n\nBise-Task: native-mac");
+        j.task_trailers = false;
+        assert_eq!(j.commit_message(), "feat: the icon");
+    }
+
     pub(super) fn job(agent: &str, dir: &Path, shared: &Path, files: &[&str], others: &[(&str, &[&str])]) -> Job {
         Job {
             agent: agent.into(),
@@ -621,6 +642,7 @@ mod tests {
             checks: shared.parent().unwrap_or(shared).join("worktrees"),
             lands: shared.parent().unwrap_or(shared).join("lands.jsonl"),
             works: Vec::new(),
+            task_trailers: true,
         }
     }
 

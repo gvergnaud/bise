@@ -10,6 +10,10 @@
 # rust/switchboard/src/land_after.rs): `scripts/tip_check.py <base> <tip>
 # <agent>`, the quick gate on main at low priority, one run per 10 min at
 # most, never on battery (docs/loop-speed.md §0 rule 11).
+# A land's commit names the tasks its turn serves, one `Bise-Task: <id>`
+# trailer each (rust/switchboard/src/land_trailer.rs). On by default; a repo
+# that wants none says `task_trailers = false` here (Gabriel m_65054: never
+# forced, never forbidden).
 [land]
 after = "scripts/tip_check.py"
 
