@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { WorkRow, WorkStatus } from '@/proto';
 import { barRows, cutAtWord, goalsOf, type ProjWork } from './model';
 import { sinceLooked } from './since';
+import { tasksOf } from './chips';
 
 const NOW = 1_700_000_000_000;
 const H = 3_600_000;
@@ -37,6 +38,23 @@ describe('the bar rows', () => {
   it('cuts a long name at a word', () => {
     expect(cutAtWord('Plugin apps in the gallery and the store', 20)).toBe('Plugin apps in the…');
     expect(cutAtWord('Short', 20)).toBe('Short');
+  });
+});
+
+describe('the chips of a thing', () => {
+  const all = [
+    w('a', 'done', NOW - H, { agents: ['perf'], cards: [3], origin: 12 }),
+    w('b', 'working', NOW - 2 * H, { agents: ['perf', 'docs'] }),
+    w('c', 'paused', NOW, { agents: ['docs'], cards: [3] }),
+  ].map((x) => x.w);
+  it('reads an agent from the tasks it served, open ones first, then the newest', () => {
+    expect(tasksOf(all, { agent: 'perf' }).map((x) => x.id)).toEqual(['b', 'a']);
+    expect(tasksOf(all, { agent: 'docs' }).map((x) => x.id)).toEqual(['c', 'b']);
+  });
+  it('reads a card, his message and an artifact by their own fields', () => {
+    expect(tasksOf(all, { card: 3 }).map((x) => x.id)).toEqual(['c', 'a']);
+    expect(tasksOf(all, { origin: 12 }).map((x) => x.id)).toEqual(['a']);
+    expect(tasksOf(all, { ids: ['b', 'gone'] }).map((x) => x.id)).toEqual(['b']);
   });
 });
 

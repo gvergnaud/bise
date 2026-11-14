@@ -24,6 +24,9 @@
 .tk-more{height:var(--s-6);padding:0 var(--s-1);border:0;border-radius:var(--r-1);background:none;color:var(--c-text-3);font:inherit;font-size:var(--t-12)}
 .tk-more:hover{background:var(--c-hover);color:var(--c-text-2)}
 
+/* a chip under his message, at his bubble's right edge */
+.tk-under-you{display:flex;justify-content:flex-end;margin-top:var(--s-1)}
+
 /* the right bar's Tasks section: the agents' row shape (s3-orow), a mark in the mark's column */
 .tk-orow .s3-orow-mark{display:inline-flex;align-items:center;justify-content:center}
 .tk-goals{color:var(--c-text-3);font-size:var(--t-12);font-variant-numeric:tabular-nums}

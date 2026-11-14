@@ -6,6 +6,7 @@
 import { memo, useState, type HTMLAttributes, type KeyboardEvent, type Ref } from 'react';
 import { useListKeys } from '@/app/listkeys';
 import { tipAttrs } from '@/ds';
+import { TaskChipsOf } from '@/tasks';
 import { byDay, glyphOf, keyOf, kindWords, madeBy, revealPathOf, splitArchived, timeOf, type Item } from './model';
 import { isNew, lineTip, listKind, listName, topOf, whenOf, whoOf, type Card } from './gallery';
 import { appWord } from './apps';
@@ -188,6 +189,8 @@ export const ListRow = memo(function ListRow({ card, on, picked, now, visible, o
         {isNew(card) && <span className="art-new" data-testid={`${testId}.new`}>{panel.new_chip}</span>}
         {/* a PR: its words after its name, dim but for what waits on him (designer m_54748) */}
         {it.a.pr != null && <span className="art-lr-pr"><PrWords a={it.a} fit testId={`${testId}.pr`} /></span>}
+        {/* the tasks it serves (its row's works) */}
+        {(it.a.works ?? []).length > 0 && <TaskChipsOf project={it.project} of={{ ids: it.a.works ?? [] }} testId={`${testId}.task`} />}
       </span>
       <span className="art-lr-a" {...tipAttrs(lineTip(card))}>{whoOf(it.a)}</span>
       {/* its app ('Sheets'; no app: 'your Mac', File types' word, which fits the column); a PR, a

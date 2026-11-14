@@ -21,6 +21,7 @@ import { useModHeld } from "./held";
 import { FRAME_KEYS, HISTORY_KEYS } from "./keys";
 import { useAgents, useProjects } from "@/store";
 import { usePluginTitle } from "@/plugins/title";
+import { TaskChipsOf } from "@/tasks";
 import { formatRoute, MAIN, type Route } from "./route";
 import { overOf, type Slid } from "./over";
 import { type Side, useRoute, useRouter } from "./router";
@@ -464,6 +465,8 @@ export function Bar({ frame: state }: { frame: FrameState }) {
         <TitleSlot text={t.title} />
         {/* the thread's agent's links right after its name: its PR, its branch, its page (designer m_57254) */}
         {route.screen === "thread" && route.agent !== MAIN && <BarLinks project={route.project} agent={route.agent} />}
+        {/* the tasks the agent serves (WorkRow.agents); main serves them all: none on its header */}
+        {route.screen === "thread" && route.agent !== MAIN && <TaskChipsOf project={route.project} of={{ agent: route.agent }} testId="app.bar.title.task" />}
         {t.sub.length > 0 && (
           <span className="s" data-testid="app.bar.title.sub">
             {t.sub.map((p, i) => (

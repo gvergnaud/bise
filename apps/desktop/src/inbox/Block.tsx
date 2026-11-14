@@ -18,6 +18,7 @@ import type { NotifyAuth } from '@/shared/api';
 import { Act, Dot, Kbd, Row, RowMark } from '@/ds';
 import { actedKeys, useActed, useInboxItems, useProjects, useRefusedList, useStore, useVoiceAnswer, type AnswerAt } from '@/store';
 import { shownName } from '@/agents/model';
+import { TaskChipsOf } from '@/tasks';
 import { inbox } from '@/proto/words_inbox.gen';
 import { common } from '@/proto/words_common.gen';
 import { age, dotOf, folds, InboxCard, RefusedMark } from './InboxCard';
@@ -897,6 +898,8 @@ export function InboxBlock({ here, onAnswer, now: pinned, only, rest }: InboxBlo
                   </span>
                 )}
                 {!isNotify(c) && <RefusedMark card={c} />}
+                {/* the task it serves (WorkRow.cards) */}
+                <TaskChipsOf project={c.project} of={{ card: c.id }} testId={`inbox.card.${c.project}.${String(c.id)}.task`} />
               </>
             }
             end={

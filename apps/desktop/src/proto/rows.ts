@@ -1038,6 +1038,12 @@ folder?: string,
  */
 turn?: number, 
 /**
+ * the tasks it serves, by id (its Meta's or its page's ArtWorks: the
+ * union of the turns that made it, or his Move; architect m_64865);
+ * none: no task, or an older hub
+ */
+works?: Array<string>, 
+/**
  * who it is for; none: an older hub (read as for him)
  */
 audience?: ArtifactAudience, 

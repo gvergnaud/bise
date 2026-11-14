@@ -104,6 +104,11 @@ pub struct Artifact {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub turn: Option<u64>,
+    /// the tasks it serves, by id (its Meta's or its page's ArtWorks: the
+    /// union of the turns that made it, or his Move; architect m_64865);
+    /// none: no task, or an older hub
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub works: Vec<String>,
     // his pick on page artifacts-signal (the hub's artifacts_marks): who it
     // is for, who kept it, whether its work is done, the section it reads in,
     // his last open. Left out when empty: an older hub's row reads as open work

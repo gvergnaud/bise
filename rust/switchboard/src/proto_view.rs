@@ -513,6 +513,8 @@ pub fn artifacts(ev: &Value, page_url: impl Fn(&str) -> Option<String>, frame_ba
                 live: r.get("live").and_then(|l| serde_json::from_value(l.clone()).ok()),
                 folder: Some(s(r, "folder")).filter(|f| !f.is_empty()),
                 turn: r.get("turn").and_then(Value::as_u64),
+                // its ArtWorks, flattened into its Meta (a page's into its page_meta)
+                works: r.get("works").and_then(Value::as_array).map_or_else(Vec::new, |w| w.iter().filter_map(|x| x.as_str().map(String::from)).collect()),
                 // the store's marks and the hub's section (artifacts_marks, join_sections)
                 audience: r.get("audience").and_then(|x| serde_json::from_value(x.clone()).ok()),
                 kept: r.get("kept").and_then(|x| serde_json::from_value(x.clone()).ok()),
