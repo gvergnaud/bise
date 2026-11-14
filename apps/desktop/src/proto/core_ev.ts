@@ -2,7 +2,7 @@
 // BISE_PROTO_BLESS=1 cargo test -p bise-proto --features ts --test ts
 // ids, positions and *_ms are numbers (u64 in Rust, safe below 2^53).
 
-import type { Account, AwayProject, CheckState, CheckWhy, ComputerAgent, ConnectorsProblem, CuProfile, CuRow, Found, IndexRow, Looked, OpenWhat, PeekShot, PhasePage, PickCommand, PickFile, PickFolder, PickSkill, Plugin, PluginPreview, PluginsSummary, PreviewAction, PreviewReport, PreviewWait, ProjectRow, RoleRow, SetupGauge, StateAgent, StateCard, VoiceLit } from './app_rows';
+import type { Account, AwayProject, CheckState, CheckWhy, ComputerAgent, ConnectorsProblem, CuProfile, CuRow, Found, GatewayModel, GatewayState, GatewayWhy, IndexRow, Looked, OpenWhat, PeekShot, PhasePage, PickCommand, PickFile, PickFolder, PickSkill, Plugin, PluginPreview, PluginsSummary, PreviewAction, PreviewReport, PreviewWait, ProjectRow, RoleRow, SetupGauge, StateAgent, StateCard, VoiceLit } from './app_rows';
 import type { Mode } from './hub';
 import type { JsonValue } from './json';
 import type { BiseUpdate, FileType, Folder, Page, ScheduledTask } from './rows';
@@ -25,7 +25,7 @@ pasted?: boolean, answer?: string | null, main?: string | null, lines?: Array<st
  * how long the one real call took, its end (works or failed): the
  * first launch's '✓ it said: “…” · 1.2 s' (desktop-onboarding v4)
  */
-ms?: number | null, } | { "ev": "found", dir: string, items: Array<Found>, guarded?: Array<string>, looked?: Array<Looked>, } | { "ev": "away_summary", since_ms: number, done: number, questions: number, failed: number, projects: Array<AwayProject>, } | { "ev": "plugins", project?: string | null, items: Array<Plugin>, 
+ms?: number | null, } | { "ev": "gateway_found", url?: string | null, from?: string | null, } | { "ev": "gateway_list", state: GatewayState, url?: string | null, models?: Array<GatewayModel>, why?: GatewayWhy | null, said?: string | null, } | { "ev": "found", dir: string, items: Array<Found>, guarded?: Array<string>, looked?: Array<Looked>, } | { "ev": "away_summary", since_ms: number, done: number, questions: number, failed: number, projects: Array<AwayProject>, } | { "ev": "plugins", project?: string | null, items: Array<Plugin>, 
 /**
  * why his Mistral connectors may be missing or old (none: fine)
  */

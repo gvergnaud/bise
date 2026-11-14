@@ -458,10 +458,12 @@ pub fn pick_for(c: &crate::Catalog, provider: &str, main: &str) -> Option<String
 /// What a key that just passed its check writes as main's model
 /// (architect m_28532): the checked model when main has none, or when
 /// main's model can't run (its provider has no working key or sign-in);
-/// never over a model that runs. None: main's model stays.
-pub fn model_to_write(main: &str, main_runs: bool, checked: &str) -> Option<String> {
+/// never over a model that runs, unless `picked`: he picked it on a model
+/// list (a gateway's, onboarding-models: his last pick counts). None:
+/// main's model stays.
+pub fn model_to_write(main: &str, main_runs: bool, checked: &str, picked: bool) -> Option<String> {
     let none = main.trim().is_empty() || main == "none";
-    ((none || !main_runs) && !checked.is_empty() && checked != main).then(|| checked.to_string())
+    ((none || !main_runs || picked) && !checked.is_empty() && checked != main).then(|| checked.to_string())
 }
 
 fn table_is_empty(text: &str, table: &str) -> bool {

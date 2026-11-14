@@ -273,25 +273,29 @@ fn a_prs_diff_finds_gh_on_the_kept_login_path() {
     let _ = std::fs::remove_dir_all(&d);
 }
 
-/// No gh on that PATH: what it is, what to do, where it looked. A gh
-/// that runs but has no login: `gh auth login`. Any other failure:
-/// gh's one line, never its whole output.
+/// No gh on that PATH: its kind, what to do, and where it looked as
+/// the tip (never in the line, designer m_64591). A gh that runs but
+/// has no login: `gh auth login`. No such PR: its own kind, never
+/// "GitHub unreachable" (architect m_64590). Any other failure: gh's
+/// one line, no kind, never its whole output.
 #[cfg(unix)]
 #[test]
 fn a_missing_or_signed_out_gh_says_what_to_do() {
-    use bise_proto::words::pages;
+    use bise_proto::{hub::ErrorKind, words::pages};
     let d = std::env::temp_dir().join(format!("sb-diff-gh-words-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(d.join("empty")).unwrap();
     let url = "https://github.com/o/r/pull/7";
     let none = format!("{}:/nonexistent/bin", d.join("empty").display());
     let err = pr(url, None, &none).unwrap_err();
-    assert_eq!(err, pages::review_gh_missing(&none));
-    assert!(err.contains("brew install gh") && err.contains(&none), "{err}");
+    assert_eq!(err, DiffErr { text: pages::review_gh_missing(pages::review_gh_install), kind: Some(ErrorKind::GhMissing), tip: Some(pages::review_gh_looked_in(&none)) });
+    assert!(err.text.contains("brew install gh") && !err.text.contains(&none), "{err:?}");
     let out = fake_gh(&d, "out", "echo 'To get started with GitHub CLI, please run:  gh auth login' >&2\nexit 4");
-    assert_eq!(pr(url, None, &out.to_string_lossy()).unwrap_err(), pages::review_gh_signed_out);
-    let gone = fake_gh(&d, "gone", "echo 'no pull requests found for branch \"x\"' >&2\necho more >&2\nexit 1");
-    assert_eq!(pr(url, None, &gone.to_string_lossy()).unwrap_err(), format!("gh couldn't read {url}: no pull requests found for branch \"x\""));
+    assert_eq!(pr(url, None, &out.to_string_lossy()).unwrap_err(), DiffErr { text: pages::review_gh_signed_out(pages::review_gh_login), kind: Some(ErrorKind::GhSignedOut), tip: None });
+    let no_pr = fake_gh(&d, "no-pr", "echo 'GraphQL: Could not resolve to a PullRequest with the number of 7. (repository.pullRequest)' >&2\nexit 1");
+    assert_eq!(pr(url, None, &no_pr.to_string_lossy()).unwrap_err(), DiffErr { text: pages::review_gh_no_pr.into(), kind: Some(ErrorKind::GhNotFound), tip: None });
+    let odd = fake_gh(&d, "odd", "echo 'unknown flag: --color' >&2\necho more >&2\nexit 1");
+    assert_eq!(pr(url, None, &odd.to_string_lossy()).unwrap_err(), DiffErr::from(format!("gh couldn't read {url}: unknown flag: --color")));
     let _ = std::fs::remove_dir_all(&d);
 }
 

@@ -13,6 +13,7 @@
 // Their state (open, place) and effects (the outside press, esc, a resize, the focus back) are
 // hooks.ts's useOpen and usePop (purity.mts): the floating is the ds's, written once. The lint
 // (ds/lint.ts menuDrawn) refuses a menu built anywhere else. css/dropdown.css.
+import { useCoverWhile } from "./cover";
 import { useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEventHandler, type ReactNode, type Ref, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { cx } from "./cx";
@@ -82,6 +83,7 @@ export interface PickerPopProps extends Omit<PickerProps, "style" | "maxHeight" 
 /** The Picker floating from its anchor; rendered while open. Its floating is hooks.ts's usePop. */
 export function PickerPop({ anchor, box, align = "auto", side = "below", match = false, onClose, callerKeys = false, ...picker }: PickerPopProps) {
   const { place, mount, focus, layer } = usePop(anchor, { box, align, side, match }, onClose);
+  useCoverWhile(true);
   return createPortal(
     <div ref={mount} className="b-picker-pop" onFocus={focus.onFocus} onBlur={focus.onBlur}
       // its keys are its own: never the screen's under it (React bubbles through the portal)
@@ -157,6 +159,7 @@ export function DropdownPair({ label, extra, name, tip, back, testId, onPick, ..
 /** The floating of a PickerPair: usePop's, like PickerPop's. */
 function PairPop({ anchor, align, onClose, children }: { anchor: RefObject<HTMLElement | null>; align: "start" | "end"; onClose: () => void; children: (place: { style: CSSProperties; maxHeight: number }) => ReactNode }) {
   const { place, mount, focus, layer } = usePop(anchor, { box: undefined, align, side: "below", match: false }, onClose);
+  useCoverWhile(true);
   return createPortal(
     <div ref={mount} className="b-picker-pop" onFocus={focus.onFocus} onBlur={focus.onBlur}
       onKeyDown={(e: KeyboardEvent<HTMLDivElement>) => { e.stopPropagation(); }}>

@@ -179,7 +179,7 @@ fn is_gone(e: &RpcError) -> bool {
 }
 
 pub(super) fn gone(why: &str) -> RpcError {
-    RpcError { code: -32000, message: format!("the view's server is not reachable: {why}"), data: Some(ErrorData { reason: Some(REASON_SERVER_GONE.into()), ..Default::default() }) }
+    RpcError { code: -32000, message: format!("the view's server is not reachable: {why}"), data: Some(Box::new(ErrorData { reason: Some(REASON_SERVER_GONE.into()), ..Default::default() })) }
 }
 
 /// The folder a static view (`~views`) may serve its own files from

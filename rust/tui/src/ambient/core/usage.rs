@@ -64,6 +64,8 @@ pub(crate) fn of_cmd(c: &AppCmd) -> Counted {
         AppCmd::Send { .. } | AppCmd::Start { .. } | AppCmd::Answer { .. } | AppCmd::AgentSend { .. } => NotCounted,
         // the setup: its provider check is counted at its end (of_check)
         AppCmd::ProviderUse { .. }
+        | AppCmd::GatewayFind {}
+        | AppCmd::GatewayModels { .. }
         | AppCmd::SetupCheck
         | AppCmd::SetupTest { .. }
         | AppCmd::SetupFirstCancel

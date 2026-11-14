@@ -5,7 +5,7 @@
 // amb-home.
 import { useEffect, useRef, useState } from 'react';
 import type { Artifact } from '@/proto';
-import { useAccounts, useArtifacts, useClaudePlan, useFound, useFoundFolders, usePrefs, useProjects, useProviderCheck, useRoles, useStore } from '@/store';
+import { useAccounts, useArtifacts, useClaudePlan, useFound, useFoundFolders, useGatewayFound, useGatewayList, usePrefs, useProjects, useProviderCheck, useRoles, useStore } from '@/store';
 import { useRoute, useRouter } from '@/app/router';
 import { onboarded, prefsOf, useCmdError } from '@/settings';
 import { Onboarding } from './Onboarding';
@@ -31,6 +31,8 @@ export function OnboardingScreen() {
       hasModel={mainHasModel(useRoles())}
       share={shareOf(prefsOf(usePrefs()))}
       signInError={useCmdError('sign_in')?.text ?? null}
+      gwFound={useGatewayFound()}
+      gwList={useGatewayList()}
       ports={{
         send: (cmd) => {
           store.command(cmd);

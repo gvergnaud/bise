@@ -21,6 +21,8 @@
 //     goes where its CSP lets it; the view or its proxy leaving for any other url is dropped, never
 //     sent to his browser;
 //   - no <webview>;
+//   - not guarded here: a web tab's view (webview/views.ts isWebContents; page newtab-browser,
+//     architect m_64682), a real web page on its own session with its own guard (webview/guard.ts);
 //   - not guarded: a card's capture window (thumbs/make.ts isCaptureContents), offscreen, on its
 //     own partition, with its own fence. Its main frame is never the app's page, so the rule
 //     above sent each local site's 302 to his browser at every card drawn (art-links-burst);
@@ -39,6 +41,7 @@ import { openLink } from './ipc';
 import { PINCH_FORWARD } from './pinch';
 import { FIND_AGENT } from './findagent';
 import { isCaptureContents } from './thumbs/make';
+import { isWebContents } from './webview/views';
 import { isViewOrigin, isViewProxy, viewNavigation, type NavFrame } from './viewrules';
 
 export interface OwnPage {
@@ -206,6 +209,8 @@ export function installGuard(own: OwnPage, testMode: boolean): void {
   app.on('web-contents-created', (_e, wc) => {
     // a card's capture window fences itself (thumbs/make.ts): the guard's rules are for the app's pages
     if (isCaptureContents(wc)) return;
+    // a web tab's view: its own guard (webview/guard.ts), its registry's (webview/views.ts)
+    if (isWebContents(wc)) return;
     guardContents(wc, own, testMode);
   });
   void app.whenReady().then(fenceFrames);

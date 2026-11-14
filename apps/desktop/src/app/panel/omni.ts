@@ -85,15 +85,21 @@ function classOf(q: string, prefixes: readonly string[], hay: string): number {
   return ws.every((w) => l.includes(w)) ? 1 : 0;
 }
 
-/** What a page completes from: its shown URL, then with www., then whole. Pure. */
-function pagePrefixes(p: WebPage): readonly string[] {
+/** What a page's address completes from: its shown URL, then with www., then whole. Pure. */
+function addressPrefixes(p: WebPage): readonly string[] {
   return [shownUrl(p.url), noScheme(p.url), p.url];
+}
+
+/** What ranks a page as a prefix match: its address, then its title (a web tab read it). Pure. */
+function pagePrefixes(p: WebPage): readonly string[] {
+  return [...addressPrefixes(p), ...(p.title === undefined ? [] : [p.title])];
 }
 
 /** The whole text a hit completes `q` to (his letters kept, the rest the hit's), or null: no prefix match. Pure. */
 export function completionOf(q: string, hit: OmniHit | undefined): string | null {
   if (hit === undefined) return null;
-  const c = prefixOf(q, hit.kind === 'web' ? pagePrefixes(hit.page) : [hit.item.a.title]);
+  // a page completes its address only, as Chrome: its title ranks it, never fills the field (ui-review m_64756)
+  const c = prefixOf(q, hit.kind === 'web' ? addressPrefixes(hit.page) : [hit.item.a.title]);
   return c === null ? null : q + c.slice(q.length);
 }
 
@@ -104,7 +110,7 @@ export function completionOf(q: string, hit: OmniHit | undefined): string | null
 export function omniHits(q: string, web: WebHistory, items: readonly Item[], recent: ReadonlySet<string>, now: number, max = HITS_MAX): readonly OmniHit[] {
   if (q.trim() === '') return [];
   const pages: OmniHit[] = web.pages.flatMap((page) => {
-    const cls = classOf(q, pagePrefixes(page), page.url);
+    const cls = classOf(q, pagePrefixes(page), `${page.url} ${page.title ?? ''}`);
     return cls === 0 ? [] : [{ kind: 'web' as const, page, cls, score: frecency(page.visits, now) }];
   });
   const arts: OmniHit[] = items.flatMap((item) => {

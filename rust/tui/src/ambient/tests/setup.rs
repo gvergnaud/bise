@@ -146,7 +146,8 @@ fn setup_home(t: &mut T, home_dir: Option<PathBuf>) -> Rc<RefCell<World>> {
         claude_plan: Box::new(|| true),
         // the live port checks on a thread (firstkey.rs); this one answers
         // at once: "sk-bad…" is refused, nothing saved; any other key works
-        provider_use: Box::new(move |id, key, _base_url, seq, tx| {
+        provider_use: Box::new(move |req, seq, tx| {
+            let (id, key) = (req.id.as_str(), req.key.clone());
             let k = key.clone().unwrap_or_default();
             let res = if k.starts_with("sk-bad") || k.trim().is_empty() {
                 Err(crate::firstkey::Failed { why: bise_proto::app_rows::CheckWhy::WrongKey, said: "invalid api key".into(), url: Some("https://keys.test".into()) })
@@ -157,6 +158,19 @@ fn setup_home(t: &mut T, home_dir: Option<PathBuf>) -> Rc<RefCell<World>> {
             let used = crate::firstkey::Used { id: id.into(), name: "Anthropic".into(), model: "anthropic/claude-opus-5-5".into(), pasted: key.is_some(), res };
             let _ = tx.send(Done::Used { seq, used });
             ("Anthropic".into(), "anthropic/claude-opus-5-5".into())
+        }),
+        gateway_find: Box::new(|| Some(("https://gw.test".into(), "~/.claude/settings.json".into()))),
+        // a fake gateway (fake /models): "sk-bad…" is refused; else two models at <url>/v1
+        gateway_models: Box::new(|url, key, seq, tx| {
+            let get = |_: &str, k: &str| {
+                let (status, body) = if k.starts_with("sk-bad") { (401, r#"{"error":{"message":"invalid key"}}"#) } else { (200, r#"{"data":[{"id":"my-own-model"},{"id":"azure_ai/claude-opus-5-5"}]}"#) };
+                Ok(crate::gateway::Got { status, html: false, body: body.as_bytes().to_vec() })
+            };
+            let res = crate::gateway::list(&url, &key.unwrap_or_else(|| "sk-found".into()), &get).map(|(at, ids)| {
+                let rows = crate::gateway::rows(&bise_catalog::Catalog::builtin(), "litellm", &ids);
+                crate::gateway::Listed { at, ids, rows }
+            });
+            let _ = tx.send(Done::GatewayListed { seq, res });
         }),
         key_remove: Box::new(move |id| {
             e.borrow_mut().keys.retain(|(k, _)| k != id);
@@ -507,6 +521,51 @@ fn a_newer_provider_use_drops_the_older_answer() {
     let out = t.take();
     let ends: Vec<&str> = evs(&out, "provider_check").iter().filter_map(|e| e["state"].as_str()).filter(|s| *s != "checking").collect();
     assert_eq!(ends, vec!["works"], "only the newest answer");
+}
+
+/// onboarding-models: the gateway's URL found is a suggestion with its
+/// source; its list (a fake /models) comes listing then listed, known
+/// first; a wrong key fails typed; the key is never in an event or a log.
+#[test]
+fn a_gateway_is_found_then_listed_and_never_says_its_key() {
+    let mut t = T::new();
+    let _w = setup(&mut t);
+    app(&mut t, r#"{"cmd":"gateway_find"}"#);
+    let out = t.take();
+    let f = evs(&out, "gateway_found")[0];
+    assert_eq!((f["url"].as_str(), f["from"].as_str()), (Some("https://gw.test"), Some("~/.claude/settings.json")));
+    // a wrong key: listing, then failed with its why and the gateway's words
+    app(&mut t, r#"{"cmd":"gateway_models","url":"https://gw.test","key":"sk-bad-gw"}"#);
+    assert_eq!(evs(&t.take(), "gateway_list")[0]["state"], "listing");
+    t.until(|o| !evs(o, "gateway_list").is_empty());
+    let out = t.take();
+    let l = evs(&out, "gateway_list")[0];
+    assert_eq!((l["state"].as_str(), l["why"].as_str(), l["said"].as_str()), (Some("failed"), Some("wrong_key"), Some("invalid key")));
+    // a good one: its rows, the known model first with its name, the base URL it answered at
+    app(&mut t, r#"{"cmd":"gateway_models","url":"https://gw.test","key":"sk-fake-gw-secret"}"#);
+    t.until(|o| evs(o, "gateway_list").iter().any(|e| e["state"] == "listed"));
+    let out = t.take();
+    let l = evs(&out, "gateway_list").into_iter().find(|e| e["state"] == "listed").unwrap();
+    assert_eq!(l["url"], "https://gw.test/v1");
+    assert_eq!((l["models"][0]["id"].as_str(), l["models"][0]["label"].as_str()), (Some("azure_ai/claude-opus-5-5"), Some("opus 5.5")));
+    assert_eq!((l["models"][1]["id"].as_str(), l["models"][1].get("known")), (Some("my-own-model"), None));
+    assert!(!serde_json::to_string(&out).unwrap().contains("sk-fake-gw-secret"));
+    assert!(!crate::ambient::setup::redact(r#"{"cmd":"gateway_models","url":"https://gw.test","key":"sk-fake-gw-secret"}"#).contains("sk-fake-gw-secret"));
+}
+
+/// tasks-ux m_64555: only the last list asked counts.
+#[test]
+fn a_newer_gateway_list_drops_the_older_answer() {
+    let mut t = T::new();
+    let _w = setup(&mut t);
+    app(&mut t, r#"{"cmd":"gateway_models","url":"https://gw.test","key":"sk-good-1"}"#);
+    app(&mut t, r#"{"cmd":"gateway_models","url":"https://gw.test","key":"sk-bad-2"}"#);
+    t.until(|o| evs(o, "gateway_list").iter().any(|e| e["state"] == "failed"));
+    t.core.tick(std::time::Instant::now());
+    t.out.extend(t.core.take_out());
+    let out = t.take();
+    let ends: Vec<&str> = evs(&out, "gateway_list").iter().filter_map(|e| e["state"].as_str()).filter(|s| *s != "listing").collect();
+    assert_eq!(ends, vec!["failed"], "only the newest answer");
 }
 
 #[test]

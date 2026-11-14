@@ -75,6 +75,8 @@ pub fn plugin_app_dir_in(root: &Path, plugin: &str) -> Option<PathBuf> {
 }
 /// [`Home::dictation_dir`]'s name under the root (the sandbox denies it).
 pub const DICTATION_DIR: &str = "dictation";
+/// [`Home::gateway_models_file`]'s name under the cache folder.
+pub const GATEWAY_MODELS_FILE: &str = "gateway-models.json";
 /// The stamp of the exported paths: `<HOME>\n<BISE_HOME>` they were computed for.
 pub const EXPORTS_FOR: &str = "BISE_EXPORTS_FOR";
 
@@ -308,6 +310,14 @@ impl Home {
     /// `<root>/cache`: rebuildable files (indexes, the providers' models).
     pub fn cache_dir(&self) -> PathBuf {
         self.root.join("cache")
+    }
+
+    /// `<root>/cache/gateway-models.json`: the models a LiteLLM gateway
+    /// lists (`{"provider", "models": [ids]}`), its one writer the first
+    /// run's check of a gateway model that works (onboarding-models,
+    /// architect m_64551); read with the plan lists (catalog plan_list).
+    pub fn gateway_models_file(&self) -> PathBuf {
+        self.cache_dir().join(GATEWAY_MODELS_FILE)
     }
 
     /// `<root>/cache/thumbs`: the desktop app's artifact card pictures, one

@@ -122,12 +122,30 @@ pub enum AppCmd {
     /// the check and written to config.toml (`[providers.<id>]
     /// base_url`) once it works (Isidor, 28 oct: a key with no URL left
     /// no model)
+    /// `model`: his pick on the model list (a gateway's, onboarding-models:
+    /// `litellm/<id>`): checked instead of the provider's own pick, and
+    /// written as main's model once it works, over one that runs
     ProviderUse {
         id: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         key: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         base_url: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        model: Option<String>,
+    },
+    /// the model step opened (onboarding-models, architect m_64551): the
+    /// core reads a LiteLLM gateway's URL in his tools' configs (Vibe,
+    /// Claude Code; never a key) and answers `gateway_found`
+    GatewayFind {},
+    /// list the models a LiteLLM gateway serves (its `/models`, off the
+    /// core's loop, 5 s at most, nothing written): `gateway_list`
+    /// listing, then listed or failed. `key`: none = the key found
+    /// (LITELLM_API_KEY, auth.json); never echoed nor logged
+    GatewayModels {
+        url: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        key: Option<String>,
     },
     KeyRemove { id: String },
     /// folders that could be projects (none: his home folder, depth 2)
@@ -717,6 +735,8 @@ impl AppCmd {
         "sign_in",
         "sign_in_cancel",
         "provider_use",
+        "gateway_find",
+        "gateway_models",
         "key_remove",
         "found_scan",
         "away_back",

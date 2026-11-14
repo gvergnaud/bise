@@ -1,6 +1,8 @@
 // The thread's list: its rows (entries, his sends not landed yet, the live reply), the folded
 // runs of messages between agents, and the first-run block over an empty main thread. Split out
 // of ThreadScreen.tsx (the file cap); ThreadScreen mounts it. Owner: amb-win.
+import { openWebLink } from '@/app/panel/web';
+import { webHistoryNow } from '@/app/panel/webpages';
 import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
 import { Press } from '@/ds';
 import type { ComposerActions } from '@/composer';
@@ -39,10 +41,9 @@ function useBase(project: string, agent: string): string | undefined {
   return a?.worktree ?? row?.path;
 }
 
-/** A link from an answer: his browser, through main (http/https/mailto only). */
-function openLink(url: string) {
-  const bise = (window as Partial<Window>).bise;
-  void bise?.openExternal(url);
+/** A link from an answer: a web tab of bise, his browser with ⌘ or for a site he always opens there (designer m_64680). */
+function openLink(url: string, mod = false) {
+  openWebLink(url, mod, webHistoryNow().out);
 }
 
 /**

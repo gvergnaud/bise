@@ -5,6 +5,7 @@
 import {
   type BranchesList,
   type Dictation,
+  type DiffErr,
   diffKey,
   diffErrKey,
   artDiffKey,
@@ -267,6 +268,14 @@ export function applyTyped(s: Store, ev: Ev): void {
       // the last check's state (provider_use): checking, works or failed
       s.put("provider_check", ev);
       return;
+    case "gateway_found":
+      // a LiteLLM gateway's URL in his tools' configs (a suggestion), or none
+      s.put("gateway_found", ev);
+      return;
+    case "gateway_list":
+      // a gateway's model list: listing, then listed or failed
+      s.put("gateway_list", ev);
+      return;
     case "found":
       s.put("found", ev.items);
       // the folders macOS guards: not looked in yet, and the ones he looked in (his 'Look in Documents')
@@ -371,7 +380,8 @@ export function applyTyped(s: Store, ev: Ev): void {
       // (pr-changes-blank); one this window never asked is not its own
       if (ev.cmd === "diff") {
         const key = ev.project == null ? undefined : s.diffAsked.get(ev.project);
-        if (key !== undefined) s.put(diffErrKey(key), ev.text);
+        // a PR's says its kind and its tip (gh missing, signed out, no such PR): the view draws by kind
+        if (key !== undefined) s.put(diffErrKey(key), { text: ev.text, kind: ev.kind ?? null, tip: ev.tip ?? null } satisfies DiffErr);
         return;
       }
       // a refused subscribe (no such agent): no page comes, its thread's cue goes (thread-loading)

@@ -1,7 +1,7 @@
 // bise's web history, pure (main/webhistory.ts; architect m_64583): what is never recorded, a
 // visit noted, the prune, a removal, his switch, a broken file. Fake URLs and times only.
 import { describe, expect, it } from 'vitest';
-import { cleared, EMPTY_HISTORY, historyText, KEEP_DAYS, MAX_PAGES, noteVisit, parseHistory, pruned, recordable, URL_MAX, VISITS_KEPT, webHistoryFile, withKeep, withoutUrl } from './webhistory';
+import { cleared, EMPTY_HISTORY, siteOf, titled, TITLE_MAX, withOut, historyText, KEEP_DAYS, MAX_PAGES, noteVisit, parseHistory, pruned, recordable, URL_MAX, VISITS_KEPT, webHistoryFile, withKeep, withoutUrl } from './webhistory';
 import { standInPaths } from './userdata';
 
 const DAY = 86_400_000;
@@ -61,9 +61,9 @@ describe('a visit noted', () => {
   it('nothing while his switch is off; off clears it; on again starts empty', () => {
     const h = noteVisit(EMPTY_HISTORY, 'https://a.com/', NOW, false);
     const off = withKeep(h, false);
-    expect(off).toEqual({ keep: false, pages: [] });
+    expect(off).toEqual({ keep: false, pages: [], out: [] });
     expect(noteVisit(off, 'https://b.com/', NOW, true)).toBe(off);
-    expect(withKeep(off, true)).toEqual({ keep: true, pages: [] });
+    expect(withKeep(off, true)).toEqual({ keep: true, pages: [], out: [] });
   });
 });
 
@@ -80,7 +80,7 @@ describe('the prune, a removal, a clear', () => {
     let h = noteVisit(EMPTY_HISTORY, 'https://a.com/', NOW, false);
     h = noteVisit(h, 'https://b.com/', NOW, false);
     expect(withoutUrl(h, 'https://a.com/').pages.map((x) => x.url)).toEqual(['https://b.com/']);
-    expect(cleared(h)).toEqual({ keep: true, pages: [] });
+    expect(cleared(h)).toEqual({ keep: true, pages: [], out: [] });
   });
 });
 
@@ -88,7 +88,7 @@ describe('the file', () => {
   it('reads back what it wrote', () => {
     const h = noteVisit(noteVisit(EMPTY_HISTORY, 'https://a.com/', NOW, true), 'https://b.com/x', NOW + 1, false);
     expect(parseHistory(historyText(h))).toEqual({ h, broken: false });
-    expect(parseHistory(historyText(withKeep(h, false)))).toEqual({ h: { keep: false, pages: [] }, broken: false });
+    expect(parseHistory(historyText(withKeep(h, false)))).toEqual({ h: { keep: false, pages: [], out: [] }, broken: false });
   });
   it('none yet: empty, his switch on; broken: empty and said, never a throw', () => {
     expect(parseHistory(null)).toEqual({ h: EMPTY_HISTORY, broken: false });
@@ -107,5 +107,29 @@ describe('the file', () => {
       expect(webHistoryFile(p.userData)).not.toBe(his);
       expect(webHistoryFile(p.userData).startsWith(`${REAL}/Library`)).toBe(false);
     }
+  });
+});
+
+describe('titles and his sites', () => {
+  it('a title a web tab read is kept on its page, one line, capped; a later visit keeps it', () => {
+    let h = noteVisit(EMPTY_HISTORY, 'https://a.com/', NOW, false);
+    h = titled(h, 'https://a.com/', '  A \n page ');
+    expect(h.pages[0]?.title).toBe('A page');
+    h = noteVisit(h, 'https://a.com/', NOW + 1, false);
+    expect(h.pages[0]?.title).toBe('A page');
+    expect(titled(h, 'https://a.com/', 'x'.repeat(TITLE_MAX + 9)).pages[0]?.title).toHaveLength(TITLE_MAX);
+    expect(titled(h, 'https://none.com/', 'X')).toBe(h);
+    expect(parseHistory(historyText(h)).h.pages[0]?.title).toBe('A page');
+  });
+  it("'Always open <site> in your browser': by host, www. aside, kept across a Clear and his switch", () => {
+    expect(siteOf('https://www.Slack.com/client')).toBe('slack.com');
+    expect(siteOf('http://localhost:3000/')).toBeNull();
+    let h = withOut(EMPTY_HISTORY, 'slack.com', true);
+    h = withOut(h, 'notion.so', true);
+    expect(h.out).toEqual(['notion.so', 'slack.com']);
+    expect(cleared(h).out).toEqual(['notion.so', 'slack.com']);
+    expect(withKeep(h, false).out).toEqual(['notion.so', 'slack.com']);
+    expect(withOut(h, 'slack.com', false).out).toEqual(['notion.so']);
+    expect(parseHistory(historyText(h)).h.out).toEqual(['notion.so', 'slack.com']);
   });
 });

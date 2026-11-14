@@ -172,6 +172,22 @@ max_output = 32768
 vision = true
 reasoning = true
 
+# A LiteLLM gateway (a company's, the first run's 'LiteLLM gateway' row,
+# onboarding-models): bise ships no URL. config.toml's base_url, or
+# LITELLM_BASE_URL; its key in LITELLM_API_KEY (the name LiteLLM's docs
+# and company setup scripts export) or auth.json. Its models are the ones
+# its /v1/models lists (<cache>/gateway-models.json, written when the
+# first run's check of one works); `gateway = true`: a model the catalog
+# knows under another provider (claude-opus-5-5, azure_ai/claude-opus-5-5)
+# takes that model's caps and wire family (catalog::gateway_id).
+[providers.litellm]
+name = "LiteLLM gateway"
+hidden = true
+gateway = true
+api = "openai-chat"
+key_env = "LITELLM_API_KEY"
+base_url_env = "LITELLM_BASE_URL"
+
 # the proxy bills Anthropic's list prices
 [models."foundry/claude-opus-5-5"]
 efforts = "none,low,medium,high,xhigh,max"

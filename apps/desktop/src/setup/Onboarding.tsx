@@ -16,7 +16,7 @@ import { Composer } from '@/composer';
 import type { ComposerActions } from '@/composer/actions';
 import type { ProviderCheck } from '@/settings';
 import { PayStep } from './PayStep';
-import { afterSignIn, enterOf, PAY_START, phase, ready, upOf, type PayState } from './pay';
+import { afterList, afterSignIn, enterOf, PAY_START, phase, ready, upOf, type GatewayFound, type GatewayList, type PayState } from './pay';
 import { IslandStage } from './island/Island';
 import { planOf } from './island/plan';
 import { reducedMotion } from '@/ds/hooks';
@@ -59,6 +59,10 @@ export interface OnboardingProps {
   check?: ProviderCheck | null;
   /** the core's last refusal of a sign-in started here (error {cmd: sign_in}): its words */
   signInError?: string | null;
+  /** gateway_find's answer (onboarding-models): a LiteLLM gateway's URL found, and where */
+  gwFound?: GatewayFound | null;
+  /** gateway_models' last answer: listing, then listed or failed */
+  gwList?: GatewayList | null;
   ports: OnboardingPorts;
   now?: number;
   /** his home folder (window.bise.home), shown as ~ in the paths */
@@ -81,7 +85,7 @@ const FIRST_KISS = 48;
 /** A fn sentinel in onb_first_fn's words, where the key chip goes. */
 const FN_HOLE = '\u0000';
 
-export function Onboarding({ accounts, claudePlan = false, found, folders = null, perms, fn = null, check = null, signInError = null, ports, now: pinned, home = '', hasModel = false, share = true }: OnboardingProps) {
+export function Onboarding({ accounts, claudePlan = false, found, folders = null, perms, fn = null, check = null, signInError = null, gwFound = null, gwList = null, ports, now: pinned, home = '', hasModel = false, share = true }: OnboardingProps) {
   const [opened] = useState(() => Date.now());
   const now = pinned ?? opened;
   const [st, setSt] = useState<OnbState>(START);
@@ -139,6 +143,13 @@ export function Onboarding({ accounts, claudePlan = false, found, folders = null
       setPay(r.s);
     }
   }
+  // the gateway's list his fields wait on answered: on to its models, once (onboarding-models)
+  const [payList, setPayList] = useState(gwList);
+  if (payList !== gwList) {
+    setPayList(gwList);
+    const r = afterList(pay, gwList);
+    if (r !== null) setPay(r);
+  }
   const ok = ready(pay, check);
   // a model answered this time, or main had one: the first launch may end (Isidor, 28 oct)
   const modelReady = ok || hasModel;
@@ -158,10 +169,18 @@ export function Onboarding({ accounts, claudePlan = false, found, folders = null
     run(next(s, { signedIn: ok, found, now }));
   };
   const at = stepOf(s);
+  // the model step opened: a LiteLLM gateway's URL in his tools' configs, read now (his act; architect m_64551)
+  const asked = useRef(false);
+  useEffect(() => {
+    if (at !== 'model' || asked.current) return;
+    asked.current = true;
+    ports.send({ cmd: 'gateway_find' });
+  }, [at, ports]);
   // '← back' and esc: the model step's own levels first (a key field, a provider list, a sign-in or a
-  // check: a sign-in under way is cancelled), then a step back (Matthias, Slack: stuck on OpenRouter's sign-in)
+  // check: a sign-in under way is cancelled; 'it works' to the view he picked from), then a step back
+  // (Matthias, Slack: stuck on OpenRouter's sign-in)
   const stepBack = () => {
-    const up = at === 'model' ? upOf(pay, accounts) : null;
+    const up = at === 'model' ? upOf(pay, accounts, check) : null;
     if (up === null) {
       setSt(back(s));
       return;
@@ -169,10 +188,12 @@ export function Onboarding({ accounts, claudePlan = false, found, folders = null
     if (up.cmd !== null) ports.send(up.cmd);
     setPay(up.s);
   };
+  // '← back' in the column's foot of every view but hello (designer m_64550: B, nothing top left)
   const frame = {
     steps: STEPS.length,
     step: s.at,
     testId: `setup.step.${at}`,
+    ...(s.at > 0 ? { back: { text: settings.onb_back, onClick: stepBack, testId: 'setup.back' } } : {}),
   };
   let body;
   switch (at) {
@@ -206,6 +227,8 @@ export function Onboarding({ accounts, claudePlan = false, found, folders = null
           go={go}
           back={stepBack}
           signInError={signInError}
+          gwFound={gwFound}
+          gwList={gwList}
           {...(ports.open ? { open: ports.open } : {})}
         />
       );
@@ -366,7 +389,7 @@ export function Onboarding({ accounts, claudePlan = false, found, folders = null
         if (e.key === 'Enter' && !e.metaKey && !e.shiftKey) {
           e.preventDefault();
           // the model step's list: ⏎ takes its first ready row, which comes selected (designer m_52236)
-          const take = at === 'model' ? enterOf(pay, accounts, check) : null;
+          const take = at === 'model' ? enterOf(pay, accounts, check, gwFound?.url ?? null, gwList) : null;
           if (take === null) {
             go();
             return;
@@ -379,18 +402,13 @@ export function Onboarding({ accounts, claudePlan = false, found, folders = null
         }
       }}
     >
-      {/* designer m_18736: back and skip are Acts; only the step's own action is a Button (pri). v4: at the top,
-          '← back' left, 'skip for now' right ('open bise' on the first message: it leaves without asking) */}
+      {/* 'skip for now' top right ('open bise' on the first message: it leaves without asking); '← back' is in
+          the column's foot (onboarding-models, designer m_64550: nothing top left) */}
       <div className="setup-top">
-        <span>
-          {s.at > 0 && (
-            <Act onClick={stepBack} testId="setup.back">
-              {settings.onb_back}
-            </Act>
-          )}
-        </span>
-        {/* no model yet: skip goes to the model step, which has none until a check works (a working setup at the end) */}
-        {!(s.at === MODEL_AT && !modelReady) && (
+        <span />
+        {/* no model yet: skip goes to the model step, which has none until a check works (a working setup at the end);
+            none on 'it works' either: its continue goes on (tasks-ux m_64555) */}
+        {!(s.at === MODEL_AT && (!modelReady || phase(pay, check) === 'works')) && (
           <Act
             onClick={() => {
               leaveHello();

@@ -64,7 +64,7 @@ describe('answers in markdown', () => {
     if (a === null) throw new Error('no link');
     const click = fireEvent.click(a);
     expect(click).toBe(false); // default prevented: the window stays
-    expect(onLink).toHaveBeenCalledWith('https://bise.dev/docs');
+    expect(onLink).toHaveBeenCalledWith('https://bise.dev/docs', false);
     // file: is not a link; raw HTML is not rendered as HTML
     expect(container.querySelectorAll('a')).toHaveLength(1);
     expect(container.querySelector('b')).toBeNull();

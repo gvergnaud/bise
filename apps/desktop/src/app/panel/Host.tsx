@@ -32,6 +32,7 @@ import { PANEL_FULL_KEY } from './keys';
 import { Launcher } from './Launcher';
 import { ThingTab } from './Thing';
 import { BlankBrowser } from './Browser';
+import { WebTab } from './WebTab';
 import { PanelTabs } from './BarTabs';
 import './panel.css';
 
@@ -103,7 +104,8 @@ function Body({ tab, shown }: { tab: Tab; shown: boolean }) {
     case 'launcher':
       return <Launcher tabId={tab.id} shown={shown} artifacts={what.artifacts === true} />;
     case 'browser':
-      return <BlankBrowser tabId={tab.id} shown={shown} />;
+      // a web page (WebTab.tsx, page newtab-browser), else the blank browser and its address field
+      return what.page === undefined ? <BlankBrowser tabId={tab.id} shown={shown} /> : <WebTab tabId={tab.id} shown={shown} page={what.page} />;
     case 'thing':
       return what.e.kind === 'tab' ? null : <ThingTab e={what.e} tabId={tab.id} />;
     case 'folder':

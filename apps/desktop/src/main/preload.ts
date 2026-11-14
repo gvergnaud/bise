@@ -5,7 +5,7 @@
 // ⌘V and the menu's clipboard items play on a private buffer, never his.
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
 import type { HelperEv } from '../proto';
-import { HOME_ARG, IPC, OFFSCREEN_ARG, SURFACE_ARG, TEST_ENV, type A11y, type AppSwapResult, type AppUpdate, type ArtifactLink, type BiseApi, type CrashReport, type CapsuleState, type FileFacts, type MenuAction, type NotifyAuth, type SaveResult, type SkillRead, type Surface, type ThumbAnswer, type TermOpened, type UpdateInfo, type UpdateState, type ViewAnswerWire, type WebHistory } from '../shared/api';
+import { HOME_ARG, IPC, OFFSCREEN_ARG, SURFACE_ARG, TEST_ENV, type A11y, type AppSwapResult, type AppUpdate, type ArtifactLink, type BiseApi, type CrashReport, type CapsuleState, type FileFacts, type MenuAction, type NotifyAuth, type SaveResult, type SkillRead, type Surface, type ThumbAnswer, type TermOpened, type UpdateInfo, type UpdateState, type ViewAnswerWire, type WebEvent, type WebHistory } from '../shared/api';
 import { argValue } from './args';
 import { installClipFence, type ClipOp, type ClipSeed, type WinLike } from './clipfence';
 import { coreBridge } from './core/bridge';
@@ -115,6 +115,44 @@ const api: BiseApi = {
     },
     keep: async (on) => {
       await ipcRenderer.invoke(IPC.webHistoryKeep, on);
+    },
+    out: async (site, on) => {
+      await ipcRenderer.invoke(IPC.webHistoryOut, site, on);
+    },
+    clearCookies: async () => {
+      await ipcRenderer.invoke(IPC.webHistoryCookies);
+    },
+  },
+  web: {
+    open: (key, start) => {
+      ipcRenderer.send(IPC.webOpen, key, start);
+    },
+    rect: (key, rect) => {
+      ipcRenderer.send(IPC.webRect, key, rect);
+    },
+    go: (key, url, typed) => {
+      ipcRenderer.send(IPC.webGo, key, url, typed);
+    },
+    act: (key, verb) => {
+      ipcRenderer.send(IPC.webAct, key, verb);
+    },
+    find: (key, text, back, next) => {
+      ipcRenderer.send(IPC.webFind, key, text, back, next);
+    },
+    focus: (key) => {
+      ipcRenderer.send(IPC.webFocus, key);
+    },
+    close: (key) => {
+      ipcRenderer.send(IPC.webClose, key);
+    },
+    onEvent: (cb) => {
+      const h = (_e: unknown, ev: WebEvent): void => {
+        cb(ev);
+      };
+      ipcRenderer.on(IPC.webEvent, h);
+      return () => {
+        ipcRenderer.removeListener(IPC.webEvent, h);
+      };
     },
   },
   views: {

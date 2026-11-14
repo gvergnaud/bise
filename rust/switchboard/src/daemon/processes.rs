@@ -556,7 +556,7 @@ impl State {
     }
 
     fn error(&self, client: ClientId, cmd: &str, text: String) {
-        let v = HubEv::Error { project: Some(self.project.clone()), cmd: Some(cmd.into()), text, cid: None, reason: None, ws: None, kind: None }.to_value();
+        let v = HubEv::Error { project: Some(self.project.clone()), cmd: Some(cmd.into()), text, cid: None, reason: None, ws: None, kind: None, tip: None }.to_value();
         let _ = self.out.send(Msg::Typed { to: Typed::Answer(client), v });
     }
 

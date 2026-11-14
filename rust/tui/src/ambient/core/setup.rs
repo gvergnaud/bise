@@ -17,7 +17,7 @@
 use super::Core;
 use crate::ambient::setup::{rank, repos_after, CuBusy, Done, RegistryOp, SetupPorts, Walked};
 use bise_proto::app_cmd::{AppCmd, TelemetryAct};
-use bise_proto::app_rows::CheckState;
+use bise_proto::app_rows::{CheckState, GatewayState};
 use bise_proto::core_ev::CoreEv;
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
@@ -57,6 +57,15 @@ pub(crate) fn provider_check(id: &str, name: &str, state: CheckState, model: &st
     serde_json::to_value(ev).unwrap_or_else(|_| json!({}))
 }
 
+/// A `gateway_list` event (onboarding-models): never the key.
+pub(crate) fn gateway_list(state: GatewayState, url: Option<String>, models: Vec<bise_proto::app_rows::GatewayModel>, fail: Option<crate::gateway::Fail>) -> Value {
+    let (why, said) = match fail {
+        Some((w, s)) => (Some(w), Some(s).filter(|t| !t.is_empty())),
+        None => (None, None),
+    };
+    serde_json::to_value(CoreEv::GatewayList { state, url, models, why, said }).unwrap_or_else(|_| json!({}))
+}
+
 /// The commands this file answers (never a hub's, never another of the
 /// core's own).
 pub const TAGS: &[&str] = &[
@@ -64,6 +73,8 @@ pub const TAGS: &[&str] = &[
     "sign_in",
     "sign_in_cancel",
     "provider_use",
+    "gateway_find",
+    "gateway_models",
     "key_remove",
     "found_scan",
     "project_add",
@@ -180,6 +191,11 @@ pub(crate) struct Setup {
     use_seq: u64,
     /// the check running per provider: its seq and when it started (its end says how long)
     using: std::collections::HashMap<String, (u64, Instant)>,
+    /// `gateway_models`: the last seq given (an older list's end is dropped)
+    gw_seq: u64,
+    /// the last gateway list that answered: its base URL and ids (a
+    /// `provider_use` of that gateway writes them once it works)
+    gw_listed: Option<(String, Vec<String>)>,
     /// settings · Setup's gauge: its tests, generations, the helper's perms
     pub(super) gauge: super::gauge::GaugeLive,
 }
@@ -211,7 +227,7 @@ impl Core {
     /// The setup's ports (the binary's live ones, or a test's).
     pub fn set_setup(&mut self, ports: SetupPorts) {
         let (tx, rx) = channel();
-        self.setup = Some(Setup { ports, tx, rx, signing: None, logins: Vec::new(), staged: Default::default(), found: None, evidence: Vec::new(), signals_at: None, markets: Vec::new(), summaries: Default::default(), skills_refused: Vec::new(), cu: None, update: Default::default(), held: None, keychain_moving: false, keychain_said: (Vec::new(), false), repos: None, use_seq: 0, using: Default::default(), gauge: Default::default() });
+        self.setup = Some(Setup { ports, tx, rx, signing: None, logins: Vec::new(), staged: Default::default(), found: None, evidence: Vec::new(), signals_at: None, markets: Vec::new(), summaries: Default::default(), skills_refused: Vec::new(), cu: None, update: Default::default(), held: None, keychain_moving: false, keychain_said: (Vec::new(), false), repos: None, use_seq: 0, using: Default::default(), gw_seq: 0, gw_listed: None, gauge: Default::default() });
     }
 
     /// R8: his `/model <model>` in `agent`'s view, before it goes to the
@@ -344,14 +360,48 @@ impl Core {
 
     /// `provider_use` (firstkey.rs): `checking` at once, the check on
     /// its own thread, its end on the tick ([`Self::on_used`]).
-    fn provider_use(&mut self, id: String, key: Option<String>, base_url: Option<String>) {
+    fn provider_use(&mut self, id: String, key: Option<String>, base_url: Option<String>, model: Option<String>) {
         let Some(s) = self.setup.as_mut() else { return };
         s.use_seq += 1;
         let seq = s.use_seq;
         s.using.insert(id.clone(), (seq, Instant::now()));
         let pasted = key.is_some();
-        let (name, model) = (s.ports.provider_use)(&id, key, base_url, seq, s.tx.clone());
+        // a gateway's pick: the list it was picked from (its ids), written once it works
+        let listed = match (&s.gw_listed, &base_url) {
+            (Some((at, ids)), Some(u)) if id == crate::firstkey::GATEWAY && at.trim_end_matches('/') == u.trim().trim_end_matches('/') => ids.clone(),
+            _ => Vec::new(),
+        };
+        let req = crate::firstkey::UseReq { id: id.clone(), key, base_url, model, listed };
+        let (name, model) = (s.ports.provider_use)(req, seq, s.tx.clone());
         self.emit(provider_check(&id, &name, CheckState::Checking, &model, pasted, None));
+    }
+
+    /// `gateway_models` (onboarding-models): `listing` at once, the list on
+    /// its own thread, its end on the tick ([`Self::on_gateway_listed`]);
+    /// only the last one asked counts.
+    fn gateway_models(&mut self, url: String, key: Option<String>) {
+        let Some(s) = self.setup.as_mut() else { return };
+        s.gw_seq += 1;
+        let seq = s.gw_seq;
+        (s.ports.gateway_models)(url, key, seq, s.tx.clone());
+        self.emit(gateway_list(GatewayState::Listing, None, Vec::new(), None));
+    }
+
+    /// A gateway's list ended: dropped when a newer one was asked; else
+    /// its rows (known first, recommended on top) or why not.
+    fn on_gateway_listed(&mut self, seq: u64, res: Result<crate::gateway::Listed, crate::gateway::Fail>) {
+        let Some(s) = self.setup.as_mut() else { return };
+        if seq != s.gw_seq {
+            return;
+        }
+        let ev = match res {
+            Ok(l) => {
+                s.gw_listed = Some((l.at.clone(), l.ids));
+                gateway_list(GatewayState::Listed, Some(l.at), l.rows, None)
+            }
+            Err(f) => gateway_list(GatewayState::Failed, None, Vec::new(), Some(f)),
+        };
+        self.emit(ev);
     }
 
     /// A check ended: dropped when a newer one for that provider runs;
@@ -410,8 +460,17 @@ impl Core {
                 }
                 ("prefs_set", res)
             }
-            AppCmd::ProviderUse { id, key, base_url } => {
-                self.provider_use(id, key, base_url);
+            AppCmd::ProviderUse { id, key, base_url, model } => {
+                self.provider_use(id, key, base_url, model);
+                return;
+            }
+            AppCmd::GatewayFind {} => {
+                let found = (p.gateway_find)();
+                self.emit(serde_json::to_value(CoreEv::GatewayFound { url: found.as_ref().map(|f| f.0.clone()), from: found.map(|f| f.1) }).unwrap_or_else(|_| json!({})));
+                return;
+            }
+            AppCmd::GatewayModels { url, key } => {
+                self.gateway_models(url, key);
                 return;
             }
             AppCmd::Keychain { to } => ("keychain", self.keychain(to)),
@@ -929,6 +988,7 @@ impl Core {
                     self.emit_accounts();
                 }
                 Done::Used { seq, used } => self.on_used(seq, used),
+                Done::GatewayListed { seq, res } => self.on_gateway_listed(seq, res),
                 Done::GuardedRead { project, refused } => self.on_guarded_read(project, refused),
                 d @ Done::Tested { .. } => self.on_tested(d),
                 Done::CuCheck(v) => {

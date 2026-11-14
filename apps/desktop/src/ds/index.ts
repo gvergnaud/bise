@@ -14,6 +14,7 @@
 // The gallery (gallery/Gallery.tsx) draws every component in each state, dark and light.
 export { cx, st, step5, sub, type Cls, type UiState } from "./cx";
 export * from "./prim";
+export { holdCover, useCovered, useCoverWhile } from "./cover";
 export * from "./window";
 export * from "./composer";
 export * from "./thread";

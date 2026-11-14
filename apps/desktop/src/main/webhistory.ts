@@ -2,7 +2,8 @@
 // m_64583). bise loads no web page in-app: every http(s) link leaves through openLink (ipc.ts), and
 // that door notes a visit here. Pure: what is never recorded (a URL with user:pass@, loopback and
 // local hosts, which carry bise's own tokens, every scheme but http and https), a visit noted (the
-// page to the front, its last VISITS_KEPT visits, `typed` when he typed it in the bar), the prune
+// page to the front, its last VISITS_KEPT visits, `typed` when he typed it in the bar), its title
+// once a web tab read it, the sites he always opens in his browser (`out`), the prune
 // (visits older than KEEP_DAYS, MAX_PAGES pages), a page removed, all cleared, his switch, and the
 // file's words read back (a broken file: empty, said). The shell is webhistoryipc.ts, the one
 // writer. Never in a hub: no agent, sb or telemetry sees it. Owner: newtab-omnibox.
@@ -26,7 +27,9 @@ export function webHistoryFile(dir: string): string {
 }
 
 /** Nothing yet: his switch on (designer m_64584: on by default, local only). */
-export const EMPTY_HISTORY: WebHistory = { keep: true, pages: [] };
+export const EMPTY_HISTORY: WebHistory = { keep: true, pages: [], out: [] };
+/** The longest page title it keeps. */
+export const TITLE_MAX = 300;
 
 /** A loopback or local host: bise's own pages and view origins (tokens in their URLs). Pure. */
 function localHost(host: string): boolean {
@@ -49,13 +52,41 @@ export function recordable(raw: unknown): string | null {
   return s.length > URL_MAX ? null : s;
 }
 
+/** A page's title as kept: one line, TITLE_MAX at most, none when empty. Pure. */
+function titleOf(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const t = raw.replace(/\s+/gu, ' ').trim().slice(0, TITLE_MAX);
+  return t === '' ? undefined : t;
+}
+
 /** `url` opened at `at` (`typed`: he typed it in the bar): its page first, its visit first; nothing while his switch is off. Pure. */
 export function noteVisit(h: WebHistory, url: string, at: number, typed: boolean): WebHistory {
   if (!h.keep) return h;
   const old = h.pages.find((p) => p.url === url);
   const visit: WebVisit = { at, typed };
-  const page: WebPage = { url, n: (old?.n ?? 0) + 1, visits: [visit, ...(old?.visits ?? [])].slice(0, VISITS_KEPT) };
-  return { keep: true, pages: [page, ...h.pages.filter((p) => p.url !== url)].slice(0, MAX_PAGES) };
+  const page: WebPage = { url, ...(old?.title === undefined ? {} : { title: old.title }), n: (old?.n ?? 0) + 1, visits: [visit, ...(old?.visits ?? [])].slice(0, VISITS_KEPT) };
+  return { ...h, pages: [page, ...h.pages.filter((p) => p.url !== url)].slice(0, MAX_PAGES) };
+}
+
+/** A web tab read `url`'s title: kept on its page (a page not kept: nothing). Pure. */
+export function titled(h: WebHistory, url: string, title: string): WebHistory {
+  const t = titleOf(title);
+  const old = h.pages.find((p) => p.url === url);
+  if (t === undefined || old === undefined || old.title === t) return h;
+  return { ...h, pages: h.pages.map((p) => (p.url === url ? { ...p, title: t } : p)) };
+}
+
+/** A site's host as kept in `out` ('github.com': lowercased, www. aside), or null. Pure. */
+export function siteOf(raw: unknown): string | null {
+  const u = recordable(raw);
+  if (u === null) return null;
+  return new URL(u).hostname.toLowerCase().replace(/^www\./u, '');
+}
+
+/** His 'Always open <site> in your browser' on or off for `host`. Pure. */
+export function withOut(h: WebHistory, host: string, on: boolean): WebHistory {
+  const rest = h.out.filter((x) => x !== host);
+  return { ...h, out: on ? [...rest, host].toSorted() : rest };
 }
 
 /** Visits older than KEEP_DAYS gone, a page with none left gone, newest page first. Pure. */
@@ -66,22 +97,22 @@ export function pruned(h: WebHistory, now: number): WebHistory {
     .filter((p) => p.visits.length > 0)
     .toSorted((a, b) => (b.visits[0]?.at ?? 0) - (a.visits[0]?.at ?? 0))
     .slice(0, MAX_PAGES);
-  return { keep: h.keep, pages };
+  return { ...h, pages };
 }
 
 /** Without that page (his ⇧⌫ or the row's ×). Pure. */
 export function withoutUrl(h: WebHistory, url: string): WebHistory {
-  return { keep: h.keep, pages: h.pages.filter((p) => p.url !== url) };
+  return { ...h, pages: h.pages.filter((p) => p.url !== url) };
 }
 
-/** Every page gone, his switch kept. Pure. */
+/** Every page gone, his switch and his sites kept. Pure. */
 export function cleared(h: WebHistory): WebHistory {
-  return { keep: h.keep, pages: [] };
+  return { ...h, pages: [] };
 }
 
 /** His switch 'Keep the links I open': off clears it and records nothing. Pure. */
 export function withKeep(h: WebHistory, on: boolean): WebHistory {
-  return { keep: on, pages: on ? h.pages : [] };
+  return { ...h, keep: on, pages: on ? h.pages : [] };
 }
 
 function visitOf(raw: unknown): WebVisit | null {
@@ -97,7 +128,8 @@ function pageOf(raw: unknown): WebPage | null {
   const visits = (Array.isArray(r['visits']) ? (r['visits'] as unknown[]) : []).map(visitOf).filter((v): v is WebVisit => v !== null).slice(0, VISITS_KEPT);
   if (url === null || visits.length === 0) return null;
   const n = typeof r['n'] === 'number' && r['n'] >= visits.length ? Math.floor(r['n']) : visits.length;
-  return { url, n, visits };
+  const title = titleOf(r['title']);
+  return { url, ...(title === undefined ? {} : { title }), n, visits };
 }
 
 /** The file's words: its history, `broken` when they were there but unreadable (moved aside by the shell). Pure. */
@@ -113,10 +145,11 @@ export function parseHistory(text: string | null): { readonly h: WebHistory; rea
   const r = raw as Record<string, unknown>;
   const pages = (Array.isArray(r['pages']) ? (r['pages'] as unknown[]) : []).map(pageOf).filter((p): p is WebPage => p !== null);
   const keep = r['keep'] !== false;
-  return { h: { keep, pages: keep ? pages : [] }, broken: false };
+  const out = (Array.isArray(r['out']) ? (r['out'] as unknown[]) : []).filter((x): x is string => typeof x === 'string' && /^[a-z0-9.-]{1,253}$/u.test(x));
+  return { h: { keep, pages: keep ? pages : [], out }, broken: false };
 }
 
 /** Its words on disk, versioned. Pure. */
 export function historyText(h: WebHistory): string {
-  return JSON.stringify({ v: 1, keep: h.keep, pages: h.pages });
+  return JSON.stringify({ v: 1, keep: h.keep, pages: h.pages, out: h.out });
 }

@@ -497,6 +497,28 @@ crate::words! { panel:
     /// a web page row's ×: out of bise's web history
     omni_remove = "Remove from history";
 
+    // ---- a web page in a browser tab (page newtab-browser, designer m_64680)
+    /// the address bar's × while the page loads
+    web_stop = "Stop";
+    /// the address bar's ⋯
+    web_more = "More";
+    /// ⋯'s per-site item (checked while on): the site always opens in his browser
+    web_out_site(site) = "Always open {site} in your browser";
+    /// a download he saved, the line under the bar: its name and the folder he picked
+    web_saved(name, folder) = "{name} saved to {folder}";
+    /// that line's act
+    web_show = "Show in Finder";
+    /// a page that didn't load, the line under the bar
+    web_failed = "This page didn't load";
+    /// that line's act
+    web_retry = "Try again";
+    /// ⌘F in a web tab: the field's placeholder and name
+    web_find = "Find in page";
+    /// find's count: the match in front and how many
+    web_found(at, n) = "{at} of {n}";
+    /// find with nothing found
+    web_no_match = "no match";
+
     // ---- a browser tab with no page yet (the launcher's Browser, ⌘L)
     /// its tab's title
     tab_browser = "Browser";

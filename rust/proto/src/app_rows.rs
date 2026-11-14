@@ -151,6 +151,65 @@ pub enum CheckWhy {
     Unknown,
 }
 
+/// Where a `gateway_models` listing is (onboarding-models).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum GatewayState {
+    Listing,
+    Listed,
+    Failed,
+    #[serde(other)]
+    Unknown,
+}
+
+/// Why a gateway's model list failed, each with its own words.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum GatewayWhy {
+    /// not an http(s) URL
+    BadUrl,
+    /// no key typed nor found
+    NoKey,
+    /// no answer (`said`: the reason)
+    Unreachable,
+    /// its certificate was refused
+    Tls,
+    /// 401 or 403
+    WrongKey,
+    /// a web page or a redirect answered: a sign-in page, not the API
+    SignInPage,
+    /// 429: too many calls now
+    Busy,
+    /// no model list there (404, or an answer that isn't one)
+    NoList,
+    /// a list with no model in it
+    Empty,
+    #[serde(other)]
+    Unknown,
+}
+
+/// One model a gateway serves, as the model step lists it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct GatewayModel {
+    /// the gateway's own id (`azure_ai/claude-opus-5-5`); bise's model
+    /// is `litellm/<id>`
+    pub id: String,
+    /// its name for people (`opus 5.5`), the id when bise doesn't know it
+    pub label: String,
+    /// bise knows it (its caps and price)
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub known: bool,
+    /// a provider's own pick: on top
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub recommended: bool,
+    /// its context window in tokens, when known
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<u64>,
+}
+
 /// A folder found by `found_scan` that could be a project.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]

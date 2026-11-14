@@ -1191,3 +1191,36 @@
   top: 50%;
   transform: translateY(-50%);
 }
+
+/* a web page's tab (WebTab.tsx, page newtab-browser): its box, where main lays the page's view;
+   one line under the bar (a download saved, a page that didn't load, find) */
+.pn-webpage {
+  background: var(--c-surface);
+}
+.pn-webline {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-1) var(--s-2);
+  border-bottom: 1px solid var(--c-line);
+  color: var(--c-text-2);
+  font: 400 var(--f-meta);
+}
+.pn-webline-t {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.pn-webline-act {
+  flex: none;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--c-accent);
+  font: 500 var(--f-meta);
+}
+.pn-favicon {
+  flex: none;
+  border-radius: var(--r-1);
+}

@@ -85,6 +85,15 @@ pub(crate) fn checker_of(setup: &bise_catalog::Setup, keys: &Keys) -> String {
 /// auto's checker.
 pub(crate) fn works_lines(setup: &bise_catalog::Setup, checker: &str) -> Vec<String> {
     let mut v = Vec::new();
+    // on a gateway: models by their names, its ids in the window's tip (designer m_64550)
+    let gateway = bise_catalog::split_name(&setup.model).and_then(|(pid, _)| setup.catalog.provider(pid)).is_some_and(|p| p.gateway);
+    if gateway {
+        v.push(settings::first_main_uses_gateway(bise_catalog::names::long_name(&setup.model)));
+        if !setup.small_model.is_empty() && setup.small_model != setup.model {
+            v.push(settings::first_small(bise_catalog::names::long_name(&setup.small_model)));
+        }
+        return v;
+    }
     if !setup.model.is_empty() {
         v.push(settings::first_main_uses(&setup.model));
     }
@@ -269,6 +278,20 @@ pub fn accounts(home: &bise_home::Home, env: Env) -> Vec<Account> {
     v
 }
 
+/// The LiteLLM gateway's provider id (models.toml, onboarding-models).
+pub(crate) const GATEWAY: &str = "litellm";
+
+/// The key found for provider `id` (env, auth.json, an old .env), never
+/// shown; None: none, or no such provider.
+pub(crate) fn found_key(home: &bise_home::Home, env: Env, id: &str) -> Option<String> {
+    let paths = bise_catalog::auth_cli::Paths::of(home);
+    let setup = bise_catalog::Setup::load(&paths.config);
+    let p = setup.catalog.provider(id)?;
+    let store = Store::read(&paths.auth_file).unwrap_or_default();
+    let files = EnvFile::read_all(&paths.env_files);
+    (Keys { env, store: &store, files: &files }).find(&p.id, &p.key_env).map(|f| f.key)
+}
+
 /// A base URL he typed, cleaned: trimmed, http(s) only, no trailing '/'.
 pub(crate) fn clean_url(s: &str) -> Option<String> {
     let u = s.trim().trim_end_matches('/');
@@ -289,11 +312,30 @@ pub(crate) fn save_base_url(home: &bise_home::Home, id: &str, url: &str) -> std:
     std::fs::write(&file, bise_catalog::roles::with_table_key(&text, &format!("providers.{id}"), "base_url", &value))
 }
 
-/// Use provider `id`: check it live with `key` (None: the key found for
-/// it, or its sign-in's token) and, for a provider with no base URL,
-/// `base_url`; then save the URL, the key and, when
-/// `roles::model_to_write` says so, main's model. Blocking.
-pub(crate) fn use_provider(home: &bise_home::Home, env: Env, id: &str, key: Option<String>, base_url: Option<String>, ports: &Ports) -> Used {
+/// What a `provider_use` asks (proto's AppCmd::ProviderUse, plus the
+/// gateway list the core last got for it).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct UseReq {
+    pub id: String,
+    /// pasted (None: the key found, or the sign-in)
+    pub key: Option<String>,
+    /// for a provider with none (the foundry proxy, a LiteLLM gateway)
+    pub base_url: Option<String>,
+    /// his pick on a model list (`litellm/<id>`): checked, then written
+    /// as main's model over one that runs
+    pub model: Option<String>,
+    /// a gateway's ids as it listed them (onboarding-models): written to
+    /// `Home::gateway_models_file` once its check works
+    pub listed: Vec<String>,
+}
+
+/// Use provider `req.id`: check it live with its key (None: the key
+/// found for it, or its sign-in's token) and, for a provider with no base
+/// URL, `base_url`; then save the URL, the key and, when
+/// `roles::model_to_write` says so (his pick: always), main's model; a
+/// gateway also its model list and its small jobs' model. Blocking.
+pub(crate) fn use_provider(home: &bise_home::Home, env: Env, req: &UseReq, ports: &Ports) -> Used {
+    let (id, key, base_url) = (req.id.as_str(), req.key.clone(), req.base_url.clone());
     let setup = crate::onboarding::setup_of(env, home);
     let paths = bise_catalog::auth_cli::Paths::of(home);
     let pasted = key.is_some();
@@ -308,9 +350,18 @@ pub(crate) fn use_provider(home: &bise_home::Home, env: Env, id: &str, key: Opti
         return fail(id, "", CheckWhy::Config, settings::first_unknown_provider(id), None);
     };
     let keys_url = (!p.keys_url.is_empty()).then(|| p.keys_url.clone());
-    let Some(model) = bise_catalog::roles::pick_for(&setup.catalog, id, &setup.model) else {
-        return fail(&p.name, "", CheckWhy::Model, String::new(), keys_url);
+    // his pick on the model list (one of this provider's), else the provider's own
+    let picked = req.model.as_deref().map(str::trim).filter(|m| !m.is_empty());
+    let model = match picked {
+        Some(m) if bise_catalog::split_name(m).is_some_and(|(pid, _)| pid == id) => m.to_string(),
+        Some(m) => return fail(&p.name, m, CheckWhy::Model, String::new(), None),
+        None => match bise_catalog::roles::pick_for(&setup.catalog, id, &setup.model) {
+            Some(m) => m,
+            None => return fail(&p.name, "", CheckWhy::Model, String::new(), keys_url),
+        },
     };
+    // a gateway's key found in his shell is copied to auth.json once it works (the app opened from the Finder has no shell)
+    let mut copy_found = false;
     let the_key = match key {
         Some(k) => match crate::firstkey::clean_key(&k) {
             Some(k) => k,
@@ -324,7 +375,10 @@ pub(crate) fn use_provider(home: &bise_home::Home, env: Env, id: &str, key: Opti
             let store = Store::read(&paths.auth_file).unwrap_or_default();
             let files = EnvFile::read_all(&paths.env_files);
             match (Keys { env, store: &store, files: &files }).find(&p.id, &p.key_env) {
-                Some(f) => f.key,
+                Some(f) => {
+                    copy_found = p.gateway && !matches!(f.from, From::AuthFile);
+                    f.key
+                }
                 None => return fail(&p.name, &model, CheckWhy::NoKey, String::new(), keys_url),
             }
         }
@@ -363,20 +417,34 @@ pub(crate) fn use_provider(home: &bise_home::Home, env: Env, id: &str, key: Opti
             return fail(&p.name, &model, CheckWhy::Config, settings::first_write_config(e), None);
         }
     }
-    if pasted {
+    if pasted || copy_found {
         if let Err(e) = bise_catalog::auth_cli::login(&paths, p, &the_key, env) {
             return fail(&p.name, &model, CheckWhy::Config, e, None);
         }
     }
-    // main's model: written when it has none or can't run (never over one that runs)
+    // a gateway's list: the model lists read it (plan_list), its one writer (architect m_64551)
+    if p.gateway && !req.listed.is_empty() {
+        let file = home.gateway_models_file();
+        let wrote = file.parent().map_or(Ok(()), std::fs::create_dir_all).and_then(|()| std::fs::write(&file, bise_catalog::plan_list::gateway_list_text(&p.id, &req.listed)));
+        if let Err(e) = wrote {
+            return fail(&p.name, &model, CheckWhy::Config, settings::first_write_config(e), None);
+        }
+    }
+    // main's model: written when it has none or can't run (never over one that runs), or when he picked it
     let store = Store::read(&paths.auth_file).unwrap_or_default();
     let files = EnvFile::read_all(&paths.env_files);
     let keys = Keys { env, store: &store, files: &files };
     let main_p = setup.catalog.resolve(&setup.model).provider;
     let main_runs = setup.catalog.provider(&main_p).is_some_and(|mp| keys.ready(mp));
-    if let Some(m) = bise_catalog::roles::model_to_write(&setup.model, main_runs, &model) {
+    if let Some(m) = bise_catalog::roles::model_to_write(&setup.model, main_runs, &model, picked.is_some()) {
         if let Err(e) = save_model(home, &m) {
             return fail(&p.name, &model, CheckWhy::Config, settings::first_write_config(e), None);
+        }
+        // a gateway: its small jobs on the small model of main's family when it serves it
+        if let Some(small) = gateway_small(&setup.catalog, p, &m, &req.listed) {
+            if let Err(e) = save_role(home, bise_catalog::roles::SMALL, &small) {
+                return fail(&p.name, &model, CheckWhy::Config, settings::first_write_config(e), None);
+            }
         }
     }
     let now = crate::onboarding::setup_of(env, home);
@@ -388,6 +456,27 @@ pub(crate) fn use_provider(home: &bise_home::Home, env: Env, id: &str, key: Opti
         pasted,
         res: Ok(Works { answer, main: now.model.clone(), lines: works_lines(&now, &checker) }),
     }
+}
+
+/// A gateway's small jobs' model: the small model of the provider main's
+/// model is known under (`claude-opus-5-5` -> anthropic's small one), as
+/// the gateway lists it (`litellm/<its id>`). None: not a gateway, main
+/// unknown, or the gateway doesn't serve it. Pure.
+pub(crate) fn gateway_small(c: &bise_catalog::Catalog, p: &bise_catalog::Provider, main: &str, listed: &[String]) -> Option<String> {
+    let (_, mid) = bise_catalog::split_name(main)?;
+    let known = bise_catalog::gateway_id(c, p, mid)?;
+    let small = c.small_of(&known)?;
+    listed.iter().find(|l| bise_catalog::gateway_id(c, p, l).as_deref() == Some(small.as_str())).map(|l| format!("{}/{l}", p.id))
+}
+
+/// Write `[roles] <role>` in config.toml (the rest kept).
+pub(crate) fn save_role(home: &bise_home::Home, role: &str, model: &str) -> std::io::Result<()> {
+    let file = home.config_file();
+    let text = std::fs::read_to_string(&file).unwrap_or_default();
+    if let Some(dir) = file.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    std::fs::write(&file, bise_catalog::roles::with_role(&text, role, model))
 }
 
 #[cfg(test)]
@@ -427,20 +516,63 @@ mod url_tests {
         let p = setup.catalog.provider("foundry").expect("foundry");
         assert!(needs_url(p), "no base URL built in");
         // no URL: said plainly, nothing written
-        let u = use_provider(&home, &env, "foundry", None, None, &ports());
+        let req = |url: Option<&str>| UseReq { id: "foundry".into(), base_url: url.map(String::from), ..Default::default() };
+        let u = use_provider(&home, &env, &req(None), &ports());
         assert!(matches!(&u.res, Err(f) if f.why == CheckWhy::Config && f.said.contains("no base URL")), "{:?}", u.res);
         assert!(!home.config_file().exists());
         // a URL that isn't one: refused before any call
-        let u = use_provider(&home, &env, "foundry", None, Some("proxy.test".into()), &ports());
+        let u = use_provider(&home, &env, &req(Some("proxy.test")), &ports());
         assert!(matches!(&u.res, Err(f) if f.why == CheckWhy::Config), "{:?}", u.res);
         // his URL: the check calls it, the URL and main's model are written
-        let u = use_provider(&home, &env, "foundry", None, Some(" https://proxy.test/anthropic/ ".into()), &ports());
+        let u = use_provider(&home, &env, &req(Some(" https://proxy.test/anthropic/ ")), &ports());
         assert!(u.res.is_ok(), "{:?}", u.res);
         let cfg = std::fs::read_to_string(home.config_file()).unwrap();
         assert!(cfg.contains("[providers.foundry]") && cfg.contains("base_url = \"https://proxy.test/anthropic/v1\""), "{cfg}");
         let now = crate::onboarding::setup_of(&env, &home);
         assert!(now.model.starts_with("foundry/"), "main has a model now: {}", now.model);
         assert!(!needs_url(now.catalog.provider("foundry").unwrap()), "the URL reads back");
+    }
+
+    /// onboarding-models: a gateway model he picked is checked on the wire
+    /// of its family, then written over a main that runs; its list, its
+    /// URL, its small model and the key found in his shell are saved.
+    #[test]
+    fn a_gateway_pick_is_written_over_a_main_that_runs() {
+        let root = tmp("gateway");
+        let home = bise_home::Home::at(root.join(".bise"));
+        let m = HashMap::from([
+            ("HOME", root.to_string_lossy().to_string()),
+            ("MISTRAL_API_KEY", "sk-fake-mistral".to_string()),
+            ("LITELLM_API_KEY", "sk-fake-gw".to_string()),
+        ]);
+        let env = move |k: &str| m.get(k).cloned().filter(|v| !v.is_empty());
+        save_model(&home, "mistral/mistral-large-4").unwrap();
+        fn gw_check(c: &Call, _env: Env) -> Result<String, Fail> {
+            match (c.base_url.as_str(), c.api.as_str(), c.model.as_str(), c.key.as_str()) {
+                ("https://gw.test/v1", "anthropic", "azure_ai/claude-opus-5-5", "sk-fake-gw") => Ok("Hi!".into()),
+                _ => Err(Fail::of(Why::Unreachable(format!("called {c:?}")))),
+            }
+        }
+        let ports = Ports { check: gw_check, token: |_| Err("no plan".into()) };
+        let listed: Vec<String> = ["azure_ai/claude-opus-5-5", "azure_ai/claude-haiku-4-5", "my-own-model"].map(String::from).to_vec();
+        let req = |model: &str| UseReq { id: GATEWAY.into(), base_url: Some("https://gw.test/v1".into()), model: Some(model.into()), listed: listed.clone(), ..Default::default() };
+        // a model of another provider: refused, nothing written
+        let u = use_provider(&home, &env, &req("anthropic/claude-opus-5-5"), &ports);
+        assert!(matches!(&u.res, Err(f) if f.why == CheckWhy::Model), "{:?}", u.res);
+        assert!(!home.gateway_models_file().exists());
+        // his pick: works, written over mistral (whose key runs)
+        let u = use_provider(&home, &env, &req("litellm/azure_ai/claude-opus-5-5"), &ports);
+        let w = u.res.as_ref().expect("works");
+        assert_eq!(w.main, "litellm/azure_ai/claude-opus-5-5");
+        assert_eq!(w.lines, vec!["main uses opus 5.5 on your gateway.".to_string(), "small jobs use haiku 4.5.".to_string()]);
+        let cfg = std::fs::read_to_string(home.config_file()).unwrap();
+        assert!(cfg.contains("base_url = \"https://gw.test/v1\"") && cfg.contains("litellm/azure_ai/claude-haiku-4-5"), "{cfg}");
+        let list = std::fs::read_to_string(home.gateway_models_file()).unwrap();
+        assert_eq!(bise_catalog::plan_list::gateway_list_of(&list), Some(("litellm".to_string(), listed.clone())));
+        // the key found in his shell is in auth.json now (the app opened from the Finder has no shell)
+        let auth = std::fs::read_to_string(home.root().join("auth.json")).unwrap_or_default();
+        assert!(auth.contains("sk-fake-gw"), "copied to auth.json");
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

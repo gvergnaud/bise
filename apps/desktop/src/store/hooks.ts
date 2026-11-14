@@ -15,7 +15,7 @@ import type { FoundFolders } from './reads';
 import type { Refused } from './refused';
 import type { InboxItem } from '@/inbox/listed';
 import { guideForKey, guideKey, prActKey, prDetailKey, prDiffKey, prLogKey, rangeDiffKey, type GuideEv, type PrActState } from './types';
-import { artDiffKey, branchDiffKey, diffErrKey, diffKey, toolOutKey, Store, type ToolOut, type Away, type Dictation, type HubLine, type Diff, type FilesAnswer, type Ev, type EvOf, type Pending, type PrsList, type BranchesList, type VersionsList, type PagesList, type ThreadHits, type ThreadMarks, type ThreadOrder, type VoiceModeState, type TalkShot } from './store';
+import { artDiffKey, branchDiffKey, diffErrKey, diffKey, toolOutKey, Store, type ToolOut, type Away, type Dictation, type HubLine, type Diff, type DiffErr, type FilesAnswer, type Ev, type EvOf, type Pending, type PrsList, type BranchesList, type VersionsList, type PagesList, type ThreadHits, type ThreadMarks, type ThreadOrder, type VoiceModeState, type TalkShot } from './store';
 
 /**
  * Feeds a store from a core port: its live events, then the state events
@@ -101,6 +101,10 @@ export const useClaudePlan = (): boolean => useSlice('claude_plan', (s) => s.cla
 export const useSigning = (): { readonly id: string; readonly url: string } | null => useSlice('signing', (s) => s.signing());
 /** provider_use's last answer (checking, then works or failed), null before any. */
 export const useProviderCheck = (): EvOf<'provider_check'> | null => useSlice('provider_check', (s) => s.providerCheck());
+/** gateway_find's answer (a LiteLLM gateway's URL found, where), null before any. */
+export const useGatewayFound = (): EvOf<'gateway_found'> | null => useSlice('gateway_found', (s) => s.gatewayFound());
+/** gateway_models' last answer (listing, then listed or failed), null before any. */
+export const useGatewayList = (): EvOf<'gateway_list'> | null => useSlice('gateway_list', (s) => s.gatewayList());
 export const useFound = (): readonly Found[] => useSlice('found', (s) => s.found());
 /** the scan's folders macOS guards: not looked in yet, and the ones he looked in; null before the first scan answered */
 export const useFoundFolders = (): FoundFolders | null => useSlice('found_folders', (s) => s.foundFolders());
@@ -175,8 +179,8 @@ export const usePrCheckLog = (project: string, url: string, check: string): EvOf
 export const usePrActed = (project: string, url: string): PrActState | null =>
   useSlice(prActKey(project, url), (s) => s.prActed(project, url));
 /** The hub's words when it refused that diff (`diffKey` or `artDiffKey`); null while none. */
-export const useDiffError = (key: string): string | null =>
-  useSlice(diffErrKey(key), (s) => (s.slices.get(diffErrKey(key)) as string | null | undefined) ?? null);
+export const useDiffError = (key: string): DiffErr | null =>
+  useSlice(diffErrKey(key), (s) => (s.slices.get(diffErrKey(key)) as DiffErr | null | undefined) ?? null);
 /** A tool call's real output once its open row asked (askToolOut), or the hub's refusal; null until then. */
 export const useToolOut = (project: string, agent: string, pos: number): ToolOut | null =>
   useSlice(toolOutKey(project, agent, pos), (s) => s.toolOut(project, agent, pos));

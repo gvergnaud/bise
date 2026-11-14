@@ -302,7 +302,7 @@ key_env = "MY_KEY"
     assert_eq!(s.catalog.resolve("anthropic/claude-haiku-4-5").caps.max_output, 64_000);
     // the order of the list is kept (models.toml's, not alphabetical)
     let ids: Vec<&str> = s.catalog.providers.iter().map(|p| p.id.as_str()).collect();
-    assert_eq!(&ids[..5], ["anthropic", "foundry", "openai", "chatgpt", "google"]);
+    assert_eq!(&ids[..6], ["anthropic", "foundry", "litellm", "openai", "chatgpt", "google"]);
 }
 
 #[test]
@@ -1337,5 +1337,51 @@ fn racing_role_writers_lose_no_change() {
     assert!(text.contains("language = \"fr\""), "{text}");
     let left: Vec<_> = std::fs::read_dir(&dir).unwrap().filter_map(|e| e.ok()).map(|e| e.file_name().to_string_lossy().to_string()).filter(|n| n.contains(".tmp-")).collect();
     assert!(left.is_empty(), "{left:?}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_gateway_model_borrows_the_known_models_caps_by_exact_id() {
+    // onboarding-models, architect m_64551: one '<route>/' cut, an exact id, else nothing
+    let c = Catalog::builtin();
+    let gw = c.provider("litellm").expect("the built-in LiteLLM gateway");
+    assert!(gw.gateway && gw.hidden && gw.base_url.is_empty());
+    assert_eq!(gateway_id(&c, gw, "claude-opus-5-5").as_deref(), Some("anthropic/claude-opus-5-5"));
+    assert_eq!(gateway_id(&c, gw, "azure_ai/claude-opus-5-5").as_deref(), Some("anthropic/claude-opus-5-5"));
+    assert_eq!(gateway_id(&c, gw, "mistral/mistral-large-4").as_deref(), Some("mistral/mistral-large-4"));
+    // no fuzzy match: a near id, an unknown one, two routes deep
+    assert_eq!(gateway_id(&c, gw, "claude-opus-5"), None);
+    assert_eq!(gateway_id(&c, gw, "azure_ai/my-model"), None);
+    assert_eq!(gateway_id(&c, gw, "a/b/claude-opus-5-5"), None);
+    // a provider that is not a gateway borrows nothing
+    assert_eq!(gateway_id(&c, c.provider("openrouter").unwrap(), "claude-opus-5-5"), None);
+    // resolved: the known model's caps, its family's wire, the gateway's own URL
+    let r = c.resolve("litellm/azure_ai/claude-opus-5-5");
+    let o = c.resolve("anthropic/claude-opus-5-5");
+    assert_eq!((r.known, r.api.as_str(), r.caps.context, r.caps.reasoning, r.caps.efforts.clone()), (Known::Listed, "anthropic", o.caps.context, true, o.caps.efforts));
+    assert_eq!(r.provider, "litellm");
+    let m = c.resolve("litellm/mistral/mistral-large-4");
+    assert_eq!((m.api.as_str(), m.caps.context), ("openai-chat", 524_288));
+    // unknown: the defaults and LiteLLM's openai-chat
+    let u = c.resolve("litellm/azure_ai/my-model");
+    assert_eq!((u.known, u.api.as_str(), u.caps.context, u.caps.reasoning), (Known::Unlisted, "openai-chat", DEFAULT_CAPS.context, false));
+}
+
+#[test]
+fn a_gateway_list_is_one_more_plan_list() {
+    let text = plan_list::gateway_list_text("litellm", &["claude-opus-5-5".into(), "azure_ai/gpt-6.1-sol".into()]);
+    assert_eq!(plan_list::gateway_list_of(&text), Some(("litellm".into(), vec!["claude-opus-5-5".into(), "azure_ai/gpt-6.1-sol".into()])));
+    assert_eq!(plan_list::gateway_list_of(r#"{"provider": "litellm", "models": []}"#), None);
+    assert_eq!(plan_list::gateway_list_of("nope"), None);
+    let dir = std::env::temp_dir().join(format!("bise-gwlist-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join(bise_home::GATEWAY_MODELS_FILE), &text).unwrap();
+    let lists = plan_list::read(&dir);
+    assert_eq!(lists, vec![("litellm".to_string(), vec!["claude-opus-5-5".to_string(), "azure_ai/gpt-6.1-sol".to_string()])]);
+    // the pickers offer what it serves once its key is ready
+    let s = Setup::from_text(Some("[providers.litellm]\nbase_url = \"https://gw.test/v1\"\n"), &|k: &str| (k == "LITELLM_API_KEY").then(|| "sk-fake".to_string())).with_plan_lists(lists);
+    let ps = picks::picks(&s, &|p: &str| p == "litellm");
+    let vals: Vec<&str> = ps.iter().map(|p| p.value.as_str()).collect();
+    assert_eq!(vals, ["litellm/claude-opus-5-5", "litellm/azure_ai/gpt-6.1-sol"]);
     let _ = std::fs::remove_dir_all(&dir);
 }

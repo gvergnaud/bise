@@ -810,7 +810,7 @@ impl Core {
                             self.project_ev(id, ev);
                         }
                     }
-                    Read::Error { tag, text, cid, reason, kind } => {
+                    Read::Error { tag, text, cid, reason, kind, tip } => {
                         let mut ev = json!({"ev": "error", "project": id, "cmd": tag, "text": text});
                         if let Some(cid) = cid {
                             ev["cid"] = json!(cid);
@@ -820,6 +820,9 @@ impl Core {
                         }
                         if let Some(k) = kind {
                             ev["kind"] = json!(k);
+                        }
+                        if let Some(t) = tip {
+                            ev["tip"] = json!(t);
                         }
                         self.emit(ev);
                     }

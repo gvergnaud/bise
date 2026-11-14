@@ -189,12 +189,16 @@ export interface OnbProps {
   children?: ReactNode;
   fn?: "up" | "down";
   cta?: { text: ReactNode; onClick?: MouseEventHandler<HTMLButtonElement>; state?: "loading" | "disabled"; testId?: string };
+  /** '← Back' (onboarding-models, designer m_64550): a secondary button at the left of the column's
+   * foot, the cta at its right; alone where the step has no cta */
+  back?: { text: ReactNode; onClick?: MouseEventHandler<HTMLButtonElement>; testId?: string };
   steps?: number;
   step?: number;
   testId?: string;
 }
 /** an onboarding step */
-export function Onb({ mark, title, sub: subtitle, children, fn, cta, steps, step, testId }: OnbProps) {
+export function Onb({ mark, title, sub: subtitle, children, fn, cta, back, steps, step, testId }: OnbProps) {
+  const ctaEl = cta && <Button kind="pri" state={cta.state} onClick={cta.onClick} testId={cta.testId}>{cta.text}</Button>;
   return (
     <div className="b-onb" data-testid={testId}>
       {mark != null && <div className="mk">{mark}</div>}
@@ -202,7 +206,12 @@ export function Onb({ mark, title, sub: subtitle, children, fn, cta, steps, step
       {subtitle != null && <div className="s">{subtitle}</div>}
       {children}
       {fn && <FnKey down={fn === "down"} />}
-      {cta && <Button kind="pri" state={cta.state} onClick={cta.onClick} testId={cta.testId}>{cta.text}</Button>}
+      {back ? (
+        <div className="foot">
+          <Button onClick={back.onClick} testId={back.testId}>{back.text}</Button>
+          {ctaEl}
+        </div>
+      ) : ctaEl}
       {steps != null && steps > 0 && (
         <div className="steps">{Array.from({ length: steps }, (_, i) => <i key={i} className={i === step ? "on" : undefined} />)}</div>
       )}

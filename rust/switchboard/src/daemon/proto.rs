@@ -321,7 +321,7 @@ impl Shell {
         let project = Some(self.project());
         let cmd = Some(cmd.to_string()).filter(|c| !c.is_empty());
         let reason = reason.map(str::to_string);
-        self.proto_send(id, &HubEv::Error { project, cmd, text: text.to_string(), cid, reason, ws, kind: None });
+        self.proto_send(id, &HubEv::Error { project, cmd, text: text.to_string(), cid, reason, ws, kind: None, tip: None });
     }
 }
 

@@ -623,6 +623,7 @@ export type {
   BranchesList,
   Dictation,
   Diff,
+  DiffErr,
   GuideEv,
   Ev,
   EvOf,

@@ -479,9 +479,14 @@ Owner: desktop `apps/desktop/src/views/` and `app/panel/`
   artifacts and the web pages he opened from bise in one list, ranked as
   Chrome's (prefix, word start, inside; then frecency), the first prefix
   hit completed inline (Tab takes it), else his words as an address or a
-  Google search. The web history is the app's own (main/webhistory.ts,
-  userData only, never a hub; architect m_64583), cleared in Settings ›
-  Privacy; his Chrome history is not read (an opt-in for him to decide). Content
+  Google search, opened in a web tab of bise (page newtab-browser: a
+  sandboxed WebContentsView over the panel tab, main/webview/ its one
+  owner, on its own session persist:bise-web, nothing reaching bise's
+  loopback ports; architect m_64682, designer m_64680); ⌘ or a site he
+  always opens there goes to his browser. The web history is the app's
+  own (main/webhistory.ts, userData only, never a hub; architect m_64583),
+  with titles, cleared in Settings › Privacy with the web tabs' cookies;
+  his Chrome history is not read (an opt-in for him to decide). Content
   search inside a plugin-only type needs a declared reader: not this
   round.
 

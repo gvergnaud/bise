@@ -322,23 +322,41 @@ pub fn range(dir: &Path, r: &str) -> Result<(Vec<File>, usize), String> {
 /// the files), else the forge's (`gh pr diff <url>`, the gh found on
 /// `path`: the agents' PATH, his login shell's included, so the app
 /// started from the Dock finds /opt/homebrew/bin's gh). No gh there, or
-/// one not signed in: the words that say what to do.
-pub fn pr(url: &str, local: Option<&PrLocal>, path: &str) -> Result<(Vec<File>, Option<std::path::PathBuf>), String> {
+/// one not signed in, or no such PR: its kind (the window draws by it),
+/// the words that say what to do, and gh missing's tip (the PATH looked in).
+pub fn pr(url: &str, local: Option<&PrLocal>, path: &str) -> Result<(Vec<File>, Option<std::path::PathBuf>), DiffErr> {
     use crate::forge::{github::GitHub, ForgeError};
-    use bise_proto::words::pages;
+    use bise_proto::{hub::ErrorKind, words::pages};
     if let Some(l) = local.filter(|l| l.at_head()) {
         let range = format!("origin/{}...{}", l.base, l.head);
         if let Ok(text) = git(&l.dir, &diff_args(&[range.as_str()])) {
             return Ok((parse(&text), Some(l.dir.clone())));
         }
     }
-    let missing = || pages::review_gh_missing(path);
+    let kind = |k, text: String| DiffErr { text, kind: Some(k), tip: None };
+    let missing = || DiffErr { tip: Some(pages::review_gh_looked_in(path)), ..kind(ErrorKind::GhMissing, pages::review_gh_missing(pages::review_gh_install)) };
     let gh = GitHub::find(path).ok_or_else(missing)?;
     match gh.pr_diff(url) {
         Ok(text) => Ok((parse(&text), None)),
         Err(ForgeError::Missing) => Err(missing()),
-        Err(ForgeError::Auth(_)) => Err(pages::review_gh_signed_out.into()),
-        Err(e) => Err(format!("gh couldn't read {}: {}", url, e.describe())),
+        Err(ForgeError::Auth(_)) => Err(kind(ErrorKind::GhSignedOut, pages::review_gh_signed_out(pages::review_gh_login))),
+        Err(ForgeError::NotFound(_)) => Err(kind(ErrorKind::GhNotFound, pages::review_gh_no_pr.into())),
+        Err(e) => Err(format!("gh couldn't read {}: {}", url, e.describe()).into()),
+    }
+}
+
+/// A refused PR diff: its one line (the TUI's, an older window's), and
+/// for the window its kind and hover tip (HubEv::Error's).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DiffErr {
+    pub text: String,
+    pub kind: Option<bise_proto::hub::ErrorKind>,
+    pub tip: Option<String>,
+}
+
+impl From<String> for DiffErr {
+    fn from(text: String) -> DiffErr {
+        DiffErr { text, kind: None, tip: None }
     }
 }
 

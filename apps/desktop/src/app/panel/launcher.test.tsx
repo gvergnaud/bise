@@ -351,7 +351,7 @@ describe('New tab at the keys (his m_46444, designer m_46449)', () => {
   // page newtab-omnibox-flow (designer m_64584): his web pages and artifacts in one list, on a fake history
   describe('the omnibox', () => {
     const NOW = Date.now();
-    const WEB: WebHistory = { keep: true, pages: [{ url: 'https://github.com/gvergnaud/bise', n: 2, visits: [{ at: NOW, typed: true }, { at: NOW, typed: false }] }, { url: 'https://news.ycombinator.com/', n: 1, visits: [{ at: NOW, typed: false }] }] };
+    const WEB: WebHistory = { keep: true, out: [], pages: [{ url: 'https://github.com/gvergnaud/bise', n: 2, visits: [{ at: NOW, typed: true }, { at: NOW, typed: false }] }, { url: 'https://news.ycombinator.com/', n: 1, visits: [{ at: NOW, typed: false }] }] };
     async function omni() {
       const s = shell('perf', 3, [], WEB);
       // the history main answers comes in a microtask

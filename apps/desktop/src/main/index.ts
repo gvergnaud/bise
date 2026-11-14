@@ -32,6 +32,11 @@ import { installIpc, panelShown, sendClip, sendMenu, setLooks, setProjectRoots }
 import { installViewFrames } from './viewframes';
 import { installKeepIpc } from './keep';
 import { installWebHistory } from './webhistoryipc';
+import { installWebViews } from './webview/views';
+import { bisePortsOf } from './webview/guard';
+
+/** bise's own loopback ports, as the core names them (webview/guard.ts): a web page never reaches them. */
+const bisePorts = new Set<number>();
 import { projectRoots } from './reveal';
 import { hasTestNotify } from './menu';
 import { installAppMenu } from './agentmenu';
@@ -136,6 +141,11 @@ void app.whenReady().then(() => {
   // what he typed or opened, on disk for a reload, a relaunch or a crash (src/main/keep.ts)
   installKeepIpc(app.getPath('userData'));
   // the web pages he opened from bise, for ⌘T's omnibox (webhistoryipc.ts): userData only, never a hub
+  // the web tabs (webview/views.ts): their views, on bise's live loopback ports (the pages servers the core names)
+  installWebViews({ ports: () => bisePorts, testMode });
+  onCoreEvent((ev) => {
+    for (const p of bisePortsOf(ev)) bisePorts.add(p);
+  });
   installWebHistory(app.getPath('userData'), (line) => {
     appendFile(join(app.getPath('userData'), 'app.log'), `${new Date().toISOString()} ${line}\n`, () => undefined);
   });

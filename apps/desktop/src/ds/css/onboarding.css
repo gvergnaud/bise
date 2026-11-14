@@ -4,6 +4,11 @@
 .b-onb .s{color:var(--c-text-2);font:var(--t-15)/1.5 var(--font-read);max-width:46ch}
 .b-onb .b-gi{font-size:var(--t-14)}
 .b-onb .b-btn.pri{height:var(--h-control-lg);min-width:160px;margin-top:var(--s-6);font-size:var(--t-14)}
+/* the column's foot (onboarding-models, designer m_64550): '← Back' secondary at its left, the cta at its right;
+   alone where the step has none */
+.b-onb .foot{display:flex;align-items:center;justify-content:space-between;gap:var(--s-3);width:100%;margin-top:var(--s-6)}
+.b-onb .foot .b-btn{height:var(--h-control-lg);font-size:var(--t-14)}
+.b-onb .foot .b-btn.pri{margin-top:0}
 .b-onb .steps{display:flex;gap:var(--s-2);margin-top:var(--s-5)}
 .b-onb .steps i{width:6px;height:6px;border-radius:50%;background:var(--c-active)}
 .b-onb .steps i.on{background:var(--c-ink)}

@@ -9,7 +9,7 @@ const DAY = 86_400_000;
 const NOW = 1_800_000_000_000;
 
 const page = (url: string, ages: readonly number[], typed = false): WebPage => ({ url, n: ages.length, visits: ages.map((d) => ({ at: NOW - d * DAY, typed })) });
-const web = (...pages: WebPage[]): WebHistory => ({ keep: true, pages });
+const web = (...pages: WebPage[]): WebHistory => ({ keep: true, pages, out: [] });
 const item = (id: string, title: string, ageDays: number, kind = 'page', agent = 'perf') =>
   ({ project: 'acme', projectName: 'acme', a: { id, title, kind, agent, at_ms: NOW - ageDays * DAY, version: 1, url: '', new: false } }) as unknown as Item;
 const NONE = new Set<string>();
@@ -114,5 +114,17 @@ describe('the rows (designer m_64584)', () => {
     expect(rowText({ kind: 'web', page: gh }, 'g')).toBe('github.com/gvergnaud/bise');
     expect(rowText({ kind: 'found', item: item('a', 'Perf notes', 1) }, 'p')).toBe('Perf notes');
     expect(rowText(typedRow('perf x'), 'perf x')).toBe('perf x');
+  });
+});
+
+describe('a page with its title (a web tab read it)', () => {
+  it('its title ranks it as a prefix match, but only its address completes inline (Chrome; ui-review m_64756)', () => {
+    const p: WebPage = { url: 'https://docs.rs/tokio', title: 'Tokio docs', n: 1, visits: [{ at: NOW, typed: false }] };
+    const hits = omniHits('tok', web(p), [item('w', 'tokens', 200)], NONE, NOW);
+    expect(hits.map((h) => h.kind)).toEqual(['web', 'found']);
+    expect(completionOf('tok', hits[0])).toBeNull();
+    expect(omniRows('tok', hits).map((r) => r.kind)).toEqual(['search', 'web', 'found']);
+    expect(completionOf('docs', hits[0])).toBe('docs.rs/tokio');
+    expect(omniHits('docs', web(p), [], NONE, NOW)).toHaveLength(1);
   });
 });

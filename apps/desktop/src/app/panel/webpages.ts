@@ -5,7 +5,7 @@
 import { useSyncExternalStore } from 'react';
 import type { WebHistory } from '@/shared/api';
 
-const NONE: WebHistory = { keep: true, pages: [] };
+const NONE: WebHistory = { keep: true, pages: [], out: [] };
 
 let h: WebHistory = NONE;
 let bound = false;
@@ -41,6 +41,12 @@ export function useWebHistory(): WebHistory {
   return useSyncExternalStore(subscribe, () => h);
 }
 
+/** His web history now (a link's click outside React reads its sites: web.ts openWebLink). */
+export function webHistoryNow(): WebHistory {
+  bind();
+  return h;
+}
+
 /** That page out of his history (⇧⌫, the row's ×). */
 export function removeWebPage(url: string): void {
   void api()?.remove(url);
@@ -54,6 +60,16 @@ export function clearWebHistory(): void {
 /** His switch 'Keep the links I open' (off clears it). */
 export function keepWebHistory(on: boolean): void {
   void api()?.keep(on);
+}
+
+/** 'Always open <site> in your browser' on or off (a page's URL or a host). */
+export function outWebSite(site: string, on: boolean): void {
+  void api()?.out(site, on);
+}
+
+/** The web tabs' cookies and site data (their session only). */
+export function clearWebCookies(): void {
+  void api()?.clearCookies();
 }
 
 /** Tests: forget what was read and bind again at the next mount. */
