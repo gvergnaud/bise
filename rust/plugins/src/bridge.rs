@@ -775,12 +775,20 @@ pub fn index_line(cid: &str, group: &str, tool: &str, desc: &str, schema: Option
 /// view may call (`_meta.ui.visibility` without `model`) is published
 /// (callable) but never in the index; a tool with a view ends its line
 /// with ` | ui: <uri>`.
+/// Whether a server's tools go in the index: on, and past its start. `launch` sets its tools,
+/// then its outcome; a publish between the two (the poll's, every `Opts::poll`) listed a route
+/// whose call answered 'still starting' (connectors_and_toggles_reach_the_index_within_a_poll,
+/// red once in the tip gate under load, 2026-11-14).
+fn in_index(off: bool, outcome: &Outcome) -> bool {
+    !off && *outcome != Outcome::Starting
+}
+
 fn index_of(entries: &[Arc<Entry>], virtuals: &[Arc<Virtual>], base: &str, state: &StateV2) -> (String, Vec<Diagnostic>, HashMap<String, usize>) {
     let mut index = String::new();
     let mut diags = Vec::new();
     let mut counts = HashMap::new();
     let mut taken: HashMap<&str, Vec<String>> = HashMap::new();
-    for e in entries.iter().filter(|e| !e.off.load(Ordering::SeqCst)) {
+    for e in entries.iter().filter(|e| in_index(e.off.load(Ordering::SeqCst), &lock(&e.outcome))) {
         let cid = format!("{}/{}", base, e.key);
         let mut names = HashMap::new();
         let mut shown = 0;
@@ -1703,6 +1711,14 @@ fn stop_all(entries: Vec<Arc<Entry>>) {
 #[cfg(test)]
 mod stamp_tests {
     use super::*;
+
+    #[test]
+    fn a_server_still_starting_is_not_in_the_index_even_with_its_tools_set() {
+        assert!(!in_index(false, &Outcome::Starting), "tools set, outcome not yet: no route that says 'still starting'");
+        assert!(in_index(false, &Outcome::Up) && in_index(false, &Outcome::Listed));
+        assert!(in_index(false, &Outcome::Login) && in_index(false, &Outcome::Failed("x".into())), "no tools: no lines, as before");
+        assert!(!in_index(true, &Outcome::Up), "off: out");
+    }
 
     #[test]
     fn a_non_object_answer_is_an_error_not_a_panic() {

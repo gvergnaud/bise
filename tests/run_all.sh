@@ -84,6 +84,8 @@ rust_tests() {  # <dir>: cargo test of the workspace, each red test rerun once b
     grep -E "^test .* FAILED|^failures:|panicked|test result" "$d/test.log" | head -40; return 1
   fi
   echo "cargo test: $(echo $names) failed: once more, alone"
+  # what the first run said (its test.log is a temp dir, gone after the gate): a flake's only trace
+  grep -E "panicked at|^  left:|^ right:|^thread '.*' panicked|never: " "$d/test.log" | head -12 | sed 's/^/  first run: /'
   # shellcheck disable=SC2086
   if (cd rust && cargo test --offline -q --workspace --no-fail-fast --tests -- --exact $names) >"$d/rerun.log" 2>&1; then
     grep "test result" "$d/test.log" | grep -v FAILED; flaky_note cargo $names; return 0
