@@ -11,9 +11,18 @@ import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { Browser, ConsoleMessage, Locator, Page, Request, Response } from '@playwright/test';
+import type { Browser, CDPSession, ConsoleMessage, Locator, Page, Request, Response } from '@playwright/test';
 import { ART_PAGE, artCols } from './artpage.ts';
 import { fxDir, named } from './fx.ts';
+import { noLogpoint, pickLogpoint, type ParsedScript } from './logpoint.ts';
+
+// the Debugger.scriptParsed events seen so far, each with its source (empty when CDP refuses it)
+async function withSources(dbg: CDPSession, scripts: { scriptId: string; url: string; startLine: number; startColumn: number }[]): Promise<ParsedScript[]> {
+  return Promise.all(scripts.map(async (s) => ({
+    scriptId: s.scriptId, url: s.url, startLine: s.startLine, startColumn: s.startColumn,
+    source: (await dbg.send('Debugger.getScriptSource', { scriptId: s.scriptId }).catch(() => null))?.scriptSource ?? '',
+  })));
+}
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DESKTOP = process.env.PW_FROM ?? path.join(HERE, '..', '..', '..', '..', 'apps', 'desktop');
@@ -1250,20 +1259,13 @@ if (mode === 'rows2') {
     await dbg.send('Runtime.enable').catch(() => {});
     await dbg.send('Debugger.enable').catch(() => {});
     await page.waitForTimeout(800);
-    for (const s of scripts) {
-      if (bp) break;
-      const src = (await dbg.send('Debugger.getScriptSource', { scriptId: s.scriptId }).catch(() => null))?.scriptSource ?? '';
-      const m = /openExternal:\s*async\s*\(?(\w+)\)?\s*=>\s*/.exec(src);
-      if (!m) continue;
-      const at = m.index + m[0].length;
-      const head = src.slice(0, at);
-      const line = head.split('\n').length - 1;
-      const col = at - (head.lastIndexOf('\n') + 1);
-      bp = await dbg.send('Debugger.setBreakpoint', {
-        location: { scriptId: s.scriptId, lineNumber: line + (s.startLine ?? 0), columnNumber: col + (line === 0 ? (s.startColumn ?? 0) : 0) },
-        condition: `console.log('AHD-EXT ' + String(${m[1]})), false`,
-      }).then((r) => ({ id: r.breakpointId, url: s.url, param: m[1] }), (e) => ({ error: String(e).slice(0, 200) }));
-    }
+    // by the function's source (logpoint.ts), whatever its parameters, script or line
+    const parsed = await withSources(dbg, scripts);
+    const lp = pickLogpoint(parsed, 'openExternal');
+    bp = !lp ? { error: noLogpoint(parsed, 'openExternal') } : await dbg.send('Debugger.setBreakpoint', {
+      location: { scriptId: lp.scriptId, lineNumber: lp.lineNumber, columnNumber: lp.columnNumber },
+      condition: `console.log('AHD-EXT ' + String(${lp.param})), false`,
+    }).then((r) => ({ id: r.breakpointId, url: lp.url, param: lp.param }), (e) => ({ error: String(e).slice(0, 200) }));
   }
   let pr: {
     row: boolean; logpoint: typeof bp; leaves?: string | null; external_calls?: string[]; panel?: number;
@@ -1863,21 +1865,15 @@ async function fileChips(harness: () => Promise<unknown>) {
     await dbg.send('Runtime.enable').catch(() => {});
     await dbg.send('Debugger.enable').catch(() => {});
     await page.waitForTimeout(800);
-    for (const s of scripts) {
-      const src = (await dbg.send('Debugger.getScriptSource', { scriptId: s.scriptId }).catch(() => null))?.scriptSource ?? '';
-      for (const fn of ['quickLook', 'showInFinder']) {
-        const m = new RegExp(`${fn}:\\s*async\\s*\\(?(\\w+)\\)?\\s*=>\\s*`).exec(src);
-        if (!m || bps.some((b) => b.fn === fn)) continue;
-        const where = m.index + m[0].length;
-        const head = src.slice(0, where);
-        const line = head.split(NL).length - 1;
-        const col = where - (head.lastIndexOf(NL) + 1);
-        const r = await dbg.send('Debugger.setBreakpoint', {
-          location: { scriptId: s.scriptId, lineNumber: line + (s.startLine ?? 0), columnNumber: col + (line === 0 ? (s.startColumn ?? 0) : 0) },
-          condition: `console.log('AHD-F ${fn} ' + String(${m[1]})), false`,
-        }).then((ok) => ({ id: ok.breakpointId, error: null }), (e: unknown) => ({ id: null, error: String(e).slice(0, 200) }));
-        bps.push({ fn, id: r.id, error: r.error });
-      }
+    const parsed = await withSources(dbg, scripts);
+    for (const fn of ['quickLook', 'showInFinder']) {
+      const lp = pickLogpoint(parsed, fn);
+      if (!lp) { bps.push({ fn, id: null, error: noLogpoint(parsed, fn) }); continue; }
+      const r = await dbg.send('Debugger.setBreakpoint', {
+        location: { scriptId: lp.scriptId, lineNumber: lp.lineNumber, columnNumber: lp.columnNumber },
+        condition: `console.log('AHD-F ${fn} ' + String(${lp.param})), false`,
+      }).then((ok) => ({ id: ok.breakpointId, error: null }), (e: unknown) => ({ id: null, error: String(e).slice(0, 200) }));
+      bps.push({ fn, id: r.id, error: r.error });
     }
   }
   const ck: { fenced: boolean; logpoints: typeof bps; calls?: string[]; gone_calls?: number; right?: unknown } = { fenced, logpoints: bps };
