@@ -241,6 +241,8 @@ export interface Pending {
   readonly parts?: readonly Part[];
   /** the thread he typed it in when not `agent`'s (at-start): a retry leaves its trace there too */
   readonly from?: string;
+  /** his explicit tasks (a Task tab's '+ Agent'): a retry sends them again */
+  readonly works?: readonly string[];
   readonly at_ms: number;
   /** late: the core gave up waiting for its hub's answer (30 s), which may still make it: drawn as
    *  sending, no retry; its end comes as the core's late 'sent' (queue-drawer-fix) */

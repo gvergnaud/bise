@@ -541,7 +541,7 @@ law user_queued_never_answers_a_card:
   for +text: String
   for +parts: String
   for +from: String
-  {HC.user_says(o, cx, to, text, True{}, parts, from) == HC.says.card(o, None{}, cx, to, text, True{}, parts, from) : HX.Cx<o>}
+  {HC.user_says(o, cx, to, text, True{}, parts, from, None{}) == HC.says.card(o, None{}, cx, to, text, True{}, parts, from, None{}) : HX.Cx<o>}
 # (his words typed in another thread: bend/laws/say_from.bend)
 
 def any_queued(xs: List<&2, HS.Msg>) -> Bool:

@@ -150,6 +150,17 @@ crate::words! { tasks:
     merge_head = "Merge into";
     /// the merge picker with no other open task
     merge_none = "No other open task";
+    /// the footer's '+ Agent' (tasks-ux m_64875)
+    act_agent = "+ Agent";
+    /// its tip
+    agent_tip = "ask bise for one more agent on this task";
+    /// its field's placeholder, in place of the footer
+    agent_ask = "What should it do?";
+    /// his message's lead for main: only for the human reading the thread
+    /// (architect m_64887: nothing keys on it; main reads the task from its turn)
+    agent_lead(name, words) = "new agent on {name}: {words}";
+    /// the line under Agents until the new agent's row comes
+    agent_asked = "asked bise for an agent · just now";
     /// the task gone (merged, folded, unknown here)
     tab_gone = "This task is not here anymore.";
     /// a merged task's tab: where it went

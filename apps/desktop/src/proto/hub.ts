@@ -258,7 +258,15 @@ export type SendOpts = { mode?: Mode | null, context?: FnContext | null, voice?:
  * his `@agent …` from another thread): the hub leaves one route row
  * there. Only a trace: an unknown or archived one writes none
  */
-from?: string | null, };
+from?: string | null, 
+/**
+ * his explicit tasks for these words, by id (a Task tab's '+ Agent':
+ * tasks-ux m_64875). sb-core reads them like an agent's `--task` (a
+ * merged id: its target; an unknown one or a tomb refuses the send) and
+ * they replace the single-task rule (architect m_64887). Empty: the
+ * rule applies
+ */
+works?: Array<string>, };
 
 /**
  * What a client asks a hub.
@@ -283,7 +291,15 @@ parts?: Array<Part>, mode?: Mode | null, context?: FnContext | null, voice?: boo
  * his `@agent …` from another thread): the hub leaves one route row
  * there. Only a trace: an unknown or archived one writes none
  */
-from?: string | null, } | { "cmd": "answer", project: string, card: number, reply: string, 
+from?: string | null, 
+/**
+ * his explicit tasks for these words, by id (a Task tab's '+ Agent':
+ * tasks-ux m_64875). sb-core reads them like an agent's `--task` (a
+ * merged id: its target; an unknown one or a tomb refuses the send) and
+ * they replace the single-task rule (architect m_64887). Empty: the
+ * rule applies
+ */
+works?: Array<string>, } | { "cmd": "answer", project: string, card: number, reply: string, 
 /**
  * his answer as typed parts, as `Send.parts` (`reply` then ignored)
  */
@@ -307,7 +323,15 @@ parts?: Array<Part>, mode?: Mode | null, context?: FnContext | null, voice?: boo
  * his `@agent …` from another thread): the hub leaves one route row
  * there. Only a trace: an unknown or archived one writes none
  */
-from?: string | null, } | { "cmd": "scheduled_run", project: string, id: number, } | { "cmd": "artifacts_add", project: string, agent: string, target: string, title?: string | null, 
+from?: string | null, 
+/**
+ * his explicit tasks for these words, by id (a Task tab's '+ Agent':
+ * tasks-ux m_64875). sb-core reads them like an agent's `--task` (a
+ * merged id: its target; an unknown one or a tomb refuses the send) and
+ * they replace the single-task rule (architect m_64887). Empty: the
+ * rule applies
+ */
+works?: Array<string>, } | { "cmd": "scheduled_run", project: string, id: number, } | { "cmd": "artifacts_add", project: string, agent: string, target: string, title?: string | null, 
 /**
  * a library folder's id: the artifact goes there
  */

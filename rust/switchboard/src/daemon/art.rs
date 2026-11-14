@@ -404,7 +404,7 @@ impl Shell {
             self.art_lines(a);
             if let Some((text, parts, _)) = crate::pages::artifact::notes::record_edit(pages, &a.meta.id, &a.meta.title, v.v, now_ms()) {
                 let to = if self.page_agent_gone(&a.meta.agent) { MAIN.to_string() } else { a.meta.agent.clone() };
-                self.step(Input::ClientInput { client: 0, focus: to, text, queued: true, parts, from: String::new() });
+                self.step(Input::ClientInput { client: 0, focus: to, text, queued: true, parts, from: String::new(), works: Vec::new() });
             }
         }
         self.artifacts_refresh(false);

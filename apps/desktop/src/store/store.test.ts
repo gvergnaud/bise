@@ -707,4 +707,12 @@ what is in this picture?`,
     store.setCore("up");
     expect(sent.filter((c) => c.cmd === "commands")).toHaveLength(2);
   });
+
+  it("his words from a Task tab's '+ Agent' go with their task, a retry keeps it (architect m_64887)", () => {
+    const { store, sent } = fake();
+    store.send({ project: P, agent: "main", text: "new agent on Login: repro", works: ["login"] });
+    expect(sent.at(-1)).toMatchObject({ cmd: "send", agent: "main", works: ["login"] });
+    store.send({ project: P, agent: "main", text: "plain" });
+    expect(sent.at(-1)).not.toHaveProperty("works");
+  });
 });

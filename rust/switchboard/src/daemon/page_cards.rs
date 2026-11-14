@@ -571,7 +571,7 @@ impl Shell {
                 let parts = serde_json::to_string(&[part]).unwrap_or_default();
                 log_line(&self.opts.paths, &format!("page {id}: words on batch card #{card} → {to}: {words:?}"));
                 // client 0, as every page message: a real id would move that client's focus to `to` (focus_of)
-                self.step(Input::ClientInput { client: 0, focus: to.clone(), text, queued: false, parts, from: String::new() });
+                self.step(Input::ClientInput { client: 0, focus: to.clone(), text, queued: false, parts, from: String::new(), works: Vec::new() });
                 let who = if to == MAIN { "bise".to_string() } else { to };
                 self.notice_out(client, Some("answer"), &format!("sent to {who}: \"{words}\". the drafts still wait for you."));
                 return true;

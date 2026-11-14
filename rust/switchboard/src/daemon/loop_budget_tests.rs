@@ -189,7 +189,7 @@ fn the_loop_stays_in_budget_at_his_scale() {
     let mut n = 0;
     let deliver = median5(|| {
         n += 1;
-        sh.step(Input::ClientInput { client: 1, focus: live.clone(), text: format!("his message {n}"), queued: false, parts: String::new(), from: String::new() });
+        sh.step(Input::ClientInput { client: 1, focus: live.clone(), text: format!("his message {n}"), queued: false, parts: String::new(), from: String::new(), works: Vec::new() });
     });
     let _ = std::fs::remove_dir_all(&root);
     eprintln!("loop budget at his scale: setup {setup:?}, push {push:.1} ms, after a write {wrote:.1} ms, after its build {built:.1} ms, repl line {line:.2} ms, his message {deliver:.1} ms (CPU, median of 5); store reads on the loop: {read:?}");

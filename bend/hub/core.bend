@@ -2309,20 +2309,22 @@ def says.sent(-o: S.St, p: X.Cx<o> & SendR, +to: String, +text: String, +from: S
       +cx2 = says.trace(o, cx, from, to, S.Msg.id(m), text, parts)
       LZ.pick(X.Cx<o>, String.eq(to, M.MAIN()), u => cx2, u => user_sent(o, cx2, text))
 
-def says.card(-o: S.St, card: Maybe<&2, Nat>, +cx: X.Cx<o>, +to: String, +text: String, +queued: Bool, +parts: String, +from: String) -> X.Cx<o>:
+def says.card(-o: S.St, card: Maybe<&2, Nat>, +cx: X.Cx<o>, +to: String, +text: String, +queued: Bool, +parts: String, +from: String, +works: Maybe<&2, List<&2, String>>) -> X.Cx<o>:
   match card:
     case Some{+id}:
       answer_card(o, user_sent(o, cx, text), id, text, parts, "thread")
     case None{}:
-      says.sent(o, send(o, cx, Snd{M.USER(), to, text, False{}, None{}, True{}, False{}, queued, None{}, parts, None{}, None{}}), to, text, from, parts)
+      says.sent(o, send(o, cx, Snd{M.USER(), to, text, False{}, None{}, True{}, False{}, queued, None{}, parts, None{}, works}), to, text, from, parts)
 
 # plain text from the user to the agent in focus. `queued` (the window's
 # "send queued"): a queued-mode message, held while the agent is busy and
 # said at its turn's end (law user_queued_waits_for_turn_end); it never
 # answers a question card (law user_queued_never_answers_a_card).
-# `parts`: his message's parts (msg-parts, "" none), kept on it; `from`: says.trace
-def user_says(-o: S.St, +cx: X.Cx<o>, +to: String, +text: String, +queued: Bool, +parts: String, +from: String) -> X.Cx<o>:
-  says.card(o, Bool.pick(Maybe<&2, Nat>, queued || String.eq(to, M.MAIN()), None{}, question_card(S.St.cards(st(o, cx)), st(o, cx), to)), cx, to, text, queued, parts, from)
+# `parts`: his message's parts (msg-parts, "" none), kept on it; `from`: says.trace;
+# `works`: his explicit tasks (a Task tab's '+ Agent', read by task_flag), None: the
+# single-task rule (laws his_words_follow_a_single_task, his_task_tab_words_carry_its_task)
+def user_says(-o: S.St, +cx: X.Cx<o>, +to: String, +text: String, +queued: Bool, +parts: String, +from: String, +works: Maybe<&2, List<&2, String>>) -> X.Cx<o>:
+  says.card(o, Bool.pick(Maybe<&2, Nat>, queued || String.eq(to, M.MAIN()), None{}, question_card(S.St.cards(st(o, cx)), st(o, cx), to)), cx, to, text, queued, parts, from, works)
 
 def route.sent(-o: S.St, p: X.Cx<o> & SendR, +name: String, +text: String, +focus: String, +parts: String) -> X.Cx<o>:
   match p:
@@ -2350,7 +2352,7 @@ def route.target(-o: S.St, m: Maybe<&2, String>, +cx: X.Cx<o>, +target: String, 
 # `@task text`: a direct message, without main; `queued` and `parts` as
 # user_says
 def route(-o: S.St, +cx: X.Cx<o>, +target: String, +text: String, +focus: String, +queued: Bool, +parts: String) -> X.Cx<o>:
-  LZ.pick(X.Cx<o>, String.eq(target, M.MAIN()), u => user_says(o, cx, M.MAIN(), text, queued, parts, ""),
+  LZ.pick(X.Cx<o>, String.eq(target, M.MAIN()), u => user_says(o, cx, M.MAIN(), text, queued, parts, "", None{}),
     u => route.target(o, M.resolve(st(o, cx), target), cx, target, text, focus, queued, parts))
 
 # ---- an MCP App view's context (docs/mcp-apps.md, C5, review d5) ----
@@ -2382,9 +2384,19 @@ def view_context(-o: S.St, +cx: X.Cx<o>, +agent: String, +call: String, +text: S
   view_context.go(o, live_agent(M.agent_named(S.St.agents(st(o, cx)), agent)), cx, S.Vctx.with_part(S.Vctx.with_text(S.Vctx.with_call(S.Vctx.with_agent(S.Vctx.empty(), agent), call), text), part))
 
 # his message to `to`, its views' contexts before his words, taken once
-def says_ctx(-o: S.St, +cx: X.Cx<o>, +to: String, +text: String, +queued: Bool, +parts: String, +from: String) -> X.Cx<o>:
+def says_ctx(-o: S.St, +cx: X.Cx<o>, +to: String, +text: String, +queued: Bool, +parts: String, +from: String, +works: Maybe<&2, List<&2, String>>) -> X.Cx<o>:
   +cs = VC.of(X.R.ctx(rr(o, cx)), to)
-  user_says(o, view_ctx_drop(o, cx, to), to, VC.join_text(cs, text), queued, VC.join_parts(cs, parts, text), from)
+  user_says(o, view_ctx_drop(o, cx, to), to, VC.join_text(cs, text), queued, VC.join_parts(cs, parts, text), from, works)
+
+# his say with its explicit tasks read like an agent's --task (architect
+# m_64887): an unknown id (or a folded one) refuses it with a word, his
+# draft stays in his window; none given: the single-task rule
+def says_flag(-o: S.St, f: TaskFlag, given: Bool, +cx: X.Cx<o>, +to: String, +text: String, +queued: Bool, +parts: String, +from: String) -> X.Cx<o>:
+  match f:
+    case TFErr{+e}:
+      notice(o, cx, e)
+    case TFOk{+ws}:
+      says_ctx(o, cx, to, text, queued, parts, from, Bool.pick(Maybe<&2, List<&2, String>>, given, Some{ws}, None{}))
 
 # his `@agent` message likewise (an agent it names: its contexts)
 def route_ctx(-o: S.St, m: Maybe<&2, String>, +cx: X.Cx<o>, +target: String, +text: String, +focus: String, +queued: Bool, +parts: String) -> X.Cx<o>:
@@ -4778,11 +4790,12 @@ def dispatch(-o: S.St, +cx: X.Cx<o>, +i: GI.In) -> X.Cx<o>:
       repl_exited(o, cx, agent, crashed, SL.exit(stopped, stalled, loaded, row), reason)
     case GI.IBoot{}:
       xboot(o, boot(o, cx))
-    case GI.ISay{+focus, +text, +queued, +parts, +from}:
-      says_ctx(o, cx, focus, text, queued, parts, from)
+    case GI.ISay{+focus, +text, +queued, +parts, +from, +works}:
+      +ids = Maybe.default(&2, List<&2, String>, works, Nil{})
+      says_flag(o, task_flag(ids, S.St.works(st(o, cx))), Bool.not(List.is_empty(&2, String, ids)), cx, focus, text, queued, parts, from)
     case GI.IRoute{+target, +text, +focus, +queued, +parts}:
       LZ.pick(X.Cx<o>, String.eq(target, M.MAIN()),
-        u => says_ctx(o, cx, M.MAIN(), text, queued, parts, ""),
+        u => says_ctx(o, cx, M.MAIN(), text, queued, parts, "", None{}),
         u => route_ctx(o, M.resolve(st(o, cx), target), cx, target, text, focus, queued, parts))
     case GI.INew{+base, +brief, +brief_text, +objective, +worktree, +with_changes}:
       user_new.res(o, create_task(o, cx, NewTask{M.USER(), base, brief, brief_text, objective, worktree, with_changes, "", None{}, None{}}))

@@ -70,6 +70,8 @@ export type Intent =
       readonly from?: string;
       /** the still the spotlight showed (the core's shot id): the core puts it first, as an image part */
       readonly shot?: number;
+      /** his explicit tasks (a Task tab's '+ Agent'): the hub reads them like --task, an unknown one refuses it */
+      readonly works?: readonly string[];
     }
   /** 'try again' on his failed message of thread `key`: the same words, mode and parts, under a new cid */
   | { readonly i: "resend"; readonly key: string; readonly cid: number }

@@ -56,7 +56,9 @@ impl Shell {
         }
         // at-start: the thread he typed it in, when not focus's (a trace there)
         let from = v.get("from").and_then(Value::as_str).filter(|_| !slash).unwrap_or_default().to_string();
-        self.step(Input::ClientInput { client, focus, text, queued, parts, from });
+        // his explicit tasks (SendOpts.works, a Task tab's '+ Agent'), never on a slash command
+        let works = v.get("works").and_then(Value::as_array).filter(|_| !slash).map_or_else(Vec::new, |w| w.iter().filter_map(|x| x.as_str().map(String::from)).collect());
+        self.step(Input::ClientInput { client, focus, text, queued, parts, from, works });
         self.fn_ctx = None;
     }
 

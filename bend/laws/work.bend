@@ -31,15 +31,28 @@ law notice_carries_no_works:
   for +s: HS.St
   {HC.works_of_send(None{}, s, HM.HUB()) == Nil{} : List<&2, String>}
 
-# LAW: his message to an agent (outside a Task tab) carries the work the
-# agent's turn serves when it is exactly one, else none (architect
-# m_64507). Read from St at the send: the Msg records what it got, so a
+# LAW: his message to an agent with no explicit tasks (outside a Task
+# tab: SendOpts.works empty) carries the work the agent's turn serves
+# when it is exactly one, else none (architect m_64507; explicit works
+# replace this rule: his_task_tab_words_carry_its_task, m_64887). Read from St at the send: the Msg records what it got, so a
 # replay never recomputes it from a later turn; a wrong attach is his to
 # move (moved_by_you_sticks).
 law his_words_follow_a_single_task:
   for +s: HS.St
   for +to: String
   {HC.works_his(None{}, s, to) == HC.single(HC.works_of_agent(HM.get_agent(s, to))) : List<&2, String>}
+
+# LAW: his words sent with explicit tasks (a Task tab's '+ Agent',
+# SendOpts.works, read by task_flag) carry exactly them, whatever the
+# recipient's turn holds (architect m_64887): the fact is his act.
+law his_task_tab_words_carry_its_task:
+  for +ws: List<&2, String>
+  for +s: HS.St
+  for +to: String
+  for +text: String
+  for +queued: Bool
+  for +parts: String
+  {HC.Snd.works(HC.Snd.resolved(s, HC.Snd{HM.USER(), to, text, False{}, None{}, True{}, False{}, queued, None{}, parts, None{}, Some{ws}})) == Some{ws} : Maybe<&2, List<&2, String>>}
 
 # LAW: the edge: the recipient serves two works, his message carries none.
 law his_words_to_two_tasks_carry_none:

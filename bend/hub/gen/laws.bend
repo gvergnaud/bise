@@ -88,7 +88,7 @@ def in_boot_bare():
   {==}
 
 law in_say_bare:
-  {IN.of(J.obj([J.kv("t", J.JStr{"say"})])) == IN.ISay{"", "", False{}, "", ""} : IN.In}
+  {IN.of(J.obj([J.kv("t", J.JStr{"say"})])) == IN.ISay{"", "", False{}, "", "", None{}} : IN.In}
 
 def in_say_bare():
   {==}
@@ -541,17 +541,30 @@ law in_ISay_round:
   for queued: Bool
   for parts: String
   for from: String
-  {IN.of(IN.json(IN.ISay{focus, text, queued, parts, from})) == IN.ISay{focus, text, queued, parts, from} : IN.In}
+  for works: Maybe<&2, List<&2, String>>
+  {IN.of(IN.json(IN.ISay{focus, text, queued, parts, from, works})) == IN.ISay{focus, text, queued, parts, from, works} : IN.In}
 
-def in_ISay_round(focus, text, queued, parts, from):
-  match parts from:
-    case SNil{} SNil{}:
+def in_ISay_round(focus, text, queued, parts, from, works):
+  match parts from works:
+    case SNil{} SNil{} None{}:
       {==}
-    case SNil{} SCon{h_from, t_from}:
+    case SNil{} SNil{} Some{x_works}:
+      %K.strs_round(x_works) : {IN.of(IN.json(IN.ISay{focus, text, queued, SNil{}, SNil{}, Some{x_works}})) == IN.ISay{focus, text, queued, SNil{}, SNil{}, Some{_}} : IN.In}
       {==}
-    case SCon{h_parts, t_parts} SNil{}:
+    case SNil{} SCon{h_from, t_from} None{}:
       {==}
-    case SCon{h_parts, t_parts} SCon{h_from, t_from}:
+    case SNil{} SCon{h_from, t_from} Some{x_works}:
+      %K.strs_round(x_works) : {IN.of(IN.json(IN.ISay{focus, text, queued, SNil{}, SCon{h_from, t_from}, Some{x_works}})) == IN.ISay{focus, text, queued, SNil{}, SCon{h_from, t_from}, Some{_}} : IN.In}
+      {==}
+    case SCon{h_parts, t_parts} SNil{} None{}:
+      {==}
+    case SCon{h_parts, t_parts} SNil{} Some{x_works}:
+      %K.strs_round(x_works) : {IN.of(IN.json(IN.ISay{focus, text, queued, SCon{h_parts, t_parts}, SNil{}, Some{x_works}})) == IN.ISay{focus, text, queued, SCon{h_parts, t_parts}, SNil{}, Some{_}} : IN.In}
+      {==}
+    case SCon{h_parts, t_parts} SCon{h_from, t_from} None{}:
+      {==}
+    case SCon{h_parts, t_parts} SCon{h_from, t_from} Some{x_works}:
+      %K.strs_round(x_works) : {IN.of(IN.json(IN.ISay{focus, text, queued, SCon{h_parts, t_parts}, SCon{h_from, t_from}, Some{x_works}})) == IN.ISay{focus, text, queued, SCon{h_parts, t_parts}, SCon{h_from, t_from}, Some{_}} : IN.In}
       {==}
 
 law in_IRoute_round:

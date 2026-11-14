@@ -128,6 +128,9 @@ pub enum Input {
         /// `@agent …` from another thread; "" none): sb-core leaves one
         /// route row there (says.trace)
         from: String,
+        /// his explicit tasks for these words (SendOpts.works: a Task tab's
+        /// '+ Agent'); empty: the single-task rule (architect m_64887)
+        works: Vec<String>,
     },
     ClientFocus {
         client: ClientId,
@@ -1734,7 +1737,8 @@ impl Hub {
                 queued,
                 parts,
                 from,
-            } => self.user_input(&mut fx, env, client, &focus, &text, queued, &parts, &from),
+                works,
+            } => self.user_input(&mut fx, env, client, &focus, &text, queued, &parts, &from, works),
             Input::UserCmd { client, focus, cmd } => {
                 let focus = self.focus_of(client, &focus);
                 self.user_cmd(&mut fx, env, client, focus, cmd, false, "", "")

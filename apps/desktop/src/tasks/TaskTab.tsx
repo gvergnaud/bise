@@ -45,6 +45,9 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
   const req = useTaskReq();
   const now = useNowFor(() => false);
   const [renaming, setRenaming] = useState(false);
+  // '+ Agent': the field open; asked: how many agents it had when he asked (its line goes when one more comes)
+  const [asking, setAsking] = useState(false);
+  const [asked, setAsked] = useState<{ readonly n: number } | null>(null);
   const w = works.works.find((x) => x.id === id);
   // his message that started it, quoted from main's thread when this window holds it (by its id)
   const mainKey = threadKey(project, MAIN);
@@ -177,6 +180,26 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
         </section>
       )}
 
+      {asked !== null && names.length <= asked.n && (
+        <p className="tk-meta" data-testid={`${t}.asked`}>{tasks.agent_asked}</p>
+      )}
+
+      {asking ? (
+        // '+ Agent' (tasks-ux m_64875): his words for main in place of the footer; esc closes, an empty ⏎ does nothing
+        <footer className="tk-foot">
+          <Input look="tk-rename" autoFocus placeholder={tasks.agent_ask} aria-label={tasks.agent_tip} data-testid={`${t}.agent.ask`}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setAsking(false);
+              if (e.key !== 'Enter') return;
+              const words = e.currentTarget.value.trim();
+              if (words === '') return;
+              // his message to main, carrying the task (architect m_64887): an unknown task refuses it, his row stays
+              store.send({ project, agent: MAIN, text: tasks.agent_lead({ name: w.name, words }), works: [w.id] });
+              setAsked({ n: names.length });
+              setAsking(false);
+            }} />
+        </footer>
+      ) : (
       <footer className="tk-foot">
         {w.status === 'stalled' && (
           <Press look="b-btn sm pri" onClick={() => {
@@ -205,6 +228,11 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
             }} data-testid={`${t}.pause`}>{tasks.act_pause}</Press>
           )
         )}
+        {w.status !== 'done' && (
+          <Press look="b-btn sm" {...tipAttrs(tasks.agent_tip)} onClick={() => {
+            setAsking(true);
+          }} data-testid={`${t}.agent.add`}>{tasks.act_agent}</Press>
+        )}
         <Dropdown look="pop" label="⋯" name={tasks.act_more} tip={tasks.act_more} testId={`${t}.more`}
           groups={[
             { id: 'acts', rows: [{ id: 'rename', name: tasks.act_rename, testId: `${t}.more.rename` }] },
@@ -221,6 +249,7 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
             else if (pick.startsWith('merge:')) req(project, { step: 'merge', id: w.id, into: pick.slice('merge:'.length) });
           }} />
       </footer>
+      )}
     </div>
   );
 }

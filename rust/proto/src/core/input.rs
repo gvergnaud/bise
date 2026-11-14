@@ -56,8 +56,12 @@ core_kinds! {
         /// his message to the agent in view (`parts`: msg-parts JSON, only
         /// when he sent typed parts). `from`: the thread he typed it in when
         /// not `focus`'s (at-start: his `@agent …` from another thread), ""
-        /// none: sb-core leaves one route row there
-        Say = "say" => ISay { focus: Str, text: Str, queued: Bool, parts: StrOmit, from: StrOmit },
+        /// none: sb-core leaves one route row there. `works`: his explicit
+        /// pick (a Task tab's '+ Agent', SendOpts.works): read like an
+        /// agent's `--task` (task_flag: a merged one's target, an unknown
+        /// one refuses the send) and it replaces the single-task rule
+        /// (architect m_64887); none: the rule applies
+        Say = "say" => ISay { focus: Str, text: Str, queued: Bool, parts: StrOmit, from: StrOmit, works: OptStrsOmit },
         /// his `@agent` message
         Route = "route" => IRoute { target: Str, text: Str, focus: Str, queued: Bool, parts: StrOmit },
         /// `/new`: `brief` is the Brief as JSON, `brief_text` its body

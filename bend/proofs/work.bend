@@ -27,6 +27,9 @@ def Laws.his_words_follow_a_single_task(s, to):
 def Laws.his_words_to_two_tasks_carry_none(a, b):
   {==}
 
+def Laws.his_task_tab_words_carry_its_task(ws, s, to, text, queued, parts):
+  {==}
+
 def Laws.task_tab_keeps_its_work(ws, s, to):
   {==}
 

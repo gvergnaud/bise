@@ -656,6 +656,10 @@ impl Shell {
         if !parts.is_empty() {
             op["parts"] = json!(parts);
         }
+        // his explicit tasks (a Task tab's '+ Agent'): sb-core reads them like --task
+        if !opts.works.is_empty() {
+            op["works"] = json!(opts.works);
+        }
         // BISE-266: a key saved since a REPL started reaches it before
         // this message does; then the input handler (daemon/capsule.rs:
         // a page's answer, a step, a route or a plain input). The wire's

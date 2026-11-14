@@ -306,7 +306,45 @@ fn a_pause_until_a_time_resumes_by_itself_and_a_stale_end_does_nothing() {
 }
 
 fn his_words(t: &mut T, to: &str, text: &str) {
-    t.go(Input::ClientInput { client: 1, focus: to.into(), text: text.into(), queued: false, parts: String::new(), from: String::new() });
+    t.go(Input::ClientInput { client: 1, focus: to.into(), text: text.into(), queued: false, parts: String::new(), from: String::new(), works: Vec::new() });
+}
+
+fn his_task_words(t: &mut T, to: &str, text: &str, works: &[&str]) -> Vec<Effect> {
+    t.go(Input::ClientInput { client: 1, focus: to.into(), text: text.into(), queued: false, parts: String::new(), from: String::new(), works: works.iter().map(|w| w.to_string()).collect() })
+}
+
+#[test]
+fn his_task_tab_words_carry_its_task_a_merged_ones_target_and_an_unknown_one_refuses() {
+    let mut t = T::new();
+    let a = new(&mut t, MAIN, "Login timeout", &[]);
+    let b = new(&mut t, MAIN, "Pricing", &[]);
+    // explicit works: exactly them, whatever main's turn serves (law his_task_tab_words_carry_its_task)
+    his_task_words(&mut t, MAIN, "new agent on Login timeout: repro on 3G", &[&a]);
+    let his = sent_to(&t, MAIN).last().unwrap().clone();
+    assert_eq!((his["text"].as_str(), his["works"].clone()), (Some("new agent on Login timeout: repro on 3G"), json!([a])), "{his}");
+    // a merged id reads as the task it went into (the --task path)
+    let c = new(&mut t, MAIN, "Old login", &[]);
+    assert_eq!(task(&mut t, MAIN, Task::Merge { id: c.clone(), into: b.clone() })["ok"], true);
+    his_task_words(&mut t, MAIN, "new agent on Old login: the copy", &[&c]);
+    assert_eq!(sent_to(&t, MAIN).last().unwrap()["works"], json!([b]));
+    // an unknown id: refused with a word, nothing sent (his draft stays in his window)
+    let n = sent_to(&t, MAIN).len();
+    let fx = his_task_words(&mut t, MAIN, "new agent on Gone: hi", &["gone"]);
+    assert_eq!(sent_to(&t, MAIN).len(), n, "nothing sent");
+    assert!(format!("{fx:?}").contains("no task gone"), "{fx:?}");
+}
+
+#[test]
+fn his_task_tab_words_to_a_paused_task_are_never_held() {
+    let mut t = T::new();
+    let a = new(&mut t, MAIN, "WhatsApp", &[]);
+    t.spawn_task("wa");
+    t.go(Input::ClientWorkAct { client: 7, req: Task::Pause { id: a.clone(), until_ms: None } });
+    // his word with works=[the paused one] goes through (law his_words_are_never_held)
+    his_task_words(&mut t, "wa", "one more thing", &[&a]);
+    let his = sent_to(&t, "wa").last().unwrap().clone();
+    assert_eq!(his["works"], json!([a]));
+    assert_eq!(t.hub.st.msg_state()[&his["id"].as_u64().unwrap()], MsgState::Delivered);
 }
 
 #[test]

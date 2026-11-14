@@ -753,6 +753,13 @@ pub struct SendOpts {
     /// there. Only a trace: an unknown or archived one writes none
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub from: Option<String>,
+    /// his explicit tasks for these words, by id (a Task tab's '+ Agent':
+    /// tasks-ux m_64875). sb-core reads them like an agent's `--task` (a
+    /// merged id: its target; an unknown one or a tomb refuses the send) and
+    /// they replace the single-task rule (architect m_64887). Empty: the
+    /// rule applies
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub works: Vec<String>,
 }
 
 impl SendOpts {

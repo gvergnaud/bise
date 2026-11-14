@@ -152,6 +152,7 @@ impl T {
             queued: false,
             parts: String::new(),
             from: from.into(),
+            works: Vec::new(),
         })
     }
 
@@ -164,6 +165,7 @@ impl T {
             queued: true,
             parts: String::new(),
             from: String::new(),
+            works: Vec::new(),
         })
     }
 
@@ -177,6 +179,7 @@ impl T {
             queued,
             parts: parts.into(),
             from: String::new(),
+            works: Vec::new(),
         })
     }
 
@@ -2786,6 +2789,7 @@ fn bench_step() {
         queued: false,
         parts: String::new(),
         from: String::new(),
+        works: Vec::new(),
     });
     // every context from nothing (before contexts.rs, at each input)
     let t0 = std::time::Instant::now();
@@ -2912,7 +2916,7 @@ fn bench_byte_equal() {
     h.handle(Input::ClientHello { client: 1 }, &mut env);
     seen("hello", &mut h, env.now);
     env.now += 500;
-    let user = |text: &str| Input::ClientInput { client: 1, focus: MAIN.into(), text: text.into(), queued: false, parts: String::new(), from: String::new() };
+    let user = |text: &str| Input::ClientInput { client: 1, focus: MAIN.into(), text: text.into(), queued: false, parts: String::new(), from: String::new(), works: Vec::new() };
     h.handle(user("hello"), &mut env);
     seen("user line", &mut h, env.now);
     let task = (h.st.order.iter())
