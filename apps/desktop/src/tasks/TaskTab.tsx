@@ -21,9 +21,10 @@ import { useNowFor } from '@/app/clock';
 import { askButtons, pickIntent } from '@/app/side3d/model';
 import { tasks } from '@/proto/words_tasks.gen';
 import { useWorks } from '@/store';
-import { artsOf, crewOf, cutAtWord, doingOf, firstLine, goalsOf, isOpen, nowOf } from './model';
+import { aboutOf, artsOf, crewOf, cutAtWord, doingOf, firstLine, goalsOf, isOpen, nowOf } from './model';
 import { openTask, StatusMark, statusWord } from './Marks';
 import { useTaskAct, useTaskReq } from './Board';
+import { lineAt } from './Side';
 
 /** His message's words by its id among a thread's entries; null when this window doesn't hold it. Pure. */
 export function originText(entries: readonly (Pick<Entry, 'kind' | 'msg_id' | 'text'> | undefined)[], id: number): string | null {
@@ -96,6 +97,7 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
     const a = live(n);
     return a === undefined ? [] : [a];
   }));
+  const nowLine = said ?? aboutOf(lineAt(x, now));
   const arts = artsOf(allArts, w.id, works.tombs);
   // its agents that work on a branch of their own (a worktree)
   const changes = names.flatMap((n) => {
@@ -191,11 +193,12 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
         </section>
       )}
 
-      {said !== null && (
-        // the newest report or status note of its agents; the status words stay in the pill (tasks-ux m_64959)
+      {nowLine !== '' && (
+        // the newest report or status note of its agents; none said: what the status is about, past the
+        // pill's own word ('no agent yet', 'quiet since 14:20'): never a bare pill (tasks-ux m_64959, m_65131)
         <section className="tk-sec">
           <h3 className="tk-h">{tasks.sec_now}</h3>
-          <p className="tk-why" data-testid={`${t}.now`}>{said}</p>
+          <p className="tk-why" data-testid={`${t}.now`}>{nowLine}</p>
         </section>
       )}
 

@@ -35,6 +35,8 @@ export function whatOf(r: WorkRow, now: number, past: (ms: number) => string, ne
       if (about === 'reply') return tasks.waiting_reply({ who });
       if (about === 'timer') return tasks.waiting_timer({ at: n() });
       if (about === 'watch') return tasks.waiting_watch({ who });
+      // no agent yet: say so, never a bare Waiting (tasks-ux m_65131)
+      if ((r.agents ?? []).length === 0) return tasks.waiting_no_agent;
       return at !== undefined ? tasks.waiting_quiet({ at: p() }) : tasks.status_waiting;
     case 'stalled':
       if (about === 'crash') return tasks.stalled_crash({ who, at: p() });

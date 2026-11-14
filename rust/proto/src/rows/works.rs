@@ -145,6 +145,7 @@ impl WorkRow {
             (WorkStatus::Waiting, "reply") => tasks::waiting_reply(who),
             (WorkStatus::Waiting, "timer") => tasks::waiting_timer(next()),
             (WorkStatus::Waiting, "watch") => tasks::waiting_watch(who),
+            (WorkStatus::Waiting, _) if self.agents.is_empty() => tasks::waiting_no_agent.into(),
             (WorkStatus::Waiting, _) if self.at_ms.is_some() => tasks::waiting_quiet(past()),
             (WorkStatus::Waiting, _) => tasks::status_waiting.into(),
             (WorkStatus::Stalled, "crash") => tasks::stalled_crash(who, past()),

@@ -40,6 +40,8 @@ crate::words! { tasks:
     waiting_timer(at) = "waiting · wakes at {at}";
     /// it waits for an agent's watch (a build, a pid)
     waiting_watch(who) = "waiting · {who}'s watch";
+    /// waiting, the task has no agent yet (tasks-ux m_65131: never a blank Waiting)
+    waiting_no_agent = "waiting · no agent yet";
     /// nothing named: since its last fact
     waiting_quiet(at) = "waiting · quiet since {at}";
     /// an agent of it crashed, and when

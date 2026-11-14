@@ -515,6 +515,11 @@
     "one": null,
     "text": "today"
   },
+  "tasks.waiting_no_agent": {
+    "args": [],
+    "one": null,
+    "text": "waiting · no agent yet"
+  },
   "tasks.waiting_quiet": {
     "args": [
       "at"

@@ -113,3 +113,10 @@ export function nowOf(agents: readonly Pick<Agent, 'report' | 'note'>[]): string
   const note = agents.map((a) => (a.note ?? '').trim()).find((n) => n !== '');
   return note ?? null;
 }
+
+/** A task line's part past its status word ('waiting · no agent yet' → 'no agent yet'); '' when the
+ *  line is the status word alone (the pill says it). Pure. */
+export function aboutOf(line: string): string {
+  const at = line.indexOf(' · ');
+  return at < 0 ? '' : line.slice(at + 3);
+}

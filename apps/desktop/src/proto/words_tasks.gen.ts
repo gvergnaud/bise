@@ -34,6 +34,8 @@ export const tasks = {
   waiting_timer: (a: { at: string | number }): string => "waiting · wakes at " + String(a.at),
   /** it waits for an agent's watch (a build, a pid) */
   waiting_watch: (a: { who: string | number }): string => "waiting · " + String(a.who) + "'s watch",
+  /** waiting, the task has no agent yet (tasks-ux m_65131: never a blank Waiting) */
+  waiting_no_agent: "waiting · no agent yet",
   /** nothing named: since its last fact */
   waiting_quiet: (a: { at: string | number }): string => "waiting · quiet since " + String(a.at),
   /** an agent of it crashed, and when */
