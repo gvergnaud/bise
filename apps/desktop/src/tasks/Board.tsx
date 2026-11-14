@@ -8,11 +8,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { Press, tipAttrs } from '@/ds';
 import { keep } from '@/app/keep';
-import { useStore } from '@/store';
+import { useAgents, useStore } from '@/store';
 import type { Task as TaskReq, WorkStatus } from '@/proto';
 import { tasks } from '@/proto/words_tasks.gen';
 import { useNowFor } from '@/app/clock';
-import { barRows, cutAtWord, goalsOf, STATUS_ORDER, type ProjWork } from './model';
+import { barRows, crewOf, cutAtWord, goalsOf, STATUS_ORDER, type ProjWork } from './model';
 import { useAllWorks } from './hooks';
 import { openTask, StatusMark } from './Marks';
 import { lineAt } from './Side';
@@ -76,6 +76,9 @@ export function useTaskReq(): (project: string, req: TaskReq) => void {
 
 function Card({ x, now }: { x: ProjWork; now: number }) {
   const act = useTaskAct();
+  // its agents as the Task tab lists them: main only when alone or working on it (designer m_64968)
+  const agents = useAgents(x.project);
+  const crew = crewOf(x.w.agents ?? [], (n) => agents.find((a) => a.name === n)?.status === 'working');
   const goals = goalsOf(x.w);
   const id = `tasks.board.card.${x.project}.${x.w.id}`;
   return (
@@ -89,10 +92,10 @@ function Card({ x, now }: { x: ProjWork; now: number }) {
         {cutAtWord(x.w.name, 40)}
       </span>
       <span className="tk-card-what">{lineAt(x, now)}</span>
-      {(goals !== null || (x.w.agents ?? []).length > 0) && (
+      {(goals !== null || crew.length > 0) && (
         <span className="tk-card-foot">
           {goals !== null && <span {...tipAttrs(tasks.goals_tip(goals))}>{tasks.goals_of(goals)}</span>}
-          {(x.w.agents ?? []).length > 0 && <span>{(x.w.agents ?? []).join(', ')}</span>}
+          {crew.length > 0 && <span>{crew.join(', ')}</span>}
         </span>
       )}
       {x.w.status === 'stalled' && (

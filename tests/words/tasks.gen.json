@@ -78,6 +78,11 @@
     "one": null,
     "text": "ask bise for one more agent on this task"
   },
+  "tasks.agent_waits": {
+    "args": [],
+    "one": null,
+    "text": "waits for you"
+  },
   "tasks.arts_all": {
     "args": [
       "n"
@@ -286,6 +291,11 @@
     ],
     "one": null,
     "text": "paused · until {at}"
+  },
+  "tasks.q_type": {
+    "args": [],
+    "one": null,
+    "text": "type your answer, ⏎ sends it"
   },
   "tasks.sec_agents": {
     "args": [],

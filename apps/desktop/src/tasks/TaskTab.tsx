@@ -99,6 +99,8 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
   });
   return (
     <div className="tk-tab" data-testid={t}>
+      {/* the body scrolls above the footer, never under it (tasks-ux m_64967) */}
+      <div className="tk-body">
       <header className="tk-tab-head">
         <span className="tk-pill" data-st={w.status} data-testid={`${t}.status`}>
           <StatusMark status={w.status} />
@@ -170,7 +172,7 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
                   </li>
                 ))}
               </ol>
-              <Input look="tk-q-type" placeholder={askButtons(c).opts.length > 0 ? inbox.hint_or_answer : inbox.type_or_below} aria-label={c.question} data-testid={`${t}.q.${String(c.id)}.type`}
+              <Input look="tk-q-type" placeholder={askButtons(c).opts.length > 0 ? inbox.hint_or_answer : tasks.q_type} aria-label={c.question} data-testid={`${t}.q.${String(c.id)}.type`}
                 onKeyDown={(e) => {
                   const words = e.currentTarget.value.trim();
                   if (e.key === 'Enter' && words !== '') store.do({ i: 'answer', project: c.project, card: c.id, reply: words });
@@ -199,7 +201,7 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
             {crew.map((n) => {
               const a = live(n);
               const on = a?.status === 'working';
-              const state = a === undefined ? tasks.agent_archived : on ? tasks.agent_live : tasks.agent_idle;
+              const state = a === undefined ? tasks.agent_archived : on ? tasks.agent_live : a.waits > 0 ? tasks.agent_waits : tasks.agent_idle;
               const doing = a === undefined ? '' : doingOf(a);
               return (
                 <li key={n} role="link" tabIndex={0} data-archived={a === undefined || undefined} onClick={() => {
@@ -263,6 +265,8 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
       {asked !== null && names.length <= asked.n && (
         <p className="tk-meta" data-testid={`${t}.asked`}>{tasks.agent_asked}</p>
       )}
+
+      </div>
 
       {asking ? (
         // '+ Agent' (tasks-ux m_64875): his words for main in place of the footer; esc closes, an empty ⏎ does nothing

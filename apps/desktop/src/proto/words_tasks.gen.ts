@@ -126,6 +126,10 @@ export const tasks = {
   agent_live: "working",
   /** an agent of it, idle */
   agent_idle: "idle",
+  /** an agent of it waiting on his answer (tasks-ux m_64967) */
+  agent_waits: "waits for you",
+  /** the typed answer's placeholder on a question with no options */
+  q_type: "type your answer, ⏎ sends it",
   /** an agent of it, archived: its thread stays readable */
   agent_archived: "archived",
   /** a goal ticked by an agent's report */
