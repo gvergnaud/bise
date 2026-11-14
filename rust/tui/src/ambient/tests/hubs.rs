@@ -767,6 +767,24 @@ fn a_held_hubs_pulse_rides_its_row() {
 }
 
 #[test]
+fn a_held_hubs_pages_server_rides_its_row() {
+    // panel-page-blank (architect m_65009): the window opens a link to a
+    // held hub's page in the panel, so its row says that hub's pages
+    // server; a project not held says none
+    let mut t = T::new();
+    t.ready();
+    let mut w = world(&mut t);
+    typed(&mut t, json!({"cmd": "shown", "projects": ["shop"]}));
+    w.opened(&mut t, &["home", "shop"]);
+    w.end("shop").pages_url = Some("http://127.0.0.1:47520/p".into());
+    w.welcome(&mut t, "shop");
+    w.until(&mut t, |o| o.iter().any(|v| v["ev"] == "projects" && v["projects"][1]["pages_url"] == "http://127.0.0.1:47520/p"));
+    let p = t.take().into_iter().rfind(|v| v["ev"] == "projects").unwrap();
+    assert_eq!(p["projects"][1]["project"], "shop", "{p}");
+    assert!(p["projects"][2].get("pages_url").is_none(), "not held: no pages server: {p}");
+}
+
+#[test]
 fn the_rows_carry_the_open_cards_of_every_project() {
     // lead m_8769 (b): bise's "waiting for you" answers an unheld
     // project's cards from its row: a held hub's own cards, else its

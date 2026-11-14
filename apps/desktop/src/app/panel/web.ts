@@ -3,11 +3,17 @@
 // events main sends (kept outside React's tree, one per key), what they do here (the tab's page
 // kept in its tab: URL, title, back/forward; a page's new window opens a web tab next to it; a key
 // the panel owns, pressed in the page, played as the window's own; a saved download's line; find's
-// count), the views of tabs gone closed, and where a link he clicks goes (openWebLink: a web tab, his browser with
-// ⌘ or for a site he always opens there). Owner: newtab-omnibox.
+// count; a tab that never showed a page closed when his go went out or was refused), the views of
+// tabs gone closed, and where a link he clicks goes (openWebLink: a page of one of his hubs in the
+// panel as its artifact, else a web tab, his browser with ⌘ or for a site he always opens there).
+// Owner: newtab-omnibox.
 import { useSyncExternalStore } from 'react';
 import type { WebEvent, WebTabState } from '@/shared/api';
-import { onPanelChange, openWebPage, panelAt, setWebPage, webTabKeys } from './state';
+import { pageLinkOf, type PagesOf } from '@/shared/pagelink';
+import { getAppStore } from '@/store';
+import { openAtVersion } from '@/artifacts/links';
+import { closeTabId, onPanelChange, openWebPage, panelAt, setWebPage, webTabKeys } from './state';
+import { openTab } from './tabs';
 
 /** A web tab's key for main: its project's panel and its tab id. Pure. */
 export function webKey(project: string, tabId: string): string {
@@ -72,7 +78,17 @@ function onEvent(ev: WebEvent): void {
     case 'found':
       put(ev.key, { found: { at: ev.at, n: ev.n } });
       return;
+    case 'went':
+      // his go went out or was refused: a tab that never showed a page goes, never a blank tab
+      // (panel-page-blank, architect m_65009); one with a page keeps it
+      if (closesOnVerdict(ev.to, sides.get(ev.key)?.state ?? null) && ev.key.startsWith(`${panelAt()}|`)) closeTabId(tabOfKey(ev.key));
+      return;
   }
+}
+
+/** Does his go's verdict close its tab? Only a tab that never showed a page, when the page isn't shown there. Pure. */
+export function closesOnVerdict(to: Extract<WebEvent, { kind: 'went' }>['to'], state: WebTabState | null): boolean {
+  return to !== 'shown' && (state === null || (state.url === '' && state.entries.length === 0));
 }
 
 /** Binds main's events once, and closes the view of a tab gone at each panel change. */
@@ -137,9 +153,25 @@ export function linkGoes(url: string, mod: boolean, out: readonly string[]): 'ta
   return mod || site === null || out.includes(site) ? 'browser' : 'tab';
 }
 
-/** A link he clicked in a thread or a card (designer m_64680): a web tab, or his browser. */
+/**
+ * Where a link goes: one of his hubs' pages (pageLinkOf: its origin is a project's pages_url) opens
+ * in the panel as that artifact (panel-page-blank: the web tab refuses bise's own ports and stayed
+ * blank, architect m_65009), else a web tab, else his browser (linkGoes). ⌘ always goes to his
+ * browser. Pure.
+ */
+export function linkPlan(url: string, mod: boolean, out: readonly string[], projects: readonly PagesOf[]): { readonly go: 'artifact'; readonly project: string; readonly id: string; readonly v?: number } | { readonly go: 'tab' | 'browser' } {
+  const page = mod ? null : pageLinkOf(url, projects);
+  if (page !== null) return { go: 'artifact', ...page };
+  return { go: linkGoes(url, mod, out) };
+}
+
+/** A link he clicked in a thread or a card (designer m_64680): a page of his in the panel, a web tab, or his browser. */
 export function openWebLink(url: string, mod: boolean, out: readonly string[]): void {
-  if (linkGoes(url, mod, out) === 'tab' && api() !== undefined) openWebPage(url, {});
+  const plan = linkPlan(url, mod, out, getAppStore().projects());
+  if (plan.go === 'artifact') {
+    if (plan.v !== undefined) openAtVersion(`${plan.project}/${plan.id}`, plan.v);
+    openTab({ kind: 'artifact', project: plan.project, id: plan.id });
+  } else if (plan.go === 'tab' && api() !== undefined) openWebPage(url, {});
   else void (window as Partial<Window>).bise?.openExternal(url);
 }
 

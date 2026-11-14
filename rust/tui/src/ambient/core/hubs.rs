@@ -1054,6 +1054,12 @@ impl Core {
                     // a held hub with no pulse yet: its view.json's last one
                     row.pulse = (p.facts.view)(&f.row.id).and_then(|v| v.pulse);
                 }
+                // its pages server while held: the window opens its page links in the panel
+                row.pages_url = match f.row.home {
+                    true => self.pages_url.clone(),
+                    false => conns.get(&f.row.id).filter(|_| held).and_then(|c| c.rpc.pages_url.clone()),
+                }
+                .filter(|u| !u.is_empty());
                 row
             })
             .collect();

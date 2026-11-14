@@ -50,6 +50,13 @@ pub struct ProjectRow {
     /// (rows::pulse's header); absent: none known yet
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pulse: Option<crate::rows::Pulse>,
+    /// its hub's pages server (`initialize`'s `pages_url`,
+    /// `http://127.0.0.1:47520/p`) while the core holds it: the window
+    /// opens a link to one of its pages in the panel, never a web tab
+    /// (panel-page-blank, architect m_65009); absent: not held, or no
+    /// pages server
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pages_url: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

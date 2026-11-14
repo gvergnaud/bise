@@ -36,7 +36,8 @@
 import { app, session, webFrameMain, type BrowserWindow, type WebContents, type WebFrameMain } from 'electron';
 import { IPC, TEST_WINDOW_OPEN_HOOK } from '../shared/api';
 import { FRAME_KINDS } from '../shared/frame';
-import { frameLink, isPagesFrame, type FrameLink } from './framelink';
+import { isPagesFrame } from '../shared/pagelink';
+import { frameLink, type FrameLink } from './framelink';
 import { openLink } from './ipc';
 import { PINCH_FORWARD } from './pinch';
 import { FIND_AGENT } from './findagent';

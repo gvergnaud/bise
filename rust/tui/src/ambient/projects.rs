@@ -124,6 +124,8 @@ pub fn row(f: &Facts, order: u32, c: &Checkout) -> ProjectRow {
         // its view.json's (a stopped hub's last); a held hub's own event
         // replaces it (core/hubs.rs)
         pulse: f.view.as_ref().and_then(|v| v.pulse.clone()),
+        // the core's own fact (its held hub's initialize), set by core/hubs.rs
+        pages_url: None,
     }
 }
 

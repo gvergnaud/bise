@@ -52,7 +52,15 @@ down?: string | null,
  * New artifacts and unread are counted against `seen.<project>`
  * (rows::pulse's header); absent: none known yet
  */
-pulse?: Pulse | null, };
+pulse?: Pulse | null, 
+/**
+ * its hub's pages server (`initialize`'s `pages_url`,
+ * `http://127.0.0.1:47520/p`) while the core holds it: the window
+ * opens a link to one of its pages in the panel, never a web tab
+ * (panel-page-blank, architect m_65009); absent: not held, or no
+ * pages server
+ */
+pages_url?: string | null, };
 
 export type OpenWhat = "thread" | "review" | "artifact" | "worktree" | "view";
 

@@ -664,7 +664,9 @@ export type WebEvent =
   /** a download he saved where he picked (the save panel) */
   | { readonly kind: 'saved'; readonly key: string; readonly name: string; readonly path: string; readonly folder: string }
   /** find in the page: the match in front and how many */
-  | { readonly kind: 'found'; readonly key: string; readonly at: number; readonly n: number };
+  | { readonly kind: 'found'; readonly key: string; readonly at: number; readonly n: number }
+  /** his own go's verdict (main/webview/guard.ts goVerdict): a tab that never showed a page closes unless 'shown' */
+  | { readonly kind: 'went'; readonly key: string; readonly to: 'shown' | 'external' | 'refused' };
 
 /** How a link leaves (openExternal): `typed` in the bar (a typed visit), `background` behind his windows (⌘⏎). */
 export interface OpenOpts {

@@ -8,6 +8,8 @@
 //     opens it in the panel (IPC.artifactLink);
 //   - anything else: his browser, through openLink's rule (http, https, mailto; else nothing).
 // An in-page anchor (#x) is a same-document move: no navigation, it never gets here.
+// A pages server's url is read by shared/pagelink.ts (the window reads it too).
+import { ARTIFACT_ID, isPagesFrame, pagesArtifact } from '../shared/pagelink';
 
 /** What the guard does with a frame's navigation or new window. */
 export type FrameLink =
@@ -16,36 +18,13 @@ export type FrameLink =
   | { readonly do: 'out'; readonly url: string }
   | { readonly do: 'drop' };
 
-/** Pure: may a subframe show `url`? Only the local pages server: http on 127.0.0.1, any port. */
-export function isPagesFrame(url: string): boolean {
-  try {
-    const u = new URL(url);
-    return u.protocol === 'http:' && u.hostname === '127.0.0.1' && u.username === '' && u.password === '';
-  } catch {
-    return false;
-  }
-}
-
-// the hub's artifact and page ids (pages::store::valid_id, artifacts::parse_ref)
-const ID = /^[a-z0-9-]{1,40}$/u;
-
 /** Pure: the artifact an `artifact:<id>[@vN]` link names, else null (the hub's parse_ref). */
 export function artifactRef(url: string): { id: string; v?: number } | null {
   const m = /^artifact:([^@]*)(?:@v?(\d+))?$/u.exec(url.trim());
   if (m === null) return null;
   const id = m[1] ?? '';
-  if (!ID.test(id)) return null;
+  if (!ARTIFACT_ID.test(id)) return null;
   return m[2] === undefined ? { id } : { id, v: Number(m[2]) };
-}
-
-/** Pure: the artifact a pages-server url shows (/a/<id>/<v>/…, /a/<id>/view, /p/<id>[/v/<n>]), else null. */
-export function pagesArtifact(url: string): { id: string; v?: number } | null {
-  if (!isPagesFrame(url)) return null;
-  const segs = new URL(url).pathname.split('/').filter((s) => s !== '');
-  const [route, id = '', a, b] = segs;
-  if ((route !== 'a' && route !== 'p') || !ID.test(id)) return null;
-  const n = route === 'a' ? a : a === 'v' ? b : undefined;
-  return n !== undefined && /^\d+$/u.test(n) ? { id, v: Number(n) } : { id };
 }
 
 /**

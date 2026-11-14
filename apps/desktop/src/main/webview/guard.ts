@@ -1,7 +1,9 @@
 // The web view's own guard, pure (page newtab-browser; architect m_64682 rules 2 and 4): what a web
 // tab's navigation does (webNav: allow, a new web tab, out to his Mac, refused) and which requests of
 // its session are cancelled (blockedRequest: bise's own loopback ports, every *.localhost view host,
-// whatever the resource type or initiator). bise's ports are main's live facts (bisePortsOf: the
+// whatever the resource type or initiator), and his own go's verdict (goVerdict: shown, out to his
+// browser for mailto and bise's own pages, refused; the window closes a tab that never showed a
+// page, panel-page-blank, architect m_65009). bise's ports are main's live facts (bisePortsOf: the
 // pages servers its core and hubs name), never a hardcoded number. The second wall, and the real one
 // against DNS rebinding, is the pages server's own Host/Origin check (rust pages/server.rs host_ok):
 // any new loopback listener bise adds must keep that check. The app's own guard (main/guard.ts) is
@@ -10,6 +12,9 @@
 
 /** What a web tab's navigation does. */
 export type WebNav = 'allow' | 'new-tab' | 'external' | 'refuse';
+
+/** His own go's verdict, sent to the window: a tab that never showed a page closes unless 'shown'. */
+export type WebVerdict = 'shown' | 'external' | 'refused';
 
 /** The frame a navigation is in, and whether it would open a window (target=_blank, window.open). */
 export type NavFrame = 'main' | 'sub' | 'window';
@@ -62,6 +67,21 @@ export function webNav(url: string, frame: NavFrame, ports: ReadonlySet<number>)
   if (u.protocol === 'mailto:') return 'external';
   // file:, javascript:, data:, blob: at the top, and any other scheme: refused
   return 'refuse';
+}
+
+/**
+ * What his own go (the window's verb: his click, his ⏎ in the bar) to `url` does, its verdict for the
+ * window (panel-page-blank, architect m_65009): shown in the tab; out to his browser or mail app
+ * (mailto, and bise itself: the web tab never loads bise's ports, rule 4, but his browser may);
+ * refused. A page's own navigation never comes here (webNav, prevented in place). Pure.
+ */
+export function goVerdict(url: string, ports: ReadonlySet<number>): WebVerdict {
+  const nav = webNav(url, 'main', ports);
+  if (nav === 'allow') return 'shown';
+  if (nav === 'external') return 'external';
+  const u = parse(url);
+  const plain = u !== null && (u.protocol === 'http:' || u.protocol === 'https:') && u.username === '' && u.password === '';
+  return plain && isBise(url, ports) ? 'external' : 'refused';
 }
 
 /** The loopback ports a pages-server URL names ('http://127.0.0.1:7841/p'), or none. Pure. */

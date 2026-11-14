@@ -1,7 +1,7 @@
 // The web view's guard, pure (webview/guard.ts; architect m_64682 rules 2 and 4): navigations and
 // the requests to bise itself, with a pages server's port as main would learn it.
 import { describe, expect, it } from 'vitest';
-import { bisePortsOf, blockedRequest, isLoopback, webNav } from './guard';
+import { bisePortsOf, blockedRequest, goVerdict, isLoopback, webNav } from './guard';
 
 const PAGES = 47438;
 const PORTS = new Set([PAGES]);
@@ -55,6 +55,26 @@ describe('blockedRequest: nothing reaches bise from a web page (rule 4)', () => 
   it('no port known yet: loopback dev servers pass, view hosts never', () => {
     expect(blockedRequest(`http://127.0.0.1:${String(PAGES)}/`, new Set())).toBe(false);
     expect(blockedRequest('http://v-1.localhost:80/', new Set())).toBe(true);
+  });
+});
+
+describe('goVerdict: his own go never leaves a blank tab (panel-page-blank, architect m_65009)', () => {
+  it.each([
+    ['https://github.com/', 'shown'],
+    ['http://127.0.0.1:3000/x', 'shown'],
+    // his bug: a bise page loads in his browser, never refused into about:blank
+    [`http://127.0.0.1:${String(PAGES)}/p/vibebot-sprint-critique`, 'external'],
+    [`http://localhost:${String(PAGES)}/`, 'external'],
+    ['mailto:a@b.c', 'external'],
+    [`http://u:p@127.0.0.1:${String(PAGES)}/p/x`, 'refused'],
+    ['file:///etc/passwd', 'refused'],
+    ['javascript:alert(1)', 'refused'],
+    ['not a url', 'refused'],
+  ] as const)('%s: %s', (url, want) => {
+    expect(goVerdict(url, PORTS)).toBe(want);
+  });
+  it("a page's own navigation to bise stays refused (webNav), whatever his go does", () => {
+    expect(webNav(`http://127.0.0.1:${String(PAGES)}/p/x`, 'main', PORTS)).toBe('refuse');
   });
 });
 

@@ -4,7 +4,7 @@
 // sends facts (its tab's key, rect, visible) and verbs (open, go, back, forward, reload, stop, zoom,
 // find, close); main sends back each page's state (its URL, title, favicon as a data URL, back and
 // forward, loading, failed, its entries) and events (a new tab a page asked for, a key bise owns,
-// a download saved, find's count). The view: sandboxed, contextIsolation, no node, no preload (a page
+// a download saved, find's count, his go's verdict). The view: sandboxed, contextIsolation, no node, no preload (a page
 // never sees window.bise), webviewTag off, on persist:bise-web (session.ts). Its navigations are
 // guard.ts's webNav; none of the window's injections (ESC_FORWARD, PINCH_FORWARD, FIND_AGENT) ever
 // go in. Its keys: back/forward (⌘[ ⌘]), reload (⌘R), zoom (⌘+ ⌘− ⌘0) and stop (esc while loading)
@@ -17,7 +17,7 @@ import { IPC, type WebEvent, type WebStart, type WebTabState, type WebVerb } fro
 import { ENTRIES_MAX, keyIn, keyOf, rectIn, startIn, zoomStep } from './input';
 import { openLink } from '../ipc';
 import { keepsLinks, noteLink, noteTitle } from '../webhistoryipc';
-import { webNav, type NavFrame } from './guard';
+import { goVerdict, webNav, type NavFrame } from './guard';
 import { webSession, type Saved } from './session';
 
 /** A favicon bigger than this is not shown. */
@@ -237,11 +237,16 @@ function start(l: Live, s: WebStart): void {
   void wc.navigationHistory.restore({ entries, index: Math.max(0, Math.min(entries.length - 1, s.index)) }).catch(() => undefined);
 }
 
+/**
+ * His own go (the window's verb, never a page's navigation): shown in the tab, out to his browser
+ * (bise's own pages too: the tab never loads them, rule 4), or refused; its verdict goes to the
+ * window, which closes a tab that never showed a page (panel-page-blank, architect m_65009).
+ */
 function go(l: Live, url: string, typed: boolean): void {
-  if (webNav(url, 'main', ports()) !== 'allow') {
-    route(l, url, 'main');
-    return;
-  }
+  const to = goVerdict(url, ports());
+  send(l, { kind: 'went', key: l.key, to });
+  if (to === 'external') void openLink(url, testMode);
+  if (to !== 'shown') return;
   l.typedNext = typed;
   void l.view.webContents.loadURL(url).catch(() => undefined);
 }

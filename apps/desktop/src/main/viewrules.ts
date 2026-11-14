@@ -21,7 +21,7 @@ import { VIEW_ORIGIN_RE } from '../proto/view_rules.gen';
 import type { ViewFrame } from '../shared/api';
 import { callViewKey } from '../shared/viewkey';
 import type { ViewPerm } from '../shared/viewperms';
-import { isPagesFrame } from './framelink';
+import { isPagesFrame } from '../shared/pagelink';
 
 export type { ViewFrame, ViewPerm };
 

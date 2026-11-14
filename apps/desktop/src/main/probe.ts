@@ -7,7 +7,7 @@
 // 'up'; nothing answers: 'down'. Only http://127.0.0.1:<port> is asked; any other url is not ours
 // to judge: 'up'. Owner: page-unreach (the artifact view's reach, artifacts/reach.ts, reads it).
 import { get } from 'node:http';
-import { isPagesFrame } from './framelink';
+import { isPagesFrame } from '../shared/pagelink';
 
 /** How long the server may take to answer before it counts as not answering. */
 export const PROBE_MS = 800;

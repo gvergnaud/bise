@@ -1,23 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { artifactRef, frameLink, isPagesFrame, pagesArtifact } from './framelink';
+import { artifactRef, frameLink } from './framelink';
 
 const S = 'http://127.0.0.1:47438';
-
-describe('isPagesFrame (an artifact in the window, amb-kit m_11871)', () => {
-  it('the local pages server, any port and path', () => {
-    expect(isPagesFrame(`${S}/p/desktop-app`)).toBe(true);
-    expect(isPagesFrame('http://127.0.0.1:9/p/x#item')).toBe(true);
-  });
-  it('anything else stays out: https, another host, localhost, credentials, file, junk', () => {
-    expect(isPagesFrame('https://127.0.0.1:47438/p/x')).toBe(false);
-    expect(isPagesFrame('http://example.com/p/x')).toBe(false);
-    expect(isPagesFrame('http://localhost:47438/p/x')).toBe(false);
-    expect(isPagesFrame('http://127.0.0.1.evil.com/p/x')).toBe(false);
-    expect(isPagesFrame('http://u:p@127.0.0.1:47438/p/x')).toBe(false);
-    expect(isPagesFrame('file:///etc/passwd')).toBe(false);
-    expect(isPagesFrame('not a url')).toBe(false);
-  });
-});
 
 describe('artifactRef (the hub parse_ref)', () => {
   it('an id, with a version or not', () => {
@@ -30,21 +14,6 @@ describe('artifactRef (the hub parse_ref)', () => {
     expect(artifactRef('artifact:x@vx')).toBeNull();
     expect(artifactRef('artifact:')).toBeNull();
     expect(artifactRef('https://x.dev/artifact:a')).toBeNull();
-  });
-});
-
-describe('pagesArtifact', () => {
-  it("the pages server's artifact and page routes", () => {
-    expect(pagesArtifact(`${S}/a/sign/2/index.html?theme=light`)).toEqual({ id: 'sign', v: 2 });
-    expect(pagesArtifact(`${S}/a/deck/view`)).toEqual({ id: 'deck' });
-    expect(pagesArtifact(`${S}/p/plan`)).toEqual({ id: 'plan' });
-    expect(pagesArtifact(`${S}/p/plan/v/4`)).toEqual({ id: 'plan', v: 4 });
-  });
-  it('the kit, junk, another host: none', () => {
-    expect(pagesArtifact(`${S}/kit/kit.css`)).toBeNull();
-    expect(pagesArtifact(`${S}/`)).toBeNull();
-    expect(pagesArtifact(`${S}/a/Bad_Id/1/x`)).toBeNull();
-    expect(pagesArtifact('https://example.com/p/plan')).toBeNull();
   });
 });
 
