@@ -4,6 +4,7 @@ import type { WorkRow, WorkStatus } from '@/proto';
 import { barRows, cutAtWord, goalsOf, type ProjWork } from './model';
 import { sinceLooked } from './since';
 import { tasksOf } from './chips';
+import { resolveMerged } from './model';
 
 const NOW = 1_700_000_000_000;
 const H = 3_600_000;
@@ -69,5 +70,15 @@ describe('since you looked', () => {
       w('e', 'needs_you', NOW - 10 * H),
     ];
     expect(sinceLooked(all, since)).toEqual({ done: 1, moving: 1, needs: 1 });
+  });
+});
+
+describe('a merged task read as the one it went into', () => {
+  it('follows the merges to the end, and stops on a loop', () => {
+    const tombs = [{ id: 'a', merged_into: 'b' }, { id: 'b', merged_into: 'c' }, { id: 'x', merged_into: null }];
+    expect(resolveMerged(tombs, 'a')).toBe('c');
+    expect(resolveMerged(tombs, 'x')).toBe('x');
+    expect(resolveMerged(tombs, 'live')).toBe('live');
+    expect(['p', 'q']).toContain(resolveMerged([{ id: 'p', merged_into: 'q' }, { id: 'q', merged_into: 'p' }], 'p'));
   });
 });

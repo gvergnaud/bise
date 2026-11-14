@@ -68,6 +68,18 @@ export interface SearchScheduled {
   readonly at_ms?: number;
 }
 
+/** A task (HubEv works, its folded ones too: tasks-center 'Done compris'), found by its name and id. */
+export interface SearchTask {
+  readonly project: string;
+  readonly id: string;
+  readonly name: string;
+  /** rows::WorkStatus ('needs_you', 'working', ... 'done') */
+  readonly status: string;
+  /** its line ('waiting · perf's reply'), its why after it */
+  readonly what: string;
+  readonly at_ms: number;
+}
+
 /** What ⏎ on a page row does: go to a route (its string form), or open the inbox or the key list in place. */
 export type PageGo = { readonly route: string } | { readonly inbox: true } | { readonly help: true };
 
@@ -97,18 +109,21 @@ export interface SearchData {
   readonly scheduled: readonly SearchScheduled[];
   /** the app's pages, found by name only with a query (never in 'waiting' or 'recent') */
   readonly pages?: readonly SearchPage[];
+  /** the tasks, done ones too (tasks-center: 'Done compris'), found by a word of their name or id */
+  readonly tasks?: readonly SearchTask[];
 }
 
 export type Scope = 'all' | 'agents' | 'artifacts' | 'scheduled';
 export const SCOPES: readonly Scope[] = ['all', 'agents', 'artifacts', 'scheduled'];
 
-export type HitKind = 'agent' | 'page' | 'artifact' | 'scheduled';
+export type HitKind = 'agent' | 'page' | 'artifact' | 'scheduled' | 'task';
 
 /** What ⏎ does on a result; ⌘⏎ on an archived agent restores it, then opens it. */
 export type HitOpen =
   | { readonly to: 'thread'; readonly project: string; readonly agent: string }
   | { readonly to: 'artifact'; readonly project: string; readonly id: string }
-  | { readonly to: 'page'; readonly go: PageGo };
+  | { readonly to: 'page'; readonly go: PageGo }
+  | { readonly to: 'task'; readonly project: string; readonly id: string };
 
 export interface Hit {
   readonly kind: HitKind;
@@ -142,7 +157,7 @@ export interface Hit {
 }
 
 export interface Group {
-  readonly id: 'waiting' | 'recent' | 'agents' | 'pages' | 'artifacts' | 'scheduled';
+  readonly id: 'waiting' | 'recent' | 'agents' | 'tasks' | 'pages' | 'artifacts' | 'scheduled';
   readonly label: string;
   readonly hits: readonly Hit[];
 }
@@ -381,6 +396,38 @@ function scheduledHit(s: SearchScheduled, pname: string, tz?: string): Hit {
   };
 }
 
+/** A task's sign in the glyph column: its status mark's (tasks/Marks.tsx), as text. */
+const TASK_GLYPH: Readonly<Record<string, readonly [string, Hit['tone']]>> = {
+  needs_you: ['●', 'acc'],
+  working: ['●', 'ink'],
+  waiting: ['○', ''],
+  stalled: ['✗', 'err'],
+  to_review: ['◉', 'ink'],
+  paused: ['‖', ''],
+  done: ['✓', ''],
+  ongoing: ['↻', ''],
+};
+
+function taskHit(t: SearchTask, pname: string): Hit {
+  const [glyph, tone] = TASK_GLYPH[t.status] ?? ['○', ''];
+  return {
+    kind: 'task',
+    id: `task.${t.project}.${t.id}`,
+    project: t.project,
+    glyph,
+    tone,
+    name: t.name,
+    detail: t.what,
+    where: pname,
+    when: '',
+    archived: t.status === 'done',
+    waiting: t.status === 'needs_you',
+    at_ms: t.at_ms,
+    score: 0,
+    open: { to: 'task', project: t.project, id: t.id },
+  };
+}
+
 function pageHit(p: SearchPage): Hit {
   return {
     kind: 'page',
@@ -458,6 +505,15 @@ export function searchList(d: SearchData, q: string, scope: Scope, now: number, 
       (a) => !a.main && sentenceNames(q, a),
     );
     if (hits.length > 0) groups.push({ id: 'agents', label: 'agents', hits });
+  }
+  // the tasks (tasks-center: results, the done ones too, after the open ones), in 'all' only
+  if (scope === 'all' && d.tasks !== undefined) {
+    const hits = ranked(
+      d.tasks,
+      (t) => taskHit(t, pname(t.project)),
+      (t) => ({ name: [t.name, t.id], about: [t.what], where: [pname(t.project)] }),
+    );
+    if (hits.length > 0) groups.push({ id: 'tasks', label: 'tasks', hits });
   }
   // the app's pages (designer m_21505): after the agents, in 'all' only, by a word of their name
   // (a project's name alone finds its agents, not its six pages)

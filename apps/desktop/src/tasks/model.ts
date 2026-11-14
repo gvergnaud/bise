@@ -1,7 +1,7 @@
 // The tasks' pure model for the desktop: the order of the statuses (the Board's columns, signed by
 // designer and tasks-ux), the right bar's rows (open first, then a fold for the ongoing ones and the
 // ones done this week), its counts, a row's done-when count, a name cut at a word. Pure. Owner: tasks.
-import type { WorkRow, WorkStatus } from '@/proto';
+import type { WorkRow, WorkStatus, WorkTomb } from '@/proto';
 
 /** A task with its project (the bar lists every project's on bise's own). */
 export interface ProjWork {
@@ -55,6 +55,19 @@ export function goalsOf(w: Pick<WorkRow, 'goals'>): { readonly done: number; rea
   const g = w.goals ?? [];
   if (g.length === 0) return null;
   return { done: g.filter((x) => x.done === true).length, all: g.length };
+}
+
+/** A task id as a link reads it: a merged one's, the task it went into (its tombs, followed to the end). Pure. */
+export function resolveMerged(tombs: readonly Pick<WorkTomb, 'id' | 'merged_into'>[], id: string): string {
+  const into = new Map(tombs.flatMap((t) => (t.merged_into == null ? [] : [[t.id, t.merged_into] as const])));
+  let at = id;
+  // a chain of merges ends; a loop (never written by the hub) stops after as many steps as tombs
+  for (let n = 0; n <= into.size; n++) {
+    const next = into.get(at);
+    if (next === undefined) return at;
+    at = next;
+  }
+  return at;
 }
 
 /** A name cut at a word with '…' when longer than `max` letters (the whole name goes in its tip). Pure. */

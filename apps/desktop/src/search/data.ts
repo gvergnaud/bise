@@ -4,7 +4,7 @@
 // the projects it does not hold from amb-core's index (2926a991: their view.json, as of
 // written_ms); the scheduled tasks from amb-feed's typed list (284bd5c6) for a held project, from
 // the index row's scheduled (26b2400b, its live timers as of written_ms) for the others.
-import type { Agent, Artifact, Card, IndexRow, ProjectRow, ScheduledTask } from '@/proto';
+import type { Agent, Artifact, Card, IndexRow, ProjectRow, ScheduledTask, WorkRow, WorkTomb } from '@/proto';
 import { leaves, LEAVES } from '@/artifacts/model';
 import { howOften } from '@/scheduled/model';
 import type { SearchData, SearchScheduled } from './rank';
@@ -15,6 +15,10 @@ export interface StoreView {
   readonly artifacts: (project: string) => readonly Artifact[];
   readonly cards: (project: string) => readonly Card[];
   readonly scheduled?: (project: string) => readonly ScheduledTask[];
+  /** a project's tasks and its folded ones (HubEv works) */
+  readonly works?: (project: string) => { readonly works: readonly WorkRow[]; readonly tombs: readonly WorkTomb[] };
+  /** a task's line (tasks/what.ts at render's now) */
+  readonly taskLine?: (project: string, w: WorkRow) => string;
   /** amb-core's index: the projects the core does not hold (store.index()). */
   readonly index?: readonly IndexRow[];
 }
@@ -82,5 +86,14 @@ export function searchDataOf(v: StoreView): SearchData {
       artifactsOf(p.id).map((a) => ({ project: p.id, id: a.id, title: a.title, kind: a.kind, what: whatOf(a), agent: a.agent, at_ms: a.at_ms })),
     ),
     scheduled: projects.flatMap((p) => scheduledOfP(p.id).map((t) => scheduledOf(p.id, t))),
+    // the tasks, then the folded done ones (a merged one is found through the task it went into)
+    tasks: projects.flatMap((p) => {
+      const w = v.works?.(p.id);
+      if (w === undefined) return [];
+      return [
+        ...w.works.map((x) => ({ project: p.id, id: x.id, name: x.name, status: x.status, what: v.taskLine?.(p.id, x) ?? x.status, at_ms: x.last_ms })),
+        ...w.tombs.filter((t) => (t.merged_into ?? null) === null).map((t) => ({ project: p.id, id: t.id, name: t.name, status: 'done', what: 'done', at_ms: t.done_ms })),
+      ];
+    }),
   };
 }

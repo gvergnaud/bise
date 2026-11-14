@@ -18,6 +18,7 @@ import { Button, Empty, Filters, GroupLabel, MoreButton, PageBanner, Press, sent
 import { hero } from '@/proto/words_hero.gen';
 import { library } from '@/proto/words_library.gen';
 import { useFolders, usePlugins, useProjects, useStore } from '@/store';
+import { resolveMerged } from '@/tasks/model';
 import { DEPTH, useRouter } from '@/app/router';
 import { libraryExit } from '@/app/escape';
 import { usePageSearchKeys } from '@/app/searchkeys';
@@ -216,7 +217,8 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
   const lib = libraryOf(folders, all);
   // the field's text is the one filter state (filters.ts): in:, since:, by:, the words
   const parsed = parseFilters(q);
-  const fctx = { now, tz: localTz };
+  // `task:` reads a merged task's id as the task it went into (its project's tombs)
+  const fctx = { now, tz: localTz, taskOf: (p: string, id: string) => resolveMerged(store.works(p).tombs, id) };
   const filtered = parsed.keys.size > 0;
   const typedProject = parsed.project === null ? null : projectOfTyped(projects.map((p) => ({ project: p.project, name: p.name })), parsed.project);
   const eff = typedProject ?? scope;

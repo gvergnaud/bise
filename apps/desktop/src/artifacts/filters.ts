@@ -28,6 +28,8 @@ export const localTz: Tz = (ms) => -new Date(ms).getTimezoneOffset();
 export interface Ctx {
   readonly now: number;
   readonly tz: Tz;
+  /** a task id as `task:` reads it: a merged one's, the task it went into (its tombs); none: as is */
+  readonly taskOf?: (project: string, id: string) => string;
 }
 
 /** A dimension of the bar. */
@@ -95,8 +97,19 @@ const app: Dimension = {
   keysOf: (it) => [appKeyOf(it)],
 };
 
-/** The bar's dimensions; `app:` is apps-gallery's (plugin-apps). */
-export const DIMENSIONS: readonly Dimension[] = [since, by, app];
+/** The tasks an item serves for `task:` (its row's works), a merged one's read as the task it went into. */
+export const tasksOfItem = (it: Item, ctx: Ctx): string[] => (it.a.works ?? []).map((w) => ctx.taskOf?.(it.project, w) ?? w);
+
+/** `task:<id>` (tasks-center: the artifact's token in the filter bar): the items that serve that task. */
+const task: Dimension = {
+  token: 'task',
+  parse: (v) => (v === '' ? null : v),
+  match: (it, keys, ctx) => tasksOfItem(it, ctx).some((w) => keys.has(w)),
+  keysOf: (it, ctx) => tasksOfItem(it, ctx),
+};
+
+/** The bar's dimensions; `app:` is apps-gallery's (plugin-apps); `task:` the tasks' (desktop only: `sb artifact list` has no task filter yet). */
+export const DIMENSIONS: readonly Dimension[] = [since, by, app, task];
 
 /** The field's text read: the project typed (`in:`), each dimension's keys, the words. */
 export interface Filters {
