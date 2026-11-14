@@ -1,5 +1,5 @@
 // 'since you looked' (brief, top of the Board): what moved since his last look at the Board. Done:
-// marked done after it; moving: working or waiting with a fact after it; needs: what waits on him
+// marked done after it; moving: working now; needs: what waits on him
 // now (whenever it came). Pure. Owner: tasks.
 import type { ProjWork } from './model';
 
@@ -9,7 +9,8 @@ export function sinceLooked(all: readonly ProjWork[], since: number): { readonly
   let needs = 0;
   for (const { w } of all) {
     if (w.status === 'done' && (w.done?.at_ms ?? w.last_ms) > since) done += 1;
-    else if ((w.status === 'working' || w.status === 'waiting') && w.last_ms > since) moving += 1;
+    // moving: the tasks working now, one count whatever his last look (tasks-ux m_64959)
+    else if (w.status === 'working') moving += 1;
     else if (w.status === 'needs_you') needs += 1;
   }
   return { done, moving, needs };

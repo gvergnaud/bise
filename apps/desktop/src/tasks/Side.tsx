@@ -8,15 +8,16 @@ import { OuterList } from '@/app/side3d/OuterCard';
 import { Empty } from '@/app/side3d/Flyout';
 import { groupParts } from '@/app/side3d/lists';
 import { tasks } from '@/proto/words_tasks.gen';
+import { dayWords, timeOf } from '@/artifacts/model';
 import { barRows, cutAtWord, goalsOf, needsHim, type ProjWork } from './model';
 import { openBoard, openTask, StatusMark } from './Marks';
 import { whatOf } from './what';
 
 /** how a past and a coming time read in a row's line: the hour, a date past a day */
 function clock(ms: number, now: number): string {
-  const d = new Date(ms);
-  const hm = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  return Math.abs(now - ms) < 20 * 3_600_000 ? hm : `${d.toLocaleDateString([], { weekday: 'short' })} ${hm}`;
+  // 24 h like the rest of the app ('14:20'); another day: 'yesterday 14:20', 'sun 5 oct 14:20' (designer m_64958)
+  const day = dayWords(ms, now);
+  return day === 'today' ? timeOf(ms) : `${day} ${timeOf(ms)}`;
 }
 
 /** A task's line at `now` (what.ts), its times as the bar writes them. */

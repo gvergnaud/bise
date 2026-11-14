@@ -61,7 +61,7 @@ describe('the chips of a thing', () => {
 });
 
 describe('since you looked', () => {
-  it('counts what was done and what moved after his look, and every task that needs him now', () => {
+  it('counts what was done after his look, the tasks working now (one count), and every task that needs him now', () => {
     const since = NOW - 3 * H;
     const all = [
       w('a', 'done', NOW, { done: { at_ms: NOW - H, by: 'user' } }),
@@ -71,6 +71,8 @@ describe('since you looked', () => {
       w('e', 'needs_you', NOW - 10 * H),
     ];
     expect(sinceLooked(all, since)).toEqual({ done: 1, moving: 1, needs: 1 });
+    // a working task counts whatever his last look: one count for moving (tasks-ux m_64959)
+    expect(sinceLooked([w('c', 'working', NOW - 9 * H)], since).moving).toBe(1);
   });
 });
 

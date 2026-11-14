@@ -1,7 +1,7 @@
 // The tasks' pure model for the desktop: the order of the statuses (the Board's columns, signed by
 // designer and tasks-ux), the right bar's rows (open first, then a fold for the ongoing ones and the
 // ones done this week), its counts, a row's done-when count, a name cut at a word. Pure. Owner: tasks.
-import type { Artifact, WorkRow, WorkStatus, WorkTomb } from '@/proto';
+import type { Agent, Artifact, WorkRow, WorkStatus, WorkTomb } from '@/proto';
 
 /** A task with its project (the bar lists every project's on bise's own). */
 export interface ProjWork {
@@ -84,4 +84,32 @@ export function artsOf<A extends Pick<Artifact, 'works' | 'at_ms' | 'archived' |
   const all = arts.filter((a) => a.archived !== true && (a.works ?? []).some((w) => resolveMerged(tombs, w) === id)).sort((a, b) => b.at_ms - a.at_ms);
   const his = all.filter((a) => a.audience !== 'agents');
   return { all, mine: his.length > 0 ? his : all };
+}
+
+/** A message's first line (his origin is quoted by it). Pure. */
+export function firstLine(text: string): string {
+  return text.trim().split('\n')[0]?.trim() ?? '';
+}
+
+/** The agents a Task tab lists (tasks-ux m_64959): main starts the work, it is not on the task, so it
+ *  shows only when it is the task's only agent or in a turn for it. Pure. */
+export function crewOf(names: readonly string[], working: (name: string) => boolean): string[] {
+  const rest = names.filter((n) => n !== 'main');
+  return names.filter((n) => n !== 'main' || rest.length === 0 || working(n));
+}
+
+/** What an agent does now, one line: its status note, else its turn's title, else nothing. Pure. */
+export function doingOf(a: Pick<Agent, 'note' | 'title' | 'status'>): string {
+  const note = (a.note ?? '').trim();
+  if (note !== '') return note;
+  return a.status === 'working' ? a.title.trim() : '';
+}
+
+/** A task's Now: the newest report of its agents, else a status note; null: nothing said. Pure. */
+export function nowOf(agents: readonly Pick<Agent, 'report' | 'note'>[]): string | null {
+  const reps = agents.flatMap((a) => (a.report == null || a.report.text.trim() === '' ? [] : [a.report])).sort((a, b) => b.at_ms - a.at_ms);
+  const r = reps[0];
+  if (r !== undefined) return firstLine(r.text.replace(/^\[report: [a-z]+\]\s*/, ''));
+  const note = agents.map((a) => (a.note ?? '').trim()).find((n) => n !== '');
+  return note ?? null;
 }

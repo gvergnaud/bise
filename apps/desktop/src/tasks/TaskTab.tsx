@@ -5,7 +5,10 @@
 // · Pause/Resume (Reopen when done, Restart when stalled). A merged or folded one says where it went.
 // Gestures go through the hub's task_act. Owner: tasks.
 import { useState } from 'react';
-import { Dropdown, Input, Press, tipAttrs } from '@/ds';
+import { ArtChip, Dropdown, Input, Kbd, Press, tipAttrs } from '@/ds';
+import { dayWords, glyphOf, timeOf } from '@/artifacts/model';
+import { age } from '@/inbox/InboxCard';
+import { inbox } from '@/proto/words_inbox.gen';
 import { sentenceCase } from '@/ds/case';
 import type { Entry } from '@/proto';
 import { threadKey, useAgents, useArtifacts, useCards, useProjects, useStore, useThreadOrder } from '@/store';
@@ -15,13 +18,11 @@ import { changeDoor } from '@/review/openChange';
 import { useRouter } from '@/app/router';
 import { MAIN } from '@/app/route';
 import { useNowFor } from '@/app/clock';
-import { OptButton } from '@/app/side3d/FlyoutAgents';
 import { askButtons, pickIntent } from '@/app/side3d/model';
 import { tasks } from '@/proto/words_tasks.gen';
 import { useWorks } from '@/store';
-import { artsOf, cutAtWord, goalsOf, isOpen } from './model';
+import { artsOf, crewOf, cutAtWord, doingOf, firstLine, goalsOf, isOpen, nowOf } from './model';
 import { openTask, StatusMark, statusWord } from './Marks';
-import { lineAt } from './Side';
 import { useTaskAct, useTaskReq } from './Board';
 
 /** His message's words by its id among a thread's entries; null when this window doesn't hold it. Pure. */
@@ -34,7 +35,9 @@ export function originText(entries: readonly (Pick<Entry, 'kind' | 'msg_id' | 't
 /** a start's words: today's hour, else the date */
 function started(ms: number, now: number): string {
   const d = new Date(ms);
-  return now - ms < 20 * 3_600_000 ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  // 24 h ('14:20') today, else the day ('yesterday', 'sun 5 oct'), as the rest of the app
+  const day = dayWords(ms, now);
+  return day === 'today' ? timeOf(d.getTime()) : day;
 }
 
 export function TaskTab({ project, id }: { project: string; id: string }) {
@@ -82,6 +85,12 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
   // the tasks it can merge into: the other open ones of its project
   const others = works.works.filter((o) => o.id !== w.id && isOpen(o));
   const t = `tasks.tab.${w.id}`;
+  // main starts the work, it is not on the task: listed only when alone or in a turn for it
+  const crew = crewOf(names, (n) => live(n)?.status === 'working');
+  const said = nowOf(names.flatMap((n) => {
+    const a = live(n);
+    return a === undefined ? [] : [a];
+  }));
   const arts = artsOf(allArts, w.id, works.tombs);
   // its agents that work on a branch of their own (a worktree)
   const changes = names.flatMap((n) => {
@@ -113,19 +122,18 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
         <p className="tk-meta">{tasks.tab_meta({ project: x.projectName, agents: tasks.tab_agents({ n: names.length }), when: started(w.created_ms, now) })}</p>
       </header>
 
-      {w.origin != null && (
+      {origin !== null && (
+        // his message itself, its first line cut at a word, linked to its place in main's thread (no origin: no block)
         <Press look="tk-origin" {...tipAttrs(tasks.origin_tip)} onClick={() => {
           router.go({ screen: 'thread', project, agent: MAIN });
-        }} data-testid={`${t}.origin`}>{origin === null ? tasks.origin_open : `“${cutAtWord(origin, 160)}”`}</Press>
+        }} data-testid={`${t}.origin`}>{`“${cutAtWord(firstLine(origin), 160)}”`}</Press>
       )}
       {(w.why ?? '') !== '' && <p className="tk-why">{w.why}</p>}
 
       {w.status === 'paused' && (
+        // one Resume, the footer's (tasks-ux m_64959): the line says since when
         <p className="tk-paused" data-testid={`${t}.paused`}>
-          <StatusMark status="paused" /> {lineAt(x, now)}
-          <Press look="b-btn sm" onClick={() => {
-            act(project, 'resume', w.id);
-          }} data-testid={`${t}.resume.line`}>{tasks.act_resume}</Press>
+          <StatusMark status="paused" /> {tasks.paused_since({ ago: age(now - (w.paused_ms ?? now)) })}
         </p>
       )}
 
@@ -151,29 +159,48 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
           {asks.map((c) => (
             <div key={c.id} className="tk-q" data-testid={`${t}.q.${String(c.id)}`}>
               <p className="tk-q-text">{c.question}</p>
-              <span className="tk-q-opts">
+              {/* the inbox's keys (1-9) on its options, then his own words (tasks-ux m_64959) */}
+              <ol className="tk-q-opts">
                 {askButtons(c).opts.map((o) => (
-                  <OptButton key={o.n} label={o.label} onPick={() => store.do(pickIntent(c, o.n, null))} testId={`${t}.q.${String(c.id)}.${String(o.n)}`} />
+                  <li key={o.n}>
+                    <Press look="tk-q-opt" onClick={() => store.do(pickIntent(c, o.n, null))} data-testid={`${t}.q.${String(c.id)}.${String(o.n)}`}>
+                      <Kbd>{String(o.n)}</Kbd>
+                      <span className="tk-q-opt-w">{o.label}</span>
+                    </Press>
+                  </li>
                 ))}
-              </span>
+              </ol>
+              <Input look="tk-q-type" placeholder={askButtons(c).opts.length > 0 ? inbox.hint_or_answer : inbox.type_or_below} aria-label={c.question} data-testid={`${t}.q.${String(c.id)}.type`}
+                onKeyDown={(e) => {
+                  const words = e.currentTarget.value.trim();
+                  if (e.key === 'Enter' && words !== '') store.do({ i: 'answer', project: c.project, card: c.id, reply: words });
+                  else if (e.key >= '1' && e.key <= '9' && e.currentTarget.value === '' && askButtons(c).opts.some((o) => String(o.n) === e.key)) {
+                    e.preventDefault();
+                    store.do(pickIntent(c, Number(e.key), null));
+                  }
+                }} />
             </div>
           ))}
         </section>
       )}
 
-      <section className="tk-sec">
-        <h3 className="tk-h">{tasks.sec_now}</h3>
-        <p className="tk-why" data-testid={`${t}.now`}>{lineAt(x, now)}</p>
-      </section>
+      {said !== null && (
+        // the newest report or status note of its agents; the status words stay in the pill (tasks-ux m_64959)
+        <section className="tk-sec">
+          <h3 className="tk-h">{tasks.sec_now}</h3>
+          <p className="tk-why" data-testid={`${t}.now`}>{said}</p>
+        </section>
+      )}
 
-      {names.length > 0 && (
+      {crew.length > 0 && (
         <section className="tk-sec">
           <h3 className="tk-h">{tasks.sec_agents}</h3>
           <ul className="tk-agents">
-            {names.map((n) => {
+            {crew.map((n) => {
               const a = live(n);
               const on = a?.status === 'working';
               const state = a === undefined ? tasks.agent_archived : on ? tasks.agent_live : tasks.agent_idle;
+              const doing = a === undefined ? '' : doingOf(a);
               return (
                 <li key={n} role="link" tabIndex={0} data-archived={a === undefined || undefined} onClick={() => {
                   router.go({ screen: 'thread', project, agent: n });
@@ -182,6 +209,7 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
                 }} data-testid={`${t}.agent.${n}`}>
                   <span className="tk-live" data-on={on || undefined} />
                   <span className="tk-agent">{n}</span>
+                  {doing !== '' && <span className="tk-agent-doing">· {doing}</span>}
                   <span className="tk-agent-state">{state}</span>
                 </li>
               );
@@ -197,16 +225,15 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
           <ul className="tk-rows">
             {arts.mine.slice(0, 3).map((a) => (
               <li key={a.id}>
-                <Press look="tk-row" {...tipAttrs(a.title)} onClick={() => {
+                {/* an artifact is a pink chip, everywhere (taste 13); its kind at the right, text-3 */}
+                <ArtChip title={a.title} glyph={glyphOf(a.kind)} keep={24} onClick={() => {
                   openTab({ kind: 'artifact', project, id: a.id });
-                }} data-testid={`${t}.art.${a.id}`}>
-                  <span className="tk-row-name">{a.title}</span>
-                  <span className="tk-agent-state">{a.agent}</span>
-                </Press>
+                }} testId={`${t}.art.${a.id}`} />
+                <span className="tk-agent-state">{a.kind}</span>
               </li>
             ))}
           </ul>
-          <Press look="tk-origin" onClick={() => {
+          <Press look="tk-more" onClick={() => {
             presetLibraryQuery(`task:${w.id}`);
             router.go({ screen: 'artifacts', project });
           }} data-testid={`${t}.arts.all`}>{tasks.arts_all({ n: arts.all.length })}</Press>

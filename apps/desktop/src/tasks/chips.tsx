@@ -33,7 +33,7 @@ export function tasksOf(works: readonly WorkRow[], of: ChipsOf): WorkRow[] {
 }
 
 /** The chips of a thing of `project`; nothing when it serves no task. */
-export function TaskChipsOf({ project, of, testId }: { project: string; of: ChipsOf; testId?: string }) {
+export function TaskChipsOf({ project, of, testId, keep = false }: { project: string; of: ChipsOf; testId?: string; keep?: boolean }) {
   const works = useWorks(project);
   const now = useNowFor(() => false);
   const key = JSON.stringify(of);
@@ -45,5 +45,5 @@ export function TaskChipsOf({ project, of, testId }: { project: string; of: Chip
     const w = byId.get(id);
     return w === undefined ? '' : lineAt({ project, projectName: project, w }, now);
   };
-  return <TaskChips project={project} list={list} lineOf={lineOf} {...(testId === undefined ? {} : { testId })} />;
+  return <TaskChips project={project} list={list} lineOf={lineOf} keep={keep} {...(testId === undefined ? {} : { testId })} />;
 }

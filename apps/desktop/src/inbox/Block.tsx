@@ -19,6 +19,9 @@ import { Act, Dot, Kbd, Row, RowMark } from '@/ds';
 import { actedKeys, useActed, useInboxItems, useProjects, useRefusedList, useStore, useVoiceAnswer, type AnswerAt } from '@/store';
 import { shownName } from '@/agents/model';
 import { TaskChipsOf } from '@/tasks';
+import { useAllWorks } from '@/tasks/hooks';
+import { tasks } from '@/proto/words_tasks.gen';
+import { heldCards } from './past';
 import { inbox } from '@/proto/words_inbox.gen';
 import { common } from '@/proto/words_common.gen';
 import { age, dotOf, folds, InboxCard, RefusedMark } from './InboxCard';
@@ -389,10 +392,16 @@ export function InboxBlock({ here, onAnswer, now: pinned, only, rest }: InboxBlo
   const home = rows.find((r) => r.home)?.project ?? '';
   // a project's view lists that project's items; bise's view and the inbox screen every project's (scope.ts)
   const scope = inboxScope(here, home, rest);
-  const real = useMemo(
+  // a paused task's questions leave the block's top as the inbox page's (tasks-ux m_64959): the
+  // head counts them apart, its link opens the inbox where they fold
+  const works = useAllWorks();
+  const held = useMemo(() => heldCards(works), [works]);
+  const scoped0 = useMemo(
     () => (wide ? all : all.filter((c) => inScope(scope, c) && (only === undefined || only(c)))),
     [all, only, wide, scope],
   );
+  const real = useMemo(() => scoped0.filter((c) => !held.has(`${c.project}\u0000${String(c.id)}`)), [scoped0, held]);
+  const pausedN = scoped0.length - real.length;
   const notify = useNotifyRow(real.length);
   // bise's own notifications ask is no project's: only where every project's items show
   const asks = notify.show && only === undefined && (scope === null || wide);
@@ -791,6 +800,18 @@ export function InboxBlock({ here, onAnswer, now: pinned, only, rest }: InboxBlo
         {inbox.head}{' '}
         <span className="strip-count">
           {headWords(list)}
+          {pausedN > 0 && (
+            <>
+              {' · '}
+              <span className="strip-others">
+                <Act testId="inbox.block.paused" onClick={() => {
+                  router.go({ screen: 'inbox' });
+                }}>
+                  {tasks.block_paused({ n: pausedN })}
+                </Act>
+              </span>
+            </>
+          )}
           {others > 0 && (
             // what waits in his other projects: ' · ' plain, then the link to the inbox screen
             // (designer m_32874, m_33443: only the words are the link, one space each side of the dot)

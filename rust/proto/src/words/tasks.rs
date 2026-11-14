@@ -98,11 +98,15 @@ crate::words! { tasks:
     col_unknown = "Other";
     /// an empty column's strip tip
     col_empty(col) = "{col}: no task";
-    /// the Board's top line, its start: what was done since he last opened it
-    since_done(n) = "since you looked: {n} done";
+    /// the Board's top line, its start; its parts follow, the zero ones left out (tasks-ux m_64959)
+    since_head = "since you looked: ";
+    /// the since line's part: what was done since he last opened it
+    since_done(n) = "{n} done";
+    /// the since line when every part is zero
+    since_none = "since you looked: nothing new";
     /// the since line's pink part: what waits on him now
     since_needs(n) = one "{n} needs you" | "{n} need you";
-    /// the since line's end: what moved since his look
+    /// the since line's end: the tasks working now
     since_moving(n) = "{n} moving";
     /// the Board with no task at all
     board_empty = "No task yet. main makes one when you ask for something that takes more than a turn.";
@@ -114,14 +118,14 @@ crate::words! { tasks:
     tab_agents(n) = one "{n} agent" | "{n} agents";
     /// the quoted origin's tip
     origin_tip = "your message that started it · open it in the thread";
-    /// the origin line when its words are not here
-    origin_open = "your message that started it";
     /// a section head
     sec_done_when = "Done when";
     /// a section head
     sec_needs = "Needs you";
-    /// a section head
+    /// a section head: the newest report or status note of its agents
     sec_now = "Now";
+    /// the paused line under its name (tasks-ux m_64959): since when, its Resume in the footer
+    paused_since(ago) = "paused by you · {ago} ago";
     /// a section head
     sec_agents = "Agents";
     /// a section head: the 3 newest artifacts for him that serve it
@@ -133,7 +137,7 @@ crate::words! { tasks:
     /// a change row's tip
     change_tip = "open its changes";
     /// an agent of it in a turn
-    agent_live = "in a turn";
+    agent_live = "working";
     /// an agent of it, idle
     agent_idle = "idle";
     /// an agent of it, archived: its thread stays readable
@@ -176,6 +180,8 @@ crate::words! { tasks:
     /// the inbox's folded group under 'Waiting for you': the questions of
     /// tasks he paused (they wait until he resumes one)
     inbox_paused = "On paused tasks";
+    /// the thread's inbox strip head: the questions of paused tasks, apart (a link to the inbox page)
+    block_paused(n) = "{n} on paused tasks";
     /// its fold's tip while folded
     inbox_paused_show = "show the questions of the tasks you paused";
     /// its fold's tip while open

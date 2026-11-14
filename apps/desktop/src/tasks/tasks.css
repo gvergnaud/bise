@@ -21,6 +21,7 @@
 .tk-chip:focus-visible{outline:2px solid var(--c-focus);outline-offset:2px}
 .tk-chip-name{min-width:0;overflow:hidden;text-overflow:ellipsis}
 .tk-chips{display:inline-flex;align-items:center;gap:var(--s-2);min-width:0}
+.tk-chips.keep .tk-chip-name{min-width:16ch}
 .tk-more{height:var(--s-6);padding:0 var(--s-1);border:0;border-radius:var(--r-1);background:none;color:var(--c-text-3);font:inherit;font-size:var(--t-12)}
 .tk-more:hover{background:var(--c-hover);color:var(--c-text-2)}
 
@@ -85,6 +86,10 @@
 .tk-live[data-on]{border:0;background:var(--c-text)}
 .tk-agent{font-weight:500}
 .tk-agent-state{margin-left:auto;color:var(--c-text-3);font-size:var(--t-12)}
+.tk-agent-doing{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--c-text-2)}
+/* 'All n in Library →': a quiet act, text-2, ink and underlined on hover (designer m_64958) */
+.tk-more{align-self:flex-start;padding:0;border:0;background:none;color:var(--c-text-2);font:inherit}
+.tk-more:hover{color:var(--c-text);text-decoration:underline}
 /* the Task tab's Artifacts and Changes rows: a name, then who (an agent) at the end */
 .tk-rows{display:flex;flex-direction:column;gap:var(--s-1);margin:0;padding:0;list-style:none}
 .tk-row{display:flex;align-items:center;gap:var(--s-2);width:100%;height:var(--s-7);padding:0 var(--s-2);border:0;border-radius:var(--r-1);background:none;color:var(--c-text);font:inherit;text-align:left}
@@ -92,7 +97,12 @@
 .tk-row-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tk-q{display:flex;flex-direction:column;gap:var(--s-2);padding:var(--s-2) var(--s-3);border-radius:var(--r-2);background:var(--c-sunken)}
 .tk-q-text{margin:0;line-height:1.5}
-.tk-q-opts{display:flex;flex-wrap:wrap;gap:var(--s-2)}
+/* its options as the inbox's: the key, then the words; then his own words (tasks-ux m_64959) */
+.tk-q-opts{display:flex;flex-direction:column;gap:var(--s-1);margin:0;padding:0;list-style:none}
+.tk-q-opt{display:flex;align-items:center;gap:var(--s-2);width:100%;min-height:var(--s-7);padding:0 var(--s-2);border:0;border-radius:var(--r-1);background:none;color:var(--c-text);font:inherit;text-align:left}
+.tk-q-opt:hover{background:var(--c-hover)}
+.tk-q-opt-w{min-width:0}
+.tk-q-type{width:100%}
 .tk-paused{display:flex;align-items:center;gap:var(--s-2);margin:0;color:var(--c-text-2)}
 .tk-foot{position:sticky;bottom:0;display:flex;align-items:center;gap:var(--s-2);margin-top:auto;padding:var(--s-3) 0;border-top:1px solid var(--c-line);background:var(--c-surface)}
 .tk-gone{margin:0;padding:var(--s-4);color:var(--c-text-3)}

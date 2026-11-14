@@ -71,7 +71,7 @@
   "tasks.agent_live": {
     "args": [],
     "one": null,
-    "text": "in a turn"
+    "text": "working"
   },
   "tasks.agent_tip": {
     "args": [],
@@ -84,6 +84,13 @@
     ],
     "one": null,
     "text": "All {n} in Library →"
+  },
+  "tasks.block_paused": {
+    "args": [
+      "n"
+    ],
+    "one": null,
+    "text": "{n} on paused tasks"
   },
   "tasks.board_empty": {
     "args": [],
@@ -256,11 +263,6 @@
     "one": null,
     "text": "No open task"
   },
-  "tasks.origin_open": {
-    "args": [],
-    "one": null,
-    "text": "your message that started it"
-  },
   "tasks.origin_tip": {
     "args": [],
     "one": null,
@@ -270,6 +272,13 @@
     "args": [],
     "one": null,
     "text": "paused · by you"
+  },
+  "tasks.paused_since": {
+    "args": [
+      "ago"
+    ],
+    "one": null,
+    "text": "paused by you · {ago} ago"
   },
   "tasks.paused_until": {
     "args": [
@@ -318,7 +327,12 @@
       "n"
     ],
     "one": null,
-    "text": "since you looked: {n} done"
+    "text": "{n} done"
+  },
+  "tasks.since_head": {
+    "args": [],
+    "one": null,
+    "text": "since you looked: "
   },
   "tasks.since_moving": {
     "args": [
@@ -333,6 +347,11 @@
     ],
     "one": "{n} needs you",
     "text": "{n} need you"
+  },
+  "tasks.since_none": {
+    "args": [],
+    "one": null,
+    "text": "since you looked: nothing new"
   },
   "tasks.stalled_crash": {
     "args": [

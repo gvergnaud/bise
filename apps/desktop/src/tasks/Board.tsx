@@ -95,6 +95,15 @@ function Card({ x, now }: { x: ProjWork; now: number }) {
           {(x.w.agents ?? []).length > 0 && <span>{(x.w.agents ?? []).join(', ')}</span>}
         </span>
       )}
+      {x.w.status === 'stalled' && (
+        // a stalled card's Restart, on the card (signed; tasks-ux m_64959)
+        <span className="tk-card-acts">
+          <Press look="b-btn sm" onClick={(e) => {
+            e.stopPropagation();
+            act(x.project, 'resume', x.w.id);
+          }} data-testid={`${id}.restart`}>{tasks.act_restart}</Press>
+        </span>
+      )}
       {x.w.status === 'paused' && (
         <span className="tk-card-acts">
           <Press look="b-btn sm" onClick={(e) => {
@@ -140,11 +149,17 @@ export function BoardTab({ project }: { project: string }) {
     <div className="tk-board" data-testid="tasks.board">
       <header className="tk-board-head">
         <p className="tk-since" data-testid="tasks.board.since">
-          {tasks.since_done({ n: n.done })}
-          {', '}
-          <span className={n.needs > 0 ? 'tk-pink' : undefined}>{tasks.since_needs({ n: n.needs })}</span>
-          {', '}
-          {tasks.since_moving({ n: n.moving })}
+          {/* the zero parts left out: '1 needs you, 3 moving' (tasks-ux m_64959) */}
+          {n.done + n.needs + n.moving === 0 ? tasks.since_none : (
+            <>
+              {tasks.since_head}
+              {[
+                n.done > 0 ? <span key="d">{tasks.since_done({ n: n.done })}</span> : null,
+                n.needs > 0 ? <span key="n" className="tk-pink">{tasks.since_needs({ n: n.needs })}</span> : null,
+                n.moving > 0 ? <span key="m">{tasks.since_moving({ n: n.moving })}</span> : null,
+              ].filter((x) => x !== null).flatMap((x, i) => (i === 0 ? [x] : [', ', x]))}
+            </>
+          )}
         </p>
       </header>
       {shown.length === 0 ? (

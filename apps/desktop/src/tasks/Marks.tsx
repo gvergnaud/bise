@@ -70,11 +70,12 @@ export function TaskChip({ project, w, line, max = 28, testId }: { project: stri
 }
 
 /** Many tasks: the first in clear, then '+N' in text-3 whose tip lists the others (its click opens the next). */
-export function TaskChips({ project, list, lineOf, testId }: { project: string; list: readonly Pick<WorkRow, 'id' | 'name' | 'status'>[]; lineOf: (id: string) => string; testId?: string }) {
+export function TaskChips({ project, list, lineOf, testId, keep = false }: { project: string; list: readonly Pick<WorkRow, 'id' | 'name' | 'status'>[]; lineOf: (id: string) => string; testId?: string; keep?: boolean }) {
   const [first, ...rest] = list;
   if (first === undefined) return null;
   return (
-    <span className="tk-chips">
+    // `keep`: a narrow place (a thread's head) keeps ~16 letters before its cut (tasks-ux m_64959)
+    <span className={keep ? 'tk-chips keep' : 'tk-chips'}>
       <TaskChip project={project} w={first} line={lineOf(first.id)} {...(testId === undefined ? {} : { testId })} />
       {rest.length > 0 && (
         <Press look="tk-more" data-testid={testId === undefined ? undefined : `${testId}.more`} onClick={(e) => {
