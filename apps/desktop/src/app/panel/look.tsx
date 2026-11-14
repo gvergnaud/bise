@@ -54,13 +54,6 @@ function lookOf(tab: Tab, projects: ReturnType<typeof useProjects>, arts: Return
     case 'folder':
       // a folder of bise (FolderTab.tsx): its name at the last listing, the root 'bise'
       return { title: what.name === '' ? panel.bise : what.name, icon: <AppIcon name="folder" size={14} /> };
-    case 'board':
-      return { title: tasks.board_title, icon: <AppIcon name="list" size={14} /> };
-    case 'task': {
-      // the task's name cut at a word, its status mark for an icon; a gone one keeps its id
-      const w = works(what.project).works.find((x) => x.id === what.id);
-      return w === undefined ? { title: what.id, icon: <AppIcon name="list" size={14} /> } : { title: cutAtWord(w.name, 18), icon: <StatusMark status={w.status} /> };
-    }
     case 'thing':
       break;
   }
@@ -113,6 +106,13 @@ function lookOf(tab: Tab, projects: ReturnType<typeof useProjects>, arts: Return
       return { title: name, icon: <AppIcon name="folder" size={14} /> };
     case 'office':
       return { title: panel.tab_office({ project: name }), icon: <AppIcon name="folder" size={14} /> };
+    case 'tasks':
+      return { title: tasks.board_title, icon: <AppIcon name="list" size={14} /> };
+    case 'task': {
+      // the task's name cut at a word, its status mark for an icon; a gone one keeps its id
+      const w = works(e.project).works.find((x) => x.id === e.id);
+      return w === undefined ? { title: e.id, icon: <AppIcon name="list" size={14} /> } : { title: cutAtWord(w.name, 18), icon: <StatusMark status={w.status} /> };
+    }
     case 'tab':
       return { title: e.id, icon: null };
   }

@@ -1,5 +1,5 @@
 // The right bar's Tasks section (brief "Right bar"): under Agents, above Artifacts. One row per open
-// task in the Board's order (its mark, its name, its done-when n/m, a pink dot when it needs him),
+// task in the Board's order (its mark, the pink dot when it needs him; its name; its done-when n/m),
 // then one fold line for the ongoing ones and the ones done this week (it opens the Board, where they
 // sit at the right end). Head: `Tasks 9 · 2 need you` and `all ›` (the Board as a panel tab). A row
 // opens its Task tab. Owner: tasks.
@@ -40,7 +40,6 @@ function TaskRow({ x, now, group }: { x: ProjWork; now: number; group: string | 
         <span className="s3-orow-name" data-testid={`${id}.name`}>{g.project !== '' && <span className="s3-group">{g.project}</span>}{g.name}</span>
         <span className="s3-orow-gap" aria-hidden="true" />
         {goals !== null && <span className="tk-goals" {...tipAttrs(tasks.goals_tip(goals))} data-testid={`${id}.goals`}>{tasks.goals_of(goals)}</span>}
-        {needsHim(x.w) && <span className="tk-needs" data-testid={`${id}.needs`} />}
       </Press>
     </div>
   );

@@ -5,6 +5,7 @@
 // · Pause/Resume (Reopen when done, Restart when stalled). A merged or folded one says where it went.
 // Gestures go through the hub's task_act. Owner: tasks.
 import { Press, tipAttrs } from '@/ds';
+import { sentenceCase } from '@/ds/case';
 import { useAgents, useCards, useProjects, useStore } from '@/store';
 import { useRouter } from '@/app/router';
 import { MAIN } from '@/app/route';
@@ -62,7 +63,7 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
       <header className="tk-tab-head">
         <span className="tk-pill" data-st={w.status} data-testid={`${t}.status`}>
           <StatusMark status={w.status} />
-          {statusWord(w.status)}
+          {sentenceCase(statusWord(w.status))}
         </span>
         <h2 className="tk-tab-name">{w.name}</h2>
         <p className="tk-meta">{tasks.tab_meta({ project: x.projectName, agents: tasks.tab_agents({ n: names.length }), when: started(w.created_ms, now) })}</p>

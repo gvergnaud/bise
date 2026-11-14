@@ -66,8 +66,8 @@ export type MenuFacts =
   | { readonly e: Of<'tab'>; readonly inner: MenuFacts | undefined; readonly moveable: boolean; readonly closable: boolean; readonly others: boolean }
   /** a PR, by its link: its artifact row when the hub sent it (its branch) */
   | { readonly e: Of<'pr'>; readonly row: Artifact | undefined }
-  /** an office, a commit, a branch's diff, a diff, a plugin: opened in a tab or a window */
-  | { readonly e: Of<'office' | 'commit' | 'branch' | 'diff' | 'plugin'> }
+  /** an office, a commit, a branch's diff, a diff, a plugin, a task, a project's tasks Board: opened in a tab or a window */
+  | { readonly e: Of<'office' | 'commit' | 'branch' | 'diff' | 'plugin' | 'task' | 'tasks'> }
   /** a plugin's skill: its tab's own '…' holds its actions (plugins/SkillTab.tsx), its tab menu only the tab's; an MCP App's view (src/views): its tab menu only the tab's */
   | { readonly e: Of<'skill' | 'view' | 'file'> };
 
@@ -316,6 +316,8 @@ export function menuOf(f: MenuFacts): PopupItem[] {
     case 'branch':
     case 'diff':
     case 'plugin':
+    case 'task':
+    case 'tasks':
       return [item('move-right', menus.move_right), item('new-window', menus.new_window)];
     case 'skill':
     case 'view':

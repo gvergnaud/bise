@@ -21,11 +21,7 @@ export type TabWhat =
    * (opaque: never built or split here), null its root; `name` its name at the last listing, the
    * tab's title before the next. A folder row opens in place (the tab takes the new what).
    */
-  | { readonly kind: 'folder'; readonly entry: string | null; readonly name: string }
-  /** a project's tasks Board (the right bar's Tasks 'all ›'): one column per status; '' every project's */
-  | { readonly kind: 'board'; readonly project: string }
-  /** one task of a project by its id (a slug of its name, stable on a rename) */
-  | { readonly kind: 'task'; readonly project: string; readonly id: string };
+  | { readonly kind: 'folder'; readonly entry: string | null; readonly name: string };
 
 export interface Tab {
   /** one per thing: 'new:2', 'term:<project>#1', or the entity's key */
@@ -58,10 +54,6 @@ export function tabIdOf(what: TabWhat): string {
       return entityKey(what.e);
     case 'folder':
       return `dir:${what.entry ?? ''}`;
-    case 'board':
-      return `board:${what.project}`;
-    case 'task':
-      return `task:${what.project}/${what.id}`;
   }
 }
 
@@ -522,7 +514,10 @@ function entityOf(x: unknown): Entity | undefined {
     case 'scheduled':
       return s('project') && typeof x['id'] === 'number' ? (x as Entity) : undefined;
     case 'office':
+    case 'tasks':
       return s('project') ? (x as Entity) : undefined;
+    case 'task':
+      return s('project') && s('id') ? (x as Entity) : undefined;
     default:
       return undefined;
   }
@@ -548,10 +543,6 @@ function whatOf(x: unknown): TabWhat | undefined {
       if ((typeof entry !== 'string' || entry === '') && entry !== null) return undefined;
       return { kind: 'folder', entry, name: typeof x['name'] === 'string' ? x['name'] : '' };
     }
-    case 'board':
-      return typeof x['project'] === 'string' ? { kind: 'board', project: x['project'] } : undefined;
-    case 'task':
-      return typeof x['project'] === 'string' && x['project'] !== '' && typeof x['id'] === 'string' && x['id'] !== '' ? { kind: 'task', project: x['project'], id: x['id'] } : undefined;
     default:
       return undefined;
   }

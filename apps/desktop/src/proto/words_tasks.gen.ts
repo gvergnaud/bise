@@ -86,10 +86,12 @@ export const tasks = {
   col_unknown: "Other",
   /** an empty column's strip tip */
   col_empty: (a: { col: string | number }): string => String(a.col) + ": no task",
-  /** the Board's top line: what moved since he last opened it */
-  since_looked: (a: { done: string | number; moving: string | number }): string => "since you looked: " + String(a.done) + " done, " + String(a.moving) + " moving",
-  /** the since line's pink part, after it */
-  since_needs: (a: { n: number }): string => a.n === 1 ? ", " + String(a.n) + " needs you" : ", " + String(a.n) + " need you",
+  /** the Board's top line, its start: what was done since he last opened it */
+  since_done: (a: { n: string | number }): string => "since you looked: " + String(a.n) + " done",
+  /** the since line's pink part: what waits on him now */
+  since_needs: (a: { n: number }): string => a.n === 1 ? String(a.n) + " needs you" : String(a.n) + " need you",
+  /** the since line's end: what moved since his look */
+  since_moving: (a: { n: string | number }): string => String(a.n) + " moving",
   /** the Board with no task at all */
   board_empty: "No task yet. main makes one when you ask for something that takes more than a turn.",
   /** its meta line: the project, its agents, when it started */

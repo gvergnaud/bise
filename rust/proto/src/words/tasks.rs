@@ -98,10 +98,12 @@ crate::words! { tasks:
     col_unknown = "Other";
     /// an empty column's strip tip
     col_empty(col) = "{col}: no task";
-    /// the Board's top line: what moved since he last opened it
-    since_looked(done, moving) = "since you looked: {done} done, {moving} moving";
-    /// the since line's pink part, after it
-    since_needs(n) = one ", {n} needs you" | ", {n} need you";
+    /// the Board's top line, its start: what was done since he last opened it
+    since_done(n) = "since you looked: {n} done";
+    /// the since line's pink part: what waits on him now
+    since_needs(n) = one "{n} needs you" | "{n} need you";
+    /// the since line's end: what moved since his look
+    since_moving(n) = "{n} moving";
     /// the Board with no task at all
     board_empty = "No task yet. main makes one when you ask for something that takes more than a turn.";
 

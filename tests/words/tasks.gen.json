@@ -228,20 +228,26 @@
     "one": null,
     "text": "Tasks"
   },
-  "tasks.since_looked": {
+  "tasks.since_done": {
     "args": [
-      "done",
-      "moving"
+      "n"
     ],
     "one": null,
-    "text": "since you looked: {done} done, {moving} moving"
+    "text": "since you looked: {n} done"
+  },
+  "tasks.since_moving": {
+    "args": [
+      "n"
+    ],
+    "one": null,
+    "text": "{n} moving"
   },
   "tasks.since_needs": {
     "args": [
       "n"
     ],
-    "one": ", {n} needs you",
-    "text": ", {n} need you"
+    "one": "{n} needs you",
+    "text": "{n} need you"
   },
   "tasks.stalled_crash": {
     "args": [

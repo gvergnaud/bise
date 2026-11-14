@@ -23,6 +23,10 @@ export type Entity =
   | { readonly kind: 'project'; readonly project: string }
   /** a project's bims office (the world's click opens it in a tab: nm-side m_42152) */
   | { readonly kind: 'office'; readonly project: string }
+  /** a task of a project by its id (a slug of its name, stable on a rename: rows::WorkRow.id) */
+  | { readonly kind: 'task'; readonly project: string; readonly id: string }
+  /** a project's tasks Board, a project's screen like its office (architect m_64851) */
+  | { readonly kind: 'tasks'; readonly project: string }
   /** an artifact by its id, in its store's project (the hub id, the shared library's too) */
   | { readonly kind: 'artifact'; readonly project: string; readonly id: string }
   /**
@@ -73,6 +77,10 @@ export function entityKey(e: Entity): string {
       return `project:${e.project}`;
     case 'office':
       return `office:${e.project}`;
+    case 'task':
+      return `task:${e.project}/${e.id}`;
+    case 'tasks':
+      return `tasks:${e.project}`;
     case 'artifact':
       return `artifact:${e.project}/${e.id}`;
     case 'pr':

@@ -3,7 +3,7 @@
 // then the name cut at a word, never pink), the chips (the main one in clear, '+N' whose tip lists
 // the others), and the openers of the Task tab and the Board. Tokens only (tasks.css). Owner: tasks.
 import { Press, tipAttrs } from '@/ds';
-import { openWhat } from '@/app/panel/state';
+import { openTab } from '@/app/panel/tabs';
 import type { WorkRow, WorkStatus } from '@/proto';
 import { tasks } from '@/proto/words_tasks.gen';
 import { cutAtWord } from './model';
@@ -47,12 +47,12 @@ export function StatusMark({ status, tip, testId }: { status: WorkStatus; tip?: 
 
 /** Opens a task's tab in the panel (over the Board when it is in front: the Board stays one click back). */
 export function openTask(project: string, id: string): void {
-  openWhat({ kind: 'task', project, id });
+  openTab({ kind: 'task', project, id });
 }
 
 /** Opens a project's Board in the panel ('': every project's). */
 export function openBoard(project: string): void {
-  openWhat({ kind: 'board', project });
+  openTab({ kind: 'tasks', project });
 }
 
 /** The task chip: neutral, its mark then its name cut at a word; its tip the whole name and its line. */

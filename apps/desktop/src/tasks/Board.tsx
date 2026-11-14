@@ -2,7 +2,8 @@
 // (Needs you · Working · Waiting · Stalled · To review · Done this week · Paused · Ongoing), scrolling
 // sideways like Linear; an empty column folds to a strip (its name, 0, a tip). No drag. A card opens
 // its Task tab (over the Board, one click back); a stalled card has Restart, a paused one Resume.
-// Its top line: 'since you looked: 3 done, 2 moving, 2 need you' (the last time he opened it, kept).
+// Its top line: 'since you looked: 3 done, 1 needs you, 2 moving' (the last time he opened it, kept;
+// his first look counts the last day), on a 40 px head, its 24 px padding the columns' edge.
 // Owner: tasks.
 import { useEffect, useRef, useState } from 'react';
 import { Press, tipAttrs } from '@/ds';
@@ -42,6 +43,7 @@ function colWord(s: WorkStatus): string {
 }
 
 const LOOKED = 'tasks.looked';
+const DAY_MS = 24 * 3_600_000;
 
 /** when he last opened this Board (the kept view), 0 never */
 function lookedAt(project: string): number {
@@ -124,16 +126,18 @@ export function BoardTab({ project }: { project: string }) {
   }, []);
   const { done } = barRows(all, now);
   const shown = [...all.filter((x) => x.w.status !== 'done'), ...done];
-  const n = sinceLooked(all, since);
+  // his first look counts the last day (designer m_64839: the line is always there)
+  const n = sinceLooked(all, since > 0 ? since : now - DAY_MS);
   return (
     <div className="tk-board" data-testid="tasks.board">
       <header className="tk-board-head">
-        {since > 0 && (
-          <p className="tk-since" data-testid="tasks.board.since">
-            {tasks.since_looked({ done: n.done, moving: n.moving })}
-            {n.needs > 0 && <span className="tk-pink">{tasks.since_needs({ n: n.needs })}</span>}
-          </p>
-        )}
+        <p className="tk-since" data-testid="tasks.board.since">
+          {tasks.since_done({ n: n.done })}
+          {', '}
+          <span className={n.needs > 0 ? 'tk-pink' : undefined}>{tasks.since_needs({ n: n.needs })}</span>
+          {', '}
+          {tasks.since_moving({ n: n.moving })}
+        </p>
       </header>
       {shown.length === 0 ? (
         <p className="tk-board-empty">{tasks.board_empty}</p>
