@@ -24,6 +24,12 @@ def Laws.notice_carries_no_works(s):
 def Laws.his_words_follow_a_single_task(s, to):
   {==}
 
+def Laws.his_words_pick_the_rule_by_their_recipient(s, to):
+  {==}
+
+def Laws.his_plain_words_to_main_carry_no_works(s):
+  {==}
+
 def Laws.his_words_to_two_tasks_carry_none(a, b):
   {==}
 
@@ -197,4 +203,10 @@ def Laws.work_birth_takes_turn(o, cx, token, by, id):
   {==}
 
 def Laws.his_work_birth_takes_no_turn(o, cx, by, id):
+  {==}
+
+def Laws.main_never_holds_a_work_out_of_review(ns, s):
+  {==}
+
+def Laws.a_reply_watch_names_who_it_waits_on(to, msg):
   {==}

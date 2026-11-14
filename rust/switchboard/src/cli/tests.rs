@@ -185,6 +185,11 @@ fn notify_is_a_card_on_the_wire_and_sb_card_is_unknown() {
     assert!(build(&a(&["card", "--withdraw", "#4", "why"])).is_err(), "sb card --withdraw is an unknown command");
     assert_eq!(render("withdraw", &json!({"ok": true, "card": 4})).1, "notification #4 withdrawn: the user sees why; the question is yours again");
     assert_eq!(render("close", &json!({"ok": true, "card": 3})).1, "notification #3 closed");
+    // tasks (tasks-qa): sb task new prints the id --task takes; list and
+    // show their text (they printed "ok")
+    assert_eq!(render("task", &json!({"ok": true, "id": "login-timeout", "name": "Login timeout"})).1, "task login-timeout made: Login timeout (your turn serves it; --task login-timeout carries it)");
+    assert_eq!(render("task", &json!({"ok": true, "text": "login-timeout · Login timeout · waiting"})).1, "login-timeout · Login timeout · waiting");
+    assert_eq!(render("task", &json!({"ok": true, "id": "crashy"})).1, "task crashy: ok");
     let u = usage();
     assert!(u.contains("sb notify \"<question for the user>\" [--for <id>]") && u.contains("sb notify --withdraw <notification>"), "{u}");
     assert!(!u.contains("sb card"), "the old word is a hidden alias: {u}");

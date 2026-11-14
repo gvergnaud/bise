@@ -118,6 +118,7 @@ impl Hub {
             waiting: (c.kind == signin_card::KIND).then(|| self.signin_waiting()),
             place: c.place.clone(),
             pr: c.pr,
+            from_report: c.from_report,
             ..CardRow::default()
         }
     }

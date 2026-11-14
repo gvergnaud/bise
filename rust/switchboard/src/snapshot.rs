@@ -147,6 +147,9 @@ pub struct CardRow {
     pub pick: Option<Pick>,
     /// the hub carries out his answer to it now (`Hub::running_cards`)
     pub running: bool,
+    /// an agent's blocked report (tasks): his card whatever its kind
+    /// (model::user_card)
+    pub from_report: bool,
 }
 
 #[cfg(test)]

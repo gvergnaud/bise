@@ -1,0 +1,8 @@
+{"kind":"question","from_report":false,"his":true}
+{"kind":"drop","from_report":false,"his":true}
+{"kind":"confirm","from_report":false,"his":true}
+{"kind":"merge","from_report":false,"his":true}
+{"kind":"blocked","from_report":true,"his":true}
+{"kind":"blocked","from_report":false,"his":false}
+{"kind":"report","from_report":false,"his":false}
+{"kind":"overlap","from_report":false,"his":false}

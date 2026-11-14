@@ -18,6 +18,7 @@ import ./core.bend as H
 import ./keyed.bend as KY
 import ./work.bend as WO
 import ./lazy.bend as LZ
+import ./wakes.bend as WK
 
 # nothing moves and nothing waits on him for 2 h: Stalled
 def STALL_MS() -> Nat:
@@ -116,13 +117,14 @@ def timer_wait(ts: List<&2, S.Timer>, +ns: List<&2, String>) -> Maybe<&2, Nat>:
     case Con{+x, +t}:
       LZ.pick(Maybe<&2, Nat>, WO.has(ns, S.Timer.agent(x)), u => Some{S.Timer.next(x)}, u => timer_wait(t, ns))
 
-# an agent of `names` waits on a watch (`sb wake`)
-def watch_wait(ws: List<&2, S.Watch>, +ns: List<&2, String>) -> Maybe<&2, String>:
+# an agent of `names` waits on a watch (`sb wake`, or the reply an `sb
+# ask` past its timeout still waits for)
+def watch_wait(ws: List<&2, S.Watch>, +ns: List<&2, String>) -> Maybe<&2, S.Watch>:
   match ws:
     case Nil{}:
       None{}
     case Con{+x, +t}:
-      LZ.pick(Maybe<&2, String>, WO.has(ns, S.Watch.agent(x)), u => Some{S.Watch.agent(x)}, u => watch_wait(t, ns))
+      LZ.pick(Maybe<&2, S.Watch>, WO.has(ns, S.Watch.agent(x)), u => Some{x}, u => watch_wait(t, ns))
 
 def decl_done(m: Maybe<&2, S.Decl>) -> Bool:
   match m:
@@ -147,12 +149,27 @@ def all_done.go(ns: List<&2, String>, +s: S.St) -> Bool:
     case Con{+n, +t}:
       LZ.and(said_done(M.get_agent(s, n)), u => all_done.go(t, s))
 
-def all_done(ns: List<&2, String>, +s: S.St) -> Bool:
+def all_done.of(ns: List<&2, String>, +s: S.St) -> Bool:
   match ns:
     case Nil{}:
       False{}
     case Con{+n, +t}:
       all_done.go(n <> t, s)
+
+# its doers: main routes and never says done (a work main made or was
+# told of has main among its agents), so main never holds it out of To
+# review (tasks-qa: a live hub never read To review once main was in)
+def doers(ns: List<&2, String>) -> List<&2, String>:
+  match ns:
+    case Nil{}:
+      Nil{}
+    case Con{+n, +t}:
+      +rest = doers(t)
+      Bool.pick(List<&2, String>, String.eq(n, M.MAIN()), rest, n <> rest)
+
+# every doer of `names` said done (none: none did)
+def all_done(ns: List<&2, String>, +s: S.St) -> Bool:
+  all_done.of(doers(ns), s)
 
 # ---- the status, first fact that holds ----
 
@@ -166,10 +183,15 @@ def st.review(r: Bool, +w: S.Work, +now: Nat) -> WSt:
     case False{}:
       quiet(w, now)
 
-def st.watch(m: Maybe<&2, String>, +w: S.Work, +s: S.St, +now: Nat) -> WSt:
+# a reply watch names who it waits on (tasks-qa: an `sb ask` past its
+# timeout read "quiet"), any other watch its agent
+def st.watch.of(+x: S.Watch) -> WSt:
+  Bool.pick(WSt, WK.is_reply(x), WSReply{WK.reply_to_of(x)}, WSWatch{S.Watch.agent(x)})
+
+def st.watch(m: Maybe<&2, S.Watch>, +w: S.Work, +s: S.St, +now: Nat) -> WSt:
   match m:
-    case Some{+a}:
-      WSWatch{a}
+    case Some{+x}:
+      st.watch.of(x)
     case None{}:
       st.review(all_done(S.Work.agents(w), s), w, now)
 

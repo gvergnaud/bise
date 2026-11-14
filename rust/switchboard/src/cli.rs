@@ -183,7 +183,7 @@ pub const COMMANDS: &[CmdDoc] = &[
     cmd(
         "sb task done|reopen|resume|ongoing <id> | sb task pause <id> [--until <18:00|tomorrow 09:00|2h>] | sb task rename|why|goal <id> \"<text>\" | sb task untick <id> <n> | sb task merge <id> --into <id>",
         Who::Main,
-        "the user's tasks (`<open_tasks>` in your state). In the turn where you start work for him (a spawn, a forward, a delegation), make its task first: `sb task new \"<his words>\" --why \"…\" --done-when \"…\"`, or put the work on an open task with `--task <id>`; a plain answer makes none. His words on a task are these verbs (\"pause WhatsApp until Monday\", \"that one is done\", \"merge X into Y\"): `done` only on his word, never on an agent's done; `pause` stops its agents' turns cleanly after a grace and holds their messages until `resume`; `ongoing`: a task that never ends.",
+        "the user's tasks (`<open_tasks>` in your state). In the turn where you start work for him (a spawn, a forward, a delegation), make its task first: `sb task new \"<his words>\" --why \"…\" --done-when \"…\"` (it prints the new id), then start its agent with `--task <new id>` so it serves that task alone; or put the work on an open task with `--task <id>`; a plain answer makes none. His words on a task are these verbs (\"pause WhatsApp until Monday\", \"that one is done\", \"merge X into Y\"): `done` only on his word, never on an agent's done; `pause` stops its agents' turns cleanly after a grace and holds their messages until `resume`; `ongoing`: a task that never ends.",
     ),
     cmd("sb rename <task> <new-name>", Who::Main, "rename a task (unique name; the old name still works)."),
     cmd(
@@ -436,6 +436,11 @@ pub fn render(cmd: &str, v: &Value) -> (bool, String) {
         "worktree" if s("path").is_empty() => "the hub knows you work in your own workspace again".to_string(),
         "worktree" => format!("the hub knows you work in {}", s("path")),
         "page" => render_page(v),
+        // tasks: list and show answer their text; new its id (the one
+        // `--task <id>` takes); the other verbs the task they changed
+        "task" if !s("text").is_empty() => s("text"),
+        "task" if !s("name").is_empty() => format!("task {} made: {} (your turn serves it; --task {} carries it)", s("id"), s("name"), s("id")),
+        "task" if !s("id").is_empty() => format!("task {}: ok", s("id")),
         _ => "ok".to_string(),
     };
     (true, text)

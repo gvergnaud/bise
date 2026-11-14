@@ -12,6 +12,7 @@ import ../hub/core.bend as HC
 import ../hub/work.bend as HWO
 import ../hub/cx.bend as HX
 import ../hub/wstatus.bend as HWS
+import ../hub/wakes.bend as HWK
 import ../hub/view.bend as HV
 import ../hub/keyed.bend as HKY
 
@@ -31,16 +32,30 @@ law notice_carries_no_works:
   for +s: HS.St
   {HC.works_of_send(None{}, s, HM.HUB()) == Nil{} : List<&2, String>}
 
-# LAW: his message to an agent with no explicit tasks (outside a Task
-# tab: SendOpts.works empty) carries the work the agent's turn serves
-# when it is exactly one, else none (architect m_64507; explicit works
-# replace this rule: his_task_tab_words_carry_its_task, m_64887). Read from St at the send: the Msg records what it got, so a
-# replay never recomputes it from a later turn; a wrong attach is his to
-# move (moved_by_you_sticks).
+# LAW: his message to an agent other than main with no explicit tasks
+# (outside a Task tab: SendOpts.works empty) carries the work the
+# agent's turn serves when it is exactly one, else none (architect
+# m_64507; explicit works replace this rule:
+# his_task_tab_words_carry_its_task, m_64887). Read from St at the send:
+# the Msg records what it got, so a replay never recomputes it from a
+# later turn; a wrong attach is his to move (moved_by_you_sticks).
 law his_words_follow_a_single_task:
   for +s: HS.St
   for +to: String
-  {HC.works_his(None{}, s, to) == HC.single(HC.works_of_agent(HM.get_agent(s, to))) : List<&2, String>}
+  {HC.works_his.single(False{}, s, to) == HC.single(HC.works_of_agent(HM.get_agent(s, to))) : List<&2, String>}
+
+law his_words_pick_the_rule_by_their_recipient:
+  for +s: HS.St
+  for +to: String
+  {HC.works_his(None{}, s, to) == HC.works_his.single(String.eq(to, HM.MAIN()), s, to) : List<&2, String>}
+
+# LAW: his plain words to main carry no works, whatever main's turn
+# serves (architect m_65127): main routes, his plain words to it are
+# most often a new ask, and main's birth rule decides (its row: the new
+# task's agent spawned with --task <new id>, which replaces).
+law his_plain_words_to_main_carry_no_works:
+  for +s: HS.St
+  {HC.works_his(None{}, s, HM.MAIN()) == Nil{} : List<&2, String>}
 
 # LAW: his words sent with explicit tasks (a Task tab's '+ Agent',
 # SendOpts.works, read by task_flag) carry exactly them, whatever the
@@ -264,6 +279,21 @@ law paused_wins_over_the_rest:
   for +n: Nat
   for +now: Nat
   {HWS.st.paused(Some{p}, w, s, rts, ws, n, now) == HWS.WSPaused{HS.Work.until(w)} : HWS.WSt}
+
+# LAW: a reply watch (an `sb ask` past its timeout) reads as waiting on
+# that reply, naming who it waits on; any other watch names its agent
+# (tasks-qa: the task read "quiet").
+law a_reply_watch_names_who_it_waits_on:
+  for +to: String
+  for +msg: Nat
+  {HWS.st.watch.of(HS.Watch.with_spec(HS.Watch.empty(), HWK.reply_spec(to, msg))) == HWS.WSReply{to} : HWS.WSt}
+
+# LAW: main never holds a work out of To review: it routes and never
+# says done, so its agents' done is read without it (tasks-qa).
+law main_never_holds_a_work_out_of_review:
+  for +ns: List<&2, String>
+  for +s: HS.St
+  {HWS.all_done(HM.MAIN() <> ns, s) == HWS.all_done(ns, s) : Bool}
 
 # LAW: an open card or page wait of his on a work makes it Needs you,
 # whatever its agents do.

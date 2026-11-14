@@ -506,3 +506,68 @@ fn a_blocked_card_main_opened_stays_when_the_agent_moves_on() {
     t.req("kb", AgentReq::Status { status: Declared::Working, note: String::new() });
     assert!(!t.hub.st.cards.contains_key(&id), "status working closes it");
 }
+
+/// tasks-qa (architect m_65127): an agent's blocked report is HIS card:
+/// it reaches the client's cards (model::user_card) and an sb-core
+/// restarted on the journal keeps it open (cardkind.bend user_card: laws
+/// a_report_blocked_card_reaches_his_inbox, legacy_blocked_still_closes_at_boot).
+/// On a live hub it was dropped from hub/cards and closed at boot while
+/// its task said Needs you.
+#[test]
+fn a_blocked_report_card_reaches_his_inbox_and_survives_a_restart() {
+    let mut t = T::new();
+    let a = new(&mut t, MAIN, "Shared KB", &[]);
+    t.spawn_task("kb");
+    t.go(Input::ReplIdle { agent: "kb".into(), leftover: false });
+    t.req(MAIN, send("kb", "build the KB", &[a.as_str()]));
+    report(&mut t, "kb", "blocked", "create the KB bise-poc first");
+    let ids = report_cards(&t, "kb");
+    assert_eq!(ids.len(), 1);
+    let (his, _) = crate::proto_view::cards(&t.hub.snapshot(1_000), "p", 1_000, crate::model::user_kind);
+    assert!(his.iter().any(|c| c.id == ids[0]), "his inbox has the blocked card: {his:?}");
+    let journal = t.journal.clone();
+    t.hub.set_revive(Revive::new(Box::new(move || journal.borrow().clone()), Box::new(|_| {})));
+    t.hub.kill_core();
+    t.user(MAIN, "hello");
+    assert!(t.hub.st.cards.contains_key(&ids[0]), "the card survives the restart: {:?}", t.hub.st.cards);
+    assert_eq!(t.hub.st.works[&a].status, "needs_you");
+}
+
+/// tasks-qa (architect m_65127): a mid-turn birth (an agent's `sb task
+/// new`) updates that agent's row: the shell's mirror of its turn_works,
+/// which stamps the artifacts, pages and lands of the rest of the turn
+/// (daemon/art.rs art_turn_works). On a live hub the artifact added right
+/// after carried none.
+#[test]
+fn a_mid_turn_birth_reaches_the_shells_turn_works() {
+    let mut t = T::new();
+    t.spawn_task("docs");
+    t.go(Input::ReplIdle { agent: "docs".into(), leftover: false });
+    his_words(&mut t, "docs", "the docs look stale");
+    let b = new(&mut t, "docs", "Docs cleanup", &[]);
+    assert_eq!(t.hub.st.agents["docs"].turn_works.clone().unwrap_or_default(), vec![b], "the mirror's turn_works has the new task");
+}
+
+/// tasks-qa (architect m_65127): his plain words to main carry no task,
+/// even when main's turn serves exactly one (law
+/// his_plain_words_to_main_carry_no_works); main's new task's agent,
+/// sent with --task <new id>, serves that one alone. On a live hub the
+/// new agent's brief carried the old task and the new one.
+#[test]
+fn his_new_ask_to_main_after_a_report_starts_a_task_alone() {
+    let mut t = T::new();
+    let a = new(&mut t, MAIN, "Login timeout", &[]);
+    t.spawn_task("fixer");
+    t.go(Input::ReplIdle { agent: "fixer".into(), leftover: false });
+    assert_eq!(t.hub.st.agents[MAIN].turn_works.clone().unwrap_or_default(), vec![a.clone()], "main's turn serves one task");
+    his_words(&mut t, MAIN, "also: write the release notes");
+    assert_eq!(sent_to(&t, MAIN).last().unwrap()["works"], Value::Null, "his plain words to main carry none");
+    let b = new(&mut t, MAIN, "Release notes", &[]);
+    t.spawn_task("writer");
+    t.req(MAIN, send("writer", "write them", &[b.as_str()]));
+    assert_eq!(last_msg_to(&t, "writer")["works"], json!([b]), "--task <new id> replaces the turn's works");
+    // to another agent, the single-task rule still holds
+    t.req(MAIN, send("fixer", "go", &[a.as_str()]));
+    his_words(&mut t, "fixer", "one more thing");
+    assert_eq!(sent_to(&t, "fixer").last().unwrap()["works"], json!([a]));
+}

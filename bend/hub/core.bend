@@ -461,16 +461,25 @@ def single(xs: List<&2, String>) -> List<&2, String>:
       Nil{}
 
 # his words (architect m_64507, tasks-ux F4): a Task tab's message keeps
-# its work; any other message of his to an agent carries the work its
-# turn serves when it is exactly one, else none (law
-# his_words_follow_a_single_task). Read at the send from St: the Msg
-# keeps what it got, so a replay never recomputes it from a later turn.
+# its work; any other message of his to an agent other than main carries
+# the work its turn serves when it is exactly one, else none (law
+# his_words_follow_a_single_task). Main routes: his plain words to main
+# are most often a new ask, so they carry none (architect m_65127, law
+# his_plain_words_to_main_carry_no_works). Read at the send from St: the
+# Msg keeps what it got, so a replay never recomputes it from a later turn.
+def works_his.single(is_main: Bool, +s: S.St, +to: String) -> List<&2, String>:
+  match is_main:
+    case True{}:
+      Nil{}
+    case False{}:
+      single(works_of_agent(M.get_agent(s, to)))
+
 def works_his(w: Maybe<&2, List<&2, String>>, +s: S.St, +to: String) -> List<&2, String>:
   match w:
     case Some{+ws}:
       ws
     case None{}:
-      single(works_of_agent(M.get_agent(s, to)))
+      works_his.single(String.eq(to, M.MAIN()), s, to)
 
 def card_new(+id: Nat, +kind: String, +agent: String, +text: String, +for_msg: Maybe<&2, Nat>, +created: Nat, +place: Maybe<&2, String>, +pr: Maybe<&2, Nat>, +about: Maybe<&2, J.Json>) -> S.Card:
   S.Card.with_about(S.Card.with_pr(S.Card.with_place(S.Card.with_created(S.Card.with_for_msg(S.Card.with_text(S.Card.with_agent(S.Card.with_kind(S.Card.with_id(S.Card.empty(), id), kind), agent), text), for_msg), created), place), pr), about)
@@ -3688,7 +3697,7 @@ def req_close(-o: S.St, m: Maybe<&2, S.Card>, +cx: X.Cx<o>, +token: Nat, +id: Na
       reply_err(o, cx, token, String.append("no open notification #", ns(id)))
     case Some{+c}:
       +res = Bool.pick(String, String.is_empty(T.one_line(note)), "closed by main", String.append("main: ", T.one_line(note)))
-      LZ.pick(X.Cx<o>, CK.user_kind(S.Card.kind(c)),
+      LZ.pick(X.Cx<o>, CK.user_card(c),
         u => reply_err(o, cx, token, cat(["notification #", ns(id), " is in the user's inbox: only the user answers or closes it (your own question, now moot: sb notify --withdraw ", ns(id), " \"why\")"])),
         u => reply(o, close_card(o, cx, id, res), token, ok_body([J.kv("card", J.JNum{id})])))
 

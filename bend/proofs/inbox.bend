@@ -35,6 +35,12 @@ def Laws.drop_card_words():
 def Laws.only_his_kinds_are_his_cards():
   {==}
 
+def Laws.a_report_blocked_card_reaches_his_inbox():
+  {==}
+
+def Laws.legacy_blocked_still_closes_at_boot():
+  {==}
+
 def Laws.archive_ask_is_a_drop_card(o, cx, q, name):
   {==}
 

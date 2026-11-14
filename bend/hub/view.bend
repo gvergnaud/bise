@@ -328,6 +328,10 @@ def ev_names(e: M.Ev) -> List<&2, String>:
       [name]
     case M.EJobEnd{+name, _}:
       [name]
+    # tasks: a turn's works change its row's turn_works (a birth mid-turn:
+    # the shell stamps the artifacts, pages and lands that follow from it)
+    case M.EWorkTurn{+t}:
+      [S.WTurn.agent(t)]
     case _:
       Nil{}
 

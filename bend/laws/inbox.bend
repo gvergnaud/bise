@@ -140,6 +140,19 @@ def none_his(xs: List<&2, String>) -> Bool:
 law only_his_kinds_are_his_cards:
   {Bool.and(all_his(his_kinds()), none_his(traffic_kinds())) == True{} : Bool}
 
+# tasks (architect m_65127): an agent's blocked report is his card (the
+# typed flag, never the kind): it reaches his inbox and stays at boot; an
+# older journal's blocked card (no from_report) is still main's and
+# closes at boot (BISE-299 holds for it).
+def blocked_card(+id: Nat, from_report: Bool) -> HS.Card:
+  HS.Card.with_from_report(HS.Card.with_kind(HS.Card.with_id(HS.Card.empty(), id), "blocked"), from_report)
+
+law a_report_blocked_card_reaches_his_inbox:
+  {Bool.and(CK.user_card(blocked_card(7n, True{})), List.is_empty(&2, Nat, CK.legacy_cards([blocked_card(7n, True{})]))) == True{} : Bool}
+
+law legacy_blocked_still_closes_at_boot:
+  {CK.legacy_cards([blocked_card(7n, False{})]) == [7n] : List<&2, Nat>}
+
 # LAW: his own /archive of a working or dirty agent asks with the same
 # drop card (architect m_37339): the facts alone (he asked, no 'main
 # suggests it') and its 2 options; nothing is archived until he picks 1

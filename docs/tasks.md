@@ -19,6 +19,11 @@ side.
 - Every message, card and timer carries its works (`works`, omitted when empty); an agent's turn
   carries `turn_works`. Whatever a turn makes inherits them; `--task <id>` replaces them; a notice
   from the hub never carries any.
+- His words: a Task tab's carry its task; his plain words to an agent other than main carry its
+  turn's work when it is exactly one; to main, none (main routes; its new task's agent is spawned
+  with `--task <new id>`). An agent's `sb report blocked` is one card for him (`from_report`: his
+  card whatever its kind, `user_card` in cardkind.bend and model.rs, rows in
+  rust/proto/fixtures/user_card.jsonl). To review reads its agents' done without main's.
 - The status is computed in sb-core's view from the facts (cards, his page waits, its agents'
   runs and waits, `now`), never stored and never from an agent's word (`bend/hub/wstatus.bend`,
   first that holds: done, paused, needs you, working, ongoing, stalled by a crash, waiting on a

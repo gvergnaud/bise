@@ -134,6 +134,14 @@ pub fn user_kind(kind: &str) -> bool {
     matches!(kind, "question" | "plan" | "drop" | "confirm") || choice_kind(kind)
 }
 
+/// A card is his: a user kind, or an agent's blocked report (tasks:
+/// `from_report`, architect m_65127; hub/cardkind.bend `user_card`, the
+/// same rule, both pinned by fixtures/user_card.jsonl). An older
+/// journal's blocked card has no `from_report`: it stays main's.
+pub fn user_card(kind: &str, from_report: bool) -> bool {
+    user_kind(kind) || from_report
+}
+
 /// The hub's items with numbered options, about a place
 /// ([`bise_proto::rows::CHOICE_KINDS`], sb-core's hub/cardkind.bend
 /// `choice_kind` pinned to it): opened and closed by the hub's Rust side,
@@ -345,7 +353,7 @@ impl State {
     /// The user's inbox: an older journal's cards of other kinds are
     /// hidden until the hub's boot closes them.
     pub fn open_cards(&self) -> impl Iterator<Item = &Card> {
-        self.cards.values().filter(|c| user_kind(&c.kind))
+        self.cards.values().filter(|c| user_card(&c.kind, c.from_report))
     }
 
     /// Tests only: a task as its creation leaves it (the real state
@@ -466,5 +474,19 @@ mod tests {
         assert_eq!(a.status(), Status::Done);
         a.lifecycle = Lifecycle::Archived;
         assert_eq!(a.status(), Status::Archived);
+    }
+
+    /// architect m_65127: his-ness is a function of the card, the rows
+    /// shared with hub/cardkind.bend `user_card` (its laws
+    /// a_report_blocked_card_reaches_his_inbox and
+    /// legacy_blocked_still_closes_at_boot pin the two blocked rows)
+    #[test]
+    fn user_card_follows_the_shared_rows() {
+        let rows = include_str!("../../proto/fixtures/user_card.jsonl");
+        for l in rows.lines().filter(|l| !l.trim().is_empty()) {
+            let r: serde_json::Value = serde_json::from_str(l).unwrap();
+            let (kind, rep, his) = (r["kind"].as_str().unwrap(), r["from_report"].as_bool().unwrap(), r["his"].as_bool().unwrap());
+            assert_eq!(user_card(kind, rep), his, "{l}");
+        }
     }
 }
