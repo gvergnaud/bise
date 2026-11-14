@@ -48,4 +48,86 @@ export const tasks = {
   yesterday: "yesterday",
   /** 2 days or more */
   days_ago: (a: { n: number }): string => a.n === 1 ? String(a.n) + " day ago" : String(a.n) + " days ago",
+  /** the section's name */
+  section: "Tasks",
+  /** the head's loud part: how many tasks wait on him */
+  head_needs: (a: { n: number }): string => a.n === 1 ? String(a.n) + " needs you" : String(a.n) + " need you",
+  /** no open task in the scope */
+  none_open: "No open task",
+  /** a row's done-when count, ticked of all */
+  goals_of: (a: { done: string | number; all: string | number }): string => String(a.done) + "/" + String(a.all),
+  /** a row's done-when count's tip */
+  goals_tip: (a: { done: string | number; all: string | number }): string => "done when: " + String(a.done) + " of " + String(a.all) + " ticked",
+  /** the fold at the section's end: never-done tasks and the ones done this week */
+  fold_rest: (a: { ongoing: string | number; done: string | number }): string => String(a.ongoing) + " ongoing · " + String(a.done) + " done lately",
+  /** a chip's tip: the task's name and its line, then what the click does */
+  chip_tip: (a: { name: string | number; what: string | number }): string => String(a.name) + " · " + String(a.what) + " · open the task",
+  /** the `+N` after a chip: its tip lists the other tasks */
+  chips_more: (a: { n: string | number }): string => "+" + String(a.n),
+  /** the Board tab's title */
+  board_title: "Tasks",
+  /** a column's head: his questions wait there */
+  col_needs_you: "Needs you",
+  /** a column's head */
+  col_working: "Working",
+  /** a column's head */
+  col_waiting: "Waiting",
+  /** a column's head */
+  col_stalled: "Stalled",
+  /** a column's head */
+  col_to_review: "To review",
+  /** a column's head: done in the last 7 days */
+  col_done: "Done this week",
+  /** a column's head */
+  col_paused: "Paused",
+  /** a column's head: never done */
+  col_ongoing: "Ongoing",
+  /** a status a newer hub knows: its own column at the end */
+  col_unknown: "Other",
+  /** an empty column's strip tip */
+  col_empty: (a: { col: string | number }): string => String(a.col) + ": no task",
+  /** the Board's top line: what moved since he last opened it */
+  since_looked: (a: { done: string | number; moving: string | number }): string => "since you looked: " + String(a.done) + " done, " + String(a.moving) + " moving",
+  /** the since line's pink part, after it */
+  since_needs: (a: { n: number }): string => a.n === 1 ? ", " + String(a.n) + " needs you" : ", " + String(a.n) + " need you",
+  /** the Board with no task at all */
+  board_empty: "No task yet. main makes one when you ask for something that takes more than a turn.",
+  /** its meta line: the project, its agents, when it started */
+  tab_meta: (a: { project: string | number; agents: string | number; when: string | number }): string => String(a.project) + " · " + String(a.agents) + " · started " + String(a.when),
+  /** its meta line's agents part */
+  tab_agents: (a: { n: number }): string => a.n === 1 ? String(a.n) + " agent" : String(a.n) + " agents",
+  /** the quoted origin's tip */
+  origin_tip: "your message that started it · open it in the thread",
+  /** the origin line when its words are not here */
+  origin_open: "your message that started it",
+  /** a section head */
+  sec_done_when: "Done when",
+  /** a section head */
+  sec_needs: "Needs you",
+  /** a section head */
+  sec_now: "Now",
+  /** a section head */
+  sec_agents: "Agents",
+  /** an agent of it in a turn */
+  agent_live: "in a turn",
+  /** an agent of it, idle */
+  agent_idle: "idle",
+  /** an agent of it, archived: its thread stays readable */
+  agent_archived: "archived",
+  /** a goal ticked by an agent's report */
+  goal_by: (a: { by: string | number }): string => "ticked by " + String(a.by),
+  /** the footer's buttons */
+  act_done: "Mark done",
+  /** the footer's buttons */
+  act_pause: "Pause",
+  /** the footer's buttons */
+  act_resume: "Resume",
+  /** a stalled task's button */
+  act_restart: "Restart",
+  /** a done task's button */
+  act_reopen: "Reopen",
+  /** the task gone (merged, folded, unknown here) */
+  tab_gone: "This task is not here anymore.",
+  /** a merged task's tab: where it went */
+  tab_merged: (a: { name: string | number }): string => "Merged into " + String(a.name) + ".",
 } as const;

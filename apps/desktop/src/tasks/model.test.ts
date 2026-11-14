@@ -1,0 +1,55 @@
+// The right bar's rows and the since line, on plain rows (model.ts, since.ts). Owner: tasks.
+import { describe, expect, it } from 'vitest';
+import type { WorkRow, WorkStatus } from '@/proto';
+import { barRows, cutAtWord, goalsOf, type ProjWork } from './model';
+import { sinceLooked } from './since';
+
+const NOW = 1_700_000_000_000;
+const H = 3_600_000;
+
+function w(id: string, status: WorkStatus, last: number, extra: Partial<WorkRow> = {}): ProjWork {
+  return { project: 'p', projectName: 'p', w: { id, name: id, by: 'main', created_ms: NOW - 48 * H, last_ms: last, status, ...extra } };
+}
+
+describe('the bar rows', () => {
+  it('lists the open ones in the Board order, newest first inside a status, and folds ongoing and done this week', () => {
+    const all = [
+      w('a', 'working', NOW - 2 * H),
+      w('b', 'needs_you', NOW - 5 * H),
+      w('c', 'working', NOW - H),
+      w('d', 'paused', NOW),
+      w('e', 'to_review', NOW),
+      w('f', 'ongoing', NOW),
+      w('g', 'done', NOW, { done: { at_ms: NOW - 24 * H, by: 'user' } }),
+      w('h', 'done', NOW, { done: { at_ms: NOW - 8 * 24 * H, by: 'user' } }),
+    ];
+    const r = barRows(all, NOW);
+    expect(r.open.map((x) => x.w.id)).toEqual(['b', 'c', 'a', 'e', 'd']);
+    expect(r.ongoing.map((x) => x.w.id)).toEqual(['f']);
+    expect(r.done.map((x) => x.w.id)).toEqual(['g']);
+  });
+
+  it('counts the done-when items ticked of all, none without items', () => {
+    expect(goalsOf({ goals: [{ text: 'x', done: true }, { text: 'y' }] })).toEqual({ done: 1, all: 2 });
+    expect(goalsOf({})).toBeNull();
+  });
+
+  it('cuts a long name at a word', () => {
+    expect(cutAtWord('Plugin apps in the gallery and the store', 20)).toBe('Plugin apps in the…');
+    expect(cutAtWord('Short', 20)).toBe('Short');
+  });
+});
+
+describe('since you looked', () => {
+  it('counts what was done and what moved after his look, and every task that needs him now', () => {
+    const since = NOW - 3 * H;
+    const all = [
+      w('a', 'done', NOW, { done: { at_ms: NOW - H, by: 'user' } }),
+      w('b', 'done', NOW - 5 * H, { done: { at_ms: NOW - 5 * H, by: 'user' } }),
+      w('c', 'working', NOW - H),
+      w('d', 'waiting', NOW - 4 * H),
+      w('e', 'needs_you', NOW - 10 * H),
+    ];
+    expect(sinceLooked(all, since)).toEqual({ done: 1, moving: 1, needs: 1 });
+  });
+});

@@ -66,6 +66,7 @@ import { useAgents, useCards, useProjects, useStore } from '@/store';
 import { useAllArtifacts } from '@/artifacts';
 import { AddButton, useAddDropOn, useAddPlace } from '@/artifacts/Drops';
 import { useAllScheduled } from '@/scheduled';
+import { OuterTasks, useAllWorks } from '@/tasks';
 import { followOf } from '@/bims/focus';
 import { mapPrefKey } from '@/bims/maps/ids';
 import { isRunning, useAllProcesses } from '@/running';
@@ -197,6 +198,8 @@ function Side({ project, scope, home, world, at: coinsAt, right, outerW, room }:
   const schedLeads = (x: { project: string; t: { id: number } }) => pinnedIn(schedOrder, x.project, String(x.t.id));
   const artifacts = pinFirst(bar.level === 'agent' ? allArtifacts.filter((it) => inScope(bar, it.a.agent)) : allArtifacts, (it) => pinnedIn(artOrder, it.project, it.a.id));
   const tasks = pinFirst(useAllScheduled(scope), schedLeads);
+  // the tasks (HubEv works): the card's Tasks section, under Agents
+  const works = useAllWorks(scope);
   const procs = pinFirst(useAllProcesses(scope), (x) => pinnedIn(procOrder, x.project, procPinId(x.p.agent, x.p.id)));
   // the processes are asked once here, as the old right bar did; the hub sends them again on each change
   const asked = all ? rows.map((p) => p.project).join('\n') : scope;
@@ -610,6 +613,7 @@ function Side({ project, scope, home, world, at: coinsAt, right, outerW, room }:
         } } : {})}>
           <OuterAgents live={ov.live} agents={ov.agents} cards={ov.cards} at={at} here={here} now={now} groupOf={groupOf} onOpen={openRow} onOpenPr={openPr} bims={tile.hidden ? null : project} onAsk={setAskOpen} />
         </OuterSection>
+        <OuterTasks all={works} scope={scope} now={now} groupOf={groupOf} />
         <OuterList id="artifacts" name={bubbleName('artifacts')} count={String(artifacts.length)} onAll={() => {
           router.go({ screen: 'artifacts', project: scope });
         }} total={artifacts.length} empty={<Empty>{artScope?.empty ?? side.no_artifacts}</Empty>}

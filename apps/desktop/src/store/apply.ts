@@ -91,6 +91,10 @@ export function applyTyped(s: Store, ev: Ev): void {
     case "proc_out":
       // a range of a process's output: read through onEvent by its terminal (running/Output.tsx), never kept
       return;
+    case "works":
+      // a project's tasks, whole each time (sent only when they changed), and the folded ones (tombs)
+      s.put(`works:${ev.project}`, { works: ev.works, tombs: ev.tombs ?? [] });
+      return;
     case "scheduled":
     case "worktrees":
     case "merged":

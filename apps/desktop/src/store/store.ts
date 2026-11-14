@@ -638,4 +638,5 @@ export type {
   ToolOut,
   VersionsList,
   VoiceModeState,
+  Works,
 } from "./types";

@@ -70,6 +70,8 @@ import {
   toolOutKey,
   type VersionsList,
   type VoiceModeState,
+  type Works,
+  NO_WORKS,
 } from "./types";
 import { EMPTY, StoreBase } from "./base";
 import type { Looked } from "@/proto";
@@ -232,6 +234,10 @@ export class StoreReads extends StoreBase {
   /** the project's live scheduled tasks (sb every), whole each time; none until the hub said */
   scheduled(project: string): readonly ScheduledTask[] {
     return this.slice(`scheduled:${project}`, EMPTY);
+  }
+  /** the project's tasks (HubEv works) and its folded ones; none until the hub said */
+  works(project: string): Works {
+    return this.slice<Works>(`works:${project}`, NO_WORKS);
   }
   /** the project's scheduled event came (its list is the hub's, even empty) */
   scheduledCame(project: string): boolean {

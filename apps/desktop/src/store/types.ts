@@ -2,7 +2,7 @@
 // checked complete at compile time), the slices' list types, and the key and
 // compare helpers. Pure, no state. Split out of store.ts (pure move). Owner:
 // amb-core (the hub slices with amb-win).
-import type { AwayProject, CoreEv, FindHit, GuideTarget, HubEv, InboxRecord, Mark, Mode, Part, Pr, PickFile, PickFolder, BranchRow, Page, TakeStop, VersionItem } from '@/proto';
+import type { AwayProject, CoreEv, FindHit, GuideTarget, HubEv, InboxRecord, Mark, Mode, Part, Pr, PickFile, PickFolder, BranchRow, Page, TakeStop, VersionItem, WorkRow, WorkTomb } from '@/proto';
 export type Ev = HubEv | CoreEv;
 export type EvOf<T extends Ev['ev']> = Extract<Ev, { ev: T }>;
 
@@ -186,6 +186,13 @@ export interface PagesList {
   readonly items: readonly Page[];
   readonly overdue: number;
 }
+
+/** A project's tasks (the works event without its tag): the live ones and the folded ones (tombs). */
+export interface Works {
+  readonly works: readonly WorkRow[];
+  readonly tombs: readonly WorkTomb[];
+}
+export const NO_WORKS: Works = { works: [], tombs: [] };
 
 /** A project's PR list (the prs event without its tag). */
 /** A hub's answered and withdrawn records (inbox/history), newest first, with its totals. */
