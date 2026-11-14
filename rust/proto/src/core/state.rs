@@ -524,6 +524,10 @@ pub const STATE: State = State {
                 // his Move to task… (law moved_by_you_sticks)
                 f("works", Strs),
                 f("moved", Bool),
+                // tasks: opened by its agent's `sb report blocked` (the
+                // typed fact the moved-on close and the one-card check
+                // read, never its kind; architect m_64931)
+                f("from_report", Bool),
             ],
             shapes: &[Shape {
                 name: "journal",
@@ -541,6 +545,7 @@ pub const STATE: State = State {
                     k("about", W::OptJsonOmit),
                     k("works", W::StrsOmit),
                     k("moved", W::Flag),
+                    k("from_report", W::Flag),
                 ],
             }],
         },
@@ -729,6 +734,9 @@ pub const STATE: State = State {
                 f("max_at", Nat),
                 f("quiet", Bool),
                 f("resumes", Bool),
+                // tasks: its setter's turn's works when it was set (its
+                // wakes carry them; architect m_64926); none in an old line
+                f("works", Strs),
             ],
             shapes: &[Shape {
                 name: "journal",
@@ -744,6 +752,7 @@ pub const STATE: State = State {
                     // an old line has none: its spec says (a pid's
                     // watch resumes, wakes.bend resumes_of)
                     Key { field: "resumes", key: "resumes", wire: W::Bool, read: Some(&WATCH_RESUMES) },
+                    k("works", W::StrsOmit),
                 ],
             }, photo(&[
                 k("id", W::Nat),
@@ -755,6 +764,7 @@ pub const STATE: State = State {
                 k("quiet", W::Bool),
                 // read plainly: a photo always has it
                 k("resumes", W::Bool),
+                k("works", W::StrsOmit),
             ])],
         },
         Record {

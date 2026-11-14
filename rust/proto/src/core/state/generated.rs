@@ -302,6 +302,8 @@ pub struct Card {
     pub works: Vec<String>,
     #[serde(skip_serializing_if = "super::read::is_false")]
     pub moved: bool,
+    #[serde(skip_serializing_if = "super::read::is_false")]
+    pub from_report: bool,
 }
 
 /// Not an object: an error (its reader skips it).
@@ -321,6 +323,7 @@ impl<'de> Deserialize<'de> for Card {
             about: field(&o, "about"),
             works: field(&o, "works"),
             moved: field(&o, "moved"),
+            from_report: field(&o, "from_report"),
         })
     }
 }

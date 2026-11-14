@@ -533,6 +533,30 @@ def card_ids(cs: List<&2, S.Card>, +agent: String, +kinds: List<&2, String>) -> 
 def close_cards(-o: S.St, +cx: X.Cx<o>, +agent: String, +kinds: List<&2, String>, +res: String) -> X.Cx<o>:
   close_ids(o, card_ids(S.St.cards(st(o, cx)), agent, kinds), cx, res)
 
+# ---- tasks: a blocked report is a card (spec tasks-center row 63;
+# architect m_64926/m_64931) ----
+# What waits on him is a card: an agent's `sb report blocked` (never `sb
+# status blocked`, never its text) opens one for him when that agent has
+# no open card yet. The typed fact is Card.from_report, never its kind:
+# the wire kind stays "blocked" (card_rank, the TUI). Main's notice names
+# the card; main opening another one for the same blocked is a prompt
+# rule (role prompt), no typed link ties its `sb notify` to this card.
+
+# the open cards `agent`'s blocked reports opened
+def report_card_ids(cs: List<&2, S.Card>, +agent: String) -> List<&2, Nat>:
+  match cs:
+    case Nil{}:
+      Nil{}
+    case Con{+c, +t}:
+      +rest = report_card_ids(t, agent)
+      Bool.pick(List<&2, Nat>, S.Card.from_report(c) && String.eq(S.Card.agent(c), agent), S.Card.id(c) <> rest, rest)
+
+# its agent moved on (reports progress or done, says working or done, is
+# dropped or archived): its blocked card closes in the same step (law
+# blocked_card_ends_when_it_moves_on); any other card stays
+def report_cards_end(-o: S.St, +cx: X.Cx<o>, +agent: String) -> X.Cx<o>:
+  close_ids(o, report_card_ids(S.St.cards(st(o, cx)), agent), cx, "moved on")
+
 # ---- REPL lifecycle ----
 
 def spawn.if(-o: S.St, down: Bool, +cx: X.Cx<o>, +n: String, +resume: Bool) -> X.Cx<o>:
@@ -1219,6 +1243,24 @@ def view_message(-o: S.St, +cx: X.Cx<o>, +agent: String, +plugin: String, +text:
 def notify_main(-o: S.St, +cx: X.Cx<o>, +text: String) -> X.Cx<o>:
   fst(o, send(o, cx, msg(M.HUB(), M.MAIN(), text, False{}, None{}, False{}, False{})))
 
+# tasks: the blocked report's card (its rules above report_card_ids)
+def blocked_card_new(+id: Nat, +agent: String, +text: String, +now: Nat, +works: List<&2, String>) -> S.Card:
+  S.Card.with_from_report(S.Card.with_works(card_new(id, "blocked", agent, text, None{}, now, None{}, None{}, None{}), works), True{})
+
+def blocked_card.go(-o: S.St, need: Bool, +cx: X.Cx<o>, +agent: String, +text: String) -> X.Cx<o>:
+  match need:
+    case False{}:
+      cx
+    case True{}:
+      +id = S.St.next_card(st(o, cx))
+      +c = blocked_card_new(id, agent, text, now(o, cx), works_of_agent(M.get_agent(st(o, cx), agent)))
+      +cx2 = feed(o, emit(o, cx, M.ECardOpened{c}, {==}, Unit{}, Unit{}), M.MAIN(), FD.card(id, "blocked", agent, text))
+      notify_main(o, cx2, cat(["@", agent, "'s blocked report is card #", Nat.show(id), " in the user's inbox: do not open another card for it"]))
+
+# law blocked_report_opens_one_card: none while that agent has an open card
+def blocked_card(-o: S.St, +cx: X.Cx<o>, +agent: String, +text: String) -> X.Cx<o>:
+  blocked_card.go(o, List.is_empty(&2, Nat, card_ids(S.St.cards(st(o, cx)), agent, Nil{})), cx, agent, text)
+
 # hub-loop (place.bend): a placing task's worktree is made by the shell
 def place.ask(-o: S.St, placing: Bool, +cx: X.Cx<o>, +name: String, +ws: J.Json) -> X.Cx<o>:
   match placing:
@@ -1603,11 +1645,13 @@ def timers_tick(-o: S.St, +cx: X.Cx<o>) -> X.Cx<o>:
 
 # a watch's wake from bise: never queued mode, so an idle agent starts a
 # turn and a busy one gets it in its turn, steered (law wake_steers_busy)
-def wake_snd(+agent: String, +text: String) -> Snd:
-  Snd{M.HUB(), agent, text, False{}, None{}, False{}, False{}, False{}, None{}, "", None{}, None{}}
+# `works`: Some{its watch's works} for its hit and its max (law
+# watch_carries_turn_works), None for a word about the watch itself
+def wake_snd(+agent: String, +text: String, +works: Maybe<&2, List<&2, String>>) -> Snd:
+  Snd{M.HUB(), agent, text, False{}, None{}, False{}, False{}, False{}, None{}, "", None{}, works}
 
-def wake_say(-o: S.St, +cx: X.Cx<o>, +agent: String, +text: String) -> X.Cx<o>:
-  fst(o, send(o, cx, wake_snd(agent, text)))
+def wake_say(-o: S.St, +cx: X.Cx<o>, +agent: String, +text: String, +works: Maybe<&2, List<&2, String>>) -> X.Cx<o>:
+  fst(o, send(o, cx, wake_snd(agent, text, works)))
 
 # {"t":"wake_hit"}: the look saw it happen. A live watch of an active
 # agent ends and its agent gets ONE message from bise in the same step
@@ -1620,7 +1664,7 @@ def wake_hit.found(-o: S.St, m: Maybe<&2, S.Watch>, +cx: X.Cx<o>, +text: String)
       cx
     case Some{+w}:
       LZ.pick(X.Cx<o>, R.agent_active(st(o, cx), S.Watch.agent(w)),
-        u => wake_say(o, wake_end(o, cx, S.Watch.id(w), "hit"), S.Watch.agent(w), text),
+        u => wake_say(o, wake_end(o, cx, S.Watch.id(w), "hit"), S.Watch.agent(w), text, Some{S.Watch.works(w)}),
         u => cx)
 
 def wake_hit(-o: S.St, +cx: X.Cx<o>, +id: Nat, +text: String) -> X.Cx<o>:
@@ -1633,7 +1677,8 @@ def wake_set.agent(-o: S.St, ok: Bool, +cx: X.Cx<o>, +agent: String, +spec: J.Js
     case False{}:
       cx
     case True{}:
-      +w = WK.make(wks(o, cx), agent, spec, max_text, now(o, cx), max_ms, quiet, then)
+      # tasks: the watch carries its setter's turn's works (law watch_carries_turn_works)
+      +w = WK.make(wks(o, cx), agent, spec, max_text, now(o, cx), max_ms, quiet, then, works_of_agent(M.get_agent(st(o, cx), agent)))
       emit(o, cx, M.EWake{WK.WSet{w}}, Unit{}, Unit{}, Unit{})
 
 def wake_set(-o: S.St, m: Maybe<&2, String>, +cx: X.Cx<o>, +spec: J.Json, +max_text: String, +max_ms: Nat, +quiet: Bool, +then: Maybe<&2, Bool>) -> X.Cx<o>:
@@ -1650,7 +1695,7 @@ def wake_stop.found(-o: S.St, m: Maybe<&2, S.Watch>, +cx: X.Cx<o>, +why: String,
       cx
     case Some{+w}:
       LZ.pick(X.Cx<o>, WK.stop_tells(tell, R.agent_active(st(o, cx), S.Watch.agent(w))),
-        u => wake_say(o, wake_end(o, cx, S.Watch.id(w), why), S.Watch.agent(w), tell), u => wake_end(o, cx, S.Watch.id(w), why))
+        u => wake_say(o, wake_end(o, cx, S.Watch.id(w), why), S.Watch.agent(w), tell, None{}), u => wake_end(o, cx, S.Watch.id(w), why))
 
 # a watch past its max ends, with its "still running" wake unless quiet
 # (law wake_max_once: ended, it is never due again)
@@ -1661,7 +1706,7 @@ def wakes_tick.each(-o: S.St, ws: List<&2, S.Watch>, +cx: X.Cx<o>) -> X.Cx<o>:
     case Con{+w, +rest}:
       +cx2 = wake_end(o, cx, S.Watch.id(w), "max")
       +cx3 = LZ.pick(X.Cx<o>, WK.max_says(w, R.agent_active(st(o, cx2), S.Watch.agent(w))),
-        u => wake_say(o, cx2, S.Watch.agent(w), S.Watch.max_text(w)), u => cx2)
+        u => wake_say(o, cx2, S.Watch.agent(w), S.Watch.max_text(w), Some{S.Watch.works(w)}), u => cx2)
       wakes_tick.each(o, rest, cx3)
 
 def wakes_tick.go(-o: S.St, work: Bool, +cx: X.Cx<o>) -> X.Cx<o>:
@@ -1699,7 +1744,7 @@ def replies_gone.each(-o: S.St, ws: List<&2, S.Watch>, +cx: X.Cx<o>) -> X.Cx<o>:
     case Con{+w, +rest}:
       +cx2 = wake_end(o, cx, S.Watch.id(w), "gone")
       +cx3 = LZ.pick(X.Cx<o>, R.agent_active(st(o, cx2), S.Watch.agent(w)),
-        u => wake_say(o, cx2, S.Watch.agent(w), WK.reply_gone_text(w)), u => cx2)
+        u => wake_say(o, cx2, S.Watch.agent(w), WK.reply_gone_text(w), None{}), u => cx2)
       replies_gone.each(o, rest, cx3)
 
 # the tick: a reply watch whose asked agent is gone ends, its agent told
@@ -2162,6 +2207,19 @@ def answer.q(-o: S.St, m: Maybe<&2, S.Msg>, +cx: X.Cx<o>, +c: S.Card, +text: Str
         u => answer.q.sent(o, send(o, cx, answer.snd(ag, text, None{}, parts)), c, ag, text, parts, via),
         u => answer.q.main(o, cx, c, text, parts, via))
 
+# tasks: his answer on a blocked report's card (Card.from_report, never
+# its kind) goes to its agent as his message, carrying the card's works,
+# and closes it (law his_answer_on_a_blocked_card_reaches_its_agent); an
+# agent gone meanwhile: main reads it
+def answer.blocked.snd(+c: S.Card, +text: String, +parts: String) -> Snd:
+  Snd.with_works(answer.snd(S.Card.agent(c), text, None{}, parts), Some{S.Card.works(c)})
+
+def answer.blocked(-o: S.St, +cx: X.Cx<o>, +c: S.Card, +text: String, +parts: String, +via: String) -> X.Cx<o>:
+  +ag = S.Card.agent(c)
+  LZ.pick(X.Cx<o>, Maybe.is_some(&2, String, M.resolve(st(o, cx), ag)),
+    u => answer.q.sent(o, send(o, cx, answer.blocked.snd(c, text, parts)), c, ag, text, parts, via),
+    u => answer.q.main(o, cx, c, text, parts, via))
+
 def answer.dropped(-o: S.St, p: X.Cx<o> & DropR, +c: S.Card, +a: S.Ans) -> X.Cx<o>:
   match p:
     case (+cx, DErr{+e}):
@@ -2267,7 +2325,9 @@ def answer.card(-o: S.St, m: Maybe<&2, S.Card>, +cx: X.Cx<o>, +id: Nat, +text: S
     case None{}:
       answer.late(o, G.find(S.St.gone(st(o, cx)), id), cx, id, text, parts)
     case Some{+c}:
-      answer.kind(o, card_kind(S.Card.kind(c)), cx, c, text, parts, via)
+      LZ.pick(X.Cx<o>, S.Card.from_report(c),
+        u => answer.blocked(o, cx, c, text, parts, via),
+        u => answer.kind(o, card_kind(S.Card.kind(c)), cx, c, text, parts, via))
 
 # his answer to card `id`; `parts`: his message's parts (msg-parts, ""
 # none), kept on the asker's message and written after the route line;
@@ -3309,7 +3369,9 @@ def decl_of(+s: String) -> S.Decl:
 def req_status(-o: S.St, +cx: X.Cx<o>, +token: Nat, +from: String, +is_main: Bool, +q: J.Json) -> X.Cx<o>:
   +status = K.get_s(q, "status")
   +note = K.get_s(q, "note")
-  +cx1 = emit(o, cx, M.EDeclared{from, Some{decl_of(status)}, note}, Unit{}, Unit{}, Unit{})
+  # tasks: working or done, it moved on: its blocked report's card closes
+  +cx0 = LZ.pick(X.Cx<o>, String.eq(status, "blocked"), u => cx, u => report_cards_end(o, cx, from))
+  +cx1 = emit(o, cx0, M.EDeclared{from, Some{decl_of(status)}, note}, Unit{}, Unit{}, Unit{})
   # done: it moved on, its reply watches end (ask-wait)
   +cx2 = LZ.pick(X.Cx<o>, String.eq(status, "done"), u => replies_end(o, cx1, from), u => cx1)
   # a blocked task is main's to handle (BISE-299): main escalates to the
@@ -3442,14 +3504,16 @@ def req_report.sent(-o: S.St, p: X.Cx<o> & SendR, +token: Nat) -> X.Cx<o>:
     case (+cx, SOk{+m}):
       reply(o, cx, token, ok_body([J.kv("message_id", J.JStr{mid(S.Msg.id(m))})]))
 
+# tasks: a blocked report opens its card for him (blocked_card); a
+# progress or a done one closes it (report_cards_end), in the same step
 def req_report.kind(-o: S.St, +cx: X.Cx<o>, +from: String, +kind: String, +summary: String) -> X.Cx<o>:
   LZ.pick(X.Cx<o>, String.eq(kind, "done"),
-    u => job_end(o, report_done(o, cx, from), from, "done", summary),
+    u => job_end(o, report_done(o, report_cards_end(o, cx, from), from), from, "done", summary),
     u => LZ.pick(X.Cx<o>, String.eq(kind, "blocked"),
-      u => emit(o, cx, M.EDeclared{from, Some{S.DBlocked{}}, summary}, Unit{}, Unit{}, Unit{}),
+      u => blocked_card(o, emit(o, cx, M.EDeclared{from, Some{S.DBlocked{}}, summary}, Unit{}, Unit{}, Unit{}), from, summary),
       u => LZ.pick(X.Cx<o>, String.eq(kind, "failed"),
         u => job_end(o, report_failed(o, cx, from, summary), from, "failed", summary),
-        u => cx)))
+        u => LZ.pick(X.Cx<o>, String.eq(kind, "progress"), u => report_cards_end(o, cx, from), u => cx))))
 
 # tasks: `sb report --done-when <n>`: done-when n ticked on each work of
 # the report (its `--task`, else its turn's), by its agent (0: none)
@@ -4463,7 +4527,7 @@ def reply_pause.go(-o: S.St, need: Bool, +cx: X.Cx<o>, +agent: String, +orig: S.
     case False{}:
       cx
     case True{}:
-      emit(o, cx, M.EWake{WK.WSet{WK.make_reply(wks(o, cx), agent, S.Msg.to(orig), S.Msg.id(orig), S.Msg.created(orig), now(o, cx))}}, Unit{}, Unit{}, Unit{})
+      emit(o, cx, M.EWake{WK.WSet{WK.make_reply(wks(o, cx), agent, S.Msg.to(orig), S.Msg.id(orig), S.Msg.created(orig), now(o, cx), works_of_agent(M.get_agent(st(o, cx), agent)))}}, Unit{}, Unit{}, Unit{})
 
 def reply_pause.orig(-o: S.St, m: Maybe<&2, S.Msg>, +cx: X.Cx<o>, +agent: String) -> X.Cx<o>:
   match m:

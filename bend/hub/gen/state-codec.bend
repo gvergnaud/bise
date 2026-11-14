@@ -2089,18 +2089,18 @@ def ViewAsk.journal_mof(m: Maybe<&2, J.Json>) -> Maybe<&2, S.ViewAsk>:
     case Some{+j}:
       Some{ViewAsk.journal_of(j)}
 
-# ---- Card, its journal shape: id, kind, agent, text, for_msg, created_ms, place, pr, view, about, works, moved ----
+# ---- Card, its journal shape: id, kind, agent, text, for_msg, created_ms, place, pr, view, about, works, moved, from_report ----
 
 def Card.journal_kvs(r: S.Card) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
   match r:
-    case S.Card{+id, +kind, +agent, +text, +for_msg, +created, +place, +pr, +view, +about, +works, +moved}:
-      K.cat([[J.kv("id", J.JNum{id}), J.kv("kind", J.JStr{kind}), J.kv("agent", J.JStr{agent}), J.kv("text", J.JStr{text}), J.kv("for_msg", K.jmaybe_n(for_msg)), J.kv("created_ms", J.JNum{created}), J.kv("place", K.jmaybe_s(place)), J.kv("pr", K.jmaybe_n(pr))], K.omit_mj("view", ViewAsk.journal_mjson(view)), K.omit_mj("about", about), K.omit_ss("works", works), K.flag("moved", moved)])
+    case S.Card{+id, +kind, +agent, +text, +for_msg, +created, +place, +pr, +view, +about, +works, +moved, +from_report}:
+      K.cat([[J.kv("id", J.JNum{id}), J.kv("kind", J.JStr{kind}), J.kv("agent", J.JStr{agent}), J.kv("text", J.JStr{text}), J.kv("for_msg", K.jmaybe_n(for_msg)), J.kv("created_ms", J.JNum{created}), J.kv("place", K.jmaybe_s(place)), J.kv("pr", K.jmaybe_n(pr))], K.omit_mj("view", ViewAsk.journal_mjson(view)), K.omit_mj("about", about), K.omit_ss("works", works), K.flag("moved", moved), K.flag("from_report", from_report)])
 
 def Card.journal_json(r: S.Card) -> J.Json:
   J.obj(Card.journal_kvs(r))
 
 def Card.journal_of(+j: J.Json) -> S.Card:
-  S.Card{rd.n(J.get(j, "id")), rd.s(J.get(j, "kind")), rd.s(J.get(j, "agent")), rd.s(J.get(j, "text")), K.opt_n(J.get(j, "for_msg")), rd.n(J.get(j, "created_ms")), K.opt_s(J.get(j, "place")), K.opt_n(J.get(j, "pr")), ViewAsk.journal_mof(J.get(j, "view")), J.get(j, "about"), rd.ss(J.get(j, "works")), rd.b(J.get(j, "moved"))}
+  S.Card{rd.n(J.get(j, "id")), rd.s(J.get(j, "kind")), rd.s(J.get(j, "agent")), rd.s(J.get(j, "text")), K.opt_n(J.get(j, "for_msg")), rd.n(J.get(j, "created_ms")), K.opt_s(J.get(j, "place")), K.opt_n(J.get(j, "pr")), ViewAsk.journal_mof(J.get(j, "view")), J.get(j, "about"), rd.ss(J.get(j, "works")), rd.b(J.get(j, "moved")), rd.b(J.get(j, "from_report"))}
 
 law Card.journal.id:
   for +id: Nat
@@ -2115,9 +2115,10 @@ law Card.journal.id:
   for +about: Maybe<&2, J.Json>
   for +works: List<&2, String>
   for +moved: Bool
-  {rd.n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "id")) == id : Nat}
+  for +from_report: Bool
+  {rd.n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "id")) == id : Nat}
 
-def Card.journal.id(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved):
+def Card.journal.id(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report):
   {==}
 
 law Card.journal.kind:
@@ -2133,9 +2134,10 @@ law Card.journal.kind:
   for +about: Maybe<&2, J.Json>
   for +works: List<&2, String>
   for +moved: Bool
-  {rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "kind")) == kind : String}
+  for +from_report: Bool
+  {rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "kind")) == kind : String}
 
-def Card.journal.kind(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved):
+def Card.journal.kind(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report):
   {==}
 
 law Card.journal.agent:
@@ -2151,9 +2153,10 @@ law Card.journal.agent:
   for +about: Maybe<&2, J.Json>
   for +works: List<&2, String>
   for +moved: Bool
-  {rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "agent")) == agent : String}
+  for +from_report: Bool
+  {rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "agent")) == agent : String}
 
-def Card.journal.agent(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved):
+def Card.journal.agent(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report):
   {==}
 
 law Card.journal.text:
@@ -2169,9 +2172,10 @@ law Card.journal.text:
   for +about: Maybe<&2, J.Json>
   for +works: List<&2, String>
   for +moved: Bool
-  {rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "text")) == text : String}
+  for +from_report: Bool
+  {rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "text")) == text : String}
 
-def Card.journal.text(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved):
+def Card.journal.text(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report):
   {==}
 
 law Card.journal.for_msg:
@@ -2187,9 +2191,10 @@ law Card.journal.for_msg:
   for +about: Maybe<&2, J.Json>
   for +works: List<&2, String>
   for +moved: Bool
-  {K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "for_msg")) == for_msg : Maybe<&2, Nat>}
+  for +from_report: Bool
+  {K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "for_msg")) == for_msg : Maybe<&2, Nat>}
 
-def Card.journal.for_msg(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved):
+def Card.journal.for_msg(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report):
   match for_msg:
     case None{}:
       {==}
@@ -2209,9 +2214,10 @@ law Card.journal.created:
   for +about: Maybe<&2, J.Json>
   for +works: List<&2, String>
   for +moved: Bool
-  {rd.n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "created_ms")) == created : Nat}
+  for +from_report: Bool
+  {rd.n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "created_ms")) == created : Nat}
 
-def Card.journal.created(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved):
+def Card.journal.created(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report):
   {==}
 
 law Card.journal.place:
@@ -2227,9 +2233,10 @@ law Card.journal.place:
   for +about: Maybe<&2, J.Json>
   for +works: List<&2, String>
   for +moved: Bool
-  {K.opt_s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "place")) == place : Maybe<&2, String>}
+  for +from_report: Bool
+  {K.opt_s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "place")) == place : Maybe<&2, String>}
 
-def Card.journal.place(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved):
+def Card.journal.place(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report):
   match place:
     case None{}:
       {==}
@@ -2249,9 +2256,10 @@ law Card.journal.pr:
   for +about: Maybe<&2, J.Json>
   for +works: List<&2, String>
   for +moved: Bool
-  {K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "pr")) == pr : Maybe<&2, Nat>}
+  for +from_report: Bool
+  {K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "pr")) == pr : Maybe<&2, Nat>}
 
-def Card.journal.pr(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved):
+def Card.journal.pr(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report):
   match pr:
     case None{}:
       {==}
@@ -2271,14 +2279,16 @@ law Card.journal.view:
   for +about: Maybe<&2, J.Json>
   for +works: List<&2, String>
   for +moved: Bool
-  {ViewAsk.journal_mof(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "view")) == view : Maybe<&2, S.ViewAsk>}
+  for +from_report: Bool
+  {ViewAsk.journal_mof(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "view")) == view : Maybe<&2, S.ViewAsk>}
 
-def Card.journal.view(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved):
+def Card.journal.view(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report):
   match view:
     case None{}:
-      %skip_mj("about", about, [K.omit_ss("works", works), K.flag("moved", moved)], "view", {==}) : {ViewAsk.journal_mof(_) == None{} : Maybe<&2, S.ViewAsk>}
-      %skip_ss("works", works, [K.flag("moved", moved)], "view", {==}) : {ViewAsk.journal_mof(_) == None{} : Maybe<&2, S.ViewAsk>}
-      %skip_flag("moved", moved, [], "view", {==}) : {ViewAsk.journal_mof(_) == None{} : Maybe<&2, S.ViewAsk>}
+      %skip_mj("about", about, [K.omit_ss("works", works), K.flag("moved", moved), K.flag("from_report", from_report)], "view", {==}) : {ViewAsk.journal_mof(_) == None{} : Maybe<&2, S.ViewAsk>}
+      %skip_ss("works", works, [K.flag("moved", moved), K.flag("from_report", from_report)], "view", {==}) : {ViewAsk.journal_mof(_) == None{} : Maybe<&2, S.ViewAsk>}
+      %skip_flag("moved", moved, [K.flag("from_report", from_report)], "view", {==}) : {ViewAsk.journal_mof(_) == None{} : Maybe<&2, S.ViewAsk>}
+      %skip_flag("from_report", from_report, [], "view", {==}) : {ViewAsk.journal_mof(_) == None{} : Maybe<&2, S.ViewAsk>}
       {==}
     case Some{view_x}:
       %ViewAsk.journal_round(view_x) : {Some{ViewAsk.journal_of(ViewAsk.journal_json(view_x))} == Some{_} : Maybe<&2, S.ViewAsk>}
@@ -2297,17 +2307,19 @@ law Card.journal.about:
   for +about: Maybe<&2, J.Json>
   for +works: List<&2, String>
   for +moved: Bool
-  {J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "about") == about : Maybe<&2, J.Json>}
+  for +from_report: Bool
+  {J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "about") == about : Maybe<&2, J.Json>}
 
-def Card.journal.about(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved):
+def Card.journal.about(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report):
   match about:
     case None{}:
-      %skip_mj("view", ViewAsk.journal_mjson(view), [K.omit_mj("about", None{}), K.omit_ss("works", works), K.flag("moved", moved)], "about", {==}) : {_ == None{} : Maybe<&2, J.Json>}
-      %skip_ss("works", works, [K.flag("moved", moved)], "about", {==}) : {_ == None{} : Maybe<&2, J.Json>}
-      %skip_flag("moved", moved, [], "about", {==}) : {_ == None{} : Maybe<&2, J.Json>}
+      %skip_mj("view", ViewAsk.journal_mjson(view), [K.omit_mj("about", None{}), K.omit_ss("works", works), K.flag("moved", moved), K.flag("from_report", from_report)], "about", {==}) : {_ == None{} : Maybe<&2, J.Json>}
+      %skip_ss("works", works, [K.flag("moved", moved), K.flag("from_report", from_report)], "about", {==}) : {_ == None{} : Maybe<&2, J.Json>}
+      %skip_flag("moved", moved, [K.flag("from_report", from_report)], "about", {==}) : {_ == None{} : Maybe<&2, J.Json>}
+      %skip_flag("from_report", from_report, [], "about", {==}) : {_ == None{} : Maybe<&2, J.Json>}
       {==}
     case Some{about_x}:
-      %skip_mj("view", ViewAsk.journal_mjson(view), [K.omit_mj("about", Some{about_x}), K.omit_ss("works", works), K.flag("moved", moved)], "about", {==}) : {_ == Some{about_x} : Maybe<&2, J.Json>}
+      %skip_mj("view", ViewAsk.journal_mjson(view), [K.omit_mj("about", Some{about_x}), K.omit_ss("works", works), K.flag("moved", moved), K.flag("from_report", from_report)], "about", {==}) : {_ == Some{about_x} : Maybe<&2, J.Json>}
       {==}
 
 law Card.journal.works:
@@ -2323,18 +2335,20 @@ law Card.journal.works:
   for +about: Maybe<&2, J.Json>
   for +works: List<&2, String>
   for +moved: Bool
-  {rd.ss(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "works")) == works : List<&2, String>}
+  for +from_report: Bool
+  {rd.ss(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "works")) == works : List<&2, String>}
 
-def Card.journal.works(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved):
+def Card.journal.works(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report):
   match works:
     case Nil{}:
-      %skip_mj("view", ViewAsk.journal_mjson(view), [K.omit_mj("about", about), K.omit_ss("works", Nil{}), K.flag("moved", moved)], "works", {==}) : {rd.ss(_) == Nil{} : List<&2, String>}
-      %skip_mj("about", about, [K.omit_ss("works", Nil{}), K.flag("moved", moved)], "works", {==}) : {rd.ss(_) == Nil{} : List<&2, String>}
-      %skip_flag("moved", moved, [], "works", {==}) : {rd.ss(_) == Nil{} : List<&2, String>}
+      %skip_mj("view", ViewAsk.journal_mjson(view), [K.omit_mj("about", about), K.omit_ss("works", Nil{}), K.flag("moved", moved), K.flag("from_report", from_report)], "works", {==}) : {rd.ss(_) == Nil{} : List<&2, String>}
+      %skip_mj("about", about, [K.omit_ss("works", Nil{}), K.flag("moved", moved), K.flag("from_report", from_report)], "works", {==}) : {rd.ss(_) == Nil{} : List<&2, String>}
+      %skip_flag("moved", moved, [K.flag("from_report", from_report)], "works", {==}) : {rd.ss(_) == Nil{} : List<&2, String>}
+      %skip_flag("from_report", from_report, [], "works", {==}) : {rd.ss(_) == Nil{} : List<&2, String>}
       {==}
     case Con{works_h, works_t}:
-      %skip_mj("view", ViewAsk.journal_mjson(view), [K.omit_mj("about", about), K.omit_ss("works", Con{works_h, works_t}), K.flag("moved", moved)], "works", {==}) : {rd.ss(_) == Con{works_h, works_t} : List<&2, String>}
-      %skip_mj("about", about, [K.omit_ss("works", Con{works_h, works_t}), K.flag("moved", moved)], "works", {==}) : {rd.ss(_) == Con{works_h, works_t} : List<&2, String>}
+      %skip_mj("view", ViewAsk.journal_mjson(view), [K.omit_mj("about", about), K.omit_ss("works", Con{works_h, works_t}), K.flag("moved", moved), K.flag("from_report", from_report)], "works", {==}) : {rd.ss(_) == Con{works_h, works_t} : List<&2, String>}
+      %skip_mj("about", about, [K.omit_ss("works", Con{works_h, works_t}), K.flag("moved", moved), K.flag("from_report", from_report)], "works", {==}) : {rd.ss(_) == Con{works_h, works_t} : List<&2, String>}
       K.strs_round(Con{works_h, works_t})
 
 law Card.journal.moved:
@@ -2350,19 +2364,52 @@ law Card.journal.moved:
   for +about: Maybe<&2, J.Json>
   for +works: List<&2, String>
   for +moved: Bool
-  {rd.b(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "moved")) == moved : Bool}
+  for +from_report: Bool
+  {rd.b(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "moved")) == moved : Bool}
 
-def Card.journal.moved(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved):
+def Card.journal.moved(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report):
   match moved:
     case True{}:
-      %skip_mj("view", ViewAsk.journal_mjson(view), [K.omit_mj("about", about), K.omit_ss("works", works), K.flag("moved", True{})], "moved", {==}) : {rd.b(_) == True{} : Bool}
-      %skip_mj("about", about, [K.omit_ss("works", works), K.flag("moved", True{})], "moved", {==}) : {rd.b(_) == True{} : Bool}
-      %skip_ss("works", works, [K.flag("moved", True{})], "moved", {==}) : {rd.b(_) == True{} : Bool}
+      %skip_mj("view", ViewAsk.journal_mjson(view), [K.omit_mj("about", about), K.omit_ss("works", works), K.flag("moved", True{}), K.flag("from_report", from_report)], "moved", {==}) : {rd.b(_) == True{} : Bool}
+      %skip_mj("about", about, [K.omit_ss("works", works), K.flag("moved", True{}), K.flag("from_report", from_report)], "moved", {==}) : {rd.b(_) == True{} : Bool}
+      %skip_ss("works", works, [K.flag("moved", True{}), K.flag("from_report", from_report)], "moved", {==}) : {rd.b(_) == True{} : Bool}
       {==}
     case False{}:
-      %skip_mj("view", ViewAsk.journal_mjson(view), [K.omit_mj("about", about), K.omit_ss("works", works), K.flag("moved", False{})], "moved", {==}) : {rd.b(_) == False{} : Bool}
-      %skip_mj("about", about, [K.omit_ss("works", works), K.flag("moved", False{})], "moved", {==}) : {rd.b(_) == False{} : Bool}
-      %skip_ss("works", works, [K.flag("moved", False{})], "moved", {==}) : {rd.b(_) == False{} : Bool}
+      %skip_mj("view", ViewAsk.journal_mjson(view), [K.omit_mj("about", about), K.omit_ss("works", works), K.flag("moved", False{}), K.flag("from_report", from_report)], "moved", {==}) : {rd.b(_) == False{} : Bool}
+      %skip_mj("about", about, [K.omit_ss("works", works), K.flag("moved", False{}), K.flag("from_report", from_report)], "moved", {==}) : {rd.b(_) == False{} : Bool}
+      %skip_ss("works", works, [K.flag("moved", False{}), K.flag("from_report", from_report)], "moved", {==}) : {rd.b(_) == False{} : Bool}
+      %skip_flag("from_report", from_report, [], "moved", {==}) : {rd.b(_) == False{} : Bool}
+      {==}
+
+law Card.journal.from_report:
+  for +id: Nat
+  for +kind: String
+  for +agent: String
+  for +text: String
+  for +for_msg: Maybe<&2, Nat>
+  for +created: Nat
+  for +place: Maybe<&2, String>
+  for +pr: Maybe<&2, Nat>
+  for +view: Maybe<&2, S.ViewAsk>
+  for +about: Maybe<&2, J.Json>
+  for +works: List<&2, String>
+  for +moved: Bool
+  for +from_report: Bool
+  {rd.b(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "from_report")) == from_report : Bool}
+
+def Card.journal.from_report(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report):
+  match from_report:
+    case True{}:
+      %skip_mj("view", ViewAsk.journal_mjson(view), [K.omit_mj("about", about), K.omit_ss("works", works), K.flag("moved", moved), K.flag("from_report", True{})], "from_report", {==}) : {rd.b(_) == True{} : Bool}
+      %skip_mj("about", about, [K.omit_ss("works", works), K.flag("moved", moved), K.flag("from_report", True{})], "from_report", {==}) : {rd.b(_) == True{} : Bool}
+      %skip_ss("works", works, [K.flag("moved", moved), K.flag("from_report", True{})], "from_report", {==}) : {rd.b(_) == True{} : Bool}
+      %skip_flag("moved", moved, [K.flag("from_report", True{})], "from_report", {==}) : {rd.b(_) == True{} : Bool}
+      {==}
+    case False{}:
+      %skip_mj("view", ViewAsk.journal_mjson(view), [K.omit_mj("about", about), K.omit_ss("works", works), K.flag("moved", moved), K.flag("from_report", False{})], "from_report", {==}) : {rd.b(_) == False{} : Bool}
+      %skip_mj("about", about, [K.omit_ss("works", works), K.flag("moved", moved), K.flag("from_report", False{})], "from_report", {==}) : {rd.b(_) == False{} : Bool}
+      %skip_ss("works", works, [K.flag("moved", moved), K.flag("from_report", False{})], "from_report", {==}) : {rd.b(_) == False{} : Bool}
+      %skip_flag("moved", moved, [K.flag("from_report", False{})], "from_report", {==}) : {rd.b(_) == False{} : Bool}
       {==}
 
 # the fields it carries come back (the others at their default)
@@ -2379,21 +2426,23 @@ law Card.journal_round_by_fields:
   for +about: Maybe<&2, J.Json>
   for +works: List<&2, String>
   for +moved: Bool
-  {Card.journal_of(Card.journal_json(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})) == S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved} : S.Card}
+  for +from_report: Bool
+  {Card.journal_of(Card.journal_json(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})) == S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report} : S.Card}
 
-def Card.journal_round_by_fields(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved):
-  %Equal.sym(Nat, rd.n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "id")), id, Card.journal.id(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved)) : {S.Card{_, rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "kind")), rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "agent")), rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "text")), K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "for_msg")), rd.n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "created_ms")), K.opt_s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "place")), K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "pr")), ViewAsk.journal_mof(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "view")), J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "about"), rd.ss(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "works")), rd.b(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "moved"))} == S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved} : S.Card}
-  %Equal.sym(String, rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "kind")), kind, Card.journal.kind(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved)) : {S.Card{id, _, rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "agent")), rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "text")), K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "for_msg")), rd.n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "created_ms")), K.opt_s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "place")), K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "pr")), ViewAsk.journal_mof(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "view")), J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "about"), rd.ss(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "works")), rd.b(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "moved"))} == S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved} : S.Card}
-  %Equal.sym(String, rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "agent")), agent, Card.journal.agent(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved)) : {S.Card{id, kind, _, rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "text")), K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "for_msg")), rd.n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "created_ms")), K.opt_s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "place")), K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "pr")), ViewAsk.journal_mof(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "view")), J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "about"), rd.ss(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "works")), rd.b(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "moved"))} == S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved} : S.Card}
-  %Equal.sym(String, rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "text")), text, Card.journal.text(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved)) : {S.Card{id, kind, agent, _, K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "for_msg")), rd.n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "created_ms")), K.opt_s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "place")), K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "pr")), ViewAsk.journal_mof(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "view")), J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "about"), rd.ss(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "works")), rd.b(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "moved"))} == S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved} : S.Card}
-  %Equal.sym(Maybe<&2, Nat>, K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "for_msg")), for_msg, Card.journal.for_msg(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved)) : {S.Card{id, kind, agent, text, _, rd.n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "created_ms")), K.opt_s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "place")), K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "pr")), ViewAsk.journal_mof(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "view")), J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "about"), rd.ss(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "works")), rd.b(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "moved"))} == S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved} : S.Card}
-  %Equal.sym(Nat, rd.n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "created_ms")), created, Card.journal.created(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved)) : {S.Card{id, kind, agent, text, for_msg, _, K.opt_s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "place")), K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "pr")), ViewAsk.journal_mof(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "view")), J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "about"), rd.ss(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "works")), rd.b(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "moved"))} == S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved} : S.Card}
-  %Equal.sym(Maybe<&2, String>, K.opt_s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "place")), place, Card.journal.place(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved)) : {S.Card{id, kind, agent, text, for_msg, created, _, K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "pr")), ViewAsk.journal_mof(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "view")), J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "about"), rd.ss(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "works")), rd.b(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "moved"))} == S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved} : S.Card}
-  %Equal.sym(Maybe<&2, Nat>, K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "pr")), pr, Card.journal.pr(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved)) : {S.Card{id, kind, agent, text, for_msg, created, place, _, ViewAsk.journal_mof(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "view")), J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "about"), rd.ss(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "works")), rd.b(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "moved"))} == S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved} : S.Card}
-  %Equal.sym(Maybe<&2, S.ViewAsk>, ViewAsk.journal_mof(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "view")), view, Card.journal.view(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved)) : {S.Card{id, kind, agent, text, for_msg, created, place, pr, _, J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "about"), rd.ss(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "works")), rd.b(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "moved"))} == S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved} : S.Card}
-  %Equal.sym(Maybe<&2, J.Json>, J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "about"), about, Card.journal.about(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved)) : {S.Card{id, kind, agent, text, for_msg, created, place, pr, view, _, rd.ss(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "works")), rd.b(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "moved"))} == S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved} : S.Card}
-  %Equal.sym(List<&2, String>, rd.ss(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "works")), works, Card.journal.works(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved)) : {S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, _, rd.b(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "moved"))} == S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved} : S.Card}
-  %Equal.sym(Bool, rd.b(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved})), "moved")), moved, Card.journal.moved(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved)) : {S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, _} == S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved} : S.Card}
+def Card.journal_round_by_fields(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report):
+  %Equal.sym(Nat, rd.n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "id")), id, Card.journal.id(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report)) : {S.Card{_, rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "kind")), rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "agent")), rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "text")), K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "for_msg")), rd.n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "created_ms")), K.opt_s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "place")), K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "pr")), ViewAsk.journal_mof(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "view")), J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "about"), rd.ss(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "works")), rd.b(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "moved")), rd.b(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "from_report"))} == S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report} : S.Card}
+  %Equal.sym(String, rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "kind")), kind, Card.journal.kind(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report)) : {S.Card{id, _, rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "agent")), rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "text")), K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "for_msg")), rd.n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "created_ms")), K.opt_s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "place")), K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "pr")), ViewAsk.journal_mof(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "view")), J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "about"), rd.ss(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "works")), rd.b(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "moved")), rd.b(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "from_report"))} == S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report} : S.Card}
+  %Equal.sym(String, rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "agent")), agent, Card.journal.agent(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report)) : {S.Card{id, kind, _, rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "text")), K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "for_msg")), rd.n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "created_ms")), K.opt_s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "place")), K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "pr")), ViewAsk.journal_mof(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "view")), J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "about"), rd.ss(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "works")), rd.b(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "moved")), rd.b(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "from_report"))} == S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report} : S.Card}
+  %Equal.sym(String, rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "text")), text, Card.journal.text(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report)) : {S.Card{id, kind, agent, _, K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "for_msg")), rd.n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "created_ms")), K.opt_s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "place")), K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "pr")), ViewAsk.journal_mof(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "view")), J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "about"), rd.ss(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "works")), rd.b(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "moved")), rd.b(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "from_report"))} == S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report} : S.Card}
+  %Equal.sym(Maybe<&2, Nat>, K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "for_msg")), for_msg, Card.journal.for_msg(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report)) : {S.Card{id, kind, agent, text, _, rd.n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "created_ms")), K.opt_s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "place")), K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "pr")), ViewAsk.journal_mof(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "view")), J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "about"), rd.ss(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "works")), rd.b(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "moved")), rd.b(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "from_report"))} == S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report} : S.Card}
+  %Equal.sym(Nat, rd.n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "created_ms")), created, Card.journal.created(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report)) : {S.Card{id, kind, agent, text, for_msg, _, K.opt_s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "place")), K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "pr")), ViewAsk.journal_mof(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "view")), J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "about"), rd.ss(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "works")), rd.b(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "moved")), rd.b(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "from_report"))} == S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report} : S.Card}
+  %Equal.sym(Maybe<&2, String>, K.opt_s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "place")), place, Card.journal.place(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report)) : {S.Card{id, kind, agent, text, for_msg, created, _, K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "pr")), ViewAsk.journal_mof(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "view")), J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "about"), rd.ss(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "works")), rd.b(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "moved")), rd.b(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "from_report"))} == S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report} : S.Card}
+  %Equal.sym(Maybe<&2, Nat>, K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "pr")), pr, Card.journal.pr(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report)) : {S.Card{id, kind, agent, text, for_msg, created, place, _, ViewAsk.journal_mof(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "view")), J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "about"), rd.ss(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "works")), rd.b(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "moved")), rd.b(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "from_report"))} == S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report} : S.Card}
+  %Equal.sym(Maybe<&2, S.ViewAsk>, ViewAsk.journal_mof(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "view")), view, Card.journal.view(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report)) : {S.Card{id, kind, agent, text, for_msg, created, place, pr, _, J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "about"), rd.ss(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "works")), rd.b(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "moved")), rd.b(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "from_report"))} == S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report} : S.Card}
+  %Equal.sym(Maybe<&2, J.Json>, J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "about"), about, Card.journal.about(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report)) : {S.Card{id, kind, agent, text, for_msg, created, place, pr, view, _, rd.ss(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "works")), rd.b(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "moved")), rd.b(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "from_report"))} == S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report} : S.Card}
+  %Equal.sym(List<&2, String>, rd.ss(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "works")), works, Card.journal.works(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report)) : {S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, _, rd.b(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "moved")), rd.b(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "from_report"))} == S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report} : S.Card}
+  %Equal.sym(Bool, rd.b(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "moved")), moved, Card.journal.moved(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report)) : {S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, _, rd.b(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "from_report"))} == S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report} : S.Card}
+  %Equal.sym(Bool, rd.b(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report})), "from_report")), from_report, Card.journal.from_report(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report)) : {S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, _} == S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report} : S.Card}
   {==}
 
 law Card.journal_round:
@@ -2402,8 +2451,8 @@ law Card.journal_round:
 
 def Card.journal_round(x):
   match x:
-    case S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved}:
-      Card.journal_round_by_fields(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved)
+    case S.Card{id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report}:
+      Card.journal_round_by_fields(id, kind, agent, text, for_msg, created, place, pr, view, about, works, moved, from_report)
 
 # ---- a list of Card, each in its journal shape ----
 
@@ -4328,18 +4377,18 @@ law Act.journal_list_round:
 def Act.journal_list_round(xs):
   Act.journal_list_round.go(xs)
 
-# ---- Watch, its journal shape: id, agent, spec, max_text, set_at, max_at, quiet, resumes ----
+# ---- Watch, its journal shape: id, agent, spec, max_text, set_at, max_at, quiet, resumes, works ----
 
 def Watch.journal_kvs(r: S.Watch) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
   match r:
-    case S.Watch{+id, +agent, +spec, +max_text, +set_at, +max_at, +quiet, +resumes}:
-      [J.kv("id", J.JNum{id}), J.kv("agent", J.JStr{agent}), J.kv("spec", spec), J.kv("max_text", J.JStr{max_text}), J.kv("set_at", J.JNum{set_at}), J.kv("max_at", J.JNum{max_at}), J.kv("quiet", J.JBool{quiet}), J.kv("resumes", J.JBool{resumes})]
+    case S.Watch{+id, +agent, +spec, +max_text, +set_at, +max_at, +quiet, +resumes, +works}:
+      K.cat([[J.kv("id", J.JNum{id}), J.kv("agent", J.JStr{agent}), J.kv("spec", spec), J.kv("max_text", J.JStr{max_text}), J.kv("set_at", J.JNum{set_at}), J.kv("max_at", J.JNum{max_at}), J.kv("quiet", J.JBool{quiet}), J.kv("resumes", J.JBool{resumes})], K.omit_ss("works", works)])
 
 def Watch.journal_json(r: S.Watch) -> J.Json:
   J.obj(Watch.journal_kvs(r))
 
 def Watch.journal_of(+j: J.Json) -> S.Watch:
-  S.Watch{rd.n(J.get(j, "id")), rd.s(J.get(j, "agent")), rd.j(J.get(j, "spec")), rd.s(J.get(j, "max_text")), rd.n(J.get(j, "set_at")), rd.n(J.get(j, "max_at")), rd.b(J.get(j, "quiet")), SH.watch_resumes(J.get(j, "resumes"), J.get(j, "spec"))}
+  S.Watch{rd.n(J.get(j, "id")), rd.s(J.get(j, "agent")), rd.j(J.get(j, "spec")), rd.s(J.get(j, "max_text")), rd.n(J.get(j, "set_at")), rd.n(J.get(j, "max_at")), rd.b(J.get(j, "quiet")), SH.watch_resumes(J.get(j, "resumes"), J.get(j, "spec")), rd.ss(J.get(j, "works"))}
 
 law Watch.journal.id:
   for +id: Nat
@@ -4350,9 +4399,10 @@ law Watch.journal.id:
   for +max_at: Nat
   for +quiet: Bool
   for +resumes: Bool
-  {rd.n(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "id")) == id : Nat}
+  for +works: List<&2, String>
+  {rd.n(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "id")) == id : Nat}
 
-def Watch.journal.id(id, agent, spec, max_text, set_at, max_at, quiet, resumes):
+def Watch.journal.id(id, agent, spec, max_text, set_at, max_at, quiet, resumes, works):
   {==}
 
 law Watch.journal.agent:
@@ -4364,9 +4414,10 @@ law Watch.journal.agent:
   for +max_at: Nat
   for +quiet: Bool
   for +resumes: Bool
-  {rd.s(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "agent")) == agent : String}
+  for +works: List<&2, String>
+  {rd.s(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "agent")) == agent : String}
 
-def Watch.journal.agent(id, agent, spec, max_text, set_at, max_at, quiet, resumes):
+def Watch.journal.agent(id, agent, spec, max_text, set_at, max_at, quiet, resumes, works):
   {==}
 
 law Watch.journal.spec:
@@ -4378,9 +4429,10 @@ law Watch.journal.spec:
   for +max_at: Nat
   for +quiet: Bool
   for +resumes: Bool
-  {rd.j(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "spec")) == spec : J.Json}
+  for +works: List<&2, String>
+  {rd.j(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "spec")) == spec : J.Json}
 
-def Watch.journal.spec(id, agent, spec, max_text, set_at, max_at, quiet, resumes):
+def Watch.journal.spec(id, agent, spec, max_text, set_at, max_at, quiet, resumes, works):
   {==}
 
 law Watch.journal.max_text:
@@ -4392,9 +4444,10 @@ law Watch.journal.max_text:
   for +max_at: Nat
   for +quiet: Bool
   for +resumes: Bool
-  {rd.s(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "max_text")) == max_text : String}
+  for +works: List<&2, String>
+  {rd.s(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "max_text")) == max_text : String}
 
-def Watch.journal.max_text(id, agent, spec, max_text, set_at, max_at, quiet, resumes):
+def Watch.journal.max_text(id, agent, spec, max_text, set_at, max_at, quiet, resumes, works):
   {==}
 
 law Watch.journal.set_at:
@@ -4406,9 +4459,10 @@ law Watch.journal.set_at:
   for +max_at: Nat
   for +quiet: Bool
   for +resumes: Bool
-  {rd.n(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "set_at")) == set_at : Nat}
+  for +works: List<&2, String>
+  {rd.n(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "set_at")) == set_at : Nat}
 
-def Watch.journal.set_at(id, agent, spec, max_text, set_at, max_at, quiet, resumes):
+def Watch.journal.set_at(id, agent, spec, max_text, set_at, max_at, quiet, resumes, works):
   {==}
 
 law Watch.journal.max_at:
@@ -4420,9 +4474,10 @@ law Watch.journal.max_at:
   for +max_at: Nat
   for +quiet: Bool
   for +resumes: Bool
-  {rd.n(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "max_at")) == max_at : Nat}
+  for +works: List<&2, String>
+  {rd.n(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "max_at")) == max_at : Nat}
 
-def Watch.journal.max_at(id, agent, spec, max_text, set_at, max_at, quiet, resumes):
+def Watch.journal.max_at(id, agent, spec, max_text, set_at, max_at, quiet, resumes, works):
   {==}
 
 law Watch.journal.quiet:
@@ -4434,9 +4489,10 @@ law Watch.journal.quiet:
   for +max_at: Nat
   for +quiet: Bool
   for +resumes: Bool
-  {rd.b(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "quiet")) == quiet : Bool}
+  for +works: List<&2, String>
+  {rd.b(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "quiet")) == quiet : Bool}
 
-def Watch.journal.quiet(id, agent, spec, max_text, set_at, max_at, quiet, resumes):
+def Watch.journal.quiet(id, agent, spec, max_text, set_at, max_at, quiet, resumes, works):
   {==}
 
 law Watch.journal.resumes:
@@ -4448,10 +4504,30 @@ law Watch.journal.resumes:
   for +max_at: Nat
   for +quiet: Bool
   for +resumes: Bool
-  {SH.watch_resumes(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "resumes"), J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "spec")) == resumes : Bool}
+  for +works: List<&2, String>
+  {SH.watch_resumes(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "resumes"), J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "spec")) == resumes : Bool}
 
-def Watch.journal.resumes(id, agent, spec, max_text, set_at, max_at, quiet, resumes):
+def Watch.journal.resumes(id, agent, spec, max_text, set_at, max_at, quiet, resumes, works):
   {==}
+
+law Watch.journal.works:
+  for +id: Nat
+  for +agent: String
+  for +spec: J.Json
+  for +max_text: String
+  for +set_at: Nat
+  for +max_at: Nat
+  for +quiet: Bool
+  for +resumes: Bool
+  for +works: List<&2, String>
+  {rd.ss(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "works")) == works : List<&2, String>}
+
+def Watch.journal.works(id, agent, spec, max_text, set_at, max_at, quiet, resumes, works):
+  match works:
+    case Nil{}:
+      {==}
+    case Con{works_h, works_t}:
+      K.strs_round(Con{works_h, works_t})
 
 # the fields it carries come back (the others at their default)
 law Watch.journal_round_by_fields:
@@ -4463,17 +4539,19 @@ law Watch.journal_round_by_fields:
   for +max_at: Nat
   for +quiet: Bool
   for +resumes: Bool
-  {Watch.journal_of(Watch.journal_json(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})) == S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes} : S.Watch}
+  for +works: List<&2, String>
+  {Watch.journal_of(Watch.journal_json(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})) == S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works} : S.Watch}
 
-def Watch.journal_round_by_fields(id, agent, spec, max_text, set_at, max_at, quiet, resumes):
-  %Equal.sym(Nat, rd.n(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "id")), id, Watch.journal.id(id, agent, spec, max_text, set_at, max_at, quiet, resumes)) : {S.Watch{_, rd.s(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "agent")), rd.j(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "spec")), rd.s(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "max_text")), rd.n(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "set_at")), rd.n(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "max_at")), rd.b(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "quiet")), SH.watch_resumes(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "resumes"), J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "spec"))} == S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes} : S.Watch}
-  %Equal.sym(String, rd.s(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "agent")), agent, Watch.journal.agent(id, agent, spec, max_text, set_at, max_at, quiet, resumes)) : {S.Watch{id, _, rd.j(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "spec")), rd.s(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "max_text")), rd.n(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "set_at")), rd.n(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "max_at")), rd.b(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "quiet")), SH.watch_resumes(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "resumes"), J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "spec"))} == S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes} : S.Watch}
-  %Equal.sym(J.Json, rd.j(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "spec")), spec, Watch.journal.spec(id, agent, spec, max_text, set_at, max_at, quiet, resumes)) : {S.Watch{id, agent, _, rd.s(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "max_text")), rd.n(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "set_at")), rd.n(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "max_at")), rd.b(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "quiet")), SH.watch_resumes(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "resumes"), J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "spec"))} == S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes} : S.Watch}
-  %Equal.sym(String, rd.s(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "max_text")), max_text, Watch.journal.max_text(id, agent, spec, max_text, set_at, max_at, quiet, resumes)) : {S.Watch{id, agent, spec, _, rd.n(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "set_at")), rd.n(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "max_at")), rd.b(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "quiet")), SH.watch_resumes(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "resumes"), J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "spec"))} == S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes} : S.Watch}
-  %Equal.sym(Nat, rd.n(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "set_at")), set_at, Watch.journal.set_at(id, agent, spec, max_text, set_at, max_at, quiet, resumes)) : {S.Watch{id, agent, spec, max_text, _, rd.n(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "max_at")), rd.b(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "quiet")), SH.watch_resumes(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "resumes"), J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "spec"))} == S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes} : S.Watch}
-  %Equal.sym(Nat, rd.n(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "max_at")), max_at, Watch.journal.max_at(id, agent, spec, max_text, set_at, max_at, quiet, resumes)) : {S.Watch{id, agent, spec, max_text, set_at, _, rd.b(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "quiet")), SH.watch_resumes(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "resumes"), J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "spec"))} == S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes} : S.Watch}
-  %Equal.sym(Bool, rd.b(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "quiet")), quiet, Watch.journal.quiet(id, agent, spec, max_text, set_at, max_at, quiet, resumes)) : {S.Watch{id, agent, spec, max_text, set_at, max_at, _, SH.watch_resumes(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "resumes"), J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "spec"))} == S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes} : S.Watch}
-  %Equal.sym(Bool, SH.watch_resumes(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "resumes"), J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "spec")), resumes, Watch.journal.resumes(id, agent, spec, max_text, set_at, max_at, quiet, resumes)) : {S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, _} == S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes} : S.Watch}
+def Watch.journal_round_by_fields(id, agent, spec, max_text, set_at, max_at, quiet, resumes, works):
+  %Equal.sym(Nat, rd.n(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "id")), id, Watch.journal.id(id, agent, spec, max_text, set_at, max_at, quiet, resumes, works)) : {S.Watch{_, rd.s(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "agent")), rd.j(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "spec")), rd.s(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "max_text")), rd.n(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "set_at")), rd.n(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "max_at")), rd.b(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "quiet")), SH.watch_resumes(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "resumes"), J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "spec")), rd.ss(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "works"))} == S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works} : S.Watch}
+  %Equal.sym(String, rd.s(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "agent")), agent, Watch.journal.agent(id, agent, spec, max_text, set_at, max_at, quiet, resumes, works)) : {S.Watch{id, _, rd.j(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "spec")), rd.s(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "max_text")), rd.n(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "set_at")), rd.n(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "max_at")), rd.b(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "quiet")), SH.watch_resumes(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "resumes"), J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "spec")), rd.ss(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "works"))} == S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works} : S.Watch}
+  %Equal.sym(J.Json, rd.j(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "spec")), spec, Watch.journal.spec(id, agent, spec, max_text, set_at, max_at, quiet, resumes, works)) : {S.Watch{id, agent, _, rd.s(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "max_text")), rd.n(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "set_at")), rd.n(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "max_at")), rd.b(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "quiet")), SH.watch_resumes(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "resumes"), J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "spec")), rd.ss(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "works"))} == S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works} : S.Watch}
+  %Equal.sym(String, rd.s(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "max_text")), max_text, Watch.journal.max_text(id, agent, spec, max_text, set_at, max_at, quiet, resumes, works)) : {S.Watch{id, agent, spec, _, rd.n(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "set_at")), rd.n(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "max_at")), rd.b(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "quiet")), SH.watch_resumes(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "resumes"), J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "spec")), rd.ss(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "works"))} == S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works} : S.Watch}
+  %Equal.sym(Nat, rd.n(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "set_at")), set_at, Watch.journal.set_at(id, agent, spec, max_text, set_at, max_at, quiet, resumes, works)) : {S.Watch{id, agent, spec, max_text, _, rd.n(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "max_at")), rd.b(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "quiet")), SH.watch_resumes(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "resumes"), J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "spec")), rd.ss(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "works"))} == S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works} : S.Watch}
+  %Equal.sym(Nat, rd.n(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "max_at")), max_at, Watch.journal.max_at(id, agent, spec, max_text, set_at, max_at, quiet, resumes, works)) : {S.Watch{id, agent, spec, max_text, set_at, _, rd.b(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "quiet")), SH.watch_resumes(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "resumes"), J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "spec")), rd.ss(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "works"))} == S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works} : S.Watch}
+  %Equal.sym(Bool, rd.b(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "quiet")), quiet, Watch.journal.quiet(id, agent, spec, max_text, set_at, max_at, quiet, resumes, works)) : {S.Watch{id, agent, spec, max_text, set_at, max_at, _, SH.watch_resumes(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "resumes"), J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "spec")), rd.ss(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "works"))} == S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works} : S.Watch}
+  %Equal.sym(Bool, SH.watch_resumes(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "resumes"), J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "spec")), resumes, Watch.journal.resumes(id, agent, spec, max_text, set_at, max_at, quiet, resumes, works)) : {S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, _, rd.ss(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "works"))} == S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works} : S.Watch}
+  %Equal.sym(List<&2, String>, rd.ss(J.get(J.obj(Watch.journal_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "works")), works, Watch.journal.works(id, agent, spec, max_text, set_at, max_at, quiet, resumes, works)) : {S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, _} == S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works} : S.Watch}
   {==}
 
 law Watch.journal_round:
@@ -4482,21 +4560,21 @@ law Watch.journal_round:
 
 def Watch.journal_round(x):
   match x:
-    case S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes}:
-      Watch.journal_round_by_fields(id, agent, spec, max_text, set_at, max_at, quiet, resumes)
+    case S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works}:
+      Watch.journal_round_by_fields(id, agent, spec, max_text, set_at, max_at, quiet, resumes, works)
 
-# ---- Watch, its photo shape: id, agent, spec, max_text, set_at, max_at, quiet, resumes ----
+# ---- Watch, its photo shape: id, agent, spec, max_text, set_at, max_at, quiet, resumes, works ----
 
 def Watch.photo_kvs(r: S.Watch) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
   match r:
-    case S.Watch{+id, +agent, +spec, +max_text, +set_at, +max_at, +quiet, +resumes}:
-      [J.kv("id", J.JNum{id}), J.kv("agent", J.JStr{agent}), J.kv("spec", spec), J.kv("max_text", J.JStr{max_text}), J.kv("set_at", J.JNum{set_at}), J.kv("max_at", J.JNum{max_at}), J.kv("quiet", J.JBool{quiet}), J.kv("resumes", J.JBool{resumes})]
+    case S.Watch{+id, +agent, +spec, +max_text, +set_at, +max_at, +quiet, +resumes, +works}:
+      K.cat([[J.kv("id", J.JNum{id}), J.kv("agent", J.JStr{agent}), J.kv("spec", spec), J.kv("max_text", J.JStr{max_text}), J.kv("set_at", J.JNum{set_at}), J.kv("max_at", J.JNum{max_at}), J.kv("quiet", J.JBool{quiet}), J.kv("resumes", J.JBool{resumes})], K.omit_ss("works", works)])
 
 def Watch.photo_json(r: S.Watch) -> J.Json:
   J.obj(Watch.photo_kvs(r))
 
 def Watch.photo_of(+j: J.Json) -> S.Watch:
-  S.Watch{rd.n(J.get(j, "id")), rd.s(J.get(j, "agent")), rd.j(J.get(j, "spec")), rd.s(J.get(j, "max_text")), rd.n(J.get(j, "set_at")), rd.n(J.get(j, "max_at")), rd.b(J.get(j, "quiet")), rd.b(J.get(j, "resumes"))}
+  S.Watch{rd.n(J.get(j, "id")), rd.s(J.get(j, "agent")), rd.j(J.get(j, "spec")), rd.s(J.get(j, "max_text")), rd.n(J.get(j, "set_at")), rd.n(J.get(j, "max_at")), rd.b(J.get(j, "quiet")), rd.b(J.get(j, "resumes")), rd.ss(J.get(j, "works"))}
 
 law Watch.photo.id:
   for +id: Nat
@@ -4507,9 +4585,10 @@ law Watch.photo.id:
   for +max_at: Nat
   for +quiet: Bool
   for +resumes: Bool
-  {rd.n(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "id")) == id : Nat}
+  for +works: List<&2, String>
+  {rd.n(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "id")) == id : Nat}
 
-def Watch.photo.id(id, agent, spec, max_text, set_at, max_at, quiet, resumes):
+def Watch.photo.id(id, agent, spec, max_text, set_at, max_at, quiet, resumes, works):
   {==}
 
 law Watch.photo.agent:
@@ -4521,9 +4600,10 @@ law Watch.photo.agent:
   for +max_at: Nat
   for +quiet: Bool
   for +resumes: Bool
-  {rd.s(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "agent")) == agent : String}
+  for +works: List<&2, String>
+  {rd.s(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "agent")) == agent : String}
 
-def Watch.photo.agent(id, agent, spec, max_text, set_at, max_at, quiet, resumes):
+def Watch.photo.agent(id, agent, spec, max_text, set_at, max_at, quiet, resumes, works):
   {==}
 
 law Watch.photo.spec:
@@ -4535,9 +4615,10 @@ law Watch.photo.spec:
   for +max_at: Nat
   for +quiet: Bool
   for +resumes: Bool
-  {rd.j(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "spec")) == spec : J.Json}
+  for +works: List<&2, String>
+  {rd.j(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "spec")) == spec : J.Json}
 
-def Watch.photo.spec(id, agent, spec, max_text, set_at, max_at, quiet, resumes):
+def Watch.photo.spec(id, agent, spec, max_text, set_at, max_at, quiet, resumes, works):
   {==}
 
 law Watch.photo.max_text:
@@ -4549,9 +4630,10 @@ law Watch.photo.max_text:
   for +max_at: Nat
   for +quiet: Bool
   for +resumes: Bool
-  {rd.s(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "max_text")) == max_text : String}
+  for +works: List<&2, String>
+  {rd.s(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "max_text")) == max_text : String}
 
-def Watch.photo.max_text(id, agent, spec, max_text, set_at, max_at, quiet, resumes):
+def Watch.photo.max_text(id, agent, spec, max_text, set_at, max_at, quiet, resumes, works):
   {==}
 
 law Watch.photo.set_at:
@@ -4563,9 +4645,10 @@ law Watch.photo.set_at:
   for +max_at: Nat
   for +quiet: Bool
   for +resumes: Bool
-  {rd.n(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "set_at")) == set_at : Nat}
+  for +works: List<&2, String>
+  {rd.n(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "set_at")) == set_at : Nat}
 
-def Watch.photo.set_at(id, agent, spec, max_text, set_at, max_at, quiet, resumes):
+def Watch.photo.set_at(id, agent, spec, max_text, set_at, max_at, quiet, resumes, works):
   {==}
 
 law Watch.photo.max_at:
@@ -4577,9 +4660,10 @@ law Watch.photo.max_at:
   for +max_at: Nat
   for +quiet: Bool
   for +resumes: Bool
-  {rd.n(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "max_at")) == max_at : Nat}
+  for +works: List<&2, String>
+  {rd.n(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "max_at")) == max_at : Nat}
 
-def Watch.photo.max_at(id, agent, spec, max_text, set_at, max_at, quiet, resumes):
+def Watch.photo.max_at(id, agent, spec, max_text, set_at, max_at, quiet, resumes, works):
   {==}
 
 law Watch.photo.quiet:
@@ -4591,9 +4675,10 @@ law Watch.photo.quiet:
   for +max_at: Nat
   for +quiet: Bool
   for +resumes: Bool
-  {rd.b(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "quiet")) == quiet : Bool}
+  for +works: List<&2, String>
+  {rd.b(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "quiet")) == quiet : Bool}
 
-def Watch.photo.quiet(id, agent, spec, max_text, set_at, max_at, quiet, resumes):
+def Watch.photo.quiet(id, agent, spec, max_text, set_at, max_at, quiet, resumes, works):
   {==}
 
 law Watch.photo.resumes:
@@ -4605,10 +4690,30 @@ law Watch.photo.resumes:
   for +max_at: Nat
   for +quiet: Bool
   for +resumes: Bool
-  {rd.b(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "resumes")) == resumes : Bool}
+  for +works: List<&2, String>
+  {rd.b(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "resumes")) == resumes : Bool}
 
-def Watch.photo.resumes(id, agent, spec, max_text, set_at, max_at, quiet, resumes):
+def Watch.photo.resumes(id, agent, spec, max_text, set_at, max_at, quiet, resumes, works):
   {==}
+
+law Watch.photo.works:
+  for +id: Nat
+  for +agent: String
+  for +spec: J.Json
+  for +max_text: String
+  for +set_at: Nat
+  for +max_at: Nat
+  for +quiet: Bool
+  for +resumes: Bool
+  for +works: List<&2, String>
+  {rd.ss(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "works")) == works : List<&2, String>}
+
+def Watch.photo.works(id, agent, spec, max_text, set_at, max_at, quiet, resumes, works):
+  match works:
+    case Nil{}:
+      {==}
+    case Con{works_h, works_t}:
+      K.strs_round(Con{works_h, works_t})
 
 # the fields it carries come back (the others at their default)
 law Watch.photo_round_by_fields:
@@ -4620,17 +4725,19 @@ law Watch.photo_round_by_fields:
   for +max_at: Nat
   for +quiet: Bool
   for +resumes: Bool
-  {Watch.photo_of(Watch.photo_json(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})) == S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes} : S.Watch}
+  for +works: List<&2, String>
+  {Watch.photo_of(Watch.photo_json(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})) == S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works} : S.Watch}
 
-def Watch.photo_round_by_fields(id, agent, spec, max_text, set_at, max_at, quiet, resumes):
-  %Equal.sym(Nat, rd.n(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "id")), id, Watch.photo.id(id, agent, spec, max_text, set_at, max_at, quiet, resumes)) : {S.Watch{_, rd.s(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "agent")), rd.j(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "spec")), rd.s(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "max_text")), rd.n(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "set_at")), rd.n(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "max_at")), rd.b(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "quiet")), rd.b(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "resumes"))} == S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes} : S.Watch}
-  %Equal.sym(String, rd.s(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "agent")), agent, Watch.photo.agent(id, agent, spec, max_text, set_at, max_at, quiet, resumes)) : {S.Watch{id, _, rd.j(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "spec")), rd.s(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "max_text")), rd.n(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "set_at")), rd.n(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "max_at")), rd.b(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "quiet")), rd.b(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "resumes"))} == S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes} : S.Watch}
-  %Equal.sym(J.Json, rd.j(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "spec")), spec, Watch.photo.spec(id, agent, spec, max_text, set_at, max_at, quiet, resumes)) : {S.Watch{id, agent, _, rd.s(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "max_text")), rd.n(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "set_at")), rd.n(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "max_at")), rd.b(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "quiet")), rd.b(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "resumes"))} == S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes} : S.Watch}
-  %Equal.sym(String, rd.s(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "max_text")), max_text, Watch.photo.max_text(id, agent, spec, max_text, set_at, max_at, quiet, resumes)) : {S.Watch{id, agent, spec, _, rd.n(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "set_at")), rd.n(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "max_at")), rd.b(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "quiet")), rd.b(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "resumes"))} == S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes} : S.Watch}
-  %Equal.sym(Nat, rd.n(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "set_at")), set_at, Watch.photo.set_at(id, agent, spec, max_text, set_at, max_at, quiet, resumes)) : {S.Watch{id, agent, spec, max_text, _, rd.n(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "max_at")), rd.b(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "quiet")), rd.b(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "resumes"))} == S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes} : S.Watch}
-  %Equal.sym(Nat, rd.n(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "max_at")), max_at, Watch.photo.max_at(id, agent, spec, max_text, set_at, max_at, quiet, resumes)) : {S.Watch{id, agent, spec, max_text, set_at, _, rd.b(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "quiet")), rd.b(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "resumes"))} == S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes} : S.Watch}
-  %Equal.sym(Bool, rd.b(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "quiet")), quiet, Watch.photo.quiet(id, agent, spec, max_text, set_at, max_at, quiet, resumes)) : {S.Watch{id, agent, spec, max_text, set_at, max_at, _, rd.b(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "resumes"))} == S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes} : S.Watch}
-  %Equal.sym(Bool, rd.b(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes})), "resumes")), resumes, Watch.photo.resumes(id, agent, spec, max_text, set_at, max_at, quiet, resumes)) : {S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, _} == S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes} : S.Watch}
+def Watch.photo_round_by_fields(id, agent, spec, max_text, set_at, max_at, quiet, resumes, works):
+  %Equal.sym(Nat, rd.n(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "id")), id, Watch.photo.id(id, agent, spec, max_text, set_at, max_at, quiet, resumes, works)) : {S.Watch{_, rd.s(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "agent")), rd.j(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "spec")), rd.s(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "max_text")), rd.n(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "set_at")), rd.n(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "max_at")), rd.b(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "quiet")), rd.b(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "resumes")), rd.ss(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "works"))} == S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works} : S.Watch}
+  %Equal.sym(String, rd.s(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "agent")), agent, Watch.photo.agent(id, agent, spec, max_text, set_at, max_at, quiet, resumes, works)) : {S.Watch{id, _, rd.j(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "spec")), rd.s(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "max_text")), rd.n(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "set_at")), rd.n(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "max_at")), rd.b(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "quiet")), rd.b(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "resumes")), rd.ss(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "works"))} == S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works} : S.Watch}
+  %Equal.sym(J.Json, rd.j(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "spec")), spec, Watch.photo.spec(id, agent, spec, max_text, set_at, max_at, quiet, resumes, works)) : {S.Watch{id, agent, _, rd.s(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "max_text")), rd.n(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "set_at")), rd.n(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "max_at")), rd.b(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "quiet")), rd.b(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "resumes")), rd.ss(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "works"))} == S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works} : S.Watch}
+  %Equal.sym(String, rd.s(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "max_text")), max_text, Watch.photo.max_text(id, agent, spec, max_text, set_at, max_at, quiet, resumes, works)) : {S.Watch{id, agent, spec, _, rd.n(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "set_at")), rd.n(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "max_at")), rd.b(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "quiet")), rd.b(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "resumes")), rd.ss(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "works"))} == S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works} : S.Watch}
+  %Equal.sym(Nat, rd.n(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "set_at")), set_at, Watch.photo.set_at(id, agent, spec, max_text, set_at, max_at, quiet, resumes, works)) : {S.Watch{id, agent, spec, max_text, _, rd.n(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "max_at")), rd.b(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "quiet")), rd.b(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "resumes")), rd.ss(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "works"))} == S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works} : S.Watch}
+  %Equal.sym(Nat, rd.n(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "max_at")), max_at, Watch.photo.max_at(id, agent, spec, max_text, set_at, max_at, quiet, resumes, works)) : {S.Watch{id, agent, spec, max_text, set_at, _, rd.b(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "quiet")), rd.b(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "resumes")), rd.ss(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "works"))} == S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works} : S.Watch}
+  %Equal.sym(Bool, rd.b(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "quiet")), quiet, Watch.photo.quiet(id, agent, spec, max_text, set_at, max_at, quiet, resumes, works)) : {S.Watch{id, agent, spec, max_text, set_at, max_at, _, rd.b(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "resumes")), rd.ss(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "works"))} == S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works} : S.Watch}
+  %Equal.sym(Bool, rd.b(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "resumes")), resumes, Watch.photo.resumes(id, agent, spec, max_text, set_at, max_at, quiet, resumes, works)) : {S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, _, rd.ss(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "works"))} == S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works} : S.Watch}
+  %Equal.sym(List<&2, String>, rd.ss(J.get(J.obj(Watch.photo_kvs(S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works})), "works")), works, Watch.photo.works(id, agent, spec, max_text, set_at, max_at, quiet, resumes, works)) : {S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, _} == S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works} : S.Watch}
   {==}
 
 law Watch.photo_round:
@@ -4639,8 +4746,8 @@ law Watch.photo_round:
 
 def Watch.photo_round(x):
   match x:
-    case S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes}:
-      Watch.photo_round_by_fields(id, agent, spec, max_text, set_at, max_at, quiet, resumes)
+    case S.Watch{id, agent, spec, max_text, set_at, max_at, quiet, resumes, works}:
+      Watch.photo_round_by_fields(id, agent, spec, max_text, set_at, max_at, quiet, resumes, works)
 
 # ---- a list of Watch, each in its photo shape ----
 
@@ -7272,19 +7379,19 @@ def TimerEnd.view_pinned():
   {==}
 
 law Card.view_pinned:
-  {Card.journal_json(S.Card{2n, "drop", "fix", "main suggests: archive @fix? 1 changed file and 0 unpushed commit will be saved (/restore). (answer yes or no)", None{}, 1000000n, None{}, None{}, None{}, None{}, Nil{}, False{}}) == J.obj([J.kv("id", J.JNum{2n}), J.kv("kind", J.JStr{"drop"}), J.kv("agent", J.JStr{"fix"}), J.kv("text", J.JStr{"main suggests: archive @fix? 1 changed file and 0 unpushed commit will be saved (/restore). (answer yes or no)"}), J.kv("for_msg", J.JNull{}), J.kv("created_ms", J.JNum{1000000n}), J.kv("place", J.JNull{}), J.kv("pr", J.JNull{})]) : J.Json}
+  {Card.journal_json(S.Card{2n, "drop", "fix", "main suggests: archive @fix? 1 changed file and 0 unpushed commit will be saved (/restore). (answer yes or no)", None{}, 1000000n, None{}, None{}, None{}, None{}, Nil{}, False{}, False{}}) == J.obj([J.kv("id", J.JNum{2n}), J.kv("kind", J.JStr{"drop"}), J.kv("agent", J.JStr{"fix"}), J.kv("text", J.JStr{"main suggests: archive @fix? 1 changed file and 0 unpushed commit will be saved (/restore). (answer yes or no)"}), J.kv("for_msg", J.JNull{}), J.kv("created_ms", J.JNum{1000000n}), J.kv("place", J.JNull{}), J.kv("pr", J.JNull{})]) : J.Json}
 
 def Card.view_pinned():
   {==}
 
 law Watch.view_pinned:
-  {Watch.journal_json(S.Watch{2n, "t1", J.obj([J.kv("kind", J.JStr{"bg"}), J.kv("slot", J.JStr{"/w/st/agents/t1/tmp/bg/2"}), J.kv("cmd", J.JStr{"sleep 6"}), J.kv("tail", J.JStr{"/w/st/agents/t1/tmp/bg/2.out"})]), "", 1010000n, 87410000n, True{}, True{}}) == J.obj([J.kv("id", J.JNum{2n}), J.kv("agent", J.JStr{"t1"}), J.kv("spec", J.obj([J.kv("kind", J.JStr{"bg"}), J.kv("slot", J.JStr{"/w/st/agents/t1/tmp/bg/2"}), J.kv("cmd", J.JStr{"sleep 6"}), J.kv("tail", J.JStr{"/w/st/agents/t1/tmp/bg/2.out"})])), J.kv("max_text", J.JStr{""}), J.kv("set_at", J.JNum{1010000n}), J.kv("max_at", J.JNum{87410000n}), J.kv("quiet", J.JBool{True{}}), J.kv("resumes", J.JBool{True{}})]) : J.Json}
+  {Watch.journal_json(S.Watch{2n, "t1", J.obj([J.kv("kind", J.JStr{"bg"}), J.kv("slot", J.JStr{"/w/st/agents/t1/tmp/bg/2"}), J.kv("cmd", J.JStr{"sleep 6"}), J.kv("tail", J.JStr{"/w/st/agents/t1/tmp/bg/2.out"})]), "", 1010000n, 87410000n, True{}, True{}, Nil{}}) == J.obj([J.kv("id", J.JNum{2n}), J.kv("agent", J.JStr{"t1"}), J.kv("spec", J.obj([J.kv("kind", J.JStr{"bg"}), J.kv("slot", J.JStr{"/w/st/agents/t1/tmp/bg/2"}), J.kv("cmd", J.JStr{"sleep 6"}), J.kv("tail", J.JStr{"/w/st/agents/t1/tmp/bg/2.out"})])), J.kv("max_text", J.JStr{""}), J.kv("set_at", J.JNum{1010000n}), J.kv("max_at", J.JNum{87410000n}), J.kv("quiet", J.JBool{True{}}), J.kv("resumes", J.JBool{True{}})]) : J.Json}
 
 def Watch.view_pinned():
   {==}
 
 law WatchEnd.view_pinned:
-  {WatchEnd.view_json(S.WatchEnd{S.Watch{1n, "t1", J.obj([J.kv("kind", J.JStr{"bg"}), J.kv("slot", J.JStr{"/w/st/agents/t1/tmp/bg/1"}), J.kv("cmd", J.JStr{"sleep 6"}), J.kv("tail", J.JStr{"/w/st/agents/t1/tmp/bg/1.out"})]), "", 1000000n, 87400000n, True{}, True{}}, 1006000n, "hit"}) == J.obj([J.kv("id", J.JNum{1n}), J.kv("agent", J.JStr{"t1"}), J.kv("spec", J.obj([J.kv("kind", J.JStr{"bg"}), J.kv("slot", J.JStr{"/w/st/agents/t1/tmp/bg/1"}), J.kv("cmd", J.JStr{"sleep 6"}), J.kv("tail", J.JStr{"/w/st/agents/t1/tmp/bg/1.out"})])), J.kv("max_text", J.JStr{""}), J.kv("set_at", J.JNum{1000000n}), J.kv("max_at", J.JNum{87400000n}), J.kv("quiet", J.JBool{True{}}), J.kv("resumes", J.JBool{True{}}), J.kv("ended_at", J.JNum{1006000n}), J.kv("why", J.JStr{"hit"})]) : J.Json}
+  {WatchEnd.view_json(S.WatchEnd{S.Watch{1n, "t1", J.obj([J.kv("kind", J.JStr{"bg"}), J.kv("slot", J.JStr{"/w/st/agents/t1/tmp/bg/1"}), J.kv("cmd", J.JStr{"sleep 6"}), J.kv("tail", J.JStr{"/w/st/agents/t1/tmp/bg/1.out"})]), "", 1000000n, 87400000n, True{}, True{}, Nil{}}, 1006000n, "hit"}) == J.obj([J.kv("id", J.JNum{1n}), J.kv("agent", J.JStr{"t1"}), J.kv("spec", J.obj([J.kv("kind", J.JStr{"bg"}), J.kv("slot", J.JStr{"/w/st/agents/t1/tmp/bg/1"}), J.kv("cmd", J.JStr{"sleep 6"}), J.kv("tail", J.JStr{"/w/st/agents/t1/tmp/bg/1.out"})])), J.kv("max_text", J.JStr{""}), J.kv("set_at", J.JNum{1000000n}), J.kv("max_at", J.JNum{87400000n}), J.kv("quiet", J.JBool{True{}}), J.kv("resumes", J.JBool{True{}}), J.kv("ended_at", J.JNum{1006000n}), J.kv("why", J.JStr{"hit"})]) : J.Json}
 
 def WatchEnd.view_pinned():
   {==}

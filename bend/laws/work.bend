@@ -305,3 +305,64 @@ law same_page_waits_leave_its_row:
   for +pw: List<&2, HX.Kn>
   for +id: String
   {HV.pw_moved(pw, pw, id) == False{} : Bool}
+
+# ---- a blocked report is a card (spec tasks-center row 63; architect
+# m_64926/m_64931) ----
+
+# LAW: an agent's blocked report opens a card for him only while that
+# agent has none open: a second blocked report, or one after its question
+# card, opens nothing more (what waits on him is already a card). Main's
+# own `sb notify` about the same blocked is no typed link to this card:
+# its role prompt says not to open another (prompts.rs), no law can.
+law blocked_report_opens_one_card:
+  for -o: HS.St
+  for +cx: HX.Cx<o>
+  for +agent: String
+  for +text: String
+  for +i: Nat
+  for +t: List<&2, Nat>
+  for e: {HC.card_ids(HS.St.cards(HC.st(o, cx)), agent, Nil{}) == i <> t : List<&2, Nat>}
+  {HC.blocked_card(o, cx, agent, text) == cx : HX.Cx<o>}
+
+# LAW: its agent moved on (reports progress or done, says working or
+# done): the card its blocked report opened is one the moved-on rule
+# closes (report_cards_end); a drop or an archive closes every card of it.
+law blocked_card_ends_when_it_moves_on:
+  for +c: HS.Card
+  for +t: List<&2, HS.Card>
+  for +a: String
+  for r: {HS.Card.from_report(c) == True{} : Bool}
+  for e: {String.eq(HS.Card.agent(c), a) == True{} : Bool}
+  {HC.report_card_ids(c <> t, a) == HS.Card.id(c) <> HC.report_card_ids(t, a) : List<&2, Nat>}
+
+# LAW: the fact decides, never the kind: a card of kind "blocked" made any
+# other way (`sb notify`, from_report False) is never closed by the
+# moved-on rule.
+law a_notify_blocked_card_never_ends_on_moved_on:
+  for +c: HS.Card
+  for +t: List<&2, HS.Card>
+  for +a: String
+  for r: {HS.Card.from_report(c) == False{} : Bool}
+  {HC.report_card_ids(c <> t, a) == HC.report_card_ids(t, a) : List<&2, Nat>}
+
+# LAW: his answer on a blocked report's card goes to its agent
+# (answer.blocked: his message to it, the card closed answered), whatever
+# its kind reads.
+law his_answer_on_a_blocked_card_reaches_its_agent:
+  for -o: HS.St
+  for +cx: HX.Cx<o>
+  for +c: HS.Card
+  for +id: Nat
+  for +text: String
+  for +parts: String
+  for +via: String
+  for r: {HS.Card.from_report(c) == True{} : Bool}
+  {HC.answer.card(o, Some{c}, cx, id, text, parts, via) == HC.answer.blocked(o, cx, c, text, parts, via) : HX.Cx<o>}
+
+# LAW: that message is his, to the card's agent, and carries the card's
+# works (its task's turn, like any card's answer).
+law blocked_answer_carries_its_cards_works:
+  for +c: HS.Card
+  for +text: String
+  for +parts: String
+  {HC.answer.blocked.snd(c, text, parts) == HC.Snd{HM.USER(), HS.Card.agent(c), text, False{}, None{}, False{}, False{}, False{}, None{}, parts, None{}, Some{HS.Card.works(c)}} : HC.Snd}

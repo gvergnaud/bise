@@ -431,3 +431,78 @@ fn a_timer_whose_end_passed_while_paused_ends_and_never_fires() {
     t.go(Input::Tick);
     assert!(lines(&t, "every_fired").is_empty(), "law until_passed_while_paused_never_fires");
 }
+
+/// architect m_64926: a watch carries its setter's turn's works; its hit
+/// goes out with them (law watch_carries_turn_works), and a done task
+/// never holds it (law a_done_works_watch_is_never_held).
+#[test]
+fn a_watch_carries_its_turns_works_and_a_done_task_never_holds_its_wake() {
+    let mut t = T::new();
+    let a = new(&mut t, MAIN, "Digest", &[]);
+    let spec = crate::wake::Spec { what: crate::wake::What::Pid { pid: 4242, start: String::new() }, tail: None, note: "the build".into() };
+    t.req(MAIN, AgentReq::Wake(WakeReq::Add { spec: spec.json(), max_ms: Some(crate::wake::MAX_DEFAULT_MS), then: None }));
+    let set = lines(&t, "wake_set");
+    let w = &set.last().expect("a wake_set line")["watch"];
+    assert_eq!(w["works"], json!([a]), "{w}");
+    let id = w["id"].as_u64().unwrap();
+    assert_eq!(task(&mut t, MAIN, Task::Done { id: a.clone() })["ok"], true);
+    t.go(Input::WakeHit { id, text: "pid 4242 ended · after 5s · the build".into(), rc: None, tail: vec![], after_ms: 5_000 });
+    let m = last_msg_to(&t, MAIN);
+    assert_eq!((m["from"].as_str(), m["works"].clone()), (Some("switchboard"), json!([a])), "{m}");
+    assert!(!matches!(t.hub.st.msg_state()[&m["id"].as_u64().unwrap()], MsgState::Queued { .. }), "a done task holds nothing");
+}
+
+fn report(t: &mut T, from: &str, kind: &str, summary: &str) {
+    t.req(from, AgentReq::Report { kind: kind.into(), summary: summary.into(), decisions: vec![], step: None, result: None, done_when: None, task: Vec::new() });
+}
+
+fn report_cards(t: &T, agent: &str) -> Vec<u64> {
+    t.hub.st.cards.values().filter(|c| c.from_report && c.agent == agent).map(|c| c.id).collect()
+}
+
+/// spec tasks-center row 63, architect m_64926/m_64931: an agent's `sb
+/// report blocked` opens ONE card for him (law
+/// blocked_report_opens_one_card), main's notice names it; his answer
+/// reaches that agent with the card's works and closes it (law
+/// his_answer_on_a_blocked_card_reaches_its_agent); a progress report
+/// closes the next one (law blocked_card_ends_when_it_moves_on).
+#[test]
+fn a_blocked_report_is_one_card_his_answer_reaches_its_agent_and_moving_on_closes_it() {
+    let mut t = T::new();
+    let a = new(&mut t, MAIN, "Shared KB", &[]);
+    t.spawn_task("kb");
+    t.go(Input::ReplIdle { agent: "kb".into(), leftover: false });
+    t.req(MAIN, send("kb", "build the KB", &[a.as_str()]));
+    report(&mut t, "kb", "blocked", "create the KB bise-poc first");
+    let ids = report_cards(&t, "kb");
+    assert_eq!(ids.len(), 1, "{:?}", t.hub.st.cards);
+    let c = &t.hub.st.cards[&ids[0]];
+    assert_eq!((c.kind.as_str(), c.works.clone()), ("blocked", vec![a.clone()]), "the wire kind stays, the card carries its task");
+    let named = format!("card #{}", ids[0]);
+    assert!(t.hub.st.msgs().values().any(|m| m.to == MAIN && t.hub.st.text(m.id).contains(&named)), "main's notice names the card");
+    report(&mut t, "kb", "blocked", "still blocked");
+    assert_eq!(t.hub.st.cards.values().filter(|c| c.agent == "kb").count(), 1, "one card, never two");
+    t.go(Input::UserCmd { client: 1, focus: MAIN.into(), cmd: UserCmd::Answer { card: ids[0], text: "done, it's created".into(), parts: String::new() } });
+    assert!(t.hub.st.cards.is_empty(), "answering closes it");
+    let m = last_msg_to(&t, "kb");
+    assert_eq!((m["from"].as_str(), m["works"].clone()), (Some("user"), json!([a])), "{m}");
+    report(&mut t, "kb", "blocked", "a key now");
+    assert_eq!(report_cards(&t, "kb").len(), 1);
+    report(&mut t, "kb", "progress", "unblocked");
+    assert!(report_cards(&t, "kb").is_empty(), "it moved on: its card closes");
+}
+
+/// architect m_64931: the fact decides, never the kind: main's own card
+/// of kind "blocked" stays when its agent moves on (law
+/// a_notify_blocked_card_never_ends_on_moved_on).
+#[test]
+fn a_blocked_card_main_opened_stays_when_the_agent_moves_on() {
+    let mut t = T::new();
+    t.spawn_task("kb");
+    t.req("kb", AgentReq::Status { status: Declared::Blocked, note: "need a key".into() });
+    assert!(t.hub.st.cards.is_empty(), "sb status blocked opens no card");
+    report(&mut t, "kb", "blocked", "need a key");
+    let id = report_cards(&t, "kb")[0];
+    t.req("kb", AgentReq::Status { status: Declared::Working, note: String::new() });
+    assert!(!t.hub.st.cards.contains_key(&id), "status working closes it");
+}

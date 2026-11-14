@@ -2232,17 +2232,17 @@ law Card.id.get_with:
 
 def Card.id.get_with(r, v):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.id.eta:
   for r: S.Card
   for v: Nat
-  {S.Card{v, S.Card.kind(r), S.Card.agent(r), S.Card.text(r), S.Card.for_msg(r), S.Card.created(r), S.Card.place(r), S.Card.pr(r), S.Card.view(r), S.Card.about(r), S.Card.works(r), S.Card.moved(r)} == S.Card.with_id(r, v) : S.Card}
+  {S.Card{v, S.Card.kind(r), S.Card.agent(r), S.Card.text(r), S.Card.for_msg(r), S.Card.created(r), S.Card.place(r), S.Card.pr(r), S.Card.view(r), S.Card.about(r), S.Card.works(r), S.Card.moved(r), S.Card.from_report(r)} == S.Card.with_id(r, v) : S.Card}
 
 def Card.id.eta(r, v):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.id.set_get:
@@ -2251,7 +2251,7 @@ law Card.id.set_get:
 
 def Card.id.set_get(r):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.id.set_set:
@@ -2262,7 +2262,7 @@ law Card.id.set_set:
 
 def Card.id.set_set(r, a, b):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.id.over:
@@ -2272,7 +2272,7 @@ law Card.id.over:
 
 def Card.id.over(r, g):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.kind.get_with:
@@ -2282,17 +2282,17 @@ law Card.kind.get_with:
 
 def Card.kind.get_with(r, v):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.kind.eta:
   for r: S.Card
   for v: String
-  {S.Card{S.Card.id(r), v, S.Card.agent(r), S.Card.text(r), S.Card.for_msg(r), S.Card.created(r), S.Card.place(r), S.Card.pr(r), S.Card.view(r), S.Card.about(r), S.Card.works(r), S.Card.moved(r)} == S.Card.with_kind(r, v) : S.Card}
+  {S.Card{S.Card.id(r), v, S.Card.agent(r), S.Card.text(r), S.Card.for_msg(r), S.Card.created(r), S.Card.place(r), S.Card.pr(r), S.Card.view(r), S.Card.about(r), S.Card.works(r), S.Card.moved(r), S.Card.from_report(r)} == S.Card.with_kind(r, v) : S.Card}
 
 def Card.kind.eta(r, v):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.kind.set_get:
@@ -2301,7 +2301,7 @@ law Card.kind.set_get:
 
 def Card.kind.set_get(r):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.kind.set_set:
@@ -2312,7 +2312,7 @@ law Card.kind.set_set:
 
 def Card.kind.set_set(r, a, b):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.kind.over:
@@ -2322,7 +2322,7 @@ law Card.kind.over:
 
 def Card.kind.over(r, g):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.agent.get_with:
@@ -2332,17 +2332,17 @@ law Card.agent.get_with:
 
 def Card.agent.get_with(r, v):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.agent.eta:
   for r: S.Card
   for v: String
-  {S.Card{S.Card.id(r), S.Card.kind(r), v, S.Card.text(r), S.Card.for_msg(r), S.Card.created(r), S.Card.place(r), S.Card.pr(r), S.Card.view(r), S.Card.about(r), S.Card.works(r), S.Card.moved(r)} == S.Card.with_agent(r, v) : S.Card}
+  {S.Card{S.Card.id(r), S.Card.kind(r), v, S.Card.text(r), S.Card.for_msg(r), S.Card.created(r), S.Card.place(r), S.Card.pr(r), S.Card.view(r), S.Card.about(r), S.Card.works(r), S.Card.moved(r), S.Card.from_report(r)} == S.Card.with_agent(r, v) : S.Card}
 
 def Card.agent.eta(r, v):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.agent.set_get:
@@ -2351,7 +2351,7 @@ law Card.agent.set_get:
 
 def Card.agent.set_get(r):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.agent.set_set:
@@ -2362,7 +2362,7 @@ law Card.agent.set_set:
 
 def Card.agent.set_set(r, a, b):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.agent.over:
@@ -2372,7 +2372,7 @@ law Card.agent.over:
 
 def Card.agent.over(r, g):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.text.get_with:
@@ -2382,17 +2382,17 @@ law Card.text.get_with:
 
 def Card.text.get_with(r, v):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.text.eta:
   for r: S.Card
   for v: String
-  {S.Card{S.Card.id(r), S.Card.kind(r), S.Card.agent(r), v, S.Card.for_msg(r), S.Card.created(r), S.Card.place(r), S.Card.pr(r), S.Card.view(r), S.Card.about(r), S.Card.works(r), S.Card.moved(r)} == S.Card.with_text(r, v) : S.Card}
+  {S.Card{S.Card.id(r), S.Card.kind(r), S.Card.agent(r), v, S.Card.for_msg(r), S.Card.created(r), S.Card.place(r), S.Card.pr(r), S.Card.view(r), S.Card.about(r), S.Card.works(r), S.Card.moved(r), S.Card.from_report(r)} == S.Card.with_text(r, v) : S.Card}
 
 def Card.text.eta(r, v):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.text.set_get:
@@ -2401,7 +2401,7 @@ law Card.text.set_get:
 
 def Card.text.set_get(r):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.text.set_set:
@@ -2412,7 +2412,7 @@ law Card.text.set_set:
 
 def Card.text.set_set(r, a, b):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.text.over:
@@ -2422,7 +2422,7 @@ law Card.text.over:
 
 def Card.text.over(r, g):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.for_msg.get_with:
@@ -2432,17 +2432,17 @@ law Card.for_msg.get_with:
 
 def Card.for_msg.get_with(r, v):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.for_msg.eta:
   for r: S.Card
   for v: Maybe<&2, Nat>
-  {S.Card{S.Card.id(r), S.Card.kind(r), S.Card.agent(r), S.Card.text(r), v, S.Card.created(r), S.Card.place(r), S.Card.pr(r), S.Card.view(r), S.Card.about(r), S.Card.works(r), S.Card.moved(r)} == S.Card.with_for_msg(r, v) : S.Card}
+  {S.Card{S.Card.id(r), S.Card.kind(r), S.Card.agent(r), S.Card.text(r), v, S.Card.created(r), S.Card.place(r), S.Card.pr(r), S.Card.view(r), S.Card.about(r), S.Card.works(r), S.Card.moved(r), S.Card.from_report(r)} == S.Card.with_for_msg(r, v) : S.Card}
 
 def Card.for_msg.eta(r, v):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.for_msg.set_get:
@@ -2451,7 +2451,7 @@ law Card.for_msg.set_get:
 
 def Card.for_msg.set_get(r):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.for_msg.set_set:
@@ -2462,7 +2462,7 @@ law Card.for_msg.set_set:
 
 def Card.for_msg.set_set(r, a, b):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.for_msg.over:
@@ -2472,7 +2472,7 @@ law Card.for_msg.over:
 
 def Card.for_msg.over(r, g):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.created.get_with:
@@ -2482,17 +2482,17 @@ law Card.created.get_with:
 
 def Card.created.get_with(r, v):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.created.eta:
   for r: S.Card
   for v: Nat
-  {S.Card{S.Card.id(r), S.Card.kind(r), S.Card.agent(r), S.Card.text(r), S.Card.for_msg(r), v, S.Card.place(r), S.Card.pr(r), S.Card.view(r), S.Card.about(r), S.Card.works(r), S.Card.moved(r)} == S.Card.with_created(r, v) : S.Card}
+  {S.Card{S.Card.id(r), S.Card.kind(r), S.Card.agent(r), S.Card.text(r), S.Card.for_msg(r), v, S.Card.place(r), S.Card.pr(r), S.Card.view(r), S.Card.about(r), S.Card.works(r), S.Card.moved(r), S.Card.from_report(r)} == S.Card.with_created(r, v) : S.Card}
 
 def Card.created.eta(r, v):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.created.set_get:
@@ -2501,7 +2501,7 @@ law Card.created.set_get:
 
 def Card.created.set_get(r):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.created.set_set:
@@ -2512,7 +2512,7 @@ law Card.created.set_set:
 
 def Card.created.set_set(r, a, b):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.created.over:
@@ -2522,7 +2522,7 @@ law Card.created.over:
 
 def Card.created.over(r, g):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.place.get_with:
@@ -2532,17 +2532,17 @@ law Card.place.get_with:
 
 def Card.place.get_with(r, v):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.place.eta:
   for r: S.Card
   for v: Maybe<&2, String>
-  {S.Card{S.Card.id(r), S.Card.kind(r), S.Card.agent(r), S.Card.text(r), S.Card.for_msg(r), S.Card.created(r), v, S.Card.pr(r), S.Card.view(r), S.Card.about(r), S.Card.works(r), S.Card.moved(r)} == S.Card.with_place(r, v) : S.Card}
+  {S.Card{S.Card.id(r), S.Card.kind(r), S.Card.agent(r), S.Card.text(r), S.Card.for_msg(r), S.Card.created(r), v, S.Card.pr(r), S.Card.view(r), S.Card.about(r), S.Card.works(r), S.Card.moved(r), S.Card.from_report(r)} == S.Card.with_place(r, v) : S.Card}
 
 def Card.place.eta(r, v):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.place.set_get:
@@ -2551,7 +2551,7 @@ law Card.place.set_get:
 
 def Card.place.set_get(r):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.place.set_set:
@@ -2562,7 +2562,7 @@ law Card.place.set_set:
 
 def Card.place.set_set(r, a, b):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.place.over:
@@ -2572,7 +2572,7 @@ law Card.place.over:
 
 def Card.place.over(r, g):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.pr.get_with:
@@ -2582,17 +2582,17 @@ law Card.pr.get_with:
 
 def Card.pr.get_with(r, v):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.pr.eta:
   for r: S.Card
   for v: Maybe<&2, Nat>
-  {S.Card{S.Card.id(r), S.Card.kind(r), S.Card.agent(r), S.Card.text(r), S.Card.for_msg(r), S.Card.created(r), S.Card.place(r), v, S.Card.view(r), S.Card.about(r), S.Card.works(r), S.Card.moved(r)} == S.Card.with_pr(r, v) : S.Card}
+  {S.Card{S.Card.id(r), S.Card.kind(r), S.Card.agent(r), S.Card.text(r), S.Card.for_msg(r), S.Card.created(r), S.Card.place(r), v, S.Card.view(r), S.Card.about(r), S.Card.works(r), S.Card.moved(r), S.Card.from_report(r)} == S.Card.with_pr(r, v) : S.Card}
 
 def Card.pr.eta(r, v):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.pr.set_get:
@@ -2601,7 +2601,7 @@ law Card.pr.set_get:
 
 def Card.pr.set_get(r):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.pr.set_set:
@@ -2612,7 +2612,7 @@ law Card.pr.set_set:
 
 def Card.pr.set_set(r, a, b):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.pr.over:
@@ -2622,7 +2622,7 @@ law Card.pr.over:
 
 def Card.pr.over(r, g):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.view.get_with:
@@ -2632,17 +2632,17 @@ law Card.view.get_with:
 
 def Card.view.get_with(r, v):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.view.eta:
   for r: S.Card
   for v: Maybe<&2, S.ViewAsk>
-  {S.Card{S.Card.id(r), S.Card.kind(r), S.Card.agent(r), S.Card.text(r), S.Card.for_msg(r), S.Card.created(r), S.Card.place(r), S.Card.pr(r), v, S.Card.about(r), S.Card.works(r), S.Card.moved(r)} == S.Card.with_view(r, v) : S.Card}
+  {S.Card{S.Card.id(r), S.Card.kind(r), S.Card.agent(r), S.Card.text(r), S.Card.for_msg(r), S.Card.created(r), S.Card.place(r), S.Card.pr(r), v, S.Card.about(r), S.Card.works(r), S.Card.moved(r), S.Card.from_report(r)} == S.Card.with_view(r, v) : S.Card}
 
 def Card.view.eta(r, v):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.view.set_get:
@@ -2651,7 +2651,7 @@ law Card.view.set_get:
 
 def Card.view.set_get(r):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.view.set_set:
@@ -2662,7 +2662,7 @@ law Card.view.set_set:
 
 def Card.view.set_set(r, a, b):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.view.over:
@@ -2672,7 +2672,7 @@ law Card.view.over:
 
 def Card.view.over(r, g):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.about.get_with:
@@ -2682,17 +2682,17 @@ law Card.about.get_with:
 
 def Card.about.get_with(r, v):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.about.eta:
   for r: S.Card
   for v: Maybe<&2, J.Json>
-  {S.Card{S.Card.id(r), S.Card.kind(r), S.Card.agent(r), S.Card.text(r), S.Card.for_msg(r), S.Card.created(r), S.Card.place(r), S.Card.pr(r), S.Card.view(r), v, S.Card.works(r), S.Card.moved(r)} == S.Card.with_about(r, v) : S.Card}
+  {S.Card{S.Card.id(r), S.Card.kind(r), S.Card.agent(r), S.Card.text(r), S.Card.for_msg(r), S.Card.created(r), S.Card.place(r), S.Card.pr(r), S.Card.view(r), v, S.Card.works(r), S.Card.moved(r), S.Card.from_report(r)} == S.Card.with_about(r, v) : S.Card}
 
 def Card.about.eta(r, v):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.about.set_get:
@@ -2701,7 +2701,7 @@ law Card.about.set_get:
 
 def Card.about.set_get(r):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.about.set_set:
@@ -2712,7 +2712,7 @@ law Card.about.set_set:
 
 def Card.about.set_set(r, a, b):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.about.over:
@@ -2722,7 +2722,7 @@ law Card.about.over:
 
 def Card.about.over(r, g):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.works.get_with:
@@ -2732,17 +2732,17 @@ law Card.works.get_with:
 
 def Card.works.get_with(r, v):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.works.eta:
   for r: S.Card
   for v: List<&2, String>
-  {S.Card{S.Card.id(r), S.Card.kind(r), S.Card.agent(r), S.Card.text(r), S.Card.for_msg(r), S.Card.created(r), S.Card.place(r), S.Card.pr(r), S.Card.view(r), S.Card.about(r), v, S.Card.moved(r)} == S.Card.with_works(r, v) : S.Card}
+  {S.Card{S.Card.id(r), S.Card.kind(r), S.Card.agent(r), S.Card.text(r), S.Card.for_msg(r), S.Card.created(r), S.Card.place(r), S.Card.pr(r), S.Card.view(r), S.Card.about(r), v, S.Card.moved(r), S.Card.from_report(r)} == S.Card.with_works(r, v) : S.Card}
 
 def Card.works.eta(r, v):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.works.set_get:
@@ -2751,7 +2751,7 @@ law Card.works.set_get:
 
 def Card.works.set_get(r):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.works.set_set:
@@ -2762,7 +2762,7 @@ law Card.works.set_set:
 
 def Card.works.set_set(r, a, b):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.works.over:
@@ -2772,7 +2772,7 @@ law Card.works.over:
 
 def Card.works.over(r, g):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.moved.get_with:
@@ -2782,17 +2782,17 @@ law Card.moved.get_with:
 
 def Card.moved.get_with(r, v):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.moved.eta:
   for r: S.Card
   for v: Bool
-  {S.Card{S.Card.id(r), S.Card.kind(r), S.Card.agent(r), S.Card.text(r), S.Card.for_msg(r), S.Card.created(r), S.Card.place(r), S.Card.pr(r), S.Card.view(r), S.Card.about(r), S.Card.works(r), v} == S.Card.with_moved(r, v) : S.Card}
+  {S.Card{S.Card.id(r), S.Card.kind(r), S.Card.agent(r), S.Card.text(r), S.Card.for_msg(r), S.Card.created(r), S.Card.place(r), S.Card.pr(r), S.Card.view(r), S.Card.about(r), S.Card.works(r), v, S.Card.from_report(r)} == S.Card.with_moved(r, v) : S.Card}
 
 def Card.moved.eta(r, v):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.moved.set_get:
@@ -2801,7 +2801,7 @@ law Card.moved.set_get:
 
 def Card.moved.set_get(r):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.moved.set_set:
@@ -2812,7 +2812,7 @@ law Card.moved.set_set:
 
 def Card.moved.set_set(r, a, b):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.moved.over:
@@ -2822,7 +2822,57 @@ law Card.moved.over:
 
 def Card.moved.over(r, g):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
+      {==}
+
+law Card.from_report.get_with:
+  for r: S.Card
+  for v: Bool
+  {S.Card.from_report(S.Card.with_from_report(r, v)) == v : Bool}
+
+def Card.from_report.get_with(r, v):
+  match r:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
+      {==}
+
+law Card.from_report.eta:
+  for r: S.Card
+  for v: Bool
+  {S.Card{S.Card.id(r), S.Card.kind(r), S.Card.agent(r), S.Card.text(r), S.Card.for_msg(r), S.Card.created(r), S.Card.place(r), S.Card.pr(r), S.Card.view(r), S.Card.about(r), S.Card.works(r), S.Card.moved(r), v} == S.Card.with_from_report(r, v) : S.Card}
+
+def Card.from_report.eta(r, v):
+  match r:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
+      {==}
+
+law Card.from_report.set_get:
+  for r: S.Card
+  {S.Card.with_from_report(r, S.Card.from_report(r)) == r : S.Card}
+
+def Card.from_report.set_get(r):
+  match r:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
+      {==}
+
+law Card.from_report.set_set:
+  for r: S.Card
+  for a: Bool
+  for b: Bool
+  {S.Card.with_from_report(S.Card.with_from_report(r, a), b) == S.Card.with_from_report(r, b) : S.Card}
+
+def Card.from_report.set_set(r, a, b):
+  match r:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
+      {==}
+
+law Card.from_report.over:
+  for r: S.Card
+  for g: Bool -> Bool
+  {S.Card.over_from_report(r, g) == S.Card.with_from_report(r, g(S.Card.from_report(r))) : S.Card}
+
+def Card.from_report.over(r, g):
+  match r:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 law Card.open_eq:
@@ -2831,7 +2881,7 @@ law Card.open_eq:
 
 def Card.open_eq(r):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
       {==}
 
 # ---- Ans ----
@@ -5209,17 +5259,17 @@ law Watch.id.get_with:
 
 def Watch.id.get_with(r, v):
   match r:
-    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Watch.id.eta:
   for r: S.Watch
   for v: Nat
-  {S.Watch{v, S.Watch.agent(r), S.Watch.spec(r), S.Watch.max_text(r), S.Watch.set_at(r), S.Watch.max_at(r), S.Watch.quiet(r), S.Watch.resumes(r)} == S.Watch.with_id(r, v) : S.Watch}
+  {S.Watch{v, S.Watch.agent(r), S.Watch.spec(r), S.Watch.max_text(r), S.Watch.set_at(r), S.Watch.max_at(r), S.Watch.quiet(r), S.Watch.resumes(r), S.Watch.works(r)} == S.Watch.with_id(r, v) : S.Watch}
 
 def Watch.id.eta(r, v):
   match r:
-    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Watch.id.set_get:
@@ -5228,7 +5278,7 @@ law Watch.id.set_get:
 
 def Watch.id.set_get(r):
   match r:
-    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Watch.id.set_set:
@@ -5239,7 +5289,7 @@ law Watch.id.set_set:
 
 def Watch.id.set_set(r, a, b):
   match r:
-    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Watch.id.over:
@@ -5249,7 +5299,7 @@ law Watch.id.over:
 
 def Watch.id.over(r, g):
   match r:
-    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Watch.agent.get_with:
@@ -5259,17 +5309,17 @@ law Watch.agent.get_with:
 
 def Watch.agent.get_with(r, v):
   match r:
-    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Watch.agent.eta:
   for r: S.Watch
   for v: String
-  {S.Watch{S.Watch.id(r), v, S.Watch.spec(r), S.Watch.max_text(r), S.Watch.set_at(r), S.Watch.max_at(r), S.Watch.quiet(r), S.Watch.resumes(r)} == S.Watch.with_agent(r, v) : S.Watch}
+  {S.Watch{S.Watch.id(r), v, S.Watch.spec(r), S.Watch.max_text(r), S.Watch.set_at(r), S.Watch.max_at(r), S.Watch.quiet(r), S.Watch.resumes(r), S.Watch.works(r)} == S.Watch.with_agent(r, v) : S.Watch}
 
 def Watch.agent.eta(r, v):
   match r:
-    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Watch.agent.set_get:
@@ -5278,7 +5328,7 @@ law Watch.agent.set_get:
 
 def Watch.agent.set_get(r):
   match r:
-    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Watch.agent.set_set:
@@ -5289,7 +5339,7 @@ law Watch.agent.set_set:
 
 def Watch.agent.set_set(r, a, b):
   match r:
-    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Watch.agent.over:
@@ -5299,7 +5349,7 @@ law Watch.agent.over:
 
 def Watch.agent.over(r, g):
   match r:
-    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Watch.spec.get_with:
@@ -5309,17 +5359,17 @@ law Watch.spec.get_with:
 
 def Watch.spec.get_with(r, v):
   match r:
-    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Watch.spec.eta:
   for r: S.Watch
   for v: J.Json
-  {S.Watch{S.Watch.id(r), S.Watch.agent(r), v, S.Watch.max_text(r), S.Watch.set_at(r), S.Watch.max_at(r), S.Watch.quiet(r), S.Watch.resumes(r)} == S.Watch.with_spec(r, v) : S.Watch}
+  {S.Watch{S.Watch.id(r), S.Watch.agent(r), v, S.Watch.max_text(r), S.Watch.set_at(r), S.Watch.max_at(r), S.Watch.quiet(r), S.Watch.resumes(r), S.Watch.works(r)} == S.Watch.with_spec(r, v) : S.Watch}
 
 def Watch.spec.eta(r, v):
   match r:
-    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Watch.spec.set_get:
@@ -5328,7 +5378,7 @@ law Watch.spec.set_get:
 
 def Watch.spec.set_get(r):
   match r:
-    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Watch.spec.set_set:
@@ -5339,7 +5389,7 @@ law Watch.spec.set_set:
 
 def Watch.spec.set_set(r, a, b):
   match r:
-    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Watch.spec.over:
@@ -5349,7 +5399,7 @@ law Watch.spec.over:
 
 def Watch.spec.over(r, g):
   match r:
-    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Watch.max_text.get_with:
@@ -5359,17 +5409,17 @@ law Watch.max_text.get_with:
 
 def Watch.max_text.get_with(r, v):
   match r:
-    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Watch.max_text.eta:
   for r: S.Watch
   for v: String
-  {S.Watch{S.Watch.id(r), S.Watch.agent(r), S.Watch.spec(r), v, S.Watch.set_at(r), S.Watch.max_at(r), S.Watch.quiet(r), S.Watch.resumes(r)} == S.Watch.with_max_text(r, v) : S.Watch}
+  {S.Watch{S.Watch.id(r), S.Watch.agent(r), S.Watch.spec(r), v, S.Watch.set_at(r), S.Watch.max_at(r), S.Watch.quiet(r), S.Watch.resumes(r), S.Watch.works(r)} == S.Watch.with_max_text(r, v) : S.Watch}
 
 def Watch.max_text.eta(r, v):
   match r:
-    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Watch.max_text.set_get:
@@ -5378,7 +5428,7 @@ law Watch.max_text.set_get:
 
 def Watch.max_text.set_get(r):
   match r:
-    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Watch.max_text.set_set:
@@ -5389,7 +5439,7 @@ law Watch.max_text.set_set:
 
 def Watch.max_text.set_set(r, a, b):
   match r:
-    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Watch.max_text.over:
@@ -5399,7 +5449,7 @@ law Watch.max_text.over:
 
 def Watch.max_text.over(r, g):
   match r:
-    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Watch.set_at.get_with:
@@ -5409,17 +5459,17 @@ law Watch.set_at.get_with:
 
 def Watch.set_at.get_with(r, v):
   match r:
-    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Watch.set_at.eta:
   for r: S.Watch
   for v: Nat
-  {S.Watch{S.Watch.id(r), S.Watch.agent(r), S.Watch.spec(r), S.Watch.max_text(r), v, S.Watch.max_at(r), S.Watch.quiet(r), S.Watch.resumes(r)} == S.Watch.with_set_at(r, v) : S.Watch}
+  {S.Watch{S.Watch.id(r), S.Watch.agent(r), S.Watch.spec(r), S.Watch.max_text(r), v, S.Watch.max_at(r), S.Watch.quiet(r), S.Watch.resumes(r), S.Watch.works(r)} == S.Watch.with_set_at(r, v) : S.Watch}
 
 def Watch.set_at.eta(r, v):
   match r:
-    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Watch.set_at.set_get:
@@ -5428,7 +5478,7 @@ law Watch.set_at.set_get:
 
 def Watch.set_at.set_get(r):
   match r:
-    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Watch.set_at.set_set:
@@ -5439,7 +5489,7 @@ law Watch.set_at.set_set:
 
 def Watch.set_at.set_set(r, a, b):
   match r:
-    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Watch.set_at.over:
@@ -5449,7 +5499,7 @@ law Watch.set_at.over:
 
 def Watch.set_at.over(r, g):
   match r:
-    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Watch.max_at.get_with:
@@ -5459,17 +5509,17 @@ law Watch.max_at.get_with:
 
 def Watch.max_at.get_with(r, v):
   match r:
-    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Watch.max_at.eta:
   for r: S.Watch
   for v: Nat
-  {S.Watch{S.Watch.id(r), S.Watch.agent(r), S.Watch.spec(r), S.Watch.max_text(r), S.Watch.set_at(r), v, S.Watch.quiet(r), S.Watch.resumes(r)} == S.Watch.with_max_at(r, v) : S.Watch}
+  {S.Watch{S.Watch.id(r), S.Watch.agent(r), S.Watch.spec(r), S.Watch.max_text(r), S.Watch.set_at(r), v, S.Watch.quiet(r), S.Watch.resumes(r), S.Watch.works(r)} == S.Watch.with_max_at(r, v) : S.Watch}
 
 def Watch.max_at.eta(r, v):
   match r:
-    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Watch.max_at.set_get:
@@ -5478,7 +5528,7 @@ law Watch.max_at.set_get:
 
 def Watch.max_at.set_get(r):
   match r:
-    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Watch.max_at.set_set:
@@ -5489,7 +5539,7 @@ law Watch.max_at.set_set:
 
 def Watch.max_at.set_set(r, a, b):
   match r:
-    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Watch.max_at.over:
@@ -5499,7 +5549,7 @@ law Watch.max_at.over:
 
 def Watch.max_at.over(r, g):
   match r:
-    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Watch.quiet.get_with:
@@ -5509,17 +5559,17 @@ law Watch.quiet.get_with:
 
 def Watch.quiet.get_with(r, v):
   match r:
-    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Watch.quiet.eta:
   for r: S.Watch
   for v: Bool
-  {S.Watch{S.Watch.id(r), S.Watch.agent(r), S.Watch.spec(r), S.Watch.max_text(r), S.Watch.set_at(r), S.Watch.max_at(r), v, S.Watch.resumes(r)} == S.Watch.with_quiet(r, v) : S.Watch}
+  {S.Watch{S.Watch.id(r), S.Watch.agent(r), S.Watch.spec(r), S.Watch.max_text(r), S.Watch.set_at(r), S.Watch.max_at(r), v, S.Watch.resumes(r), S.Watch.works(r)} == S.Watch.with_quiet(r, v) : S.Watch}
 
 def Watch.quiet.eta(r, v):
   match r:
-    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Watch.quiet.set_get:
@@ -5528,7 +5578,7 @@ law Watch.quiet.set_get:
 
 def Watch.quiet.set_get(r):
   match r:
-    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Watch.quiet.set_set:
@@ -5539,7 +5589,7 @@ law Watch.quiet.set_set:
 
 def Watch.quiet.set_set(r, a, b):
   match r:
-    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Watch.quiet.over:
@@ -5549,7 +5599,7 @@ law Watch.quiet.over:
 
 def Watch.quiet.over(r, g):
   match r:
-    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Watch.resumes.get_with:
@@ -5559,17 +5609,17 @@ law Watch.resumes.get_with:
 
 def Watch.resumes.get_with(r, v):
   match r:
-    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Watch.resumes.eta:
   for r: S.Watch
   for v: Bool
-  {S.Watch{S.Watch.id(r), S.Watch.agent(r), S.Watch.spec(r), S.Watch.max_text(r), S.Watch.set_at(r), S.Watch.max_at(r), S.Watch.quiet(r), v} == S.Watch.with_resumes(r, v) : S.Watch}
+  {S.Watch{S.Watch.id(r), S.Watch.agent(r), S.Watch.spec(r), S.Watch.max_text(r), S.Watch.set_at(r), S.Watch.max_at(r), S.Watch.quiet(r), v, S.Watch.works(r)} == S.Watch.with_resumes(r, v) : S.Watch}
 
 def Watch.resumes.eta(r, v):
   match r:
-    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Watch.resumes.set_get:
@@ -5578,7 +5628,7 @@ law Watch.resumes.set_get:
 
 def Watch.resumes.set_get(r):
   match r:
-    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Watch.resumes.set_set:
@@ -5589,7 +5639,7 @@ law Watch.resumes.set_set:
 
 def Watch.resumes.set_set(r, a, b):
   match r:
-    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Watch.resumes.over:
@@ -5599,7 +5649,57 @@ law Watch.resumes.over:
 
 def Watch.resumes.over(r, g):
   match r:
-    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
+      {==}
+
+law Watch.works.get_with:
+  for r: S.Watch
+  for v: List<&2, String>
+  {S.Watch.works(S.Watch.with_works(r, v)) == v : List<&2, String>}
+
+def Watch.works.get_with(r, v):
+  match r:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
+      {==}
+
+law Watch.works.eta:
+  for r: S.Watch
+  for v: List<&2, String>
+  {S.Watch{S.Watch.id(r), S.Watch.agent(r), S.Watch.spec(r), S.Watch.max_text(r), S.Watch.set_at(r), S.Watch.max_at(r), S.Watch.quiet(r), S.Watch.resumes(r), v} == S.Watch.with_works(r, v) : S.Watch}
+
+def Watch.works.eta(r, v):
+  match r:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
+      {==}
+
+law Watch.works.set_get:
+  for r: S.Watch
+  {S.Watch.with_works(r, S.Watch.works(r)) == r : S.Watch}
+
+def Watch.works.set_get(r):
+  match r:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
+      {==}
+
+law Watch.works.set_set:
+  for r: S.Watch
+  for a: List<&2, String>
+  for b: List<&2, String>
+  {S.Watch.with_works(S.Watch.with_works(r, a), b) == S.Watch.with_works(r, b) : S.Watch}
+
+def Watch.works.set_set(r, a, b):
+  match r:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
+      {==}
+
+law Watch.works.over:
+  for r: S.Watch
+  for g: List<&2, String> -> List<&2, String>
+  {S.Watch.over_works(r, g) == S.Watch.with_works(r, g(S.Watch.works(r))) : S.Watch}
+
+def Watch.works.over(r, g):
+  match r:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Watch.open_eq:
@@ -5608,7 +5708,7 @@ law Watch.open_eq:
 
 def Watch.open_eq(r):
   match r:
-    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Watch{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 # ---- WatchEnd ----

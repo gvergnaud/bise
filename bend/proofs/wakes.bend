@@ -11,9 +11,11 @@ import ../hub/gen/state-laws.bend as HSL
 import ../hub/wakes.bend as HWK
 import ../hub/timers.bend as HTM
 import ../hub/reach.bend as HR
+import ../hub/work.bend as HWO
 import ../hub/lazy.bend as HLZ
 import ../hub/cold.bend as CO
 import ./lib/hub-1.bend as PL1
+import ./lib/hub-2.bend as PL2
 import ./lib/hub-3.bend as PL3
 import ../laws/wakes.bend as Laws
 
@@ -56,7 +58,7 @@ def Laws.wake_set_keeps_agents(o, ok, cx, agent, spec, max_text, max_ms, quiet, 
     case False{}:
       {==}
     case True{}:
-      +e = {HWK.WSet{HWK.make(HC.wks(o, cx), agent, spec, max_text, HC.now(o, cx), max_ms, quiet, then)} : HWK.WkEv}
+      +e = {HWK.WSet{HWK.make(HC.wks(o, cx), agent, spec, max_text, HC.now(o, cx), max_ms, quiet, then, HC.works_of_agent(HM.get_agent(HC.st(o, cx), agent)))} : HWK.WkEv}
       +cx2 = HC.emit(o, cx, HM.EWake{e}, Unit{}, Unit{}, Unit{})
       Equal.trans(List<&2, HS.Agent>, HS.St.agents(HX.d(o, cx2)), HS.St.agents(HM.apply(HX.d(o, cx), HM.EWake{e})), HS.St.agents(HX.d(o, cx)),
         Equal.cong(HS.St, List<&2, HS.Agent>, s => HS.St.agents(s), HX.d(o, cx2), HM.apply(HX.d(o, cx), HM.EWake{e}), PL1.hub_d_emit(o, cx, HM.EWake{e}, Unit{}, Unit{}, Unit{})),
@@ -77,13 +79,13 @@ def Laws.wake_reply_pauses(s, e):
   %Equal.sym(HWK.WatchKind, HWK.kind_of(s), HWK.KReply{}, e) : {HWK.kind_pauses(_) == True{} : Bool}
   {==}
 
-def Laws.ask_timeout_pauses(ws, agent, to, msg, asked_at, now):
+def Laws.ask_timeout_pauses(ws, agent, to, msg, asked_at, now, works):
   {==}
 
-def Laws.ask_pause_resumes(ws, agent, to, msg, asked_at, now):
+def Laws.ask_pause_resumes(ws, agent, to, msg, asked_at, now, works):
   {==}
 
-def Laws.ask_max_tells(ws, agent, to, msg, asked_at, now):
+def Laws.ask_max_tells(ws, agent, to, msg, asked_at, now, works):
   {==}
 
 def ask_need_false(-o: HS.St, +cx: HX.Cx<o>, +agent: String, +orig: HS.Msg, +w: HS.Watch,
@@ -153,6 +155,19 @@ def Laws.ask_done_quiet(o, cx, agent):
 def Laws.ask_target_gone_tells(o, cx, w, e):
   +cx2 = HC.wake_end(o, cx, HS.Watch.id(w), "gone")
   %Equal.sym(Bool, HR.agent_active(HC.st(o, cx2), HS.Watch.agent(w)), True{}, e)
-    : {HC.replies_gone.each(o, Nil{}, HLZ.pick(HX.Cx<o>, _, u => HC.wake_say(o, cx2, HS.Watch.agent(w), HWK.reply_gone_text(w)), u => cx2))
-      == HC.wake_say(o, cx2, HS.Watch.agent(w), HWK.reply_gone_text(w)) : HX.Cx<o>}
+    : {HC.replies_gone.each(o, Nil{}, HLZ.pick(HX.Cx<o>, _, u => HC.wake_say(o, cx2, HS.Watch.agent(w), HWK.reply_gone_text(w), None{}), u => cx2))
+      == HC.wake_say(o, cx2, HS.Watch.agent(w), HWK.reply_gone_text(w), None{}) : HX.Cx<o>}
+  {==}
+
+# ---- tasks: a watch's works ----
+
+def Laws.watch_carries_turn_works(ws, agent, spec, max_text, now, max_ms, quiet, then, works):
+  +w = HS.Watch.with_max_text(HS.Watch.with_spec(HS.Watch.with_agent(HS.Watch.with_id(HS.Watch.empty(), 1n+HS.Wakes.last_id(ws)), agent), spec), max_text)
+  HSL.Watch.works.get_with(HS.Watch.with_resumes(HS.Watch.with_quiet(HS.Watch.with_max_at(HS.Watch.with_set_at(w, now), Nat.add(now, max_ms)), quiet), HWK.resumes_of(spec, then)), works)
+
+def Laws.a_done_works_watch_is_never_held(d, t, e):
+  %Equal.sym(Bool, String.eq(HS.Work.id(d), HS.Work.id(d)), True{}, PL2.hub_str_eq_refl(HS.Work.id(d)))
+    : {HLZ.and(Maybe.is_some(&2, Nat, HWO.paused_at(HLZ.pick(Maybe<&2, HS.Work>, _, u => Some{d}, u => HWO.find(t, HS.Work.id(d))))), u => HWO.every_paused(Nil{}, d <> t)) == False{} : Bool}
+  %Equal.sym(Maybe<&2, Nat>, HS.Work.paused(d), None{}, e)
+    : {HLZ.and(Maybe.is_some(&2, Nat, _), u => HWO.every_paused(Nil{}, d <> t)) == False{} : Bool}
   {==}

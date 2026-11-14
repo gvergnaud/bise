@@ -146,3 +146,30 @@ def Laws.no_page_waits_no_needs(ns, id):
 def Laws.moved_by_you_sticks(c, ws):
   %Equal.sym(Bool, Nat.is_eq(HS.Card.id(c), HS.Card.id(c)), True{}, eq_refl(HS.Card.id(c))) : {HLZ.pick(List<&2, HS.Card>, _, u => HS.Card.with_moved(HS.Card.with_works(c, ws), True{}) <> Nil{}, u => c <> HM.card_moved(Nil{}, HS.Card.id(c), ws)) == [HS.Card.with_moved(HS.Card.with_works(c, ws), True{})] : List<&2, HS.Card>}
   {==}
+
+# ---- a blocked report is a card ----
+
+def Laws.blocked_report_opens_one_card(o, cx, agent, text, i, t, e):
+  %Equal.sym(List<&2, Nat>, HC.card_ids(HS.St.cards(HC.st(o, cx)), agent, Nil{}), i <> t, e)
+    : {HC.blocked_card.go(o, List.is_empty(&2, Nat, _), cx, agent, text) == cx : HX.Cx<o>}
+  {==}
+
+def Laws.blocked_card_ends_when_it_moves_on(c, t, a, r, e):
+  %Equal.sym(Bool, HS.Card.from_report(c), True{}, r)
+    : {Bool.pick(List<&2, Nat>, _ && String.eq(HS.Card.agent(c), a), HS.Card.id(c) <> HC.report_card_ids(t, a), HC.report_card_ids(t, a)) == HS.Card.id(c) <> HC.report_card_ids(t, a) : List<&2, Nat>}
+  %Equal.sym(Bool, String.eq(HS.Card.agent(c), a), True{}, e)
+    : {Bool.pick(List<&2, Nat>, True{} && _, HS.Card.id(c) <> HC.report_card_ids(t, a), HC.report_card_ids(t, a)) == HS.Card.id(c) <> HC.report_card_ids(t, a) : List<&2, Nat>}
+  {==}
+
+def Laws.a_notify_blocked_card_never_ends_on_moved_on(c, t, a, r):
+  %Equal.sym(Bool, HS.Card.from_report(c), False{}, r)
+    : {Bool.pick(List<&2, Nat>, _ && String.eq(HS.Card.agent(c), a), HS.Card.id(c) <> HC.report_card_ids(t, a), HC.report_card_ids(t, a)) == HC.report_card_ids(t, a) : List<&2, Nat>}
+  {==}
+
+def Laws.his_answer_on_a_blocked_card_reaches_its_agent(o, cx, c, id, text, parts, via, r):
+  %Equal.sym(Bool, HS.Card.from_report(c), True{}, r)
+    : {HLZ.pick(HX.Cx<o>, _, u => HC.answer.blocked(o, cx, c, text, parts, via), u => HC.answer.kind(o, HC.card_kind(HS.Card.kind(c)), cx, c, text, parts, via)) == HC.answer.blocked(o, cx, c, text, parts, via) : HX.Cx<o>}
+  {==}
+
+def Laws.blocked_answer_carries_its_cards_works(c, text, parts):
+  {==}

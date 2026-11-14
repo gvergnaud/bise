@@ -292,7 +292,8 @@ law wake_replay_keeps:
 law wake_steers_busy:
   for +a: String
   for +text: String
-  {HC.wake_snd(a, text) == HC.Snd{HM.HUB(), a, text, False{}, None{}, False{}, False{}, False{}, None{}, "", None{}, None{}} : HC.Snd}
+  for +works: Maybe<&2, List<&2, String>>
+  {HC.wake_snd(a, text, works) == HC.Snd{HM.HUB(), a, text, False{}, None{}, False{}, False{}, False{}, None{}, "", None{}, works} : HC.Snd}
 
 # LAW: a busy agent's pump steers every queued message that is not queued
 # mode (a wake, a timer's fire, his message, an agent's): in order, now.
@@ -803,21 +804,23 @@ law xin_ask_has_no_parts:
 # ---- followed jobs (desktop S10, core.bend's `followed jobs`) ----
 
 # LAW: before its end a followed task's progress makes no job_end: a
-# progress report changes nothing but the report itself.
+# progress report changes nothing but the report itself and the card its
+# blocked report opened, which closes (tasks: blocked_card_ends_when_it_moves_on).
 law follow_quiet_before_end:
   for -o: HS.St
   for +cx: HX.Cx<o>
   for +from: String
   for +summary: String
-  {HC.req_report.kind(o, cx, from, "progress", summary) == cx : HX.Cx<o>}
+  {HC.req_report.kind(o, cx, from, "progress", summary) == HC.report_cards_end(o, cx, from) : HX.Cx<o>}
 
-# LAW: its done ends the job in the same step (job_end when followed).
+# LAW: its done ends the job in the same step (job_end when followed),
+# its blocked report's card closed first (blocked_card_ends_when_it_moves_on).
 law follow_done_at_its_report:
   for -o: HS.St
   for +cx: HX.Cx<o>
   for +from: String
   for +summary: String
-  {HC.req_report.kind(o, cx, from, "done", summary) == HC.job_end(o, HC.report_done(o, cx, from), from, "done", summary) : HX.Cx<o>}
+  {HC.req_report.kind(o, cx, from, "done", summary) == HC.job_end(o, HC.report_done(o, HC.report_cards_end(o, cx, from), from), from, "done", summary) : HX.Cx<o>}
 
 # LAW: a failure ends it at once, in the same step as the failure.
 law follow_failed_at_once:
