@@ -2224,13 +2224,21 @@ impl Hub {
             }
             // tasks (docs/tasks.md): every change is sb-core's; `new`
             // with its slug (router's rules), sb-core makes it free
-            AgentReq::Task(t) => match pure::task_req(t) {
-                Ok(q) => q,
-                Err(body) => {
-                    reply(fx, body);
-                    return;
+            AgentReq::Task(t) => {
+                let new = matches!(t, bise_proto::sb::Task::New { .. });
+                match pure::task_req(t) {
+                    Ok(mut q) => {
+                        if new {
+                            pure::said_keys(&self.st, &mut q, from);
+                        }
+                        q
+                    }
+                    Err(body) => {
+                        reply(fx, body);
+                        return;
+                    }
                 }
-            },
+            }
             AgentReq::Restore { agent } => json!({"cmd": "restore", "agent": agent}),
             AgentReq::Isolate { agent } => json!({"cmd": "isolate", "agent": agent}),
             AgentReq::Every(r) => {

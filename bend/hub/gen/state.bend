@@ -180,9 +180,9 @@ type Goal is Data:
 type Fin is Data:
   Fin{at: Nat, by: String}
 
-# a task (page tasks-center): what he asked for, whatever the number of agents on it. `id` a slug, stable on a rename; `origin` his message that started it; `agents` every agent a turn of it served (kept after an archive); `last` the newest fact of it (a delivery tagged with it, a report of one of its agents in its turn): Stalled reads it, no agent carries a last-activity time of its own; `until_timer` the timer of a pause until a time
+# a task (page tasks-center): what he asked for, whatever the number of agents on it. `id` a slug, stable on a rename; `origin` his message that started it; `agents` every agent a turn of it served (kept after an archive); `last` the newest fact of it (a delivery tagged with it, a report of one of its agents in its turn): Stalled reads it, no agent carries a last-activity time of its own; `until_timer` the timer of a pause until a time; `said` his origin message's words, one line, clipped (the shell's `said` on `sb task new`, stamped once at birth: a joining agent's context quotes it; an older work has none)
 type Work is Data:
-  Work{id: String, name: String, why: String, goals: List<&2, Goal>, kind: WKind, origin: Maybe<&2, Nat>, by: String, created: Nat, paused: Maybe<&2, Nat>, until: Maybe<&2, Nat>, until_timer: Maybe<&2, Nat>, done: Maybe<&2, Fin>, merged_into: Maybe<&2, String>, named_by_you: Bool, agents: List<&2, String>, last: Nat}
+  Work{id: String, name: String, why: String, goals: List<&2, Goal>, kind: WKind, origin: Maybe<&2, Nat>, by: String, created: Nat, paused: Maybe<&2, Nat>, until: Maybe<&2, Nat>, until_timer: Maybe<&2, Nat>, done: Maybe<&2, Fin>, merged_into: Maybe<&2, String>, named_by_you: Bool, agents: List<&2, String>, last: Nat, said: String}
 
 # a work done more than 7 days ago, folded (architect m_64425): its id stays taken and its links resolve; the journal keeps the rest
 type Tomb is Data:
@@ -2761,250 +2761,265 @@ def Fin.open(+r: Fin) -> Fin:
 # ---- Work ----
 
 def Work.empty() -> Work:
-  Work{"", "", "", Nil{}, WTask{}, None{}, "", 0n, None{}, None{}, None{}, None{}, None{}, False{}, Nil{}, 0n}
+  Work{"", "", "", Nil{}, WTask{}, None{}, "", 0n, None{}, None{}, None{}, None{}, None{}, False{}, Nil{}, 0n, ""}
 
 def Work.id(r: Work) -> String:
   match r:
-    case Work{f0, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _}:
+    case Work{f0, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _}:
       f0
 
 def Work.with_id(r: Work, v: String) -> Work:
   match r:
-    case Work{_, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Work{v, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+    case Work{_, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Work{v, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}
 
 def Work.over_id(r: Work, g: String -> String) -> Work:
   match r:
-    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Work{g(f0), f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Work{g(f0), f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}
 
 def Work.name(r: Work) -> String:
   match r:
-    case Work{_, f1, _, _, _, _, _, _, _, _, _, _, _, _, _, _}:
+    case Work{_, f1, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _}:
       f1
 
 def Work.with_name(r: Work, v: String) -> Work:
   match r:
-    case Work{f0, _, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Work{f0, v, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+    case Work{f0, _, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Work{f0, v, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}
 
 def Work.over_name(r: Work, g: String -> String) -> Work:
   match r:
-    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Work{f0, g(f1), f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Work{f0, g(f1), f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}
 
 def Work.why(r: Work) -> String:
   match r:
-    case Work{_, _, f2, _, _, _, _, _, _, _, _, _, _, _, _, _}:
+    case Work{_, _, f2, _, _, _, _, _, _, _, _, _, _, _, _, _, _}:
       f2
 
 def Work.with_why(r: Work, v: String) -> Work:
   match r:
-    case Work{f0, f1, _, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Work{f0, f1, v, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+    case Work{f0, f1, _, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Work{f0, f1, v, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}
 
 def Work.over_why(r: Work, g: String -> String) -> Work:
   match r:
-    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Work{f0, f1, g(f2), f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Work{f0, f1, g(f2), f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}
 
 def Work.goals(r: Work) -> List<&2, Goal>:
   match r:
-    case Work{_, _, _, f3, _, _, _, _, _, _, _, _, _, _, _, _}:
+    case Work{_, _, _, f3, _, _, _, _, _, _, _, _, _, _, _, _, _}:
       f3
 
 def Work.with_goals(r: Work, v: List<&2, Goal>) -> Work:
   match r:
-    case Work{f0, f1, f2, _, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Work{f0, f1, f2, v, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+    case Work{f0, f1, f2, _, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Work{f0, f1, f2, v, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}
 
 def Work.over_goals(r: Work, g: List<&2, Goal> -> List<&2, Goal>) -> Work:
   match r:
-    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Work{f0, f1, f2, g(f3), f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Work{f0, f1, f2, g(f3), f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}
 
 def Work.kind(r: Work) -> WKind:
   match r:
-    case Work{_, _, _, _, f4, _, _, _, _, _, _, _, _, _, _, _}:
+    case Work{_, _, _, _, f4, _, _, _, _, _, _, _, _, _, _, _, _}:
       f4
 
 def Work.with_kind(r: Work, v: WKind) -> Work:
   match r:
-    case Work{f0, f1, f2, f3, _, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Work{f0, f1, f2, f3, v, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+    case Work{f0, f1, f2, f3, _, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Work{f0, f1, f2, f3, v, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}
 
 def Work.over_kind(r: Work, g: WKind -> WKind) -> Work:
   match r:
-    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Work{f0, f1, f2, f3, g(f4), f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Work{f0, f1, f2, f3, g(f4), f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}
 
 def Work.origin(r: Work) -> Maybe<&2, Nat>:
   match r:
-    case Work{_, _, _, _, _, f5, _, _, _, _, _, _, _, _, _, _}:
+    case Work{_, _, _, _, _, f5, _, _, _, _, _, _, _, _, _, _, _}:
       f5
 
 def Work.with_origin(r: Work, v: Maybe<&2, Nat>) -> Work:
   match r:
-    case Work{f0, f1, f2, f3, f4, _, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Work{f0, f1, f2, f3, f4, v, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+    case Work{f0, f1, f2, f3, f4, _, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Work{f0, f1, f2, f3, f4, v, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}
 
 def Work.over_origin(r: Work, g: Maybe<&2, Nat> -> Maybe<&2, Nat>) -> Work:
   match r:
-    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Work{f0, f1, f2, f3, f4, g(f5), f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Work{f0, f1, f2, f3, f4, g(f5), f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}
 
 def Work.by(r: Work) -> String:
   match r:
-    case Work{_, _, _, _, _, _, f6, _, _, _, _, _, _, _, _, _}:
+    case Work{_, _, _, _, _, _, f6, _, _, _, _, _, _, _, _, _, _}:
       f6
 
 def Work.with_by(r: Work, v: String) -> Work:
   match r:
-    case Work{f0, f1, f2, f3, f4, f5, _, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Work{f0, f1, f2, f3, f4, f5, v, f7, f8, f9, f10, f11, f12, f13, f14, f15}
+    case Work{f0, f1, f2, f3, f4, f5, _, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Work{f0, f1, f2, f3, f4, f5, v, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}
 
 def Work.over_by(r: Work, g: String -> String) -> Work:
   match r:
-    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Work{f0, f1, f2, f3, f4, f5, g(f6), f7, f8, f9, f10, f11, f12, f13, f14, f15}
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Work{f0, f1, f2, f3, f4, f5, g(f6), f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}
 
 def Work.created(r: Work) -> Nat:
   match r:
-    case Work{_, _, _, _, _, _, _, f7, _, _, _, _, _, _, _, _}:
+    case Work{_, _, _, _, _, _, _, f7, _, _, _, _, _, _, _, _, _}:
       f7
 
 def Work.with_created(r: Work, v: Nat) -> Work:
   match r:
-    case Work{f0, f1, f2, f3, f4, f5, f6, _, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Work{f0, f1, f2, f3, f4, f5, f6, v, f8, f9, f10, f11, f12, f13, f14, f15}
+    case Work{f0, f1, f2, f3, f4, f5, f6, _, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Work{f0, f1, f2, f3, f4, f5, f6, v, f8, f9, f10, f11, f12, f13, f14, f15, f16}
 
 def Work.over_created(r: Work, g: Nat -> Nat) -> Work:
   match r:
-    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Work{f0, f1, f2, f3, f4, f5, f6, g(f7), f8, f9, f10, f11, f12, f13, f14, f15}
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Work{f0, f1, f2, f3, f4, f5, f6, g(f7), f8, f9, f10, f11, f12, f13, f14, f15, f16}
 
 def Work.paused(r: Work) -> Maybe<&2, Nat>:
   match r:
-    case Work{_, _, _, _, _, _, _, _, f8, _, _, _, _, _, _, _}:
+    case Work{_, _, _, _, _, _, _, _, f8, _, _, _, _, _, _, _, _}:
       f8
 
 def Work.with_paused(r: Work, v: Maybe<&2, Nat>) -> Work:
   match r:
-    case Work{f0, f1, f2, f3, f4, f5, f6, f7, _, f9, f10, f11, f12, f13, f14, f15}:
-      Work{f0, f1, f2, f3, f4, f5, f6, f7, v, f9, f10, f11, f12, f13, f14, f15}
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, _, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Work{f0, f1, f2, f3, f4, f5, f6, f7, v, f9, f10, f11, f12, f13, f14, f15, f16}
 
 def Work.over_paused(r: Work, g: Maybe<&2, Nat> -> Maybe<&2, Nat>) -> Work:
   match r:
-    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Work{f0, f1, f2, f3, f4, f5, f6, f7, g(f8), f9, f10, f11, f12, f13, f14, f15}
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Work{f0, f1, f2, f3, f4, f5, f6, f7, g(f8), f9, f10, f11, f12, f13, f14, f15, f16}
 
 def Work.until(r: Work) -> Maybe<&2, Nat>:
   match r:
-    case Work{_, _, _, _, _, _, _, _, _, f9, _, _, _, _, _, _}:
+    case Work{_, _, _, _, _, _, _, _, _, f9, _, _, _, _, _, _, _}:
       f9
 
 def Work.with_until(r: Work, v: Maybe<&2, Nat>) -> Work:
   match r:
-    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, _, f10, f11, f12, f13, f14, f15}:
-      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, v, f10, f11, f12, f13, f14, f15}
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, _, f10, f11, f12, f13, f14, f15, f16}:
+      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, v, f10, f11, f12, f13, f14, f15, f16}
 
 def Work.over_until(r: Work, g: Maybe<&2, Nat> -> Maybe<&2, Nat>) -> Work:
   match r:
-    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, g(f9), f10, f11, f12, f13, f14, f15}
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, g(f9), f10, f11, f12, f13, f14, f15, f16}
 
 def Work.until_timer(r: Work) -> Maybe<&2, Nat>:
   match r:
-    case Work{_, _, _, _, _, _, _, _, _, _, f10, _, _, _, _, _}:
+    case Work{_, _, _, _, _, _, _, _, _, _, f10, _, _, _, _, _, _}:
       f10
 
 def Work.with_until_timer(r: Work, v: Maybe<&2, Nat>) -> Work:
   match r:
-    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, _, f11, f12, f13, f14, f15}:
-      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, v, f11, f12, f13, f14, f15}
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, _, f11, f12, f13, f14, f15, f16}:
+      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, v, f11, f12, f13, f14, f15, f16}
 
 def Work.over_until_timer(r: Work, g: Maybe<&2, Nat> -> Maybe<&2, Nat>) -> Work:
   match r:
-    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, g(f10), f11, f12, f13, f14, f15}
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, g(f10), f11, f12, f13, f14, f15, f16}
 
 def Work.done(r: Work) -> Maybe<&2, Fin>:
   match r:
-    case Work{_, _, _, _, _, _, _, _, _, _, _, f11, _, _, _, _}:
+    case Work{_, _, _, _, _, _, _, _, _, _, _, f11, _, _, _, _, _}:
       f11
 
 def Work.with_done(r: Work, v: Maybe<&2, Fin>) -> Work:
   match r:
-    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, _, f12, f13, f14, f15}:
-      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, v, f12, f13, f14, f15}
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, _, f12, f13, f14, f15, f16}:
+      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, v, f12, f13, f14, f15, f16}
 
 def Work.over_done(r: Work, g: Maybe<&2, Fin> -> Maybe<&2, Fin>) -> Work:
   match r:
-    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, g(f11), f12, f13, f14, f15}
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, g(f11), f12, f13, f14, f15, f16}
 
 def Work.merged_into(r: Work) -> Maybe<&2, String>:
   match r:
-    case Work{_, _, _, _, _, _, _, _, _, _, _, _, f12, _, _, _}:
+    case Work{_, _, _, _, _, _, _, _, _, _, _, _, f12, _, _, _, _}:
       f12
 
 def Work.with_merged_into(r: Work, v: Maybe<&2, String>) -> Work:
   match r:
-    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, _, f13, f14, f15}:
-      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, v, f13, f14, f15}
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, _, f13, f14, f15, f16}:
+      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, v, f13, f14, f15, f16}
 
 def Work.over_merged_into(r: Work, g: Maybe<&2, String> -> Maybe<&2, String>) -> Work:
   match r:
-    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, g(f12), f13, f14, f15}
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, g(f12), f13, f14, f15, f16}
 
 def Work.named_by_you(r: Work) -> Bool:
   match r:
-    case Work{_, _, _, _, _, _, _, _, _, _, _, _, _, f13, _, _}:
+    case Work{_, _, _, _, _, _, _, _, _, _, _, _, _, f13, _, _, _}:
       f13
 
 def Work.with_named_by_you(r: Work, v: Bool) -> Work:
   match r:
-    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, _, f14, f15}:
-      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, v, f14, f15}
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, _, f14, f15, f16}:
+      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, v, f14, f15, f16}
 
 def Work.over_named_by_you(r: Work, g: Bool -> Bool) -> Work:
   match r:
-    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, g(f13), f14, f15}
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, g(f13), f14, f15, f16}
 
 def Work.agents(r: Work) -> List<&2, String>:
   match r:
-    case Work{_, _, _, _, _, _, _, _, _, _, _, _, _, _, f14, _}:
+    case Work{_, _, _, _, _, _, _, _, _, _, _, _, _, _, f14, _, _}:
       f14
 
 def Work.with_agents(r: Work, v: List<&2, String>) -> Work:
   match r:
-    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, _, f15}:
-      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, v, f15}
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, _, f15, f16}:
+      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, v, f15, f16}
 
 def Work.over_agents(r: Work, g: List<&2, String> -> List<&2, String>) -> Work:
   match r:
-    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, g(f14), f15}
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, g(f14), f15, f16}
 
 def Work.last(r: Work) -> Nat:
   match r:
-    case Work{_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, f15}:
+    case Work{_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, f15, _}:
       f15
 
 def Work.with_last(r: Work, v: Nat) -> Work:
   match r:
-    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, _}:
-      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, v}
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, _, f16}:
+      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, v, f16}
 
 def Work.over_last(r: Work, g: Nat -> Nat) -> Work:
   match r:
-    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, g(f15)}
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, g(f15), f16}
+
+def Work.said(r: Work) -> String:
+  match r:
+    case Work{_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, f16}:
+      f16
+
+def Work.with_said(r: Work, v: String) -> Work:
+  match r:
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, _}:
+      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, v}
+
+def Work.over_said(r: Work, g: String -> String) -> Work:
+  match r:
+    case Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16}:
+      Work{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, g(f16)}
 
 def Work.open(+r: Work) -> Work:
-  Work.with_last(Work.with_agents(Work.with_named_by_you(Work.with_merged_into(Work.with_done(Work.with_until_timer(Work.with_until(Work.with_paused(Work.with_created(Work.with_by(Work.with_origin(Work.with_kind(Work.with_goals(Work.with_why(Work.with_name(Work.with_id(Work.empty(), Work.id(r)), Work.name(r)), Work.why(r)), Work.goals(r)), Work.kind(r)), Work.origin(r)), Work.by(r)), Work.created(r)), Work.paused(r)), Work.until(r)), Work.until_timer(r)), Work.done(r)), Work.merged_into(r)), Work.named_by_you(r)), Work.agents(r)), Work.last(r))
+  Work.with_said(Work.with_last(Work.with_agents(Work.with_named_by_you(Work.with_merged_into(Work.with_done(Work.with_until_timer(Work.with_until(Work.with_paused(Work.with_created(Work.with_by(Work.with_origin(Work.with_kind(Work.with_goals(Work.with_why(Work.with_name(Work.with_id(Work.empty(), Work.id(r)), Work.name(r)), Work.why(r)), Work.goals(r)), Work.kind(r)), Work.origin(r)), Work.by(r)), Work.created(r)), Work.paused(r)), Work.until(r)), Work.until_timer(r)), Work.done(r)), Work.merged_into(r)), Work.named_by_you(r)), Work.agents(r)), Work.last(r)), Work.said(r))
 
 # ---- Tomb ----
 

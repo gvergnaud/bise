@@ -39,10 +39,42 @@ def ctx_reports() -> String:
 def ctx_report(+who: String, +kind: String, +text: String) -> String:
   String.concat(["- ", who, " (", kind, "): ", text])
 
-# a decision of that report, under it
+# a decision of its agents' newest reports
 def ctx_decided(+text: String) -> String:
-  String.concat(["  decided: ", text])
+  String.concat(["Decided: ", text])
 
 # the task is paused by him
 def ctx_paused() -> String:
   "Paused by the user: its messages wait until he resumes it."
+
+# his words that started it, quoted
+def ctx_said(+text: String) -> String:
+  String.concat(["He asked: “", text, "”"])
+
+# the head of what waits on him now
+def ctx_waits() -> String:
+  "Waiting on the user now (never ask him again):"
+
+# one of its open questions or picks: its kind and words
+def ctx_wait(+kind: String, +text: String) -> String:
+  String.concat(["- ", kind, ": ", text])
+
+# the count of its items waiting on his pages
+def ctx_page_waits(+n: String) -> String:
+  String.concat(["- on his pages, items waiting: ", n])
+
+# the head of its agents
+def ctx_agents() -> String:
+  "Its agents:"
+
+# one of its agents and what it says it does now
+def ctx_agent(+who: String, +note: String) -> String:
+  String.concat(["- ", who, ": ", note])
+
+# one of its agents that says nothing now
+def ctx_agent_quiet(+who: String) -> String:
+  String.concat(["- ", who])
+
+# the last line: where the rest is
+def ctx_more(+id: String) -> String:
+  String.concat(["More: sb task show ", id, " --log"])

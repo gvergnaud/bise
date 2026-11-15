@@ -20,8 +20,24 @@ export const core = {
   ctx_reports: "Its agents' newest reports:",
   /** one agent's newest report: its kind and summary */
   ctx_report: (a: { who: string | number; kind: string | number; text: string | number }): string => "- " + String(a.who) + " (" + String(a.kind) + "): " + String(a.text),
-  /** a decision of that report, under it */
-  ctx_decided: (a: { text: string | number }): string => "  decided: " + String(a.text),
+  /** a decision of its agents' newest reports */
+  ctx_decided: (a: { text: string | number }): string => "Decided: " + String(a.text),
   /** the task is paused by him */
   ctx_paused: "Paused by the user: its messages wait until he resumes it.",
+  /** his words that started it, quoted */
+  ctx_said: (a: { text: string | number }): string => "He asked: “" + String(a.text) + "”",
+  /** the head of what waits on him now */
+  ctx_waits: "Waiting on the user now (never ask him again):",
+  /** one of its open questions or picks: its kind and words */
+  ctx_wait: (a: { kind: string | number; text: string | number }): string => "- " + String(a.kind) + ": " + String(a.text),
+  /** the count of its items waiting on his pages */
+  ctx_page_waits: (a: { n: string | number }): string => "- on his pages, items waiting: " + String(a.n),
+  /** the head of its agents */
+  ctx_agents: "Its agents:",
+  /** one of its agents and what it says it does now */
+  ctx_agent: (a: { who: string | number; note: string | number }): string => "- " + String(a.who) + ": " + String(a.note),
+  /** one of its agents that says nothing now */
+  ctx_agent_quiet: (a: { who: string | number }): string => "- " + String(a.who),
+  /** the last line: where the rest is */
+  ctx_more: (a: { id: string | number }): string => "More: sb task show " + String(a.id) + " --log",
 } as const;

@@ -54,9 +54,15 @@ journal: 0.46 s.
 An agent's delivery for a task it never served (it is not in `Work.agents`, read before the step's
 `work_turn`) carries the task's context in front of its messages: Fx deliver's `ctx`, a hub part
 the shell renders as `<task_context>…</task_context>`, never added to anyone's words. A brief that
-carries the task is its first such delivery. The context is `bend/hub/wctx.bend`'s `ctx(ids, st)`:
-its name, why, pause, done-when ticked or not, its agents' newest reports with their decisions,
-clipped at 2000 chars; main gets none (it routes). Its words are the catalog's `core` area
+carries the task is its first such delivery. The context is `bend/hub/wctx.bend`'s `ctx(ids, st,
+pw)`, in the order a cut keeps (tasks-ux m_65542, architect m_65544): its name, his words that
+started it (`Work.said`: on `sb task new` the shell reads his newest message to the maker, one
+line, 300 chars, as `said`/`said_msg`; sb-core stamps it once at birth when `said_msg` is the
+work's origin; an older work has none), why, pause, done-when ticked or not, what waits on him
+(its open cards, one line each, and the count of its items on his pages, R.pw), its agents'
+newest decisions, its agents with their `sb status` note, their newest reports; cut from the end
+at 2000 chars, its last line `More: sb task show <id> --log` kept. No artifact list (sb-core keeps
+none: the Log has them). Main gets none (it routes). Its words are the catalog's `core` area
 (`rust/proto/src/words/core.rs`), generated into `bend/hub/gen/words.bend` (core_gen): sb-core's
 inline English moves there one at a time. Laws: work_context_only_for_new_works,
 work_context_for_a_joined_work, work_context_is_capped (bend/laws/work.bend).

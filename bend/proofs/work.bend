@@ -230,5 +230,5 @@ def Laws.work_context_for_a_joined_work(w, agent, e):
     : {Bool.pick(List<&2, String>, Bool.not(_), [HS.Work.id(w)], Nil{}) == [HS.Work.id(w)] : List<&2, String>}
   {==}
 
-def Laws.work_context_is_capped(ids, st):
+def Laws.work_context_is_capped(ids, st, pw):
   {==}

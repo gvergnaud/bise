@@ -912,7 +912,7 @@ pub const STATE: State = State {
         },
         Record {
             name: "Work",
-            doc: "a task (page tasks-center): what he asked for, whatever the number of agents on it. `id` a slug, stable on a rename; `origin` his message that started it; `agents` every agent a turn of it served (kept after an archive); `last` the newest fact of it (a delivery tagged with it, a report of one of its agents in its turn): Stalled reads it, no agent carries a last-activity time of its own; `until_timer` the timer of a pause until a time",
+            doc: "a task (page tasks-center): what he asked for, whatever the number of agents on it. `id` a slug, stable on a rename; `origin` his message that started it; `agents` every agent a turn of it served (kept after an archive); `last` the newest fact of it (a delivery tagged with it, a report of one of its agents in its turn): Stalled reads it, no agent carries a last-activity time of its own; `until_timer` the timer of a pause until a time; `said` his origin message's words, one line, clipped (the shell's `said` on `sb task new`, stamped once at birth: a joining agent's context quotes it; an older work has none)",
             fields: &[
                 f("id", Str),
                 f("name", Str),
@@ -930,6 +930,7 @@ pub const STATE: State = State {
                 f("named_by_you", Bool),
                 f("agents", Strs),
                 f("last", Nat),
+                f("said", Str),
             ],
             shapes: &[Shape {
                 name: "journal",
@@ -951,6 +952,7 @@ pub const STATE: State = State {
                     k("named_by_you", W::Flag),
                     k("agents", W::Strs),
                     k("last", W::Nat),
+                    k("said", W::StrOmit),
                 ],
             }],
         },

@@ -613,3 +613,51 @@ fn an_agent_spawned_for_a_task_reads_its_context_with_its_brief() {
     let turns = lines(&t, "work_turn");
     assert!(turns.iter().any(|j| j["turn"]["agent"] == "pricing"), "it joined at its brief: {turns:?}");
 }
+
+fn first_delivery(t: &mut T, to: &str, text: &str, a: &str) -> String {
+    let (_, fx) = t.req(MAIN, send(to, text, &[a]));
+    say_to(&fx, to).or_else(|| steer_to(&fx, to)).unwrap_or_default()
+}
+
+/// roma idea 5, chunk 3b (tasks-ux m_65542, architect m_65544): the
+/// context quotes his words (Work.said: the shell reads them, sb-core
+/// stamps them once at birth), says what waits on him and who does what
+/// before the reports, and its last line points to the task's Log, kept
+/// when the cap cuts the rest.
+#[test]
+fn a_joining_agents_context_quotes_him_says_what_waits_and_ends_on_its_log() {
+    let mut t = T::new();
+    t.spawn_task("kb");
+    t.spawn_task("auth");
+    t.go(Input::ReplIdle { agent: "kb".into(), leftover: false });
+    his_words(&mut t, MAIN, "the login  times out on 3G: fix it");
+    let a = new(&mut t, MAIN, "Fix the login timeout", &[]);
+    let born = lines(&t, "work_created").last().unwrap().clone();
+    assert_eq!(born["work"]["said"], "the login times out on 3G: fix it", "his words, one line: {born}");
+    t.req(MAIN, send("kb", "find the cause", &[a.as_str()]));
+    report(&mut t, "kb", "blocked", "need the 3G trace from you");
+    t.req("kb", AgentReq::Status { status: Declared::Blocked, note: "reading the proxy logs".into() });
+    let ctx = first_delivery(&mut t, "auth", "write the fix", &a);
+    let at = |s: &str| ctx.find(s).unwrap_or_else(|| panic!("{s:?} missing: {ctx}"));
+    // the order a cut keeps: his words, what waits on him, its agents, then the reports
+    let order = [
+        "He asked: “the login times out on 3G: fix it”",
+        "Waiting on the user now",
+        "- blocked: need the 3G trace from you",
+        "Its agents:",
+        "- kb: reading the proxy logs",
+        "Its agents' newest reports:",
+    ];
+    assert!(order.windows(2).all(|p| at(p[0]) < at(p[1])), "{ctx}");
+    let more = format!("More: sb task show {a} --log");
+    let block = &ctx[..at("</task_context>")];
+    assert!(block.trim_end().ends_with(&more), "the Log's pointer is its last line: {ctx}");
+    // a task over the cap: cut from the end, the pointer stays last
+    let long = "word ".repeat(600);
+    let r = task(&mut t, MAIN, Task::New { name: "Rewrite the docs".into(), why: long, goals: vec![] });
+    let b = r["id"].as_str().unwrap().to_string();
+    let ctx = first_delivery(&mut t, "auth", "and the docs", &b);
+    let inner = ctx.split("<task_context>").nth(1).and_then(|s| s.split("</task_context>").next()).unwrap_or_default().trim();
+    assert!(inner.chars().count() <= 2000, "capped: {}", inner.chars().count());
+    assert!(inner.starts_with(&format!("## Task `{b}`")) && inner.ends_with(&format!("More: sb task show {b} --log")), "{inner}");
+}

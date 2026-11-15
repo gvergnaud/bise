@@ -276,6 +276,21 @@ def born(+id: String, +name: String, +why: String, +gs: List<&2, String>, +origi
   +w = S.Work.with_goals(S.Work.with_why(S.Work.with_name(S.Work.with_id(S.Work.empty(), id), name), why), goals(gs))
   S.Work.with_last(S.Work.with_agents(S.Work.with_created(S.Work.with_by(S.Work.with_origin(w, origin), by), at), [by]), at)
 
+# his words that started it (roma idea 5, architect m_65544): the shell's
+# `said` of message `msg` on `sb task new` (it reads the text, sb-core
+# keeps none), stamped once at birth, only when `msg` is the work's own
+# origin; else none
+def with_said.is(m: Maybe<&2, Nat>, +n: Nat) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{+x}:
+      Nat.is_eq(x, n)
+
+def with_said(+w: S.Work, +msg: Nat, +said: String) -> S.Work:
+  +ok = with_said.is(S.Work.origin(w), msg)
+  S.Work.with_said(w, Bool.pick(String, ok, String.trim(said), ""))
+
 # ---- a merged id reads its target (law merge_redirects) ----
 
 def target.of(m: Maybe<&2, S.Work>, +id: String) -> Maybe<&2, String>:

@@ -477,4 +477,5 @@ law work_context_for_a_joined_work:
 law work_context_is_capped:
   for ids: List<&2, String>
   for +st: HS.St
-  {HWC.ctx(ids, st) == HT.clip(HWC.raw(ids, st), HWC.CTX_MAX()) : String}
+  for +pw: List<&2, HX.Kn>
+  {HWC.ctx(ids, st, pw) == HT.clip(HWC.raw(ids, st, pw), HWC.CTX_MAX()) : String}

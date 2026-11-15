@@ -118,6 +118,21 @@ pub(super) fn task_req(t: bise_proto::sb::Task) -> Result<Value, Value> {
     Ok(q)
 }
 
+/// The most chars of his words a task keeps (Work.said).
+pub(super) const SAID_MAX: usize = 300;
+
+/// roma idea 5 (architect m_65544): `sb task new`'s `said` and
+/// `said_msg`, his newest message to `agent` (the work's origin, the
+/// same rule as sb-core's work.bend `origin`) as one line, clipped:
+/// sb-core keeps no message's words, it stamps these once at birth when
+/// `said_msg` is its origin. None from him: no keys.
+pub(super) fn said_keys(st: &crate::model::State, q: &mut Value, agent: &str) {
+    let Some(n) = st.peeks().rev().find(|m| m.from == "user" && m.to == agent).map(|m| m.id) else { return };
+    let text = crate::util::clip(&crate::util::one_line(&st.text(n)), SAID_MAX);
+    q["said"] = serde_json::json!(text);
+    q["said_msg"] = serde_json::json!(n);
+}
+
 /// Issue 37 #2: an agent request core.rs turns into sb-core's `req` step
 /// with nothing done before it (no reply, effect or state change), so
 /// sb-core checks its sender in that step. Anything else (core.rs answers

@@ -413,7 +413,9 @@ impl<'de> Deserialize<'de> for Fin {
 /// archive); `last` the newest fact of it (a delivery tagged with it, a
 /// report of one of its agents in its turn): Stalled reads it, no agent
 /// carries a last-activity time of its own; `until_timer` the timer of a
-/// pause until a time
+/// pause until a time; `said` his origin message's words, one line, clipped
+/// (the shell's `said` on `sb task new`, stamped once at birth: a joining
+/// agent's context quotes it; an older work has none)
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 pub struct Work {
     pub id: String,
@@ -439,6 +441,8 @@ pub struct Work {
     pub named_by_you: bool,
     pub agents: Vec<String>,
     pub last: u64,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub said: String,
 }
 
 /// Not an object: an error (its reader skips it).
@@ -462,6 +466,7 @@ impl<'de> Deserialize<'de> for Work {
             named_by_you: field(&o, "named_by_you"),
             agents: field(&o, "agents"),
             last: field(&o, "last"),
+            said: field(&o, "said"),
         })
     }
 }

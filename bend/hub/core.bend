@@ -737,7 +737,7 @@ def pump.batch(-o: S.St, batch: List<&2, S.Msg>, +cx: X.Cx<o>, +name: String, +b
       # roma idea 5: the context of the works it joins, read before this
       # step's work_turn makes it their agent (law work_context_only_for_new_works);
       # main routes, it joins none
-      +ctx = Bool.pick(String, is_main, "", WC.ctx(WC.fresh(ws, S.St.works(st(o, cx2)), name), st(o, cx2)))
+      +ctx = Bool.pick(String, is_main, "", WC.ctx(WC.fresh(ws, S.St.works(st(o, cx2)), name), st(o, cx2), X.R.pw(rr(o, cx2))))
       +cx3 = work_turn(o, WO.turn_change(works_of_agent(M.get_agent(st(o, cx2), name)), ws, busy), cx2, name, busy)
       pump.send(o, busy, deliver_each(o, b, cx3, name, Nil{}), name, ids_of(b), notes, status, ctx)
 
@@ -4015,7 +4015,7 @@ def req_task.new(-o: S.St, +cx: X.Cx<o>, +a: TAsk, +by: String, +q: J.Json) -> X
   +gs = M.jstr_list(Maybe.default(&2, List<&2, J.Json>, J.get_arr(q, "goals"), Nil{}))
   LZ.pick(X.Cx<o>, String.is_empty(name) || String.is_empty(slug),
     u => task_err(o, a, cx, "say its name: sb task new \"<name>\" [--why \"…\"] [--done-when \"…\"]..."),
-    u => req_task.born(o, cx, a, by, WO.born(WO.free(st(o, cx), slug), name, K.get_s(q, "why"), gs, WO.origin(st(o, cx), by), by, now(o, cx))))
+    u => req_task.born(o, cx, a, by, WO.with_said(WO.born(WO.free(st(o, cx), slug), name, K.get_s(q, "why"), gs, WO.origin(st(o, cx), by), by, now(o, cx)), K.get_n(q, "said_msg"), K.get_s(q, "said"))))
 
 def req_task.verb(-o: S.St, v: TaskV, +cx: X.Cx<o>, +a: TAsk, +by: String, +is_main: Bool, +q: J.Json) -> X.Cx<o>:
   match v:
