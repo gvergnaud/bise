@@ -29,7 +29,7 @@ import { lineAt } from './Side';
 import { markLooked, markSeen } from './seen';
 import { UndoToast, useUndo } from './UndoToast';
 import type { Did } from './undo';
-import { askMove, lastAt } from './moveTo';
+import { ArtMoveMore, CardMoveMore } from './MoveMenus';
 
 /** His message's words by its id among a thread's entries; null when this window doesn't hold it. Pure. */
 export function originText(entries: readonly (Pick<Entry, 'kind' | 'msg_id' | 'text'> | undefined)[], id: number): string | null {
@@ -210,11 +210,7 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
               <div className="tk-q-head">
                 <p className="tk-q-text">{c.question}</p>
                 {/* Move to task… (F9): a card belongs to one task, this one */}
-                <Dropdown look="pop" label="⋯" name={tasks.act_more} tip={tasks.act_more} testId={`${t}.q.${String(c.id)}.more`}
-                  groups={[{ id: 'move', rows: [{ id: 'move', name: tasks.move_to, testId: `${t}.q.${String(c.id)}.move` }] }]}
-                  onPick={() => {
-                    askMove({ thing: { kind: 'card', project, card: c.id, title: firstLine(c.question), works: [w.id] }, mode: 'move', x: lastAt.x, y: lastAt.y });
-                  }} />
+                <CardMoveMore project={project} card={c.id} title={firstLine(c.question)} testId={`${t}.q.${String(c.id)}.more`} />
               </div>
               {/* the inbox's keys (1-9) on its options, then his own words (tasks-ux m_64959) */}
               <ol className="tk-q-opts">
@@ -296,6 +292,8 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
                   openTab({ kind: 'artifact', project, id: a.id });
                 }} testId={`${t}.art.${a.id}`} />
                 <span className="tk-agent-state">{a.kind}</span>
+                {/* Move to task… (F9, tasks-ux m_65591): the visible ⋯, beside its kind */}
+                <ArtMoveMore project={project} a={a} testId={`${t}.art.${a.id}.more`} />
               </li>
             ))}
           </ul>

@@ -34,6 +34,7 @@ import { tasks } from '@/proto/words_tasks.gen';
 const NO_PAUSED: ReadonlySet<string> = new Set();
 import { aboutOfRecord, alsoPage, footWords, jumpWords, pickedN, settledCard, whenOf } from './settled';
 import { ArtText } from './artWords';
+import { CardMoveMore, useCardMoveMenu } from '@/tasks/MoveMenus';
 import { barFit, type BarFit } from './barfit';
 import './past.css';
 
@@ -274,13 +275,21 @@ export function InboxView({ cards, records, onEnd, names, projects, ports, pageO
  *  the question, 'project · age' alone (no '#id', as the inbox block; ui-review m_44137); the chosen
  *  one shows its 'answer' (⏎), which opens it above the composer as ⌘I. */
 function WaitLine({ w, on, end, onPick, onAnswer }: { w: WaitRow; on: boolean; end: string; onPick: () => void; onAnswer: () => void }) {
+  // a right click gives the ⋯'s menu: Move to task… (F9, tasks-ux m_65591)
+  const moveMenu = useCardMoveMenu(w.project, w.card.id, w.question);
   return (
     <div className="ip-row" data-row={w.key}>
-      <ListRow on={on} testId={`inbox.row.${w.key}`} tip={inbox.row_tip_wait}
+      <ListRow on={on} testId={`inbox.row.${w.key}`} tip={inbox.row_tip_wait} onContextMenu={moveMenu}
         state={<RowMark icon="ask" tone="accent" label={w.glyph === '¶' ? inbox.row_mark_page : inbox.row_mark_question} />}
         title={<><span className="ip-who">{w.title}</span><span className="ip-q"><ArtText text={w.question} /></span></>}
         sub={end}
-        end={on ? <RowAction onClick={onAnswer} tip={inbox.row_tip_wait} testId={`inbox.row.${w.key}.answer`}>{inbox.key_answer}</RowAction> : undefined}
+        end={
+          <>
+            {on && <RowAction onClick={onAnswer} tip={inbox.row_tip_wait} testId={`inbox.row.${w.key}.answer`}>{inbox.key_answer}</RowAction>}
+            {/* Move to task… (F9, tasks-ux m_65591): beside its answer, never over it */}
+            <CardMoveMore project={w.project} card={w.card.id} title={w.question} testId={`inbox.row.${w.key}.more`} />
+          </>
+        }
         onClick={onPick} />
     </div>
   );

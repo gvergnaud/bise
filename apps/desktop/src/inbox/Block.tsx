@@ -20,6 +20,7 @@ import { actedKeys, useActed, useInboxItems, useProjects, useRefusedList, useSto
 import { shownName } from '@/agents/model';
 import { TaskChipsOf } from '@/tasks';
 import { useAllWorks } from '@/tasks/hooks';
+import { CardMoveMore } from '@/tasks/MoveMenus';
 import { tasks } from '@/proto/words_tasks.gen';
 import { heldCards } from './past';
 import { inbox } from '@/proto/words_inbox.gen';
@@ -899,9 +900,10 @@ export function InboxBlock({ here, onAnswer, now: pinned, only, rest }: InboxBlo
         }
         const w = rowWords(c);
         return (
-          // raw-controls (designer m_18343): the ds's Row as a button, never a bare button
+          // raw-controls (designer m_18343): the ds's Row as a button, never a bare button; its ⋯ (Move
+          // to task…, F9 tasks-ux m_65591) sits beside the row, never in it (a button in a button)
+          <div className="strip-line" key={cardKey(c)}>
           <Row
-            key={cardKey(c)}
             lead={
               <>
                 <span className="strip-n">{n}</span>
@@ -934,6 +936,9 @@ export function InboxBlock({ here, onAnswer, now: pinned, only, rest }: InboxBlo
             }}
             testId={`inbox.block.row.${String(n)}`}
           />
+          {/* after the age, its space kept (an update has no task to move: an empty slot) */}
+          {isUpdate(c) ? <span className="tk-more-slot" /> : <CardMoveMore project={c.project} card={c.id} title={c.question} testId={`inbox.block.row.${String(n)}.more`} />}
+          </div>
         );
       })}
       {more > 0 && next !== undefined && (

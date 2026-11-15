@@ -70,8 +70,12 @@ happened, never rebuilt later:
 ## Move to task… (F9; tasks-ux m_65409, designer m_65406, architect m_65565)
 
 His gesture on an artifact (its native menu: the Library row's ⋯, its frame's ⋯, a right click:
-Move to task…, Also add to task…, Remove from <task> with 2+ tasks) or a card (the Task tab's
-Needs you ⋯): `tasks/moveTo.ts` says what the picker offers (open tasks, the ones he opened lately
+Move to task…, Also add to task…, Remove from <task> with 2+ tasks) or a card. Where the native
+menu doesn't reach, `tasks/MoveMenus.tsx` draws the same items in a ⋯ (tip "More") on the row:
+an inbox card on the inbox page (a right click too) and in the thread's strip (beside the row,
+never in its button), the Task tab's Needs you and Artifacts rows. It shows on the row's hover and
+keyboard focus, its space always kept, beside the row's own acts (answer, open), never over them
+(tasks-ux m_65591). `tasks/moveTo.ts` says what the picker offers (open tasks, the ones he opened lately
 first, then the Board's order; done lately at the end for an artifact; 'No task' last) and what a
 pick makes of the works; `tasks/MoveHost.tsx` (mounted once in App.tsx) draws the picker where he
 clicked and the 6 s toast. A pick sends `task_move` with exactly the new works (his for good:
