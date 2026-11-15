@@ -58,14 +58,21 @@
 .tk-card:focus-visible{outline:2px solid var(--c-focus);outline-offset:2px}
 .tk-card-name{display:flex;align-items:center;gap:var(--s-2);min-width:0;font-weight:500}
 .tk-card-title{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+/* the Task tab's Log (roma idea 3): newest first, its time text-3 on the left, a report's
+   decisions under it in text-2 */
+.tk-log{display:flex;flex-direction:column;gap:var(--s-3);margin:0;padding:0;list-style:none}
+.tk-log-row{display:grid;grid-template-columns:auto 1fr;gap:var(--s-3);align-items:baseline;font-size:var(--t-13)}
+.tk-log-at{color:var(--c-text-3);font-size:var(--t-12);font-variant-numeric:tabular-nums;white-space:nowrap}
+.tk-log-what{display:flex;flex-direction:column;gap:var(--s-1);min-width:0;overflow-wrap:anywhere}
+.tk-log-dec{color:var(--c-text-2);font-size:var(--t-12)}
 /* new since he looked (roma idea 2): the ink dot, 6 px after the name; never blue, never pink */
 .tk-new{flex:none;width:6px;height:6px;border-radius:50%;background:var(--c-text)}
 .tk-card-what{display:flex;align-items:baseline;gap:var(--s-2);min-width:0;color:var(--c-text-2);font-size:var(--t-12)}
 /* one line, cut at a word in the text (model's cutAtWord); the CSS cut only guards a narrow column */
 .tk-card-said{flex:1 1 auto;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .tk-card-age{flex:none;color:var(--c-text-3);font-variant-numeric:tabular-nums}
-.tk-card[data-st="needs_you"] .tk-card-what{color:var(--c-accent)}
-.tk-card[data-st="stalled"] .tk-card-what{color:var(--c-err)}
+/* the sentence is text-2 on every card: pink stays on the mark and the column's count (designer m_65397) */
+.tk-card-what.paused{color:var(--c-text-3)}
 .tk-card-foot{display:flex;align-items:center;gap:var(--s-2);color:var(--c-text-3);font-size:var(--t-12)}
 .tk-card-acts{display:flex;gap:var(--s-2);margin-top:var(--s-1)}
 /* the Board with nothing on it (BoardEmpty, designer m_65123): the kit's Empty centred in the Board's

@@ -249,6 +249,18 @@ pub enum HubEv {
         #[cfg_attr(feature = "ts", ts(optional))]
         why: Option<String>,
     },
+    /// the answer to `task_log`, to that client (`req` echoed): the task's
+    /// Log newest first (a merged id: the task it went into), or why not
+    TaskLog {
+        project: Project,
+        req: u64,
+        id: String,
+        #[serde(default)]
+        lines: Vec<crate::rows::LogLine>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "ts", ts(optional))]
+        error: Option<String>,
+    },
     /// the answer to `pr_check_log`, to that client (`req` echoed): the
     /// check's last lines (at most the hub's cap), or why not
     PrCheckLog {
@@ -659,7 +671,7 @@ pub enum HubEv {
 }
 
 impl HubEv {
-    pub const TAGS: &'static [&'static str] = &["welcome", "agents", "cards", "thread", "thread_hits", "thread_marks", "entry", "typing", "partial", "artifacts", "artifacts_moved", "artifact_notes", "files_ids", "folders", "library", "scheduled", "worktrees", "processes", "proc_out", "merged", "features", "prs", "pr_acted", "pr_detail", "pr_check_log", "models", "tool_out", "queued_taken", "log", "completion", "log_body", "diff", "guide", "branches", "versions", "release", "update", "route", "route_done", "jobs", "job_end", "followed_end", "activity", "flow", "paused", "switch", "growth", "pulse", "works", "bise_update", "usage", "pages", "page_changed", "card_open", "app_open", "inbox_history", "inbox_recorded", "focused", "approvals", "notice", "refused", "error"];
+    pub const TAGS: &'static [&'static str] = &["welcome", "agents", "cards", "thread", "thread_hits", "thread_marks", "entry", "typing", "partial", "artifacts", "artifacts_moved", "artifact_notes", "files_ids", "folders", "library", "scheduled", "worktrees", "processes", "proc_out", "merged", "features", "prs", "pr_acted", "pr_detail", "task_log", "pr_check_log", "models", "tool_out", "queued_taken", "log", "completion", "log_body", "diff", "guide", "branches", "versions", "release", "update", "route", "route_done", "jobs", "job_end", "followed_end", "activity", "flow", "paused", "switch", "growth", "pulse", "works", "bise_update", "usage", "pages", "page_changed", "card_open", "app_open", "inbox_history", "inbox_recorded", "focused", "approvals", "notice", "refused", "error"];
 
     pub fn decode(line: &str) -> Result<HubEv, String> {
         Self::from_value(parse(line)?)
@@ -1036,6 +1048,15 @@ pub enum HubCmd {
         #[serde(default)]
         works: Vec<String>,
     },
+    /// a task's Log (roma idea 3): its lines newest first, at most
+    /// `limit` (0: the hub's), answered by `task_log` with `req`
+    TaskLog {
+        project: Project,
+        id: String,
+        req: u64,
+        #[serde(default, skip_serializing_if = "crate::rows::is_zero_u64")]
+        limit: u64,
+    },
     /// the inbox's history (inbox-record): one page of his answered and
     /// withdrawn cards, newest first, answered by `inbox_history`
     InboxHistory {
@@ -1384,7 +1405,7 @@ pub enum HubCmd {
 }
 
 impl HubCmd {
-    pub const TAGS: &'static [&'static str] = &["subscribe", "unsubscribe", "page", "find", "marks", "send", "answer", "close", "approvals", "remove_rule", "stop", "archive", "unarchive", "artifacts_seen", "tool_out", "log", "completion", "log_body", "queued_take", "queued_steer", "diff", "worktrees", "processes", "proc_out", "proc_follow", "proc_stop", "merged", "features", "prs", "pr_act", "task_act", "task_move", "pr_detail", "pr_check_log", "inbox_history", "scheduled", "scheduled_stop", "wake_stop", "models", "new", "rename", "model", "effort", "route_correct", "route_cancel", "follow", "slash", "guide", "branches", "scheduled_run", "artifacts_add", "artifacts_move", "artifacts_folders", "artifacts_keep", "artifacts_opened", "artifacts_library", "focus", "versions", "version_info", "version_switch", "version_rollback", "version_restart", "version_update", "bise_update", "release_plan", "release_run", "stop_hub", "page_voice", "usage", "pause", "resume", "view_resource", "view_call", "view_message", "view_context", "plugin_views", "app_open", "view_close", "view_notes", "view_open", "view_copy", "folder_list", "file_new", "files_ids_subscribe", "files_mint"];
+    pub const TAGS: &'static [&'static str] = &["subscribe", "unsubscribe", "page", "find", "marks", "send", "answer", "close", "approvals", "remove_rule", "stop", "archive", "unarchive", "artifacts_seen", "tool_out", "log", "completion", "log_body", "queued_take", "queued_steer", "diff", "worktrees", "processes", "proc_out", "proc_follow", "proc_stop", "merged", "features", "prs", "pr_act", "task_act", "task_move", "task_log", "pr_detail", "pr_check_log", "inbox_history", "scheduled", "scheduled_stop", "wake_stop", "models", "new", "rename", "model", "effort", "route_correct", "route_cancel", "follow", "slash", "guide", "branches", "scheduled_run", "artifacts_add", "artifacts_move", "artifacts_folders", "artifacts_keep", "artifacts_opened", "artifacts_library", "focus", "versions", "version_info", "version_switch", "version_rollback", "version_restart", "version_update", "bise_update", "release_plan", "release_run", "stop_hub", "page_voice", "usage", "pause", "resume", "view_resource", "view_call", "view_message", "view_context", "plugin_views", "app_open", "view_close", "view_notes", "view_open", "view_copy", "folder_list", "file_new", "files_ids_subscribe", "files_mint"];
 
     pub fn decode(line: &str) -> Result<HubCmd, String> {
         Self::from_value(parse(line)?)
@@ -1438,6 +1459,7 @@ impl HubCmd {
             | HubCmd::PrAct { project, .. }
             | HubCmd::TaskAct { project, .. }
             | HubCmd::TaskMove { project, .. }
+            | HubCmd::TaskLog { project, .. }
             | HubCmd::PrDetail { project, .. }
             | HubCmd::PrCheckLog { project, .. }
             | HubCmd::InboxHistory { project, .. }

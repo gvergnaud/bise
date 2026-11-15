@@ -34,4 +34,23 @@ side.
 - `sb task list [--all]` and `sb task show <id>` are the hub's reads of those rows
   (`rust/switchboard/src/task_list.rs`): words only, no decision.
 - The shell stamps artifacts and pages at the door from the view's `turn_works` (as `turn_ms`) and
-  writes a `Bise-Task: <id>` trailer per work on a land; it decides nothing.
+  writes a `Bise-Task: <id>` trailer per work on a land; it decides nothing. The land record
+  (`lands.jsonl`) keeps the lander's works too (`works`), the Log's typed land fact.
+
+## The Log (roma idea 3; architect m_65317, m_65437)
+
+A task's Log is a read, never rows kept: `task/log` (the Task tab's Log) and `sb task show <id>
+--log` read the journal from its end on a thread (`daemon/task_log.rs`, never the loop) until the
+task's birth, and the land records; `switchboard/src/task_log.rs` makes the lines
+(`rows::LogLine`): its agents' `sb report`s (the `reported` line's `report.works`, the reporter's
+`--task` or turn's works), his answers (`card_closed` of a card whose works hold it), his gestures
+(`work_changed` by `user`, `art_moved`/`card_moved` in and out), joins (an agent's first
+`work_turn`), lands (`lands.jsonl` works). A merged task's facts read as the one it went into. Its
+records are pinned by the journal codec's fixture (`core_journal.jsonl`). Worst case on a 116 MB
+journal: 0.46 s.
+
+## His gestures' Undo, the dot (roma ideas 2, 4)
+
+Desktop only (`apps/desktop/src/tasks`): Undo sends the inverse gesture (undo.ts; Merge has none);
+'new since you looked' compares each task with what he saw of it (seen.ts, his kept view, no hub
+state).

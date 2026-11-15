@@ -8,27 +8,35 @@ import { saidOf } from './model';
 const NOW = 1_700_000_000_000;
 
 describe('the new dot', () => {
-  it('is off for a task he never saw, on for a new status, a newer artifact or a new question', () => {
-    const w = { status: 'working' as const, cards: [3] };
-    expect(isNew(w, undefined, NOW)).toBe(false);
+  it('lights a task he never saw only when it was born after his last look (tasks-ux m_65371)', () => {
+    const w = { status: 'working' as const, cards: [3], created_ms: NOW };
+    expect(isNew(w, undefined, 0, NOW - 1)).toBe(true);
+    expect(isNew(w, undefined, 0, NOW)).toBe(false);
+    expect(isNew(w, undefined, 0, NOW + 1)).toBe(false);
+  });
+
+  it('is on for a new status, a newer artifact or a new question since he saw it', () => {
+    const w = { status: 'working' as const, cards: [3], created_ms: NOW + 5 };
     const s = seenNow(w, NOW);
-    expect(isNew(w, s, 0)).toBe(false);
-    expect(isNew({ ...w, status: 'needs_you' }, s, 0)).toBe(true);
-    expect(isNew(w, s, NOW + 1)).toBe(true);
-    expect(isNew(w, s, NOW)).toBe(false);
-    expect(isNew({ ...w, cards: [3, 4] }, s, 0)).toBe(true);
+    // seen: its birth no longer counts
+    expect(isNew(w, s, 0, 0)).toBe(false);
+    expect(isNew({ ...w, status: 'needs_you' }, s, 0, 0)).toBe(true);
+    expect(isNew(w, s, NOW + 1, 0)).toBe(true);
+    expect(isNew(w, s, NOW, 0)).toBe(false);
+    expect(isNew({ ...w, cards: [3, 4] }, s, 0, 0)).toBe(true);
     // a question he answered is not news
-    expect(isNew({ ...w, cards: [] }, s, 0)).toBe(false);
+    expect(isNew({ ...w, cards: [] }, s, 0, 0)).toBe(false);
   });
 
   it('takes the status his own gesture led to as seen, then sees the next change', () => {
-    const s = seenActed({ status: 'paused', cards: [] }, NOW);
-    expect(isNew({ status: 'paused', cards: [] }, s, 0)).toBe(false);
-    expect(settled(s, { status: 'paused', cards: [] })).toBeNull();
-    const s2 = settled(s, { status: 'working', cards: [] });
+    const r = (status: 'paused' | 'working' | 'stalled') => ({ status, cards: [], created_ms: 0 });
+    const s = seenActed(r('paused'), NOW);
+    expect(isNew(r('paused'), s, 0, 0)).toBe(false);
+    expect(settled(s, r('paused'))).toBeNull();
+    const s2 = settled(s, r('working'));
     expect(s2).toEqual({ at: NOW, status: 'working', cards: [] });
-    expect(isNew({ status: 'working', cards: [] }, s2 ?? undefined, 0)).toBe(false);
-    expect(isNew({ status: 'stalled', cards: [] }, s2 ?? undefined, 0)).toBe(true);
+    expect(isNew(r('working'), s2 ?? undefined, 0, 0)).toBe(false);
+    expect(isNew(r('stalled'), s2 ?? undefined, 0, 0)).toBe(true);
     expect(settled(seenNow({ status: 'paused', cards: [] }, NOW), { status: 'working', cards: [] })).toBeNull();
   });
 });

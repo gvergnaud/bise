@@ -126,7 +126,7 @@ fn list_and_show_read_the_status_sb_core_computed() {
     let r = task(&mut t, MAIN, Task::List { all: false });
     let text = r["text"].as_str().unwrap();
     assert!(text.starts_with("native-mac · Native mac · working · docs"), "{text}");
-    let r = task(&mut t, MAIN, Task::Show { id: a.clone() });
+    let r = task(&mut t, MAIN, Task::Show { id: a.clone(), log: false });
     assert!(r["text"].as_str().unwrap().contains("1. [ ] it builds"), "{r}");
     // main sees it in its state, to put new work on it
     let ctx = crate::board::main_context(&t.hub.st, t.env.now, &[], &[]);
@@ -140,7 +140,7 @@ fn list_and_show_read_the_status_sb_core_computed() {
     assert!(!open.contains("native-mac"), "{open}");
     let all = task(&mut t, MAIN, Task::List { all: true })["text"].as_str().unwrap().to_string();
     assert!(all.contains("native-mac · Native mac · done · today"), "{all}");
-    let r = task(&mut t, MAIN, Task::Show { id: "nope".into() });
+    let r = task(&mut t, MAIN, Task::Show { id: "nope".into(), log: false });
     assert_eq!(r["ok"], false, "{r}");
 }
 

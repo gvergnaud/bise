@@ -70,12 +70,13 @@ export function resolveMerged(tombs: readonly Pick<WorkTomb, 'id' | 'merged_into
   return at;
 }
 
-/** A name cut at a word with '…' when longer than `max` letters (the whole name goes in its tip). Pure. */
-export function cutAtWord(name: string, max: number): string {
+/** A name cut at a word with '…' when longer than `max` letters (the whole name goes in its tip); a
+ *  first word longer than `minWord` letters... is cut inside when no space comes after `minWord`. Pure. */
+export function cutAtWord(name: string, max: number, minWord = 8): string {
   if (name.length <= max) return name;
   const head = name.slice(0, max);
   const at = head.lastIndexOf(' ');
-  return `${(at > 8 ? head.slice(0, at) : head).trimEnd()}…`;
+  return `${(at >= minWord && at > 0 ? head.slice(0, at) : head).trimEnd()}…`;
 }
 
 /** The artifacts that serve task `id` (a merged task's read as the one it went into), archived ones out,

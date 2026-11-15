@@ -44,18 +44,42 @@ export function markActed(project: string, w: Pick<WorkRow, 'id' | 'status' | 'c
   write({ ...read(), [key(project, w.id)]: seenActed(w, now) });
 }
 
-/** The seen records, re-read when one is written. */
-export function useSeenTasks(): (project: string, id: string) => Seen | undefined {
-  const all = useSyncExternalStore(
-    (cb) => {
-      subs.add(cb);
-      return () => {
-        subs.delete(cb);
-      };
-    },
-    read,
-  );
-  return (project, id) => all[key(project, id)];
+const LOOK = 'tasks.seen.look';
+let lookCache: number | null = null;
+
+/** His last look at the tasks (a Board's close, a Task tab's open): a task born after it with no
+ *  seen record is new. None kept yet (the dot's first run): now, so the tasks there before start
+ *  as seen (tasks-ux m_65371). */
+function looked(): number {
+  if (lookCache !== null) return lookCache;
+  const v = keep.view(LOOK);
+  if (typeof v === 'number') lookCache = v;
+  else {
+    lookCache = Date.now();
+    keep.setView(LOOK, lookCache);
+  }
+  return lookCache;
+}
+
+/** He looked at the tasks now. */
+export function markLooked(now: number = Date.now()): void {
+  lookCache = now;
+  keep.setView(LOOK, now);
+  for (const f of subs) f();
+}
+
+const subscribe = (cb: () => void): (() => void) => {
+  subs.add(cb);
+  return () => {
+    subs.delete(cb);
+  };
+};
+
+/** The seen records and his last look, re-read when one is written. */
+export function useSeenTasks(): { readonly seen: (project: string, id: string) => Seen | undefined; readonly looked: number } {
+  const all = useSyncExternalStore(subscribe, read);
+  const at = useSyncExternalStore(subscribe, looked);
+  return { seen: (project, id) => all[key(project, id)], looked: at };
 }
 
 /** Settles his gestures once the rows show where they went (news.ts's `settled`). */

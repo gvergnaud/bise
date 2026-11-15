@@ -45,6 +45,7 @@ export const METHODS = {
   "pr/act": { cmd: "pr_act", result: "pr_acted" },
   "task/act": { cmd: "task_act", result: null },
   "task/move": { cmd: "task_move", result: null },
+  "task/log": { cmd: "task_log", result: "task_log" },
   "pr/detail": { cmd: "pr_detail", result: "pr_detail" },
   "pr/checkLog": { cmd: "pr_check_log", result: "pr_check_log" },
   "inbox/history": { cmd: "inbox_history", result: "inbox_history" },

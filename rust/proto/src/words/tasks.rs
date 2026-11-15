@@ -184,14 +184,64 @@ crate::words! { tasks:
     act_reopen = "Reopen";
     /// the short Undo after his gesture (roma idea 4): its button
     undo = "Undo";
-    /// the Undo's line after Pause
-    undo_paused(name) = "Paused {name}";
+    /// the Undo's line after Pause: the name first, like our other toasts (designer m_65397)
+    undo_paused(name) = "{name} paused";
     /// the Undo's line after Resume
-    undo_resumed(name) = "Resumed {name}";
+    undo_resumed(name) = "{name} resumed";
     /// the Undo's line after Mark done
-    undo_done(name) = "Marked {name} done";
+    undo_done(name) = "{name} marked done";
     /// the ink dot's label and tip (roma idea 2): its status, artifacts or questions changed
     new_since_looked = "new since you looked";
+
+    // ---- the task's Log (roma idea 3): who did what and why, newest first
+    /// the Task tab's first pane: what the task is now
+    tab_overview = "Overview";
+    /// the Task tab's second pane: its Log
+    tab_log = "Log";
+    /// the Log with no line yet
+    log_none = "Nothing in its Log yet: its agents' reports, your answers, its lands and your gestures land here.";
+    /// the Log while the hub reads it
+    log_loading = "reading its Log…";
+    /// the Log the hub couldn't read
+    log_failed(why) = "its Log can't be read: {why}";
+    /// an agent's `sb report` (kind: progress, done, blocked, failed)
+    log_report(who, kind, text) = "{who} reported {kind}: {text}";
+    /// a `--decision` of that report
+    log_decision(text) = "decided: {text}";
+    /// his answer to one of its questions
+    log_answer(text) = "you answered: {text}";
+    /// a land of its agents: its commits, onto which ref, its tip
+    log_land(who, n, target, sha) = one "{who} landed {n} commit on {target} ({sha})" | "{who} landed {n} commits on {target} ({sha})";
+    /// an agent's first turn on it
+    log_join(who) = "{who} joined";
+    /// his gesture: Pause
+    log_paused = "you paused it";
+    /// his gesture: Resume
+    log_resumed = "you resumed it";
+    /// his gesture: Mark done
+    log_done = "you marked it done";
+    /// his gesture: Reopen
+    log_reopened = "you reopened it";
+    /// his gesture: Rename, its new name
+    log_renamed(name) = "you renamed it {name}";
+    /// his gesture: Merge into, its target
+    log_merged(into) = "you merged it into {into}";
+    /// his gesture: its why set
+    log_why(text) = "you set its why: {text}";
+    /// his gesture: a done-when item added
+    log_goal(text) = "you added done-when: {text}";
+    /// his gesture: done-when item n ticked
+    log_ticked(n) = "you ticked done-when {n}";
+    /// his gesture: done-when item n unticked
+    log_unticked(n) = "you unticked done-when {n}";
+    /// his gesture: made a task that never ends
+    log_ongoing = "you made it ongoing";
+    /// he moved an artifact, a page or a card onto it
+    log_moved_in(what) = "you moved {what} here";
+    /// he moved an artifact, a page or a card off it
+    log_moved_out(what) = "you moved {what} away";
+    /// a moved card (no title to name it)
+    log_a_card = "a question";
     /// the footer's ⋯: its tip
     act_more = "More: Rename, Merge into…";
     /// the ⋯ menu: rename the task (his name: an agent never renames it after)

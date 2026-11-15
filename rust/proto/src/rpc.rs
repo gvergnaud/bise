@@ -103,6 +103,8 @@ pub const METHODS: &[MethodRow] = &[
     // change; a refusal is the command's error
     m("task/act", "task_act", None),
     m("task/move", "task_move", None),
+    // a task's Log (roma idea 3): read off the hub's loop, answered once
+    m("task/log", "task_log", Some("task_log")),
     // a PR's tab: its detail and a check's log, from the forge on a thread
     m("pr/detail", "pr_detail", Some("pr_detail")),
     m("pr/checkLog", "pr_check_log", Some("pr_check_log")),

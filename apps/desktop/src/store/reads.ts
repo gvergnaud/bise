@@ -50,6 +50,7 @@ import {
   prActKey,
   type PrActState,
   prDetailKey,
+  taskLogKey,
   prDiffKey,
   rangeDiffKey,
   prLogKey,
@@ -379,6 +380,15 @@ export class StoreReads extends StoreBase {
   }
   prDetail(project: string, url: string): EvOf<"pr_detail"> | null {
     return this.slice<EvOf<"pr_detail"> | null>(prDetailKey(project, url), null);
+  }
+  /** A task's Log, asked again (its tab opened, a change of the task): the last one stays until
+   *  the new one comes; an older ask's answer is dropped (prReq). */
+  askTaskLog(project: string, id: string): void {
+    const req = this.prReq(taskLogKey(project, id));
+    this.command({ cmd: "task_log", project, id, req, limit: 0 });
+  }
+  taskLog(project: string, id: string): EvOf<"task_log"> | null {
+    return this.slice<EvOf<"task_log"> | null>(taskLogKey(project, id), null);
   }
   /** A failing check's last lines ('Ask <agent> to fix'): null while they come. */
   askPrCheckLog(project: string, url: string, check: string): void {

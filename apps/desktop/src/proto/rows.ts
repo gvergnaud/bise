@@ -1866,3 +1866,53 @@ page?: string | null, };
  * links resolve (a merged one's to the task it went into).
  */
 export type WorkTomb = { id: string, name: string, done_ms: number, merged_into?: string | null, };
+
+/**
+ * What a task Log line is (roma idea 3; architect m_65317): an agent's
+ * `sb report` (with its decisions), his answer to a question, a land, his
+ * gesture, an agent joining. `Unknown`: a kind a newer hub knows.
+ */
+export type LogKind = "report" | "answer" | "land" | "gesture" | "join" | "unknown";
+
+/**
+ * His gesture on a task, as a Log line says it.
+ */
+export type LogGesture = "pause" | "resume" | "done" | "reopen" | "rename" | "merge" | "why" | "goal" | "tick" | "untick" | "ongoing" | "move_in" | "move_out" | "unknown";
+
+/**
+ * One line of a task's Log, newest first in its list: facts only, the
+ * window and `sb task show --log` put them in words. Built by the hub
+ * when asked (switchboard's task_log.rs), from the journal's typed facts
+ * and the land records, never kept.
+ */
+export type LogLine = { at_ms: number, kind: LogKind, 
+/**
+ * the agent, or `user` for his gestures and answers
+ */
+who: string, 
+/**
+ * a report's summary; his answer's words or pick; a rename's new
+ * name, a goal's words, a merge's target, a moved thing's title; a
+ * land's commit range
+ */
+text?: string, 
+/**
+ * a report's kind (`progress`, `done`, `blocked`, `failed`)
+ */
+report?: string, 
+/**
+ * a report's `--decision`s
+ */
+decisions?: Array<string>, gesture?: LogGesture | null, 
+/**
+ * a land's tip (full sha) and its commits' count
+ */
+sha?: string | null, commits?: number, 
+/**
+ * a land's target ref (`main`)
+ */
+target?: string, 
+/**
+ * his answer's card
+ */
+card?: number | null, };

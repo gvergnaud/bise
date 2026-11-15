@@ -184,7 +184,8 @@ export function applyTyped(s: Store, ev: Ev): void {
     // a PR tab's answers: each by its req, the newest one for its key only (a closed tab's, an
     // older ask's, another window's: dropped)
     case "pr_detail":
-    case "pr_check_log": {
+    case "pr_check_log":
+    case "task_log": {
       const key = s.prTake(ev.req);
       if (key !== undefined) s.put(key, ev);
       return;

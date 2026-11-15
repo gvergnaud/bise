@@ -170,14 +170,62 @@ export const tasks = {
   act_reopen: "Reopen",
   /** the short Undo after his gesture (roma idea 4): its button */
   undo: "Undo",
-  /** the Undo's line after Pause */
-  undo_paused: (a: { name: string | number }): string => "Paused " + String(a.name),
+  /** the Undo's line after Pause: the name first, like our other toasts (designer m_65397) */
+  undo_paused: (a: { name: string | number }): string => String(a.name) + " paused",
   /** the Undo's line after Resume */
-  undo_resumed: (a: { name: string | number }): string => "Resumed " + String(a.name),
+  undo_resumed: (a: { name: string | number }): string => String(a.name) + " resumed",
   /** the Undo's line after Mark done */
-  undo_done: (a: { name: string | number }): string => "Marked " + String(a.name) + " done",
+  undo_done: (a: { name: string | number }): string => String(a.name) + " marked done",
   /** the ink dot's label and tip (roma idea 2): its status, artifacts or questions changed */
   new_since_looked: "new since you looked",
+  /** the Task tab's first pane: what the task is now */
+  tab_overview: "Overview",
+  /** the Task tab's second pane: its Log */
+  tab_log: "Log",
+  /** the Log with no line yet */
+  log_none: "Nothing in its Log yet: its agents' reports, your answers, its lands and your gestures land here.",
+  /** the Log while the hub reads it */
+  log_loading: "reading its Log…",
+  /** the Log the hub couldn't read */
+  log_failed: (a: { why: string | number }): string => "its Log can't be read: " + String(a.why),
+  /** an agent's `sb report` (kind: progress, done, blocked, failed) */
+  log_report: (a: { who: string | number; kind: string | number; text: string | number }): string => String(a.who) + " reported " + String(a.kind) + ": " + String(a.text),
+  /** a `--decision` of that report */
+  log_decision: (a: { text: string | number }): string => "decided: " + String(a.text),
+  /** his answer to one of its questions */
+  log_answer: (a: { text: string | number }): string => "you answered: " + String(a.text),
+  /** a land of its agents: its commits, onto which ref, its tip */
+  log_land: (a: { who: string | number; n: number; target: string | number; sha: string | number }): string => a.n === 1 ? String(a.who) + " landed " + String(a.n) + " commit on " + String(a.target) + " (" + String(a.sha) + ")" : String(a.who) + " landed " + String(a.n) + " commits on " + String(a.target) + " (" + String(a.sha) + ")",
+  /** an agent's first turn on it */
+  log_join: (a: { who: string | number }): string => String(a.who) + " joined",
+  /** his gesture: Pause */
+  log_paused: "you paused it",
+  /** his gesture: Resume */
+  log_resumed: "you resumed it",
+  /** his gesture: Mark done */
+  log_done: "you marked it done",
+  /** his gesture: Reopen */
+  log_reopened: "you reopened it",
+  /** his gesture: Rename, its new name */
+  log_renamed: (a: { name: string | number }): string => "you renamed it " + String(a.name),
+  /** his gesture: Merge into, its target */
+  log_merged: (a: { into: string | number }): string => "you merged it into " + String(a.into),
+  /** his gesture: its why set */
+  log_why: (a: { text: string | number }): string => "you set its why: " + String(a.text),
+  /** his gesture: a done-when item added */
+  log_goal: (a: { text: string | number }): string => "you added done-when: " + String(a.text),
+  /** his gesture: done-when item n ticked */
+  log_ticked: (a: { n: string | number }): string => "you ticked done-when " + String(a.n),
+  /** his gesture: done-when item n unticked */
+  log_unticked: (a: { n: string | number }): string => "you unticked done-when " + String(a.n),
+  /** his gesture: made a task that never ends */
+  log_ongoing: "you made it ongoing",
+  /** he moved an artifact, a page or a card onto it */
+  log_moved_in: (a: { what: string | number }): string => "you moved " + String(a.what) + " here",
+  /** he moved an artifact, a page or a card off it */
+  log_moved_out: (a: { what: string | number }): string => "you moved " + String(a.what) + " away",
+  /** a moved card (no title to name it) */
+  log_a_card: "a question",
   /** the footer's ⋯: its tip */
   act_more: "More: Rename, Merge into…",
   /** the ⋯ menu: rename the task (his name: an agent never renames it after) */

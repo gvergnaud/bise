@@ -557,6 +557,7 @@ mod tests {
             tip: "t".into(),
             commits: vec!["t".into()],
             at_ms,
+            works: Vec::new(),
         };
         let records = [rec(5_000), rec(9_000)];
         assert!(before_records(None, 4_000, &records), "no record, older than the first");

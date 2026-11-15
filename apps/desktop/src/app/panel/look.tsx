@@ -117,12 +117,16 @@ function lookOf(tab: Tab, projects: ReturnType<typeof useProjects>, arts: Return
     case 'task': {
       // the task's name cut at a word, its status mark for an icon; a gone one keeps its id
       const w = works(e.project).works.find((x) => x.id === e.id);
-      return w === undefined ? { title: e.id, icon: <AppIcon name="list" size={14} /> } : { title: cutAtWord(w.name, 18), icon: <StatusMark status={w.status} /> };
+      // short enough that the tab never cuts it again with its own ellipsis (designer m_65397: 'Speed up…')
+      return w === undefined ? { title: e.id, icon: <AppIcon name="list" size={14} /> } : { title: cutAtWord(w.name, TASK_TITLE_MAX, 1), icon: <StatusMark status={w.status} /> };
     }
     case 'tab':
       return { title: e.id, icon: null };
   }
 }
+
+/** The longest task name a tab shows, cut at a word: what a tab's title holds without its own cut. */
+const TASK_TITLE_MAX = 10;
 
 /** The longest web page title a tab shows, cut at a word. */
 const WEB_TITLE_MAX = 40;

@@ -45,6 +45,7 @@ pub(super) fn core_served(req: &AgentReq, follows: bool) -> bool {
         | AgentReq::People(_)
         | AgentReq::Artifact(_)
         | AgentReq::ProjectList
+        | AgentReq::Task(bise_proto::sb::Task::Show { log: true, .. })
         | AgentReq::Unknown { .. } => false,
         AgentReq::Follow { .. } => !follows,
         AgentReq::Send { attach, .. } | AgentReq::Spawn { attach, .. } => attach.is_empty(),
@@ -149,6 +150,8 @@ impl Shell {
             AgentReq::History(h) if xread::wanted(&h) => return self.xsearch(stream, &from, h),
             AgentReq::Show { agent, pos, context, .. } => return self.search(stream, &from, history::Look::show(&agent, pos, context)),
             AgentReq::History(h) => return self.search(stream, &from, history::Look::history(&h)),
+            // a task's Log: the journal read on a thread (daemon/task_log.rs)
+            AgentReq::Task(bise_proto::sb::Task::Show { id, log: true }) => return self.task_log_text(stream, id),
             // S10: bise's `sb follow <p>/<agent>`: on that project's hub
             AgentReq::Follow { agent, on, .. } if self.wants_follow(&agent) => return self.xfollow(stream, &from, &agent, on),
             AgentReq::Inspect(q) => self.inspect(&from, &q),

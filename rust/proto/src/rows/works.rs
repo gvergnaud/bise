@@ -61,6 +61,85 @@ pub struct WorkDone {
     pub by: String,
 }
 
+/// What a task Log line is (roma idea 3; architect m_65317): an agent's
+/// `sb report` (with its decisions), his answer to a question, a land, his
+/// gesture, an agent joining. `Unknown`: a kind a newer hub knows.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum LogKind {
+    Report,
+    Answer,
+    Land,
+    Gesture,
+    Join,
+    #[default]
+    #[serde(other)]
+    Unknown,
+}
+
+/// His gesture on a task, as a Log line says it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum LogGesture {
+    Pause,
+    Resume,
+    Done,
+    Reopen,
+    Rename,
+    Merge,
+    Why,
+    Goal,
+    Tick,
+    Untick,
+    Ongoing,
+    /// he moved an artifact, a page or a card onto it
+    MoveIn,
+    /// he moved one off it
+    MoveOut,
+    #[default]
+    #[serde(other)]
+    Unknown,
+}
+
+/// One line of a task's Log, newest first in its list: facts only, the
+/// window and `sb task show --log` put them in words. Built by the hub
+/// when asked (switchboard's task_log.rs), from the journal's typed facts
+/// and the land records, never kept.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct LogLine {
+    pub at_ms: u64,
+    pub kind: LogKind,
+    /// the agent, or `user` for his gestures and answers
+    pub who: String,
+    /// a report's summary; his answer's words or pick; a rename's new
+    /// name, a goal's words, a merge's target, a moved thing's title; a
+    /// land's commit range
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub text: String,
+    /// a report's kind (`progress`, `done`, `blocked`, `failed`)
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub report: String,
+    /// a report's `--decision`s
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub decisions: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gesture: Option<LogGesture>,
+    /// a land's tip (full sha) and its commits' count
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sha: Option<String>,
+    #[serde(default, skip_serializing_if = "super::is_zero_u64")]
+    pub commits: u64,
+    /// a land's target ref (`main`)
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub target: String,
+    /// his answer's card
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub card: Option<u64>,
+}
+
 /// One task with its status.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]

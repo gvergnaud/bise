@@ -22,6 +22,11 @@ pub struct LandRecord {
     pub tip: String,
     pub commits: Vec<String>,
     pub at_ms: u64,
+    /// tasks-roma (architect m_65317): the works the lander's turn served
+    /// (`land::Job.works`), the task Log's typed land fact; none on an
+    /// older record
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub works: Vec<String>,
 }
 
 /// The record of `job`'s land `o` (its commits: `git rev-list base..tip`).
@@ -36,6 +41,7 @@ pub fn of(job: &crate::land::Job, o: &crate::land::Outcome, at_ms: u64) -> LandR
         tip: o.tip.clone(),
         commits,
         at_ms,
+        works: job.works.clone(),
     }
 }
 
@@ -80,6 +86,7 @@ mod tests {
             tip: commits.first().unwrap_or(&"b").to_string(),
             commits: commits.iter().map(|s| s.to_string()).collect(),
             at_ms: 1,
+            works: Vec::new(),
         }
     }
 

@@ -30,10 +30,12 @@ export function settled(s: Seen | undefined, w: Pick<WorkRow, 'status' | 'cards'
   return { at: s.at, status: w.status, cards: s.cards };
 }
 
-/** The dot: what changed since `s` (never seen: no dot, nothing to compare). `newestArt` the newest
- *  artifact of the task (0 none). A question he answered (a card gone) is not news; a new one is. Pure. */
-export function isNew(w: Pick<WorkRow, 'status' | 'cards'>, s: Seen | undefined, newestArt: number): boolean {
-  if (s === undefined) return false;
+/** The dot: what changed since `s`. Never seen: a task born after his last look (`looked`: his last
+ *  Board close or Task tab open; the tasks there before the dot came start as seen) is what's new
+ *  (tasks-ux m_65371). `newestArt` the newest artifact of the task (0 none). A question he answered
+ *  (a card gone) is not news; a new one is. Pure. */
+export function isNew(w: Pick<WorkRow, 'status' | 'cards' | 'created_ms'>, s: Seen | undefined, newestArt: number, looked: number): boolean {
+  if (s === undefined) return w.created_ms > looked;
   if (s.acted !== true && w.status !== s.status) return true;
   if (newestArt > s.at) return true;
   const was = new Set(s.cards);

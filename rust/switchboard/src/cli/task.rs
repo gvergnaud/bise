@@ -4,18 +4,18 @@
 use super::*;
 use bise_proto::sb::Task;
 
-pub(super) const TASK_USAGE: &str = "usage: sb task new \"<name>\" [--why \"<why>\"] [--done-when \"<item>\"]... | sb task list [--all] | sb task show <id> | sb task done|reopen|resume|ongoing <id> | sb task pause <id> [--until <18:00|tomorrow 09:00|2h>] | sb task rename <id> \"<name>\" | sb task why <id> \"<why>\" | sb task goal <id> \"<item>\" | sb task tick|untick <id> <n> | sb task merge <id> --into <id>";
+pub(super) const TASK_USAGE: &str = "usage: sb task new \"<name>\" [--why \"<why>\"] [--done-when \"<item>\"]... | sb task list [--all] | sb task show <id> [--log] | sb task done|reopen|resume|ongoing <id> | sb task pause <id> [--until <18:00|tomorrow 09:00|2h>] | sb task rename <id> \"<name>\" | sb task why <id> \"<why>\" | sb task goal <id> \"<item>\" | sb task tick|untick <id> <n> | sb task merge <id> --into <id>";
 
 /// `sb task <verb> ...` as its request.
 pub(super) fn task_req(rest: &[String]) -> Result<Task, String> {
-    let (pos, o) = parse_args(rest, &["why", "done-when", "until", "into"], &["all"])?;
+    let (pos, o) = parse_args(rest, &["why", "done-when", "until", "into"], &["all", "log"])?;
     let verb = pos.first().ok_or(TASK_USAGE)?.as_str();
     let id = || pos.get(1).map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).ok_or_else(|| TASK_USAGE.to_string());
     let words = |from: usize| text_of(pos.get(from..).unwrap_or(&[]));
     Ok(match verb {
         "new" => Task::New { name: words(1)?, why: str_of(&o, "why"), goals: list_of(o.get("done-when")) },
         "list" => Task::List { all: o.contains_key("all") },
-        "show" => Task::Show { id: id()? },
+        "show" => Task::Show { id: id()?, log: o.contains_key("log") },
         "done" => Task::Done { id: id()? },
         "reopen" => Task::Reopen { id: id()? },
         "resume" => Task::Resume { id: id()? },

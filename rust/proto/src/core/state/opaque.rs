@@ -132,5 +132,10 @@ pub struct Report {
     /// emitter 5: `--result`, proto's DiffResult as JSON
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub result: Option<Value>,
+    /// tasks-roma (architect m_65317): the works an `sb report` is about
+    /// (its `--task`, else its turn's): the task Log reads it. None on a
+    /// turn's end and on an older line.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub works: Vec<String>,
 }
 

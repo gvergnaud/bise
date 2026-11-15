@@ -3553,7 +3553,10 @@ def req_report.go(-o: S.St, is_main: Bool, +cx: X.Cx<o>, +token: Nat, +from: Str
       +cx2 = emit(o, cx, M.EReported{from, J.obj([J.kv("at_ms", J.JNum{now(o, cx)}), J.kv("kind", J.JStr{kind}),
         J.kv("summary", J.JStr{summary}), J.kv("decisions", J.JArr{jstrs(decisions)}), J.kv("auto", J.JBool{False{}}),
         J.kv("step", Maybe.default(&2, J.Json, J.get(q, "step"), J.JNull{})), J.kv("of", Maybe.default(&2, J.Json, J.get(q, "of"), J.JNull{})),
-        J.kv("result", Maybe.default(&2, J.Json, J.get(q, "result"), J.JNull{}))])}, Unit{}, Unit{}, Unit{})
+        J.kv("result", Maybe.default(&2, J.Json, J.get(q, "result"), J.JNull{})),
+        # tasks-roma (architect m_65317): the works it reports on (its
+        # --task, else its turn's), the Log's typed fact
+        J.kv("works", J.JArr{jstrs(works_of_send(task_of(q), st(o, cx), from))})])}, Unit{}, Unit{}, Unit{})
       +cx3 = req_report.kind(o, report_tick(o, K.get_n(q, "done_when"), cx2, from, q), from, kind, summary)
       +parent = Maybe.default(&2, String, ST.parent_of(M.get_agent(st(o, cx3), from)), M.MAIN())
       +to = Bool.pick(String, String.eq(parent, M.USER()), M.MAIN(), parent)

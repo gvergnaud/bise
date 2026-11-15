@@ -14,10 +14,11 @@ import { tasks } from '@/proto/words_tasks.gen';
 import { useNowFor } from '@/app/clock';
 import { aboutOf, barRows, crewOf, cutAtWord, goalsOf, saidOf, STATUS_ORDER, type ProjWork } from './model';
 import { ago } from '@/agents/model';
+import { age } from '@/inbox/InboxCard';
 import { useAllWorks, useNewestArts } from './hooks';
 import { NewDot, openTask, StatusMark } from './Marks';
 import { isNew } from './news';
-import { markActed, markSeen, useSeenTasks, useSettleActed } from './seen';
+import { markActed, markLooked, markSeen, useSeenTasks, useSettleActed } from './seen';
 import { UndoToast, useUndo } from './UndoToast';
 import type { Did } from './undo';
 import { lineAt } from './Side';
@@ -100,7 +101,11 @@ function Card({ x, now, fresh, onDid }: { x: ProjWork; now: number; fresh: boole
     return a === undefined ? [] : [a];
   }));
   const line = lineAt(x, now);
-  const sentence = said?.text ?? (aboutOf(line) !== '' ? aboutOf(line) : line);
+  // a paused card says its pause, never a stale report (designer m_65397)
+  const paused = x.w.status === 'paused';
+  const sentence = paused
+    ? tasks.paused_since({ ago: age(now - (x.w.paused_ms ?? now)) })
+    : (said?.text ?? (aboutOf(line) !== '' ? aboutOf(line) : line));
   return (
     <div className="tk-card" data-st={x.w.status} data-testid={id} role="button" tabIndex={0} onClick={() => {
       openTask(x.project, x.w.id);
@@ -113,9 +118,9 @@ function Card({ x, now, fresh, onDid }: { x: ProjWork; now: number; fresh: boole
         {/* new since he looked: the ink dot (designer: never blue, never pink) */}
         <NewDot on={fresh} testId={`${id}.new`} />
       </span>
-      <span className="tk-card-what" data-testid={`${id}.said`} {...tipAttrs(sentence)}>
+      <span className={`tk-card-what${paused ? ' paused' : ''}`} data-testid={`${id}.said`} {...tipAttrs(sentence)}>
         <span className="tk-card-said">{cutAtWord(sentence, 46)}</span>
-        {said?.at != null && <span className="tk-card-age">{ago(said.at, now)}</span>}
+        {!paused && said?.at != null && <span className="tk-card-age">{ago(said.at, now)}</span>}
       </span>
       {(goals !== null || crew.length > 0) && (
         <span className="tk-card-foot">
@@ -152,7 +157,7 @@ export function BoardTab({ project }: { project: string }) {
   // the since line counts from his last look before this one; this look is kept when the tab goes
   const [since] = useState(() => lookedAt(project));
   // what he saw of each task (the dots): every task it shows is seen when the Board goes
-  const seen = useSeenTasks();
+  const { seen, looked } = useSeenTasks();
   const arts = useNewestArts(project);
   useSettleActed(all);
   const shownRef = useRef<readonly ProjWork[]>([]);
@@ -161,6 +166,7 @@ export function BoardTab({ project }: { project: string }) {
   useEffect(() => () => {
     setLooked(project, Date.now());
     markSeen(shownRef.current);
+    markLooked();
   }, [project]);
   // sideways with the wheel too (a trackpad scrolls both ways by itself)
   useEffect(() => {
@@ -229,7 +235,7 @@ export function BoardTab({ project }: { project: string }) {
                 </h3>
                 <div className="tk-col-cards">
                   {list.map((x) => (
-                    <Card key={`${x.project}/${x.w.id}`} x={x} now={now} fresh={isNew(x.w, seen(x.project, x.w.id), arts.get(`${x.project}/${x.w.id}`) ?? 0)} onDid={offer} />
+                    <Card key={`${x.project}/${x.w.id}`} x={x} now={now} fresh={isNew(x.w, seen(x.project, x.w.id), arts.get(`${x.project}/${x.w.id}`) ?? 0, looked)} onDid={offer} />
                   ))}
                 </div>
               </div>

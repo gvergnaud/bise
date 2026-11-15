@@ -1976,7 +1976,8 @@ impl Hub {
                 reply(fx, json!({"ok": true, "text": crate::task_list::list(&self.st, all, env.now())}));
                 return;
             }
-            AgentReq::Task(bise_proto::sb::Task::Show { id }) => {
+            // `--log` is the shell's, off the loop (daemon/task_log.rs)
+            AgentReq::Task(bise_proto::sb::Task::Show { id, .. }) => {
                 let body = match crate::task_list::show(&self.st, &id, env.now()) {
                     Ok(text) => json!({"ok": true, "text": text}),
                     Err(e) => json!({"ok": false, "error": e}),

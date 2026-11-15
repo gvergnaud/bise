@@ -42,7 +42,8 @@ export function UndoToast({ did, works, name, send, done, testId }: {
   if (inverse(did, 0) === null) return null;
   return (
     <div className="tk-undo">
-      <Toast lead="done" action={{ text: tasks.undo, testId: `${testId}.undo`, onClick: () => {
+      {/* no lead mark: nothing passed or failed (designer m_65397) */}
+      <Toast action={{ text: tasks.undo, testId: `${testId}.undo`, onClick: () => {
         // the inverse at his click (a Resume undone keeps its end only if it is still to come)
         const now = inverse(did, Date.now());
         if (now !== null) send(did.project, now);

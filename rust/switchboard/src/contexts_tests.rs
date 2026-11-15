@@ -111,6 +111,7 @@ fn step(st: &mut State, r: &mut Rng, now: &mut u64, models: &mut Models, n: &mut
                     step: None,
                     of: None,
                     result: None,
+                    works: Vec::new(),
                 });
             }
         }

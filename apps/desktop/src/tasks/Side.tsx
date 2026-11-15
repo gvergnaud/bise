@@ -56,7 +56,7 @@ function TaskRow({ x, now, group, fresh }: { x: ProjWork; now: number; group: st
 /** The section: `scope` the bar's project ('' every project's: bise's own); `groupOf` a project's group words. */
 export function OuterTasks({ all, scope, now, groupOf }: { all: readonly ProjWork[]; scope: string; now: number; groupOf: (project: string) => string | undefined }) {
   const router = useRouter();
-  const seen = useSeenTasks();
+  const { seen, looked } = useSeenTasks();
   const arts = useNewestArts(scope);
   useSettleActed(all);
   const { open, ongoing, done } = barRows(all, now);
@@ -75,7 +75,7 @@ export function OuterTasks({ all, scope, now, groupOf }: { all: readonly ProjWor
           }} data-testid="app.outer.tasks.ask">{tasks.ask_bise}</Press>
         </Empty>
       ) : <Empty>{tasks.none_open}</Empty>}
-      rows={(n) => open.slice(0, n).map((x) => <TaskRow key={`${x.project}/${x.w.id}`} x={x} now={now} group={groupOf(x.project)} fresh={isNew(x.w, seen(x.project, x.w.id), arts.get(`${x.project}/${x.w.id}`) ?? 0)} />)}
+      rows={(n) => open.slice(0, n).map((x) => <TaskRow key={`${x.project}/${x.w.id}`} x={x} now={now} group={groupOf(x.project)} fresh={isNew(x.w, seen(x.project, x.w.id), arts.get(`${x.project}/${x.w.id}`) ?? 0, looked)} />)}
       after={rest > 0 && (
         <Press look="tk-fold" data-testid="app.outer.tasks.rest" onClick={() => {
           openBoard(scope);

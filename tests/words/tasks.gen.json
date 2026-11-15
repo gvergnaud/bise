@@ -286,6 +286,149 @@
     "one": null,
     "text": "show the questions of the tasks you paused"
   },
+  "tasks.log_a_card": {
+    "args": [],
+    "one": null,
+    "text": "a question"
+  },
+  "tasks.log_answer": {
+    "args": [
+      "text"
+    ],
+    "one": null,
+    "text": "you answered: {text}"
+  },
+  "tasks.log_decision": {
+    "args": [
+      "text"
+    ],
+    "one": null,
+    "text": "decided: {text}"
+  },
+  "tasks.log_done": {
+    "args": [],
+    "one": null,
+    "text": "you marked it done"
+  },
+  "tasks.log_failed": {
+    "args": [
+      "why"
+    ],
+    "one": null,
+    "text": "its Log can't be read: {why}"
+  },
+  "tasks.log_goal": {
+    "args": [
+      "text"
+    ],
+    "one": null,
+    "text": "you added done-when: {text}"
+  },
+  "tasks.log_join": {
+    "args": [
+      "who"
+    ],
+    "one": null,
+    "text": "{who} joined"
+  },
+  "tasks.log_land": {
+    "args": [
+      "who",
+      "n",
+      "target",
+      "sha"
+    ],
+    "one": "{who} landed {n} commit on {target} ({sha})",
+    "text": "{who} landed {n} commits on {target} ({sha})"
+  },
+  "tasks.log_loading": {
+    "args": [],
+    "one": null,
+    "text": "reading its Log…"
+  },
+  "tasks.log_merged": {
+    "args": [
+      "into"
+    ],
+    "one": null,
+    "text": "you merged it into {into}"
+  },
+  "tasks.log_moved_in": {
+    "args": [
+      "what"
+    ],
+    "one": null,
+    "text": "you moved {what} here"
+  },
+  "tasks.log_moved_out": {
+    "args": [
+      "what"
+    ],
+    "one": null,
+    "text": "you moved {what} away"
+  },
+  "tasks.log_none": {
+    "args": [],
+    "one": null,
+    "text": "Nothing in its Log yet: its agents' reports, your answers, its lands and your gestures land here."
+  },
+  "tasks.log_ongoing": {
+    "args": [],
+    "one": null,
+    "text": "you made it ongoing"
+  },
+  "tasks.log_paused": {
+    "args": [],
+    "one": null,
+    "text": "you paused it"
+  },
+  "tasks.log_renamed": {
+    "args": [
+      "name"
+    ],
+    "one": null,
+    "text": "you renamed it {name}"
+  },
+  "tasks.log_reopened": {
+    "args": [],
+    "one": null,
+    "text": "you reopened it"
+  },
+  "tasks.log_report": {
+    "args": [
+      "who",
+      "kind",
+      "text"
+    ],
+    "one": null,
+    "text": "{who} reported {kind}: {text}"
+  },
+  "tasks.log_resumed": {
+    "args": [],
+    "one": null,
+    "text": "you resumed it"
+  },
+  "tasks.log_ticked": {
+    "args": [
+      "n"
+    ],
+    "one": null,
+    "text": "you ticked done-when {n}"
+  },
+  "tasks.log_unticked": {
+    "args": [
+      "n"
+    ],
+    "one": null,
+    "text": "you unticked done-when {n}"
+  },
+  "tasks.log_why": {
+    "args": [
+      "text"
+    ],
+    "one": null,
+    "text": "you set its why: {text}"
+  },
   "tasks.merge_head": {
     "args": [],
     "one": null,
@@ -494,6 +637,11 @@
     "one": null,
     "text": "This task is not here anymore."
   },
+  "tasks.tab_log": {
+    "args": [],
+    "one": null,
+    "text": "Log"
+  },
   "tasks.tab_merged": {
     "args": [
       "name"
@@ -515,6 +663,11 @@
     "one": null,
     "text": "no agent yet"
   },
+  "tasks.tab_overview": {
+    "args": [],
+    "one": null,
+    "text": "Overview"
+  },
   "tasks.today": {
     "args": [],
     "one": null,
@@ -530,21 +683,21 @@
       "name"
     ],
     "one": null,
-    "text": "Marked {name} done"
+    "text": "{name} marked done"
   },
   "tasks.undo_paused": {
     "args": [
       "name"
     ],
     "one": null,
-    "text": "Paused {name}"
+    "text": "{name} paused"
   },
   "tasks.undo_resumed": {
     "args": [
       "name"
     ],
     "one": null,
-    "text": "Resumed {name}"
+    "text": "{name} resumed"
   },
   "tasks.waiting_no_agent": {
     "args": [],

@@ -378,6 +378,8 @@ impl Shell {
             // notice as this command's error
             HubCmd::TaskAct { req, .. } => self.step_typed(id, &tag, Input::ClientWorkAct { client: id, req }),
             HubCmd::TaskMove { card, art, page, works, .. } => self.step_typed(id, &tag, Input::ClientWorkMove { client: id, card, art, page, works }),
+            // a task's Log: the journal read on a thread (daemon/task_log.rs)
+            HubCmd::TaskLog { id: task, req, limit, .. } => self.task_log(id, task, req, limit),
             // a PR's tab reads the forge on a thread (daemon/pr_detail.rs)
             HubCmd::PrDetail { url, req, .. } => match crate::forge::pr_link(&url) {
                 Some(l) => self.pr_detail(id, l.url, req),

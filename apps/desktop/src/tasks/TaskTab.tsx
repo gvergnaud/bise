@@ -5,7 +5,8 @@
 // · Pause/Resume (Reopen when done, Restart when stalled). A merged or folded one says where it went.
 // Gestures go through the hub's task_act. Owner: tasks.
 import { useEffect, useRef, useState } from 'react';
-import { ArtChip, Dropdown, Input, Kbd, Press, tipAttrs } from '@/ds';
+import { ArtChip, Dropdown, Input, Kbd, Press, Tabs, tipAttrs } from '@/ds';
+import { TaskLog } from './TaskLog';
 import { dayWords, glyphOf, timeOf } from '@/artifacts/model';
 import { age } from '@/inbox/InboxCard';
 import { inbox } from '@/proto/words_inbox.gen';
@@ -25,7 +26,7 @@ import { aboutOf, artsOf, crewOf, cutAtWord, doingOf, firstLine, goalsOf, isOpen
 import { openTask, StatusMark, statusWord } from './Marks';
 import { useTaskAct, useTaskReq } from './Board';
 import { lineAt } from './Side';
-import { markSeen } from './seen';
+import { markLooked, markSeen } from './seen';
 import { UndoToast, useUndo } from './UndoToast';
 import type { Did } from './undo';
 
@@ -70,11 +71,15 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
     seenRef.current = seenRow;
     if (seenRow !== undefined) markSeen([{ project, projectName: project, w: seenRow }]);
   }, [project, seenRow]);
+  useEffect(() => {
+    markLooked();
+  }, [project, id]);
   useEffect(() => () => {
     const r = seenRef.current;
     if (r !== undefined) markSeen([{ project, projectName: project, w: r }]);
   }, [project]);
   const [renaming, setRenaming] = useState(false);
+  const [pane, setPane] = useState<'overview' | 'log'>('overview');
   // '+ Agent': the field open; asked: how many agents it had when he asked (its line goes when one more comes)
   const [asking, setAsking] = useState(false);
   const [asked, setAsked] = useState<{ readonly n: number; readonly at: number } | null>(null);
@@ -152,6 +157,16 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
         )}
         <p className="tk-meta">{tasks.tab_meta({ project: x.projectName, agents: names.length === 0 ? tasks.tab_no_agents : tasks.tab_agents({ n: names.length }), when: started(w.created_ms, now) })}</p>
       </header>
+
+      {/* roma idea 3: its Log beside what it is now */}
+      <Tabs testId={`${t}.panes`} onPick={(p) => {
+        setPane(p === 'log' ? 'log' : 'overview');
+      }} items={[
+        { id: 'overview', text: tasks.tab_overview, on: pane === 'overview' },
+        { id: 'log', text: tasks.tab_log, on: pane === 'log' },
+      ]} />
+
+      {pane === 'log' ? <TaskLog project={project} id={w.id} last={w.last_ms} now={now} testId={`${t}.log`} /> : (<>
 
       {origin !== null && (
         // his message itself, its first line cut at a word, linked to its place in main's thread (no origin: no block)
@@ -310,6 +325,7 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
           <p className="tk-meta" data-testid={`${t}.asked`}>{tasks.agent_asked}</p>
         )
       )}
+      </>)}
 
       </div>
 

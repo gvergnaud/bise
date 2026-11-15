@@ -14,7 +14,7 @@ import type { Acted } from './acted';
 import type { FoundFolders } from './reads';
 import type { Refused } from './refused';
 import type { InboxItem } from '@/inbox/listed';
-import { guideForKey, guideKey, prActKey, prDetailKey, prDiffKey, prLogKey, rangeDiffKey, type GuideEv, type PrActState } from './types';
+import { guideForKey, guideKey, prActKey, prDetailKey, prDiffKey, prLogKey, rangeDiffKey, taskLogKey, type GuideEv, type PrActState } from './types';
 import { artDiffKey, branchDiffKey, diffErrKey, diffKey, toolOutKey, Store, type ToolOut, type Away, type Dictation, type HubLine, type Diff, type DiffErr, type FilesAnswer, type Ev, type EvOf, type Pending, type BranchesList, type VersionsList, type PagesList, type ThreadHits, type ThreadMarks, type ThreadOrder, type VoiceModeState, type TalkShot } from './store';
 
 /**
@@ -171,6 +171,9 @@ export const useRangeDiff = (project: string, range: string): Diff | null =>
 /** A PR tab's detail (askPrDetail): the last answer, a detail or a typed error; null before one. */
 export const usePrDetail = (project: string, url: string): EvOf<'pr_detail'> | null =>
   useSlice(prDetailKey(project, url), (s) => s.prDetail(project, url));
+/** A task's Log (askTaskLog): the last answer, its lines or its error; null before one. */
+export const useTaskLog = (project: string, id: string): EvOf<'task_log'> | null =>
+  useSlice(taskLogKey(project, id), (s) => s.taskLog(project, id));
 /** A check's log (askPrCheckLog): null while it comes. */
 export const usePrCheckLog = (project: string, url: string, check: string): EvOf<'pr_check_log'> | null =>
   useSlice(prLogKey(project, url, check), (s) => s.prCheckLog(project, url, check));

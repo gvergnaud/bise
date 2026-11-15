@@ -39,6 +39,8 @@ export const TAGS = {
   // a PR tab's detail and a check's log (pr/detail, pr/checkLog): results, never pushed
   pr_detail: true,
   pr_check_log: true,
+  // a task's Log (task/log): a result, never pushed
+  task_log: true,
   models: true,
   tool_out: true,
   // the answer to queued_take (turn/unqueue): his taken-back words, to the asking window (main 34c35175)
@@ -414,6 +416,11 @@ export function prDiffKey(project: string, url: string): string {
 /** A range's diff (`from..to`, the `diff` ask's `range`; its answer is known by its `req`). */
 export function rangeDiffKey(project: string, range: string): string {
   return `diff:${project}/range:${range}`;
+}
+
+/** A task's Log (task/log's last answer for it). */
+export function taskLogKey(project: string, id: string): string {
+  return `task_log:${project}/${id}`;
 }
 
 /** A PR tab's detail (pr/detail's last answer for it). */
