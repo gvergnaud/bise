@@ -2,7 +2,7 @@
 // checked complete at compile time), the slices' list types, and the key and
 // compare helpers. Pure, no state. Split out of store.ts (pure move). Owner:
 // amb-core (the hub slices with amb-win).
-import type { AwayProject, CoreEv, ErrorKind, FindHit, GuideTarget, HubEv, InboxRecord, Mark, Mode, Part, Pr, PickFile, PickFolder, BranchRow, Page, TakeStop, VersionItem, WorkRow, WorkTomb } from '@/proto';
+import type { AwayProject, CoreEv, ErrorKind, FindHit, GuideTarget, HubEv, InboxRecord, Mark, Mode, Part, PickFile, PickFolder, BranchRow, Page, TakeStop, VersionItem, WorkRow, WorkTomb } from '@/proto';
 export type Ev = HubEv | CoreEv;
 export type EvOf<T extends Ev['ev']> = Extract<Ev, { ev: T }>;
 

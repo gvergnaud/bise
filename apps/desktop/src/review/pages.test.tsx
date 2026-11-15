@@ -27,7 +27,7 @@ function world() {
   const store = new Store(port);
   store.setCore('up');
   // the hub's PR rows on their places (the PRs screen reads them there)
-  const prs = hub_ev.find((e) => e.ev === 'prs' && e.items.length > 0)?.items ?? [];
+  const prs = hub_ev.flatMap((e) => (e.ev === 'prs' ? [e.items] : [])).find((items) => items.length > 0) ?? [];
   const places = prs.map((pr) => ({ id: `wt:${pr.branch}`, branch: pr.branch, agents: pr.agents, pr }));
   store.apply({ ev: 'agents', project: P, places, agents: [ag('main'), ag('perf', { status: 'working', worktree: '/w/perf', branch: 'sb/perf' }), ag('alerts', { waits: 1 }), ag('old', { archived: true, status: 'done' })] });
   store.apply({ ev: 'worktrees', project: P, items: [{ path: '/w/perf', branch: 'sb/perf', agent: 'perf', ahead: 2, behind: 0, dirty: true }] });
