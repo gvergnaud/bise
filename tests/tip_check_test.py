@@ -60,6 +60,24 @@ def pure():
     now = 1_000_000
     # a tip with a verdict: nothing; the first run: the hook's base (the newest land), no wait
     check(T.plan("t1", [v("t1", now)], "h", now, anc) is None, "a checked tip runs nothing")
+    # a red step's test name survives the recheck (main m_65480): its failure lines, kept
+    cargo_red = ("running 253 tests\n....F..\nfailures:\n\n---- words::tests::x stdout ----\n"
+                 "thread 'words::tests::x' panicked at src/words/tests.rs:9:5:\nassertion `left == right` failed\n"
+                 "  left: 1\n right: 2\n\nfailures:\n    words::tests::x\n\ntest result: FAILED. 252 passed; 1 failed\n")
+    got = T.red_lines(cargo_red)
+    check(got[:2] == ["failures:", "---- words::tests::x stdout ----"] and any("panicked at" in l for l in got)
+          and "  left: 1" in got and " right: 2" in got, "a cargo red's lines: %r" % got)
+    check(T.red_lines("") == [] and T.red_lines("ok   x\n") == [], "a green log: none")
+    import tempfile
+    with tempfile.TemporaryDirectory() as hd:
+        os.makedirs(os.path.join(hd, "gate"))
+        open(os.path.join(hd, "gate", "sb-gate-testx-tip-check.log"), "w").write(cargo_red)
+        tl = os.path.join(hd, "tip.log")
+        open(tl, "w").write("== quick\nFAIL testx\n")
+        T.keep_red_logs(hd, tl, ["testx", "gone_step"])
+        kept = open(tl).read()
+        check("== testx's first red (kept: %s.red-testx.log)" % tl in kept and "---- words::tests::x stdout ----" in kept
+              and os.path.exists(tl + ".red-testx.log") and "gone_step" not in kept, "its log kept: %r" % kept)
     # a quick gate heavy-run stopped (HEAVY_MAX_MIN) is no red, and no base for the next run
     stop = ('heavy-run: stopped "nice -n 5 bash tests/gate.sh quick ": it ran 120 min, over its limit '
             '(HEAVY_MAX_MIN=120): a stuck job holds a slot')

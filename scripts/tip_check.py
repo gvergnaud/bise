@@ -477,6 +477,34 @@ def flaky(home, sha, log):
     os.replace(dst + ".tmp", dst)
 
 
+FAIL_LINE_RX = re.compile(r"^---- .+ stdout ----$|panicked at|^\s*(left|right): |^test .* FAILED$|^failures:$|never: |timeout after ")
+
+
+def red_lines(text, most=30):
+    """A red step's log's lines that name the failing test and why (cargo's '---- <test> stdout
+    ----', its panic, left/right), at most `most`. Pure."""
+    return [l.rstrip() for l in (text or "").splitlines() if FAIL_LINE_RX.search(l)][:most]
+
+
+def keep_red_logs(home, log, steps):
+    """Before the rechecks rewrite it (gate.sh's <gate>/sb-gate-<step>-tip-check.log, main m_65480:
+    a bise-proto red's test name was lost): each red step's log copied next to the tip log
+    (<log>.red-<step>.log) and its failure lines added to the tip log."""
+    with open(log, "a") as out:
+        for s in steps:
+            src = os.path.join(home, "gate", "sb-gate-%s-tip-check.log" % s)
+            try:
+                text = open(src, errors="replace").read()
+            except OSError:
+                continue
+            dst = "%s.red-%s.log" % (log, s)
+            with open(dst, "w") as f:
+                f.write(text)
+            out.write("== %s's first red (kept: %s):\n" % (s, dst))
+            for l in red_lines(text) or ["(no test line: see the kept log)"]:
+                out.write("   " + l + "\n")
+
+
 def quick_red(home, main_tree, wt, tip, base, log, v, journals, today_cpu, bound=CPU_BOUND):
     """After a red quick gate on tip (architect m_63969): only its red steps again (recheck). The
     range's commits whose own diff reaches a red step: exactly one is confirmed on itself first
@@ -489,6 +517,7 @@ def quick_red(home, main_tree, wt, tip, base, log, v, journals, today_cpu, bound
         steps, cargo = red_steps(open(log).read())
     except OSError:
         steps, cargo = [], []
+    keep_red_logs(home, log, steps)
     commits = (git(main_tree, "rev-list", "--first-parent", "--reverse", base + ".." + tip) or "").split() or [tip]
     if len(commits) > 1:
         selfnames = set(self_cmds(wt))
