@@ -158,11 +158,14 @@ def recheck_pure():
     check(T.named_by_diff(["shims_check"], [], plans, set()) == [] and T.named_by_diff(["testbend-tui"], [], plans, set()) == [],
           "none named: the halving")
     check(T.named_by_diff(["clippy"], [], plans, set()) == ["c2"], "clippy: any crate")
-    # the real gate_plan: a proto change and a dependency-only change reach bend-tui's red tests and the desktop
-    for f in ("rust/proto/src/lib.rs", "rust/home/src/lib.rs"):
+    # the real gate_plan: a proto change and a dependency-only change reach bend-tui's red tests;
+    # the core seam (rust/home) the desktop too, the proto's src only through its .gen.ts output
+    # (gate_plan.GEN_ROUTED, architect m_65232: no .gen.ts in the change, no desktop step)
+    for f, desk in (("rust/proto/src/lib.rs", False), ("rust/home/src/lib.rs", True)):
         p = T.gate_plan_in(ROOT, [f])
         check(p is not None and T.reaches(["testbend-tui_bend-harness"], ["-p bend-tui --lib"], p, set())
-              and T.reaches(["desktop_check"], [], p, set()), "the real gate_plan: %s reaches bend-tui and the desktop" % f)
+              and T.reaches(["desktop_check"], [], p, set()) == desk,
+              "the real gate_plan: %s reaches bend-tui, the desktop %s" % (f, "too" if desk else "not"))
     # the halving stopped at the bound: the window still open
     asked = []
 
