@@ -18,6 +18,40 @@ fn cpu_ms() -> f64 {
     t.tv_sec as f64 * 1000.0 + t.tv_nsec as f64 / 1e6
 }
 
+/// A fixed piece of CPU work's ms on this thread now (median of 3): no memory, no syscall, so
+/// only the core's speed moves it (an efficiency core, a low clock under a gate's nice).
+fn work_ms() -> f64 {
+    let mut ms: Vec<f64> = (0..3)
+        .map(|_| {
+            let t = cpu_ms();
+            let mut x: u64 = 0x9E37_79B9_7F4A_7C15;
+            for _ in 0..WORK_STEPS {
+                x ^= x << 13;
+                x ^= x >> 7;
+                x ^= x << 17;
+            }
+            std::hint::black_box(x);
+            cpu_ms() - t
+        })
+        .collect();
+    ms.sort_by(f64::total_cmp);
+    ms[1]
+}
+
+/// How much slower than the budgets' core this thread's core is now, at least 1 (fast-loop,
+/// main m_65497: sb_history_and_show_never_hold_the_loop went red once in the tip gate, its
+/// CPU budget on a slow core): a CPU ms measured now, divided by it, is a fast core's ms. The
+/// guard keeps its teeth: the search back on the loop was 2.3 s here, 140x the budget.
+fn core_factor() -> f64 {
+    (work_ms() / WORK_MS).max(1.0)
+}
+
+const WORK_STEPS: u64 = 2_000_000;
+/// work_ms() where the budgets were measured (M-series, a debug test under heavy-run, load ~12,
+/// 2026-11-15): 12.3-16.4 ms, and the loop's raw CPU there 4.0-5.8 ms for the history asks,
+/// HISTORY_MS's own 4.5-5.4. Its low side: a core as fast or faster leaves the ms as they are.
+const WORK_MS: f64 = 12.0;
+
 /// The median CPU ms of 5 runs of `f`.
 fn median5(mut f: impl FnMut()) -> f64 {
     let mut ms: Vec<f64> = (0..5)
@@ -283,12 +317,15 @@ fn sb_history_and_show_never_hold_the_loop() {
         ("sb show", json!({"cmd": "show", "agent": "t3", "pos": 2})),
         ("sb history --all", json!({"cmd": "history", "query": "walrus", "all": true})),
     ] {
+        // the core it runs on now, in the budget's units: just before the ask, on this thread
+        let k = core_factor();
+        eprintln!("{what}: the core factor {k:.2} (the work {WORK_MS} ms on the budgets' core)");
         let (ms, wall, n, reply) = ask(&mut sh, v);
-        seen.push((what, ms, wall, n, reply));
+        seen.push((what, ms / k, wall, n, reply));
     }
     let _ = std::fs::remove_dir_all(&root);
     for (what, ms, wall, n, _) in &seen {
-        eprintln!("{what}: the loop's CPU {ms:.2} ms, its wall {wall:?}, {n} transcript reads on the loop");
+        eprintln!("{what}: the loop's CPU {ms:.2} ms (a fast core's), its wall {wall:?}, {n} transcript reads on the loop");
     }
     // what they answer: the search's own (history_work.rs's test compares it)
     assert_eq!(seen[0].4["ok"], json!(true), "{}", seen[0].4);
