@@ -207,13 +207,6 @@ export interface InboxList {
   readonly withdrawn: number;
 }
 
-export interface PrsList {
-  readonly head: string;
-  readonly items: readonly Pr[];
-  /** the hub's words when none is open */
-  readonly none: string | null;
-}
-
 export function typed(raw: unknown): Ev | null {
   if (typeof raw !== 'object' || raw === null) return null;
   const tag = (raw as { ev?: unknown }).ev;

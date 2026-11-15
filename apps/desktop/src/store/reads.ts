@@ -57,7 +57,6 @@ import {
   type HubLine,
   type InboxList,
   type PagesList,
-  type PrsList,
   type QueuedTake,
   sameJson,
   type TalkShot,
@@ -318,9 +317,6 @@ export class StoreReads extends StoreBase {
   /** a hub's answered and withdrawn records (inbox/history); null before it said */
   inbox(project: string): InboxList | null {
     return this.slice<InboxList | null>(`inbox:${project}`, null);
-  }
-  prs(project: string): PrsList | null {
-    return this.slice<PrsList | null>(`prs:${project}`, null);
   }
   jobs(project: string): readonly Job[] {
     return this.slice(`jobs:${project}`, EMPTY);

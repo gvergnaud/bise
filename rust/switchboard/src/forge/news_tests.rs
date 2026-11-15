@@ -244,6 +244,37 @@ fn a_long_body_is_cut() {
     assert!(t[0].1.contains("x…"));
 }
 
+/// Which places' PRs are open, once each, by number: the same table as
+/// the window's review/prs.ts openPrs (bise-proto's fixtures/open_prs.json,
+/// architect m_65418).
+#[test]
+fn open_prs_follow_the_shared_table() {
+    use crate::place::{Place, PlaceKind};
+    let cases: Vec<serde_json::Value> = serde_json::from_str(include_str!("../../../proto/fixtures/open_prs.json")).unwrap();
+    for c in cases {
+        let places: Vec<Place> = c["places"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| Place {
+                id: p["id"].as_str().unwrap().into(),
+                kind: PlaceKind::Worktree,
+                path: String::new(),
+                branch: None,
+                base: None,
+                agents: Vec::new(),
+                pr: p["pr"].as_object().map(|o| PrSnapshot {
+                    number: o["number"].as_u64().unwrap(),
+                    state: serde_json::from_value(o["state"].clone()).unwrap(),
+                    ..pr("h", Review::None, Checks::None)
+                }),
+            })
+            .collect();
+        let want: Vec<u64> = c["open"].as_array().unwrap().iter().map(|n| n.as_u64().unwrap()).collect();
+        assert_eq!(pr_rows(&places).iter().map(|r| r.number).collect::<Vec<_>>(), want, "{}", c["name"]);
+    }
+}
+
 /// bar A.7 (architect m_10314): `/prs`'s typed rows say what each PR
 /// means (state, checks, review) with the hub's words; the text list and
 /// the typed event are made from them.

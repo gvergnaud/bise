@@ -16,7 +16,6 @@ import {
   type HubLine,
   type InboxList,
   type PagesList,
-  type PrsList,
   type PrActState,
   type QueuedTake,
   takeKey,
@@ -180,11 +179,7 @@ export function applyTyped(s: Store, ev: Ev): void {
       s.put(`${ev.ev}:${ev.project}`, ev);
       return;
     case "prs":
-      s.put(`prs:${ev.project}`, {
-        head: ev.head,
-        items: ev.items,
-        none: ev.none ?? null,
-      } satisfies PrsList);
+      // the TUI's and sb's /prs list: the window reads the same PRs off the places (review/prs.ts openPrs)
       return;
     // a PR tab's answers: each by its req, the newest one for its key only (a closed tab's, an
     // older ask's, another window's: dropped)

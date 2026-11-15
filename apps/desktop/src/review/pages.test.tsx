@@ -26,10 +26,11 @@ function world() {
   const port: CorePort = { send: () => undefined, onEvent: () => () => undefined, onState: () => () => undefined, state: () => Promise.resolve('up') };
   const store = new Store(port);
   store.setCore('up');
-  store.apply({ ev: 'agents', project: P, agents: [ag('main'), ag('perf', { status: 'working', worktree: '/w/perf', branch: 'sb/perf' }), ag('alerts', { waits: 1 }), ag('old', { archived: true, status: 'done' })] });
+  // the hub's PR rows on their places (the PRs screen reads them there)
+  const prs = hub_ev.find((e) => e.ev === 'prs' && e.items.length > 0)?.items ?? [];
+  const places = prs.map((pr) => ({ id: `wt:${pr.branch}`, branch: pr.branch, agents: pr.agents, pr }));
+  store.apply({ ev: 'agents', project: P, places, agents: [ag('main'), ag('perf', { status: 'working', worktree: '/w/perf', branch: 'sb/perf' }), ag('alerts', { waits: 1 }), ag('old', { archived: true, status: 'done' })] });
   store.apply({ ev: 'worktrees', project: P, items: [{ path: '/w/perf', branch: 'sb/perf', agent: 'perf', ahead: 2, behind: 0, dirty: true }] });
-  const prs = hub_ev.find((e) => e.ev === 'prs' && e.items.length > 0);
-  if (prs) store.apply({ ...prs, project: P });
   const wrap = (ui: ReactElement) => (
     <StoreProvider store={store}>
       <RouterContext value={createRouter({ screen: 'agents', project: P })}>{ui}</RouterContext>

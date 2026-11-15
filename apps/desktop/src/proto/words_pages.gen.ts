@@ -66,6 +66,8 @@ export const pages = {
   yours: "yours",
   /** no PR open: the empty state's title */
   no_pr: "no pull request open.",
+  /** how many PRs are open or drafts (the hub's `/prs` head, the window's Pull requests row and banner) */
+  prs_open: (a: { n: number }): string => a.n === 1 ? String(a.n) + " PR open" : String(a.n) + " PRs open",
   /** the project's checkout every agent without a worktree works in */
   shared_folder: "The shared folder",
   /** nobody works here */

@@ -36,7 +36,6 @@ function shell(from: Route) {
   store.apply(ev('agents', { project: P, agents: [agent('main'), agent('perf'), agent('docs')], places: [{ id: 'wt:perf', branch: 'sb/perf', agents: ['perf'], pr: status }] }));
   store.apply(ev('worktrees', { project: P, items: [{ path: '/w/perf', branch: 'sb/perf', agent: 'perf', ahead: 2, behind: 0, dirty: false }, { path: '/w/docs', branch: 'sb/docs', agent: 'docs', ahead: 1, behind: 0, dirty: false }] }));
   store.apply(artifacts(P, artifact({ id: 'pr-412', kind: 'pr', title: 'Faster signup', url: URL, agent: 'perf', pr: { repo: 'acme/web', number: 412, tag: '#412', status } })));
-  store.apply(ev('prs', { project: P, head: '1 PR open', items: [status] }));
   store.apply(ev('merged', { project: P, items: [{ sha: 'e0f3df5a9c1b', title: 'perf: sort_unstable', by: 'perf', at_ms: 1 }] }));
   const router = createRouter(from);
   const wrap = (ui: ReactNode) => (

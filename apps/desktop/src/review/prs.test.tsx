@@ -1,15 +1,16 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render } from '@testing-library/react';
+import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { Pr } from '@/proto';
+import type { Place, Pr } from '@/proto';
 import { hub_ev } from '@/proto/fixtures.gen';
+import OPEN_PRS from '../../../../rust/proto/fixtures/open_prs.json';
 import { pages } from '@/proto/words_pages.gen';
 import type { CoreCmd, CorePort } from '@/shared/api';
 import { Store, StoreProvider, replay } from '@/store';
 import { createRouter, RouterContext } from '@/app/router';
 import { formatRoute, parseRoute } from '@/app/route';
 import { runWindowCommand } from '@/thread/commands';
-import { agentsOf, toneOf, wordsOf } from './prs';
+import { agentsOf, openPrs, toneOf, wordsOf } from './prs';
 import { PrsScreen } from './PrsScreen';
 import { panelState } from '@/app/panel/state';
 import { ChangesScreen } from './ChangesScreen';
@@ -44,6 +45,10 @@ describe('PRs, pure (fixtures)', () => {
     expect(wordsOf(pr({ state: 'draft', checks: 'fail', failing: ['lint', 'e2e'] }))).toBe('draft · checks fail: lint, e2e');
     expect(wordsOf(pr({ review: 'approved', checks: 'pass' }))).toBe('approved · checks pass');
   });
+  it.each(OPEN_PRS)('the open PRs off the places, as the hub picks them: $name', (c) => {
+    const places: Place[] = c.places.map((p) => ({ id: p.id, pr: p.pr === null ? null : pr({ number: p.pr.number, state: p.pr.state as Pr['state'] }) }));
+    expect(openPrs(places).map((p) => p.number)).toEqual(c.open);
+  });
   it('/prs and its route', () => {
     expect(runWindowCommand('/prs', '', { project: P, agent: 'main' })).toEqual({ screen: 'prs', project: P });
     expect(parseRoute(`prs/${P}`)).toEqual({ screen: 'prs', project: P });
@@ -67,17 +72,22 @@ function setup() {
 
 afterEach(cleanup);
 
+/** The hub's PR rows on their places, as the agents event brings them (one place each). */
+function placesOf(store: Store, items: readonly Pr[]): void {
+  store.apply({ ev: 'agents', project: P, agents: [], places: items.map((p) => ({ id: `wt:${p.branch}`, branch: p.branch, agents: p.agents, pr: p })) });
+}
+
 describe('the PR list', () => {
-  it('asks prs on open; rows say number, branch, agents, state in words; a click opens its tab, ⌘-click the forge', () => {
+  it('reads its places, asks nothing; rows say number, branch, agents, state in words; a click opens its tab, ⌘-click the forge', () => {
     const { store, cmds, wrap } = setup();
     const list = fixtures.find((e) => e.items.length > 0);
     if (!list) throw new Error('fixture');
-    store.apply(list);
+    placesOf(store, list.items);
     const openExternal = vi.fn(() => Promise.resolve());
     (window as unknown as { bise: unknown }).bise = { openExternal };
     const v = render(wrap(<PrsScreen project={P} />));
-    expect(cmds).toContainEqual({ cmd: 'prs', project: P });
-    expect(v.getByTestId('prs.screen').textContent).toContain('2 PRs open');
+    expect(cmds).toEqual([]);
+    expect(v.getByTestId('prs.screen').textContent).toContain(pages.prs_open({ n: 2 }));
     const row = v.getByTestId('prs.row.412');
     expect(row.textContent).toContain('#412');
     expect(row.textContent).toContain('sb/dark-mode');
@@ -95,18 +105,31 @@ describe('the PR list', () => {
 
   it("empty: one line, never the banner's sentence again (designer m_43933 #7)", () => {
     const { store, wrap } = setup();
-    const none = fixtures.find((e) => e.items.length === 0);
-    if (!none) throw new Error('fixture');
-    store.apply(none);
+    // a merged PR's place: nothing open
+    placesOf(store, [pr({ number: 400, state: 'merged' })]);
     const v = render(wrap(<PrsScreen project={P} />));
     expect(v.getByTestId('prs.none').textContent).toBe(pages.no_pr);
+    expect(v.getByTestId('prs.screen').textContent).not.toContain(pages.prs_open({ n: 1 }));
   });
 
-  it('the changes screen asks prs, says how many, and opens the list', () => {
+  it('a PR that opens on a place shows at once, with no ask (the one source the right bar reads)', () => {
+    const { store, cmds, wrap } = setup();
+    const v = render(wrap(<PrsScreen project={P} />));
+    expect(v.queryByTestId('prs.row.9')).toBeNull();
+    act(() => {
+      placesOf(store, [pr({ number: 9, branch: 'sb/new', url: 'https://github.com/acme/acme/pull/9' })]);
+    });
+    expect(v.getByTestId('prs.row.9').textContent).toContain('sb/new');
+    expect(cmds).toEqual([]);
+  });
+
+  it("the changes screen says how many off the places, asks nothing for them, and opens the list", () => {
     const { store, cmds, router, wrap } = setup();
     replay(store);
     const v = render(wrap(<ChangesScreen project={P} />));
-    expect(cmds).toContainEqual({ cmd: 'prs', project: P });
+    expect(cmds.some((c) => c.cmd === 'prs')).toBe(false);
+    const n = openPrs(store.places(P)).length;
+    expect(v.getByTestId('changes.prs').textContent).toContain(n === 0 ? pages.prs_none_open : pages.prs_open({ n }));
     fireEvent.click(v.getByTestId('changes.prs.open'));
     expect(router.get()).toEqual({ screen: 'prs', project: P });
   });

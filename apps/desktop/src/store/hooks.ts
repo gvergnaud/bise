@@ -15,7 +15,7 @@ import type { FoundFolders } from './reads';
 import type { Refused } from './refused';
 import type { InboxItem } from '@/inbox/listed';
 import { guideForKey, guideKey, prActKey, prDetailKey, prDiffKey, prLogKey, rangeDiffKey, type GuideEv, type PrActState } from './types';
-import { artDiffKey, branchDiffKey, diffErrKey, diffKey, toolOutKey, Store, type ToolOut, type Away, type Dictation, type HubLine, type Diff, type DiffErr, type FilesAnswer, type Ev, type EvOf, type Pending, type PrsList, type BranchesList, type VersionsList, type PagesList, type ThreadHits, type ThreadMarks, type ThreadOrder, type VoiceModeState, type TalkShot } from './store';
+import { artDiffKey, branchDiffKey, diffErrKey, diffKey, toolOutKey, Store, type ToolOut, type Away, type Dictation, type HubLine, type Diff, type DiffErr, type FilesAnswer, type Ev, type EvOf, type Pending, type BranchesList, type VersionsList, type PagesList, type ThreadHits, type ThreadMarks, type ThreadOrder, type VoiceModeState, type TalkShot } from './store';
 
 /**
  * Feeds a store from a core port: its live events, then the state events
@@ -143,7 +143,6 @@ export const useHubSwitch = (project: string): SwitchRow | null => useSlice(`swi
 /** les bims: how much the project has done (hub/growth): null before the hub said */
 export const useGrowth = (project: string): Growth | null => useSlice(`growth:${project}`, (s) => s.growth(project));
 export const useRelease = (project: string): ReleaseEv | null => useSlice(`release:${project}`, (s) => s.release(project));
-export const usePrs = (project: string): PrsList | null => useSlice(`prs:${project}`, (s) => s.prs(project));
 export const useModels = (project: string): readonly Model[] => useSlice(`models:${project}`, (s) => s.models(project));
 export const useFeatures = (project: string): readonly Feature[] => useSlice(`features:${project}`, (s) => s.features(project));
 export const usePlaces = (project: string): readonly Place[] => useSlice(`places:${project}`, (s) => s.places(project));

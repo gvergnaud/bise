@@ -12,7 +12,8 @@ import { AppIcon, Dot, Empty, GroupLabel, ListRow, MoreButton, PageBanner } from
 import { hero } from '@/proto/words_hero.gen';
 import { pages } from '@/proto/words_pages.gen';
 import type { Merged, Worktree } from '@/proto';
-import { useAgents, useFeatures, useMerged, usePrs, useStore, useWorktrees } from '@/store';
+import { useAgents, useFeatures, useMerged, usePlaces, useStore, useWorktrees } from '@/store';
+import { openPrs } from './prs';
 import { StateMark } from '@/agents/AgentsScreen';
 import { PageVignette, useBannerGutter } from '@/artifacts/hero/vignettes';
 import { distance, stateWords } from './feature';
@@ -34,14 +35,14 @@ export function ChangesScreen({ project }: { project: string }) {
   const worktrees = useWorktrees(project);
   const merged = useMerged(project);
   const features = useFeatures(project);
-  const prs = usePrs(project);
+  // its open PRs off its places, live (the right bar's and the PR tab's source)
+  const prs = openPrs(usePlaces(project));
 
   // fresh lists on open (the old window's f8e8330a)
   useEffect(() => {
     store.command({ cmd: 'worktrees', project });
     store.command({ cmd: 'merged', project });
     store.command({ cmd: 'features', project });
-    store.command({ cmd: 'prs', project });
   }, [store, project]);
 
   const branches = branchesOf(worktrees);
@@ -55,7 +56,7 @@ export function ChangesScreen({ project }: { project: string }) {
           {/* its open PRs (bar A.7, the TUI's /prs): the count, the list one click away */}
           <ListRow testId="changes.prs" state={<AppIcon name="branch" size={14} />}
             title={pages.prs_row}
-            sub={prs === null ? pages.prs_asking : prs.items.length === 0 ? pages.prs_none_open : prs.head}
+            sub={prs.length === 0 ? pages.prs_none_open : pages.prs_open({ n: prs.length })}
             onClick={() => {
               router.go({ screen: 'prs', project });
             }} />

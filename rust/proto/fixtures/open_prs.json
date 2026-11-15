@@ -1,0 +1,35 @@
+[
+  {
+    "name": "a merged and a closed PR are not open",
+    "places": [
+      { "id": "wt:old", "pr": { "number": 401, "state": "merged" } },
+      { "id": "wt:gone", "pr": { "number": 402, "state": "closed" } }
+    ],
+    "open": []
+  },
+  {
+    "name": "an open PR and a draft, by number",
+    "places": [
+      { "id": "wt:perf", "pr": { "number": 415, "state": "draft" } },
+      { "id": "wt:dark-mode", "pr": { "number": 412, "state": "open" } }
+    ],
+    "open": [412, 415]
+  },
+  {
+    "name": "two places on one PR give one row",
+    "places": [
+      { "id": "wt:x", "pr": { "number": 420, "state": "open" } },
+      { "id": "pt:/w/x", "pr": { "number": 420, "state": "open" } },
+      { "id": "wt:y", "pr": { "number": 3, "state": "draft" } }
+    ],
+    "open": [3, 420]
+  },
+  {
+    "name": "a place with no PR has no row",
+    "places": [
+      { "id": "wt:none", "pr": null },
+      { "id": "wt:z", "pr": { "number": 7, "state": "open" } }
+    ],
+    "open": [7]
+  }
+]

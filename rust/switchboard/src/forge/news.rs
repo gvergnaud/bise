@@ -504,14 +504,19 @@ fn parts(pr: &PrView) -> Vec<bise_proto::rows::PrPiece> {
 /// typed (bise-proto `rows::Pr`, what each means and the hub's words for
 /// it). The TUI's `/prs` and the window's `prs` event both read these
 /// rows; the TUI's tone comes from `state` and `checks` (red when checks
-/// fail, dim for a draft), never from the wire.
+/// fail, dim for a draft), never from the wire. Two places on one PR give
+/// one row, the first place's (the hub's order). The window reads the same
+/// rule off the places (review/prs.ts openPrs); both are pinned by
+/// bise-proto's fixtures/open_prs.json.
 pub fn pr_rows(places: &[crate::place::Place]) -> Vec<bise_proto::rows::Pr> {
     let mut prs: Vec<(&PrSnapshot, &[String])> = places
         .iter()
         .filter_map(|p| p.pr.as_ref().map(|pr| (pr, p.agents.as_slice())))
         .filter(|(pr, _)| matches!(pr.state, PrState::Open | PrState::Draft))
         .collect();
+    // stable: on one number, the first place stays first and the rest go
     prs.sort_by_key(|(pr, _)| pr.number);
+    prs.dedup_by_key(|(pr, _)| pr.number);
     prs.into_iter().map(|(pr, agents)| pr_row(&PrView::of(pr, None), agents)).collect()
 }
 
@@ -574,7 +579,7 @@ pub fn prs_head(rows: &[bise_proto::rows::Pr]) -> String {
     if rows.is_empty() {
         return String::new();
     }
-    format!("{} open", plural(rows.len(), "PR", "PRs"))
+    bise_proto::words::pages::prs_open(rows.len() as u64)
 }
 
 /// `/prs` as text (sb's CLI prints it): the head, each PR's line with

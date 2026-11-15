@@ -157,6 +157,13 @@
     "one": null,
     "text": "none open"
   },
+  "pages.prs_open": {
+    "args": [
+      "n"
+    ],
+    "one": "{n} PR open",
+    "text": "{n} PRs open"
+  },
   "pages.prs_row": {
     "args": [],
     "one": null,

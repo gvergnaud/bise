@@ -631,7 +631,6 @@ export type {
   HubLine,
   PagesList,
   Pending,
-  PrsList,
   InboxList,
   QueuedTake,
   TalkShot,

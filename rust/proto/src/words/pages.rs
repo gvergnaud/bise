@@ -76,6 +76,8 @@ crate::words! { pages:
     // ---- pull requests
     /// no PR open: the empty state's title
     no_pr = "no pull request open.";
+    /// how many PRs are open or drafts (the hub's `/prs` head, the window's Pull requests row and banner)
+    prs_open(n) = one "{n} PR open" | "{n} PRs open";
 
     // ---- environments
     /// the project's checkout every agent without a worktree works in
