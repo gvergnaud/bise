@@ -82,7 +82,13 @@ TOP = {
 # the desktop app's own paths: its checks, no terminal test
 DESKTOP_PREFIXES = ("apps/desktop/", "dev/", "scripts/desktop", "tests/desktop_", "tests/ambient_qa")
 # what the desktop's checks read besides its own tree (architect m_19472):
-# the generators' crates (pinned by gen_seams_law) and the core the app runs
+# the generators' crates (pinned by gen_seams_law) and the core the app runs.
+# In quick (tests/gate_plan.py GEN_ROUTED, architect m_65232) rust/proto/src/ and the TS
+# generator (rust/proto/tests/ts.rs) reach the desktop only through their .gen.ts output:
+# vitest related on the changed .gen.ts, none changed: no desktop step (proto_ts fails a
+# stale one). The others go whole app: rust/proto/fixtures/ (vitest reads some fixtures
+# from disk, an edge vitest related can't see) and the core the app runs (rust/home,
+# tui's ambient, harness's ambient/approot/update). The full gate runs everything.
 DESKTOP_SEAMS = ("rust/proto/", "rust/home/", "rust/tui/src/ambient/", "rust/harness/src/ambient.rs",
                  "rust/harness/src/approot.rs", "rust/harness/src/update.rs")
 GEN_SUFFIX = ".gen.ts"

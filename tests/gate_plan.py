@@ -278,14 +278,25 @@ def desktop_why(changed, tree):
     return test_map.desktop(changed)
 
 
+# the seams the desktop reads only through their generated output (apps/desktop/src/**/*.gen.ts,
+# in the change whenever that output changed; proto_ts checks it is current): no whole app for
+# them in quick (fast-loop, architect m_65232). rust/proto/fixtures/ is not one: vitest reads
+# some fixtures straight from disk, an edge vitest related can't see (whole app, as before)
+GEN_ROUTED = ("rust/proto/src/", "rust/proto/tests/ts.rs")
+
+
+def gen_routed(p):
+    return p.startswith(GEN_ROUTED)
+
+
 def desktop_rel(changed, tree):
     """quick's vitest share (gate-reds, main m_33154): when every changed path the desktop counts
     is a file under apps/desktop/src/, those files (relative to apps/desktop: vitest related and
     the by-path tests); else [] (the whole app: a config, a fixture, a seam outside the app, a
-    deleted file)."""
+    deleted file). A GEN_ROUTED path counts through its .gen.ts output only: left out here."""
     rel = []
     for p in changed:
-        if not desktop_why([p], tree):
+        if not desktop_why([p], tree) or gen_routed(p):
             continue
         if not p.startswith("apps/desktop/src/") or p not in tree.exists:
             return []
@@ -330,6 +341,10 @@ def plan(changed, tree):
     bend = any(PROOF_RX.match(p) for p in changed)
     core_gen = any(CORE_GEN_RX.match(p) for p in changed)
     why = desktop_why(changed, tree)
+    # only GEN_ROUTED paths reach the desktop (a proto change whose TS didn't change): no desktop
+    # step; proto_ts (FLAG_RULES' rust/proto/ arm) fails a stale .gen.ts
+    if why and all(gen_routed(p) for p in changed if desktop_why([p], tree)):
+        why = None
     desktop = None
     if why:
         rel = desktop_rel(changed, tree)

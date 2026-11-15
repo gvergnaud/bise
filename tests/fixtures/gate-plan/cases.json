@@ -105,7 +105,7 @@
   }
  },
  {
-  "name": "the proto: its TS and the desktop seam",
+  "name": "the proto with no .gen.ts changed: its crate and proto_ts (a stale gen goes red there), no desktop step",
   "paths": [
    "rust/proto/src/draft.rs"
   ],
@@ -119,8 +119,72 @@
    "flags": {
     "proto_ts": 1
    },
+   "desktop": null
+  }
+ },
+ {
+  "name": "the proto and its .gen.ts: related on the gen file, not the whole app",
+  "paths": [
+   "rust/proto/src/draft.rs",
+   "apps/desktop/src/proto/fixtures.gen.ts"
+  ],
+  "exists": [
+   "rust/proto/src/draft.rs",
+   "apps/desktop/src/proto/fixtures.gen.ts"
+  ],
+  "want": {
+   "flags": {
+    "proto_ts": 1
+   },
    "desktop": {
     "why": "rust/proto/src/draft.rs (a seam the desktop reads)",
+    "rel": [
+     "src/proto/fixtures.gen.ts"
+    ]
+   }
+  }
+ },
+ {
+  "name": "the TS generator itself (rust/proto/tests/ts.rs): no desktop step, proto_ts",
+  "paths": [
+   "rust/proto/tests/ts.rs"
+  ],
+  "exists": [
+   "rust/proto/tests/ts.rs"
+  ],
+  "want": {
+   "flags": {
+    "proto_ts": 1
+   },
+   "desktop": null
+  }
+ },
+ {
+  "name": "a proto fixture only: the whole app (vitest reads some fixtures from disk, architect m_65232)",
+  "paths": [
+   "rust/proto/fixtures/x.json"
+  ],
+  "exists": [
+   "rust/proto/fixtures/x.json"
+  ],
+  "want": {
+   "desktop": {
+    "why": "rust/proto/fixtures/x.json (a seam the desktop reads)",
+    "rel": []
+   }
+  }
+ },
+ {
+  "name": "the core the app runs (rust/home): the whole app, as before",
+  "paths": [
+   "rust/home/src/lib.rs"
+  ],
+  "exists": [
+   "rust/home/src/lib.rs"
+  ],
+  "want": {
+   "desktop": {
+    "why": "rust/home/src/lib.rs (a seam the desktop reads)",
     "rel": []
    }
   }
