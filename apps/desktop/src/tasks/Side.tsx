@@ -11,7 +11,10 @@ import { groupParts } from '@/app/side3d/lists';
 import { tasks } from '@/proto/words_tasks.gen';
 import { dayWords, timeOf } from '@/artifacts/model';
 import { barRows, cutAtWord, goalsOf, needsHim, type ProjWork } from './model';
-import { openBoard, openTask, StatusMark } from './Marks';
+import { NewDot, openBoard, openTask, StatusMark } from './Marks';
+import { useNewestArts } from './hooks';
+import { isNew } from './news';
+import { useSeenTasks, useSettleActed } from './seen';
 import { whatOf } from './what';
 import { askBise } from './BoardEmpty';
 import { useRouter } from '@/app/router';
@@ -28,7 +31,7 @@ export function lineAt(x: ProjWork, now: number): string {
   return whatOf(x.w, now, (ms) => clock(ms, now), (ms) => clock(ms, now));
 }
 
-function TaskRow({ x, now, group }: { x: ProjWork; now: number; group: string | undefined }) {
+function TaskRow({ x, now, group, fresh }: { x: ProjWork; now: number; group: string | undefined; fresh: boolean }) {
   const id = `app.outer.tasks.${x.project}.${x.w.id}`;
   const g = groupParts(group, cutAtWord(x.w.name, 26));
   const goals = goalsOf(x.w);
@@ -42,6 +45,7 @@ function TaskRow({ x, now, group }: { x: ProjWork; now: number; group: string | 
           <StatusMark status={x.w.status} testId={`${id}.mark`} />
         </span>
         <span className="s3-orow-name" data-testid={`${id}.name`}>{g.project !== '' && <span className="s3-group">{g.project}</span>}{g.name}</span>
+        <NewDot on={fresh} testId={`${id}.new`} />
         <span className="s3-orow-gap" aria-hidden="true" />
         {goals !== null && <span className="tk-goals" {...tipAttrs(tasks.goals_tip(goals))} data-testid={`${id}.goals`}>{tasks.goals_of(goals)}</span>}
       </Press>
@@ -52,6 +56,9 @@ function TaskRow({ x, now, group }: { x: ProjWork; now: number; group: string | 
 /** The section: `scope` the bar's project ('' every project's: bise's own); `groupOf` a project's group words. */
 export function OuterTasks({ all, scope, now, groupOf }: { all: readonly ProjWork[]; scope: string; now: number; groupOf: (project: string) => string | undefined }) {
   const router = useRouter();
+  const seen = useSeenTasks();
+  const arts = useNewestArts(scope);
+  useSettleActed(all);
   const { open, ongoing, done } = barRows(all, now);
   const needs = open.filter((x) => needsHim(x.w)).length;
   const rest = ongoing.length + done.length;
@@ -68,7 +75,7 @@ export function OuterTasks({ all, scope, now, groupOf }: { all: readonly ProjWor
           }} data-testid="app.outer.tasks.ask">{tasks.ask_bise}</Press>
         </Empty>
       ) : <Empty>{tasks.none_open}</Empty>}
-      rows={(n) => open.slice(0, n).map((x) => <TaskRow key={`${x.project}/${x.w.id}`} x={x} now={now} group={groupOf(x.project)} />)}
+      rows={(n) => open.slice(0, n).map((x) => <TaskRow key={`${x.project}/${x.w.id}`} x={x} now={now} group={groupOf(x.project)} fresh={isNew(x.w, seen(x.project, x.w.id), arts.get(`${x.project}/${x.w.id}`) ?? 0)} />)}
       after={rest > 0 && (
         <Press look="tk-fold" data-testid="app.outer.tasks.rest" onClick={() => {
           openBoard(scope);

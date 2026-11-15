@@ -4,7 +4,7 @@
 // archived greyed); Artifacts (3 newest for him, 'All n in Library →' on task:<id>); Changes (its agents' branches); a paused task's line 'this task is paused · Resume' (tasks-ux); footer Mark done
 // · Pause/Resume (Reopen when done, Restart when stalled). A merged or folded one says where it went.
 // Gestures go through the hub's task_act. Owner: tasks.
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArtChip, Dropdown, Input, Kbd, Press, tipAttrs } from '@/ds';
 import { dayWords, glyphOf, timeOf } from '@/artifacts/model';
 import { age } from '@/inbox/InboxCard';
@@ -25,6 +25,9 @@ import { aboutOf, artsOf, crewOf, cutAtWord, doingOf, firstLine, goalsOf, isOpen
 import { openTask, StatusMark, statusWord } from './Marks';
 import { useTaskAct, useTaskReq } from './Board';
 import { lineAt } from './Side';
+import { markSeen } from './seen';
+import { UndoToast, useUndo } from './UndoToast';
+import type { Did } from './undo';
 
 /** His message's words by its id among a thread's entries; null when this window doesn't hold it. Pure. */
 export function originText(entries: readonly (Pick<Entry, 'kind' | 'msg_id' | 'text'> | undefined)[], id: number): string | null {
@@ -49,9 +52,28 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
   const allArts = useArtifacts(project);
   const store = useStore();
   const router = useRouter();
-  const act = useTaskAct();
+  const doAct = useTaskAct();
   const req = useTaskReq();
   const now = useNowFor(() => false);
+  // the short Undo after Pause, Resume, Mark done (roma idea 4)
+  const [did, offer] = useUndo();
+  const act = (p: string, step: 'done' | 'reopen' | 'pause' | 'resume', tid: string): void => {
+    const row = works.works.find((x) => x.id === tid);
+    doAct(p, step, tid);
+    offer(row !== undefined && step !== 'reopen' ? ({ project: p, step, row } satisfies Did) : null);
+  };
+  // he sees this task while its tab is open: seen when it opens, as it changes, and when it goes
+  // (the dot, news.ts)
+  const seenRow = works.works.find((x) => x.id === id);
+  const seenRef = useRef(seenRow);
+  useEffect(() => {
+    seenRef.current = seenRow;
+    if (seenRow !== undefined) markSeen([{ project, projectName: project, w: seenRow }]);
+  }, [project, seenRow]);
+  useEffect(() => () => {
+    const r = seenRef.current;
+    if (r !== undefined) markSeen([{ project, projectName: project, w: r }]);
+  }, [project]);
   const [renaming, setRenaming] = useState(false);
   // '+ Agent': the field open; asked: how many agents it had when he asked (its line goes when one more comes)
   const [asking, setAsking] = useState(false);
@@ -307,6 +329,10 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
             }} />
         </footer>
       ) : (
+      <>
+      <UndoToast did={did} works={works.works} name={did?.row.name ?? w.name} send={req} done={() => {
+        offer(null);
+      }} testId={`${t}.toast`} />
       <footer className="tk-foot">
         {w.status === 'stalled' && (
           <Press look="b-btn sm pri" onClick={() => {
@@ -357,6 +383,7 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
             else if (pick.startsWith('merge:')) req(project, { step: 'merge', id: w.id, into: pick.slice('merge:'.length) });
           }} />
       </footer>
+      </>
       )}
     </div>
   );

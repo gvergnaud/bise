@@ -168,6 +168,16 @@ export const tasks = {
   act_restart: "Restart",
   /** a done task's button */
   act_reopen: "Reopen",
+  /** the short Undo after his gesture (roma idea 4): its button */
+  undo: "Undo",
+  /** the Undo's line after Pause */
+  undo_paused: (a: { name: string | number }): string => "Paused " + String(a.name),
+  /** the Undo's line after Resume */
+  undo_resumed: (a: { name: string | number }): string => "Resumed " + String(a.name),
+  /** the Undo's line after Mark done */
+  undo_done: (a: { name: string | number }): string => "Marked " + String(a.name) + " done",
+  /** the ink dot's label and tip (roma idea 2): its status, artifacts or questions changed */
+  new_since_looked: "new since you looked",
   /** the footer's ⋯: its tip */
   act_more: "More: Rename, Merge into…",
   /** the ⋯ menu: rename the task (his name: an agent never renames it after) */

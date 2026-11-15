@@ -105,13 +105,19 @@ export function doingOf(a: Pick<Agent, 'note' | 'title' | 'status'>): string {
   return a.status === 'working' ? a.title.trim() : '';
 }
 
-/** A task's Now: the newest report of its agents, else a status note; null: nothing said. Pure. */
-export function nowOf(agents: readonly Pick<Agent, 'report' | 'note'>[]): string | null {
+/** A task's Now with its time: the newest report of its agents (`at` its time), else a status note
+ *  (no time); null: nothing said. Pure. */
+export function saidOf(agents: readonly Pick<Agent, 'report' | 'note'>[]): { readonly text: string; readonly at: number | null } | null {
   const reps = agents.flatMap((a) => (a.report == null || a.report.text.trim() === '' ? [] : [a.report])).sort((a, b) => b.at_ms - a.at_ms);
   const r = reps[0];
-  if (r !== undefined) return firstLine(r.text.replace(/^\[report: [a-z]+\]\s*/, ''));
+  if (r !== undefined) return { text: firstLine(r.text.replace(/^\[report: [a-z]+\]\s*/, '')), at: r.at_ms };
   const note = agents.map((a) => (a.note ?? '').trim()).find((n) => n !== '');
-  return note ?? null;
+  return note === undefined ? null : { text: note, at: null };
+}
+
+/** A task's Now: the newest report of its agents, else a status note; null: nothing said. Pure. */
+export function nowOf(agents: readonly Pick<Agent, 'report' | 'note'>[]): string | null {
+  return saidOf(agents)?.text ?? null;
 }
 
 /** A task line's part past its status word ('waiting · no agent yet' → 'no agent yet'); '' when the

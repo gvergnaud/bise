@@ -9,6 +9,13 @@ import { tasks } from '@/proto/words_tasks.gen';
 import { cutAtWord } from './model';
 import './tasks.css';
 
+/** 'new since you looked' (roma idea 2, designer): our 6 px ink dot after the name, never blue,
+ *  never pink (pink is what waits on him); its words for a reader in its label. */
+export function NewDot({ on, testId }: { on: boolean; testId?: string }) {
+  if (!on) return null;
+  return <span className="tk-new" role="img" aria-label={tasks.new_since_looked} {...tipAttrs(tasks.new_since_looked)} {...(testId === undefined ? {} : { 'data-testid': testId })} />;
+}
+
 /** a status's word alone (the mark's aria label, a column's strip) */
 export function statusWord(s: WorkStatus): string {
   switch (s) {

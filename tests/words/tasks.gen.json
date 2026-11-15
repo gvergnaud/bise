@@ -310,6 +310,11 @@
     "one": "needs you · {n} question",
     "text": "needs you · {n} questions"
   },
+  "tasks.new_since_looked": {
+    "args": [],
+    "one": null,
+    "text": "new since you looked"
+  },
   "tasks.none_open": {
     "args": [],
     "one": null,
@@ -514,6 +519,32 @@
     "args": [],
     "one": null,
     "text": "today"
+  },
+  "tasks.undo": {
+    "args": [],
+    "one": null,
+    "text": "Undo"
+  },
+  "tasks.undo_done": {
+    "args": [
+      "name"
+    ],
+    "one": null,
+    "text": "Marked {name} done"
+  },
+  "tasks.undo_paused": {
+    "args": [
+      "name"
+    ],
+    "one": null,
+    "text": "Paused {name}"
+  },
+  "tasks.undo_resumed": {
+    "args": [
+      "name"
+    ],
+    "one": null,
+    "text": "Resumed {name}"
   },
   "tasks.waiting_no_agent": {
     "args": [],
