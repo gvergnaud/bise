@@ -50,8 +50,6 @@ export const pages = {
   group_merged: "Merged today",
   /** the row that opens the pull requests page */
   prs_row: "Pull requests",
-  /** the pull requests row while GitHub answers */
-  prs_asking: "asking GitHub…",
   /** the pull requests row with none open */
   prs_none_open: "none open",
   /** no branch: the empty state's title */

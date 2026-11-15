@@ -76,8 +76,6 @@ export const hero = {
   branches_n: (a: { n: number }): string => a.n === 1 ? String(a.n) + " branch" : String(a.n) + " branches",
   /** changes: how many commits reached main today */
   merged_today: (a: { n: string | number }): string => String(a.n) + " merged today",
-  /** pull requests: GitHub hasn't answered yet */
-  asking_github: "asking GitHub…",
   /** pull requests: none open */
   none_open: "none open",
   /** environments: how many places agents work in */

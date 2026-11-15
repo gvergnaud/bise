@@ -85,8 +85,6 @@ crate::words! { hero:
     branches_n(n) = one "{n} branch" | "{n} branches";
     /// changes: how many commits reached main today
     merged_today(n) = "{n} merged today";
-    /// pull requests: GitHub hasn't answered yet
-    asking_github = "asking GitHub…";
     /// pull requests: none open
     none_open = "none open";
     /// environments: how many places agents work in

@@ -39,11 +39,6 @@
     "one": null,
     "text": "Artifacts"
   },
-  "hero.asking_github": {
-    "args": [],
-    "one": null,
-    "text": "asking GitHub…"
-  },
   "hero.branches_n": {
     "args": [
       "n"
