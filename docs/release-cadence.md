@@ -14,11 +14,15 @@ runs the checked part: `scripts/release_cut.sh`.
 ## One wake
 
 1. `scripts/release_slot.py`. `slot: skip: <why>`: nothing to do, end the turn (a red tip: one
-   line on the page release-cadence per sha; main forwards tip-red as usual). `slot: cut <sha>`:
-   `scripts/release_slot.py start <sha>`, then the steps below.
-2. **Tip gate**: `scripts/release_cut.sh gate <keep dir>`. It prints `green <sha>`: the sha its
-   slot tested (main's tip then, maybe newer than the wake's). Every step below is on THAT sha.
-   Red: `release_slot.py end`; the next wake tries main's next tip.
+   line on the page release-cadence per sha; main forwards tip-red as usual). `slot: cut <sha> on
+   main`: `scripts/release_branch.py start <next terminal tag>` (the line `release/<tag>` on main's
+   tip, pushed), `scripts/release_slot.py start <sha>`, then the steps below on the line. `slot:
+   cut <sha> on release/<tag>` (main holds a held commit): the open line's tip; no new line.
+2. **Tip gate**: `scripts/release_cut.sh gate <keep dir> <the line's tip>` (or `pass`). It prints
+   `green <sha>`. Every step below is on THAT sha. Red: the fix lands on main (its agent, plain
+   `sb land`), then `scripts/release_branch.py pick <its sha>` onto the line, and the gate again
+   on the line's new tip (one fix from a full run: release_reuse keeps its green rows). Main keeps
+   moving meanwhile; nothing else reaches the release.
 3. **The app's notes**, before its tag (the annotated tag's body is the notes file, read at
    `desktop_tag.py`'s start): from the commits since the last release, each line checked.
 4. **The app's checks and its local tag**: `scripts/release_cut.sh tag <sha> <next desktop tag>
@@ -47,11 +51,36 @@ it is published or deleted). A draft to drop: `gh release delete <tag> --yes`, `
 :refs/tags/<tag>` (no v* tag left on an old commit), `git tag -d <desktop tag>` (its name free for
 the next cut).
 
+## Release lines
+
+Gabriel 2026-11-15 (page release-branches): a release is tested on its own branch while work goes
+on on main, and a big feature is ironed out on main before it reaches users. `scripts/
+release_branch.py` is the lines' one writer (architect m_65259):
+
+- A line is `release/<terminal tag>` (`release/v2026.11.15`), started on a main sha, pushed to
+  GitHub (his pick: the tags sit on commits GitHub has). One is open at a time: the newest
+  `release/*` ref. Its tags are the usual ones (`v2026.11.15`, `desktop-v2026.11.N`).
+- It takes fixes only, main first: the fix lands on main, then `pick <sha>` (cherry-pick -x, never a
+  merge, the quick gate with GATE_BASE = the line's tip before, then the line moves and is pushed).
+  `candidates` lists main's `fix:` commits the line lacks. A fix that does not apply: its agent
+  redoes it on a branch from the line with a `Backport-of: <main sha>` trailer, then `pick` that.
+  Agents never land on a line; sb land and sb feature know nothing of lines.
+- A hold keeps a main commit (a big feature with no flag off by default yet) out of releases:
+  `hold <sha> "<his words>"`, `unhold <sha>` (his word, or main on it; never by itself), in
+  `<BISE_HOME>/run/release/holds.json`. While main holds one, no line starts on main: releases
+  come from the open line, fixes only (his pick). First use: `release/v2026.11.15` from 6579c4400,
+  hold 419422141 (tasks), lifted once tasks ships behind its flag, off by default.
+- A line ends when the next starts, refused while it has a commit main lacks (patch-equal on main,
+  or naming a main commit by -x or Backport-of): no fix made only on a release is lost.
+- Tip-green is by exact sha, main's or a line's (tip_green.py unchanged). A red on a line names
+  each pick's main lander and marketing (tip_blame.py). The after-land tip check stays on main.
+
 ## Rules
 
 - Terminal first, same sha: the app carries the published terminal release whose v* tag is on its
   own commit (desktop-release.yml failed without it, 2026-10-28). So every release has both.
-- Only on a tip-green sha (docs/loop-speed.md §0 rule 11); no `--not-tip-green` unless main names it.
+- Only on a tip-green sha (docs/loop-speed.md §0 rule 11), the tip of its release line; no
+  `--not-tip-green` unless main names it.
 - Only on a ready Mac: on AC, load under 12, no quick gate running (`release_slot.py` skips
   otherwise): on battery `nightly_desktop.sh` runs nothing, under load its end-to-end steps go red
   with no real cause.

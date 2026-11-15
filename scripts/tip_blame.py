@@ -22,6 +22,9 @@ import subprocess
 import sys
 import time
 
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import release_branch  # noqa: E402
+
 LANDED = re.compile(r"✓ ([A-Za-z0-9@._-]+) landed (\d+) commits? on main \(([0-9a-f]{7,40})\)")
 JOURNAL_TAIL = 64 * 1024 * 1024
 
@@ -73,16 +76,37 @@ def fails(log_text):
     return names
 
 
+def picked_from(repo, sha, own):
+    """the agent that landed the main commit a release line's pick names (-x's 'cherry picked
+    from', Backport-of: scripts/release_branch.py), or None"""
+    for n in release_branch.named(git(repo, "log", "-1", "--format=%B", sha) or ""):
+        f = git(repo, "rev-parse", "--verify", "-q", n + "^{commit}")
+        if f in own:
+            return own[f]
+    return None
+
+
+def where(repo, tested):
+    """'main', or the release line holding a sha main lacks (release/vX: the release manager,
+    marketing, is told too, architect m_65259)"""
+    if subprocess.run(["git", "-C", repo, "merge-base", "--is-ancestor", tested, "main"], capture_output=True).returncode == 0:
+        return "main"
+    lines = (git(repo, "for-each-ref", "--contains", tested, "--format=%(refname:short)", "refs/heads/release/") or "").split()
+    return release_branch.open_line(lines) or (lines[0] if lines else "main")
+
+
 def report(repo, tested, green_tsv, log, journals, now=None, what="tip gate"):
-    """(agents, text): the tip-red file's content"""
+    """(agents, text): the tip-red file's content; on a release line, each pick is its main
+    commit's lander's, and marketing is told"""
     green = last_green(repo, green_tsv, tested)
+    ref = where(repo, tested)
     rng = "%s..%s" % (green, tested) if green else tested
     lines = git(repo, "log", "--first-parent", "--format=%H %s", rng, *([] if green else ["-n", "20"])) or ""
     own = owners(repo, landed(journal_texts(journals)))
     commits, agents = [], []
     for l in lines.splitlines():
         sha, _, subject = l.partition(" ")
-        who = own.get(sha)
+        who = own.get(sha) or (picked_from(repo, sha, own) if ref != "main" else None)
         commits.append("  %s %s (%s)" % (sha[:9], subject[:100], who or "no land line: main's or a hand commit"))
         if who and who not in agents:
             agents.append(who)
@@ -93,8 +117,8 @@ def report(repo, tested, green_tsv, log, journals, now=None, what="tip gate"):
     red = fails(log_text)
     when = time.strftime("%Y-%m-%d %H:%M", time.localtime(now or time.time()))
     text = "\n".join([
-        "to: %s" % " ".join(agents + ["main"]),
-        "%s red on main %s (%s): %s" % (what, tested[:9], when, " ".join(red) or "no FAIL line, see the log"),
+        "to: %s" % " ".join(agents + (["marketing"] if ref != "main" and "marketing" not in agents else []) + ["main"]),
+        "%s red on %s %s (%s): %s" % (what, ref, tested[:9], when, " ".join(red) or "no FAIL line, see the log"),
         "commits since the last green %s:" % (green[:9] if green else "(none known: the last 20)"),
         *commits,
         "log: %s" % log,

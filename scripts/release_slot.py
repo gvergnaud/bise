@@ -7,7 +7,9 @@ docs/release-cadence.md. Every release goes out on its own: no word of his is as
 2026-10-28).
 
   scripts/release_slot.py [--min-gap-h 2] [--repo <tree>] [--now <epoch>]
-      prints 'slot: cut <sha12>' or 'slot: skip: <why>', then what it read: main's tip, the last
+      prints 'slot: cut <sha12> on <main|release/vX>' or 'slot: skip: <why>', then what it read: the
+      release's tip (main's, or the open release line's while main holds a held commit:
+      scripts/release_branch.py), the holds, the last
       published terminal release (its commit, its age), a terminal draft still out, a cut under
       way, the tip gate's verdict on the tip, the next terminal and desktop tags.
       Exit 0 cut, 1 skip, 2 an error (git, gh).
@@ -15,8 +17,8 @@ docs/release-cadence.md. Every release goes out on its own: no word of his is as
   scripts/release_slot.py end            the cut ended (published, or not this time, or skipped)
 
 Skip, in this order: a cut is under way (the marker, younger than STALE_H; an older one is named
-and ignored); a terminal draft is out (a cut not finished, or one that stopped: one release at a time); nothing
-new on main since the last published terminal release; nothing shipped changed (only docs/,
+and ignored); main holds a held commit and no release line is open; a terminal draft is out (a cut
+not finished, or one that stopped: one release at a time); nothing new on main (or the line) since the last published terminal release; nothing shipped changed (only docs/,
 tests/, private/...: NOT_SHIPPED); the last terminal release was published less than --min-gap-h
 ago (says when the next can start); the tip gate ran on the tip and found it red; the Mac is
 busy (on battery, load >= MAX_LOAD, a quick gate running: the app's end-to-end steps go red
@@ -26,7 +28,7 @@ gate has not run on yet is a cut: the cut runs it (scripts/nightly_gate.sh --tip
 The terminal and the app go out together, on the same sha, terminal first: the app carries a
 published terminal release, the v* tag on its own commit (desktop-release.yml).
 
-Reads: git (main, tags), gh (the releases of gvergnaud/bise), <BISE_HOME>/gate/green-shas.tsv,
+Reads: git (main, release/*, tags), <BISE_HOME>/run/release/holds.json, gh (the releases of gvergnaud/bise), <BISE_HOME>/gate/green-shas.tsv,
 <BISE_HOME>/run/nightly/tip-last, pmset, the load, ps. Its one state, which it owns: <BISE_HOME>/run/release/cut
 ('<sha> <epoch>', written by start, removed by end). Pure parts: tests/release_slot_test.py.
 """
@@ -40,6 +42,7 @@ import time
 
 HERE = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, HERE)
+import release_branch  # noqa: E402
 import tip_green  # noqa: E402
 
 REPO_GH = "gvergnaud/bise"
@@ -84,19 +87,21 @@ def decide(now, s):
     """('cut'|'skip', why) for one wake. s: tip, last_sha, last_at (epoch), since (commits),
     shipped (paths), draft (tag or None), cut ((sha, epoch) or None), verdict, gap_h"""
     cut = s["cut"]
+    if s.get("nowhere"):
+        return "skip", s["nowhere"]
     if cut and now - cut[1] < STALE_H * 3600:
         return "skip", "a cut is under way on %s since %s" % (cut[0][:12], hm(cut[1]))
     if s["draft"]:
         return "skip", "the terminal draft %s is out (a cut not finished, or stopped): one release at a time" % s["draft"]
     if s["tip"] == s["last_sha"] or s["since"] == 0:
-        return "skip", "nothing new on main since the last release"
+        return "skip", "nothing new on %s since the last release" % s.get("from", "main")
     if not s["shipped"]:
         return "skip", "%d commits since the last release, none in what users get (docs, tests only)" % s["since"]
     ready = s["last_at"] + s["gap_h"] * 3600
     if now < ready:
         return "skip", "the last release went out at %s: the next can start at %s" % (hm(s["last_at"]), hm(ready))
     if s["verdict"] == "red":
-        return "skip", "main's tip %s is red at the tip gate (~/.bise/run/nightly/tip-red)" % s["tip"][:12]
+        return "skip", "%s's tip %s is red at the tip gate" % (s.get("from", "main"), s["tip"][:12])
     busy = machine_busy(s["ac"], s["load"], s["quick"])
     if busy:
         return "skip", "the Mac is not ready for a cut: %s" % busy
@@ -140,7 +145,16 @@ def read_cut(path):
 
 def gather(repo, bh, gap_h):
     sh(["git", "fetch", "-q", "--tags", "origin"], repo)
-    tip = sh(["git", "rev-parse", "main"], repo)
+    # the release's sha: main's tip, or the open release line's when main holds a held commit
+    # (scripts/release_branch.py: holds.json, the release/* refs)
+    line = release_branch.Repo(repo)
+    if not line.main:
+        raise RuntimeError("no branch main in %s" % repo)
+    held = release_branch.reached(release_branch.read_holds(bh), lambda h: release_branch.is_ancestor(repo, h, line.main))
+    where, tip = release_branch.cut_base(line.main, held, line.line, line.line_tip)
+    nowhere = tip if where == "none" else None
+    if where != "line":
+        tip = line.main
     rels = json.loads(sh(["gh", "release", "list", "-R", REPO_GH, "--limit", "40",
                           "--json", "tagName,isDraft,publishedAt"], repo))
     term = [r for r in rels if r["tagName"].startswith("v")]
@@ -150,7 +164,9 @@ def gather(repo, bh, gap_h):
     last_sha = sh(["git", "rev-list", "-n1", last["tagName"]], repo)
     files = sh(["git", "diff", "--name-only", last_sha, tip], repo).splitlines()
     return {
-        "tip": tip, "last": last["tagName"], "last_sha": last_sha, "last_at": gh_time(last["publishedAt"]),
+        "tip": tip, "from": line.line if where == "line" else "main", "nowhere": nowhere,
+        "holds": ["%s (%s)" % (h["sha"][:9], h["why"]) for h in held], "line": line.line,
+        "last": last["tagName"], "last_sha": last_sha, "last_at": gh_time(last["publishedAt"]),
         "since": int(sh(["git", "rev-list", "--count", "%s..%s" % (last_sha, tip)], repo)),
         "shipped": shipped(files),
         "draft": next((r["tagName"] for r in term if r["isDraft"]), None),
@@ -195,10 +211,13 @@ def main(argv):
         print("release_slot: %s" % e)
         return 2
     what, why = decide(now, s)
-    print("slot: cut %s" % s["tip"][:12] if what == "cut" else "slot: skip: %s" % why)
+    print("slot: cut %s on %s" % (s["tip"][:12], s["from"]) if what == "cut" else "slot: skip: %s" % why)
     if what == "cut":
         print("why: %s" % why)
-    print("main: %s %s" % (s["tip"][:12], s["subject"]))
+    print("%s: %s %s" % (s["from"], s["tip"][:12], s["subject"]))
+    print("holds on main: %s" % (", ".join(s["holds"]) or "none"))
+    print("open release line: %s%s" % (s["line"] or "none", "" if s["from"] != "main" or not s["line"] else
+                                      " (no hold reaches main: a cut starts a new line on main's tip)"))
     print("last terminal release: %s on %s, published %s, %d commits since (%d shipped files)" % (
         s["last"], s["last_sha"][:12], datetime.datetime.fromtimestamp(s["last_at"]).strftime("%Y-%m-%d %H:%M"),
         s["since"], len(s["shipped"])))
@@ -206,7 +225,7 @@ def main(argv):
     cut = s["cut"]
     print("cut under way: %s" % ("%s since %s%s" % (cut[0][:12], hm(cut[1]),
                                  " (stale: ignored)" if now - cut[1] >= STALE_H * 3600 else "") if cut else "none"))
-    print("tip gate on main: %s" % s["verdict"])
+    print("tip gate on %s: %s" % (s["from"], s["verdict"]))
     print("Mac: %s" % (machine_busy(s["ac"], s["load"], s["quick"]) or "ready (AC, load %.1f, no quick gate)" % s["load"]))
     print("next tags: %s, then %s (terminal first, same sha)" % (
         s["next_term"], next_desktop_tag(s["desk_tags"], datetime.date.fromtimestamp(now))))

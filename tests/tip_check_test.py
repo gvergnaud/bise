@@ -186,7 +186,7 @@ def fake_world(t):
     os.makedirs(os.path.join(repo, "scripts"))
     with open(os.path.join(repo, "tests", "gate.sh"), "w") as f:
         f.write(FAKE_GATE)
-    for s in ("tip_check.py", "tip_blame.py"):
+    for s in ("tip_check.py", "tip_blame.py", "release_branch.py"):
         shutil.copy(os.path.join(ROOT, "scripts", s), os.path.join(repo, "scripts", s))
     # the away run splits its reds by known_reds (plan B2)
     shutil.copy(os.path.join(ROOT, "tests", "known_reds.py"), os.path.join(repo, "tests", "known_reds.py"))

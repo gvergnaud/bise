@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # release_cut.sh: the checked part of a continuous release (docs/release-cadence.md), in two
 # steps with the app's notes written between them. Never pushes, never publishes.
-#   scripts/release_cut.sh gate <keep dir>
+#   scripts/release_cut.sh gate <keep dir> [<sha>]
 #       main's tip gate (scripts/nightly_gate.sh --tip, its own heavy-run slot); the gate's logs
 #       copied to <keep dir> at once (other gates overwrite them). Green: prints 'green <sha>', the
 #       sha of the green-shas.tsv line it wrote (main's tip when its slot opened, maybe newer than
-#       the wake's): the release is cut on THAT sha. Exit 0 green, 1 red or no new green line.
+#       the wake's): the release is cut on THAT sha. <sha>: that sha, pinned (--tip --sha), as for
+#       a release line's tip (scripts/release_branch.py; release_slot.py says 'cut <sha> on
+#       release/vX'). Exit 0 green, 1 red or no new green line.
 #   scripts/release_cut.sh tag <sha> <desktop-vYYYY.M.N> <notes file>
 #       scripts/desktop_tag.py in a clean detached worktree (RELEASE_TREE, default
 #       ~/.cache/bise-release/tree: outside ~/.bise, ~/bise and ~/Library, which the app's checks
@@ -33,10 +35,15 @@ SECRETIVE="$HOME/Library/Containers/com.maxgoedjen.Secretive.SecretAgent/Data/so
 
 case "${1:-}" in
 gate)
-  [ $# = 2 ] || { sed -n '2,20p' "$0"; exit 2; }
+  [ $# = 2 ] || [ $# = 3 ] || { sed -n '2,22p' "$0"; exit 2; }
   keep="$2"; mkdir -p "$keep"
+  pin=()
+  if [ $# = 3 ]; then
+    p="$(git -C "$R" rev-parse --verify -q "$3^{commit}")" || { echo "no commit '$3'"; exit 2; }
+    pin=(--sha "$p")
+  fi
   t0=$(date +%s)
-  "$R/scripts/nightly_gate.sh" --tip; rc=$?
+  "$R/scripts/nightly_gate.sh" --tip ${pin[@]+"${pin[@]}"}; rc=$?
   log=$(ls -t "$BH"/gate/logs/full-* 2>/dev/null | head -1)
   [ -n "$log" ] && cp "$log" "$keep/"
   cp "$BH"/gate/sb-gate-*.log "$keep/" 2>/dev/null
@@ -44,6 +51,7 @@ gate)
   [ $rc = 0 ] || exit 1
   line=$(tail -1 "$BH/gate/green-shas.tsv"); sha=$(cut -f1 <<<"$line"); when=$(cut -f2 <<<"$line")
   [ -n "$when" ] && [ "$when" -ge "$t0" ] || { echo "no new green line since the gate started"; exit 1; }
+  [ -z "${p:-}" ] || [ "$sha" = "$p" ] || { echo "the newest green line is $sha, not the pinned $p"; exit 1; }
   echo "green $sha"
   ;;
 tag|pass)

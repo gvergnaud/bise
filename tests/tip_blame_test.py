@@ -71,6 +71,18 @@ def main():
         check(r.returncode == 0 and both.startswith("to: beta alpha main\n") and both.count("to:") == 1
               and "tip gate red on main %s" % sha["b1"][:9] in both and "nightly red on main %s" % sha["a2"][:9] in both,
               "merged\n" + both)
+        # a release line's tip (scripts/release_branch.py): its pick is the picked commit's lander's,
+        # marketing is told, the head names the line
+        g("branch", "release/v2026.11.15", sha["base"])
+        g("switch", "-q", "release/v2026.11.15")
+        g("-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-m",
+          "feat: b1 picked" + chr(10) + chr(10) + "(cherry picked from commit %s)" % sha["b1"])
+        pick = g("rev-parse", "HEAD")
+        g("switch", "-q", "main")
+        agents, text = B.report(repo, pick, green, log, [journal], now=0)
+        check(agents == ["beta"] and text.startswith("to: beta marketing main" + chr(10))
+              and "tip gate red on release/v2026.11.15 %s" % pick[:9] in text and "%s feat: b1 picked (beta)" % pick[:9] in text,
+              "a line's red: " + text)
         # flaky-open: the log's FLAKY lines, each with its rate (gate-full rows of 14 days) and its
         # owner (who last landed a change to its test file, else main)
         with open(os.path.join(repo, "tests_flaky.py"), "w") as f:
