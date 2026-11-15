@@ -81,8 +81,76 @@ fn his_answer_counts_for_a_card_of_the_task_and_takes_its_neighbours_time() {
         json!({"type": "card_closed", "id": 5, "resolution": "withdrawn"}),
     ];
     let l = log(&["login"], &j, &[]);
+    // asked under the task: one entry, his answer folded under its question
+    let q: Vec<(&str, &str, Option<&str>, u64)> = l.iter().filter(|x| x.kind == LogKind::Question).map(|x| (x.who.as_str(), x.text.as_str(), x.answer.as_deref(), x.at_ms)).collect();
+    assert_eq!(q, vec![("auth", "3G or 4G?", Some("3G"), 200)]);
+    assert!(l.iter().all(|x| x.kind != LogKind::Answer), "never two entries far apart: {l:?}");
+    // a card moved onto the task after it was asked: his answer alone, at its neighbour's time
+    let j = [
+        created("login", "main", 100),
+        json!({"type": "card_opened", "card": {"id": 6, "kind": "question", "agent": "docs", "text": "font?", "for_msg": 8, "created_ms": 210, "works": ["other"]}}),
+        json!({"type": "card_moved", "moved": {"card": 6, "works": ["login"]}}),
+        json!({"type": "card_closed", "id": 6, "resolution": "answered", "said": "serif", "via": "inbox"}),
+        json!({"type": "message_sent", "msg": {"id": 9, "from": "user", "to": "docs", "created": 250, "works": ["login"]}, "text": "serif"}),
+    ];
+    let l = log(&["login"], &j, &[]);
     let a: Vec<(&str, Option<u64>, u64)> = l.iter().filter(|x| x.kind == LogKind::Answer).map(|x| (x.text.as_str(), x.card, x.at_ms)).collect();
-    assert_eq!(a, vec![("3G", Some(3), 250)]);
+    assert_eq!(a, vec![("serif", Some(6), 250)]);
+}
+
+/// chunk 2b (tasks-ux m_65504, architect m_65507): an agent's stop or
+/// failure in a turn of the task is a Break, from the lifecycle line's own
+/// works (an older line has none: no line); a Restart is said by whom.
+#[test]
+fn a_break_comes_from_its_lines_works_and_a_restart_says_who() {
+    let j = [
+        created("login", "main", 100),
+        json!({"type": "lifecycle", "name": "auth", "lifecycle": "failed", "reason": "the REPL crashed 3 times: oom", "works": ["login"]}),
+        json!({"type": "work_changed", "id": "login", "op": "restart", "by": "user", "at": 300}),
+        json!({"type": "lifecycle", "name": "auth", "lifecycle": "active", "reason": null}),
+        json!({"type": "lifecycle", "name": "docs", "lifecycle": "stopped", "reason": "dropped by main"}),
+        json!({"type": "lifecycle", "name": "kb", "lifecycle": "failed", "reason": "x", "works": ["other"]}),
+        json!({"type": "work_changed", "id": "login", "op": "restart", "by": "main", "at": 500}),
+        json!({"type": "work_changed", "id": "login", "op": "restart", "by": "kb", "at": 600}),
+    ];
+    let l = log(&["login"], &j, &[]);
+    let b: Vec<(&str, &str, &str)> = l.iter().filter(|x| x.kind == LogKind::Break).map(|x| (x.who.as_str(), x.life.as_str(), x.text.as_str())).collect();
+    assert_eq!(b, vec![("auth", "failed", "the REPL crashed 3 times: oom")]);
+    let r: Vec<&str> = l.iter().filter(|x| x.gesture == Some(LogGesture::Restart)).map(|x| x.who.as_str()).collect();
+    assert_eq!(r, vec!["main", "user"], "his and main's, never another agent's");
+    let w = words(&l, |_| String::new());
+    assert!(w.iter().any(|s| s.ends_with("main restarted it")) && w.iter().any(|s| s.ends_with("you restarted it")), "{w:?}");
+    assert!(w.iter().any(|s| s.ends_with("auth stopped (crash): the REPL crashed 3 times: oom")), "{w:?}");
+}
+
+/// chunk 2b (architect m_65507): an artifact's versions in the Log come
+/// from each version's own works; one from before the stamp reads the
+/// Meta's; back-to-back versions fold into one line in words.
+#[test]
+fn an_artifacts_versions_come_from_their_own_works_and_fold() {
+    let arts = [
+        ArtLog {
+            art: "trace".into(),
+            title: "login-3g.trace".into(),
+            page: false,
+            works: vec!["pricing".into()],
+            versions: vec![
+                (1, 200, "auth".into(), None),
+                (2, 300, "auth".into(), Some(vec!["login".into()])),
+                (3, 400, "auth".into(), Some(vec!["login".into()])),
+                (4, 500, "pr".into(), Some(vec!["pricing".into()])),
+            ],
+        },
+        ArtLog { art: "repro".into(), title: "repro page".into(), page: true, works: vec!["login".into()], versions: vec![(1, 250, "auth".into(), None)] },
+    ];
+    let mut s = Scan::new(&ids(&["login"]));
+    s.line(&created("login", "main", 100).to_string());
+    let l = s.log(&[], &arts, LIMIT);
+    let a: Vec<(&str, u64, bool)> = l.iter().filter(|x| x.kind == LogKind::Artifact).map(|x| (x.art.as_str(), x.v, x.page)).collect();
+    assert_eq!(a, vec![("trace", 3, false), ("trace", 2, false), ("repro", 1, true)], "v1 read with the Meta's works (pricing), v4 made under pricing");
+    let w = words(&l, |_| String::new());
+    assert!(w.iter().any(|s| s.ends_with("auth made login-3g.trace v2→v3")), "{w:?}");
+    assert!(w.iter().any(|s| s.ends_with("auth made repro page v1")), "{w:?}");
 }
 
 #[test]

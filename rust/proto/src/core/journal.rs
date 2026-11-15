@@ -60,6 +60,7 @@ pub const WOP: Codec = Codec {
         "S.WMerge{$a}",
         "S.WAddAgent{$a}",
         "S.WUntilTimer{$a}",
+        "S.WRestart{}",
         "S.WNoop{}",
     ],
 };
@@ -83,8 +84,11 @@ pub const JOURNAL: Table = Table {
     kinds: &[
         k("task_created", "TaskCreated", "M.ETaskCreated{name, parent, brief, ws, at_ms}",
             &[f("name", Str), f("parent", Str), f("brief", Json), f("ws", Json), f("at_ms", Nat)]),
-        k("lifecycle", "Lifecycle", "M.ELifecycle{name, lifecycle, reason}",
-            &[f("name", Str), f("lifecycle", Rec(&LIFE)), f("reason", OptStr)]),
+        // `works`: a stop's or a failure's turn's works, a list of ids
+        // (roma idea 3, a task's Log reads its breaks; architect m_65507),
+        // absent when none: an older line reads the same
+        k("lifecycle", "Lifecycle", "M.ELifecycle{name, lifecycle, reason, works}",
+            &[f("name", Str), f("lifecycle", Rec(&LIFE)), f("reason", OptStr), f("works", OptJsonOmit)]),
         k("workspace_changed", "Workspace", "M.EWorkspace{name, ws}", &[f("name", Str), f("ws", Json)]),
         k("snapshot", "Snapshot", "M.ESnapshot{name, snapshot_ref}", &[f("name", Str), f("snapshot_ref", OptStr)]),
         // hub-loop: the worktree the shell made for a placing task (its

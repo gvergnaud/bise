@@ -17,6 +17,7 @@ import ../hub/view.bend as HV
 import ../hub/keyed.bend as HKY
 import ../hub/wctx.bend as HWC
 import ../hub/text.bend as HT
+import ../hub/gen/words.bend as HCW
 
 # LAW: `--task <id>` gives the message its works, whatever the sender's
 # turn serves.
@@ -27,9 +28,10 @@ law task_flag_replaces_turn_works:
   {HC.works_of_send(Some{ws}, s, from) == ws : List<&2, String>}
 
 # LAW: a notice of the hub never inherits works: the hub is never an
-# agent, so it has no turn to inherit from. The only hub message with
-# works is a pause's resume note, and they are explicit
-# (pause_queues_one_resume_note_per_agent; architect m_64603).
+# agent, so it has no turn to inherit from. The only hub messages with
+# works are a pause's resume note and a Restart's note, and their works
+# are explicit (pause_queues_one_resume_note_per_agent,
+# restart_note_carries_only_its_work; architect m_64603, m_65555).
 law notice_carries_no_works:
   for +s: HS.St
   {HC.works_of_send(None{}, s, HM.HUB()) == Nil{} : List<&2, String>}
@@ -129,6 +131,45 @@ law an_agent_never_acts_as_him:
   for +t: Nat
   for +from: String
   {HC.task_by(HC.TAReq{t}, from) == from : String}
+
+# LAW: a Restart says honestly who made it: main's `sb task restart`
+# (by main) never gets his words (architect m_65555; the Log says "main
+# restarted it").
+law a_restart_by_main_never_says_him:
+  for +id: String
+  for +name: String
+  {HC.work_restart.text(HM.MAIN(), id, name) == HCW.restart_note_main(id, name) : String}
+
+# ---- a Restart (roma idea 3; architect m_65554, m_65555) ----
+
+# LAW: a Restart changes no field of its work: its effects are its
+# agents' (its failed ones restored, its idle ones told), never the task's.
+law work_restart_changes_no_field:
+  for +w: HS.Work
+  for +by: String
+  for +at: Nat
+  {HWO.change.op(HS.WRestart{}, w, by, at) == w : HS.Work}
+
+# LAW: the restart note carries exactly its work, explicitly (never
+# inherited from a turn).
+law restart_note_carries_only_its_work:
+  for +n: String
+  for +id: String
+  for +text: String
+  {HC.Snd.works(HC.work_restart_note(n, id, text)) == Some{[id]} : Maybe<&2, List<&2, String>>}
+
+# LAW: a closed task (done or merged) is never restarted: reopen it first.
+law restart_on_a_closed_work_is_refused:
+  for +f: HS.Fin
+  for +p: Maybe<&2, Nat>
+  for +id: String
+  {Maybe.is_some(&2, String, HC.task_refused.restart(Some{f}, p, id)) == True{} : Bool}
+
+# LAW: a paused task is never restarted: Resume is the gesture.
+law restart_on_a_paused_work_is_refused:
+  for +at: Nat
+  for +id: String
+  {Maybe.is_some(&2, String, HC.task_refused.restart(None{}, Some{at}, id)) == True{} : Bool}
 
 # LAW: only main among the agents changes any work: the right is read
 # from the asker, never from a name it carries.

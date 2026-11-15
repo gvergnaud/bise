@@ -84,6 +84,7 @@ type WOp is Data:
   WMerge{into: String}
   WAddAgent{agent: String}
   WUntilTimer{timer: Nat}
+  WRestart{}
   WNoop{}
 
 # ---- the records ----

@@ -102,6 +102,13 @@ pub struct Version {
     /// from before them.
     #[serde(flatten)]
     pub names: bise_proto::files::Names,
+    /// tasks (roma idea 3, architect m_65507): the works of the turn that
+    /// made it, stamped at the door with the Meta's union, never changed
+    /// after (his move changes the Meta's, not this): a task's Log reads
+    /// it. None: a version from before the stamp (the Log reads the
+    /// Meta's works instead).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub works: Option<Vec<String>>,
 }
 
 impl Version {
@@ -889,11 +896,13 @@ impl Store {
                 }
                 let r = rev(&last.revs);
                 last.revs.push(r);
+                // the same version: its works stay the ones it was made under
                 *last = Version { at_ms: now, target, copy, no_copy, sig, sitting: a.sitting.clone().or(last.sitting.clone()), names, ..last.clone() };
             }
             _ => {
                 let revs = vec![rev(&[])];
-                meta.versions.push(Version { v, at_ms: now, target, copy, no_copy, sig, turn: a.turn.clone(), sitting: a.sitting.clone(), revs, serve: None, names });
+                let works = Some(a.works.clone());
+                meta.versions.push(Version { v, at_ms: now, target, copy, no_copy, sig, turn: a.turn.clone(), sitting: a.sitting.clone(), revs, serve: None, names, works });
             }
         }
         // tasks: each new version adds its turn's works (none once he moved it)

@@ -118,5 +118,21 @@
     ],
     "one": null,
     "text": "Why: {why}"
+  },
+  "core.restart_note": {
+    "args": [
+      "id",
+      "name"
+    ],
+    "one": null,
+    "text": "The user restarted task `{id}` ({name}): go on with it, or say with sb report why it waits."
+  },
+  "core.restart_note_main": {
+    "args": [
+      "id",
+      "name"
+    ],
+    "one": null,
+    "text": "main restarted task `{id}` ({name}): go on with it, or say with sb report why it waits."
   }
 }

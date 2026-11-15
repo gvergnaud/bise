@@ -141,6 +141,10 @@ def change.op(op: S.WOp, +w2: S.Work, +by: String, +at: Nat) -> S.Work:
       S.Work.over_agents(w2, xs => add(xs, agent))
     case S.WUntilTimer{+timer}:
       S.Work.with_until_timer(w2, opt(timer))
+    # a Restart changes no field: its effects are its agents' (core.bend
+    # req_task.after; law work_restart_changes_no_field)
+    case S.WRestart{}:
+      w2
     case S.WNoop{}:
       w2
 

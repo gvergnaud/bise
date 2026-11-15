@@ -66,7 +66,7 @@ function setLooked(project: string, at: number): void {
 }
 
 /** a task's gesture on the Board or its tab: through the hub's task_act (sb task's own steps) */
-export function useTaskAct(): (project: string, step: 'done' | 'reopen' | 'pause' | 'resume', id: string) => void {
+export function useTaskAct(): (project: string, step: 'done' | 'reopen' | 'pause' | 'resume' | 'restart', id: string) => void {
   const req = useTaskReq();
   return (project, step, id) => {
     req(project, { step, id });
@@ -129,11 +129,13 @@ function Card({ x, now, fresh, onDid }: { x: ProjWork; now: number; fresh: boole
         </span>
       )}
       {x.w.status === 'stalled' && (
-        // a stalled card's Restart, on the card (signed; tasks-ux m_64959)
+        // a stalled card's Restart, on the card (signed; tasks-ux m_64959): its own gesture
+        // (WRestart, architect m_65555), nothing to put back so no Undo
         <span className="tk-card-acts">
           <Press look="b-btn sm" onClick={(e) => {
             e.stopPropagation();
-            act(x.project, 'resume', x.w.id);
+            markActed(x.project, x.w);
+            doAct(x.project, 'restart', x.w.id);
           }} data-testid={`${id}.restart`}>{tasks.act_restart}</Press>
         </span>
       )}

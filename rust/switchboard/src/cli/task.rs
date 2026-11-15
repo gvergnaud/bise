@@ -4,7 +4,7 @@
 use super::*;
 use bise_proto::sb::Task;
 
-pub(super) const TASK_USAGE: &str = "usage: sb task new \"<name>\" [--why \"<why>\"] [--done-when \"<item>\"]... | sb task list [--all] | sb task show <id> [--log] | sb task done|reopen|resume|ongoing <id> | sb task pause <id> [--until <18:00|tomorrow 09:00|2h>] | sb task rename <id> \"<name>\" | sb task why <id> \"<why>\" | sb task goal <id> \"<item>\" | sb task tick|untick <id> <n> | sb task merge <id> --into <id>";
+pub(super) const TASK_USAGE: &str = "usage: sb task new \"<name>\" [--why \"<why>\"] [--done-when \"<item>\"]... | sb task list [--all] | sb task show <id> [--log] | sb task done|reopen|resume|restart|ongoing <id> | sb task pause <id> [--until <18:00|tomorrow 09:00|2h>] | sb task rename <id> \"<name>\" | sb task why <id> \"<why>\" | sb task goal <id> \"<item>\" | sb task tick|untick <id> <n> | sb task merge <id> --into <id>";
 
 /// `sb task <verb> ...` as its request.
 pub(super) fn task_req(rest: &[String]) -> Result<Task, String> {
@@ -19,6 +19,7 @@ pub(super) fn task_req(rest: &[String]) -> Result<Task, String> {
         "done" => Task::Done { id: id()? },
         "reopen" => Task::Reopen { id: id()? },
         "resume" => Task::Resume { id: id()? },
+        "restart" => Task::Restart { id: id()? },
         "ongoing" => Task::Ongoing { id: id()? },
         "pause" => {
             let until = str_of(&o, "until");

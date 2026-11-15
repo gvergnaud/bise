@@ -1,6 +1,6 @@
 // A task Log line in words (log.ts): the same words as `sb task show --log`. Owner: tasks.
 import { describe, expect, it } from 'vitest';
-import { logWords } from './log';
+import { foldLog, logWords, madeWords } from './log';
 
 describe('a Log line', () => {
   it('says each kind in the words sb task show --log uses', () => {
@@ -11,6 +11,21 @@ describe('a Log line', () => {
     expect(logWords({ at_ms: 1, kind: 'gesture', who: 'user', gesture: 'pause' })).toBe('you paused it');
     expect(logWords({ at_ms: 1, kind: 'gesture', who: 'user', gesture: 'move_in', text: 'repro-page' })).toBe('you moved repro-page here');
     expect(logWords({ at_ms: 1, kind: 'gesture', who: 'user', gesture: 'move_out' })).toBe('you moved a question away');
+  });
+
+  it('says a question, a version, a break and who restarted it', () => {
+    expect(logWords({ at_ms: 1, kind: 'question', who: 'auth', text: 'retry or fail fast?', answer: 'retry' })).toBe('auth asked: retry or fail fast?');
+    expect(logWords({ at_ms: 1, kind: 'artifact', who: 'auth', text: 'login-3g.trace', art: 'trace', v: 2 })).toBe('auth made login-3g.trace v2');
+    expect(logWords({ at_ms: 1, kind: 'break', who: 'auth', life: 'failed', text: 'oom' })).toBe('auth stopped (crash): oom');
+    expect(logWords({ at_ms: 1, kind: 'break', who: 'docs', life: 'stopped', text: 'dropped by main' })).toBe('docs was stopped: dropped by main');
+    expect(logWords({ at_ms: 1, kind: 'gesture', who: 'user', gesture: 'restart' })).toBe('you restarted it');
+    expect(logWords({ at_ms: 1, kind: 'gesture', who: 'main', gesture: 'restart' })).toBe('main restarted it');
+  });
+
+  it('folds back-to-back versions of one artifact into one row, v2→v5', () => {
+    const v = (n: number, who = 'auth', art = 'trace') => ({ at_ms: 10 - n, kind: 'artifact' as const, who, text: 'login-3g.trace', art, v: n });
+    const rows = foldLog([v(5), v(4), v(3), v(2), { at_ms: 1, kind: 'join', who: 'auth' }, v(1), v(7, 'perf')]);
+    expect(rows.map((r) => (r.l.kind === 'artifact' ? madeWords(r) : r.l.kind))).toEqual([{ who: 'auth', v: 'v2→v5' }, 'join', { who: 'auth', v: 'v1' }, { who: 'perf', v: 'v7' }]);
   });
 
   it('leaves out a kind this window does not know', () => {

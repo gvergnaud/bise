@@ -73,6 +73,14 @@ pub enum LogKind {
     Land,
     Gesture,
     Join,
+    /// a question or pick of its agents to him (a card opened with its
+    /// works), his answer folded under it when there is one
+    Question,
+    /// a version of an artifact or a page made under it
+    Artifact,
+    /// an agent of it stopped or failed in its turn (the lifecycle line's
+    /// works)
+    Break,
     #[default]
     #[serde(other)]
     Unknown,
@@ -98,6 +106,9 @@ pub enum LogGesture {
     MoveIn,
     /// he moved one off it
     MoveOut,
+    /// Restart (WRestart): its failed agents restored, its idle ones
+    /// told to go on; `who` says by whom (him, or main)
+    Restart,
     #[default]
     #[serde(other)]
     Unknown,
@@ -138,6 +149,23 @@ pub struct LogLine {
     /// his answer's card
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub card: Option<u64>,
+    /// a question's card kind (`question`, `choice`, `blocked`...)
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub ask: String,
+    /// his answer to a question, folded under it (his words or pick)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub answer: Option<String>,
+    /// an artifact's or a page's id (`text` its title), its version, and
+    /// whether it is a page
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub art: String,
+    #[serde(default, skip_serializing_if = "super::is_zero_u64")]
+    pub v: u64,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub page: bool,
+    /// a break's life: `failed` or `stopped` (`text` its reason)
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub life: String,
 }
 
 /// One task with its status.

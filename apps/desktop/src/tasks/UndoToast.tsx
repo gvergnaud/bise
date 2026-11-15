@@ -2,10 +2,14 @@
 // for UNDO_MS after Pause, Resume and Mark done; its click sends the inverse gesture (undo.ts),
 // through the hub's task_act like any of his. Owner: tasks.
 import { useEffect, useRef, useState } from 'react';
-import { Toast } from '@/ds';
+import { Toast, tipAttrs } from '@/ds';
 import type { Task as TaskReq, WorkRow } from '@/proto';
 import { tasks } from '@/proto/words_tasks.gen';
+import { cutAtWord } from './model';
 import { didWords, inverse, undoable, UNDO_MS, type Did } from './undo';
+
+/** The most letters of a task's name the toast keeps on its one line ('Speed up the signup flow…'). */
+const TOAST_NAME_MAX = 25;
 
 /** The gesture the Undo is offered for, null none; `offer` starts a new one (the old one goes). */
 export function useUndo(): [Did | null, (d: Did | null) => void] {
@@ -40,6 +44,7 @@ export function UndoToast({ did, works, name, send, done, testId }: {
   if (did === null || !undoable(did, works)) return null;
   // whether it has an inverse doesn't depend on the time, only its end does (taken at his click)
   if (inverse(did, 0) === null) return null;
+  const cut = cutAtWord(name, TOAST_NAME_MAX);
   return (
     <div className="tk-undo">
       {/* no lead mark: nothing passed or failed (designer m_65397) */}
@@ -48,7 +53,10 @@ export function UndoToast({ did, works, name, send, done, testId }: {
         const now = inverse(did, Date.now());
         if (now !== null) send(did.project, now);
         done();
-      } }} testId={testId}>{didWords(did, name)}</Toast>
+      } }} testId={testId}>
+        {/* one line: the name cut at a word with one '…', the whole name in its tip (designer m_65519) */}
+        <span className="tk-undo-what" {...tipAttrs(cut === name ? undefined : name)} data-testid={`${testId}.what`}>{didWords(did, cut)}</span>
+      </Toast>
     </div>
   );
 }

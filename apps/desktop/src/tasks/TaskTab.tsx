@@ -5,7 +5,7 @@
 // · Pause/Resume (Reopen when done, Restart when stalled). A merged or folded one says where it went.
 // Gestures go through the hub's task_act. Owner: tasks.
 import { useEffect, useRef, useState } from 'react';
-import { ArtChip, Dropdown, Input, Kbd, Press, Tabs, tipAttrs } from '@/ds';
+import { ArtChip, Dropdown, Filters, Input, Kbd, Press, tipAttrs } from '@/ds';
 import { TaskLog } from './TaskLog';
 import { dayWords, glyphOf, timeOf } from '@/artifacts/model';
 import { age } from '@/inbox/InboxCard';
@@ -58,10 +58,11 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
   const now = useNowFor(() => false);
   // the short Undo after Pause, Resume, Mark done (roma idea 4)
   const [did, offer] = useUndo();
-  const act = (p: string, step: 'done' | 'reopen' | 'pause' | 'resume', tid: string): void => {
+  const act = (p: string, step: 'done' | 'reopen' | 'pause' | 'resume' | 'restart', tid: string): void => {
     const row = works.works.find((x) => x.id === tid);
     doAct(p, step, tid);
-    offer(row !== undefined && step !== 'reopen' ? ({ project: p, step, row } satisfies Did) : null);
+    // Reopen and Restart have nothing to put back: no Undo
+    offer(row !== undefined && step !== 'reopen' && step !== 'restart' ? ({ project: p, step, row } satisfies Did) : null);
   };
   // he sees this task while its tab is open: seen when it opens, as it changes, and when it goes
   // (the dot, news.ts)
@@ -159,11 +160,12 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
       </header>
 
       {/* roma idea 3: its Log beside what it is now */}
-      <Tabs testId={`${t}.panes`} onPick={(p) => {
+      {/* the pill group's own selected state, no ink ring, like For you | All (designer m_65519) */}
+      <Filters testId={`${t}.panes`} label={tasks.tab_log} on={pane} onPick={(p) => {
         setPane(p === 'log' ? 'log' : 'overview');
       }} items={[
-        { id: 'overview', text: tasks.tab_overview, on: pane === 'overview' },
-        { id: 'log', text: tasks.tab_log, on: pane === 'log' },
+        { id: 'overview', label: tasks.tab_overview },
+        { id: 'log', label: tasks.tab_log },
       ]} />
 
       {pane === 'log' ? <TaskLog project={project} id={w.id} last={w.last_ms} now={now} testId={`${t}.log`} /> : (<>
@@ -352,7 +354,7 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
       <footer className="tk-foot">
         {w.status === 'stalled' && (
           <Press look="b-btn sm pri" onClick={() => {
-            act(project, 'resume', w.id);
+            act(project, 'restart', w.id);
           }} data-testid={`${t}.restart`}>{tasks.act_restart}</Press>
         )}
         {w.status === 'done' ? (

@@ -1872,12 +1872,12 @@ export type WorkTomb = { id: string, name: string, done_ms: number, merged_into?
  * `sb report` (with its decisions), his answer to a question, a land, his
  * gesture, an agent joining. `Unknown`: a kind a newer hub knows.
  */
-export type LogKind = "report" | "answer" | "land" | "gesture" | "join" | "unknown";
+export type LogKind = "report" | "answer" | "land" | "gesture" | "join" | "question" | "artifact" | "break" | "unknown";
 
 /**
  * His gesture on a task, as a Log line says it.
  */
-export type LogGesture = "pause" | "resume" | "done" | "reopen" | "rename" | "merge" | "why" | "goal" | "tick" | "untick" | "ongoing" | "move_in" | "move_out" | "unknown";
+export type LogGesture = "pause" | "resume" | "done" | "reopen" | "rename" | "merge" | "why" | "goal" | "tick" | "untick" | "ongoing" | "move_in" | "move_out" | "restart" | "unknown";
 
 /**
  * One line of a task's Log, newest first in its list: facts only, the
@@ -1915,4 +1915,21 @@ target?: string,
 /**
  * his answer's card
  */
-card?: number | null, };
+card?: number | null, 
+/**
+ * a question's card kind (`question`, `choice`, `blocked`...)
+ */
+ask?: string, 
+/**
+ * his answer to a question, folded under it (his words or pick)
+ */
+answer?: string | null, 
+/**
+ * an artifact's or a page's id (`text` its title), its version, and
+ * whether it is a page
+ */
+art?: string, v?: number, page?: boolean, 
+/**
+ * a break's life: `failed` or `stopped` (`text` its reason)
+ */
+life?: string, };

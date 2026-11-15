@@ -298,6 +298,22 @@
     "one": null,
     "text": "you answered: {text}"
   },
+  "tasks.log_asked": {
+    "args": [
+      "who",
+      "text"
+    ],
+    "one": null,
+    "text": "{who} asked: {text}"
+  },
+  "tasks.log_crashed": {
+    "args": [
+      "who",
+      "why"
+    ],
+    "one": null,
+    "text": "{who} stopped (crash): {why}"
+  },
   "tasks.log_decision": {
     "args": [
       "text"
@@ -346,6 +362,25 @@
     "one": null,
     "text": "reading its Log…"
   },
+  "tasks.log_made": {
+    "args": [
+      "who",
+      "title",
+      "v"
+    ],
+    "one": null,
+    "text": "{who} made {title} v{v}"
+  },
+  "tasks.log_made_range": {
+    "args": [
+      "who",
+      "title",
+      "from",
+      "to"
+    ],
+    "one": null,
+    "text": "{who} made {title} v{from}→v{to}"
+  },
   "tasks.log_merged": {
     "args": [
       "into"
@@ -370,7 +405,7 @@
   "tasks.log_none": {
     "args": [],
     "one": null,
-    "text": "Nothing in its Log yet: its agents' reports, your answers, its lands and your gestures land here."
+    "text": "Nothing yet. Its agents' reports, your answers and what lands show up here."
   },
   "tasks.log_ongoing": {
     "args": [],
@@ -403,10 +438,30 @@
     "one": null,
     "text": "{who} reported {kind}: {text}"
   },
+  "tasks.log_restarted": {
+    "args": [],
+    "one": null,
+    "text": "you restarted it"
+  },
+  "tasks.log_restarted_by": {
+    "args": [
+      "who"
+    ],
+    "one": null,
+    "text": "{who} restarted it"
+  },
   "tasks.log_resumed": {
     "args": [],
     "one": null,
     "text": "you resumed it"
+  },
+  "tasks.log_stopped": {
+    "args": [
+      "who",
+      "why"
+    ],
+    "one": null,
+    "text": "{who} was stopped: {why}"
   },
   "tasks.log_ticked": {
     "args": [

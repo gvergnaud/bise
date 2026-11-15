@@ -208,8 +208,8 @@ def hub_cards_closed(+s: HS.St, +id: Nat, +res: String) -> {HS.St.cards(HM.apply
   %HSL.St.open_eq(s) : {HS.St.cards(HM.apply(_, HM.ECardClosed{id, res, HS.Ans.empty()})) == HM.drop_card(HS.St.cards(s), id) : List<&2, HS.Card>}
   {==}
 
-def hub_cards_life(+s: HS.St, +n: String, +l: HS.Life, +r: Maybe<&2, String>) -> {HS.St.cards(HM.apply(s, HM.ELifecycle{n, l, r})) == HS.St.cards(s) : List<&2, HS.Card>}:
-  %HSL.St.open_eq(s) : {HS.St.cards(HM.apply(_, HM.ELifecycle{n, l, r})) == HS.St.cards(s) : List<&2, HS.Card>}
+def hub_cards_life(+s: HS.St, +n: String, +l: HS.Life, +r: Maybe<&2, String>, +w: Maybe<&2, J.Json>) -> {HS.St.cards(HM.apply(s, HM.ELifecycle{n, l, r, w})) == HS.St.cards(s) : List<&2, HS.Card>}:
+  %HSL.St.open_eq(s) : {HS.St.cards(HM.apply(_, HM.ELifecycle{n, l, r, w})) == HS.St.cards(s) : List<&2, HS.Card>}
   {==}
 
 def hub_cards_state(+s: HS.St, +id: Nat, +x: HS.MSt) -> {HS.St.cards(HM.apply(s, HM.EMsgState{id, x})) == HS.St.cards(s) : List<&2, HS.Card>}:
@@ -401,7 +401,7 @@ def hub_apply_ucards.go(+e: HM.Ev, +s: HS.St, u: HI.UniqueCards(s), k: HX.FreshE
       u
     case HM.ETaskCreated{a, b, c, d, f}:
       u
-    case HM.ELifecycle{a, b, c}:
+    case HM.ELifecycle{a, b, c, d}:
       u
     case HM.EWorkspace{a, b}:
       u

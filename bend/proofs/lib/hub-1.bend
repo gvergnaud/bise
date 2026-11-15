@@ -664,8 +664,8 @@ def hub_msgs_closed(+s: HS.St, +id: Nat, +res: String) -> {HM.every(HM.apply(s, 
   %HSL.St.open_eq(s) : {HM.every(HM.apply(_, HM.ECardClosed{id, res, HS.Ans.empty()})) == HM.every(s) : List<&2, HS.MRec>}
   {==}
 
-def hub_msgs_life(+s: HS.St, +n: String, +l: HS.Life, +r: Maybe<&2, String>) -> {HM.every(HM.apply(s, HM.ELifecycle{n, l, r})) == HM.every(s) : List<&2, HS.MRec>}:
-  %HSL.St.open_eq(s) : {HM.every(HM.apply(_, HM.ELifecycle{n, l, r})) == HM.every(s) : List<&2, HS.MRec>}
+def hub_msgs_life(+s: HS.St, +n: String, +l: HS.Life, +r: Maybe<&2, String>, +w: Maybe<&2, J.Json>) -> {HM.every(HM.apply(s, HM.ELifecycle{n, l, r, w})) == HM.every(s) : List<&2, HS.MRec>}:
+  %HSL.St.open_eq(s) : {HM.every(HM.apply(_, HM.ELifecycle{n, l, r, w})) == HM.every(s) : List<&2, HS.MRec>}
   {==}
 
 def hub_msgs_eq(-o: HS.St, -a: HX.Cx<o>, -b: HX.Cx<o>, e: {HX.d(o, a) == HX.d(o, b) : HS.St}) -> {HM.every(HX.d(o, a)) == HM.every(HX.d(o, b)) : List<&2, HS.MRec>}:

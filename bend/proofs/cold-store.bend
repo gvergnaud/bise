@@ -436,7 +436,7 @@ def ail.go(+e: HM.Ev, +s: HS.St, +x: Nat, -r: HS.MRec, +n: {HM.nat_in(N.Needs.ms
   match e:
     case HM.ETaskCreated{a, b, c, d, f}:
       {==}
-    case HM.ELifecycle{a, b, c}:
+    case HM.ELifecycle{a, b, c, d}:
       {==}
     case HM.EWorkspace{a, b}:
       {==}
@@ -646,7 +646,7 @@ def cs_keep.go(+e: HM.Ev, +s: HS.St, +x: Nat, -r: HS.MRec, +n: {HM.nat_in(N.Need
           cs_disj_nin(hot, old, x, r, PC2.hc_p_disj(hot, old, nm, u), o), PC2.hc_p_asc(hot, old, nm, u), PC2.hc_p_disj(hot, old, nm, u)), o)
     case HM.ETaskCreated{a, b, c, d, f}:
       o
-    case HM.ELifecycle{a, b, c}:
+    case HM.ELifecycle{a, b, c, d}:
       o
     case HM.EWorkspace{a, b}:
       o

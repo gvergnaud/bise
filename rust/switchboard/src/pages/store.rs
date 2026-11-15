@@ -20,6 +20,12 @@ pub struct Version {
     pub at_ms: u64,
     #[serde(default)]
     pub blocks: Vec<Block>,
+    /// tasks (roma idea 3, architect m_65507): the works of the
+    /// publisher's turn, stamped at the publish, never changed after (a
+    /// task's Log reads it). None: a version from before the stamp (the
+    /// Meta's works instead).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub works: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -457,7 +463,7 @@ impl Store {
         let n = meta.version() + 1;
         std::fs::create_dir_all(self.page_dir(&id)).map_err(|e| format!("{}: {e}", self.page_dir(&id).display()))?;
         write_atomic(&self.page_dir(&id).join(format!("v{n}.html")), p.html.as_bytes())?;
-        meta.versions.push(Version { n, at_ms: now, blocks });
+        meta.versions.push(Version { n, at_ms: now, blocks, works: Some(p.works.clone()) });
         meta.state = ready();
         let mut notes = self.notes(&id);
         let mut unknown = Vec::new();

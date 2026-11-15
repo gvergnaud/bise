@@ -26,7 +26,7 @@ def TaskCreated.of(+i: J.Json) -> Maybe<&2, M.Ev>:
   Some{M.ETaskCreated{K.get_s(i, "name"), K.get_s(i, "parent"), K.get_j(i, "brief"), K.get_j(i, "ws"), K.get_n(i, "at_ms")}}
 
 def Lifecycle.of(+i: J.Json) -> Maybe<&2, M.Ev>:
-  Some{M.ELifecycle{K.get_s(i, "name"), SC.Life.journal_of(K.get_j(i, "lifecycle")), K.opt_s(J.get(i, "reason"))}}
+  Some{M.ELifecycle{K.get_s(i, "name"), SC.Life.journal_of(K.get_j(i, "lifecycle")), K.opt_s(J.get(i, "reason")), J.get(i, "works")}}
 
 def Workspace.of(+i: J.Json) -> Maybe<&2, M.Ev>:
   Some{M.EWorkspace{K.get_s(i, "name"), K.get_j(i, "ws")}}
@@ -657,8 +657,8 @@ def kvs(e: M.Ev) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
   match e:
     case M.ETaskCreated{+name, +parent, +brief, +ws, +at_ms}:
       [J.kv("type", J.JStr{"task_created"}), J.kv("name", J.JStr{name}), J.kv("parent", J.JStr{parent}), J.kv("brief", brief), J.kv("ws", ws), J.kv("at_ms", J.JNum{at_ms})]
-    case M.ELifecycle{+name, +lifecycle, +reason}:
-      [J.kv("type", J.JStr{"lifecycle"}), J.kv("name", J.JStr{name}), J.kv("lifecycle", SC.Life.journal_json(lifecycle)), J.kv("reason", K.jmaybe_s(reason))]
+    case M.ELifecycle{+name, +lifecycle, +reason, +works}:
+      K.cat([[J.kv("type", J.JStr{"lifecycle"}), J.kv("name", J.JStr{name}), J.kv("lifecycle", SC.Life.journal_json(lifecycle)), J.kv("reason", K.jmaybe_s(reason))], K.omit_mj("works", works)])
     case M.EWorkspace{+name, +ws}:
       [J.kv("type", J.JStr{"workspace_changed"}), J.kv("name", J.JStr{name}), J.kv("ws", ws)]
     case M.ESnapshot{+name, +snapshot_ref}:

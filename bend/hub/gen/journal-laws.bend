@@ -28,7 +28,7 @@ def journal_task_created_bare():
   {==}
 
 law journal_lifecycle_bare:
-  {GJ.of(J.obj([J.kv("type", J.JStr{"lifecycle"})])) == Some{M.ELifecycle{"", SC.Life.journal_of(J.JNull{}), None{}}} : Maybe<&2, M.Ev>}
+  {GJ.of(J.obj([J.kv("type", J.JStr{"lifecycle"})])) == Some{M.ELifecycle{"", SC.Life.journal_of(J.JNull{}), None{}, None{}}} : Maybe<&2, M.Ev>}
 
 def journal_lifecycle_bare():
   {==}
@@ -354,25 +354,42 @@ law journal_lifecycle_round:
   for name: String
   for lifecycle: S.Life
   for reason: Maybe<&2, String>
-  {GJ.of(GJ.json(M.ELifecycle{name, lifecycle, reason})) == Some{M.ELifecycle{name, lifecycle, reason}} : Maybe<&2, M.Ev>}
+  for works: Maybe<&2, J.Json>
+  {GJ.of(GJ.json(M.ELifecycle{name, lifecycle, reason, works})) == Some{M.ELifecycle{name, lifecycle, reason, works}} : Maybe<&2, M.Ev>}
 
-def journal_lifecycle_round(name, lifecycle, reason):
-  match lifecycle reason:
-    case S.LActive{} None{}:
+def journal_lifecycle_round(name, lifecycle, reason, works):
+  match lifecycle reason works:
+    case S.LActive{} None{} None{}:
       {==}
-    case S.LActive{} Some{x_reason}:
+    case S.LActive{} None{} Some{x_works}:
       {==}
-    case S.LStopped{} None{}:
+    case S.LActive{} Some{x_reason} None{}:
       {==}
-    case S.LStopped{} Some{x_reason}:
+    case S.LActive{} Some{x_reason} Some{x_works}:
       {==}
-    case S.LArchived{} None{}:
+    case S.LStopped{} None{} None{}:
       {==}
-    case S.LArchived{} Some{x_reason}:
+    case S.LStopped{} None{} Some{x_works}:
       {==}
-    case S.LFailed{} None{}:
+    case S.LStopped{} Some{x_reason} None{}:
       {==}
-    case S.LFailed{} Some{x_reason}:
+    case S.LStopped{} Some{x_reason} Some{x_works}:
+      {==}
+    case S.LArchived{} None{} None{}:
+      {==}
+    case S.LArchived{} None{} Some{x_works}:
+      {==}
+    case S.LArchived{} Some{x_reason} None{}:
+      {==}
+    case S.LArchived{} Some{x_reason} Some{x_works}:
+      {==}
+    case S.LFailed{} None{} None{}:
+      {==}
+    case S.LFailed{} None{} Some{x_works}:
+      {==}
+    case S.LFailed{} Some{x_reason} None{}:
+      {==}
+    case S.LFailed{} Some{x_reason} Some{x_works}:
       {==}
 
 law journal_workspace_changed_round:
@@ -916,6 +933,8 @@ def journal_work_changed_round(id, op, by, at):
       {==}
     case S.WUntilTimer{op_a}:
       {==}
+    case S.WRestart{}:
+      {==}
     case S.WNoop{}:
       {==}
 
@@ -967,7 +986,7 @@ def journal_fixture_0_task_created():
   {==}
 
 law journal_fixture_1_lifecycle:
-  {back(GJ.of(J.obj([J.kv("type", J.JStr{"lifecycle"}), J.kv("name", J.JStr{"docs"}), J.kv("lifecycle", J.JStr{"stopped"}), J.kv("reason", J.JStr{"dropped by main"})]))) == Some{J.obj([J.kv("type", J.JStr{"lifecycle"}), J.kv("name", J.JStr{"docs"}), J.kv("lifecycle", J.JStr{"stopped"}), J.kv("reason", J.JStr{"dropped by main"})])} : Maybe<&2, J.Json>}
+  {back(GJ.of(J.obj([J.kv("type", J.JStr{"lifecycle"}), J.kv("name", J.JStr{"docs"}), J.kv("lifecycle", J.JStr{"stopped"}), J.kv("reason", J.JStr{"dropped by main"}), J.kv("works", J.JArr{[J.JStr{"docs-site"}]})]))) == Some{J.obj([J.kv("type", J.JStr{"lifecycle"}), J.kv("name", J.JStr{"docs"}), J.kv("lifecycle", J.JStr{"stopped"}), J.kv("reason", J.JStr{"dropped by main"}), J.kv("works", J.JArr{[J.JStr{"docs-site"}]})])} : Maybe<&2, J.Json>}
 
 def journal_fixture_1_lifecycle():
   {==}
@@ -1280,7 +1299,7 @@ def journal_stable_0_task_created():
   {==}
 
 law journal_stable_1_lifecycle:
-  {again(back(GJ.of(J.obj([J.kv("type", J.JStr{"lifecycle"}), J.kv("name", J.JStr{"docs"}), J.kv("lifecycle", J.JStr{"stopped"}), J.kv("reason", J.JStr{"dropped by main"})])))) == back(GJ.of(J.obj([J.kv("type", J.JStr{"lifecycle"}), J.kv("name", J.JStr{"docs"}), J.kv("lifecycle", J.JStr{"stopped"}), J.kv("reason", J.JStr{"dropped by main"})]))) : Maybe<&2, J.Json>}
+  {again(back(GJ.of(J.obj([J.kv("type", J.JStr{"lifecycle"}), J.kv("name", J.JStr{"docs"}), J.kv("lifecycle", J.JStr{"stopped"}), J.kv("reason", J.JStr{"dropped by main"}), J.kv("works", J.JArr{[J.JStr{"docs-site"}]})])))) == back(GJ.of(J.obj([J.kv("type", J.JStr{"lifecycle"}), J.kv("name", J.JStr{"docs"}), J.kv("lifecycle", J.JStr{"stopped"}), J.kv("reason", J.JStr{"dropped by main"}), J.kv("works", J.JArr{[J.JStr{"docs-site"}]})]))) : Maybe<&2, J.Json>}
 
 def journal_stable_1_lifecycle():
   {==}

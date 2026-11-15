@@ -164,7 +164,7 @@ def hc_apply.go(+e: HM.Ev, +s: HS.St, sp: HI.Split(s), k: hc_GeEv(s, e)) -> hc_S
   match e:
     case HM.ETaskCreated{a, b, c, d, f}:
       HX.Both{{==}, sp}
-    case HM.ELifecycle{a, b, c}:
+    case HM.ELifecycle{a, b, c, d}:
       HX.Both{{==}, sp}
     case HM.EWorkspace{a, b}:
       HX.Both{{==}, sp}
@@ -281,7 +281,7 @@ def hc_fresh_ge(+s: HS.St, e: HM.Ev, k: HX.FreshEv(s, e)) -> hc_GeEv(s, e):
       hc_ge_refl(HS.St.next_msg(s))
     case HM.ETaskCreated{a, b, c, d, f}:
       Unit{}
-    case HM.ELifecycle{a, b, c}:
+    case HM.ELifecycle{a, b, c, d}:
       Unit{}
     case HM.EWorkspace{a, b}:
       Unit{}
@@ -385,7 +385,7 @@ def hc_replay_ge(+st: HS.St, e: HM.Ev, ok: {CO.replay_fresh(st, e) == True{} : B
       Unit{}
     case HM.ETaskCreated{a, b, c, d, f}:
       Unit{}
-    case HM.ELifecycle{a, b, c}:
+    case HM.ELifecycle{a, b, c, d}:
       Unit{}
     case HM.EWorkspace{a, b}:
       Unit{}
@@ -499,7 +499,7 @@ def hc_kept1(+xs: List<&2, HS.MRec>, e: HM.Ev) -> HI.IsPrefix(HI.ids(xs), HI.ids
       PL1.hub_prefix_tr(HI.ids(xs), HI.ids(HM.map_msg(xs, id, HM.OSettle{})), HI.ids(xs), PL1.hub_ids_map(xs, id, HM.OSettle{}), PL1.hub_prefix_refl(HI.ids(xs)))
     case HM.ETaskCreated{a, b, c, d, f}:
       PL1.hub_prefix_refl(HI.ids(xs))
-    case HM.ELifecycle{a, b, c}:
+    case HM.ELifecycle{a, b, c, d}:
       PL1.hub_prefix_refl(HI.ids(xs))
     case HM.EWorkspace{a, b}:
       PL1.hub_prefix_refl(HI.ids(xs))

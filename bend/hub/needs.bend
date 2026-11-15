@@ -55,7 +55,7 @@ def needs(e: M.Ev) -> Needs():
   match e:
     case M.ETaskCreated{+name, _, _, _, _}:
       of_agent(name)
-    case M.ELifecycle{+name, _, _}:
+    case M.ELifecycle{+name, _, _, _}:
       of_agent(name)
     case M.EWorkspace{+name, _}:
       of_agent(name)

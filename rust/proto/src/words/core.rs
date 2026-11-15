@@ -44,4 +44,9 @@ crate::words! { core:
     ctx_agent_quiet(who) = "- {who}";
     /// the last line: where the rest is
     ctx_more(id) = "More: sb task show {id} --log";
+    // ---- his Restart of a stalled task (WRestart; architect m_65555)
+    /// to each of its agents, when he restarted it
+    restart_note(id, name) = "The user restarted task `{id}` ({name}): go on with it, or say with sb report why it waits.";
+    /// the same, when main restarted it
+    restart_note_main(id, name) = "main restarted task `{id}` ({name}): go on with it, or say with sb report why it waits.";
 }

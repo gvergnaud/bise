@@ -51,6 +51,8 @@ import ./forward.bend as FW
 import ./viewctx.bend as VC
 import ./work.bend as WO
 import ./wctx.bend as WC
+# sb-core reads its words by their area's name (tests/words_read_check.py)
+import ./gen/words.bend as core
 
 type Snd is Data:
   Snd{from: String, to: String, text: String, expect: Bool,
@@ -131,6 +133,7 @@ type TaskV is Data:
   TVDone{}
   TVReopen{}
   TVMerge{}
+  TVRestart{}
   TVOther{}
 
 # tasks: who asks for a change of a work. An agent's `sb task` (its
@@ -715,6 +718,19 @@ def jstrs(xs: List<&2, String>) -> List<&2, J.Json>:
     case Con{+h, +t}:
       J.JStr{h} <> jstrs(t)
 
+# roma idea 3 (architect m_65507): a stop's or a failure's stamp, the
+# works of the turn it broke (a task's Log reads its breaks from it);
+# None when it served none (its line stays as before)
+def life_works.of(ws: List<&2, String>) -> Maybe<&2, J.Json>:
+  match ws:
+    case Nil{}:
+      None{}
+    case Con{+h, +t}:
+      Some{J.JArr{jstrs(Con{h, t})}}
+
+def life_works(+st: S.St, +name: String) -> Maybe<&2, J.Json>:
+  life_works.of(works_of_agent(M.get_agent(st, name)))
+
 # tasks: the work_turn line of a delivery whose works change its turn's
 # (WO.turn_change; law delivered_sets_turn_works)
 def work_turn(-o: S.St, ch: Maybe<&2, List<&2, String>>, +cx: X.Cx<o>, +name: String, +busy: Bool) -> X.Cx<o>:
@@ -942,7 +958,7 @@ def send.revive(-o: S.St, ok: Bool, +cx: X.Cx<o>, +s: Snd, +why: String) -> X.Cx
       serr(o, cx, why)
     case True{}:
       +to = Snd.to(s)
-      +cx2 = emit(o, cx, M.ELifecycle{to, S.LActive{}, None{}}, Unit{}, Unit{}, Unit{})
+      +cx2 = emit(o, cx, M.ELifecycle{to, S.LActive{}, None{}, None{}}, Unit{}, Unit{}, Unit{})
       +r = rr(o, cx2)
       +cx3 = set_r(o, cx2, X.R.with_crashes(r, KL.kn_del(X.R.crashes(r), to)))
       send.thread(o, Snd.reply_to(s), spawn(o, cx3, to, True{}), s)
@@ -1822,7 +1838,7 @@ def stop_task.go(-o: S.St, +cx: X.Cx<o>, +name: String, +life: S.Life, +reason: 
   +r = rr(o, cx2)
   +cx3 = set_r(o, cx2, X.R.with_steered(r, KL.steer_del(X.R.steered(r), name)))
   +cx4 = upd_rt(o, cx3, X.Rt.with_turn(X.Rt.with_run(rt(o, cx3, name), S.RDown{}), None{}))
-  +cx5 = emit(o, cx4, M.ELifecycle{name, life, Bool.pick(Maybe<&2, String>, String.is_empty(reason), None{}, Some{reason})}, Unit{}, Unit{}, Unit{})
+  +cx5 = emit(o, cx4, M.ELifecycle{name, life, Bool.pick(Maybe<&2, String>, String.is_empty(reason), None{}, Some{reason}), life_works(st(o, cx4), name)}, Unit{}, Unit{}, Unit{})
   +cx6 = reject_ids(o, ids_of(M.queued_for(st(o, cx5), name)), cx5)
   view_nos(o, S.St.cards(st(o, cx6)), close_cards(o, cx6, name, Nil{}, "agent stopped"), name)
 
@@ -1963,7 +1979,7 @@ def drop_task(-o: S.St, +cx: X.Cx<o>, +name: String, +force: Bool) -> X.Cx<o> & 
 
 def restore.go.as(-o: S.St, +cx: X.Cx<o>, +a: S.Agent, +label: String) -> X.Cx<o> & TaskR:
   +n = S.Agent.name(a)
-  +cx2 = emit(o, cx, M.ELifecycle{n, S.LActive{}, None{}}, Unit{}, Unit{}, Unit{})
+  +cx2 = emit(o, cx, M.ELifecycle{n, S.LActive{}, None{}, None{}}, Unit{}, Unit{}, Unit{})
   +r = rr(o, cx2)
   +cx3 = set_r(o, cx2, X.R.with_crashes(r, KL.kn_del(X.R.crashes(r), n)))
   +cx4 = spawn(o, cx3, n, True{})
@@ -3499,7 +3515,7 @@ def report_done(-o: S.St, +cx: X.Cx<o>, +from: String) -> X.Cx<o>:
   replies_end(o, emit(o, cx, M.EDeclared{from, Some{S.DDone{}}, ""}, Unit{}, Unit{}, Unit{}), from)
 
 def report_failed(-o: S.St, +cx: X.Cx<o>, +from: String, +summary: String) -> X.Cx<o>:
-  replies_end(o, emit(o, cx, M.ELifecycle{from, S.LFailed{}, Some{summary}}, Unit{}, Unit{}, Unit{}), from)
+  replies_end(o, emit(o, cx, M.ELifecycle{from, S.LFailed{}, Some{summary}, life_works(st(o, cx), from)}, Unit{}, Unit{}, Unit{}), from)
 
 def report_lines(xs: List<&2, String>) -> List<&2, String>:
   match xs:
@@ -3781,7 +3797,8 @@ def task_verb(+s: String) -> TaskV:
   Bool.pick(TaskV, String.eq(s, "resume"), TVResume{},
   Bool.pick(TaskV, String.eq(s, "done"), TVDone{},
   Bool.pick(TaskV, String.eq(s, "reopen"), TVReopen{},
-  Bool.pick(TaskV, String.eq(s, "merge"), TVMerge{}, TVOther{}))))))))))))
+  Bool.pick(TaskV, String.eq(s, "merge"), TVMerge{},
+  Bool.pick(TaskV, String.eq(s, "restart"), TVRestart{}, TVOther{})))))))))))))
 
 # the change a verb makes (new and an unknown verb: none)
 def task_op(v: TaskV, +q: J.Json) -> S.WOp:
@@ -3808,6 +3825,8 @@ def task_op(v: TaskV, +q: J.Json) -> S.WOp:
       S.WReopen{}
     case TVMerge{}:
       S.WMerge{K.get_s(q, "into")}
+    case TVRestart{}:
+      S.WRestart{}
     case _:
       S.WNoop{}
 
@@ -3840,6 +3859,22 @@ def task_refused.reopen(m: Maybe<&2, S.Fin>, +id: String) -> Maybe<&2, String>:
     case Some{_}:
       None{}
 
+# a Restart: refused on a done or merged task (reopen it first) and on a
+# paused one (Resume is the gesture; architect m_65555)
+def task_refused.restart.paused(m: Maybe<&2, Nat>, +id: String) -> Maybe<&2, String>:
+  match m:
+    case None{}:
+      None{}
+    case Some{_}:
+      Some{cat(["task ", id, " is paused: resume it"])}
+
+def task_refused.restart(m: Maybe<&2, S.Fin>, +p: Maybe<&2, Nat>, +id: String) -> Maybe<&2, String>:
+  match m:
+    case Some{_}:
+      Some{cat(["task ", id, " is closed: reopen it first"])}
+    case None{}:
+      task_refused.restart.paused(p, id)
+
 def task_refused.text(+t: String, +what: String) -> Maybe<&2, String>:
   LZ.pick(Maybe<&2, String>, String.is_empty(t), u => Some{what}, u => None{})
 
@@ -3861,6 +3896,8 @@ def task_refused.op(op: S.WOp, +w: S.Work, +by: String, +xs: List<&2, S.Work>) -
       task_refused.into(WO.target(xs, into), S.Work.id(w), into)
     case S.WReopen{}:
       task_refused.reopen(S.Work.done(w), S.Work.id(w))
+    case S.WRestart{}:
+      task_refused.restart(S.Work.done(w), S.Work.paused(w), S.Work.id(w))
     case _:
       None{}
 
@@ -3943,6 +3980,65 @@ def work_pause.until(-o: S.St, +cx: X.Cx<o>, +id: String, +until: Nat, +by: Stri
   LZ.pick(X.Cx<o>, Nat.is_eq(until, 0n), u => cx,
     u => emit(o, aemit(o, cx, TM.ActSet{TM.act_of(aid, until, S.WorkResume{id})}), M.EWorkChanged{id, S.WUntilTimer{aid}, by, now(o, cx)}, Unit{}, Unit{}, Unit{}))
 
+# ---- a Restart (roma idea 3; architect m_65554, m_65555) ----
+
+# the restart note of work `id` for agent `n`: a hub message with
+# explicit works, exactly [id] (never inherited: law
+# restart_note_carries_only_its_work)
+def work_restart_note(+n: String, +id: String, +text: String) -> Snd:
+  Snd{M.HUB(), n, text, False{}, None{}, False{}, False{}, False{}, None{}, "", None{}, Some{[id]}}
+
+# its words: who restarted it, honestly (him, or main)
+def work_restart.text(+by: String, +id: String, +name: String) -> String:
+  Bool.pick(String, String.eq(by, M.USER()), core.restart_note(id, name), core.restart_note_main(id, name))
+
+def work_restart.note(-o: S.St, +cx: X.Cx<o>, +n: String, +id: String, +text: String) -> X.Cx<o>:
+  fst(o, send(o, cx, work_restart_note(n, id, text)))
+
+def work_restart.restored(-o: S.St, p: X.Cx<o> & TaskR, +n: String, +id: String, +text: String) -> X.Cx<o>:
+  match p:
+    case (+cx, _):
+      work_restart.note(o, cx, n, id, text)
+
+# one of its agents: failed, restored once (the restore path; one that
+# fails again stays failed: the next Restart is his act again) and told;
+# active and idle, told; busy, starting or stopped, nothing
+def work_restart.life(-o: S.St, l: S.Life, +cx: X.Cx<o>, +n: String, +id: String, +text: String) -> X.Cx<o>:
+  match l:
+    case S.LFailed{}:
+      work_restart.restored(o, restore.agent(o, M.get_agent(st(o, cx), n), cx, n), n, id, text)
+    case S.LActive{}:
+      LZ.pick(X.Cx<o>, is_idle(X.Rt.run(rt(o, cx, n))), u => work_restart.note(o, cx, n, id, text), u => cx)
+    case _:
+      cx
+
+def work_restart.one(-o: S.St, m: Maybe<&2, S.Agent>, +cx: X.Cx<o>, +n: String, +id: String, +text: String) -> X.Cx<o>:
+  match m:
+    case None{}:
+      cx
+    case Some{+a}:
+      work_restart.life(o, S.Agent.life(a), cx, n, id, text)
+
+def work_restart.each(-o: S.St, ns: List<&2, String>, +cx: X.Cx<o>, +id: String, +text: String) -> X.Cx<o>:
+  match ns:
+    case Nil{}:
+      cx
+    case Con{+n, +rest}:
+      +skip = String.eq(n, M.MAIN())
+      +cx2 = LZ.pick(X.Cx<o>, skip, u => cx, u => work_restart.one(o, M.get_agent(st(o, cx), n), cx, n, id, text))
+      work_restart.each(o, rest, cx2, id, text)
+
+def work_restart.of(-o: S.St, m: Maybe<&2, S.Work>, +cx: X.Cx<o>, +id: String, +by: String) -> X.Cx<o>:
+  match m:
+    case None{}:
+      cx
+    case Some{+w}:
+      work_restart.each(o, S.Work.agents(w), cx, id, work_restart.text(by, id, S.Work.name(w)))
+
+# his (or main's) Restart of work `id`: its agents, main aside (it routes)
+def work_restart(-o: S.St, +cx: X.Cx<o>, +id: String, +by: String) -> X.Cx<o>:
+  work_restart.of(o, WO.find(S.St.works(st(o, cx)), id), cx, id, by)
+
 # what a change makes happen after its line: a pause's notes (once, at
 # the pause: a paused work's new until changes only its end) and its
 # until act; a resume's held deliveries
@@ -3953,6 +4049,8 @@ def req_task.after(-o: S.St, op: S.WOp, +cx: X.Cx<o>, +was: Bool, +id: String, +
       work_pause.until(o, cx2, id, until, by)
     case S.WResume{}:
       work_resumed(o, cx)
+    case S.WRestart{}:
+      work_restart(o, cx, id, by)
     # a paused work closed: its pause ended with it, what it held goes
     # (law a_closed_work_holds_nothing)
     case S.WDone{}:
@@ -4385,7 +4483,7 @@ def crash.restart(-o: S.St, +cx: X.Cx<o>, +agent: String, +n: Nat, +reason: Stri
 
 def crash.fail(-o: S.St, +cx: X.Cx<o>, +agent: String, +n: Nat, +reason: String) -> X.Cx<o>:
   +why = cat(["the REPL crashed ", ns(n), " times: ", reason])
-  +cx2 = job_end(o, emit(o, cx, M.ELifecycle{agent, S.LFailed{}, Some{why}}, Unit{}, Unit{}, Unit{}), agent, "failed", why)
+  +cx2 = job_end(o, emit(o, cx, M.ELifecycle{agent, S.LFailed{}, Some{why}, life_works(st(o, cx), agent)}, Unit{}, Unit{}, Unit{}), agent, "failed", why)
   +cx3 = feed(o, cx2, M.MAIN(), FD.warn(cat(["@", agent, " failed: ", why])))
   LZ.pick(X.Cx<o>, String.eq(agent, M.MAIN()), u => cx3,
     u => notify_main(o, cx3, cat(["agent @", agent, " failed: ", why, ". It is not restarted anymore. A new message from you or the user restarts it; otherwise tell the user."])))

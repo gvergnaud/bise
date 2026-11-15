@@ -49,6 +49,24 @@ task's birth, and the land records; `switchboard/src/task_log.rs` makes the line
 records are pinned by the journal codec's fixture (`core_journal.jsonl`). Worst case on a 116 MB
 journal: 0.46 s.
 
+Chunk 2b (tasks-ux m_65504, architect m_65507, m_65555), each from a fact stamped when it
+happened, never rebuilt later:
+- Question: a `card_opened` whose works hold it, his answer folded under it (one entry); a card
+  moved onto the task after it was asked keeps its answer alone.
+- Artifact: each version of an artifact or a page carries the works of the turn that made it
+  (`Version.works`, stamped at the door with the Meta's union, never changed after; None before
+  the stamp: the Meta's works). The shell reads the stores off the loop (`arts_of`); back-to-back
+  versions of one artifact by one agent fold into one line ('v2→v5'), in the window and the CLI.
+  His move stays its own gesture line.
+- Break: a `lifecycle` failed/stopped line carries the turn's works it broke (`works`, absent when
+  none: an older line gives no Break).
+- Restart: its own op, WRestart (`sb task restart <id>`, the window's Restart): the work
+  unchanged; its failed agents restored once through the restore path (one that fails again stays
+  failed: the next Restart is his act again), each restored or idle one gets one hub note with
+  works exactly [id] (law restart_note_carries_only_its_work), main aside; refused on a done,
+  merged or paused task. Journaled `restart` by whoever made it: the Log says "main restarted it"
+  for main's, never "you".
+
 ## A joining agent's context (roma idea 5; architect m_65317, m_65509)
 
 An agent's delivery for a task it never served (it is not in `Work.agents`, read before the step's

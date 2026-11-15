@@ -766,7 +766,7 @@ def lv_apply.go(+e: HM.Ev, +s: HS.St, la: HI.Lives(HS.St.agents(s), True{}), lr:
     case HM.ERenamed{+old, +new}:
       lv_on(HAG.has(HM.strip(HS.St.agents(s), new), old), HM.strip(HS.St.agents(s), new), HM.strip(HS.St.arch(s), new), old, HM.ORename{new}, {==},
         lv_strip(HS.St.agents(s), new, True{}, la), lv_strip(HS.St.arch(s), new, False{}, lr))
-    case HM.ELifecycle{+x, +l, +r}:
+    case HM.ELifecycle{+x, +l, +r, _}:
       lv_life(HAG.hit(HS.St.agents(s), x), HAG.pre(HS.St.agents(s), x), HAG.post(HS.St.agents(s), x), HS.St.agents(s), HS.St.arch(s), HS.St.order(s), x, l, r, ag_cut_whole(HS.St.agents(s), x), la, lr)
     case HM.EWorkspace{+x, +w}:
       lv_on(HAG.has(HS.St.agents(s), x), HS.St.agents(s), HS.St.arch(s), x, HM.OWs{w}, {==}, la, lr)

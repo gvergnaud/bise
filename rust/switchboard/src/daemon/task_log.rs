@@ -53,11 +53,33 @@ pub(crate) fn rev_lines(path: &Path, mut f: impl FnMut(&str) -> bool) -> std::io
 }
 
 /// The Log of the task `ids` names (the task, then the ones merged into
-/// it): the journal from its end, the land records.
-pub(crate) fn read_log(journal: &Path, lands: &Path, ids: &[String], limit: usize) -> Result<Vec<bise_proto::rows::LogLine>, String> {
+/// it): the journal from its end, the land records, the artifacts' and
+/// pages' versions made under it (`state`: the hub's state folder).
+pub(crate) fn read_log(journal: &Path, lands: &Path, state: &Path, ids: &[String], limit: usize) -> Result<Vec<bise_proto::rows::LogLine>, String> {
     let mut scan = crate::task_log::Scan::new(ids);
     rev_lines(journal, |l| scan.line(l)).map_err(|e| e.to_string())?;
-    Ok(scan.log(&crate::land_record::read(lands), limit))
+    Ok(scan.log(&crate::land_record::read(lands), &arts_of(state, ids), limit))
+}
+
+/// The artifacts and pages one of whose versions (or, before the stamp,
+/// whose Meta) names one of `ids`, as the Log reads them.
+pub(crate) fn arts_of(state: &Path, ids: &[String]) -> Vec<crate::task_log::ArtLog> {
+    use crate::task_log::ArtLog;
+    let names = |ws: &[String]| ws.iter().any(|w| ids.contains(w));
+    let mut out = Vec::new();
+    for m in crate::artifacts::Store::new(state).stored() {
+        let versions: Vec<_> = m.versions.iter().map(|v| (v.v, v.at_ms, v.turn.as_ref().map_or_else(|| m.agent.clone(), |t| t.agent.clone()), v.works.clone())).collect();
+        if names(m.works.works()) || versions.iter().any(|(_, _, _, w)| w.as_deref().is_some_and(names)) {
+            out.push(ArtLog { art: m.id.clone(), title: m.title.clone(), page: false, works: m.works.works().to_vec(), versions });
+        }
+    }
+    for m in crate::pages::store::Store::new(state).list() {
+        let versions: Vec<_> = m.versions.iter().map(|v| (v.n, v.at_ms, m.agent.clone(), v.works.clone())).collect();
+        if names(m.works.works()) || versions.iter().any(|(_, _, _, w)| w.as_deref().is_some_and(names)) {
+            out.push(ArtLog { art: m.id.clone(), title: m.title.clone(), page: true, works: m.works.works().to_vec(), versions });
+        }
+    }
+    out
 }
 
 /// The ids a task's Log reads: the live task an id names (a merged one:
@@ -93,11 +115,11 @@ impl Shell {
     /// `sb task show <id> --log`: the same lines in words, read on a
     /// thread, written to the asker's stream.
     pub(super) fn task_log_text(&mut self, mut stream: std::os::unix::net::UnixStream, task: String) {
-        let (journal, lands) = (self.opts.paths.journal(), self.opts.paths.lands());
+        let (journal, lands, state) = (self.opts.paths.journal(), self.opts.paths.lands(), self.opts.paths.state.clone());
         let found = ids_of(&self.hub.st, &task);
         std::thread::spawn(move || {
             let now = crate::util::now_ms();
-            let body = match found.and_then(|(live, ids)| read_log(&journal, &lands, &ids, crate::task_log::LIMIT).map(|l| (live, l))) {
+            let body = match found.and_then(|(live, ids)| read_log(&journal, &lands, &state, &ids, crate::task_log::LIMIT).map(|l| (live, l))) {
                 Ok((live, lines)) if lines.is_empty() => serde_json::json!({"ok": true, "text": format!("{}: {}", live, bise_proto::words::tasks::log_none)}),
                 Ok((live, lines)) => {
                     let mut out = vec![format!("{} · Log, newest first", live)];
@@ -113,11 +135,11 @@ impl Shell {
     /// `task_log` for client `id`: read on a thread, answered with `req`.
     pub(super) fn task_log(&mut self, id: ClientId, task: String, req: u64, limit: u64) {
         let (tx, project) = (self.tx.clone(), self.project());
-        let (journal, lands) = (self.opts.paths.journal(), self.opts.paths.lands());
+        let (journal, lands, state) = (self.opts.paths.journal(), self.opts.paths.lands(), self.opts.paths.state.clone());
         let limit = if limit == 0 { crate::task_log::LIMIT } else { limit as usize };
         let found = ids_of(&self.hub.st, &task);
         std::thread::spawn(move || {
-            let ev = match found.and_then(|(live, ids)| read_log(&journal, &lands, &ids, limit).map(|l| (live, l))) {
+            let ev = match found.and_then(|(live, ids)| read_log(&journal, &lands, &state, &ids, limit).map(|l| (live, l))) {
                 Ok((live, lines)) => HubEv::TaskLog { project, req, id: live, lines, error: None },
                 Err(e) => HubEv::TaskLog { project, req, id: task, lines: Vec::new(), error: Some(e) },
             };

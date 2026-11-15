@@ -40,4 +40,8 @@ export const core = {
   ctx_agent_quiet: (a: { who: string | number }): string => "- " + String(a.who),
   /** the last line: where the rest is */
   ctx_more: (a: { id: string | number }): string => "More: sb task show " + String(a.id) + " --log",
+  /** to each of its agents, when he restarted it */
+  restart_note: (a: { id: string | number; name: string | number }): string => "The user restarted task `" + String(a.id) + "` (" + String(a.name) + "): go on with it, or say with sb report why it waits.",
+  /** the same, when main restarted it */
+  restart_note_main: (a: { id: string | number; name: string | number }): string => "main restarted task `" + String(a.id) + "` (" + String(a.name) + "): go on with it, or say with sb report why it waits.",
 } as const;

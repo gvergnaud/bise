@@ -199,7 +199,7 @@ crate::words! { tasks:
     /// the Task tab's second pane: its Log
     tab_log = "Log";
     /// the Log with no line yet
-    log_none = "Nothing in its Log yet: its agents' reports, your answers, its lands and your gestures land here.";
+    log_none = "Nothing yet. Its agents' reports, your answers and what lands show up here.";
     /// the Log while the hub reads it
     log_loading = "reading its Log…";
     /// the Log the hub couldn't read
@@ -242,6 +242,20 @@ crate::words! { tasks:
     log_moved_out(what) = "you moved {what} away";
     /// a moved card (no title to name it)
     log_a_card = "a question";
+    /// one of its agents asked him (a question, a pick, a block)
+    log_asked(who, text) = "{who} asked: {text}";
+    /// one of its agents made a version of an artifact or a page
+    log_made(who, title, v) = "{who} made {title} v{v}";
+    /// back-to-back versions of one artifact, folded into one line
+    log_made_range(who, title, from, to) = "{who} made {title} v{from}→v{to}";
+    /// one of its agents failed in its turn, and why
+    log_crashed(who, why) = "{who} stopped (crash): {why}";
+    /// one of its agents was stopped in its turn, and why
+    log_stopped(who, why) = "{who} was stopped: {why}";
+    /// his gesture: Restart of a stalled task
+    log_restarted = "you restarted it";
+    /// main's Restart (sb task restart), never said as his
+    log_restarted_by(who) = "{who} restarted it";
     /// the footer's ⋯: its tip
     act_more = "More: Rename, Merge into…";
     /// the ⋯ menu: rename the task (his name: an agent never renames it after)

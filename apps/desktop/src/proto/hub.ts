@@ -249,7 +249,7 @@ all?: boolean, } | { "step": "show", id: string,
 /**
  * `--log`: its Log instead (roma idea 3), read by the hub off its loop
  */
-log?: boolean, } | { "step": "done", id: string, } | { "step": "reopen", id: string, } | { "step": "pause", id: string, until_ms?: number, } | { "step": "resume", id: string, } | { "step": "rename", id: string, name: string, } | { "step": "why", id: string, text: string, } | { "step": "goal", id: string, text: string, } | { "step": "tick", id: string, n: number, } | { "step": "untick", id: string, n: number, } | { "step": "ongoing", id: string, } | { "step": "merge", id: string, into: string, };
+log?: boolean, } | { "step": "done", id: string, } | { "step": "reopen", id: string, } | { "step": "pause", id: string, until_ms?: number, } | { "step": "resume", id: string, } | { "step": "restart", id: string, } | { "step": "rename", id: string, name: string, } | { "step": "why", id: string, text: string, } | { "step": "goal", id: string, text: string, } | { "step": "tick", id: string, n: number, } | { "step": "untick", id: string, n: number, } | { "step": "ongoing", id: string, } | { "step": "merge", id: string, into: string, };
 
 /**
  * How his words go, the same for `send` and `slash` (architect m_13313:

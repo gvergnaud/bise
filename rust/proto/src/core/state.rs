@@ -377,6 +377,9 @@ pub const STATE: State = State {
                 vf("WAddAgent", "add_agent", &[f("agent", Str)]),
                 // the timer of a pause until a time (0: none any more)
                 vf("WUntilTimer", "until_timer", &[f("timer", Nat)]),
+                // his (or main's) Restart: the work unchanged, its failed
+                // agents restored, its idle ones told to go on
+                v("WRestart", "restart"),
                 v("WNoop", "noop"),
             ],
             fallback: "WNoop",

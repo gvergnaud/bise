@@ -62,6 +62,21 @@ def Laws.an_agent_never_acts_as_him(t, from):
 def Laws.only_main_changes_any_work(t, from):
   {==}
 
+def Laws.a_restart_by_main_never_says_him(id, name):
+  {==}
+
+def Laws.work_restart_changes_no_field(w, by, at):
+  {==}
+
+def Laws.restart_note_carries_only_its_work(n, id, text):
+  {==}
+
+def Laws.restart_on_a_closed_work_is_refused(f, p, id):
+  {==}
+
+def Laws.restart_on_a_paused_work_is_refused(at, id):
+  {==}
+
 def Laws.paused_work_holds_its_deliveries(m, rest):
   {==}
 

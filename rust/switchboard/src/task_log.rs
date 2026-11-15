@@ -123,6 +123,32 @@ struct Created {
     work: Work,
 }
 
+/// `lifecycle {name, lifecycle, reason, works}`: `works` the turn's a
+/// stop or a failure broke (absent before the stamp, or none: no Break)
+#[derive(Deserialize)]
+struct Life {
+    name: String,
+    lifecycle: String,
+    #[serde(default)]
+    reason: Option<String>,
+    #[serde(default)]
+    works: Vec<String>,
+}
+
+/// One artifact or page as the Log reads it (the stores' metas, read by
+/// the shell off the loop): each version with the works it was made
+/// under (`None`: a version from before the stamp, read with `works`,
+/// the Meta's current ones; architect m_65507).
+#[derive(Clone, Debug, Default)]
+pub struct ArtLog {
+    pub art: String,
+    pub title: String,
+    pub page: bool,
+    pub works: Vec<String>,
+    /// (version, at_ms, who made it, its works)
+    pub versions: Vec<(u64, u64, String, Option<Vec<String>>)>,
+}
+
 /// One journal fact that may concern the task, in the journal's order.
 enum Fact {
     Created(Work),
@@ -133,6 +159,7 @@ enum Fact {
     Closed(Closed, u64),
     CardMoved(u64, Vec<String>, u64),
     ArtMoved(String, Vec<String>, u64),
+    Life(Life, u64),
 }
 
 #[derive(Deserialize)]
@@ -208,6 +235,7 @@ impl Scan {
             Fact::Changed(c) => self.ids.contains(&c.id),
             Fact::Turn(t) => has(&t.works),
             Fact::Reported(_, r) => !r.auto && has(&r.works),
+            Fact::Life(l, _) => matches!(l.lifecycle.as_str(), "failed" | "stopped") && has(&l.works),
             // a card's or a move's works are read with the ones before it
             Fact::Opened(_) | Fact::Closed(..) | Fact::CardMoved(..) | Fact::ArtMoved(..) => true,
         })
@@ -215,11 +243,13 @@ impl Scan {
 
     /// The Log: the facts in the journal's order made lines, newest first,
     /// with the lands of `lands` that served the task; at most `limit`.
-    pub fn log(self, lands: &[LandRecord], limit: usize) -> Vec<LogLine> {
+    pub fn log(self, lands: &[LandRecord], made: &[ArtLog], limit: usize) -> Vec<LogLine> {
         let ids = self.ids;
         let has = |ws: &[String]| ws.iter().any(|w| ids.contains(w));
         let mut out: Vec<LogLine> = Vec::new();
         let mut cards: HashMap<u64, Vec<String>> = HashMap::new();
+        // a question's line, by its card: his answer folds under it
+        let mut asked: HashMap<u64, usize> = HashMap::new();
         let mut arts: HashMap<String, Vec<String>> = HashMap::new();
         let mut joined: HashSet<String> = HashSet::new();
         let mut join = |out: &mut Vec<LogLine>, who: &str, at: u64| {
@@ -244,10 +274,13 @@ impl Scan {
                 Fact::Created(w) => join(&mut out, &w.by, w.created_ms),
                 Fact::Turn(t) => join(&mut out, &t.agent, t.at),
                 Fact::Changed(c) => {
-                    if c.by != "user" {
+                    // his gestures; a Restart main made too, said as main's
+                    // (architect m_65555: never "you")
+                    if c.by != "user" && !(c.op == "restart" && c.by == crate::model::MAIN) {
                         continue;
                     }
                     let (g, text) = match c.op.as_str() {
+                        "restart" => (LogGesture::Restart, String::new()),
                         "pause" => (LogGesture::Pause, String::new()),
                         "resume" => (LogGesture::Resume, String::new()),
                         "done" => (LogGesture::Done, String::new()),
@@ -273,6 +306,19 @@ impl Scan {
                     ..LogLine::default()
                 }),
                 Fact::Opened(c) => {
+                    // its agents' question to him, opened with the task's works
+                    if has(&c.works) && !c.text.trim().is_empty() {
+                        asked.insert(c.id, out.len());
+                        out.push(LogLine {
+                            at_ms: when(c.created_ms),
+                            kind: LogKind::Question,
+                            who: c.agent.clone(),
+                            text: c.text.trim().to_string(),
+                            ask: c.kind.clone(),
+                            card: Some(c.id),
+                            ..LogLine::default()
+                        });
+                    }
                     cards.insert(c.id, c.works);
                 }
                 Fact::Closed(c, at) => {
@@ -281,8 +327,21 @@ impl Scan {
                     if c.via.is_empty() || words.is_empty() || !cards.get(&c.id).is_some_and(|w| has(w)) {
                         continue;
                     }
-                    out.push(LogLine { at_ms: when(at), kind: LogKind::Answer, who: "user".into(), text: words, card: Some(c.id), ..LogLine::default() });
+                    // under its question when the Log has it (one entry);
+                    // a card moved onto the task after it was asked: alone
+                    match asked.get(&c.id) {
+                        Some(&i) => out[i].answer = Some(words),
+                        None => out.push(LogLine { at_ms: when(at), kind: LogKind::Answer, who: "user".into(), text: words, card: Some(c.id), ..LogLine::default() }),
+                    }
                 }
+                Fact::Life(l, at) => out.push(LogLine {
+                    at_ms: when(at),
+                    kind: LogKind::Break,
+                    who: l.name,
+                    text: l.reason.unwrap_or_default().trim().to_string(),
+                    life: l.lifecycle,
+                    ..LogLine::default()
+                }),
                 Fact::CardMoved(card, works, at) => {
                     let was = cards.insert(card, works.clone()).unwrap_or_default();
                     if let Some(g) = moved(has(&was), has(&works)) {
@@ -308,6 +367,15 @@ impl Scan {
                 ..LogLine::default()
             });
         }
+        // each version made under it (its own stamp; an older one: the
+        // Meta's works); his move is its own gesture line above
+        for a in made {
+            for (v, at, who, works) in &a.versions {
+                if has(works.as_deref().unwrap_or(&a.works)) {
+                    out.push(LogLine { at_ms: *at, kind: LogKind::Artifact, who: who.clone(), text: a.title.clone(), art: a.art.clone(), v: *v, page: a.page, ..LogLine::default() });
+                }
+            }
+        }
         // newest first; a tie keeps the journal's order, newest first too
         out.reverse();
         out.sort_by_key(|l| std::cmp::Reverse(l.at_ms));
@@ -332,13 +400,14 @@ fn parse(line: &str, at: u64) -> Option<Result<Fact, serde_json::Error>> {
         // a card's move names its card; an artifact's or a page's its `art`
         "card_moved" => serde_json::from_str::<MovedLine>(line).map(|m| Fact::CardMoved(m.moved.card.unwrap_or_default(), m.moved.works, at)),
         "art_moved" => serde_json::from_str::<MovedLine>(line).map(|m| Fact::ArtMoved(m.moved.art, m.moved.works, at)),
+        "lifecycle" => serde_json::from_str::<Life>(line).map(|l| Fact::Life(l, at)),
         _ => return None,
     };
     Some(r)
 }
 
 /// The journal kinds the Log reads.
-pub const KINDS: [&str; 8] = ["work_created", "work_changed", "work_turn", "reported", "card_opened", "card_closed", "card_moved", "art_moved"];
+pub const KINDS: [&str; 9] = ["work_created", "work_changed", "work_turn", "reported", "card_opened", "card_closed", "card_moved", "art_moved", "lifecycle"];
 
 /// A line of `KINDS` that the Log's records read (the pin test's).
 pub fn reads(line: &str) -> Result<(), String> {
@@ -367,18 +436,48 @@ pub fn of_lines<'a>(ids: &[String], lines: impl IntoIterator<Item = &'a str>, la
             break;
         }
     }
-    s.log(lands, limit)
+    s.log(lands, &[], limit)
 }
 
-/// `sb task show --log`'s lines: one per fact, newest first, `when`
-/// putting a time in words.
+/// Back-to-back versions of one artifact by one agent folded into one
+/// line (the window folds the same: "v2→v5"): each line with the oldest
+/// version of its run, newest first like the Log.
+pub fn fold(lines: &[LogLine]) -> Vec<(&LogLine, u64)> {
+    let mut out: Vec<(&LogLine, u64)> = Vec::new();
+    for l in lines {
+        if let Some((prev, from)) = out.last_mut() {
+            if l.kind == LogKind::Artifact && prev.kind == LogKind::Artifact && prev.art == l.art && prev.page == l.page && prev.who == l.who {
+                *from = l.v;
+                continue;
+            }
+        }
+        out.push((l, l.v));
+    }
+    out
+}
+
+/// `sb task show --log`'s lines: one per fact (back-to-back versions of
+/// one artifact folded), newest first, `when` putting a time in words.
 pub fn words(lines: &[LogLine], when: impl Fn(u64) -> String) -> Vec<String> {
     use bise_proto::words::tasks;
-    lines
-        .iter()
-        .map(|l| {
+    fold(lines)
+        .into_iter()
+        .map(|(l, from)| {
             let w = when(l.at_ms);
             let what = match l.kind {
+                LogKind::Question => {
+                    let mut s = tasks::log_asked(&l.who, &l.text);
+                    if let Some(a) = &l.answer {
+                        s.push(char::from(10u8));
+                        s.push_str("    ");
+                        s.push_str(&tasks::log_answer(a));
+                    }
+                    s
+                }
+                LogKind::Artifact if from < l.v => tasks::log_made_range(&l.who, &l.text, from, l.v),
+                LogKind::Artifact => tasks::log_made(&l.who, &l.text, l.v),
+                LogKind::Break if l.life == "failed" => tasks::log_crashed(&l.who, &l.text),
+                LogKind::Break => tasks::log_stopped(&l.who, &l.text),
                 LogKind::Report => {
                     let mut s = tasks::log_report(&l.who, &l.report, &l.text);
                     // its decisions under it, indented
@@ -422,6 +521,9 @@ pub fn gesture_words(l: &LogLine) -> String {
         LogGesture::Ongoing => tasks::log_ongoing.to_string(),
         LogGesture::MoveIn => tasks::log_moved_in(if t.is_empty() { tasks::log_a_card } else { t }),
         LogGesture::MoveOut => tasks::log_moved_out(if t.is_empty() { tasks::log_a_card } else { t }),
+        // main's Restart is said as main's, never his (architect m_65555)
+        LogGesture::Restart if l.who != "user" => tasks::log_restarted_by(&l.who),
+        LogGesture::Restart => tasks::log_restarted.to_string(),
         LogGesture::Unknown => String::new(),
     }
 }

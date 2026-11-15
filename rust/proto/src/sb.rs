@@ -523,6 +523,12 @@ pub enum Task {
         #[serde(default)]
         id: String,
     },
+    /// a stalled task's Restart (WRestart): its failed agents restored,
+    /// its idle ones told to go on; the task itself unchanged
+    Restart {
+        #[serde(default)]
+        id: String,
+    },
     Rename {
         #[serde(default)]
         id: String,

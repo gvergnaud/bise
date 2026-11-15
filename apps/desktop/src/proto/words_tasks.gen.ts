@@ -183,7 +183,7 @@ export const tasks = {
   /** the Task tab's second pane: its Log */
   tab_log: "Log",
   /** the Log with no line yet */
-  log_none: "Nothing in its Log yet: its agents' reports, your answers, its lands and your gestures land here.",
+  log_none: "Nothing yet. Its agents' reports, your answers and what lands show up here.",
   /** the Log while the hub reads it */
   log_loading: "reading its Log…",
   /** the Log the hub couldn't read */
@@ -226,6 +226,20 @@ export const tasks = {
   log_moved_out: (a: { what: string | number }): string => "you moved " + String(a.what) + " away",
   /** a moved card (no title to name it) */
   log_a_card: "a question",
+  /** one of its agents asked him (a question, a pick, a block) */
+  log_asked: (a: { who: string | number; text: string | number }): string => String(a.who) + " asked: " + String(a.text),
+  /** one of its agents made a version of an artifact or a page */
+  log_made: (a: { who: string | number; title: string | number; v: string | number }): string => String(a.who) + " made " + String(a.title) + " v" + String(a.v),
+  /** back-to-back versions of one artifact, folded into one line */
+  log_made_range: (a: { who: string | number; title: string | number; from: string | number; to: string | number }): string => String(a.who) + " made " + String(a.title) + " v" + String(a.from) + "→v" + String(a.to),
+  /** one of its agents failed in its turn, and why */
+  log_crashed: (a: { who: string | number; why: string | number }): string => String(a.who) + " stopped (crash): " + String(a.why),
+  /** one of its agents was stopped in its turn, and why */
+  log_stopped: (a: { who: string | number; why: string | number }): string => String(a.who) + " was stopped: " + String(a.why),
+  /** his gesture: Restart of a stalled task */
+  log_restarted: "you restarted it",
+  /** main's Restart (sb task restart), never said as his */
+  log_restarted_by: (a: { who: string | number }): string => String(a.who) + " restarted it",
   /** the footer's ⋯: its tip */
   act_more: "More: Rename, Merge into…",
   /** the ⋯ menu: rename the task (his name: an agent never renames it after) */

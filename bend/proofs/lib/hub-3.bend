@@ -88,7 +88,7 @@ def hub_apply_names.go(+e: HM.Ev, +s: HS.St, u: HI.NamesApart(s), +k: HX.FreshEv
           PLA.ag_free_eq(HI.profile(List.append(&2, HS.Agent, HM.strip(HS.St.agents(s), new), HM.strip(HS.St.arch(s), new))), HI.profile(HM.strip(List.append(&2, HS.Agent, HS.St.agents(s), HS.St.arch(s)), new)), new,
             Equal.cong(List<&2, HS.Agent>, List<&2, List<&2, String>>, z => HI.profile(z), List.append(&2, HS.Agent, HM.strip(HS.St.agents(s), new), HM.strip(HS.St.arch(s), new)), HM.strip(List.append(&2, HS.Agent, HS.St.agents(s), HS.St.arch(s)), new), Equal.sym(List<&2, HS.Agent>, HM.strip(List.append(&2, HS.Agent, HS.St.agents(s), HS.St.arch(s)), new), List.append(&2, HS.Agent, HM.strip(HS.St.agents(s), new), HM.strip(HS.St.arch(s), new)), PLA.ag_strip_app(HS.St.agents(s), HS.St.arch(s), new))),
             PLN.nm_free(List.append(&2, HS.Agent, HS.St.agents(s), HS.St.arch(s)), new, PLN.nm_held(s, new, k)))))
-    case HM.ELifecycle{+x, +l, +r}:
+    case HM.ELifecycle{+x, +l, +r, _}:
       PLA.ag_life_ok(HAG.hit(HS.St.agents(s), x), HAG.pre(HS.St.agents(s), x), HAG.post(HS.St.agents(s), x), HS.St.agents(s), HS.St.arch(s), HS.St.order(s), x, l, r, PLA.ag_cut_whole(HS.St.agents(s), x), u)
     case HM.EWorkspace{+x, +w}:
       PLA.ag_on_ok(HAG.has(HS.St.agents(s), x), HS.St.agents(s), HS.St.arch(s), x, HM.OWs{w}, {==}, u)
@@ -803,9 +803,9 @@ def hub_hot_tr(-a: HS.St, -b: HS.St, e: {a == b : HS.St}, k: {HM.hot_of(HS.St.ho
   k
 
 # a lifecycle event keeps a right index right (it touches no message)
-def hub_hot_life(+s: HS.St, +n: String, +l: HS.Life, +r: Maybe<&2, String>, k: {HM.hot_of(HS.St.hot(s)) == HM.hot_of(HM.every(s)) : List<&2, HS.MRec>})
-    -> {HM.hot_of(HS.St.hot(HM.apply(s, HM.ELifecycle{n, l, r}))) == HM.hot_of(HM.every(HM.apply(s, HM.ELifecycle{n, l, r}))) : List<&2, HS.MRec>}:
-  %HSL.St.open_eq(s) : {HM.hot_of(HS.St.hot(HM.apply(_, HM.ELifecycle{n, l, r}))) == HM.hot_of(HM.every(HM.apply(_, HM.ELifecycle{n, l, r}))) : List<&2, HS.MRec>}
+def hub_hot_life(+s: HS.St, +n: String, +l: HS.Life, +r: Maybe<&2, String>, +w: Maybe<&2, J.Json>, k: {HM.hot_of(HS.St.hot(s)) == HM.hot_of(HM.every(s)) : List<&2, HS.MRec>})
+    -> {HM.hot_of(HS.St.hot(HM.apply(s, HM.ELifecycle{n, l, r, w}))) == HM.hot_of(HM.every(HM.apply(s, HM.ELifecycle{n, l, r, w}))) : List<&2, HS.MRec>}:
+  %HSL.St.open_eq(s) : {HM.hot_of(HS.St.hot(HM.apply(_, HM.ELifecycle{n, l, r, w}))) == HM.hot_of(HM.every(HM.apply(_, HM.ELifecycle{n, l, r, w}))) : List<&2, HS.MRec>}
   k
 
 # with a right index, queued_for reads every message

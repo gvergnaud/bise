@@ -65,6 +65,8 @@
 .tk-log-at{color:var(--c-text-3);font-size:var(--t-12);font-variant-numeric:tabular-nums;white-space:nowrap}
 .tk-log-what{display:flex;flex-direction:column;gap:var(--s-1);min-width:0;overflow-wrap:anywhere}
 .tk-log-dec{color:var(--c-text-2);font-size:var(--t-12)}
+.tk-undo-what{white-space:nowrap}
+.tk-log-made{display:flex;align-items:center;gap:var(--s-2);min-width:0}
 /* new since he looked (roma idea 2): the ink dot, 6 px after the name; never blue, never pink */
 .tk-new{flex:none;width:6px;height:6px;border-radius:50%;background:var(--c-text)}
 .tk-card-what{display:flex;align-items:baseline;gap:var(--s-2);min-width:0;color:var(--c-text-2);font-size:var(--t-12)}

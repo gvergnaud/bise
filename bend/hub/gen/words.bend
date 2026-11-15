@@ -78,3 +78,11 @@ def ctx_agent_quiet(+who: String) -> String:
 # the last line: where the rest is
 def ctx_more(+id: String) -> String:
   String.concat(["More: sb task show ", id, " --log"])
+
+# to each of its agents, when he restarted it
+def restart_note(+id: String, +name: String) -> String:
+  String.concat(["The user restarted task `", id, "` (", name, "): go on with it, or say with sb report why it waits."])
+
+# the same, when main restarted it
+def restart_note_main(+id: String, +name: String) -> String:
+  String.concat(["main restarted task `", id, "` (", name, "): go on with it, or say with sb report why it waits."])

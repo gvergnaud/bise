@@ -20,7 +20,9 @@ import ./gen/state.bend as S
 
 type Ev is Data:
   ETaskCreated{name: String, parent: String, brief: J.Json, ws: J.Json, at: Nat}
-  ELifecycle{name: String, life: S.Life, reason: Maybe<&2, String>}
+  # `works`: a stop's or a failure's turn's works (a task's Log reads
+  # its breaks), a JSON list of ids; None: none, or an active life
+  ELifecycle{name: String, life: S.Life, reason: Maybe<&2, String>, works: Maybe<&2, J.Json>}
   EWorkspace{name: String, ws: J.Json}
   ESnapshot{name: String, snap: Maybe<&2, String>}
   # hub-loop: the worktree made for a placing task (`err` "": `ws`)
@@ -754,7 +756,7 @@ def apply(+st: S.St, e: Ev) -> S.St:
       +dirs = dirs_of(List.append(&2, S.Agent, S.St.agents(st), S.St.arch(st)))
       S.St.over_order(new_task(st, name, agent_of_new(ETaskCreated{name, parent, brief, ws, at}, NM.free_dir(dirs, name))),
         +od => Bool.pick(List<&2, String>, str_in(od, name), od, snoc(String, od, name)))
-    case ELifecycle{+name, +life, +reason}:
+    case ELifecycle{+name, +life, +reason, _}:
       life_ev(st, name, life, reason)
     case EWorkspace{+name, +ws}:
       on_agent(st, name, OWs{ws})

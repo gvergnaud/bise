@@ -303,7 +303,7 @@ def ev_names(e: M.Ev) -> List<&2, String>:
   match e:
     case M.ETaskCreated{+name, _, _, _, _}:
       [name]
-    case M.ELifecycle{+name, _, _}:
+    case M.ELifecycle{+name, _, _, _}:
       [name]
     case M.EWorkspace{+name, _}:
       [name]

@@ -614,6 +614,58 @@ fn an_agent_spawned_for_a_task_reads_its_context_with_its_brief() {
     assert!(turns.iter().any(|j| j["turn"]["agent"] == "pricing"), "it joined at its brief: {turns:?}");
 }
 
+/// chunk 2b (architect m_65554, m_65555): Restart is its own fact. His
+/// Restart journals `restart` by him; its failed agent is restored once
+/// and told, with works exactly [id]; its idle one told; the failure's
+/// lifecycle line carries the turn's works (the Log's Break). Main's
+/// restart is by main and says so. A paused or done task refuses it. A
+/// restored agent that fails again stays failed: no retry of its own.
+#[test]
+fn a_restart_restores_its_failed_agent_once_tells_the_idle_one_and_says_who() {
+    let mut t = T::new();
+    let a = new(&mut t, MAIN, "Fix the login timeout", &[]);
+    t.spawn_task("auth");
+    t.spawn_task("kb");
+    t.go(Input::ReplIdle { agent: "auth".into(), leftover: false });
+    t.go(Input::ReplIdle { agent: "kb".into(), leftover: false });
+    t.req(MAIN, send("auth", "fix it", &[a.as_str()]));
+    t.req(MAIN, send("kb", "find the cause", &[a.as_str()]));
+    report(&mut t, "auth", "failed", "the proxy is down");
+    let broke = lines(&t, "lifecycle").into_iter().rev().find(|j| j["name"] == "auth").unwrap();
+    assert_eq!((broke["lifecycle"].as_str(), broke["works"].clone()), (Some("failed"), json!([a])), "the Break's stamp: {broke}");
+    assert_eq!(t.hub.st.agents["auth"].lifecycle, Lifecycle::Failed);
+    t.turn("kb", "looked");
+    let before = lines(&t, "message_sent").len();
+    t.go(Input::ClientWorkAct { client: 7, req: Task::Restart { id: a.clone() } });
+    let ch = lines(&t, "work_changed").last().unwrap().clone();
+    assert_eq!((ch["op"].as_str(), ch["by"].as_str()), (Some("restart"), Some("user")), "his typed fact: {ch}");
+    assert_eq!(t.hub.st.agents["auth"].lifecycle, Lifecycle::Active, "its failed agent restored");
+    let notes: Vec<Value> = lines(&t, "message_sent").into_iter().skip(before).map(|j| j["msg"].clone()).filter(|m| m["from"] == "switchboard" || m["from"] == "hub").collect();
+    let to: Vec<&str> = notes.iter().map(|m| m["to"].as_str().unwrap_or_default()).collect();
+    assert!(to.contains(&"auth") && to.contains(&"kb") && !to.contains(&MAIN), "one note each, main aside: {notes:?}");
+    assert!(notes.iter().all(|m| m["works"] == json!([a])), "law restart_note_carries_only_its_work: {notes:?}");
+    let said = t.hub.st.text(notes[0]["id"].as_u64().unwrap());
+    assert!(said.starts_with("The user restarted task"), "{said}");
+    // it fails again: it stays failed until the next Restart, his act again
+    report(&mut t, "auth", "failed", "still down");
+    t.go(Input::Tick);
+    assert_eq!(t.hub.st.agents["auth"].lifecycle, Lifecycle::Failed, "no retry of its own");
+    // main's restart is main's, said as main's
+    let r = task(&mut t, MAIN, Task::Restart { id: a.clone() });
+    assert_eq!(r["ok"], true, "{r}");
+    let ch = lines(&t, "work_changed").last().unwrap().clone();
+    assert_eq!(ch["by"], "main", "law a_restart_by_main_never_says_him");
+    let last = lines(&t, "message_sent").into_iter().rev().find(|j| j["msg"]["to"] == "auth").unwrap();
+    assert!(last["msg"]["text"].as_str().unwrap_or_default().starts_with("main restarted task"), "{last}");
+    // refused on a paused task, then on a done one
+    t.go(Input::ClientWorkAct { client: 7, req: Task::Pause { id: a.clone(), until_ms: None } });
+    let fx = t.go(Input::ClientWorkAct { client: 7, req: Task::Restart { id: a.clone() } });
+    assert!(notice_to(&fx, 7).is_some_and(|n| n.contains("is paused")), "{:?}", notice_to(&fx, 7));
+    t.go(Input::ClientWorkAct { client: 7, req: Task::Done { id: a.clone() } });
+    let fx = t.go(Input::ClientWorkAct { client: 7, req: Task::Restart { id: a.clone() } });
+    assert!(notice_to(&fx, 7).is_some_and(|n| n.contains("reopen it first")), "{:?}", notice_to(&fx, 7));
+}
+
 fn first_delivery(t: &mut T, to: &str, text: &str, a: &str) -> String {
     let (_, fx) = t.req(MAIN, send(to, text, &[a]));
     say_to(&fx, to).or_else(|| steer_to(&fx, to)).unwrap_or_default()

@@ -129,7 +129,7 @@ def gone_bound.go(+e: HM.Ev, +s: HS.St, h: {Nat.is_le(List.length(&2, HS.Item, H
   match e:
         case HM.ETaskCreated{a, b, c, d, f}:
           h
-        case HM.ELifecycle{a, b, c}:
+        case HM.ELifecycle{a, b, c, d}:
           h
         case HM.EWorkspace{a, b}:
           h

@@ -314,7 +314,7 @@ def cl_apply.go(+e: HM.Ev, +s: HS.St, la: HI.Clean(HS.St.agents(s)), lr: HI.Clea
     case HM.ERenamed{+old, +new}:
       cl_on_ren(HAG.has(HM.strip(HS.St.agents(s), new), old), HM.strip(HS.St.agents(s), new), HM.strip(HS.St.arch(s), new), old, new, cl_fresh(s, new, k),
         cl_strip(HS.St.agents(s), new, la), cl_strip(HS.St.arch(s), new, lr))
-    case HM.ELifecycle{+x, +l, +r}:
+    case HM.ELifecycle{+x, +l, +r, _}:
       cl_life(HAG.hit(HS.St.agents(s), x), HAG.pre(HS.St.agents(s), x), HAG.post(HS.St.agents(s), x), HS.St.agents(s), HS.St.arch(s), HS.St.order(s), x, l, r, PLA.ag_cut_whole(HS.St.agents(s), x), la, lr)
     case HM.EWorkspace{+x, +w}:
       cl_on(HAG.has(HS.St.agents(s), x), HS.St.agents(s), HS.St.arch(s), x, HM.OWs{w}, {==}, la, lr)

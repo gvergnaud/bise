@@ -118,7 +118,7 @@ def Laws.stop_leaves_no_queue(o, cx, n, life, why, u):
   +cx3 = HC.set_r(o, cx2, HX.R.with_steered(r, HKL.steer_del(HX.R.steered(r), n)))
   +x4 = HX.Rt.with_turn(HX.Rt.with_run(HC.rt(o, cx3, n), HS.RDown{}), None{})
   +cx4 = HC.upd_rt(o, cx3, x4)
-  +ev = {HM.ELifecycle{n, life, Bool.pick(Maybe<&2, String>, String.is_empty(why), None{}, Some{why})} : HM.Ev}
+  +ev = {HM.ELifecycle{n, life, Bool.pick(Maybe<&2, String>, String.is_empty(why), None{}, Some{why}), HC.life_works(HX.d(o, cx4), n)} : HM.Ev}
   +cx5 = HC.emit(o, cx4, ev, Unit{}, Unit{}, Unit{})
   +m5 = HM.every(HX.d(o, cx5))
   +n5 = HM.names_of(HX.d(o, cx5), n)
@@ -175,7 +175,7 @@ def Laws.stop_leaves_no_card(o, cx, n, life, why, u):
   +cx3 = HC.set_r(o, cx2, HX.R.with_steered(r, HKL.steer_del(HX.R.steered(r), n)))
   +x4 = HX.Rt.with_turn(HX.Rt.with_run(HC.rt(o, cx3, n), HS.RDown{}), None{})
   +cx4 = HC.upd_rt(o, cx3, x4)
-  +ev = {HM.ELifecycle{n, life, Bool.pick(Maybe<&2, String>, String.is_empty(why), None{}, Some{why})} : HM.Ev}
+  +ev = {HM.ELifecycle{n, life, Bool.pick(Maybe<&2, String>, String.is_empty(why), None{}, Some{why}), HC.life_works(HX.d(o, cx4), n)} : HM.Ev}
   +cx5 = HC.emit(o, cx4, ev, Unit{}, Unit{}, Unit{})
   +ids = HC.ids_of(HM.queued_in(HS.St.hot(HX.d(o, cx5)), HM.names_of(HX.d(o, cx5), n)))
   +cx6 = HC.reject_ids(o, ids, cx5)
@@ -194,7 +194,7 @@ def Laws.stop_leaves_no_card(o, cx, n, life, why, u):
     Equal.trans(List<&2, HS.Card>, HS.St.cards(HX.d(o, cx5)), HS.St.cards(HM.apply(HX.d(o, cx4), ev)), HS.St.cards(HX.d(o, cx)),
       Equal.cong(HS.St, List<&2, HS.Card>, s => HS.St.cards(s), HX.d(o, cx5), HM.apply(HX.d(o, cx4), ev), PL1.hub_d_emit(o, cx4, ev, Unit{}, Unit{}, Unit{})),
       Equal.trans(List<&2, HS.Card>, HS.St.cards(HM.apply(HX.d(o, cx4), ev)), HS.St.cards(HX.d(o, cx4)), HS.St.cards(HX.d(o, cx)),
-        PL2.hub_cards_life(HX.d(o, cx4), n, life, Bool.pick(Maybe<&2, String>, String.is_empty(why), None{}, Some{why})),
+        PL2.hub_cards_life(HX.d(o, cx4), n, life, Bool.pick(Maybe<&2, String>, String.is_empty(why), None{}, Some{why}), HC.life_works(HX.d(o, cx4), n)),
         PL2.hub_cards_eq(o, cx4, cx, e4))))
   # the cards at the end: those of cx6 without the task's
   +ef = Equal.trans(List<&2, HS.Card>, HS.St.cards(HX.d(o, HC.stop_task(o, cx, n, life, why))), HS.St.cards(HX.d(o, g)),
@@ -1203,7 +1203,7 @@ def apply_order.go(+e: HM.Ev, +s: HS.St, k: {HM.order_ev(e) == False{} : Bool}) 
   match e:
     case HM.ETaskCreated{x0, x1, x2, x3, x4}:
       AB.absurd_eq(AB.tf_absurd(k), List<&2, String>, HS.St.order(HM.apply(HS.St.open(s), HM.ETaskCreated{x0, x1, x2, x3, x4})), HS.St.order(s))
-    case HM.ELifecycle{x0, x1, x2}:
+    case HM.ELifecycle{x0, x1, x2, x3}:
       {==}
     case HM.EWorkspace{x0, x1}:
       {==}

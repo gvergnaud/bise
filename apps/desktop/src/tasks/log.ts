@@ -38,9 +38,40 @@ function gestureWords(l: LogLine): string {
       return tasks.log_moved_in({ what });
     case 'move_out':
       return tasks.log_moved_out({ what });
+    // main's Restart is said as main's, never his (architect m_65555)
+    case 'restart':
+      return l.who === 'user' ? tasks.log_restarted : tasks.log_restarted_by({ who: l.who });
     default:
       return '';
   }
+}
+
+/** A Log row: its line, and for back-to-back versions of one artifact by one agent the oldest
+ *  version of the run (`from`; the line is the newest), folded into one row ('v2→v5'). */
+export interface LogRow {
+  readonly l: LogLine;
+  readonly from: number;
+}
+
+/** The lines as rows, back-to-back versions of one artifact folded (the same rule as
+ *  `sb task show --log`, task_log::fold). Pure. */
+export function foldLog(lines: readonly LogLine[]): LogRow[] {
+  const out: LogRow[] = [];
+  for (const l of lines) {
+    const prev = out.at(-1);
+    if (prev !== undefined && l.kind === 'artifact' && prev.l.kind === 'artifact' && prev.l.art === l.art && (prev.l.page ?? false) === (l.page ?? false) && prev.l.who === l.who) {
+      out[out.length - 1] = { l: prev.l, from: l.v ?? 0 };
+      continue;
+    }
+    out.push({ l, from: l.v ?? 0 });
+  }
+  return out;
+}
+
+/** An artifact row's words around its chip: who made it, and the version or the run. */
+export function madeWords(r: LogRow): { readonly who: string; readonly v: string } {
+  const v = r.l.v ?? 0;
+  return { who: r.l.who, v: r.from < v ? `v${String(r.from)}→v${String(v)}` : `v${String(v)}` };
 }
 
 /** A line's words (its decisions apart: the row lists them under it); '' a kind this window
@@ -57,6 +88,12 @@ export function logWords(l: LogLine): string {
       return tasks.log_join({ who: l.who });
     case 'gesture':
       return gestureWords(l);
+    case 'question':
+      return tasks.log_asked({ who: l.who, text: l.text ?? '' });
+    case 'artifact':
+      return tasks.log_made({ who: l.who, title: l.text ?? '', v: l.v ?? 0 });
+    case 'break':
+      return l.life === 'failed' ? tasks.log_crashed({ who: l.who, why: l.text ?? '' }) : tasks.log_stopped({ who: l.who, why: l.text ?? '' });
     default:
       return '';
   }
