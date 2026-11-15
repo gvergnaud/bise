@@ -1,6 +1,24 @@
 // A task Log line in words (log.ts): the same words as `sb task show --log`. Owner: tasks.
 import { describe, expect, it } from 'vitest';
-import { foldLog, logWords, madeWords } from './log';
+import { dayHeads, foldLog, logWords, madeWords } from './log';
+import { FLIP_MS, flipTo, shownStatus } from './undo';
+
+describe('a gesture shown at once (tasks-ux m_65598)', () => {
+  it('flips the status until the hub moves the row or the flip goes stale', () => {
+    const f = { id: 't', from: 'working' as const, to: 'paused' as const, at: 1000 };
+    expect(flipTo('pause')).toBe('paused');
+    expect(flipTo('reopen')).toBe(null);
+    expect(shownStatus({ id: 't', status: 'working' }, f, 1500)).toBe('paused');
+    // the hub said: its row wins
+    expect(shownStatus({ id: 't', status: 'paused' }, f, 1500)).toBe('paused');
+    expect(shownStatus({ id: 't', status: 'stalled' }, f, 1500)).toBe('stalled');
+    // a refused step falls back
+    expect(shownStatus({ id: 't', status: 'working' }, f, 1000 + FLIP_MS)).toBe('working');
+    // another task, or none
+    expect(shownStatus({ id: 'u', status: 'working' }, f, 1500)).toBe('working');
+    expect(shownStatus({ id: 't', status: 'working' }, null, 1500)).toBe('working');
+  });
+});
 
 describe('a Log line', () => {
   it('says each kind in the words sb task show --log uses', () => {
@@ -34,5 +52,12 @@ describe('a Log line', () => {
 
   it('leaves out a kind this window does not know', () => {
     expect(logWords({ at_ms: 1, kind: 'unknown', who: 'x' })).toBe('');
+  });
+
+  it('heads each day of a Log over more than one day, none for one day (tasks-ux m_65598)', () => {
+    const day = (ms: number): string => (ms >= 100 ? 'today' : ms >= 50 ? 'yesterday' : 'mon 12 nov');
+    expect(dayHeads([120, 110], day)).toEqual([null, null]);
+    expect(dayHeads([120, 110, 60, 10, 5], day)).toEqual(['today', null, 'yesterday', 'mon 12 nov', null]);
+    expect(dayHeads([], day)).toEqual([]);
   });
 });

@@ -2,7 +2,7 @@
 // Mark done that sends the inverse gesture, a new journaled one, never a rewind: Pause ↔ Resume (a
 // Resume undone pauses again with its old end if it is still to come, else with none), Mark done →
 // Reopen while the task isn't folded. Merge keeps its confirm and gets none. Pure. Owner: tasks.
-import type { Task as TaskReq, WorkRow } from '@/proto';
+import type { Task as TaskReq, WorkRow, WorkStatus } from '@/proto';
 import { tasks } from '@/proto/words_tasks.gen';
 
 /** How long the Undo stays (designer: short). */
@@ -13,6 +13,29 @@ export interface Did {
   readonly project: string;
   readonly step: 'pause' | 'resume' | 'done';
   readonly row: Pick<WorkRow, 'id' | 'name' | 'status' | 'until_ms'>;
+}
+
+/** His Pause, Resume or Mark done shown at once (tasks-ux m_65598): the pill and the footer flip
+ *  with the toast, before the hub's row comes back. */
+export interface Flip {
+  readonly id: string;
+  readonly from: WorkStatus;
+  readonly to: WorkStatus;
+  readonly at: number;
+}
+
+/** How long a flip waits for the hub's row (a refused step falls back to the row's status). */
+export const FLIP_MS = 5_000;
+
+/** The status a step makes, null a step that flips nothing (Reopen, Restart: the hub says). Pure. */
+export function flipTo(step: string): WorkStatus | null {
+  return step === 'pause' ? 'paused' : step === 'resume' ? 'working' : step === 'done' ? 'done' : null;
+}
+
+/** The status to show: the flip's while the hub's row still says what it said before (and the
+ *  flip is fresh), else the row's own. Pure. */
+export function shownStatus(row: Pick<WorkRow, 'id' | 'status'>, f: Flip | null, now: number): WorkStatus {
+  return f !== null && f.id === row.id && row.status === f.from && now - f.at < FLIP_MS ? f.to : row.status;
 }
 
 /** The gesture that undoes `d` at `now`; null: none (a resume of a task that wasn't paused, a

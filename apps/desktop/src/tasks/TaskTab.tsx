@@ -28,7 +28,7 @@ import { useTaskAct, useTaskReq } from './Board';
 import { lineAt } from './Side';
 import { markLooked, markSeen } from './seen';
 import { UndoToast, useUndo } from './UndoToast';
-import type { Did } from './undo';
+import { flipTo, shownStatus, type Did, type Flip } from './undo';
 import { ArtMoveMore, CardMoveMore } from './MoveMenus';
 
 /** His message's words by its id among a thread's entries; null when this window doesn't hold it. Pure. */
@@ -56,11 +56,16 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
   const router = useRouter();
   const doAct = useTaskAct();
   const req = useTaskReq();
-  const now = useNowFor(() => false);
+  // his Pause, Resume, Mark done shown at once: the pill and the footer flip with the toast (tasks-ux
+  // m_65598); the clock to the second while a flip waits for the hub's row
+  const [flip, setFlip] = useState<Flip | null>(null);
+  const now = useNowFor(() => flip !== null);
   // the short Undo after Pause, Resume, Mark done (roma idea 4)
   const [did, offer] = useUndo();
   const act = (p: string, step: 'done' | 'reopen' | 'pause' | 'resume' | 'restart', tid: string): void => {
     const row = works.works.find((x) => x.id === tid);
+    const to = flipTo(step);
+    setFlip(row !== undefined && to !== null ? { id: tid, from: row.status, to, at: Date.now() } : null);
     doAct(p, step, tid);
     // Reopen and Restart have nothing to put back: no Undo
     offer(row !== undefined && step !== 'reopen' && step !== 'restart' ? ({ project: p, step, row } satisfies Did) : null);
@@ -85,7 +90,8 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
   // '+ Agent': the field open; asked: how many agents it had when he asked (its line goes when one more comes)
   const [asking, setAsking] = useState(false);
   const [asked, setAsked] = useState<{ readonly n: number; readonly at: number } | null>(null);
-  const w = works.works.find((x) => x.id === id);
+  const hubRow = works.works.find((x) => x.id === id);
+  const w = hubRow === undefined ? undefined : { ...hubRow, status: shownStatus(hubRow, flip, now) };
   // his message that started it, quoted from main's thread when this window holds it (by its id)
   const mainKey = threadKey(project, MAIN);
   const order = useThreadOrder(mainKey);

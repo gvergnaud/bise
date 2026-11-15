@@ -70,6 +70,15 @@ export function foldLog(lines: readonly LogLine[]): LogRow[] {
   return out;
 }
 
+/** The day head before each row (newest first), null none: a Log over more than one day gets one
+ *  at each day's first row, so a time alone never misleads (tasks-ux m_65598); a Log of one day
+ *  gets none. `day` says a time's day ('today', 'yesterday', 'mon 12 nov'). Pure. */
+export function dayHeads(ats: readonly number[], day: (ms: number) => string): (string | null)[] {
+  const days = ats.map(day);
+  if (new Set(days).size < 2) return days.map(() => null);
+  return days.map((d, i) => (i === 0 || days[i - 1] !== d ? d : null));
+}
+
 /** An artifact row's words around its chip: who and its verb ('perf made', 'perf updated'), and
  *  the version or the run ('' for a first version alone; designer m_65569). Pure. */
 export function madeWords(r: LogRow): { readonly verb: string; readonly v: string } {

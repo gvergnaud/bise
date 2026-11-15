@@ -2,13 +2,14 @@
 // their decisions, his answers, its lands, his gestures, agents joining. Asked of the hub when the
 // tab shows it and again when the task moves (its last fact); the hub reads it off its loop and
 // keeps nothing. Owner: tasks.
-import { useEffect } from 'react';
+import { Fragment, useEffect } from 'react';
+import { sentenceCase } from '@/ds/case';
 import { useStore, useTaskLog } from '@/store';
 import { tasks } from '@/proto/words_tasks.gen';
 import { dayWords, timeOf } from '@/artifacts/model';
 import { ArtChip } from '@/ds';
 import { openTab } from '@/app/panel/tabs';
-import { foldLog, logWords, madeWords, type LogRow } from './log';
+import { dayHeads, foldLog, logWords, madeWords, type LogRow } from './log';
 
 /** a line's time: the hour today, else its day and hour (24 h, designer m_64958) */
 function when(ms: number, now: number): string {
@@ -30,14 +31,20 @@ export function TaskLog({ project, id, last, now, testId }: { project: string; i
     return words === '' ? [] : [{ r, words }];
   });
   if (rows.length === 0) return <p className="tk-meta" data-testid={`${testId}.none`}>{tasks.log_none}</p>;
+  // over more than one day: a day head at each day's first row, its rows the hour alone
+  const heads = dayHeads(rows.map(({ r }) => r.l.at_ms), (ms) => dayWords(ms, now));
+  const days = heads.some((h) => h !== null);
   return (
     <ol className="tk-log" data-testid={testId}>
       {rows.map(({ r, words }, i) => {
         const l = r.l;
         const row = `${testId}.${String(i)}`;
+        const head = heads[i] ?? null;
         return (
-          <li key={`${String(l.at_ms)}-${String(i)}`} className="tk-log-row" data-kind={l.kind} data-testid={row}>
-            <span className="tk-log-at">{when(l.at_ms, now)}</span>
+          <Fragment key={`${String(l.at_ms)}-${String(i)}`}>
+          {head !== null && <li className="tk-log-day" data-testid={`${testId}.day.${String(i)}`}>{sentenceCase(head)}</li>}
+          <li className="tk-log-row" data-kind={l.kind} data-testid={row}>
+            <span className="tk-log-at">{days ? timeOf(l.at_ms) : when(l.at_ms, now)}</span>
             <span className="tk-log-what">
               {l.kind === 'artifact' ? <Made r={r} project={project} testId={row} /> : words}
               {(l.decisions ?? []).map((d) => (
@@ -47,6 +54,7 @@ export function TaskLog({ project, id, last, now, testId }: { project: string; i
               {l.answer != null && <span className="tk-log-dec" data-testid={`${row}.answer`}>{tasks.log_answer({ text: l.answer })}</span>}
             </span>
           </li>
+          </Fragment>
         );
       })}
     </ol>
