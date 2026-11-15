@@ -200,6 +200,11 @@ def lists_round(c):
     parent = by_id.get((f or {}).get("parent") or "")
     check(f is not None and f["name"] == "y" and parent is not None and parent["name"] == "x", "filed in x/y: %r in %r" % (filed, folders))
     check(not row("LooseB")[0].get("folder"), "no --folder: unfiled: %r" % (row("LooseB")[0],))
+    # both tasks' done messages in main's thread first (an input, not a wait): main was idle
+    # between filer's and loose's, the next say landed with loose's in one steer, and the fake
+    # model answered loose's only (1d3d5cf72's cold full gate: 'sb every' never ran)
+    c.wait(lambda: {"filer", "loose"} <= {r.get("from") for r in c.feed("main", "msg-in")}, 60,
+           "filer's and loose's done messages in main's thread")
     c.wait_idle("main", timeout=30)
 
     subscribe(c, "main")
