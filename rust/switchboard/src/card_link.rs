@@ -122,11 +122,11 @@ pub fn open_act(pages: Option<&Pages>, art: &dyn Fn(&str) -> Option<crate::artif
 /// (none without them): a card's page and artifact are never written
 /// here again.
 pub fn about_on(req: crate::core::AgentReq, link: Option<CardLink>) -> (crate::core::AgentReq, Option<CardLink>) {
-    let crate::core::AgentReq::Card { text, for_msg, page, artifact, open, .. } = req else { return (req, link) };
+    let crate::core::AgentReq::Card { text, for_msg, page, artifact, open, task, .. } = req else { return (req, link) };
     let about = link.as_ref().and_then(|l| l.artifact.as_ref()).and_then(|a| serde_json::to_value(a).ok());
     let opens = link.map(|l| l.opens).unwrap_or_default();
     let link = (!opens.is_empty()).then_some(CardLink { opens, ..CardLink::default() });
-    (crate::core::AgentReq::Card { text, for_msg, page, artifact, open, about }, link)
+    (crate::core::AgentReq::Card { text, for_msg, page, artifact, open, about, task }, link)
 }
 
 /// The older client's `page` of a card about a page (its `about`): the
@@ -338,7 +338,7 @@ mod tests {
         assert!(open_act(None, &none, "1=launch-watch").is_err(), "no pages, no such artifact");
         // an artifact that is no page: its link when it has one
         let meta = |t: &str| crate::artifacts::Meta {
-            id: "plan".into(), title: "plan".into(), kind: "doc".into(), agent: "a".into(), by: "a".into(), created_ms: 0, source: t.into(), cwd: String::new(), folder: None, pr_ended: false, audience: None, expired_ms: None,
+            id: "plan".into(), title: "plan".into(), kind: "doc".into(), agent: "a".into(), by: "a".into(), created_ms: 0, source: t.into(), cwd: String::new(), folder: None, pr_ended: false, audience: None, expired_ms: None, works: Default::default(),
             versions: vec![crate::artifacts::Version { v: 1, at_ms: 0, target: t.into(), ..Default::default() }],
         };
         assert_eq!(open_act(None, &|id: &str| (id == "plan").then(|| meta("/w/plan.md")), "3=plan").unwrap(), (3, OptAct::artifact("plan", None, None)));
@@ -361,7 +361,7 @@ mod tests {
         let u = "http://127.0.0.1:47125/p/bims-office";
         let t = p.store.meta("bims-office").unwrap().title;
         let meta = |t: &str| crate::artifacts::Meta {
-            id: "les-bims-prototype".into(), title: "les bims · prototype".into(), kind: "site".into(), agent: "bims".into(), by: "bims".into(), created_ms: 0, source: t.into(), cwd: String::new(), folder: None, pr_ended: false, audience: None, expired_ms: None,
+            id: "les-bims-prototype".into(), title: "les bims · prototype".into(), kind: "site".into(), agent: "bims".into(), by: "bims".into(), created_ms: 0, source: t.into(), cwd: String::new(), folder: None, pr_ended: false, audience: None, expired_ms: None, works: Default::default(),
             versions: vec![crate::artifacts::Version { v: 2, at_ms: 0, target: t.into(), ..Default::default() }],
         };
         let file = |id: &str| (id == "les-bims-prototype").then(|| meta("/w/bims.html"));
@@ -395,7 +395,7 @@ mod tests {
         let block = Some(Anchor::Block { block: "q1".into(), quote: String::new() });
         let a = ArtLink { id: "w".into(), kind: "page".into(), title: "Wait".into(), v: Some(3), url: Some("http://h/p/w#q1".into()), at: block };
         let forged = Some(serde_json::json!({"id": "forged"}));
-        let req = |about| AgentReq::Card { text: "ok?".into(), for_msg: None, page: Some("w#q1".into()), artifact: None, open: Vec::new(), about };
+        let req = |about| AgentReq::Card { text: "ok?".into(), for_msg: None, page: Some("w#q1".into()), artifact: None, open: Vec::new(), about, task: Vec::new() };
         let opens = BTreeMap::from([(2, OptAct::artifact("w", Some("q1"), None))]);
         let link = CardLink { page: page_of_art(&a), artifact: Some(a.clone()), opens: opens.clone() };
         let (r, l) = about_on(req(forged.clone()), Some(link));

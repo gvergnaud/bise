@@ -72,4 +72,4 @@ law feature_retire_tells_once:
   for +n: String
   for +text: String
   {HC.feature_retire.tell(o, HS.LActive{}, cx, n, text)
-    == HC.fst(o, HC.send.thread(o, None{}, cx, HC.Snd{HM.HUB(), n, text, False{}, None{}, True{}, False{}, True{}, None{}, "", None{}})) : HX.Cx<o>}
+    == HC.fst(o, HC.send.thread(o, None{}, cx, HC.Snd{HM.HUB(), n, text, False{}, None{}, True{}, False{}, True{}, None{}, "", None{}, None{}})) : HX.Cx<o>}

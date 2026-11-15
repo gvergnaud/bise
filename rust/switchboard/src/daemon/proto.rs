@@ -43,9 +43,9 @@ use bise_proto::thread::{self as pthread, Ctx, PageRef};
 pub(super) struct Proto {
     conns: BTreeMap<ClientId, Conn>,
     since: Since,
-    /// the last `agents` (the live rows, agents-light) and `cards` sent
-    /// (sent again only when changed)
-    last: (String, String),
+    /// the last `agents` (the live rows, agents-light), `cards` and
+    /// `works` sent (sent again only when changed)
+    last: (String, String, String),
     /// the agents' statuses and folders at the last `worktrees` scan
     worktrees: String,
     /// the last `jobs` sent (S10: sent again only when changed)

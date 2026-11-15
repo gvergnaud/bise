@@ -44,6 +44,8 @@ fn job(agent: &str, dir: &Path, shared: &Path, files: &[&str], onto: &str) -> Jo
         onto: Some(format!("refs/heads/{}", onto)),
         checks: shared.parent().unwrap().join("worktrees"),
         lands: shared.parent().unwrap().join("lands.jsonl"),
+        works: Vec::new(),
+        task_trailers: true,
     }
 }
 

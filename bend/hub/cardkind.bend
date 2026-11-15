@@ -30,6 +30,14 @@ def page_kind(+k: String) -> Bool:
 def user_kind(+k: String) -> Bool:
   String.eq(k, "question") || String.eq(k, "drop") || String.eq(k, "confirm") || choice_kind(k) || page_kind(k)
 
+# a card is his: a user kind, or an agent's blocked report (tasks: the
+# typed flag decides, never a kind compared; architect m_65127; Rust's
+# model::user_card is the same rule, both pinned by the rows of
+# rust/proto/fixtures/user_card.jsonl). An older journal's blocked card
+# has no from_report: it stays main's and closes at boot.
+def user_card(+c: S.Card) -> Bool:
+  user_kind(S.Card.kind(c)) || S.Card.from_report(c)
+
 # the ids of the open cards that are not the user's (an older journal's)
 def legacy_cards(xs: List<&2, S.Card>) -> List<&2, Nat>:
   match xs:
@@ -37,7 +45,7 @@ def legacy_cards(xs: List<&2, S.Card>) -> List<&2, Nat>:
       Nil{}
     case Con{+h, +t}:
       +rest = legacy_cards(t)
-      Bool.pick(List<&2, Nat>, user_kind(S.Card.kind(h)), rest, S.Card.id(h) <> rest)
+      Bool.pick(List<&2, Nat>, user_card(h), rest, S.Card.id(h) <> rest)
 
 # the open card that holds message `id` (an escalated question)
 def card_holding(xs: List<&2, S.Card>, +id: Nat) -> Maybe<&2, Nat>:

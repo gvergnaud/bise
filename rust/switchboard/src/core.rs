@@ -128,6 +128,9 @@ pub enum Input {
         /// `@agent …` from another thread; "" none): sb-core leaves one
         /// route row there (says.trace)
         from: String,
+        /// his explicit tasks for these words (SendOpts.works: a Task tab's
+        /// '+ Agent'); empty: the single-task rule (architect m_64887)
+        works: Vec<String>,
     },
     ClientFocus {
         client: ClientId,
@@ -152,6 +155,22 @@ pub enum Input {
     ClientSteerQueued {
         client: ClientId,
         id: u64,
+    },
+    /// tasks: his gesture on a task (HubCmd task_act; a client's only, so
+    /// sb-core makes it as him, never as an agent): one `sb task` verb
+    ClientWorkAct {
+        client: ClientId,
+        req: bise_proto::sb::Task,
+    },
+    /// tasks: he moved card `card` or artifact `art` (`page`: the page
+    /// `art`, from the row he acted on) to the tasks `works` (HubCmd
+    /// task_move; a client's only): sb-core's work_move
+    ClientWorkMove {
+        client: ClientId,
+        card: Option<u64>,
+        art: String,
+        page: bool,
+        works: Vec<String>,
     },
     /// `by`: its sender, sb-core refuses it first when it may not speak as `from` (issue 37 #2)
     Agent { token: Token, from: String, req: AgentReq, by: crate::peer::Sender },
@@ -185,6 +204,10 @@ pub enum Input {
     /// hub-loop: the shell made task `name`'s worktree (`ws`), or could
     /// not (`err`); daemon/place_work.rs, sb-core's hub/place.bend
     Placed { name: String, ws: Value, err: String },
+    /// tasks (docs/tasks.md): his page waits per work, the shell's facts
+    /// (sb-core's page_waits; sent at boot before any client, then when
+    /// the waiting set changes). `works` and `ns` go in pairs
+    PageWaits { works: Vec<String>, ns: Vec<u64> },
     /// issue 32 3b: the shell removed task `name`'s worktree (`snapshot`:
     /// its saved work's ref), or could not (`err`); daemon/place_work.rs
     Unplaced { name: String, snapshot: Option<String>, err: String },
@@ -430,6 +453,10 @@ pub enum Effect {
     /// name-free: another agent takes the old name `from`: pages and
     /// artifacts that still say it are `to`'s (daemon/names.rs)
     Retarget { from: String, to: String },
+    /// tasks: he moved artifact `art` (`page`: the page `art`) to `works`
+    /// (sb-core's fx art_works): that store sets them (daemon/art.rs,
+    /// artifacts_works)
+    ArtWorks { art: String, works: Vec<String>, page: bool },
     /// The state changed: broadcast a snapshot.
     State,
     /// Ask a small model for a task's role line (BISE-126), off the hub's
@@ -1172,6 +1199,8 @@ impl Hub {
             onto: feature::onto(&a.ws), // a feature's agent lands on the feature (dev-flow §5.1)
             checks: std::path::PathBuf::new(),
             lands: std::path::PathBuf::new(),
+            works: a.turn_works.clone().unwrap_or_default(),
+            task_trailers: true, // the daemon reads [land] task_trailers at the trunk's tip
         })
     }
 
@@ -1709,7 +1738,8 @@ impl Hub {
                 queued,
                 parts,
                 from,
-            } => self.user_input(&mut fx, env, client, &focus, &text, queued, &parts, &from),
+                works,
+            } => self.user_input(&mut fx, env, client, &focus, &text, queued, &parts, &from, works),
             Input::UserCmd { client, focus, cmd } => {
                 let focus = self.focus_of(client, &focus);
                 self.user_cmd(&mut fx, env, client, focus, cmd, false, "", "")
@@ -1726,6 +1756,15 @@ impl Hub {
             }
             Input::ClientUnqueue { client, id } => self.core(&mut fx, env, Some(client), In::Unqueue(ci::Unqueue { id })),
             Input::ClientSteerQueued { client, id } => self.core(&mut fx, env, Some(client), In::SteerQueued(ci::SteerQueued { id })),
+            // his task gestures: sb-core's req_task as him (TAHim), its
+            // refusal a notice to that client
+            Input::ClientWorkAct { client, req } => match pure::task_req(req) {
+                Ok(req) => self.core(&mut fx, env, Some(client), In::WorkAct(ci::WorkAct { req })),
+                Err(e) => fx.push(notice(client, e["error"].as_str().unwrap_or("refused"))),
+            },
+            Input::ClientWorkMove { client, card, art, page, works } => {
+                self.core(&mut fx, env, Some(client), In::WorkMove(ci::WorkMove { card, art, works, page }))
+            }
             Input::Agent { token, from, req, by } => self.agent_step(&mut fx, env, token, &from, req, by),
             Input::Speaks { token, from, cmd, by } => self.core(&mut fx, env, None, In::Speaks(by.speaks(token, from, cmd))),
             // the waits' timeouts, then sb every's timers (sb-core decides)
@@ -1735,6 +1774,7 @@ impl Hub {
             Input::WakeStop { id } => self.wake_stop_by_him(&mut fx, env, id),
             Input::WakeHit { id, text, rc, tail, after_ms } => self.wake_hit(&mut fx, env, id, &text, crate::wake::Hit { rc, tail, after_ms }),
             Input::Placed { name, ws, err } => self.core(&mut fx, env, None, In::Placed(ci::Placed { name, ws, err })),
+            Input::PageWaits { works, ns } => self.core(&mut fx, env, None, In::PageWaits(ci::PageWaits { works, ns })),
             Input::Unplaced { name, snapshot, err } => self.core(&mut fx, env, None, In::Unplaced(ci::Unplaced { name, snapshot, err })),
             Input::ConfirmOpen { agent, text } => self.core(&mut fx, env, None, In::ConfirmOpen(ci::ConfirmOpen { agent, text })),
             Input::ConfirmClose { card, res } => self.core(&mut fx, env, None, In::ConfirmClose(ci::ConfirmClose { card, res })),
@@ -1931,6 +1971,19 @@ impl Hub {
             return;
         }
         let q = match req {
+            // tasks: the hub's reads of sb-core's works (task_list.rs)
+            AgentReq::Task(bise_proto::sb::Task::List { all }) => {
+                reply(fx, json!({"ok": true, "text": crate::task_list::list(&self.st, all, env.now())}));
+                return;
+            }
+            AgentReq::Task(bise_proto::sb::Task::Show { id }) => {
+                let body = match crate::task_list::show(&self.st, &id, env.now()) {
+                    Ok(text) => json!({"ok": true, "text": text}),
+                    Err(e) => json!({"ok": false, "error": e}),
+                };
+                reply(fx, body);
+                return;
+            }
             AgentReq::List | AgentReq::Tasks => {
                 let Some(from) = self.st.resolve(from) else {
                     reply(fx, json!({"ok": false, "error": format!("unknown agent: {}", from)}));
@@ -1961,6 +2014,7 @@ impl Hub {
                 parts,
                 attach: _,
                 fwd,
+                task,
             } => {
                 // issue #4: the model first, so the message's turn runs on it
                 if let Some((model, effort)) = switch {
@@ -1979,6 +2033,7 @@ impl Hub {
                 if !parts.is_empty() {
                     q["parts"] = json!(parts);
                 }
+                pure::task_keys(&mut q, task);
                 crate::forward::keys(&self.st, &mut q, fwd);
                 q
             }
@@ -1992,11 +2047,11 @@ impl Hub {
             AgentReq::Wait { msg, timeout_s } => {
                 json!({"cmd": "wait", "msg": msg, "timeout_s": timeout_s})
             }
-            AgentReq::Ask {
-                to,
-                text,
-                timeout_s,
-            } => json!({"cmd": "ask", "to": to, "text": text, "timeout_s": timeout_s}),
+            AgentReq::Ask { to, text, timeout_s, task } => {
+                let mut q = json!({"cmd": "ask", "to": to, "text": text, "timeout_s": timeout_s});
+                pure::task_keys(&mut q, task);
+                q
+            }
             AgentReq::Status { status, note } => {
                 json!({"cmd": "status", "status": status, "note": note})
             }
@@ -2047,6 +2102,8 @@ impl Hub {
                 decisions,
                 step,
                 result,
+                done_when,
+                task,
             } => {
                 let mut q = json!({"cmd": "report", "kind": kind, "summary": summary, "decisions": decisions});
                 if let Some((n, of)) = step {
@@ -2056,6 +2113,11 @@ impl Hub {
                 if let Some(r) = result {
                     q["result"] = r;
                 }
+                // tasks: the done-when item it ticks on its works
+                if let Some(n) = done_when {
+                    q["done_when"] = json!(n);
+                }
+                pure::task_keys(&mut q, task);
                 q
             }
             AgentReq::Follow { agent, on, hub } => json!({"cmd": "follow", "agent": agent, "off": !on, "hub": hub}),
@@ -2070,6 +2132,7 @@ impl Hub {
                 parts,
                 attach: _,
                 fwd,
+                task,
             } => {
                 // issue #4: the answer waits for the daemon's pick of the model
                 if !ask.is_empty() {
@@ -2096,6 +2159,7 @@ impl Hub {
                             v["join"] = json!(ws);
                             v["worktree"] = json!(false);
                         }
+                        pure::task_keys(&mut v, task);
                         crate::forward::keys(&self.st, &mut v, fwd);
                         v
                     }
@@ -2143,11 +2207,12 @@ impl Hub {
             }
             // its page or artifact links are the daemon's (daemon/page_cards.rs);
             // `about`, the artifact it resolved, rides it to card_opened
-            AgentReq::Card { text, for_msg, about, .. } => {
+            AgentReq::Card { text, for_msg, about, task, .. } => {
                 let mut q = json!({"cmd": "card", "text": text, "for": for_msg});
                 if let Some(a) = about {
                     q["about"] = a;
                 }
+                pure::task_keys(&mut q, task);
                 q
             }
             AgentReq::Close { card, note } => json!({"cmd": "close", "card": card, "note": note}),
@@ -2156,6 +2221,15 @@ impl Hub {
                 let valid = router::valid_name(&new_name);
                 json!({"cmd": "rename", "agent": agent, "new_name": new_name, "valid": valid})
             }
+            // tasks (docs/tasks.md): every change is sb-core's; `new`
+            // with its slug (router's rules), sb-core makes it free
+            AgentReq::Task(t) => match pure::task_req(t) {
+                Ok(q) => q,
+                Err(body) => {
+                    reply(fx, body);
+                    return;
+                }
+            },
             AgentReq::Restore { agent } => json!({"cmd": "restore", "agent": agent}),
             AgentReq::Isolate { agent } => json!({"cmd": "isolate", "agent": agent}),
             AgentReq::Every(r) => {

@@ -20,6 +20,7 @@ export { running } from './words_running.gen';
 export { scheduled } from './words_scheduled.gen';
 export { settings } from './words_settings.gen';
 export { side } from './words_side.gen';
+export { tasks } from './words_tasks.gen';
 export { thread } from './words_thread.gen';
 export { views } from './words_views.gen';
 export { viewkit } from './words_viewkit.gen';

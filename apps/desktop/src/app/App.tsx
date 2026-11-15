@@ -55,7 +55,7 @@ import { UnlessFull } from './panel/Full';
 import { SideHost } from './side3d/Host';
 import { FloatHost } from '@/composer/float/Host';
 import { ArtifactRoute } from './ArtifactView';
-import { bindPanelHistory, panelState, reopenClosed, toggleFull, useFullPreview, usePanelFit, usePanelFull, usePanelScope, usePanelState } from './panel/state';
+import { bindPanelHistory, boardInFront, panelState, reopenClosed, toggleFull, useFullPreview, usePanelFit, usePanelFull, usePanelScope, usePanelState } from './panel/state';
 import { doPanelKey } from './panel/keys';
 import { TipLayer } from './TipLayer';
 import { noteJump, numbersOf } from '@/agents/model';
@@ -631,6 +631,7 @@ function useWindowKeys(openPalette: () => void, openHelp: () => void, onFrame: (
         agents: (p) => store.agents(p),
         typing: typingIn(document.activeElement),
         panelOpen: panelState.get().open,
+        boardFront: boardInFront(panelState.get()),
         own: ownWindow() !== undefined,
         library: libraryPlaces,
         // ⌘0 as the rail's ':*': back to his last project or chat from a page

@@ -10,7 +10,7 @@ import type { InboxRecord, StateFilter } from './inbox';
 import type { BodyOf, Completion, CompletionAsk, LogItem } from './log';
 import type { BranchRow, ReleaseEv, UpdateEv, VersionItem } from './ops';
 import type { Part } from './parts';
-import type { Agent, ApprovalMode, ApprovalRule, ArchivedAgent, Artifact, ArtifactMoved, BiseUpdate, Card, CheckerKind, Feature, FlowMode, Folder, FolderOp, Growth, LibraryProject, Merged, Model, Page, Place, Pr, PrDetail, PrErr, Proc, Pulse, ReportKind, ScheduledTask, SwitchRow, UsageRow, Worktree } from './rows';
+import type { Agent, ApprovalMode, ApprovalRule, ArchivedAgent, Artifact, ArtifactMoved, BiseUpdate, Card, CheckerKind, Feature, FlowMode, Folder, FolderOp, Growth, LibraryProject, Merged, Model, Page, Place, Pr, PrDetail, PrErr, Proc, Pulse, ReportKind, ScheduledTask, SwitchRow, UsageRow, WorkRow, WorkTomb, Worktree } from './rows';
 import type { OpenWith } from './rpc';
 import type { Entry, FindHit, Mark } from './thread';
 
@@ -137,7 +137,7 @@ key?: number | null, } | { "ev": "followed_end", project: string, agent: string,
 /**
  * the messages held so far (queued for an agent, not delivered)
  */
-held?: number, } | { "ev": "switch", project: string, switch?: SwitchRow | null, } | { "ev": "growth", project: string, growth: Growth, } | { "ev": "pulse", project: string, pulse: Pulse, } | { "ev": "bise_update", project: string, update: BiseUpdate | null, } | { "ev": "usage", project: string, counting?: boolean, 
+held?: number, } | { "ev": "switch", project: string, switch?: SwitchRow | null, } | { "ev": "growth", project: string, growth: Growth, } | { "ev": "pulse", project: string, pulse: Pulse, } | { "ev": "works", project: string, works: Array<WorkRow>, tombs?: Array<WorkTomb>, } | { "ev": "bise_update", project: string, update: BiseUpdate | null, } | { "ev": "usage", project: string, counting?: boolean, 
 /**
  * boxed: HubEv stays small (hub::size)
  */
@@ -232,6 +232,22 @@ export type PrAct = "merge" | "close";
 export type PrActErr = "unknown" | "ended" | "moved" | "not_mergeable" | "running" | "forge" | "other";
 
 /**
+ * `sb task`'s verbs, tagged `step` (docs/tasks.md). `new` makes a work
+ * its caller serves; `list` and `show` are the hub's reads; the others
+ * are one change of work `id` (sb-core says who may make it). His
+ * gestures on the desktop send the same verbs (`HubCmd::TaskAct`).
+ */
+export type Task = { "step": "new", name: string, why?: string, 
+/**
+ * its done-when items, in order
+ */
+goals?: Array<string>, } | { "step": "list", 
+/**
+ * with the done and ongoing ones
+ */
+all?: boolean, } | { "step": "show", id: string, } | { "step": "done", id: string, } | { "step": "reopen", id: string, } | { "step": "pause", id: string, until_ms?: number, } | { "step": "resume", id: string, } | { "step": "rename", id: string, name: string, } | { "step": "why", id: string, text: string, } | { "step": "goal", id: string, text: string, } | { "step": "tick", id: string, n: number, } | { "step": "untick", id: string, n: number, } | { "step": "ongoing", id: string, } | { "step": "merge", id: string, into: string, };
+
+/**
  * How his words go, the same for `send` and `slash` (architect m_13313:
  * one struct, flattened, so the wire keeps `send`'s names): `mode` none
  * is now; `context` what was on his screen at fn (S9): the hub frames it
@@ -247,7 +263,15 @@ export type SendOpts = { mode?: Mode | null, context?: FnContext | null, voice?:
  * his `@agent …` from another thread): the hub leaves one route row
  * there. Only a trace: an unknown or archived one writes none
  */
-from?: string | null, };
+from?: string | null, 
+/**
+ * his explicit tasks for these words, by id (a Task tab's '+ Agent':
+ * tasks-ux m_64875). sb-core reads them like an agent's `--task` (a
+ * merged id: its target; an unknown one or a tomb refuses the send) and
+ * they replace the single-task rule (architect m_64887). Empty: the
+ * rule applies
+ */
+works?: Array<string>, };
 
 /**
  * What a client asks a hub.
@@ -272,11 +296,19 @@ parts?: Array<Part>, mode?: Mode | null, context?: FnContext | null, voice?: boo
  * his `@agent …` from another thread): the hub leaves one route row
  * there. Only a trace: an unknown or archived one writes none
  */
-from?: string | null, } | { "cmd": "answer", project: string, card: number, reply: string, 
+from?: string | null, 
+/**
+ * his explicit tasks for these words, by id (a Task tab's '+ Agent':
+ * tasks-ux m_64875). sb-core reads them like an agent's `--task` (a
+ * merged id: its target; an unknown one or a tomb refuses the send) and
+ * they replace the single-task rule (architect m_64887). Empty: the
+ * rule applies
+ */
+works?: Array<string>, } | { "cmd": "answer", project: string, card: number, reply: string, 
 /**
  * his answer as typed parts, as `Send.parts` (`reply` then ignored)
  */
-parts?: Array<Part>, } | { "cmd": "close", project: string, card: number, } | { "cmd": "approvals", project: string, mode?: string | null, } | { "cmd": "remove_rule", project: string, rule: ApprovalRule, } | { "cmd": "stop", project: string, agent: string, } | { "cmd": "archive", project: string, agent: string, force: boolean, } | { "cmd": "unarchive", project: string, agent: string, } | { "cmd": "artifacts_seen", project: string, at_ms?: number | null, } | { "cmd": "diff", project: string, artifact?: string | null, version?: number | null, agent?: string | null, commit?: string | null, branch?: string | null, pr?: number | null, pr_url?: string, range?: string | null, req?: number | null, } | { "cmd": "tool_out", project: string, agent: string, pos: number, } | { "cmd": "log", project: string, agent: string, before?: number, find?: string, } | { "cmd": "completion" } & CompletionAsk | { "cmd": "log_body", project: string, agent: string, of: BodyOf, } | { "cmd": "queued_take", project: string, agent: string, id: number, } | { "cmd": "queued_steer", project: string, agent: string, id: number, } | { "cmd": "guide", project: string, target: GuideTarget, run?: boolean, } | { "cmd": "branches", project: string, } | { "cmd": "worktrees", project: string, } | { "cmd": "processes", project: string, watch?: boolean, } | { "cmd": "proc_out", project: string, agent: string, id: string, from?: number, } | { "cmd": "proc_follow", project: string, agent: string, id: string, on: boolean, } | { "cmd": "proc_stop", project: string, agent: string, id?: string, all?: boolean, } | { "cmd": "merged", project: string, } | { "cmd": "features", project: string, } | { "cmd": "prs", project: string, } | { "cmd": "pr_detail", project: string, url: string, req: number, } | { "cmd": "pr_check_log", project: string, url: string, check: string, req: number, } | { "cmd": "pr_act", project: string, url: string, head: string, act: PrAct, req: number, } | { "cmd": "inbox_history", project: string, agent?: string | null, state?: StateFilter | null, words?: string | null, 
+parts?: Array<Part>, } | { "cmd": "close", project: string, card: number, } | { "cmd": "approvals", project: string, mode?: string | null, } | { "cmd": "remove_rule", project: string, rule: ApprovalRule, } | { "cmd": "stop", project: string, agent: string, } | { "cmd": "archive", project: string, agent: string, force: boolean, } | { "cmd": "unarchive", project: string, agent: string, } | { "cmd": "artifacts_seen", project: string, at_ms?: number | null, } | { "cmd": "diff", project: string, artifact?: string | null, version?: number | null, agent?: string | null, commit?: string | null, branch?: string | null, pr?: number | null, pr_url?: string, range?: string | null, req?: number | null, } | { "cmd": "tool_out", project: string, agent: string, pos: number, } | { "cmd": "log", project: string, agent: string, before?: number, find?: string, } | { "cmd": "completion" } & CompletionAsk | { "cmd": "log_body", project: string, agent: string, of: BodyOf, } | { "cmd": "queued_take", project: string, agent: string, id: number, } | { "cmd": "queued_steer", project: string, agent: string, id: number, } | { "cmd": "guide", project: string, target: GuideTarget, run?: boolean, } | { "cmd": "branches", project: string, } | { "cmd": "worktrees", project: string, } | { "cmd": "processes", project: string, watch?: boolean, } | { "cmd": "proc_out", project: string, agent: string, id: string, from?: number, } | { "cmd": "proc_follow", project: string, agent: string, id: string, on: boolean, } | { "cmd": "proc_stop", project: string, agent: string, id?: string, all?: boolean, } | { "cmd": "merged", project: string, } | { "cmd": "features", project: string, } | { "cmd": "prs", project: string, } | { "cmd": "pr_detail", project: string, url: string, req: number, } | { "cmd": "pr_check_log", project: string, url: string, check: string, req: number, } | { "cmd": "pr_act", project: string, url: string, head: string, act: PrAct, req: number, } | { "cmd": "task_act", project: string, req: Task, } | { "cmd": "task_move", project: string, card?: number, art?: string, page?: boolean, works: Array<string>, } | { "cmd": "inbox_history", project: string, agent?: string | null, state?: StateFilter | null, words?: string | null, 
 /**
  * a card id: only the older ones (the next page)
  */
@@ -296,7 +328,15 @@ parts?: Array<Part>, mode?: Mode | null, context?: FnContext | null, voice?: boo
  * his `@agent …` from another thread): the hub leaves one route row
  * there. Only a trace: an unknown or archived one writes none
  */
-from?: string | null, } | { "cmd": "scheduled_run", project: string, id: number, } | { "cmd": "artifacts_add", project: string, agent: string, target: string, title?: string | null, 
+from?: string | null, 
+/**
+ * his explicit tasks for these words, by id (a Task tab's '+ Agent':
+ * tasks-ux m_64875). sb-core reads them like an agent's `--task` (a
+ * merged id: its target; an unknown one or a tomb refuses the send) and
+ * they replace the single-task rule (architect m_64887). Empty: the
+ * rule applies
+ */
+works?: Array<string>, } | { "cmd": "scheduled_run", project: string, id: number, } | { "cmd": "artifacts_add", project: string, agent: string, target: string, title?: string | null, 
 /**
  * a library folder's id: the artifact goes there
  */

@@ -22,6 +22,7 @@ import ../hub/pause.bend as HP
 import ../hub/reach.bend as HR
 import ../hub/answers.bend as HA
 import ../hub/cold.bend as CO
+import ../hub/work.bend as HWO
 
 # ---- Switchboard hub (hub/*.bend, the sb-core process) ----
 # The laws quantify over EVERY hub state, EVERY input (any JSON line the
@@ -291,7 +292,8 @@ law wake_replay_keeps:
 law wake_steers_busy:
   for +a: String
   for +text: String
-  {HC.wake_snd(a, text) == HC.Snd{HM.HUB(), a, text, False{}, None{}, False{}, False{}, False{}, None{}, "", None{}} : HC.Snd}
+  for +works: Maybe<&2, List<&2, String>>
+  {HC.wake_snd(a, text, works) == HC.Snd{HM.HUB(), a, text, False{}, None{}, False{}, False{}, False{}, None{}, "", None{}, works} : HC.Snd}
 
 # LAW: a busy agent's pump steers every queued message that is not queued
 # mode (a wake, a timer's fire, his message, an agent's): in order, now.
@@ -312,8 +314,9 @@ law timer_reaches_busy:
 
 # LAW: a due wake of a timer whose agent it reaches (idle or busy:
 # timer_reaches_busy), in a project not paused, with no wake from bise
-# still queued for it, fires on the timer's own terms only: due and under
-# its times.
+# still queued for it, and tasks not all paused (a timer of paused tasks
+# waits: tasks-ux m_64703), fires on the timer's own terms only: due and
+# under its times.
 law timer_fires_busy:
   for -o: HS.St
   for +cx: HX.Cx<o>
@@ -321,7 +324,29 @@ law timer_fires_busy:
   for p: {HP.is_paused(HX.d(o, cx)) == False{} : Bool}
   for q: {HC.bise_queued(HX.d(o, cx), HS.Timer.agent(t)) == False{} : Bool}
   for r: {HC.timer_ready(o, cx, HS.Timer.agent(t)) == True{} : Bool}
+  for s: {HWO.all_paused(HS.Timer.works(t), HS.St.works(HX.d(o, cx))) == False{} : Bool}
   {HC.timer_may(o, cx, t, True{}) == HTM.may_fire.go(True{}, t, True{}, HC.now(o, cx)) : Bool}
+
+# LAW: the old case unchanged: a timer that serves no task fires on the
+# same terms as before tasks (architect m_64727).
+law timer_fires_busy_with_no_work:
+  for -o: HS.St
+  for +cx: HX.Cx<o>
+  for +t: HS.Timer
+  for p: {HP.is_paused(HX.d(o, cx)) == False{} : Bool}
+  for q: {HC.bise_queued(HX.d(o, cx), HS.Timer.agent(t)) == False{} : Bool}
+  for r: {HC.timer_ready(o, cx, HS.Timer.agent(t)) == True{} : Bool}
+  for s: {HS.Timer.works(t) == Nil{} : List<&2, String>}
+  {HC.timer_may(o, cx, t, True{}) == HTM.may_fire.go(True{}, t, True{}, HC.now(o, cx)) : Bool}
+
+# LAW: a timer whose end passed (while its tasks were paused or not)
+# ends at the tick and fires nothing: the tick reads end_why before it
+# may fire (timers_tick.end), so a resume never fires it.
+law until_passed_while_paused_never_fires:
+  for +x: HS.Timer
+  for +now: Nat
+  for q: {HTM.past_until(x, now) == True{} : Bool}
+  {HTM.end_why(x, False{}, now) == Some{"its end time passed"} : Maybe<&2, String>}
 
 # LAW: a paused project steers nothing into a busy agent's turn either:
 # pump (the only step that steers: pump.send.go's "steer") leaves the
@@ -517,7 +542,7 @@ law user_queued_never_answers_a_card:
   for +text: String
   for +parts: String
   for +from: String
-  {HC.user_says(o, cx, to, text, True{}, parts, from) == HC.says.card(o, None{}, cx, to, text, True{}, parts, from) : HX.Cx<o>}
+  {HC.user_says(o, cx, to, text, True{}, parts, from, None{}) == HC.says.card(o, None{}, cx, to, text, True{}, parts, from, None{}) : HX.Cx<o>}
 # (his words typed in another thread: bend/laws/say_from.bend)
 
 def any_queued(xs: List<&2, HS.Msg>) -> Bool:
@@ -769,31 +794,33 @@ law route_no_parts_no_key:
 law xin_input_keeps_parts:
   for +text: String
   for +parts: String
-  {HC.xin.snd(HS.KInput{}, text, parts) == HC.Snd{HM.USER(), HM.MAIN(), text, True{}, None{}, False{}, False{}, False{}, Some{HXB.VIA_BISE()}, parts, None{}} : HC.Snd}
+  {HC.xin.snd(HS.KInput{}, text, parts) == HC.Snd{HM.USER(), HM.MAIN(), text, True{}, None{}, False{}, False{}, False{}, Some{HXB.VIA_BISE()}, parts, None{}, None{}} : HC.Snd}
 
 law xin_ask_has_no_parts:
   for +text: String
   for +parts: String
-  {HC.xin.snd(HS.KAsk{}, text, parts) == HC.Snd{HXB.FROM_BISE(), HM.MAIN(), text, True{}, None{}, False{}, False{}, False{}, None{}, "", None{}} : HC.Snd}
+  {HC.xin.snd(HS.KAsk{}, text, parts) == HC.Snd{HXB.FROM_BISE(), HM.MAIN(), text, True{}, None{}, False{}, False{}, False{}, None{}, "", None{}, None{}} : HC.Snd}
 
 # ---- followed jobs (desktop S10, core.bend's `followed jobs`) ----
 
 # LAW: before its end a followed task's progress makes no job_end: a
-# progress report changes nothing but the report itself.
+# progress report changes nothing but the report itself and the card its
+# blocked report opened, which closes (tasks: blocked_card_ends_when_it_moves_on).
 law follow_quiet_before_end:
   for -o: HS.St
   for +cx: HX.Cx<o>
   for +from: String
   for +summary: String
-  {HC.req_report.kind(o, cx, from, "progress", summary) == cx : HX.Cx<o>}
+  {HC.req_report.kind(o, cx, from, "progress", summary) == HC.report_cards_end(o, cx, from) : HX.Cx<o>}
 
-# LAW: its done ends the job in the same step (job_end when followed).
+# LAW: its done ends the job in the same step (job_end when followed),
+# its blocked report's card closed first (blocked_card_ends_when_it_moves_on).
 law follow_done_at_its_report:
   for -o: HS.St
   for +cx: HX.Cx<o>
   for +from: String
   for +summary: String
-  {HC.req_report.kind(o, cx, from, "done", summary) == HC.job_end(o, HC.report_done(o, cx, from), from, "done", summary) : HX.Cx<o>}
+  {HC.req_report.kind(o, cx, from, "done", summary) == HC.job_end(o, HC.report_done(o, HC.report_cards_end(o, cx, from), from), from, "done", summary) : HX.Cx<o>}
 
 # LAW: a failure ends it at once, in the same step as the failure.
 law follow_failed_at_once:

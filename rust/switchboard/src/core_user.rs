@@ -37,8 +37,18 @@ impl Hub {
         queued: bool,
         parts: &str,
         from: &str,
+        works: Vec<String>,
     ) {
         let focus = self.focus_of(client, focus);
+        // his explicit tasks (a Task tab's '+ Agent'): his words, never a
+        // command, read by sb-core like an agent's --task (architect m_64887)
+        if !works.is_empty() {
+            if !text.is_empty() {
+                let c = Some(client);
+                self.core(fx, env, c, In::Say(ci::Say { focus, text: text.into(), queued, parts: parts.into(), from: from.into(), works: Some(works) }));
+            }
+            return;
+        }
         // only words wait for the turn's end: a command runs now
         let cmd = router::parse(text, &focus);
         if queued && !matches!(cmd, UserCmd::Say(_) | UserCmd::To { .. }) {
@@ -68,7 +78,7 @@ impl Hub {
         match cmd {
             UserCmd::Say(t) => {
                 if !t.is_empty() {
-                    self.core(fx, env, c, In::Say(ci::Say { focus, text: t, queued, parts: parts.into(), from: from.into() }));
+                    self.core(fx, env, c, In::Say(ci::Say { focus, text: t, queued, parts: parts.into(), from: from.into(), works: None }));
                 }
             }
             UserCmd::To { target, text } => {

@@ -20,6 +20,7 @@ import { OfficeTab } from './Office';
 import { ViewTab } from '@/views/Tab';
 import { viewsStore } from '@/views/window';
 import { DocumentTab } from './Document';
+import { BoardTab, TaskTab } from '@/tasks';
 
 /** The body of a thing's tab. */
 export function ThingTab({ e, tabId }: { e: Exclude<Entity, { kind: 'tab' }>; tabId: string }) {
@@ -79,6 +80,11 @@ export function ThingTab({ e, tabId }: { e: Exclude<Entity, { kind: 'tab' }>; ta
       );
     case 'office':
       return <OfficeTab project={e.project} />;
+    // a project's tasks Board, and one task (src/tasks)
+    case 'tasks':
+      return <BoardTab project={e.project} />;
+    case 'task':
+      return <TaskTab project={e.project} id={e.id} />;
     case 'file':
       // a ~/bise file that is no artifact, drawn by its app (docs/plugin-apps.md A6)
       return <DocumentTab docRef={{ project: e.project, target: { kind: 'entry', id: e.entry } }} tabId={tabId} store={viewsStore} title={e.name ?? ''} rowApp="" />;

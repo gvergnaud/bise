@@ -8,6 +8,7 @@
 import Base
 import ../../vendor/json.bend as J
 import ../../hub/model.bend as HM
+import ../../hub/work.bend as HWO
 import ../../hub/gen/state.bend as HS
 import ../../hub/gen/state-laws.bend as HSL
 import ../../hub/cx.bend as HX
@@ -588,6 +589,9 @@ def lv_life_op(+h: HS.Agent, op: HM.AgentOp, nl: {lv_is_life(op) == False{} : Bo
       {==}
     case HM.ODrop{ok, sn}:
       lv_drop_life(ok, h, sn)
+    case HM.OTurnWorks{ws, add}:
+      %HSL.Agent.turn_works.eta(h, HWO.turn_works(HS.Agent.turn_works(h), ws, add)) : {HS.Agent.life(_) == HS.Agent.life(h) : HS.Life}
+      {==}
 
 # a lifecycle gives the agent its life
 def lv_life_set(+h: HS.Agent, +l: HS.Life, +why: Maybe<&2, String>) -> {HM.live_life(HS.Agent.life(HM.agent_op(h, HM.OLife{l, why}))) == HM.live_life(l) : Bool}:
@@ -825,6 +829,18 @@ def lv_apply.go(+e: HM.Ev, +s: HS.St, la: HI.Lives(HS.St.agents(s), True{}), lr:
     case HM.EPaused{a}:
       HX.Both{la, lr}
     case HM.EResumed{a}:
+      HX.Both{la, lr}
+    case HM.EWorkCreated{w0}:
+      HX.Both{la, lr}
+    case HM.EWorkChanged{w0, w1, w2, w3}:
+      HX.Both{la, lr}
+    case HM.EWorkFolded{w0, w1}:
+      HX.Both{la, lr}
+    case HM.EWorkTurn{+wt}:
+      lv_on(HAG.has(HS.St.agents(s), HS.WTurn.agent(wt)), HS.St.agents(s), HS.St.arch(s), HS.WTurn.agent(wt), HM.OTurnWorks{HS.WTurn.works(wt), HS.WTurn.add(wt)}, {==}, la, lr)
+    case HM.ECardMoved{cm}:
+      HX.Both{la, lr}
+    case HM.EArtMoved{am}:
       HX.Both{la, lr}
 
 def lv_apply(+s: HS.St, e: HM.Ev, sp: HI.AgentsSplit(s)) -> HI.AgentsSplit(HM.apply(s, e)):

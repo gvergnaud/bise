@@ -87,6 +87,11 @@ impl Shell {
         };
         (job.flow, job.checks) = (self.config.repo().flow.clone(), self.opts.paths.worktrees.clone());
         job.lands = self.opts.paths.lands();
+        // bise.toml's [land] task_trailers, at the trunk's tip like its other [land] keys (Gabriel m_65054)
+        job.task_trailers = crate::trunk::trunk_ref(&job.shared)
+            .ok()
+            .and_then(|t| crate::land::git(&job.shared, &["show", &format!("{}:{}", t, crate::flow::TRACKED)]).ok())
+            .is_none_or(|text| crate::flow::land_task_trailers(&text));
         let (queue, tx, proc_hub) = (self.lands.clone(), self.tx.clone(), self.proc_hub.clone());
         std::thread::spawn(move || {
             let _claim = claim;

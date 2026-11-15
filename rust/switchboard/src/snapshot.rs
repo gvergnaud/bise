@@ -34,6 +34,10 @@ pub struct Snapshot {
     /// the shell's: his late promises (checklist rows of his past
     /// data-due), a count for the morning page and the menu bar
     pub overdue: u32,
+    /// tasks: every task sb-core keeps with its status, oldest first, and
+    /// the folded ones' tombs (task_list::rows; the `works` event)
+    pub works: Vec<bise_proto::rows::WorkRow>,
+    pub tombs: Vec<bise_proto::rows::WorkTomb>,
 }
 
 /// One agent as the views see it (snapshot_rows.rs builds it).
@@ -143,6 +147,9 @@ pub struct CardRow {
     pub pick: Option<Pick>,
     /// the hub carries out his answer to it now (`Hub::running_cards`)
     pub running: bool,
+    /// an agent's blocked report (tasks): his card whatever its kind
+    /// (model::user_card)
+    pub from_report: bool,
 }
 
 #[cfg(test)]

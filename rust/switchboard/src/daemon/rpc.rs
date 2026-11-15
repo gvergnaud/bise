@@ -320,7 +320,8 @@ impl Shell {
         let pages = self.pages_ev(&snap);
         let growth = self.growth_ev(&snap);
         let pulse = self.pulse_ev();
-        let mut evs = vec![agents, cards, jobs];
+        let works = self.works_ev(&snap);
+        let mut evs = vec![agents, cards, works, jobs];
         evs.extend(arts);
         evs.extend([self.features_ev(), self.prs_ev(), self.scheduled_ev(), self.models_ev(), appr, self.flow_ev(), self.paused_ev(), self.switch_ev(), pages, growth, pulse, self.bise_update_ev()]);
         // the versions (`dev`: the terminal's /release-bise, the /version
@@ -553,6 +554,7 @@ mod tests {
         let state: BTreeMap<&str, &str> = [
             ("agents", "proto_rows"),
             ("cards", "proto_rows"),
+            ("works", "works_ev"),
             ("jobs", "HubEv::Jobs"),
             ("artifacts", "artifacts_ev"),
             ("features", "features_ev"),

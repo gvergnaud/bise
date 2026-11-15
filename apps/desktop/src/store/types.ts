@@ -2,7 +2,7 @@
 // checked complete at compile time), the slices' list types, and the key and
 // compare helpers. Pure, no state. Split out of store.ts (pure move). Owner:
 // amb-core (the hub slices with amb-win).
-import type { AwayProject, CoreEv, ErrorKind, FindHit, GuideTarget, HubEv, InboxRecord, Mark, Mode, Part, Pr, PickFile, PickFolder, BranchRow, Page, TakeStop, VersionItem } from '@/proto';
+import type { AwayProject, CoreEv, ErrorKind, FindHit, GuideTarget, HubEv, InboxRecord, Mark, Mode, Part, Pr, PickFile, PickFolder, BranchRow, Page, TakeStop, VersionItem, WorkRow, WorkTomb } from '@/proto';
 export type Ev = HubEv | CoreEv;
 export type EvOf<T extends Ev['ev']> = Extract<Ev, { ev: T }>;
 
@@ -133,6 +133,8 @@ export const TAGS = {
   // the H1 sidebar: a project's pulse (rows::Pulse); known, kept nowhere: the core folds it into
   // ProjectRow.pulse (apply.ts)
   pulse: true,
+  // tasks: a project's tasks with their status (rows::WorkRow); known, the tasks store keeps them
+  works: true,
   // running processes (procs-hub's proto, docs/processes.md): known; procs-desktop applies them
   processes: true,
   proc_out: true,
@@ -188,6 +190,13 @@ export interface PagesList {
   readonly overdue: number;
 }
 
+/** A project's tasks (the works event without its tag): the live ones and the folded ones (tombs). */
+export interface Works {
+  readonly works: readonly WorkRow[];
+  readonly tombs: readonly WorkTomb[];
+}
+export const NO_WORKS: Works = { works: [], tombs: [] };
+
 /** A project's PR list (the prs event without its tag). */
 /** A hub's answered and withdrawn records (inbox/history), newest first, with its totals. */
 export interface InboxList {
@@ -235,6 +244,8 @@ export interface Pending {
   readonly parts?: readonly Part[];
   /** the thread he typed it in when not `agent`'s (at-start): a retry leaves its trace there too */
   readonly from?: string;
+  /** his explicit tasks (a Task tab's '+ Agent'): a retry sends them again */
+  readonly works?: readonly string[];
   readonly at_ms: number;
   /** late: the core gave up waiting for its hub's answer (30 s), which may still make it: drawn as
    *  sending, no retry; its end comes as the core's late 'sent' (queue-drawer-fix) */

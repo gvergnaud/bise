@@ -50,11 +50,12 @@ export const OUTER_HEAD_PX = 20;
 const COMPOSER_FIELD = '[data-testid="composer.field"]';
 
 /** A section's head: its 3D object, its name, its count (and what waits on him, in the accent), 'all ›'. */
-export function OuterHead({ id, name, count, loud, onAll, onCube }: { id: BubbleId; name: string; count: string; loud?: string; onAll: () => void; onCube?: () => void }) {
+export function OuterHead({ id, name, count, loud, onAll, onCube }: { id: SectionId; name: string; count: string; loud?: string; onAll: () => void; onCube?: () => void }) {
   return (
     <header className="s3-ohead" data-testid={`app.outer.${id}.head`}>
       <span className="s3-ohead-pic" aria-hidden="true">
-        <ThingPic thing={bubbleThing(id)} px={OUTER_HEAD_PX} tile={id === 'agents' ? 'thread' : id === 'artifacts' ? 'artifacts' : id === 'scheduled' ? 'scheduled' : 'terminal'} />
+        {/* Tasks has no bubble: its head is the list icon (brief: a section under Agents, above Artifacts) */}
+        {id === 'tasks' ? <AppIcon name="list" size={16} /> : <ThingPic thing={bubbleThing(id)} px={OUTER_HEAD_PX} tile={id === 'agents' ? 'thread' : id === 'artifacts' ? 'artifacts' : id === 'scheduled' ? 'scheduled' : 'terminal'} />}
       </span>
       <b className="s3-ohead-name">{name}</b>
       {count !== '' && <span className="s3-ohead-n">{count}</span>}
@@ -182,7 +183,7 @@ export function OuterAgents({ live, agents, cards, at, here, now, groupOf, onOpe
  * scrolls it back to the top: a fold never drops him into the next section. Nothing when the first
  * rows hold them all.
  */
-function MoreRow({ id, first, shown, total, onMore, onLess }: { id: BubbleId; first: number; shown: number; total: number; onMore: () => void; onLess: () => void }) {
+function MoreRow({ id, first, shown, total, onMore, onLess }: { id: SectionId; first: number; shown: number; total: number; onMore: () => void; onLess: () => void }) {
   const line = useRef<HTMLDivElement>(null);
   const n = moreOf(shown, total);
   const lessToo = canLess(shown, total, first);
@@ -323,8 +324,11 @@ function Mark({ g, id }: { g: string; id: string }): ReactNode {
   return <span className="s3-orow-g">{g}</span>;
 }
 
+/** A section of the card: a bubble's, or Tasks (no bubble of its own). */
+export type SectionId = BubbleId | 'tasks';
+
 interface SectionProps {
-  readonly id: BubbleId;
+  readonly id: SectionId;
   readonly name: string;
   readonly count: string;
   readonly loud?: string;
@@ -342,13 +346,14 @@ export function OuterSection({ id, name, count, loud, onAll, onCube, children }:
   );
 }
 
-/** A section of rows: its first 5, then '+ N more' adds 50; `rows(n)` draws the first n; none: its empty line. */
-export function OuterList({ total, rows, empty, ...head }: SectionProps & { total: number; rows: (n: number) => ReactNode; empty: ReactNode }) {
+/** A section of rows: its first 5, then '+ N more' adds 50; `rows(n)` draws the first n; none: its empty line; `after`: a line under its rows (Tasks' fold). */
+export function OuterList({ total, rows, empty, after, ...head }: SectionProps & { total: number; rows: (n: number) => ReactNode; empty: ReactNode; after?: ReactNode }) {
   const { shown, more, less } = useShown(FIRST_ROWS);
   return (
     <OuterSection {...head}>
       {total === 0 ? empty : rows(shown)}
       <MoreRow id={head.id} first={FIRST_ROWS} shown={shown} total={total} onMore={more} onLess={less} />
+      {after}
     </OuterSection>
   );
 }

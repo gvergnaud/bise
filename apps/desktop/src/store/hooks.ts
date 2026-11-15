@@ -9,7 +9,7 @@ import type { CorePort, CoreState } from '@/shared/api';
 import type { BiseUpdate, GuideTarget, Proc } from '@/proto';
 import { keep } from '@/app/keep';
 import type { AnsweredFrom } from './answered';
-import type { AnswerJump } from './store';
+import type { AnswerJump, Works } from './store';
 import type { Acted } from './acted';
 import type { FoundFolders } from './reads';
 import type { Refused } from './refused';
@@ -125,6 +125,8 @@ export const useArtifacts = (project: string): readonly Artifact[] => useSlice(`
 /** the library's folders, the same for every project (artifacts/folders.ts reads them) */
 export const useFolders = (): readonly Folder[] => useSlice('library:folders', (s) => s.folders());
 export const useScheduled = (project: string): readonly ScheduledTask[] => useSlice(`scheduled:${project}`, (s) => s.scheduled(project));
+/** a project's tasks and its folded ones (HubEv works); none until its hub said */
+export const useWorks = (project: string): Works => useSlice(`works:${project}`, (s) => s.works(project));
 export const useWorktrees = (project: string): readonly Worktree[] => useSlice(`worktrees:${project}`, (s) => s.worktrees(project));
 /** a project's processes (HubEv processes): running, then ended in the last 24 h; none until its hub said */
 export const useProcesses = (project: string): readonly Proc[] => useSlice(`processes:${project}`, (s) => s.processes(project));

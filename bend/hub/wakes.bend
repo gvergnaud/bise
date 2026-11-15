@@ -169,10 +169,11 @@ def resumes_of(+spec: J.Json, then: Maybe<&2, Bool>) -> Bool:
       b
 
 # a new watch (wake_set): its id the next free one, its deadline `max_ms`
-# from now (built by name: empty() and a setter per field)
-def make(+ws: S.Wakes, +agent: String, +spec: J.Json, +max_text: String, +now: Nat, +max_ms: Nat, +quiet: Bool, then: Maybe<&2, Bool>) -> S.Watch:
+# from now (built by name: empty() and a setter per field); `works` its
+# setter's turn's (tasks, law watch_carries_turn_works): its wakes carry them
+def make(+ws: S.Wakes, +agent: String, +spec: J.Json, +max_text: String, +now: Nat, +max_ms: Nat, +quiet: Bool, then: Maybe<&2, Bool>, +works: List<&2, String>) -> S.Watch:
   +w = S.Watch.with_max_text(S.Watch.with_spec(S.Watch.with_agent(S.Watch.with_id(S.Watch.empty(), 1n+S.Wakes.last_id(ws)), agent), spec), max_text)
-  S.Watch.with_resumes(S.Watch.with_quiet(S.Watch.with_max_at(S.Watch.with_set_at(w, now), Nat.add(now, max_ms)), quiet), resumes_of(spec, then))
+  S.Watch.with_works(S.Watch.with_resumes(S.Watch.with_quiet(S.Watch.with_max_at(S.Watch.with_set_at(w, now), Nat.add(now, max_ms)), quiet), resumes_of(spec, then)), works)
 
 # ---- a reply still pending (ask-wait) ----
 # An agent's `sb ask` / `sb wait` holds it WAIT_CAP seconds at most
@@ -196,9 +197,9 @@ def reply_max_text(+to: String, +msg: Nat) -> String:
 
 # the reply watch of `agent` on its message `msg` to `to`, asked at
 # `asked_at`
-def make_reply(+ws: S.Wakes, +agent: String, +to: String, +msg: Nat, +asked_at: Nat, +now: Nat) -> S.Watch:
+def make_reply(+ws: S.Wakes, +agent: String, +to: String, +msg: Nat, +asked_at: Nat, +now: Nat, +works: List<&2, String>) -> S.Watch:
   +w = S.Watch.with_max_text(S.Watch.with_spec(S.Watch.with_agent(S.Watch.with_id(S.Watch.empty(), 1n+S.Wakes.last_id(ws)), agent), reply_spec(to, msg)), reply_max_text(to, msg))
-  S.Watch.with_resumes(S.Watch.with_quiet(S.Watch.with_max_at(S.Watch.with_set_at(w, asked_at), Nat.add(now, REPLY_MAX_MS())), False{}), True{})
+  S.Watch.with_works(S.Watch.with_resumes(S.Watch.with_quiet(S.Watch.with_max_at(S.Watch.with_set_at(w, asked_at), Nat.add(now, REPLY_MAX_MS())), False{}), True{}), works)
 
 def kind_is_reply(k: WatchKind) -> Bool:
   match k:

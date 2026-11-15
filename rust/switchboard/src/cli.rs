@@ -15,6 +15,8 @@ mod report;
 use report::{result_of, step_of};
 mod wake;
 mod notify;
+mod task;
+use task::task_req;
 use notify::notify_req;
 use keeps::keeps_req;
 use wake::wake_req;
@@ -50,6 +52,11 @@ pub const COMMANDS: &[CmdDoc] = &[
         "publish a page for the user (a fragment of bise kit blocks; the kit's lint checks it): its URL comes back. `sb page start` shows the page at once, empty, while you (or --agent) write it; your first publish is v1. `sb page tick` ticks a step of the user's (a checklist row with data-who=\"yours\") when he says it's done; other words go as a note on that row. `sb page waiting` lists what waits on him across every page, one line each: `<page>#<item> · step|draft|question|notes · <text>`, his overdue promises first (a row of his past its `data-due`: `<page>#<item> · overdue 2 days · <text>`; never a notification). A new version of your page answers the user's notes: `--notes-done` the ones you did, `--note-answer` one line for the others. `--taste`: you followed ~/bise/taste.md (the frame says so).",
     ),
     cmd("sb tasks", Who::Everyone, "every task in detail: what it is doing now, its last report, its open questions."),
+    cmd(
+        "sb task new \"<name>\" [--why \"<why>\"] [--done-when \"<item>\"]... | sb task list [--all] | sb task show <id> | sb task tick <id> <n>",
+        Who::Everyone,
+        "the user's tasks: his units of work, many agents each. Every message, turn and what it makes (messages, agents, pages, artifacts, cards, timers, lands) carries its tasks by itself. `new`: a task for new work his direct message sends you on (main makes the others), in his words. `tick <id> <n>` (or `sb report … --done-when <n>`): done-when item n of your turn's task is done. `--task <id>[,<id>]` on send, ask, spawn, notify or report: the tasks it carries instead of your turn's. A task is done only by his word: your report done never makes it done.",
+    ),
     cmd(
         "sb send <agent> \"<text>\" [--expect-reply] [--reply-to <id>] [--mode steer|queued] [--attach <path|m_<n>>]... | sb send <agent> --forward m_<n> [\"<note>\"] [...]",
         Who::Everyone,
@@ -172,6 +179,11 @@ pub const COMMANDS: &[CmdDoc] = &[
         "sb flow [pr|trunk]",
         Who::Main,
         "how this repo ships code: PRs or straight to main, why, and the question to ask the user when it is not set; with `pr` or `trunk`, save the user's answer (never your own pick).",
+    ),
+    cmd(
+        "sb task done|reopen|resume|ongoing <id> | sb task pause <id> [--until <18:00|tomorrow 09:00|2h>] | sb task rename|why|goal <id> \"<text>\" | sb task untick <id> <n> | sb task merge <id> --into <id>",
+        Who::Main,
+        "the user's tasks (`<open_tasks>` in your state). In the turn where you start work for him (a spawn, a forward, a delegation), make its task first: `sb task new \"<his words>\" --why \"…\" --done-when \"…\"` (it prints the new id), then start its agent with `--task <new id>` so it serves that task alone; or put the work on an open task with `--task <id>`; a plain answer makes none. His words on a task are these verbs (\"pause WhatsApp until Monday\", \"that one is done\", \"merge X into Y\"): `done` only on his word, never on an agent's done; `pause` stops its agents' turns cleanly after a grace and holds their messages until `resume`; `ongoing`: a task that never ends.",
     ),
     cmd("sb rename <task> <new-name>", Who::Main, "rename a task (unique name; the old name still works)."),
     cmd(
@@ -324,6 +336,12 @@ fn list_of(v: Option<&Value>) -> Vec<String> {
     }
 }
 
+/// tasks: `--task <id>` (repeatable, or `a,b`): the works a request
+/// carries (docs/tasks.md); none: the caller's turn's.
+fn tasks_of(opts: &Map<String, Value>) -> Vec<String> {
+    list_of(opts.get("task")).iter().flat_map(|s| s.split(',').map(|x| x.trim().to_string())).filter(|x| !x.is_empty()).collect()
+}
+
 /// The first positional word, an agent name (`@name` accepted).
 fn agent_arg(pos: &[String], usage: impl Into<String>) -> Result<String, String> {
     pos.first()
@@ -418,6 +436,11 @@ pub fn render(cmd: &str, v: &Value) -> (bool, String) {
         "worktree" if s("path").is_empty() => "the hub knows you work in your own workspace again".to_string(),
         "worktree" => format!("the hub knows you work in {}", s("path")),
         "page" => render_page(v),
+        // tasks: list and show answer their text; new its id (the one
+        // `--task <id>` takes); the other verbs the task they changed
+        "task" if !s("text").is_empty() => s("text"),
+        "task" if !s("name").is_empty() => format!("task {} made: {} (your turn serves it; --task {} carries it)", s("id"), s("name"), s("id")),
+        "task" if !s("id").is_empty() => format!("task {}: ok", s("id")),
         _ => "ok".to_string(),
     };
     (true, text)

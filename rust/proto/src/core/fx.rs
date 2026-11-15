@@ -92,6 +92,11 @@ core_kinds! {
         /// his text, for the client's direct-exchange note
         UserSent = "user_sent" => FUserSent { text: Str },
         Renamed = "renamed" => FRenamed { old: Str, new: Str },
+        /// tasks: he moved artifact `art` (`page`: the page store's page
+        /// `art`) to `works` (none: out of every task): that store sets
+        /// them exactly and marks it his (artifacts_works.rs); unknown or
+        /// archived in that store: nothing
+        ArtWorks = "art_works" => FArtWorks { art: Str, works: Strs, page: Bool },
         /// name-free: another agent takes the old name `from`; what still
         /// says `from` (pages' and artifacts' agent) is agent `to`'s now
         Retarget = "retarget" => FRetarget { from: Str, to: Str },

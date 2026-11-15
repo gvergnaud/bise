@@ -34,6 +34,9 @@
 {"ans": [], "git": true, "now": 1000000, "paths": ["tests/known_reds.txt", "src/a.rs"], "place": "shared", "t": "claims_clean"}
 {"agent": "architect", "ans": [], "card": 3, "git": true, "now": 1000000, "page": "architecture", "t": "page_answered", "text": "D10"}
 {"agent": "perf", "ans": [], "card": 3, "git": true, "now": 1000000, "pos": 42, "t": "answer_pos"}
+{"ans": [], "git": true, "now": 1000000, "ns": [2, 1], "t": "page_waits", "works": ["native-mac", "digest"]}
+{"ans": [], "git": true, "now": 1000000, "req": {"id": "native-mac", "step": "pause", "until_ms": 0}, "t": "work_act"}
+{"ans": [], "art": "a_12", "card": null, "git": true, "now": 1000000, "page": true, "t": "work_move", "works": ["digest"]}
 {"agent": "a", "ans": [], "git": true, "held": false, "leftover": false, "now": 1000000, "t": "idle"}
 {"agent": "net", "ans": [], "git": true, "now": 1000000, "t": "interrupt"}
 {"ans": [], "git": true, "name": "a", "now": 1000000, "t": "isolate"}

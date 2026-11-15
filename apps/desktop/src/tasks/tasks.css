@@ -1,0 +1,120 @@
+/* The tasks' look (designer's look rules): a neutral chip, never pink; a 6 px status mark; the
+   Task tab 384 wide; tokens only, on the 4 px grid. Owner: tasks. */
+
+/* the status mark: Needs you a pink dot, Working an ink dot, Waiting a hollow ring, To review an
+   ink ring; Stalled ✗ err, Paused ‖, Done ✓ text-3, Ongoing ↻ text-3 */
+.tk-mark{display:inline-flex;align-items:center;justify-content:center;flex:none;box-sizing:border-box;width:6px;height:6px;border-radius:50%;font-size:var(--t-11);line-height:1}
+.tk-mark[data-st="needs_you"]{background:var(--c-accent)}
+.tk-mark[data-st="working"]{background:var(--c-text)}
+.tk-mark[data-st="waiting"]{border:1px dashed var(--c-text-2)}
+.tk-mark[data-st="to_review"]{position:relative;box-shadow:inset 0 0 0 1.5px var(--c-text)}
+.tk-mark[data-st="to_review"]::after{content:"";position:absolute;inset:0;margin:auto;width:2px;height:2px;border-radius:50%;background:var(--c-text)}
+.tk-mark[data-st="unknown"]{border:1px solid var(--c-text-3)}
+.tk-mark:is([data-st="stalled"],[data-st="paused"],[data-st="done"],[data-st="ongoing"]){width:auto;height:auto;border-radius:0}
+.tk-mark[data-st="stalled"]{color:var(--c-err)}
+.tk-mark[data-st="paused"]{color:var(--c-text-2)}
+.tk-mark:is([data-st="done"],[data-st="ongoing"]){color:var(--c-text-3)}
+
+/* the task chip: neutral, the artifact chip's height and radius, ink text */
+.tk-chip{display:inline-flex;align-items:center;gap:var(--s-2);min-width:0;max-width:100%;height:var(--s-6);margin:0;padding:0 var(--s-2);border:0;border-radius:var(--r-1);background:var(--c-hover);color:var(--c-text);font:var(--t-13) var(--font-ui);white-space:nowrap}
+.tk-chip:hover{background:color-mix(in srgb,var(--c-text) 6%,var(--c-hover))}
+.tk-chip:focus-visible{outline:2px solid var(--c-focus);outline-offset:2px}
+.tk-chip-name{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.tk-chips{display:inline-flex;align-items:center;gap:var(--s-2);min-width:0}
+.tk-chips.keep .tk-chip-name{min-width:16ch}
+.tk-more{height:var(--s-6);padding:0 var(--s-1);border:0;border-radius:var(--r-1);background:none;color:var(--c-text-3);font:inherit;font-size:var(--t-12)}
+.tk-more:hover{background:var(--c-hover);color:var(--c-text-2)}
+
+/* a chip under his message, at his bubble's right edge */
+.tk-under-you{display:flex;justify-content:flex-end;margin-top:var(--s-1)}
+
+/* the right bar's Tasks section: the agents' row shape (s3-orow), a mark in the mark's column */
+.tk-orow .s3-orow-mark{display:inline-flex;align-items:center;justify-content:center}
+.tk-goals{color:var(--c-text-3);font-size:var(--t-12);font-variant-numeric:tabular-nums}
+.tk-fold{display:flex;align-items:center;gap:var(--s-1);height:var(--s-7);margin:0;padding:0 var(--s-3);border:0;border-radius:var(--r-2);background:none;color:var(--c-text-3);font:inherit;font-size:var(--t-12)}
+.tk-fold:hover{background:var(--c-hover);color:var(--c-text-2)}
+
+/* the Board: columns side by side, scrolling sideways; an empty one folds to a strip */
+.tk-board{display:flex;flex-direction:column;height:100%;min-height:0;min-width:0;color:var(--c-text);font-size:var(--t-13)}
+.tk-board-head{display:flex;align-items:center;flex:none;height:var(--s-10);padding:0 var(--s-6)}
+.tk-since{margin:0;color:var(--c-text-2);font-size:var(--t-13)}
+.tk-pink{color:var(--c-accent)}
+.tk-dim{color:var(--c-text-3)}
+.tk-err{color:var(--c-err)}
+.tk-cols{flex:1;min-height:0;display:flex;gap:var(--s-3);padding:0 var(--s-6) var(--s-4);overflow-x:auto;overflow-y:hidden;scroll-snap-type:x proximity}
+.tk-col{flex:none;display:flex;flex-direction:column;gap:var(--s-2);width:240px;min-height:0;padding:var(--s-2);border-radius:var(--r-2);background:var(--c-sunken);box-sizing:border-box;scroll-snap-align:start}
+.tk-col.empty{width:var(--s-8);padding:var(--s-2) 0;align-items:center}
+.tk-col-head{display:flex;align-items:center;gap:var(--s-2);height:var(--s-6);margin:0;padding:0 var(--s-1);font-size:var(--t-12);font-weight:600;color:var(--c-text-2)}
+.tk-col-strip{display:inline-flex;align-items:center;gap:var(--s-2);writing-mode:vertical-rl;color:var(--c-text-2);font-size:var(--t-12);font-weight:600}
+.tk-col-strip .tk-mark{writing-mode:horizontal-tb}
+.tk-col-cards{display:flex;flex-direction:column;gap:var(--s-2);min-height:0;overflow-y:auto}
+.tk-card{display:flex;flex-direction:column;gap:var(--s-1);margin:0;padding:var(--s-2) var(--s-3);border:1px solid var(--c-line);border-radius:var(--r-2);background:var(--c-surface);color:var(--c-text);font:inherit;text-align:left}
+.tk-card:hover{border-color:var(--c-line-strong)}
+.tk-card:focus-visible{outline:2px solid var(--c-focus);outline-offset:2px}
+.tk-card-name{display:flex;align-items:center;gap:var(--s-2);font-weight:500}
+.tk-card-what{color:var(--c-text-2);font-size:var(--t-12)}
+.tk-card[data-st="needs_you"] .tk-card-what{color:var(--c-accent)}
+.tk-card[data-st="stalled"] .tk-card-what{color:var(--c-err)}
+.tk-card-foot{display:flex;align-items:center;gap:var(--s-2);color:var(--c-text-3);font-size:var(--t-12)}
+.tk-card-acts{display:flex;gap:var(--s-2);margin-top:var(--s-1)}
+/* the Board with nothing on it (BoardEmpty, designer m_65123): the kit's Empty centred in the Board's
+   space, its top at ~40 %, 56ch, its lines on one left edge; the title in ink t-15 500; the steps
+   text-2 t-13, their number text-3 on the title's edge (no hanging indent) */
+.tk-board-none{flex:1;display:grid;grid-template-rows:2fr auto 3fr;justify-items:center;min-height:0;padding:var(--s-6);overflow:auto;box-sizing:border-box}
+.tk-board-none>.b-empty{grid-row:2;width:100%;max-width:56ch;padding:0}
+.tk-board-none .b-empty .say{color:var(--c-text);font-weight:500}
+.tk-board-none .b-empty .more:has(>.tk-step){display:flex;flex-direction:column;gap:var(--s-1);margin-top:var(--s-1);color:var(--c-text-2)}
+.tk-step{display:flex;gap:var(--s-2)}
+
+/* the Task tab, 384 wide */
+.tk-tab{display:flex;flex-direction:column;gap:var(--s-4);height:100%;max-width:384px;overflow:auto;padding:var(--s-4) var(--s-4) 0;color:var(--c-text);font-size:var(--t-13);box-sizing:border-box}
+/* a task's tab: its body scrolls, the footer stays below it (tasks-ux m_64967) */
+.tk-tab:has(> .tk-body){overflow:hidden}
+.tk-body{display:flex;flex-direction:column;gap:var(--s-4);flex:1 1 auto;min-height:0;overflow:auto;padding-bottom:var(--s-4)}
+.tk-tab-head{display:flex;flex-direction:column;gap:var(--s-1)}
+.tk-pill{display:inline-flex;align-self:flex-start;align-items:center;gap:var(--s-2);height:var(--s-5);padding:0 var(--s-2);border-radius:var(--r-1);background:var(--c-hover);color:var(--c-text-2);font-size:var(--t-12)}
+.tk-pill[data-st="needs_you"]{color:var(--c-accent)}
+.tk-pill[data-st="stalled"]{color:var(--c-err)}
+.tk-tab-name{margin:0;font:600 var(--f-lead)}
+.tk-meta{margin:0;color:var(--c-text-3);font-size:var(--t-12)}
+.tk-origin{align-self:flex-start;max-width:100%;padding:0 0 0 var(--s-3);border:0;border-left:2px solid var(--c-line-strong);background:none;color:var(--c-text-2);font:inherit;font-style:italic;text-align:left}
+.tk-origin:hover{color:var(--c-text)}
+.tk-why{margin:0;color:var(--c-text);line-height:1.5}
+.tk-sec{display:flex;flex-direction:column;gap:var(--s-2)}
+.tk-none{margin:0;color:var(--c-text-3)}
+.tk-h{display:flex;align-items:center;gap:var(--s-2);margin:0;color:var(--c-text-3);font-size:var(--t-12);font-weight:600}
+.tk-count{color:var(--c-text-3);font-weight:400;font-variant-numeric:tabular-nums}
+.tk-checks{display:flex;flex-direction:column;gap:var(--s-1);margin:0;padding:0;list-style:none}
+.tk-checks li{display:flex;gap:var(--s-2);line-height:1.5}
+.tk-checks li[data-done]{color:var(--c-text-3)}
+.tk-check{flex:none;width:var(--s-4);color:var(--c-text-3)}
+.tk-checks li[data-done] .tk-check{color:var(--c-text-2)}
+.tk-agents{display:flex;flex-direction:column;gap:var(--s-1);margin:0;padding:0;list-style:none}
+.tk-agents li{display:flex;align-items:center;gap:var(--s-2);height:var(--s-7);padding:0 var(--s-2);border-radius:var(--r-1)}
+.tk-agents li:hover{background:var(--c-hover)}
+.tk-agents li[data-archived]{color:var(--c-text-3)}
+.tk-live{flex:none;width:6px;height:6px;border-radius:50%;border:1px solid var(--c-text-3);box-sizing:border-box}
+.tk-live[data-on]{border:0;background:var(--c-text)}
+.tk-agent{font-weight:500}
+.tk-agent-state{margin-left:auto;color:var(--c-text-3);font-size:var(--t-12)}
+.tk-agent-doing{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--c-text-2)}
+/* 'All n in Library →': a quiet act, text-2, ink and underlined on hover (designer m_64958) */
+.tk-more{align-self:flex-start;padding:0;border:0;background:none;color:var(--c-text-2);font:inherit}
+.tk-more:hover{color:var(--c-text);text-decoration:underline}
+/* the Task tab's Artifacts and Changes rows: a name, then who (an agent) at the end */
+.tk-rows{display:flex;flex-direction:column;gap:var(--s-1);margin:0;padding:0;list-style:none}
+.tk-row{display:flex;align-items:center;gap:var(--s-2);width:100%;height:var(--s-7);padding:0 var(--s-2);border:0;border-radius:var(--r-1);background:none;color:var(--c-text);font:inherit;text-align:left}
+.tk-row:hover{background:var(--c-hover)}
+.tk-row-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tk-q{display:flex;flex-direction:column;gap:var(--s-2);padding:var(--s-2) var(--s-3);border-radius:var(--r-2);background:var(--c-sunken)}
+.tk-q-text{margin:0;line-height:1.5}
+/* its options as the inbox's: the key, then the words; then his own words (tasks-ux m_64959) */
+.tk-q-opts{display:flex;flex-direction:column;gap:var(--s-1);margin:0;padding:0;list-style:none}
+.tk-q-opt{display:flex;align-items:center;gap:var(--s-2);width:100%;min-height:var(--s-7);padding:0 var(--s-2);border:0;border-radius:var(--r-1);background:none;color:var(--c-text);font:inherit;text-align:left}
+.tk-q-opt:hover{background:var(--c-hover)}
+.tk-q-opt-w{min-width:0}
+.tk-q-type{width:100%}
+.tk-paused{display:flex;align-items:center;gap:var(--s-2);margin:0;color:var(--c-text-2)}
+.tk-foot{flex:none;display:flex;align-items:center;gap:var(--s-2);margin-top:auto;padding:var(--s-3) 0;border-top:1px solid var(--c-line);background:var(--c-surface)}
+.tk-gone{margin:0;padding:var(--s-4);color:var(--c-text-3)}
+.tk-rename{width:100%;box-sizing:border-box}

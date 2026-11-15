@@ -880,3 +880,61 @@ impl Store {
         self.keep(ids, &|id: &str| all.iter().find(|m| m.id == id).map(|m| m.title.clone()), who, keep, now)
     }
 }
+
+#[test]
+fn an_agents_save_stamps_its_turns_works_and_his_move_sticks() {
+    let root = tmp("works");
+    let (state, work) = (root.join("state"), root.join("work"));
+    std::fs::create_dir_all(&work).unwrap();
+    let s = Store::new(&state);
+    let save = |text: &str, works: &[&str], now: u64| {
+        std::fs::write(work.join("notes.md"), text).unwrap();
+        let a = Add { target: "notes.md".into(), agent: "docs".into(), by: "docs".into(), cwd: work.to_string_lossy().to_string(), works: works.iter().map(|w| w.to_string()).collect(), ..Default::default() };
+        s.add(&a, now).unwrap().meta
+    };
+    // made under login, revised under pricing: it serves both. Each save a new size: a version is
+    // told by `<bytes>:<mtime ms>`, and two writes in the same ms with one size read as one (a flake
+    // under the gate's load: "one" then "two")
+    assert_eq!(save("one", &["login"], 10).works.works(), ["login"]);
+    let m = save("second", &["pricing"], 20);
+    assert_eq!(m.works.works(), ["login", "pricing"]);
+    // his move: exactly his works, never stamped again
+    assert!(s.move_works(&m.id, vec!["digest".into()]).unwrap());
+    let m = save("third save", &["login"], 30);
+    assert_eq!((m.works.works(), m.works.moved()), (&["digest".to_string()][..], true), "law moved_by_you_sticks");
+    // an unknown or archived artifact: nothing written, never a create
+    assert!(!s.move_works("nope", vec!["login".into()]).unwrap());
+    assert!(s.get("nope").is_none());
+    s.archive(&Pick { ids: vec![m.id.clone()], ..Default::default() }, 40).unwrap();
+    assert!(!s.move_works(&m.id, vec![]).unwrap());
+    assert_eq!(s.get(&m.id).unwrap().works.works(), ["digest"]);
+}
+
+/// architect m_64769: the move's target is typed from the row he acted on,
+/// never looked up by id: an artifact and a page may share one.
+#[test]
+fn a_move_on_a_page_touches_only_the_page_even_with_an_artifact_of_its_id() {
+    let root = tmp("same-id");
+    let (state, work) = (root.join("state"), root.join("work"));
+    std::fs::create_dir_all(&work).unwrap();
+    let s = Store::new(&state);
+    std::fs::write(work.join("weekly.md"), "x").unwrap();
+    let a = Add { target: "weekly.md".into(), agent: "docs".into(), by: "docs".into(), cwd: work.to_string_lossy().to_string(), id: Some("weekly-update".into()), works: vec!["login".into()], ..Default::default() };
+    assert_eq!(s.add(&a, 10).unwrap().meta.id, "weekly-update");
+    page(&state, "weekly-update", "weekly", &[(1, 5)], json!([]));
+    page(&state, "only-page", "only", &[(1, 5)], json!([]));
+    let pages = crate::pages::store::Store::new(&state);
+    // the page's move: the page store only
+    assert!(pages.move_works("weekly-update", vec!["digest".into()]).unwrap());
+    assert_eq!(pages.meta("weekly-update").unwrap().works.works(), ["digest"]);
+    let stored = |id: &str| s.stored().into_iter().find(|m| m.id == id);
+    assert_eq!(stored("weekly-update").unwrap().works.works(), ["login"], "the artifact of its id is untouched");
+    // the artifact's move: the stored one only, never a page, never a create
+    assert!(s.move_works("weekly-update", vec!["pricing".into()]).unwrap());
+    assert_eq!(pages.meta("weekly-update").unwrap().works.works(), ["digest"]);
+    assert!(!s.move_works("only-page", vec!["pricing".into()]).unwrap());
+    assert!(stored("only-page").is_none());
+    // the page's row in the list shows the page's own works (a copy)
+    let row = s.all().into_iter().find(|m| m.id == "only-page" && m.by == "page").unwrap();
+    assert!(row.works.works().is_empty());
+}

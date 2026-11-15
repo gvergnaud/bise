@@ -230,6 +230,8 @@ pub struct Msg {
     pub fwd: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub view: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub works: Vec<String>,
 }
 
 /// Not an object: an error (its reader skips it).
@@ -251,6 +253,7 @@ impl<'de> Deserialize<'de> for Msg {
             has_parts: field(&o, "has_parts"),
             fwd: field(&o, "fwd"),
             view: field(&o, "view"),
+            works: field(&o, "works"),
         })
     }
 }
@@ -295,6 +298,12 @@ pub struct Card {
     pub view: Option<ViewAsk>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub about: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub works: Vec<String>,
+    #[serde(skip_serializing_if = "super::read::is_false")]
+    pub moved: bool,
+    #[serde(skip_serializing_if = "super::read::is_false")]
+    pub from_report: bool,
 }
 
 /// Not an object: an error (its reader skips it).
@@ -312,6 +321,171 @@ impl<'de> Deserialize<'de> for Card {
             pr: field(&o, "pr"),
             view: field(&o, "view"),
             about: field(&o, "about"),
+            works: field(&o, "works"),
+            moved: field(&o, "moved"),
+            from_report: field(&o, "from_report"),
+        })
+    }
+}
+
+/// a work's kind: a task ends, an ongoing work (a changelog, a watch) never
+/// does; any other word reads task
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum WorkKind {
+    #[default]
+    Task,
+    Ongoing,
+}
+
+impl WorkKind {
+    /// Its word.
+    pub fn word(self) -> &'static str {
+        match self {
+            WorkKind::Task => "task",
+            WorkKind::Ongoing => "ongoing",
+        }
+    }
+
+    /// A word as sb-core reads it: any other reads `task`.
+    pub fn of_word(w: &str) -> WorkKind {
+        match w {
+            "ongoing" => WorkKind::Ongoing,
+            _ => WorkKind::Task,
+        }
+    }
+}
+
+impl Serialize for WorkKind {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(self.word())
+    }
+}
+
+/// Not a string: an error (its field then reads its default).
+impl<'de> Deserialize<'de> for WorkKind {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        Ok(WorkKind::of_word(&String::deserialize(d)?))
+    }
+}
+
+/// a work's done-when item: its words, ticked, by whom (an agent's report,
+/// or `user`)
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct Goal {
+    pub text: String,
+    pub done: bool,
+    pub by: String,
+}
+
+/// Not an object: an error (its reader skips it).
+impl<'de> Deserialize<'de> for Goal {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let o = Obj::deserialize(d)?;
+        Ok(Goal {
+            text: field(&o, "text"),
+            done: field(&o, "done"),
+            by: field(&o, "by"),
+        })
+    }
+}
+
+/// when a work was marked done, and by whom (`user`, or main on his word)
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct Fin {
+    pub at: u64,
+    pub by: String,
+}
+
+/// Not an object: an error (its reader skips it).
+impl<'de> Deserialize<'de> for Fin {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let o = Obj::deserialize(d)?;
+        Ok(Fin {
+            at: field(&o, "at"),
+            by: field(&o, "by"),
+        })
+    }
+}
+
+/// a task (page tasks-center): what he asked for, whatever the number of
+/// agents on it. `id` a slug, stable on a rename; `origin` his message that
+/// started it; `agents` every agent a turn of it served (kept after an
+/// archive); `last` the newest fact of it (a delivery tagged with it, a
+/// report of one of its agents in its turn): Stalled reads it, no agent
+/// carries a last-activity time of its own; `until_timer` the timer of a
+/// pause until a time
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct Work {
+    pub id: String,
+    pub name: String,
+    pub why: String,
+    pub goals: Vec<Goal>,
+    pub kind: WorkKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub origin: Option<u64>,
+    pub by: String,
+    pub created_ms: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub paused: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub until: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub until_timer: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub done: Option<Fin>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub merged_into: Option<String>,
+    #[serde(skip_serializing_if = "super::read::is_false")]
+    pub named_by_you: bool,
+    pub agents: Vec<String>,
+    pub last: u64,
+}
+
+/// Not an object: an error (its reader skips it).
+impl<'de> Deserialize<'de> for Work {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let o = Obj::deserialize(d)?;
+        Ok(Work {
+            id: field(&o, "id"),
+            name: field(&o, "name"),
+            why: field(&o, "why"),
+            goals: field(&o, "goals"),
+            kind: field(&o, "kind"),
+            origin: field(&o, "origin"),
+            by: field(&o, "by"),
+            created_ms: field(&o, "created_ms"),
+            paused: field(&o, "paused"),
+            until: field(&o, "until"),
+            until_timer: field(&o, "until_timer"),
+            done: field(&o, "done"),
+            merged_into: field(&o, "merged_into"),
+            named_by_you: field(&o, "named_by_you"),
+            agents: field(&o, "agents"),
+            last: field(&o, "last"),
+        })
+    }
+}
+
+/// a work done more than 7 days ago, folded (architect m_64425): its id
+/// stays taken and its links resolve; the journal keeps the rest
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct Tomb {
+    pub id: String,
+    pub name: String,
+    pub done: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub merged_into: Option<String>,
+}
+
+/// Not an object: an error (its reader skips it).
+impl<'de> Deserialize<'de> for Tomb {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let o = Obj::deserialize(d)?;
+        Ok(Tomb {
+            id: field(&o, "id"),
+            name: field(&o, "name"),
+            done: field(&o, "done"),
+            merged_into: field(&o, "merged_into"),
         })
     }
 }

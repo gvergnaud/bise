@@ -18,6 +18,8 @@
 //! ```toml
 //! [land]
 //! check = "tests/gate.sh land"   # run with <base> <head> before main moves
+//! after = "scripts/tip_check.py" # started after a land that moved main
+//! task_trailers = true           # a land's commit names its tasks (`Bise-Task:`)
 //! ```
 
 use crate::paths::Paths;
@@ -118,6 +120,15 @@ pub fn land_check(text: &str) -> Option<String> {
 /// check. None: no such key, or empty.
 pub fn land_after(text: &str) -> Option<String> {
     land_key(text, "after")
+}
+
+/// `[land] task_trailers` of the tracked config's `text`: a land's
+/// commit names the tasks its turn serves (`Bise-Task: <id>`,
+/// [`crate::land_trailer`]). Default true; `false` turns it off for the
+/// repo (Gabriel m_65054: never forced, never forbidden). Read from main's
+/// tip, like the check.
+pub fn land_task_trailers(text: &str) -> bool {
+    land_key(text, "task_trailers").is_none_or(|v| v.trim() != "false")
 }
 
 /// The guided review's config of the tracked config (`[review]`): how a
@@ -301,6 +312,11 @@ mod tests {
         assert_eq!(land_after(t).as_deref(), Some("scripts/tip_check.py"));
         assert_eq!(land_check(t), None);
         assert_eq!(land_after("[land]\u{a}check = \"x\"\u{a}"), None);
+        // [land] task_trailers: on unless the repo says false (Gabriel m_65054)
+        assert!(land_task_trailers(""));
+        assert!(land_task_trailers("[land]\u{a}task_trailers = true\u{a}"));
+        assert!(!land_task_trailers("[land]\u{a}task_trailers = false\u{a}"));
+        assert!(land_task_trailers("[other]\u{a}task_trailers = false\u{a}"), "another section's key is not [land]'s");
         assert_eq!(land_after("[land]\u{a}after = \" \"\u{a}"), None);
     }
 

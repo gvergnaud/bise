@@ -10,7 +10,9 @@ import { views } from '@/proto/words_views.gen';
 import { aheadOf as aheadOfAgent } from '@/review/model';
 import { useAllArtifacts } from '@/artifacts';
 import { useAllProcesses } from '@/running';
-import { useProjects, useStore } from '@/store';
+import { useProjects, useStore, type Works } from '@/store';
+import { tasks } from '@/proto/words_tasks.gen';
+import { cutAtWord, StatusMark, useAllWorks } from '@/tasks';
 import type { Tab } from './model';
 import { shownUrl } from './omni';
 import { panelAt } from './state';
@@ -31,11 +33,14 @@ export function useTabLooks(): (tab: Tab) => TabLook {
   const store = useStore();
   const branchOf = (project: string, agent: string) => store.agents(project).find((a) => a.name === agent)?.branch ?? null;
   const ahead = (project: string, agent: string) => aheadOfAgent(agent, store.agents(project), store.places(project));
-  return (tab) => lookOf(tab, projects, arts, procs, branchOf, ahead);
+  // a task's tab names it and wears its mark: the looks follow the tasks (every project's)
+  useAllWorks();
+  const works = (project: string) => store.works(project);
+  return (tab) => lookOf(tab, projects, arts, procs, branchOf, ahead, works);
 }
 
 function lookOf(tab: Tab, projects: ReturnType<typeof useProjects>, arts: ReturnType<typeof useAllArtifacts>, procs: ReturnType<typeof useAllProcesses>, branchOf: (project: string, agent: string) => string | null,
-  aheadOf: (project: string, agent: string) => ReturnType<typeof aheadOfAgent>): TabLook {
+  aheadOf: (project: string, agent: string) => ReturnType<typeof aheadOfAgent>, works: (project: string) => Works): TabLook {
   const what = tab.what;
   const project = what.kind === 'terminal' ? what.project : what.kind === 'thing' && 'project' in what.e ? what.e.project : undefined;
   const name = projects.find((p) => p.project === project)?.name ?? project ?? '';
@@ -107,6 +112,13 @@ function lookOf(tab: Tab, projects: ReturnType<typeof useProjects>, arts: Return
       return { title: name, icon: <AppIcon name="folder" size={14} /> };
     case 'office':
       return { title: panel.tab_office({ project: name }), icon: <AppIcon name="folder" size={14} /> };
+    case 'tasks':
+      return { title: tasks.board_title, icon: <AppIcon name="list" size={14} /> };
+    case 'task': {
+      // the task's name cut at a word, its status mark for an icon; a gone one keeps its id
+      const w = works(e.project).works.find((x) => x.id === e.id);
+      return w === undefined ? { title: e.id, icon: <AppIcon name="list" size={14} /> } : { title: cutAtWord(w.name, 18), icon: <StatusMark status={w.status} /> };
+    }
     case 'tab':
       return { title: e.id, icon: null };
   }

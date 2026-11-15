@@ -103,7 +103,7 @@ impl Shell {
                 let text = text.replacen("on the drafts notification", "on the plan's notification", 1);
                 let parts = serde_json::to_string(&[part]).unwrap_or_default();
                 log_line(&self.opts.paths, &format!("page {id}: words on plan card #{card} → {to}: {words:?}"));
-                self.step(Input::ClientInput { client: 0, focus: to.clone(), text, queued: false, parts, from: String::new() });
+                self.step(Input::ClientInput { client: 0, focus: to.clone(), text, queued: false, parts, from: String::new(), works: Vec::new() });
                 self.notice_out(client, Some("answer"), &format!("sent to {to}: \"{words}\". it publishes the next version of the plan."));
                 return true;
             }
@@ -144,7 +144,7 @@ impl Shell {
         let text = plan.start_message(&meta.title, id, meta.version(), &pages.url(id), alt, &at);
         let text = Self::page_hint(&to, text);
         log_line(&self.opts.paths, &format!("page {id}: plan started → {to}"));
-        self.step(Input::ClientInput { client: 0, focus: to, text, queued: false, parts: String::new(), from: String::new() });
+        self.step(Input::ClientInput { client: 0, focus: to, text, queued: false, parts: String::new(), from: String::new(), works: Vec::new() });
         pages.push(id, "notes", &json!({"notes": pages.store.notes(id)}));
         self.page_plan(id);
     }

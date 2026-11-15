@@ -192,7 +192,7 @@ fn agent(
         text,
         at_ms: report_ms.unwrap_or(0),
     });
-    let waits = snap.cards.iter().filter(|c| c.agent.trim() == name && his(c.kind.trim(), user_kind)).count() as u32;
+    let waits = snap.cards.iter().filter(|c| c.agent.trim() == name && his(c.kind.trim(), c.from_report, user_kind)).count() as u32;
     let branch = a.branch.as_deref().and_then(some);
     let model = a.model.as_ref().and_then(|m| some(&m.name));
     Agent {
@@ -352,9 +352,10 @@ pub fn jobs(snap: &Snapshot) -> Vec<Followed> {
 }
 
 /// His cards: the user's kinds, a `drop` too (drop-card, architect
-/// m_35666: he answers it with its 1/2 options, so the banner posts it).
-fn his(kind: &str, user_kind: fn(&str) -> bool) -> bool {
-    user_kind(kind)
+/// m_35666: he answers it with its 1/2 options, so the banner posts it),
+/// and an agent's blocked report (model::user_card, architect m_65127).
+fn his(kind: &str, from_report: bool, user_kind: fn(&str) -> bool) -> bool {
+    user_kind(kind) || from_report
 }
 
 /// The snapshot's open cards as rows, in its order: his (`HubEv::Cards`'
@@ -384,7 +385,8 @@ pub fn cards(snap: &Snapshot, project: &str, now: u64, user_kind: fn(&str) -> bo
                     o.mine = p.mine == Some(i);
                 }
             }
-            Card {
+            let his = his(&kind, c.from_report, user_kind);
+            let card = Card {
                 id: c.id,
                 project: project.to_string(),
                 urgent: kind == "confirm",
@@ -414,9 +416,13 @@ pub fn cards(snap: &Snapshot, project: &str, now: u64, user_kind: fn(&str) -> bo
             }
             // card-state (architect m_23450): each option says what a client does itself;
             // an option its asker set to open an artifact (notif-open) says that
-            .with_acts(&c.opens)
+            .with_acts(&c.opens);
+            (his, card)
         })
-        .partition(|c| his(&c.kind, user_kind))
+        .fold((Vec::new(), Vec::new()), |(mut his, mut others), (mine, card)| {
+            if mine { his.push(card) } else { others.push(card) }
+            (his, others)
+        })
 }
 
 /// The art store's `artifacts` event (daemon/art.rs `artifacts_ev`:
@@ -513,6 +519,8 @@ pub fn artifacts(ev: &Value, page_url: impl Fn(&str) -> Option<String>, frame_ba
                 live: r.get("live").and_then(|l| serde_json::from_value(l.clone()).ok()),
                 folder: Some(s(r, "folder")).filter(|f| !f.is_empty()),
                 turn: r.get("turn").and_then(Value::as_u64),
+                // its ArtWorks, flattened into its Meta (a page's into its page_meta)
+                works: r.get("works").and_then(Value::as_array).map_or_else(Vec::new, |w| w.iter().filter_map(|x| x.as_str().map(String::from)).collect()),
                 // the store's marks and the hub's section (artifacts_marks, join_sections)
                 audience: r.get("audience").and_then(|x| serde_json::from_value(x.clone()).ok()),
                 kept: r.get("kept").and_then(|x| serde_json::from_value(x.clone()).ok()),

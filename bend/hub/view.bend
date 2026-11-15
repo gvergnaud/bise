@@ -20,6 +20,9 @@ import ./timers.bend as TM
 import ./wakes.bend as WK
 import ./lazy.bend as LZ
 import ./agents.bend as AG
+import ./work.bend as WO
+import ./wstatus.bend as WS
+import ./keyed.bend as KY
 
 def jdecl(d: Maybe<&2, S.Decl>, +note: String) -> J.Json:
   match d:
@@ -46,12 +49,20 @@ def waits_on(+ws: List<&2, X.Waiter>, +s: S.St, +n: String) -> Maybe<&2, String>
       LZ.pick(Maybe<&2, String>, String.eq(X.Waiter.agent(w), n),
         u => waits_to(M.msg_of(s, X.Waiter.msg(w))), u => waits_on(t, s, n))
 
+# tasks: an agent's turn works on its row, omitted when it serves none
+def turn_works_row(xs: List<&2, String>) -> Maybe<&2, List<&2, String>>:
+  match xs:
+    case Nil{}:
+      None{}
+    case Con{+h, +t}:
+      Some{Con{h, t}}
+
 def agent_json(+a: S.Agent, +x: X.Rt, +wo: Maybe<&2, String>) -> J.Json:
   V.agent(S.Agent.name(a), S.Agent.dir(a), S.Agent.is_main(a), S.Agent.parent(a),
     S.Agent.brief(a), S.Agent.created(a), S.Agent.ws(a), SC.Life.word(S.Agent.life(a)),
     S.Agent.failure(a), jdecl(S.Agent.declared(a), S.Agent.note(a)), S.Agent.report(a),
     S.Agent.aliases(a), S.Agent.files(a), S.Agent.snap(a), M.follows(a),
-    H.run_str(X.Rt.run(x)), X.Rt.waiting(x), wo, X.Rt.turn(x), X.Rt.turns(x))
+    H.run_str(X.Rt.run(x)), X.Rt.waiting(x), wo, X.Rt.turn(x), X.Rt.turns(x), turn_works_row(S.Agent.turn_works(a)))
 
 def is_archived(l: S.Life) -> Bool:
   match l:
@@ -317,6 +328,10 @@ def ev_names(e: M.Ev) -> List<&2, String>:
       [name]
     case M.EJobEnd{+name, _}:
       [name]
+    # tasks: a turn's works change its row's turn_works (a birth mid-turn:
+    # the shell stamps the artifacts, pages and lands that follow from it)
+    case M.EWorkTurn{+t}:
+      [S.WTurn.agent(t)]
     case _:
       Nil{}
 
@@ -626,18 +641,184 @@ def view_agents(all: Bool, +s: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waite
     case False{}:
       List.append(&2, J.Json, agents_json(S.St.agents(s), rts, ws, s, False{}, names), arch_json(any_arch(names, s), names, s, rts, ws))
 
-def view.go(+s: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>, +all: Bool, +ids: List<&2, Nat>, +names: List<&2, String>, +durable: Bool, +ordered: Bool, +timers: Bool, +ended: Bool, +wakes: Bool) -> J.Json:
+# ---- the works (tasks): rows of the works a step touched ----
+# Status is computed here, per touched work (architect m_64423: never
+# over every work on every push). A work is touched when an event of the
+# step names it, when one of its agents changed (V.changed's names: a
+# run, a wait, a life, a report), when his cards or page waits changed
+# (each work's Needs-you count can move), or when its quiet time crossed
+# STALL_MS between the step's two clocks (Waiting turns Stalled).
+
+# the works an event names
+def ev_works(e: M.Ev) -> List<&2, String>:
+  match e:
+    case M.EWorkCreated{+w}:
+      [S.Work.id(w)]
+    case M.EWorkChanged{+id, _, _, _}:
+      [id]
+    case M.EWorkTurn{+t}:
+      S.WTurn.works(t)
+    case _:
+      Nil{}
+
+def evs_works(evs: List<&2, M.Ev>) -> List<&2, String>:
+  match evs:
+    case Nil{}:
+      Nil{}
+    case Con{+e, +t}:
+      WO.union(ev_works(e), evs_works(t))
+
+# the works folded in the step (out of the view, a tomb instead)
+def ev_folded(e: M.Ev) -> List<&2, String>:
+  match e:
+    case M.EWorkFolded{+id, _}:
+      [id]
+    case _:
+      Nil{}
+
+def evs_folded(evs: List<&2, M.Ev>) -> List<&2, String>:
+  match evs:
+    case Nil{}:
+      Nil{}
+    case Con{+e, +t}:
+      List.append(&2, String, ev_folded(e), evs_folded(t))
+
+# the works of card `id` among `cs` (none: no such card)
+def works_of_card(cs: List<&2, S.Card>, +id: Nat) -> List<&2, String>:
+  match cs:
+    case Nil{}:
+      Nil{}
+    case Con{+c, +t}:
+      LZ.pick(List<&2, String>, Nat.is_eq(S.Card.id(c), id), u => S.Card.works(c), u => works_of_card(t, id))
+
+# the works whose Needs-you count a card event moves: only that card's
+# (architect m_64541), read in the cards before the step (`cs0`) for a
+# card it closed, before and after for a move
+def card_works(e: M.Ev, +cs0: List<&2, S.Card>) -> List<&2, String>:
+  match e:
+    case M.ECardOpened{+c}:
+      S.Card.works(c)
+    case M.ECardClosed{+id, _, _}:
+      works_of_card(cs0, id)
+    case M.ECardWithdrawn{+id, _}:
+      works_of_card(cs0, id)
+    case M.ECardMoved{+m}:
+      WO.union(works_of_card(cs0, S.CardMove.card(m)), S.CardMove.works(m))
+    case _:
+      Nil{}
+
+def evs_card_works(evs: List<&2, M.Ev>, +cs0: List<&2, S.Card>) -> List<&2, String>:
+  match evs:
+    case Nil{}:
+      Nil{}
+    case Con{+e, +t}:
+      WO.union(card_works(e, cs0), evs_card_works(t, cs0))
+
+# one of `xs` is in `ys`
+def meets(xs: List<&2, String>, +ys: List<&2, String>) -> Bool:
+  match xs:
+    case Nil{}:
+      False{}
+    case Con{+h, +t}:
+      LZ.or(WO.has(ys, h), u => meets(t, ys))
+
+# his page waits on work `id` changed in the step (`pw0` before): only
+# those works' rows (architect m_64541)
+def pw_moved(+pw0: List<&2, X.Kn>, +pw: List<&2, X.Kn>, +id: String) -> Bool:
+  Bool.not(Nat.is_eq(KY.kn_get(pw0, id), KY.kn_get(pw, id)))
+
+# work `w`'s quiet time reached STALL_MS between `now0` (before the
+# step) and `now`
+def stall_crossed(+w: S.Work, +now0: Nat, +now: Nat) -> Bool:
+  +t = Nat.add(S.Work.last(w), WS.STALL_MS())
+  Nat.is_gt(t, now0) && Nat.is_ge(now, t)
+
+# work `w` is touched by the step: `every` (view_all), named by its
+# events or its cards' (`ids`), one of its agents changed, its page
+# waits moved, or its quiet time crossed 2 h
+def work_touched(+w: S.Work, +every: Bool, +ids: List<&2, String>, +names: List<&2, String>, +pw0: List<&2, X.Kn>, +pw: List<&2, X.Kn>, +now0: Nat, +now: Nat) -> Bool:
+  LZ.or(every, u => LZ.or(WO.has(ids, S.Work.id(w)), u => LZ.or(meets(S.Work.agents(w), names), u => LZ.or(pw_moved(pw0, pw, S.Work.id(w)), u => stall_crossed(w, now0, now)))))
+
+def work_rows(xs: List<&2, S.Work>, +s: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>, +pw0: List<&2, X.Kn>, +pw: List<&2, X.Kn>, +now: Nat, +every: Bool, +ids: List<&2, String>, +names: List<&2, String>, +now0: Nat) -> List<&2, J.Json>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case Con{+w, +t}:
+      LZ.pick(List<&2, J.Json>, work_touched(w, every, ids, names, pw0, pw, now0, now),
+        u => WS.row(w, s, rts, ws, pw, now) <> work_rows(t, s, rts, ws, pw0, pw, now, every, ids, names, now0),
+        u => work_rows(t, s, rts, ws, pw0, pw, now, every, ids, names, now0))
+
+def tombs_json(ts: List<&2, S.Tomb>) -> List<&2, J.Json>:
+  match ts:
+    case Nil{}:
+      Nil{}
+    case Con{+x, +t}:
+      SC.Tomb.journal_json(x) <> tombs_json(t)
+
+# the tombs of the works in `ids`
+def tombs_of(ts: List<&2, S.Tomb>, +ids: List<&2, String>) -> List<&2, S.Tomb>:
+  match ts:
+    case Nil{}:
+      Nil{}
+    case Con{+x, +t}:
+      LZ.pick(List<&2, S.Tomb>, WO.has(ids, S.Tomb.id(x)), u => x <> tombs_of(t, ids), u => tombs_of(t, ids))
+
+def some_rows(xs: List<&2, J.Json>) -> Maybe<&2, List<&2, J.Json>>:
+  match xs:
+    case Nil{}:
+      None{}
+    case Con{+h, +t}:
+      Some{h <> t}
+
+def some_names(xs: List<&2, String>) -> Maybe<&2, List<&2, String>>:
+  match xs:
+    case Nil{}:
+      None{}
+    case Con{+h, +t}:
+      Some{h <> t}
+
+# the works part of a view, three keys: the touched works' rows, the
+# folded ids, their tombs (every work and tomb in view_all's head)
+
+# the rows of the works a step touched (`pw0`, `now0`: the page waits
+# and the clock before it); `all`: every work
+def works_rows(all: Bool, +s: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>, +pw0: List<&2, X.Kn>, +pw: List<&2, X.Kn>, +now0: Nat, +now: Nat, +names: List<&2, String>, +evs: List<&2, M.Ev>, +cs0: List<&2, S.Card>) -> Maybe<&2, List<&2, J.Json>>:
+  match all:
+    case True{}:
+      Some{work_rows(S.St.works(s), s, rts, ws, pw, pw, now, True{}, Nil{}, Nil{}, now)}
+    case False{}:
+      some_rows(work_rows(S.St.works(s), s, rts, ws, pw0, pw, now, False{}, WO.union(evs_works(evs), evs_card_works(evs, cs0)), names, now0))
+
+def works_gone(all: Bool, +evs: List<&2, M.Ev>) -> Maybe<&2, List<&2, String>>:
+  match all:
+    case True{}:
+      None{}
+    case False{}:
+      some_names(evs_folded(evs))
+
+def works_tombs(all: Bool, +s: S.St, +evs: List<&2, M.Ev>) -> Maybe<&2, List<&2, J.Json>>:
+  match all:
+    case True{}:
+      Some{tombs_json(S.St.tombs(s))}
+    case False{}:
+      some_rows(tombs_json(tombs_of(S.St.tombs(s), evs_folded(evs))))
+
+def view.go(+s: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>, +all: Bool, +ids: List<&2, Nat>, +names: List<&2, String>, +durable: Bool, +ordered: Bool, +timers: Bool, +ended: Bool, +wakes: Bool, +rows: Maybe<&2, List<&2, J.Json>>, +evs: List<&2, M.Ev>) -> J.Json:
   +xs = view_recs(s, all, ids)
   V.view(view_agents(all, s, rts, ws, names), all,
     msgs_json(all || Bool.not(List.is_empty(&2, Nat, ids)), xs, all, ids, S.St.next_msg(s)), all,
     colds_when(all, xs, S.St.next_msg(s)),
     S.St.next_msg(s), S.St.next_card(s), S.St.paused(s),
     order_when(ordered, s), cards_when(durable, s), notes_when(durable, s),
-    timers_live(timers, s), timers_ended(ended, s), wakes_live(wakes, s), wakes_ended(wakes, s))
+    timers_live(timers, s), timers_ended(ended, s), wakes_live(wakes, s), wakes_ended(wakes, s),
+    rows, works_gone(all, evs), works_tombs(all, s, evs))
 
-def view(+s: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>, +all: Bool, +ids: List<&2, Nat>, +names: List<&2, String>, +evs: List<&2, M.Ev>) -> J.Json:
+# the view of a step (`pw0`, `now0`: the page waits and the clock before
+# it, for the works it touched)
+def view(+s: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>, +all: Bool, +ids: List<&2, Nat>, +names: List<&2, String>, +evs: List<&2, M.Ev>, +pw0: List<&2, X.Kn>, +pw: List<&2, X.Kn>, +now0: Nat, +now: Nat, +cs0: List<&2, S.Card>) -> J.Json:
   view.go(s, rts, ws, all, ids, names, all || Bool.not(List.is_empty(&2, M.Ev, evs)), all || order_evs(evs),
-    all || timer_evs(False{}, evs), all || timer_evs(True{}, evs), all || wake_evs(evs))
+    all || timer_evs(False{}, evs), all || timer_evs(True{}, evs), all || wake_evs(evs),
+    works_rows(all, s, rts, ws, pw0, pw, now0, now, names, evs, cs0), evs)
 
 # ---- view_all in lines (c6 (c), architect m_56956) ----
 # One line holding the whole view set sb-core's steady RSS: Bend's heap
@@ -686,18 +867,20 @@ def cold_rows(xs: List<&2, S.MRec>) -> List<&2, J.Json>:
       cold_json(r) <> cold_rows(t)
 
 # view_all's head line (`xs`: every message in send order, M.every);
-# the lines after it send St.arch, then colds_of(xs)
-def all_head(+s: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>, +xs: List<&2, S.MRec>) -> J.Json:
+# the lines after it send St.arch, then colds_of(xs). Every work and
+# tomb is in the head (a few hundred bytes each)
+def all_head(+s: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>, +xs: List<&2, S.MRec>, +pw: List<&2, X.Kn>, +now: Nat) -> J.Json:
   V.view(agents_json(S.St.agents(s), rts, ws, s, True{}, Nil{}), True{},
     recs_json(xs, True{}, Nil{}, S.St.next_msg(s)), True{}, Some{Nil{}},
     S.St.next_msg(s), S.St.next_card(s), S.St.paused(s),
     order_when(True{}, s), cards_when(True{}, s), notes_when(True{}, s),
-    timers_live(True{}, s), timers_ended(True{}, s), wakes_live(True{}, s), wakes_ended(True{}, s))
+    timers_live(True{}, s), timers_ended(True{}, s), wakes_live(True{}, s), wakes_ended(True{}, s),
+    works_rows(True{}, s, rts, ws, pw, pw, now, now, Nil{}, Nil{}, Nil{}), None{}, works_tombs(True{}, s, Nil{}))
 
 # a next line: a partial view of these agents and cold rows
 def all_part(+s: S.St, +agents: List<&2, J.Json>, +cold: Maybe<&2, List<&2, J.Json>>) -> J.Json:
   V.view(agents, False{}, Nil{}, False{}, cold, S.St.next_msg(s), S.St.next_card(s), S.St.paused(s),
-    None{}, None{}, None{}, None{}, None{}, None{}, None{})
+    None{}, None{}, None{}, None{}, None{}, None{}, None{}, None{}, None{}, None{})
 
 # view_all's next line when these archived agents and cold messages are
 # left to send: the first ARCH_PART() agents, else the first

@@ -90,6 +90,9 @@ pub enum Wire {
     OptJsonOmit,
     /// a list of strings
     Strs,
+    /// a list of strings, absent when empty (a new list on an old line:
+    /// its lines stay byte-identical while it is empty)
+    StrsOmit,
     /// a list of numbers
     Nats,
     /// an enum of words, as its word (`Life`: "active")
@@ -313,12 +316,13 @@ pub const STATE: State = State {
         },
         Enum {
             name: "What",
-            doc: "what an act does: send a held route (its id), try a cross-hub delivery again (its xid), or close a view's approval card he left unanswered (its card id; docs/mcp-apps.md, C5)",
+            doc: "what an act does: send a held route (its id), try a cross-hub delivery again (its xid), close a view's approval card he left unanswered (its card id; docs/mcp-apps.md, C5), or end the pause of a work paused until a time (its id; docs/tasks.md)",
             tag_key: "kind",
             variants: &[
                 vf("RouteSend", "route_send", &[f("rid", Nat)]),
                 vf("Retry", "retry", &[f("xid", Nat)]),
                 vf("CardDue", "card_due", &[f("card", Nat)]),
+                vf("WorkResume", "work_resume", &[f("work", Str)]),
             ],
             fallback: "RouteSend",
         },
@@ -342,6 +346,40 @@ pub const STATE: State = State {
             tag_key: "",
             variants: &[v("RHeld", "held"), v("RSent", "sent"), v("RCancelled", "cancelled")],
             fallback: "RHeld",
+        },
+        // tasks (page tasks-center, architect m_64423): a "task" in the
+        // UI and the sb verbs is a Work in the code (a "task" here is an
+        // agent: task_created, create_task)
+        Enum {
+            name: "WKind",
+            doc: "a work's kind: a task ends, an ongoing work (a changelog, a watch) never does; any other word reads task",
+            tag_key: "",
+            variants: &[v("WTask", "task"), v("WOngoing", "ongoing")],
+            fallback: "WTask",
+        },
+        Enum {
+            name: "WOp",
+            doc: "one change of a work (`work_changed`, hub/work.bend), its word under `op`; any other word reads WNoop (a newer core's change: skipped)",
+            tag_key: "op",
+            variants: &[
+                vf("WRename", "rename", &[f("name", Str)]),
+                vf("WWhy", "why", &[f("why", Str)]),
+                vf("WGoal", "goal", &[f("text", Str)]),
+                vf("WTick", "tick", &[f("n", Nat)]),
+                vf("WUntick", "untick", &[f("n", Nat)]),
+                v("WMakeOngoing", "ongoing"),
+                // `until` 0: no end set (a variant's field is a word or a number)
+                vf("WPause", "pause", &[f("until", Nat)]),
+                v("WResume", "resume"),
+                v("WDone", "done"),
+                v("WReopen", "reopen"),
+                vf("WMerge", "merge", &[f("into", Str)]),
+                vf("WAddAgent", "add_agent", &[f("agent", Str)]),
+                // the timer of a pause until a time (0: none any more)
+                vf("WUntilTimer", "until_timer", &[f("timer", Nat)]),
+                v("WNoop", "noop"),
+            ],
+            fallback: "WNoop",
         },
     ],
     records: &[
@@ -370,6 +408,9 @@ pub const STATE: State = State {
                 // mcp-apps: the plugin whose view wrote it (`from` is
                 // the fixed sender `view`); none for any other message
                 f("view", OptStr),
+                // tasks: the works it carries (its sender's turn's, or
+                // `--task`); empty for a notice
+                f("works", Strs),
             ],
             // no journal line carries a Msg (message_sent carries a
             // Sent): this is the shape the view and the photo write
@@ -391,6 +432,7 @@ pub const STATE: State = State {
                     k("has_parts", W::Bool),
                     k("fwd", W::OptNatOmit),
                     k("view", W::OptStrOmit),
+                    k("works", W::StrsOmit),
                 ],
             }],
         },
@@ -414,6 +456,7 @@ pub const STATE: State = State {
                 f("parts", Str),
                 f("fwd", OptNat),
                 f("view", OptStr),
+                f("works", Strs),
             ],
             shapes: &[Shape {
                 name: "journal",
@@ -434,6 +477,7 @@ pub const STATE: State = State {
                     k("parts", W::StrOmit),
                     k("fwd", W::OptNatOmit),
                     k("view", W::OptStrOmit),
+                    k("works", W::StrsOmit),
                 ],
             }],
         },
@@ -476,6 +520,14 @@ pub const STATE: State = State {
                 f("pr", OptNat),
                 f("view", OptT("ViewAsk")),
                 f("about", OptJson),
+                // tasks: the works of the turn that opened it; `moved`
+                // his Move to task… (law moved_by_you_sticks)
+                f("works", Strs),
+                f("moved", Bool),
+                // tasks: opened by its agent's `sb report blocked` (the
+                // typed fact the moved-on close and the one-card check
+                // read, never its kind; architect m_64931)
+                f("from_report", Bool),
             ],
             shapes: &[Shape {
                 name: "journal",
@@ -491,6 +543,9 @@ pub const STATE: State = State {
                     k("pr", W::OptNat),
                     k("view", W::OptObjOmit),
                     k("about", W::OptJsonOmit),
+                    k("works", W::StrsOmit),
+                    k("moved", W::Flag),
+                    k("from_report", W::Flag),
                 ],
             }],
         },
@@ -533,6 +588,8 @@ pub const STATE: State = State {
                 f("report", Json),
                 f("snap", OptStr),
                 f("follow", OptStr),
+                // tasks: the works of its current turn (work_turn)
+                f("turn_works", Strs),
             ],
             shapes: &[photo(&[
                 k("name", W::Str),
@@ -551,6 +608,7 @@ pub const STATE: State = State {
                 k("report", W::Json),
                 k("snap", W::OptStr),
                 k("follow", W::OptStr),
+                k("turn_works", W::StrsOmit),
             ])],
         },
         Record {
@@ -577,6 +635,8 @@ pub const STATE: State = State {
                 f("runs", Nats),
                 f("name", Str),
                 f("held", Bool),
+                // tasks: the works of the turn that set it
+                f("works", Strs),
             ],
             shapes: &[
                 // every_set, in the shape every.rs wrote it (old hubs
@@ -596,6 +656,7 @@ pub const STATE: State = State {
                         k("page", W::OptStrOmit),
                         k("name", W::StrOmit),
                         k("held", W::Flag),
+                        k("works", W::StrsOmit),
                     ],
                 },
                 Shape {
@@ -615,6 +676,7 @@ pub const STATE: State = State {
                         k("times", W::OptNatOmit),
                         k("page", W::OptStrOmit),
                         k("name", W::StrOmit),
+                        k("works", W::StrsOmit),
                     ],
                 },
                 // exact: its schedule as its tagged object, never normalised
@@ -633,6 +695,7 @@ pub const STATE: State = State {
                     k("runs", W::Nats),
                     k("name", W::Str),
                     k("held", W::Bool),
+                    k("works", W::StrsOmit),
                 ]),
             ],
         },
@@ -671,6 +734,9 @@ pub const STATE: State = State {
                 f("max_at", Nat),
                 f("quiet", Bool),
                 f("resumes", Bool),
+                // tasks: its setter's turn's works when it was set (its
+                // wakes carry them; architect m_64926); none in an old line
+                f("works", Strs),
             ],
             shapes: &[Shape {
                 name: "journal",
@@ -686,6 +752,7 @@ pub const STATE: State = State {
                     // an old line has none: its spec says (a pid's
                     // watch resumes, wakes.bend resumes_of)
                     Key { field: "resumes", key: "resumes", wire: W::Bool, read: Some(&WATCH_RESUMES) },
+                    k("works", W::StrsOmit),
                 ],
             }, photo(&[
                 k("id", W::Nat),
@@ -697,6 +764,7 @@ pub const STATE: State = State {
                 k("quiet", W::Bool),
                 // read plainly: a photo always has it
                 k("resumes", W::Bool),
+                k("works", W::StrsOmit),
             ])],
         },
         Record {
@@ -831,6 +899,90 @@ pub const STATE: State = State {
             ])],
         },
         Record {
+            name: "Goal",
+            doc: "a work's done-when item: its words, ticked, by whom (an agent's report, or `user`)",
+            fields: &[f("text", Str), f("done", Bool), f("by", Str)],
+            shapes: &[Shape { name: "journal", read: true, keys: &[k("text", W::Str), k("done", W::Bool), k("by", W::Str)] }],
+        },
+        Record {
+            name: "Fin",
+            doc: "when a work was marked done, and by whom (`user`, or main on his word)",
+            fields: &[f("at", Nat), f("by", Str)],
+            shapes: &[Shape { name: "journal", read: true, keys: &[k("at", W::Nat), k("by", W::Str)] }],
+        },
+        Record {
+            name: "Work",
+            doc: "a task (page tasks-center): what he asked for, whatever the number of agents on it. `id` a slug, stable on a rename; `origin` his message that started it; `agents` every agent a turn of it served (kept after an archive); `last` the newest fact of it (a delivery tagged with it, a report of one of its agents in its turn): Stalled reads it, no agent carries a last-activity time of its own; `until_timer` the timer of a pause until a time",
+            fields: &[
+                f("id", Str),
+                f("name", Str),
+                f("why", Str),
+                f("goals", Ts("Goal")),
+                fd("kind", T("WKind"), "WTask{}"),
+                f("origin", OptNat),
+                f("by", Str),
+                f("created", Nat),
+                f("paused", OptNat),
+                f("until", OptNat),
+                f("until_timer", OptNat),
+                f("done", OptT("Fin")),
+                f("merged_into", OptStr),
+                f("named_by_you", Bool),
+                f("agents", Strs),
+                f("last", Nat),
+            ],
+            shapes: &[Shape {
+                name: "journal",
+                read: true,
+                keys: &[
+                    k("id", W::Str),
+                    k("name", W::Str),
+                    k("why", W::Str),
+                    k("goals", W::Recs),
+                    k("kind", W::Word),
+                    k("origin", W::OptNatOmit),
+                    k("by", W::Str),
+                    kn("created", "created_ms", W::Nat),
+                    k("paused", W::OptNatOmit),
+                    k("until", W::OptNatOmit),
+                    k("until_timer", W::OptNatOmit),
+                    k("done", W::OptObjOmit),
+                    k("merged_into", W::OptStrOmit),
+                    k("named_by_you", W::Flag),
+                    k("agents", W::Strs),
+                    k("last", W::Nat),
+                ],
+            }],
+        },
+        Record {
+            name: "Tomb",
+            doc: "a work done more than 7 days ago, folded (architect m_64425): its id stays taken and its links resolve; the journal keeps the rest",
+            fields: &[f("id", Str), f("name", Str), f("done", Nat), f("merged_into", OptStr)],
+            shapes: &[Shape {
+                name: "journal",
+                read: true,
+                keys: &[k("id", W::Str), k("name", W::Str), k("done", W::Nat), k("merged_into", W::OptStrOmit)],
+            }],
+        },
+        Record {
+            name: "Moved",
+            doc: "his \"Move to task…\" on an artifact or a page (`page`: the target is the page store's page `art`, typed from the row he acted on, never looked up; an old line: an artifact): its works from now on, an agent's turn never moves it back (law moved_by_you_sticks)",
+            fields: &[f("art", Str), f("works", Strs), f("page", Bool)],
+            shapes: &[Shape { name: "journal", read: true, keys: &[k("art", W::Str), k("works", W::Strs), k("page", W::Flag)] }],
+        },
+        Record {
+            name: "WTurn",
+            doc: "an agent's turn's works as they change (work_turn): a new turn sets them, a steered delivery (`add`) adds to them",
+            fields: &[f("agent", Str), f("works", Strs), f("add", Bool), f("at", Nat)],
+            shapes: &[Shape { name: "journal", read: true, keys: &[k("agent", W::Str), k("works", W::Strs), k("add", W::Bool), k("at", W::Nat)] }],
+        },
+        Record {
+            name: "CardMove",
+            doc: "his \"Move to task…\" on a card: its works from now on",
+            fields: &[f("card", Nat), f("works", Strs)],
+            shapes: &[Shape { name: "journal", read: true, keys: &[k("card", W::Nat), k("works", W::Strs)] }],
+        },
+        Record {
             name: "St",
             doc: "the hub's durable state; `paused` since that ms (None runs); `hot`/`old` the messages split (hot ids ascending, old newest first); `gone` the withdrawn cards he may still answer, newest first; `agents`/`arch` the agents split (agents: not archived, in creation order; arch: archived, newest archived first; `order` every name, in creation order)",
             fields: &[
@@ -847,6 +999,11 @@ pub const STATE: State = State {
                 f("old", Ts("MRec")),
                 f("gone", Ts("Item")),
                 f("arch", Ts("Agent")),
+                // tasks: the works (open, and done within 7 days), the
+                // folded ones (his artifact moves are the artifacts' own:
+                // the shell's Meta, through fx art_works; architect m_64740)
+                f("works", Ts("Work")),
+                f("tombs", Ts("Tomb")),
             ],
             // the photo a boot starts from (issue 36): every field
             shapes: &[photo(&[
@@ -863,6 +1020,8 @@ pub const STATE: State = State {
                 k("old", W::Recs),
                 k("gone", W::Recs),
                 k("arch", W::Recs),
+                k("works", W::Recs),
+                k("tombs", W::Recs),
             ])],
         },
     ],
@@ -876,7 +1035,9 @@ pub const STATE: State = State {
 /// reads the field's default; an enum's other word reads its fallback.
 /// The others get a Rust name when a Rust reader needs one.
 pub const RUST: &[(&str, &str)] =
-    &[("Life", "Lifecycle"), ("Run", "Run"), ("Decl", "Declared"), ("MSt", "MsgState"), ("Msg", "Msg"), ("ViewAsk", "ViewAsk"), ("Card", "Card")];
+    &[("Life", "Lifecycle"), ("Run", "Run"), ("Decl", "Declared"), ("MSt", "MsgState"), ("Msg", "Msg"), ("ViewAsk", "ViewAsk"), ("Card", "Card"),
+      // tasks: the view's work rows (docs/tasks.md)
+      ("WKind", "WorkKind"), ("Goal", "Goal"), ("Fin", "Fin"), ("Work", "Work"), ("Tomb", "Tomb")];
 
 mod generated;
 mod opaque;
@@ -920,7 +1081,7 @@ mod tests {
                         Wire::OptNat | Wire::OptNatOmit => fl.ty == OptNat,
                         Wire::Json => fl.ty == Json,
                         Wire::OptJsonOmit => fl.ty == OptJson,
-                        Wire::Strs => fl.ty == Strs,
+                        Wire::Strs | Wire::StrsOmit => fl.ty == Strs,
                         Wire::Nats => fl.ty == Nats,
                         Wire::Word => matches!(fl.ty, T(n) if STATE.enum_(n).is_some_and(|e| e.tag_key.is_empty())),
                         Wire::OptWord => matches!(fl.ty, OptT(n) if STATE.enum_(n).is_some_and(|e| e.tag_key.is_empty())),

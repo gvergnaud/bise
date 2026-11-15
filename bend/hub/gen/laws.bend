@@ -88,7 +88,7 @@ def in_boot_bare():
   {==}
 
 law in_say_bare:
-  {IN.of(J.obj([J.kv("t", J.JStr{"say"})])) == IN.ISay{"", "", False{}, "", ""} : IN.In}
+  {IN.of(J.obj([J.kv("t", J.JStr{"say"})])) == IN.ISay{"", "", False{}, "", "", None{}} : IN.In}
 
 def in_say_bare():
   {==}
@@ -283,6 +283,24 @@ law in_answer_pos_bare:
   {IN.of(J.obj([J.kv("t", J.JStr{"answer_pos"})])) == IN.IAnswerPos{0n, "", 0n} : IN.In}
 
 def in_answer_pos_bare():
+  {==}
+
+law in_page_waits_bare:
+  {IN.of(J.obj([J.kv("t", J.JStr{"page_waits"})])) == IN.IPageWaits{Nil{}, Nil{}} : IN.In}
+
+def in_page_waits_bare():
+  {==}
+
+law in_work_act_bare:
+  {IN.of(J.obj([J.kv("t", J.JStr{"work_act"})])) == IN.IWorkAct{J.JNull{}} : IN.In}
+
+def in_work_act_bare():
+  {==}
+
+law in_work_move_bare:
+  {IN.of(J.obj([J.kv("t", J.JStr{"work_move"})])) == IN.IWorkMove{None{}, "", Nil{}, False{}} : IN.In}
+
+def in_work_move_bare():
   {==}
 
 law in_every_set_bare:
@@ -523,17 +541,30 @@ law in_ISay_round:
   for queued: Bool
   for parts: String
   for from: String
-  {IN.of(IN.json(IN.ISay{focus, text, queued, parts, from})) == IN.ISay{focus, text, queued, parts, from} : IN.In}
+  for works: Maybe<&2, List<&2, String>>
+  {IN.of(IN.json(IN.ISay{focus, text, queued, parts, from, works})) == IN.ISay{focus, text, queued, parts, from, works} : IN.In}
 
-def in_ISay_round(focus, text, queued, parts, from):
-  match parts from:
-    case SNil{} SNil{}:
+def in_ISay_round(focus, text, queued, parts, from, works):
+  match parts from works:
+    case SNil{} SNil{} None{}:
       {==}
-    case SNil{} SCon{h_from, t_from}:
+    case SNil{} SNil{} Some{x_works}:
+      %K.strs_round(x_works) : {IN.of(IN.json(IN.ISay{focus, text, queued, SNil{}, SNil{}, Some{x_works}})) == IN.ISay{focus, text, queued, SNil{}, SNil{}, Some{_}} : IN.In}
       {==}
-    case SCon{h_parts, t_parts} SNil{}:
+    case SNil{} SCon{h_from, t_from} None{}:
       {==}
-    case SCon{h_parts, t_parts} SCon{h_from, t_from}:
+    case SNil{} SCon{h_from, t_from} Some{x_works}:
+      %K.strs_round(x_works) : {IN.of(IN.json(IN.ISay{focus, text, queued, SNil{}, SCon{h_from, t_from}, Some{x_works}})) == IN.ISay{focus, text, queued, SNil{}, SCon{h_from, t_from}, Some{_}} : IN.In}
+      {==}
+    case SCon{h_parts, t_parts} SNil{} None{}:
+      {==}
+    case SCon{h_parts, t_parts} SNil{} Some{x_works}:
+      %K.strs_round(x_works) : {IN.of(IN.json(IN.ISay{focus, text, queued, SCon{h_parts, t_parts}, SNil{}, Some{x_works}})) == IN.ISay{focus, text, queued, SCon{h_parts, t_parts}, SNil{}, Some{_}} : IN.In}
+      {==}
+    case SCon{h_parts, t_parts} SCon{h_from, t_from} None{}:
+      {==}
+    case SCon{h_parts, t_parts} SCon{h_from, t_from} Some{x_works}:
+      %K.strs_round(x_works) : {IN.of(IN.json(IN.ISay{focus, text, queued, SCon{h_parts, t_parts}, SCon{h_from, t_from}, Some{x_works}})) == IN.ISay{focus, text, queued, SCon{h_parts, t_parts}, SCon{h_from, t_from}, Some{_}} : IN.In}
       {==}
 
 law in_IRoute_round:
@@ -839,6 +870,45 @@ law in_IAnswerPos_round:
 
 def in_IAnswerPos_round(card, agent, pos):
   {==}
+
+law in_IPageWaits_round:
+  for works: List<&2, String>
+  for ns: List<&2, Nat>
+  {IN.of(IN.json(IN.IPageWaits{works, ns})) == IN.IPageWaits{works, ns} : IN.In}
+
+def in_IPageWaits_round(works, ns):
+  %K.strs_round(works) : {IN.of(IN.json(IN.IPageWaits{works, ns})) == IN.IPageWaits{_, ns} : IN.In}
+  %K.nats_round(ns) : {IN.of(IN.json(IN.IPageWaits{works, ns})) == IN.IPageWaits{K.strs(K.jstrs(works)), _} : IN.In}
+  {==}
+
+law in_IWorkAct_round:
+  for req: J.Json
+  {IN.of(IN.json(IN.IWorkAct{req})) == IN.IWorkAct{req} : IN.In}
+
+def in_IWorkAct_round(req):
+  {==}
+
+law in_IWorkMove_round:
+  for card: Maybe<&2, Nat>
+  for art: String
+  for works: List<&2, String>
+  for page: Bool
+  {IN.of(IN.json(IN.IWorkMove{card, art, works, page})) == IN.IWorkMove{card, art, works, page} : IN.In}
+
+def in_IWorkMove_round(card, art, works, page):
+  match card art:
+    case None{} SNil{}:
+      %K.strs_round(works) : {IN.of(IN.json(IN.IWorkMove{None{}, SNil{}, works, page})) == IN.IWorkMove{None{}, SNil{}, _, page} : IN.In}
+      {==}
+    case None{} SCon{h_art, t_art}:
+      %K.strs_round(works) : {IN.of(IN.json(IN.IWorkMove{None{}, SCon{h_art, t_art}, works, page})) == IN.IWorkMove{None{}, SCon{h_art, t_art}, _, page} : IN.In}
+      {==}
+    case Some{x_card} SNil{}:
+      %K.strs_round(works) : {IN.of(IN.json(IN.IWorkMove{Some{x_card}, SNil{}, works, page})) == IN.IWorkMove{Some{x_card}, SNil{}, _, page} : IN.In}
+      {==}
+    case Some{x_card} SCon{h_art, t_art}:
+      %K.strs_round(works) : {IN.of(IN.json(IN.IWorkMove{Some{x_card}, SCon{h_art, t_art}, works, page})) == IN.IWorkMove{Some{x_card}, SCon{h_art, t_art}, _, page} : IN.In}
+      {==}
 
 law in_IEverySet_round:
   for agent: String
@@ -1430,6 +1500,12 @@ law fx_renamed_bare:
 def fx_renamed_bare():
   {==}
 
+law fx_art_works_bare:
+  {FX.of(J.obj([J.kv("fx", J.JStr{"art_works"})])) == FX.FArtWorks{"", Nil{}, False{}} : FX.Fx}
+
+def fx_art_works_bare():
+  {==}
+
 law fx_retarget_bare:
   {FX.of(J.obj([J.kv("fx", J.JStr{"retarget"})])) == FX.FRetarget{"", ""} : FX.Fx}
 
@@ -1773,6 +1849,16 @@ law fx_FRenamed_round:
   {FX.of(FX.json(FX.FRenamed{old, new})) == FX.FRenamed{old, new} : FX.Fx}
 
 def fx_FRenamed_round(old, new):
+  {==}
+
+law fx_FArtWorks_round:
+  for art: String
+  for works: List<&2, String>
+  for page: Bool
+  {FX.of(FX.json(FX.FArtWorks{art, works, page})) == FX.FArtWorks{art, works, page} : FX.Fx}
+
+def fx_FArtWorks_round(art, works, page):
+  %K.strs_round(works) : {FX.of(FX.json(FX.FArtWorks{art, works, page})) == FX.FArtWorks{art, _, page} : FX.Fx}
   {==}
 
 law fx_FRetarget_round:

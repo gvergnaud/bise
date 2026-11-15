@@ -153,3 +153,25 @@ describe("what ⏎ does with a typed line: main's decision m_12973, the spotligh
     expect(made).toBeLessThanOrEqual(4);
   });
 });
+
+describe('search: the tasks (tasks-center: results, the done ones too)', () => {
+  const T: SearchData = {
+    ...D,
+    tasks: [
+      { project: 'sf', id: 'checkout-flow', name: 'Checkout flow', status: 'needs_you', what: 'needs you · 1 question', at_ms: NOW - 5 * MIN },
+      { project: 'sf', id: 'old-checkout', name: 'Old checkout', status: 'done', what: 'done', at_ms: NOW - 9 * 1440 * MIN },
+    ],
+  };
+  it("'checkout': a tasks group after the agents, a done one after the open one, ⏎ opens its tab", () => {
+    const l = searchList(T, 'checkout', 'all', NOW);
+    const g = l.groups.map((x) => x.id);
+    expect(g.indexOf('tasks')).toBe(g.indexOf('agents') + 1);
+    const hits = l.groups.find((x) => x.id === 'tasks')?.hits ?? [];
+    expect(hits.map((h) => h.name)).toEqual(['Checkout flow', 'Old checkout']);
+    expect(hits[0]?.open).toEqual({ to: 'task', project: 'sf', id: 'checkout-flow' });
+    expect(hits[0]?.tone).toBe('acc');
+  });
+  it('a scope other than all leaves them out', () => {
+    expect(searchList(T, 'checkout', 'agents', NOW).groups.some((x) => x.id === 'tasks')).toBe(false);
+  });
+});

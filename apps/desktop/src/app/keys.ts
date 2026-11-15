@@ -82,6 +82,8 @@ export interface KeyCtx {
   readonly panelOpen?: boolean;
   /** a window of its own (app/own.ts): its ⌘W is the menu's, which closes it */
   readonly own?: boolean;
+  /** the Board (tasks) is the panel's tab in front: ⌥⌘0 is its focus, the panel's full width (tasks-center) */
+  readonly boardFront?: boolean;
   /** the artifacts library's places in its order (artifacts/library.tsx libraryPlaces), none: no library */
   readonly library?: () => readonly At[] | undefined;
   /** where bise's tab goes from here, as its rail button (railback.ts biseGo); none: bise's thread */
@@ -134,6 +136,8 @@ export function keyAction(e: KeyLike, c: KeyCtx): KeyAct | undefined {
   const metaAlt = e.metaKey && e.altKey && !e.ctrlKey && !e.shiftKey;
   if (only('meta') && (e.code === 'KeyB' || e.code === 'Backslash')) return { frame: 'sidebar' };
   if (e.metaKey && e.ctrlKey && !e.altKey && !e.shiftKey && e.code === 'KeyS') return { frame: 'sidebar' };
+  // ⌥⌘0 with the Board in front: its focus, the whole Board at once (the panel's full width; tasks-center)
+  if (metaAlt && e.code === 'Digit0' && c.boardFront === true) return { frame: 'panelFull' };
   if (metaAlt && (e.code === 'KeyB' || e.code === 'Digit0')) return { frame: 'panel' };
   if (e.metaKey && e.altKey && e.shiftKey && !e.ctrlKey && e.code === 'KeyB') return { frame: 'panelFull' };
   // bise fait mac (page native-mac §6): ⌘N New project, ⇧⌘N New agent (his m_44225), ⌘, settings

@@ -99,6 +99,18 @@ pub enum JournalKind {
     Paused,
     /// `resumed`
     Resumed,
+    /// `work_created`
+    WorkCreated,
+    /// `work_changed`
+    WorkChanged,
+    /// `work_folded`
+    WorkFolded,
+    /// `work_turn`
+    WorkTurn,
+    /// `card_moved`
+    CardMoved,
+    /// `art_moved`
+    ArtMoved,
     /// a tag this build does not know
     Unknown,
 }
@@ -151,6 +163,12 @@ impl JournalKind {
         JournalKind::WakeEnd,
         JournalKind::Paused,
         JournalKind::Resumed,
+        JournalKind::WorkCreated,
+        JournalKind::WorkChanged,
+        JournalKind::WorkFolded,
+        JournalKind::WorkTurn,
+        JournalKind::CardMoved,
+        JournalKind::ArtMoved,
     ];
 
     /// Its tag; none for `Unknown`.
@@ -201,6 +219,12 @@ impl JournalKind {
             JournalKind::WakeEnd => Some("wake_end"),
             JournalKind::Paused => Some("paused"),
             JournalKind::Resumed => Some("resumed"),
+            JournalKind::WorkCreated => Some("work_created"),
+            JournalKind::WorkChanged => Some("work_changed"),
+            JournalKind::WorkFolded => Some("work_folded"),
+            JournalKind::WorkTurn => Some("work_turn"),
+            JournalKind::CardMoved => Some("card_moved"),
+            JournalKind::ArtMoved => Some("art_moved"),
             JournalKind::Unknown => None,
         }
     }
@@ -253,6 +277,12 @@ impl JournalKind {
             "wake_end" => JournalKind::WakeEnd,
             "paused" => JournalKind::Paused,
             "resumed" => JournalKind::Resumed,
+            "work_created" => JournalKind::WorkCreated,
+            "work_changed" => JournalKind::WorkChanged,
+            "work_folded" => JournalKind::WorkFolded,
+            "work_turn" => JournalKind::WorkTurn,
+            "card_moved" => JournalKind::CardMoved,
+            "art_moved" => JournalKind::ArtMoved,
             _ => JournalKind::Unknown,
         }
     }

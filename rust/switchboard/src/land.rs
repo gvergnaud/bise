@@ -76,6 +76,25 @@ pub struct Job {
     /// The hub's land records (`Paths::lands`, the daemon sets it): the
     /// revert guard's "whose land was it" ([`crate::land_revert`]).
     pub lands: PathBuf,
+    /// tasks: the works the lander's turn serves (sb-core's view, read at
+    /// the request): its commit names them (`Bise-Task:`,
+    /// [`crate::land_trailer`])
+    pub works: Vec<String>,
+    /// `[land] task_trailers` at the trunk's tip ([`crate::flow::land_task_trailers`],
+    /// the daemon sets it): false, the commit names no task
+    pub task_trailers: bool,
+}
+
+impl Job {
+    /// The commit's message: his words, then a trailer per work, unless
+    /// the repo turned them off.
+    fn commit_message(&self) -> String {
+        if self.task_trailers {
+            crate::land_trailer::with_tasks(&self.message, &self.works)
+        } else {
+            self.message.clone()
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -429,7 +448,7 @@ pub fn run_onto(job: &Job, queue: &Queue, joined: &mut dyn FnMut(), onto_now: &m
             Ok(())
         }
     };
-    let new = commit_files(&job.dir, &target, &mine, &job.message, &mut verify, &mut || {})?;
+    let new = commit_files(&job.dir, &target, &mine, &job.commit_message(), &mut verify, &mut || {})?;
     let base = git(&job.dir, &["rev-parse", &format!("{}^", new)])?;
     let (pushed, push_error) = pushed(job, &target, &main);
     let sha = shorten(&job.dir, &new);
@@ -478,7 +497,7 @@ fn land_branch(job: &Job, l: Line, main: &str, real_main: &str, mine: &[String],
         if job.message.trim().is_empty() {
             return Err("you have changes not committed: give a message (sb land \"<message>\"), or commit them with sb land --here first".into());
         }
-        commit_files(&job.dir, &branch, mine, &job.message, &mut |_, _| Ok(()), &mut || {})?;
+        commit_files(&job.dir, &branch, mine, &job.commit_message(), &mut |_, _| Ok(()), &mut || {})?;
     }
     let dirty = git(&job.dir, &["status", "--porcelain", "--untracked-files=no"])?;
     if !dirty.is_empty() {
@@ -588,6 +607,19 @@ mod tests {
         ws.canonicalize().unwrap()
     }
 
+    /// Gabriel m_65054 (architect m_65056): `[land] task_trailers = false`,
+    /// the commit's message is his words alone; on (the default), a
+    /// trailer per task its turn serves.
+    #[test]
+    fn task_trailers_off_leaves_the_message_unchanged() {
+        let mut j = job("docs", Path::new("/nowhere"), Path::new("/nowhere"), &[], &[]);
+        j.message = "feat: the icon".into();
+        j.works = vec!["native-mac".into()];
+        assert_eq!(j.commit_message(), "feat: the icon\n\nBise-Task: native-mac");
+        j.task_trailers = false;
+        assert_eq!(j.commit_message(), "feat: the icon");
+    }
+
     pub(super) fn job(agent: &str, dir: &Path, shared: &Path, files: &[&str], others: &[(&str, &[&str])]) -> Job {
         Job {
             agent: agent.into(),
@@ -609,6 +641,8 @@ mod tests {
             onto: None,
             checks: shared.parent().unwrap_or(shared).join("worktrees"),
             lands: shared.parent().unwrap_or(shared).join("lands.jsonl"),
+            works: Vec::new(),
+            task_trailers: true,
         }
     }
 

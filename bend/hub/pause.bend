@@ -120,6 +120,21 @@ def paused_text(+stopped: Nat) -> String:
 def GO_ON() -> String:
   "the project was paused. go on where your turn stopped."
 
+# tasks: a work's pause (architect m_64602/m_64603), words to agents.
+# The note a busy turn of work `id` gets: it saves and stops by itself;
+# with other open works (`open`, their ids) it goes on with them
+def work_paused(+id: String, open: List<&2, String>) -> String:
+  match open:
+    case Nil{}:
+      String.concat(["task ", id, " is paused: save your work on your branch, write your resume note (sb report progress \"...\"), then end your turn."])
+    case Con{+h, +t}:
+      String.concat(["task ", id, " is paused: save its work and write its resume note (sb report progress \"...\"), then go on with ", String.join(Con{h, t}, ", "), "."])
+
+# the note queued at the pause for each agent of work `id`: held while it
+# is paused, it steers the work back at resume
+def work_resumed(+id: String) -> String:
+  String.concat(["task ", id, " resumed: pick it up from your resume note."])
+
 def resumed_text(+agents: Nat, +msgs: Nat) -> String:
   Bool.pick(String, Nat.is_eq(agents, 0n), "resumed: nothing was held.",
     String.concat(["resumed: ", count(agents, "agent goes on", "agents go on"),

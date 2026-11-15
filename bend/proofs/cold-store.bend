@@ -502,6 +502,18 @@ def ail.go(+e: HM.Ev, +s: HS.St, +x: Nat, -r: HS.MRec, +n: {HM.nat_in(N.Needs.ms
       {==}
     case HM.EResumed{a}:
       {==}
+    case HM.EWorkCreated{w0}:
+      {==}
+    case HM.EWorkChanged{w0, w1, w2, w3}:
+      {==}
+    case HM.EWorkFolded{w0, w1}:
+      {==}
+    case HM.EWorkTurn{wt}:
+      {==}
+    case HM.ECardMoved{cm}:
+      {==}
+    case HM.EArtMoved{am}:
+      {==}
 
 # ---- the cold message `x` stays where it was: an event that does not name it ----
 
@@ -693,6 +705,18 @@ def cs_keep.go(+e: HM.Ev, +s: HS.St, +x: Nat, -r: HS.MRec, +n: {HM.nat_in(N.Need
     case HM.EPaused{a}:
       o
     case HM.EResumed{a}:
+      o
+    case HM.EWorkCreated{w0}:
+      o
+    case HM.EWorkChanged{w0, w1, w2, w3}:
+      o
+    case HM.EWorkFolded{w0, w1}:
+      o
+    case HM.EWorkTurn{wt}:
+      o
+    case HM.ECardMoved{cm}:
+      o
+    case HM.EArtMoved{am}:
       o
 
 def cs_keep(+s: HS.St, +e: HM.Ev, +x: Nat, -r: HS.MRec, +n: {HM.nat_in(N.Needs.msgs(N.needs(e)), x) == False{} : Bool},

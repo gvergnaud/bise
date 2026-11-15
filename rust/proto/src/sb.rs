@@ -100,6 +100,10 @@ sb_reqs! {
             /// (`text`: the forwarder's note, "" none)
             #[serde(default, with = "wire::opt_msg_id", skip_serializing_if = "Option::is_none")]
             fwd: Option<u64>,
+            /// tasks: `--task <id>`, the works the message carries (none:
+            /// the sender's turn's; docs/tasks.md)
+            #[serde(default, skip_serializing_if = "Vec::is_empty")]
+            task: Vec<String>,
         },
         /// `sb send <task> --model <id> [--effort <e>]` without a text
         Switch = "switch" {
@@ -123,6 +127,9 @@ sb_reqs! {
             text: String,
             #[serde(default = "wire::twenty")]
             timeout_s: u64,
+            /// tasks: `--task <id>`
+            #[serde(default, skip_serializing_if = "Vec::is_empty")]
+            task: Vec<String>,
         },
         Status = "status" {
             #[serde(with = "wire::declared")]
@@ -155,6 +162,13 @@ sb_reqs! {
             /// it; anything but an object reads none)
             #[serde(default, deserialize_with = "wire::object", skip_serializing_if = "Option::is_none")]
             result: Option<Value>,
+            /// tasks: `--done-when <n>`, the done-when item it ticks (1 the
+            /// first) on its works
+            #[serde(default, skip_serializing_if = "Option::is_none")]
+            done_when: Option<u64>,
+            /// tasks: `--task <id>`: the works it reports on (none: its turn's)
+            #[serde(default, skip_serializing_if = "Vec::is_empty")]
+            task: Vec<String>,
         },
         /// S10: `sb follow <agent> [--off]` (main only)
         Follow = "follow" {
@@ -196,6 +210,9 @@ sb_reqs! {
             /// carries as its last section
             #[serde(default, with = "wire::opt_msg_id", skip_serializing_if = "Option::is_none")]
             fwd: Option<u64>,
+            /// tasks: `--task <id>`, the works its brief carries
+            #[serde(default, skip_serializing_if = "Vec::is_empty")]
+            task: Vec<String>,
         },
         /// `sb feature new|sync|ready|merge|drop|retire|list [<name>]`
         Feature = "feature" {
@@ -255,6 +272,9 @@ sb_reqs! {
             /// sends here is overwritten (daemon/page_cards.rs)
             #[serde(default, skip_serializing_if = "Option::is_none")]
             about: Option<Value>,
+            /// tasks: `--task <id>`, the works the card belongs to
+            #[serde(default, skip_serializing_if = "Vec::is_empty")]
+            task: Vec<String>,
         },
         /// `sb close N ["note"]`
         Close = "close" {
@@ -286,6 +306,8 @@ sb_reqs! {
         Every = "every" (Every),
         /// `sb wake`: the caller's watches (wake.rs)
         Wake = "wake" (Wake),
+        /// `sb task <verb>`: tasks (a Work in sb-core, docs/tasks.md)
+        Task = "task" (Task),
         /// `sb project list` (bise's main, desktop S2)
         ProjectList = "project_list",
         /// `sb project send <project> --input m_<n>`
@@ -378,7 +400,7 @@ impl Req {
     /// The same, about an artifact the hub resolved (a page at its
     /// block: the card's `about`, an ArtLink's JSON).
     pub fn card_about(text: impl Into<String>, about: Option<Value>) -> Req {
-        Req::Card { text: text.into(), for_msg: None, page: None, artifact: None, open: Vec::new(), about }
+        Req::Card { text: text.into(), for_msg: None, page: None, artifact: None, open: Vec::new(), about, task: Vec::new() }
     }
 
     /// Its JSON (`Unknown`: the value it was read from).
@@ -449,6 +471,96 @@ pub enum Every {
         /// none: the hub names it (every_name.rs)
         #[serde(default, deserialize_with = "wire::nonempty", skip_serializing_if = "Option::is_none")]
         name: Option<String>,
+    },
+}
+
+/// `sb task`'s verbs, tagged `step` (docs/tasks.md). `new` makes a work
+/// its caller serves; `list` and `show` are the hub's reads; the others
+/// are one change of work `id` (sb-core says who may make it). His
+/// gestures on the desktop send the same verbs (`HubCmd::TaskAct`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(tag = "step", rename_all = "snake_case")]
+pub enum Task {
+    New {
+        #[serde(default)]
+        name: String,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        why: String,
+        /// its done-when items, in order
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        goals: Vec<String>,
+    },
+    List {
+        /// with the done and ongoing ones
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        all: bool,
+    },
+    Show {
+        #[serde(default)]
+        id: String,
+    },
+    Done {
+        #[serde(default)]
+        id: String,
+    },
+    Reopen {
+        #[serde(default)]
+        id: String,
+    },
+    /// `until_ms`: when it resumes by itself (none: when he says)
+    Pause {
+        #[serde(default)]
+        id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "ts", ts(optional))]
+        until_ms: Option<u64>,
+    },
+    Resume {
+        #[serde(default)]
+        id: String,
+    },
+    Rename {
+        #[serde(default)]
+        id: String,
+        #[serde(default)]
+        name: String,
+    },
+    Why {
+        #[serde(default)]
+        id: String,
+        #[serde(default)]
+        text: String,
+    },
+    /// a done-when item added
+    Goal {
+        #[serde(default)]
+        id: String,
+        #[serde(default)]
+        text: String,
+    },
+    /// done-when item `n` (1 the first) ticked, or unticked
+    Tick {
+        #[serde(default)]
+        id: String,
+        #[serde(default)]
+        n: u64,
+    },
+    Untick {
+        #[serde(default)]
+        id: String,
+        #[serde(default)]
+        n: u64,
+    },
+    Ongoing {
+        #[serde(default)]
+        id: String,
+    },
+    Merge {
+        #[serde(default)]
+        id: String,
+        #[serde(default)]
+        into: String,
     },
 }
 

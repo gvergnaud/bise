@@ -13,11 +13,13 @@
 // Folders: + new folder in the column, F2 or a double-click renames, the folder menu merges or
 // deletes (a dialog). Every move and folder edit has its undo (⌘Z, and the toast's). The grid, the
 // cards, the stacks and the list view are art-grid's (Grid.tsx, Sheet.tsx). Owner: art-folders.
+import { takeLibraryQuery } from './preset';
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { Button, Empty, Filters, GroupLabel, MoreButton, PageBanner, Press, sentenceCase, Sheet, Toast, type EntityMenu } from '@/ds';
 import { hero } from '@/proto/words_hero.gen';
 import { library } from '@/proto/words_library.gen';
 import { useFolders, usePlugins, useProjects, useStore } from '@/store';
+import { resolveMerged } from '@/tasks/model';
 import { DEPTH, useRouter } from '@/app/router';
 import { libraryExit } from '@/app/escape';
 import { usePageSearchKeys } from '@/app/searchkeys';
@@ -147,7 +149,8 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
   // the section view is the route's too (sections.ts): Done and Between agents are history steps
   const { view: sect, rest: placePath } = splitSectionPath(atRoute);
   const at = atOfPath(placePath);
-  const [q, setQ] = useState('');
+  // the Task tab's 'All n in Library →' gives its `task:<id>` (preset.ts), once
+  const [q, setQ] = useState(() => takeLibraryQuery() ?? '');
   // the search field's caret, read at its change (the by:/since: completion opens at it); null: closed
   const [caret, setCaret] = useState<number | null>(null);
   // the completion's row he walked to with ↑↓ (the first while he hasn't)
@@ -216,7 +219,8 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
   const lib = libraryOf(folders, all);
   // the field's text is the one filter state (filters.ts): in:, since:, by:, the words
   const parsed = parseFilters(q);
-  const fctx = { now, tz: localTz };
+  // `task:` reads a merged task's id as the task it went into (its project's tombs)
+  const fctx = { now, tz: localTz, taskOf: (p: string, id: string) => resolveMerged(store.works(p).tombs, id) };
   const filtered = parsed.keys.size > 0;
   const typedProject = parsed.project === null ? null : projectOfTyped(projects.map((p) => ({ project: p.project, name: p.name })), parsed.project);
   const eff = typedProject ?? scope;

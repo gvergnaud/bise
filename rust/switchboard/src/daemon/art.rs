@@ -102,6 +102,31 @@ impl Shell {
         a.turn_ms.map(|started_ms| crate::artifacts_turns::Turn { agent: a.name.clone(), started_ms })
     }
 
+    /// tasks: the works `agent`'s turn serves, from sb-core's view (its
+    /// `turn_works`): the stamp of a save (artifacts_works), never read
+    /// from the request.
+    pub(super) fn art_turn_works(&self, agent: &str) -> Vec<String> {
+        self.hub.st.agents.get(agent).and_then(|a| a.turn_works.clone()).unwrap_or_default()
+    }
+
+    /// tasks: his move of artifact `art` (`page`: the page `art`; sb-core's
+    /// fx art_works, its kind typed from the row he acted on, never looked
+    /// up): that store sets its works exactly (its rows follow: the save
+    /// bumps the store's key). Unknown or archived in that store: one
+    /// line, nothing made.
+    pub(super) fn art_works(&mut self, art: &str, works: Vec<String>, page: bool) {
+        let (what, moved) = if page {
+            ("page", self.pg.pages.as_ref().map_or(Ok(false), |p| p.store.move_works(art, works)))
+        } else {
+            ("artifact", self.art_store().move_works(art, works))
+        };
+        match moved {
+            Ok(true) => {}
+            Ok(false) => log_line(&self.opts.paths, &format!("tasks: no {what} {art} to move (unknown or archived): nothing changed")),
+            Err(e) => log_line(&self.opts.paths, &format!("tasks: moving {what} {art} failed: {e}")),
+        }
+    }
+
     /// When the turn of the agent that made `v` started, if it runs now.
     fn art_maker_turn(&self, v: &artifacts::Version) -> Option<u64> {
         let t = v.turn.as_ref()?;
@@ -379,7 +404,7 @@ impl Shell {
             self.art_lines(a);
             if let Some((text, parts, _)) = crate::pages::artifact::notes::record_edit(pages, &a.meta.id, &a.meta.title, v.v, now_ms()) {
                 let to = if self.page_agent_gone(&a.meta.agent) { MAIN.to_string() } else { a.meta.agent.clone() };
-                self.step(Input::ClientInput { client: 0, focus: to, text, queued: true, parts, from: String::new() });
+                self.step(Input::ClientInput { client: 0, focus: to, text, queued: true, parts, from: String::new(), works: Vec::new() });
             }
         }
         self.artifacts_refresh(false);
@@ -408,6 +433,7 @@ impl Shell {
                     known_only,
                     // the turn from sb-core's fact, never from the request
                     turn: self.art_turn(from),
+                    works: self.art_turn_works(from),
                     sitting: None,
                     changed: changed.as_ref().and_then(bise_proto::office::Changed::of_value).map(|c| c.0),
                     folder,

@@ -141,3 +141,14 @@ describe("the field's grammar", () => {
     expect(waysOut({ everywhere: null, fromAgents: 0, filtered: false })).toEqual([]);
   });
 });
+
+describe('task: (tasks-center: an artifact by the tasks it serves)', () => {
+  const served = (id: string, works: string[]): Item => ({ ...row(id, 'perf', 'perf', 10), a: { ...row(id, 'perf', 'perf', 10).a, works } });
+  const list = [served('x', ['native-mac']), served('y', ['digest', 'old-mac']), served('z', [])];
+  it('keeps the items that serve the task, a merged task read as the one it went into', () => {
+    const merged: Ctx = { ...ctx, taskOf: (_p, id) => (id === 'old-mac' ? 'native-mac' : id) };
+    expect(applyFilters(list, parseFilters('task:native-mac'), ctx).map((it) => it.a.id)).toEqual(['x']);
+    expect(applyFilters(list, parseFilters('task:native-mac'), merged).map((it) => it.a.id)).toEqual(['x', 'y']);
+    expect(applyFilters(list, parseFilters('task:digest task:native-mac'), ctx).map((it) => it.a.id)).toEqual(['x', 'y']);
+  });
+});

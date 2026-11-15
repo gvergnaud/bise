@@ -127,6 +127,7 @@ fn a_join_while_placing_waits_for_its_place() {
                 parts: String::new(),
                 attach: Vec::new(),
                 fwd: None,
+                task: Vec::new(),
             };
             // the hub alone: the shell's worker has not answered yet
             t.hub.handle(Input::Agent { token: t.token, from: MAIN.into(), req, by: crate::peer::Sender::hub() }, &mut t.env)

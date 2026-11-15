@@ -1038,6 +1038,12 @@ folder?: string,
  */
 turn?: number, 
 /**
+ * the tasks it serves, by id (its Meta's or its page's ArtWorks: the
+ * union of the turns that made it, or his Move; architect m_64865);
+ * none: no task, or an older hub
+ */
+works?: Array<string>, 
+/**
  * who it is for; none: an older hub (read as for him)
  */
 audience?: ArtifactAudience, 
@@ -1775,3 +1781,88 @@ now?: string | null,
  * `*.txt`, `*.html`), said on the sheet
  */
 wide?: boolean, };
+
+/**
+ * A task's status, computed by sb-core, never declared.
+ */
+export type WorkStatus = "needs_you" | "working" | "waiting" | "stalled" | "to_review" | "paused" | "done" | "ongoing" | "unknown";
+
+/**
+ * One done-when item: its words, ticked, by whom (an agent's report, or
+ * `user`).
+ */
+export type WorkGoal = { text: string, done?: boolean, by?: string, };
+
+/**
+ * When a task was marked done, and by whom (`user`, or main on his word).
+ */
+export type WorkDone = { at_ms: number, by: string, };
+
+/**
+ * One task with its status.
+ */
+export type WorkRow = { 
+/**
+ * a slug of his name, stable on a rename
+ */
+id: string, name: string, why?: string, goals?: Array<WorkGoal>, 
+/**
+ * never done (a changelog, a watch)
+ */
+ongoing?: boolean, 
+/**
+ * his message that started it
+ */
+origin?: number | null, 
+/**
+ * who made it (main, an agent, `user`)
+ */
+by: string, created_ms: number, paused_ms?: number | null, 
+/**
+ * it resumes by itself then
+ */
+until_ms?: number | null, done?: WorkDone | null, merged_into?: string | null, 
+/**
+ * he named it: an agent never renames it
+ */
+named_by_you?: boolean, 
+/**
+ * every agent a turn of it served, in order
+ */
+agents?: Array<string>, 
+/**
+ * its newest fact
+ */
+last_ms: number, status: WorkStatus, 
+/**
+ * what the status is about: `agent` (working), `reply` (waits for
+ * `who`'s reply), `timer`, `watch` (wakes at `at_ms`), `until`
+ * (paused until `at_ms`), `crash` (`who` stopped at `at_ms`), `quiet`
+ * (nothing moves since `at_ms`); "" none
+ */
+about?: string, who?: string, at_ms?: number | null, 
+/**
+ * his open cards and page waits on it
+ */
+needs?: number, 
+/**
+ * its open cards
+ */
+cards?: Array<number>, 
+/**
+ * to review: the open PR of its agents' place, its number (the hub
+ * joins it from the places at its snapshot; tasks-ux: Waiting is
+ * never blank); none when no place has one
+ */
+pr?: number | null, 
+/**
+ * needs you: the page of a card of it (its title, else its id); none
+ * when no card of it is on a page
+ */
+page?: string | null, };
+
+/**
+ * A task done more than 7 days ago, folded: its id stays taken and its
+ * links resolve (a merged one's to the task it went into).
+ */
+export type WorkTomb = { id: string, name: string, done_ms: number, merged_into?: string | null, };

@@ -274,6 +274,7 @@ mod tests {
             AgentReq::Isolate { .. } => "isolate",
             AgentReq::Every(_) => "every",
             AgentReq::Wake(_) => "wake",
+            AgentReq::Task(_) => "task",
             AgentReq::ProjectSend { .. } => "project_send",
             AgentReq::ProjectAsk { .. } => "project_ask",
             AgentReq::ProjectList => "project_list",
@@ -331,6 +332,7 @@ mod tests {
             json!({"cmd": "isolate", "agent": "t1"}),
             json!({"cmd": "every", "step": "add", "to": "t1", "text": "x", "every_ms": 60000}),
             json!({"cmd": "wake", "step": "list"}),
+            json!({"cmd": "task", "step": "tick", "id": "w1", "n": 1}),
             json!({"cmd": "project_send", "project": "shop", "msg": "m_1"}),
             json!({"cmd": "project_ask", "project": "shop", "text": "?"}),
             // the shell's own: the shell steps `speaks` for them, and an
@@ -365,7 +367,7 @@ mod tests {
             );
             assert_eq!(format!("{:?}", h.st), before, "{v}: the hub's state as it was");
         }
-        assert_eq!(seen.len(), 42, "a fixture for every variant: {seen:?}");
+        assert_eq!(seen.len(), 43, "a fixture for every variant: {seen:?}");
     }
 
     /// The shell's own requests ask `speaks` and get one fx spoke.

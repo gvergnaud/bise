@@ -207,6 +207,7 @@ function does(s: SendsState, f: HubFacts, intent: Intent, at: number, cid: numbe
           mode: p.mode,
           ...(p.parts === undefined ? {} : { parts: p.parts }),
           ...(p.from === undefined ? {} : { from: p.from }),
+          ...(p.works === undefined ? {} : { works: p.works }),
         },
         at,
         cid,
@@ -236,6 +237,7 @@ function send(s: SendsState, f: HubFacts, a: Extract<Intent, { i: "send" }>, at:
     mode,
     ...(parts === undefined ? {} : { parts }),
     ...(a.from === undefined ? {} : { from: a.from }),
+    ...(a.works === undefined || a.works.length === 0 ? {} : { works: [...a.works] }),
     at_ms: at,
     state: "sending",
   };
@@ -258,6 +260,7 @@ function send(s: SendsState, f: HubFacts, a: Extract<Intent, { i: "send" }>, at:
           ...(a.via === undefined ? {} : { via: a.via }),
           ...(a.from === undefined ? {} : { from: a.from }),
           ...(a.shot === undefined ? {} : { shot: a.shot }),
+          ...(a.works === undefined || a.works.length === 0 ? {} : { works: [...a.works] }),
           cid,
         },
       },

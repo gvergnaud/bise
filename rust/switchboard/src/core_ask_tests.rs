@@ -15,7 +15,7 @@ fn a_reply_still_pending_after_the_hold_is_a_pause() {
     t.spawn_task("b");
     let watching = |t: &mut T, n: &str| serde_json::to_value(&t.hub.snapshot(t.env.now).agent(n).watching).unwrap();
     let asked_at = t.env.now;
-    let ask = |t: &mut T, text: &str| t.req("a", AgentReq::Ask { to: "b".into(), text: text.into(), timeout_s: 600 }).0;
+    let ask = |t: &mut T, text: &str| t.req("a", AgentReq::Ask { to: "b".into(), text: text.into(), timeout_s: 600, task: Vec::new() }).0;
     let tok = ask(&mut t, "which port?");
     let id = t.hub.st.msgs().values().find(|m| t.hub.st.text(m.id) == "which port?").unwrap().id;
     assert_eq!(watching(&mut t, "a"), json!([]), "held: no watch yet");
@@ -32,7 +32,7 @@ fn a_reply_still_pending_after_the_hold_is_a_pause() {
     assert!(reply(&t.go(Input::Tick), tok2).is_some());
     assert_eq!(watching(&mut t, "a").as_array().unwrap().len(), 1);
     // its reply ends it in the same step: no wake line, no bise message
-    let (_, fx) = t.req("b", AgentReq::Send { to: "a".into(), text: "8080".into(), expect_reply: false, reply_to: Some(id), queued: false, why: String::new(), switch: None, parts: String::new(), attach: Vec::new(), fwd: None });
+    let (_, fx) = t.req("b", AgentReq::Send { to: "a".into(), text: "8080".into(), expect_reply: false, reply_to: Some(id), queued: false, why: String::new(), switch: None, parts: String::new(), attach: Vec::new(), fwd: None, task: Vec::new() });
     assert!(fx.iter().any(|e| matches!(e, Effect::Journal(j) if j["type"] == "wake_end" && j["why"] == "answered")), "{fx:?}");
     assert!(lines_of(&fx, "a").iter().all(|l| !l.starts_with("sb wake :: ")), "{fx:?}");
     assert!(!t.journal.borrow().iter().any(|j| j["type"] == "message_sent" && j["msg"]["from"] == "switchboard" && j["msg"]["to"] == "a"), "no bise message");

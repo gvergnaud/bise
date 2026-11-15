@@ -40,6 +40,32 @@ pub const OUT: Codec = Codec { module: "SC", name: "Out.journal", ty: "S.Out", c
 pub const XIN: Codec = Codec { module: "SC", name: "XIn.journal", ty: "S.XIn", cases: &[] };
 pub const ROUTE: Codec = Codec { module: "SC", name: "Route.journal", ty: "S.Route", cases: &[] };
 pub const ACT: Codec = Codec { module: "SC", name: "Act.journal", ty: "S.Act", cases: &[] };
+/// tasks (hub/work.bend): a work, one change of it
+pub const WORK: Codec = Codec { module: "SC", name: "Work.journal", ty: "S.Work", cases: &[] };
+pub const WOP: Codec = Codec {
+    module: "SC",
+    name: "WOp.journal",
+    ty: "S.WOp",
+    cases: &[
+        "S.WRename{$a}",
+        "S.WWhy{$a}",
+        "S.WGoal{$a}",
+        "S.WTick{$a}",
+        "S.WUntick{$a}",
+        "S.WMakeOngoing{}",
+        "S.WPause{$a}",
+        "S.WResume{}",
+        "S.WDone{}",
+        "S.WReopen{}",
+        "S.WMerge{$a}",
+        "S.WAddAgent{$a}",
+        "S.WUntilTimer{$a}",
+        "S.WNoop{}",
+    ],
+};
+pub const WTURN: Codec = Codec { module: "SC", name: "WTurn.journal", ty: "S.WTurn", cases: &[] };
+pub const CARD_MOVE: Codec = Codec { module: "SC", name: "CardMove.journal", ty: "S.CardMove", cases: &[] };
+pub const ART_MOVE: Codec = Codec { module: "SC", name: "Moved.journal", ty: "S.Moved", cases: &[] };
 pub const WATCH: Codec = Codec { module: "SC", name: "Watch.journal", ty: "S.Watch", cases: &[] };
 
 const fn f(name: &'static str, kind: super::FieldKind) -> Field {
@@ -131,6 +157,17 @@ pub const JOURNAL: Table = Table {
         // cost-pause
         k("paused", "Paused", "M.EPaused{at}", &[f("at", Nat)]),
         k("resumed", "Resumed", "M.EResumed{at}", &[f("at", Nat)]),
+        // tasks (page tasks-center, architect m_64423/m_64425; hub/work.bend):
+        // a work made (`sb task new`), one change of it (`by` an agent, or
+        // `user` from his client only), folded to a tomb 7 days after its
+        // done; an agent's turn's works when they change (`add`: a steered
+        // delivery adds, a new turn sets); his moves of a card or an artifact
+        k("work_created", "WorkCreated", "M.EWorkCreated{work}", &[f("work", Rec(&WORK))]),
+        k("work_changed", "WorkChanged", "M.EWorkChanged{id, op, by, at}", &[f("id", Str), f("op", Inline(&WOP)), f("by", Str), f("at", Nat)]),
+        k("work_folded", "WorkFolded", "M.EWorkFolded{id, at}", &[f("id", Str), f("at", Nat)]),
+        k("work_turn", "WorkTurn", "M.EWorkTurn{turn}", &[f("turn", Rec(&WTURN))]),
+        k("card_moved", "CardMoved", "M.ECardMoved{moved}", &[f("moved", Rec(&CARD_MOVE))]),
+        k("art_moved", "ArtMoved", "M.EArtMoved{moved}", &[f("moved", Rec(&ART_MOVE))]),
     ],
 };
 

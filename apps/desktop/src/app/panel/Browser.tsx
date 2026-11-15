@@ -14,6 +14,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AppIcon, IconButton, Input, Kbd, KindIcon, Press, iconKindOf, tipAttrs } from '@/ds';
 import { ds } from '@/proto/words_ds.gen';
 import { panel } from '@/proto/words_panel.gen';
+import { TaskChipsOf } from '@/tasks';
 import { ArtifactOpen, ArtifactVersions, useAllArtifacts } from '@/artifacts';
 import { browserUrl } from '@/artifacts/Open';
 import { PRIMARY_KEY } from '@/artifacts/front';
@@ -137,6 +138,8 @@ export function Browser({ project, id, tabId }: { project: string; id: string; t
         <IconButton label={ds.more_actions} size="bar" onClick={menu.open} testId="app.panel.addr.more">
           <AppIcon name="more" size={16} />
         </IconButton>
+        {/* the tasks it serves (its row's works: an artifact's or a page's ArtWorks) */}
+        {a !== undefined && <TaskChipsOf project={project} of={{ ids: a.works ?? [] }} testId="app.panel.addr.task" />}
       </div>
       <div className="pn-page">
         <ArtifactOpen

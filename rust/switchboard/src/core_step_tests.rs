@@ -62,10 +62,10 @@ fn an_answer_by_number_names_its_option_in_both_feeds() {
     t.spawn_task("docs");
     let (_, _) = t.req(
         "docs",
-        AgentReq::Send { to: MAIN.into(), text: "where?".into(), expect_reply: true, reply_to: None, queued: false, why: String::new(), switch: None, parts: String::new(), attach: Vec::new(), fwd: None },
+        AgentReq::Send { to: MAIN.into(), text: "where?".into(), expect_reply: true, reply_to: None, queued: false, why: String::new(), switch: None, parts: String::new(), attach: Vec::new(), fwd: None, task: Vec::new() },
     );
     let id = t.hub.st.msgs().values().find(|m| t.hub.st.text(m.id) == "where?").unwrap().id;
-    t.req(MAIN, AgentReq::Card { text: "where does the balance show?\n1. at every step\n2. only at checkout".into(), for_msg: Some(id), page: None, artifact: None, open: Vec::new(), about: None });
+    t.req(MAIN, AgentReq::Card { text: "where does the balance show?\n1. at every step\n2. only at checkout".into(), for_msg: Some(id), page: None, artifact: None, open: Vec::new(), about: None, task: Vec::new() });
     t.turn(MAIN, "asked");
     let card = *t.hub.st.cards.keys().next().unwrap();
     t.hub.answered = None;
@@ -80,7 +80,7 @@ fn an_answer_by_number_names_its_option_in_both_feeds() {
         assert_eq!(rs, vec![json!({"sb": "route", "who": "docs", "card": card, "said": "2", "msg": answer, "pick_n": 2, "pick": "only at checkout"})], "{feed}: {fx:?}");
     }
     // words: no pick
-    t.req(MAIN, AgentReq::Card { text: "and then?\n1. ship\n2. wait".into(), for_msg: Some(id), page: None, artifact: None, open: Vec::new(), about: None });
+    t.req(MAIN, AgentReq::Card { text: "and then?\n1. ship\n2. wait".into(), for_msg: Some(id), page: None, artifact: None, open: Vec::new(), about: None, task: Vec::new() });
     let card2 = *t.hub.st.cards.keys().next().unwrap();
     let fx = t.go(Input::UserCmd { client: 1, focus: MAIN.into(), cmd: UserCmd::Answer { card: card2, text: "ship it today".into(), parts: String::new() } });
     let r = recs(&fx, MAIN).into_iter().find(|r| r["sb"] == "route").expect("the route line");
@@ -91,7 +91,7 @@ fn an_answer_by_number_names_its_option_in_both_feeds() {
     t.turn(MAIN, "ok");
     assert_eq!(t.hub.answered, None);
     // main's own card: one line, no message, in main's feed alone
-    t.req(MAIN, AgentReq::Card { text: "merge?\n1. merge\n2. not yet".into(), for_msg: None, page: None, artifact: None, open: Vec::new(), about: None });
+    t.req(MAIN, AgentReq::Card { text: "merge?\n1. merge\n2. not yet".into(), for_msg: None, page: None, artifact: None, open: Vec::new(), about: None, task: Vec::new() });
     let card3 = *t.hub.st.cards.keys().next().unwrap();
     let fx = t.go(Input::UserCmd { client: 1, focus: MAIN.into(), cmd: UserCmd::Answer { card: card3, text: "1".into(), parts: String::new() } });
     let rs: Vec<Value> = recs(&fx, MAIN).into_iter().filter(|r| r["sb"] == "route").collect();
@@ -154,6 +154,10 @@ fn a_watch_is_a_pause_or_an_alarm_on_the_agents_row() {
 /// ask-wait's tests, out of core_tests.rs too.
 #[path = "core_ask_tests.rs"]
 mod core_ask_tests;
+
+/// tasks' tests (docs/tasks.md), out of core_tests.rs too.
+#[path = "core_task_tests.rs"]
+mod core_task_tests;
 
 /// withdrawn-answer's tests, out of core_tests.rs too.
 #[path = "core_late_tests.rs"]

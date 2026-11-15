@@ -1,0 +1,26 @@
+{"now":1791100000000,"want":"needs you · 2 questions","row":{"id":"a","name":"A","by":"main","created_ms":1,"last_ms":1,"status":"needs_you","needs":2,"cards":[4]}}
+{"now":1791100000000,"want":"needs you · 1 question","row":{"id":"a","name":"A","by":"main","created_ms":1,"last_ms":1,"status":"needs_you","needs":1}}
+{"now":1791100000000,"want":"needs you","row":{"id":"a","name":"A","by":"main","created_ms":1,"last_ms":1,"status":"needs_you"}}
+{"now":1791100000000,"want":"working · docs","row":{"id":"a","name":"A","by":"main","created_ms":1,"last_ms":1,"status":"working","about":"agent","who":"docs"}}
+{"now":1791100000000,"want":"working","row":{"id":"a","name":"A","by":"main","created_ms":1,"last_ms":1,"status":"working"}}
+{"now":1791100000000,"want":"waiting · designer's reply","row":{"id":"a","name":"A","by":"main","created_ms":1,"last_ms":1,"status":"waiting","about":"reply","who":"designer"}}
+{"now":1791100000000,"want":"waiting · wakes at <next>","row":{"id":"a","name":"A","by":"main","created_ms":1,"last_ms":1,"status":"waiting","about":"timer","at_ms":1791103600000}}
+{"now":1791100000000,"want":"waiting · build's watch","row":{"id":"a","name":"A","by":"main","created_ms":1,"last_ms":1,"status":"waiting","about":"watch","who":"build"}}
+{"now":1791100000000,"want":"waiting · quiet since <past>","row":{"id":"a","name":"A","by":"main","created_ms":1,"last_ms":1,"agents":["docs"],"status":"waiting","about":"quiet","at_ms":1791090000000}}
+{"now":1791100000000,"want":"waiting","row":{"id":"a","name":"A","by":"main","created_ms":1,"last_ms":1,"agents":["docs"],"status":"waiting"}}
+{"now":1791100000000,"want":"stalled · auth-fix stopped at <past>","row":{"id":"a","name":"A","by":"main","created_ms":1,"last_ms":1,"status":"stalled","about":"crash","who":"auth-fix","at_ms":1791092800000}}
+{"now":1791100000000,"want":"stalled · quiet since <past>","row":{"id":"a","name":"A","by":"main","created_ms":1,"last_ms":1,"status":"stalled","about":"quiet","at_ms":1791080000000}}
+{"now":1791100000000,"want":"stalled","row":{"id":"a","name":"A","by":"main","created_ms":1,"last_ms":1,"status":"stalled"}}
+{"now":1791100000000,"want":"to review","row":{"id":"a","name":"A","by":"main","created_ms":1,"last_ms":1,"status":"to_review"}}
+{"now":1791100000000,"want":"paused · until <next>","row":{"id":"a","name":"A","by":"main","created_ms":1,"last_ms":1,"paused_ms":1791090000000,"until_ms":1791200000000,"status":"paused","about":"until","at_ms":1791200000000}}
+{"now":1791100000000,"want":"paused · by you","row":{"id":"a","name":"A","by":"main","created_ms":1,"last_ms":1,"paused_ms":1791090000000,"status":"paused"}}
+{"now":1791100000000,"want":"done · today","row":{"id":"a","name":"A","by":"main","created_ms":1,"last_ms":1,"done":{"at_ms":1791099000000,"by":"user"},"status":"done"}}
+{"now":1791100000000,"want":"done · yesterday","row":{"id":"a","name":"A","by":"main","created_ms":1,"last_ms":1,"done":{"at_ms":1791010000000,"by":"user"},"status":"done"}}
+{"now":1791100000000,"want":"done · 3 days ago","row":{"id":"a","name":"A","by":"main","created_ms":1,"last_ms":1,"done":{"at_ms":1790840000000,"by":"main"},"status":"done"}}
+{"now":1791100000000,"want":"done","row":{"id":"a","name":"A","by":"main","created_ms":1,"last_ms":1,"status":"done"}}
+{"now":1791100000000,"want":"ongoing","row":{"id":"a","name":"A","ongoing":true,"by":"main","created_ms":1,"last_ms":1,"status":"ongoing"}}
+{"now":1791100000000,"want":"quiet","row":{"id":"a","name":"A","by":"main","created_ms":1,"last_ms":1,"status":"a_newer_status"}}
+{"now":1791100000000,"want":"to review · PR #412","row":{"id":"a","name":"A","by":"main","created_ms":1,"last_ms":1,"status":"to_review","pr":412}}
+{"now":1791100000000,"want":"needs you · a pick on page launch plan","row":{"id":"a","name":"A","by":"main","created_ms":1,"last_ms":1,"status":"needs_you","needs":1,"cards":[4],"page":"launch plan"}}
+{"now":1791100000000,"want":"waiting · no agent yet","row":{"id":"a","name":"A","by":"user","created_ms":1,"last_ms":1,"status":"waiting","about":"quiet","at_ms":1}}
+{"now":1791100000000,"want":"waiting · quiet since <past>","row":{"id":"a","name":"A","by":"main","created_ms":1,"last_ms":1,"status":"waiting","about":"quiet","at_ms":1,"agents":["docs"]}}

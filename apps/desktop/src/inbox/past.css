@@ -14,6 +14,9 @@
 
 .ip-who { margin-right: var(--s-2); font-weight: 600; }
 .ip-q { color: var(--c-text); }
+/* 'On paused tasks': its fold, the group label's own words and look (a paused task's questions) */
+.ip-fold { display: inline-flex; align-items: center; gap: var(--s-1); font: 500 var(--f-meta); color: var(--c-text-3); }
+.ip-fold:hover { color: var(--c-text-2); }
 /* '?' waits on him: the accent's one use on a row */
 /* withdrawn: dim, the reason on its second line */
 .ip-row.gone .ip-who, .ip-row.gone .ip-q { color: var(--c-text-3); }

@@ -15,6 +15,7 @@ import ./lazy.bend as LZ
 import ./gone.bend as G
 import ./names.bend as NM
 import ./agents.bend as AG
+import ./work.bend as WO
 import ./gen/state.bend as S
 
 type Ev is Data:
@@ -71,6 +72,14 @@ type Ev is Data:
   # them (after a rollback the project comes back unpaused)
   EPaused{at: Nat}
   EResumed{at: Nat}
+  # tasks (hub/work.bend): a work made, one change of it, folded to a
+  # tomb; an agent's turn's works (`add`: steered in); his moves
+  EWorkCreated{w: S.Work}
+  EWorkChanged{id: String, op: S.WOp, by: String, at: Nat}
+  EWorkFolded{id: String, at: Nat}
+  EWorkTurn{t: S.WTurn}
+  ECardMoved{m: S.CardMove}
+  EArtMoved{m: S.Moved}
 
 type AgentOp is Data:
   OLife{life: S.Life, reason: Maybe<&2, String>}
@@ -84,6 +93,8 @@ type AgentOp is Data:
   OFollow{f: Maybe<&2, String>}
   # hub-loop: the end of a drop (`ok`: removed, `snap` its saved work)
   ODrop{ok: Bool, snap: Maybe<&2, String>}
+  # tasks: its turn's works (`add`: steered in, else a new turn's)
+  OTurnWorks{works: List<&2, String>, add: Bool}
 
 type MsgOp is Data:
   OSt{st: S.MSt}
@@ -363,6 +374,8 @@ def agent_op(+a: S.Agent, op: AgentOp) -> S.Agent:
       S.Agent.with_follow(a, f)
     case ODrop{ok, +sn}:
       agent_op.drop(ok, a, sn)
+    case OTurnWorks{+ws, add}:
+      S.Agent.with_turn_works(a, WO.turn_works(S.Agent.turn_works(a), ws, add))
 
 def Agent.strip(+a: S.Agent, +n: String) -> S.Agent:
   S.Agent.with_aliases(a, NM.drop_str(S.Agent.aliases(a), n))
@@ -429,6 +442,14 @@ def drop_card(xs: List<&2, S.Card>, +id: Nat) -> List<&2, S.Card>:
 def put_card(xs: List<&2, S.Card>, +c: S.Card) -> List<&2, S.Card>:
   snoc(S.Card, drop_card(xs, S.Card.id(c)), c)
 
+# tasks: his move of card `id` to `works` (law moved_by_you_sticks)
+def card_moved(xs: List<&2, S.Card>, +id: Nat, +ws: List<&2, String>) -> List<&2, S.Card>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case Con{+h, +t}:
+      LZ.pick(List<&2, S.Card>, Nat.is_eq(S.Card.id(h), id), u => S.Card.with_moved(S.Card.with_works(h, ws), True{}) <> t, u => h <> card_moved(t, id, ws))
+
 def is_queued(s: S.MSt) -> Bool:
   match s:
     case S.Queued{_}:
@@ -467,7 +488,7 @@ def msg_of_sent(+s: S.Sent) -> S.Msg:
   +m = S.Msg.with_reply_to(S.Msg.with_to(S.Msg.with_from(S.Msg.with_thread(S.Msg.with_id(S.Msg.empty(), S.Sent.id(s)), S.Sent.thread(s)), S.Sent.from(s)), S.Sent.to(s)), S.Sent.reply_to(s))
   +m2 = S.Msg.with_plain(S.Msg.with_created(S.Msg.with_auto(S.Msg.with_expect(m, S.Sent.expect(s)), S.Sent.auto(s)), S.Sent.created(s)), S.Sent.plain(s))
   +m3 = S.Msg.with_has_parts(S.Msg.with_via(S.Msg.with_queued(m2, S.Sent.queued(s)), S.Sent.via(s)), Bool.not(String.is_empty(S.Sent.parts(s))))
-  S.Msg.with_view(S.Msg.with_fwd(m3, S.Sent.fwd(s)), S.Sent.view(s))
+  S.Msg.with_works(S.Msg.with_view(S.Msg.with_fwd(m3, S.Sent.fwd(s)), S.Sent.view(s)), S.Sent.works(s))
 
 def new_rec(+m: S.Msg) -> S.MRec:
   S.MRec.with_st(S.MRec.with_msg(S.MRec.empty(), m), S.Queued{"new"})
@@ -817,6 +838,22 @@ def apply(+st: S.St, e: Ev) -> S.St:
       S.St.with_paused(st, Some{at})
     case EResumed{_}:
       S.St.with_paused(st, None{})
+    case EWorkCreated{+w}:
+      S.St.over_works(st, xs => WO.put(xs, w))
+    case EWorkChanged{+id, +op, +by, +at}:
+      S.St.over_works(st, xs => WO.changed(xs, id, op, by, at))
+    case EWorkFolded{+id, _}:
+      WO.folded(st, id)
+    case EWorkTurn{+t}:
+      +ws = S.WTurn.works(t)
+      +ag = S.WTurn.agent(t)
+      S.St.over_works(on_agent(st, ag, OTurnWorks{ws, S.WTurn.add(t)}), xs => WO.served(xs, ws, ag, S.WTurn.at(t)))
+    case ECardMoved{+m}:
+      S.St.over_cards(st, cs => card_moved(cs, S.CardMove.card(m), S.CardMove.works(m)))
+    # his act, journaled; its works are the artifact's own (the shell's
+    # Meta, fx art_works): sb-core keeps no map of them (architect m_64740)
+    case EArtMoved{_}:
+      st
 
 # an event that changes St.order (apply's over_order): a new task, a
 # rename. Every other one keeps it (law apply_keeps_order), so a step

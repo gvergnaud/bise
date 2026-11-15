@@ -191,6 +191,18 @@ def gone_bound.go(+e: HM.Ev, +s: HS.St, h: {Nat.is_le(List.length(&2, HS.Item, H
           h
         case HM.EResumed{a}:
           h
+        case HM.EWorkCreated{w0}:
+          h
+        case HM.EWorkChanged{w0, w1, w2, w3}:
+          h
+        case HM.EWorkFolded{w0, w1}:
+          h
+        case HM.EWorkTurn{wt}:
+          h
+        case HM.ECardMoved{cm}:
+          h
+        case HM.EArtMoved{am}:
+          h
         case HM.ECardWithdrawn{id, text}:
           Laws.gone_add_bound(HS.St.gone(s), id, text)
         case HM.ECardLate{id}:

@@ -19,7 +19,7 @@ fn rendered(text: &str) -> String {
 }
 
 fn send(to: &str, text: &str, parts: &str) -> AgentReq {
-    AgentReq::Send { to: to.into(), text: text.into(), expect_reply: false, reply_to: None, queued: false, why: String::new(), switch: None, parts: parts.into(), attach: Vec::new(), fwd: None }
+    AgentReq::Send { to: to.into(), text: text.into(), expect_reply: false, reply_to: None, queued: false, why: String::new(), switch: None, parts: parts.into(), attach: Vec::new(), fwd: None, task: Vec::new() }
 }
 
 #[test]
@@ -76,6 +76,7 @@ fn a_brief_keeps_its_parts_with_the_head_in_front() {
             parts: parts.clone(),
             attach: Vec::new(),
             fwd: None,
+            task: Vec::new(),
         },
     );
     let id = t.hub.st.whole_msgs().find(|m| m.to == "a").expect("its brief").id;

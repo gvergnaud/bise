@@ -55,6 +55,7 @@ fn full_field(f: &Field) -> Value {
         Some("Lifecycle") => json!("stopped"),
         Some("Run") => json!("busy"),
         Some("Option<Declaration>") => json!({"status": "done", "note": "n"}),
+        Some("Work") => json!({"id": "w", "name": "W", "why": "y", "goals": [{"text": "g", "done": true, "by": "docs"}], "kind": "ongoing", "origin": 3, "by": "main", "created_ms": 1, "paused": 2, "until": 4, "until_timer": 5, "done": {"at": 6, "by": "user"}, "merged_into": "v", "named_by_you": true, "agents": ["docs"], "last": 7}),
         Some("Option<Report>") => json!({"at_ms": 1, "kind": "done", "summary": "s", "decisions": ["d"], "auto": true, "step": 1, "of": 2, "result": {"k": 1}}),
         Some(t) => panic!("{}: no sample for {t}", f.name),
     }
@@ -85,6 +86,7 @@ fn empty_field(f: &Field) -> Option<Value> {
         (None, Some("Workspace")) => Some(json!({"mode": "shared", "path": "", "branch": null, "base_commit": null, "dropped": false})),
         (None, Some("Lifecycle")) => Some(json!("active")),
         (None, Some("Run")) => Some(json!("down")),
+        (None, Some("Work")) => Some(json!({"id": "", "name": "", "why": "", "goals": [], "kind": "task", "by": "", "created_ms": 0, "agents": [], "last": 0})),
         (None, Some(_)) => Some(Value::Null),
     }
 }
@@ -243,9 +245,10 @@ fn a_bad_effect_costs_only_itself() {
 #[test]
 fn the_view_table_is_what_serde_writes() {
     type Rw = fn(Value) -> Value;
-    let rws: [(&str, Rw); 3] = [
+    let rws: [(&str, Rw); 4] = [
         ("ViewAgent", |v| serde_json::to_value(serde_json::from_value::<ViewAgent>(v).unwrap()).unwrap()),
         ("ViewMsg", |v| serde_json::to_value(serde_json::from_value::<ViewMsg>(v).unwrap()).unwrap()),
+        ("ViewWork", |v| serde_json::to_value(serde_json::from_value::<super::view::ViewWork>(v).unwrap()).unwrap()),
         ("View", |v| View::decode(&v).unwrap().to_value()),
     ];
     assert_eq!(VIEW.kinds.len(), rws.len());

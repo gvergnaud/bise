@@ -529,7 +529,10 @@ function entityOf(x: unknown): Entity | undefined {
     case 'scheduled':
       return s('project') && typeof x['id'] === 'number' ? (x as Entity) : undefined;
     case 'office':
+    case 'tasks':
       return s('project') ? (x as Entity) : undefined;
+    case 'task':
+      return s('project') && s('id') ? (x as Entity) : undefined;
     default:
       return undefined;
   }

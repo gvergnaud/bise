@@ -18,6 +18,7 @@ import type { Ev } from '@/store/store';
 import { flatHits, marks, nextScope, SCOPES, searchList, type Hit, type Scope, type SearchList } from '@/search/rank';
 import { searchDataOf } from '@/search/data';
 import { useGoArtifact } from '@/artifacts/leave';
+import { lineAt, openTask } from '@/tasks';
 import { PAGES } from '@/settings';
 import { useNow } from './clock';
 import { inboxFromMenu } from './inboxAsk';
@@ -84,7 +85,7 @@ function Pairs({ text }: { text: string }): ReactNode {
 }
 
 /** The events that change what the search reads. */
-const READS = new Set<Ev['ev']>(['agents', 'artifacts', 'cards', 'projects', 'scheduled']);
+const READS = new Set<Ev['ev']>(['agents', 'artifacts', 'cards', 'projects', 'scheduled', 'works']);
 
 /** A name with the query's matches bold and underlined. */
 function Marked({ text, q }: { text: string; q: string }): ReactNode {
@@ -131,12 +132,16 @@ export function Palette({ onClose }: { onClose: () => void }) {
   }, [store]);
   const route = useRoute();
   const data = useMemo(() => {
-    const d = searchDataOf({ projects, agents: (p) => store.agents(p), artifacts: (p) => store.artifacts(p), cards: (p) => store.cards(p), scheduled: (p) => store.scheduled(p), index });
+    const d = searchDataOf({
+      projects, agents: (p) => store.agents(p), artifacts: (p) => store.artifacts(p), cards: (p) => store.cards(p), scheduled: (p) => store.scheduled(p), index,
+      works: (p) => store.works(p),
+      taskLine: (p, w) => lineAt({ project: p, projectName: p, w }, now),
+    });
     // the app's pages by name (ambient-lead m_21499): the in-view project's first, the in-view agent's log
     return { ...d, pages: appPages({ projects: d.projects, route, settings: PAGES }) };
-    // version: a held project's agents, cards or artifacts changed
+    // version: a held project's agents, cards, artifacts or tasks changed; now: a task's line
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projects, index, store, version, route]);
+  }, [projects, index, store, version, route, now]);
   const list = useMemo(() => searchList(data, q, scope, now), [data, q, scope, now]);
   const hits = useMemo(() => flatHits(list), [list]);
   // a sentence (main m_12973): 'ask bise' is the first row, ⏎ asks; the hits come one row down
@@ -200,6 +205,11 @@ export function Palette({ onClose }: { onClose: () => void }) {
     if (h.open.to === 'artifact') {
       // a browser-only one (a PR, a link) opens his browser, no route (leave.ts)
       goArtifact(h.open.project, h.open.id);
+      return;
+    }
+    // a task: its tab in the panel
+    if (h.open.to === 'task') {
+      openTask(h.open.project, h.open.id);
       return;
     }
     // a page: as its key does (⌘I the inbox in place, ⌘/ the key list, the rest a route)

@@ -510,6 +510,16 @@ pub enum HubEv {
     /// the project's pulse (the H1 sidebar, rows::pulse): at hello, then
     /// at most once a minute and only when it changed
     Pulse { project: Project, pulse: crate::rows::Pulse },
+    /// tasks (rows::works, architect m_64809): the project's tasks with
+    /// their status, done ones within 7 days too, and the folded ones'
+    /// tombs; at hello and whenever one changes (the whole list)
+    Works {
+        project: Project,
+        #[serde(default)]
+        works: Vec<crate::rows::WorkRow>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        tombs: Vec<crate::rows::WorkTomb>,
+    },
     /// a newer bise to update to, as this hub sees it (update-flow,
     /// rows::bise_update): at hello and when it changes; None: nothing
     /// to show (on it, or no release known)
@@ -649,7 +659,7 @@ pub enum HubEv {
 }
 
 impl HubEv {
-    pub const TAGS: &'static [&'static str] = &["welcome", "agents", "cards", "thread", "thread_hits", "thread_marks", "entry", "typing", "partial", "artifacts", "artifacts_moved", "artifact_notes", "files_ids", "folders", "library", "scheduled", "worktrees", "processes", "proc_out", "merged", "features", "prs", "pr_acted", "pr_detail", "pr_check_log", "models", "tool_out", "queued_taken", "log", "completion", "log_body", "diff", "guide", "branches", "versions", "release", "update", "route", "route_done", "jobs", "job_end", "followed_end", "activity", "flow", "paused", "switch", "growth", "pulse", "bise_update", "usage", "pages", "page_changed", "card_open", "app_open", "inbox_history", "inbox_recorded", "focused", "approvals", "notice", "refused", "error"];
+    pub const TAGS: &'static [&'static str] = &["welcome", "agents", "cards", "thread", "thread_hits", "thread_marks", "entry", "typing", "partial", "artifacts", "artifacts_moved", "artifact_notes", "files_ids", "folders", "library", "scheduled", "worktrees", "processes", "proc_out", "merged", "features", "prs", "pr_acted", "pr_detail", "pr_check_log", "models", "tool_out", "queued_taken", "log", "completion", "log_body", "diff", "guide", "branches", "versions", "release", "update", "route", "route_done", "jobs", "job_end", "followed_end", "activity", "flow", "paused", "switch", "growth", "pulse", "works", "bise_update", "usage", "pages", "page_changed", "card_open", "app_open", "inbox_history", "inbox_recorded", "focused", "approvals", "notice", "refused", "error"];
 
     pub fn decode(line: &str) -> Result<HubEv, String> {
         Self::from_value(parse(line)?)
@@ -747,6 +757,13 @@ pub struct SendOpts {
     /// there. Only a trace: an unknown or archived one writes none
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub from: Option<String>,
+    /// his explicit tasks for these words, by id (a Task tab's '+ Agent':
+    /// tasks-ux m_64875). sb-core reads them like an agent's `--task` (a
+    /// merged id: its target; an unknown one or a tomb refuses the send) and
+    /// they replace the single-task rule (architect m_64887). Empty: the
+    /// rule applies
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub works: Vec<String>,
 }
 
 impl SendOpts {
@@ -997,6 +1014,27 @@ pub enum HubCmd {
         head: String,
         act: PrAct,
         req: u64,
+    },
+    /// his gesture on a task (the desktop's Task tab, Board, menus): one
+    /// `sb task` verb made as him, never an agent's op. sb-core decides
+    /// it; a refusal is its notice as this command's error (docs/tasks.md)
+    TaskAct { project: Project, req: crate::sb::Task },
+    /// he moved a card (`card`) or an artifact (`art`, its id: exactly one
+    /// of the two) to the tasks `works` (none: out of every task). `page`:
+    /// `art` is a page (the row he acted on is a page's), never looked up
+    /// by id. sb-core keeps his move: no stamp changes it after
+    /// (moved_by_you_sticks)
+    TaskMove {
+        project: Project,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "ts", ts(optional))]
+        card: Option<u64>,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        art: String,
+        #[serde(default, skip_serializing_if = "crate::is_false")]
+        page: bool,
+        #[serde(default)]
+        works: Vec<String>,
     },
     /// the inbox's history (inbox-record): one page of his answered and
     /// withdrawn cards, newest first, answered by `inbox_history`
@@ -1346,7 +1384,7 @@ pub enum HubCmd {
 }
 
 impl HubCmd {
-    pub const TAGS: &'static [&'static str] = &["subscribe", "unsubscribe", "page", "find", "marks", "send", "answer", "close", "approvals", "remove_rule", "stop", "archive", "unarchive", "artifacts_seen", "tool_out", "log", "completion", "log_body", "queued_take", "queued_steer", "diff", "worktrees", "processes", "proc_out", "proc_follow", "proc_stop", "merged", "features", "prs", "pr_act", "pr_detail", "pr_check_log", "inbox_history", "scheduled", "scheduled_stop", "wake_stop", "models", "new", "rename", "model", "effort", "route_correct", "route_cancel", "follow", "slash", "guide", "branches", "scheduled_run", "artifacts_add", "artifacts_move", "artifacts_folders", "artifacts_keep", "artifacts_opened", "artifacts_library", "focus", "versions", "version_info", "version_switch", "version_rollback", "version_restart", "version_update", "bise_update", "release_plan", "release_run", "stop_hub", "page_voice", "usage", "pause", "resume", "view_resource", "view_call", "view_message", "view_context", "plugin_views", "app_open", "view_close", "view_notes", "view_open", "view_copy", "folder_list", "file_new", "files_ids_subscribe", "files_mint"];
+    pub const TAGS: &'static [&'static str] = &["subscribe", "unsubscribe", "page", "find", "marks", "send", "answer", "close", "approvals", "remove_rule", "stop", "archive", "unarchive", "artifacts_seen", "tool_out", "log", "completion", "log_body", "queued_take", "queued_steer", "diff", "worktrees", "processes", "proc_out", "proc_follow", "proc_stop", "merged", "features", "prs", "pr_act", "task_act", "task_move", "pr_detail", "pr_check_log", "inbox_history", "scheduled", "scheduled_stop", "wake_stop", "models", "new", "rename", "model", "effort", "route_correct", "route_cancel", "follow", "slash", "guide", "branches", "scheduled_run", "artifacts_add", "artifacts_move", "artifacts_folders", "artifacts_keep", "artifacts_opened", "artifacts_library", "focus", "versions", "version_info", "version_switch", "version_rollback", "version_restart", "version_update", "bise_update", "release_plan", "release_run", "stop_hub", "page_voice", "usage", "pause", "resume", "view_resource", "view_call", "view_message", "view_context", "plugin_views", "app_open", "view_close", "view_notes", "view_open", "view_copy", "folder_list", "file_new", "files_ids_subscribe", "files_mint"];
 
     pub fn decode(line: &str) -> Result<HubCmd, String> {
         Self::from_value(parse(line)?)
@@ -1398,6 +1436,8 @@ impl HubCmd {
             | HubCmd::Features { project }
             | HubCmd::Prs { project }
             | HubCmd::PrAct { project, .. }
+            | HubCmd::TaskAct { project, .. }
+            | HubCmd::TaskMove { project, .. }
             | HubCmd::PrDetail { project, .. }
             | HubCmd::PrCheckLog { project, .. }
             | HubCmd::InboxHistory { project, .. }

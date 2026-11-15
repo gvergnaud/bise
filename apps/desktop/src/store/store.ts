@@ -477,6 +477,8 @@ export class Store extends StoreVoice {
     shot?: number;
     /** the thread he typed it in when not `agent`'s (at-start): the hub leaves one route row there */
     from?: string;
+    /** his explicit tasks (a Task tab's '+ Agent'): the hub reads them like --task */
+    works?: readonly string[];
   }): number {
     // Sugar over store.do (machine/sends.ts): its 8 callers move to store.do and it goes when
     // fast-try's p4 resumes (paused after slice 2 by Gabriel's word: no new refactors)
@@ -639,4 +641,5 @@ export type {
   ToolOut,
   VersionsList,
   VoiceModeState,
+  Works,
 } from "./types";

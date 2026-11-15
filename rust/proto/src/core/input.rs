@@ -56,8 +56,12 @@ core_kinds! {
         /// his message to the agent in view (`parts`: msg-parts JSON, only
         /// when he sent typed parts). `from`: the thread he typed it in when
         /// not `focus`'s (at-start: his `@agent …` from another thread), ""
-        /// none: sb-core leaves one route row there
-        Say = "say" => ISay { focus: Str, text: Str, queued: Bool, parts: StrOmit, from: StrOmit },
+        /// none: sb-core leaves one route row there. `works`: his explicit
+        /// pick (a Task tab's '+ Agent', SendOpts.works): read like an
+        /// agent's `--task` (task_flag: a merged one's target, an unknown
+        /// one refuses the send) and it replaces the single-task rule
+        /// (architect m_64887); none: the rule applies
+        Say = "say" => ISay { focus: Str, text: Str, queued: Bool, parts: StrOmit, from: StrOmit, works: OptStrsOmit },
         /// his `@agent` message
         Route = "route" => IRoute { target: Str, text: Str, focus: Str, queued: Bool, parts: StrOmit },
         /// `/new`: `brief` is the Brief as JSON, `brief_text` its body
@@ -150,6 +154,22 @@ core_kinds! {
         /// `agent`'s transcript at `pos`: journaled once per card closed
         /// with his answer (law answer_pos_once)
         AnswerPos = "answer_pos" => IAnswerPos { card: Nat, agent: Str, pos: Nat },
+        /// tasks (architect m_64425): his page waits per work, the shell's
+        /// facts (`sb page waiting`'s rows that carry a work): work
+        /// `works[i]` has `ns[i]` of them. Sent at the shell's boot before
+        /// any client, then when they change; it replaces the ones before
+        /// (runtime only, R.pw)
+        PageWaits = "page_waits" => IPageWaits { works: Strs, ns: Nats },
+        /// tasks: his gesture on a work in the app (Board, Task tab:
+        /// done, pause, rename…), `req` in `sb task`'s shape (`step`,
+        /// `id`, …). Only the client socket sends it, so it is the one
+        /// input that acts as him (law an_agent_never_acts_as_him); an
+        /// agent's `sb task` is an `IReq` by that agent
+        WorkAct = "work_act" => IWorkAct { req: Json },
+        /// tasks: his "Move to task…" on a card (`card`) or an artifact
+        /// (`art`; `page`: the page store's page `art`, typed from the row
+        /// he acted on): its works from then (law moved_by_you_sticks)
+        WorkMove = "work_move" => IWorkMove { card: OptNat, art: StrOmit, works: Strs, page: Bool },
         /// `sb every`: the hub checked the request and computed `next_ms`;
         /// one of `every_ms`, `daily_min`; `name` only when given
         EverySet = "every_set" => IEverySet {

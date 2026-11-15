@@ -43,3 +43,9 @@
 {"type":"wake_end","id":1,"why":"exited","at":1100000}
 {"type":"paused","at":1200000}
 {"type":"resumed","at":1300000}
+{"type":"work_created","work":{"id":"login-timeout","name":"Login timeout on slow networks","why":"the login spins for 30 s","goals":[{"text":"reproduced on a 3G profile","done":true,"by":"auth-fix"},{"text":"login works on 3G within 10 s","done":false,"by":""}],"kind":"task","origin":12,"by":"main","created_ms":1400000,"paused":1450000,"until":1600000,"until_timer":4,"done":{"at":1500000,"by":"user"},"merged_into":"auth","named_by_you":true,"agents":["auth-fix","designer"],"last":1400000}}
+{"type":"work_changed","id":"login-timeout","op":"tick","n":1,"by":"auth-fix","at":1410000}
+{"type":"work_folded","id":"login-timeout","at":2100000}
+{"type":"work_turn","turn":{"agent":"auth-fix","works":["login-timeout"],"add":true,"at":1400100}}
+{"type":"card_moved","moved":{"card":3,"works":["login-timeout"]}}
+{"type":"art_moved","moved":{"art":"repro-page","works":["login-timeout"]}}

@@ -9,7 +9,7 @@ use bise_proto::parts::Part;
 const IMG: &str = r#"{"kind":"image","name":"[Image #1]","source":"/u/s.png","mime":"image/png","b64_file":"/h/images/1.b64"}"#;
 
 fn fwd(to: &str, note: &str, n: u64) -> AgentReq {
-    AgentReq::Send { to: to.into(), text: note.into(), expect_reply: true, reply_to: None, queued: false, why: String::new(), switch: None, parts: String::new(), attach: Vec::new(), fwd: Some(n) }
+    AgentReq::Send { to: to.into(), text: note.into(), expect_reply: true, reply_to: None, queued: false, why: String::new(), switch: None, parts: String::new(), attach: Vec::new(), fwd: Some(n), task: Vec::new() }
 }
 
 fn his_id(t: &T, text: &str) -> u64 {
@@ -56,7 +56,7 @@ fn a_file_chip_mid_sentence_is_a_link_and_a_forward_keeps_it() {
     let text = bise_proto::parts::render(&p);
     let link = "demande d'update [The Bot.md](/u/vibebot/The Bot.md) pour interpoler";
     assert_eq!(text, link);
-    t.req(MAIN, AgentReq::Send { to: "docs".into(), text: text.clone(), expect_reply: false, reply_to: None, queued: false, why: String::new(), switch: None, parts: parts.into(), attach: Vec::new(), fwd: None });
+    t.req(MAIN, AgentReq::Send { to: "docs".into(), text: text.clone(), expect_reply: false, reply_to: None, queued: false, why: String::new(), switch: None, parts: parts.into(), attach: Vec::new(), fwd: None, task: Vec::new() });
     let n = t.hub.st.msgs().values().find(|m| t.hub.st.text(m.id) == text).expect("the message").id;
     t.spawn_task("b");
     t.turn("b", "ok");
@@ -88,7 +88,7 @@ fn a_forwards_parts_render_to_its_text() {
     let rich = format!(r#"[{{"kind":"quote","from":"t1","text":"the quoted line"}},{{"kind":"text","text":"look "}},{IMG},{{"kind":"paste","n":1,"text":"a\nb"}}]"#);
     let p: Vec<Part> = serde_json::from_str(&rich).unwrap();
     let text = bise_proto::parts::render(&p);
-    t.req(MAIN, AgentReq::Send { to: "a".into(), text: text.clone(), expect_reply: false, reply_to: None, queued: false, why: String::new(), switch: None, parts: rich, attach: Vec::new(), fwd: None });
+    t.req(MAIN, AgentReq::Send { to: "a".into(), text: text.clone(), expect_reply: false, reply_to: None, queued: false, why: String::new(), switch: None, parts: rich, attach: Vec::new(), fwd: None, task: Vec::new() });
     let rich = t.hub.st.msgs().values().find(|m| t.hub.st.text(m.id) == text).unwrap().id;
     let check = |t: &T, n: u64| {
         let id = t.hub.st.whole_msgs().filter(|m| m.fwd == Some(n)).max_by_key(|m| m.id).expect("the forward").id;
@@ -153,7 +153,7 @@ fn a_forward_carries_the_originals_images() {
     let parts = format!(r#"[{{"kind":"text","text":"look\n\n"}},{IMG}]"#);
     let p: Vec<bise_proto::parts::Part> = serde_json::from_str(&parts).unwrap();
     let text = bise_proto::parts::render(&p);
-    let send = AgentReq::Send { to: "a".into(), text: text.clone(), expect_reply: false, reply_to: None, queued: false, why: String::new(), switch: None, parts, attach: Vec::new(), fwd: None };
+    let send = AgentReq::Send { to: "a".into(), text: text.clone(), expect_reply: false, reply_to: None, queued: false, why: String::new(), switch: None, parts, attach: Vec::new(), fwd: None, task: Vec::new() };
     t.req(MAIN, send);
     let n = t.hub.st.msgs().values().find(|m| t.hub.st.text(m.id) == text).unwrap().id;
     let (_, fx) = t.req("a", fwd("b", "see", n));
@@ -182,6 +182,7 @@ fn a_spawn_brief_carries_the_forward_last() {
             parts: String::new(),
             attach: Vec::new(),
             fwd: Some(n),
+            task: Vec::new(),
         },
     );
     let brief = t.hub.st.whole_msgs().find(|m| m.to == "fw").expect("its brief").clone();

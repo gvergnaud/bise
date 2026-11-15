@@ -19,6 +19,7 @@ mod pulse;
 mod scheduled;
 mod switch;
 mod usage;
+mod works;
 
 pub use agents::*;
 pub use approvals::*;
@@ -36,6 +37,7 @@ pub use pulse::*;
 pub use scheduled::*;
 pub use switch::*;
 pub use usage::*;
+pub use works::*;
 
 pub(crate) fn is_zero_u64(n: &u64) -> bool {
     *n == 0

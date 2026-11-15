@@ -129,7 +129,7 @@ Give a precise brief: objective, the context you know, constraints, a verifiable
 5. Ask the user a clarification question.\n\n\
 {tone}\n\n\
 As main, also:\n\
-- The user has an inbox of their own: it holds only what needs them, and only you put things there, with `sb notify`. Your questions waiting there are \"notifications\". The agents' messages (questions to you, reports, blocked tasks) are yours to handle: they never reach the user's inbox.\n\
+- The user has an inbox of their own: it holds only what needs them, and only you put things there, with `sb notify`. Your questions waiting there are \"notifications\". The agents' messages (questions to you, reports, blocked tasks) are yours to handle: they never reach the user's inbox, except an agent's `sb report blocked`, which opens its own card for the user (your notice names it): never open another card for that agent's blocked.\n\
 - When you route work, say who takes what in one line: `on it: auth-fix takes the safari bug, release takes the note.`\n\
 - After a burst of agent traffic, ONE summary line for the whole burst: `auth-fix fixed the safari login and release drafted the note. nothing needs you.` Nothing changed for the user: say nothing.\n\
 {desk}\
@@ -196,7 +196,7 @@ Your working directory: {place} Your bash tool already runs there.\n\
 {msgs}\n\n\
 Rules:\n\
 - The `<bise_state>` block at the end of each request is the live state of the group, injected by the hub. It is not a user message.\n\
-- When the task is finished: `sb report done \"<summary>\"`, then give a short final answer. When you need the user: `sb report blocked \"<what you need>\"`, or ask main (`sb send main --expect-reply \"…\"`). You never reach the user's inbox yourself: main escalates to the user when it cannot answer, and the user's answer comes back to you as a message. A question for the user is read alone in his inbox: write it whole, the decision in one line, what it is and why now, and choices as verbs that say what each does. A question about something you made for him (a page, a site, a doc, a prototype) goes on its page as a `question` block, which makes his notification linked to it, so one click opens it. Asked to main instead, name it by its id (`bims-office#look`, `les-bims-prototype`), so main links it.\n\
+- When the task is finished: `sb report done \"<summary>\"`, then give a short final answer. When you need the user: `sb report blocked \"<what you need>\"`, or ask main (`sb send main --expect-reply \"…\"`). `sb report blocked` opens a card for the user in their inbox (main is told); otherwise you never reach the user's inbox yourself: main escalates to the user when it cannot answer. The user's answer comes back to you as a message. A question for the user is read alone in his inbox: write it whole, the decision in one line, what it is and why now, and choices as verbs that say what each does. A question about something you made for him (a page, a site, a doc, a prototype) goes on its page as a `question` block, which makes his notification linked to it, so one click opens it. Asked to main instead, name it by its id (`bims-office#look`, `les-bims-prototype`), so main links it.\n\
 - A brief that is ambiguous or lacks context: read where it came from with `sb inspect main --origin` (then `--before`/`--after`/`--query`). Read only what you need.
 - When the user or your brief refers to past work you do not have in context (\"like we did for the inbox\", a commit, an old task): `sb history`, then `sb show <agent>#<pos>`. Search before you ask.
 - What you make for the user to look at (a doc, a deck, a site, an image, a PR, a deploy; a draft or a report waiting for a go too) goes in with `sb artifact add` as soon as it exists, without being asked, again for each new version. Screenshots of a check or a gate go in as one artifact (its index page or a contact sheet), never one per image. What is for the user himself (a draft that leaves, a deliverable he asked for) takes `--for-you`; the rest stays between agents. `sb artifact keep <id>` only for what he will come back to, never a run's output. Name it in replies and reports as `[<title>](artifact:<id>)`: the user sees a chip that opens it.
@@ -663,7 +663,8 @@ mod tests {
     /// the projects registry) gets main's prompt as main rendered it at
     /// 28cd0f46, byte for byte, but for the command rows of the commands
     /// that came with the desktop (page, taste, people, follow new; report
-    /// and every with new options). The fixture is main 28cd0f46's
+    /// and every with new options; task new with tasks, its birth rule in
+    /// main's row). The fixture is main 28cd0f46's
     /// main_role("/w", "/t", main_section(None, None)), with msg-forward's
     /// rules in it (architect m_41072: `--forward m_<n>` replaces "forward
     /// the user's words verbatim", every agent reads his message ids).
@@ -676,7 +677,7 @@ mod tests {
         let rows = |t: &str| t.lines().filter(|l| row_cmd(l).is_some()).map(String::from).collect::<std::collections::BTreeSet<_>>();
         let (old, new) = (rows(main), rows(&now));
         let changed: std::collections::BTreeSet<String> = old.symmetric_difference(&new).filter_map(|l| row_cmd(l)).collect();
-        let want: std::collections::BTreeSet<String> = ["every", "feature", "follow", "page", "people", "report", "send", "show", "spawn", "taste", "wake"].into_iter().map(String::from).collect();
+        let want: std::collections::BTreeSet<String> = ["every", "feature", "follow", "page", "people", "report", "send", "show", "spawn", "task", "taste", "wake"].into_iter().map(String::from).collect();
         assert_eq!(changed, want, "the command rows that differ from main's");
         // a plain project's tasks never read the @bise paragraph either
         assert!(!messages(false).contains("@bise") && messages(true).contains("@bise"));

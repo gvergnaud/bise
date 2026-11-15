@@ -3,6 +3,7 @@
 // the agent's typing line. Owner: amb-win. Split out of rows.tsx (pure move).
 import { memo, useContext, useEffect, useState, type ReactNode } from 'react';
 import { RouterContext } from '@/app/router';
+import { TaskChipsOf } from '@/tasks';
 import { Button, Chip, Press } from '@/ds';
 import type { Entry } from '@/proto';
 import { common, thread } from '@/proto/words.gen';
@@ -91,7 +92,18 @@ function WentRow({ e, ctx, name }: { e: Entry; ctx: RowCtx; name: string }) {
 
 export function YouRow({ e, ctx, next }: { e: Entry; ctx: RowCtx; next: Entry | undefined }) {
   if (e.went?.agent === true) return <WentRow e={e} ctx={ctx} name={e.went.name} />;
-  return <YouMessage e={e} ctx={ctx} next={next} />;
+  // the task his message started, under it (a task's origin is his message's id: WorkRow.origin)
+  const id = e.msg_id ?? null;
+  return (
+    <>
+      <YouMessage e={e} ctx={ctx} next={next} />
+      {id !== null && (
+        <div className="tk-under-you">
+          <TaskChipsOf project={ctx.project} of={{ origin: id }} testId={`thread.you.${String(e.pos)}.task`} />
+        </div>
+      )}
+    </>
+  );
 }
 
 function YouMessage({ e, ctx, next }: { e: Entry; ctx: RowCtx; next: Entry | undefined }) {

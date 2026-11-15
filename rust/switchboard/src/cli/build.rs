@@ -58,8 +58,8 @@ pub fn build(args: &[String]) -> Result<Req, String> {
             }
         }
         "ask" => {
-            let (pos, o) = parse_args(rest, &["timeout"], &[])?;
-            Req::Ask { to: agent(&pos, "usage: sb ask <agent> \"<question>\"")?, text: text_of(&pos[1..])?, timeout_s: timeout_of(&o) }
+            let (pos, o) = parse_args(rest, &["timeout", "task"], &[])?;
+            Req::Ask { to: agent(&pos, "usage: sb ask <agent> \"<question>\"")?, text: text_of(&pos[1..])?, timeout_s: timeout_of(&o), task: tasks_of(&o) }
         }
         "wait" => {
             let (pos, o) = parse_args(rest, &["timeout"], &[])?;
@@ -92,7 +92,12 @@ pub fn build(args: &[String]) -> Result<Req, String> {
             Req::Follow { agent: agent(&pos, "usage: sb follow <agent> [--off]")?, on: !o.contains_key("off"), hub: String::new() }
         }
         "report" => {
-            let (pos, o) = parse_args(rest, &["decision", "step", "result"], &[])?;
+            let (pos, o) = parse_args(rest, &["decision", "step", "result", "done-when", "task"], &[])?;
+            // tasks: --done-when <n>, the done-when item it ticks
+            let done_when = match o.contains_key("done-when") {
+                true => Some(str_of(&o, "done-when").trim_start_matches('#').parse::<u64>().ok().filter(|n| *n > 0).ok_or("--done-when expects an item number (1 the first)")?),
+                false => None,
+            };
             // S10: --step n/m; emitter 5: --result, proto's DiffResult
             let step = if o.contains_key("step") { Some(step_of(&str_of(&o, "step"))?) } else { None };
             let result = if o.contains_key("result") { Some(result_of(&str_of(&o, "result"))?) } else { None };
@@ -100,7 +105,7 @@ pub fn build(args: &[String]) -> Result<Req, String> {
             if !["progress", "done", "failed", "blocked"].contains(&kind.as_str()) {
                 return Err(format!("unknown report kind: {kind} (progress|done|failed|blocked)"));
             }
-            Req::Report { kind, summary: text_of(&pos[1..])?, decisions: list_of(o.get("decision")), step, result }
+            Req::Report { kind, summary: text_of(&pos[1..])?, decisions: list_of(o.get("decision")), step, result, done_when, task: tasks_of(&o) }
         }
         "spawn" => spawn(rest)?,
         "move" => {
@@ -120,6 +125,7 @@ pub fn build(args: &[String]) -> Result<Req, String> {
         }
         "every" => Req::Every(every(rest)?),
         "wake" => Req::Wake(wake_req(rest)?),
+        "task" => Req::Task(task_req(rest)?),
         "taste" => Req::Taste(keeps_req(cmd, rest)?),
         "people" => Req::People(keeps_req(cmd, rest)?),
         "land" => {
@@ -174,7 +180,7 @@ pub fn build(args: &[String]) -> Result<Req, String> {
 
 /// `sb send <agent> "<text>"`, or a model switch alone (issue #4).
 fn send(rest: &[String]) -> Result<Req, String> {
-    let (pos, o) = parse_args(rest, &["reply-to", "mode", "why", "model", "effort", "attach", "forward"], &["expect-reply"])?;
+    let (pos, o) = parse_args(rest, &["reply-to", "mode", "why", "model", "effort", "attach", "forward", "task"], &["expect-reply"])?;
     let to = agent_arg(&pos, "usage: sb send <agent> \"<text>\"")?;
     let fwd = forward_of(&o)?;
     // desktop S2: `@bise` (bise's question in a project hub) is a sender
@@ -202,7 +208,7 @@ fn send(rest: &[String]) -> Result<Req, String> {
     };
     // main answering a task for the user: the reason, shown to the user
     // in main's feed (C2 `answered`)
-    Ok(Req::Send { to, text, expect_reply: o.contains_key("expect-reply"), reply_to, queued, why: str_of(&o, "why"), switch, attach, parts: String::new(), fwd })
+    Ok(Req::Send { to, text, expect_reply: o.contains_key("expect-reply"), reply_to, queued, why: str_of(&o, "why"), switch, attach, parts: String::new(), fwd, task: tasks_of(&o) })
 }
 
 /// msg-forward: `--forward m_<n>` (one), never with `--attach` (v1: two
@@ -225,7 +231,7 @@ fn forward_of(o: &Map<String, Value>) -> Result<Option<u64>, String> {
 fn spawn(rest: &[String]) -> Result<Req, String> {
     let (pos, o) = parse_args(
         rest,
-        &["objective", "context", "constraint", "done-when", "report-format", "place", "feature", "model", "effort", "profile", "attach", "forward", "folder"],
+        &["objective", "context", "constraint", "done-when", "report-format", "place", "feature", "model", "effort", "profile", "attach", "forward", "folder", "task"],
         &["worktree", "with-changes"],
     )?;
     let attach = attach::of(&o)?;
@@ -268,6 +274,7 @@ fn spawn(rest: &[String]) -> Result<Req, String> {
         attach,
         parts: String::new(),
         fwd,
+        task: tasks_of(&o),
     })
 }
 
