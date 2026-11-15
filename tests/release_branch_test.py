@@ -108,8 +108,11 @@ def flow():
         fix1 = commit(repo, "a.txt", "a2\n", "fix: a2")
         commit(repo, "c.txt", "c\n", "feat: c")
         fix2 = commit(repo, "f.txt", "f2\n", "fix(feat): f2")  # needs the held feature
+        fix3 = commit(repo, "t.txt", "t\n", "fix(test): t, after %s" % pre[:9])  # names a commit the line holds
         rc, out = run(repo, bh, "candidates")
-        check(fix1[:12] in out and fix2[:12] in out and "feat: c" not in out, "candidates %s" % out)
+        check(fix1[:12] in out and fix2[:12] in out and "feat: c" not in out and "by subject" in out, "candidates %s" % out)
+        flagged = [l for l in out.splitlines() if "<- fixes" in l]
+        check(len(flagged) == 1 and flagged[0].startswith(fix3[:12]), "a fix naming a commit in the line is flagged %s" % out)
         rc, out = run(repo, bh, "pick", merge)
         check(rc == 1 and "merge" in out, "a merge is refused %s" % out)
         rc, out = run(repo, bh, "pick", fix1, gate="false")

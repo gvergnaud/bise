@@ -49,6 +49,7 @@ PREFIX = "release/"
 TAG_RE = re.compile(r"^v(\d{4})\.(\d{1,2})\.(\d{1,2})(?:-(\d+))?$")
 NAMED_RE = re.compile(r"^(?:\(cherry picked from commit ([0-9a-f]{7,40})\)|Backport-of:\s*([0-9a-f]{7,40}))\s*$", re.M)
 FIX_RE = re.compile(r"^fix(\([^)]*\))?!?:")
+SHA_RE = re.compile(r"\b([0-9a-f]{7,40})\b")
 
 
 # ---- pure ------------------------------------------------------------------------------------
@@ -326,7 +327,13 @@ def cmd_candidates(r):
     for l in (git(r.path, "log", "--first-parent", "--reverse", "--format=%H %s", "%s..main" % r.base) or "").splitlines():
         sha, _, subject = l.partition(" ")
         if FIX_RE.match(subject) and sha in plus and sha not in have:
-            print("%s %s" % (sha[:12], subject[:100]))
+            # a fix naming a commit the line holds (58f12cfa3 named 6579c4400): the line's own
+            # gate may need it even when it ships nothing (marketing m_65530)
+            inside = [m for m in SHA_RE.findall(subject)
+                      if full(r.path, m) and is_ancestor(r.path, full(r.path, m), r.base)]
+            print("%s %s%s" % (sha[:12], subject[:100],
+                               "  <- fixes %s, in the line: its gate may need it even if it ships nothing" % ", ".join(inside)
+                               if inside else ""))
             n += 1
     if not n:
         print("candidates: none (no fix: commit on main since %s that %s lacks)" % (r.base[:12], r.line))
