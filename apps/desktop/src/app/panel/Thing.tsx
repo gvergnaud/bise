@@ -108,6 +108,8 @@ export function ThingTab({ e, tabId }: { e: Exclude<Entity, { kind: 'tab' }>; ta
 function ArtifactTab({ project, id, tabId }: { project: string; id: string; tabId: string }) {
   const a = useAllArtifacts(project).find((x) => x.a.id === id)?.a;
   const store = useStore();
+  // TODO(page-open-old-hub): a hub without initialize's page_frame refuses a page's view/open
+  const oldHub = useProjects().find((p) => p.project === project)?.page_frame !== true;
   const opener = a?.opener;
   if (a === undefined || opener == null) return <Browser project={project} id={id} tabId={tabId} />;
   // who saved its newest version (the newer line's 'perf saved v4')
@@ -119,7 +121,7 @@ function ArtifactTab({ project, id, tabId }: { project: string; id: string; tabI
       store={viewsStore}
       title={a.title}
       rowApp={opener.app}
-      row={{ newest: a.version, gone: a.gone === true, ...(by == null ? {} : { by }) }}
+      row={{ newest: a.version, gone: a.gone === true, oldHubPage: oldHub && a.kind === 'page', ...(by == null ? {} : { by }) }}
       turnOn={() => {
         store.command({ cmd: 'plugin_set', project, name: opener.plugin, on: true });
       }}

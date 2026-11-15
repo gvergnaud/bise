@@ -373,6 +373,7 @@ impl HubEnd {
             version: Value::Null,
             reload: String::new(),
             pages_url: self.pages_url.clone(),
+            page_frame: true,
             methods: methods.unwrap_or_else(bise_proto::rpc::methods),
             notifications: bise_proto::rpc::notifications(),
             hub: bise_proto::rpc::HubState { watermark: bise_proto::rpc::Watermark { epoch: 1, seq: 0 }, state: vec![] },

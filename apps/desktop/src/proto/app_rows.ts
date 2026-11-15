@@ -60,7 +60,14 @@ pulse?: Pulse | null,
  * (panel-page-blank, architect m_65009); absent: not held, or no
  * pages server
  */
-pages_url?: string | null, };
+pages_url?: string | null, 
+/**
+ * its held hub answers a bise page's `view/open` with its frame
+ * (`initialize`'s `page_frame`): absent, the window draws a page
+ * that hub refuses as bad-handle as today's page (views-broken,
+ * architect m_65319; shim page-open-old-hub)
+ */
+page_frame?: boolean, };
 
 export type OpenWhat = "thread" | "review" | "artifact" | "worktree" | "view";
 
