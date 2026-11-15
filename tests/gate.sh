@@ -1027,7 +1027,9 @@ if [ "$mode" = full ]; then
   rm -f "$gdir/pick-$$.why"
   # ${a[@]+...}: macOS /bin/bash 3.2 calls an empty array unbound under set -u
   # GATE_QUIET=<what> (the release's tip gate, nightly_gate.sh): the e2e/tmux part, timing-bound,
-  # runs in heavy-run's quiet window, no new job starting beside it (main m_63082, architect m_63085)
+  # runs in heavy-run's quiet window: no OTHER job starts beside it (main m_63082, architect
+  # m_63085). The gate's own desktop part, just below, is the one exception: it runs beside the
+  # e2e/tmux part by design (the A/B below: the e2e part didn't stretch, 0 reds; architect m_65205)
   quiet=(); hq="$HOME/.bise/run/heavy-run"
   [ -n "${GATE_QUIET:-}" ] && [ -x "$hq" ] && quiet=("$hq" quiet "$GATE_QUIET" --)
   # the desktop's checks beside the e2e/tmux part, one way (fast-loop's A/B, architect m_64910:
