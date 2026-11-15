@@ -285,7 +285,8 @@ def sessions(h, since, hub):
 
 
 def wakes(h, hub, since):
-    """{agent: [(set, end, kind, why)]} from the hub's journal."""
+    """{agent: [(set, end, kind, why, resumes)]} from the hub's journal. resumes: a pause (--then),
+    False an alarm (--alarm, a file's default)."""
     path = os.path.join(h, "hubs", hub, "journal.jsonl")
     sets, out = {}, {}
     if not os.path.exists(path):
@@ -294,16 +295,24 @@ def wakes(h, hub, since):
         t = e.get("type")
         if t == "wake_set":
             w = e.get("watch") or {}
-            sets[w.get("id")] = (w.get("agent"), (w.get("set_at") or 0) / 1000, (w.get("spec") or {}).get("kind"))
+            sets[w.get("id")] = (w.get("agent"), (w.get("set_at") or 0) / 1000, (w.get("spec") or {}).get("kind"),
+                                 bool(w.get("resumes", True)))
         elif t == "wake_end" and e.get("id") in sets:
-            agent, s, kind = sets.pop(e["id"])
+            agent, s, kind, res = sets.pop(e["id"])
             end = (e.get("at") or 0) / 1000
             if end >= since:
-                out.setdefault(agent, []).append((s, end, kind, e.get("why", "")))
+                out.setdefault(agent, []).append((s, end, kind, e.get("why", ""), res))
     now = time.time()
-    for agent, s, kind in sets.values():  # still open
-        out.setdefault(agent, []).append((s, now, kind, "open"))
+    for agent, s, kind, res in sets.values():  # still open
+        out.setdefault(agent, []).append((s, now, kind, "open", res))
     return out
+
+
+def stuck_at_max(kind, resumes):
+    """Whether a wake that ran to --max was a stuck wait, pure: a pause, or a pid/job/bg alarm (the
+    thing it watched still ran). A file alarm that never fired is not one: main's watches on
+    flaky-open and release-red reach their 24 h --max when no red came (2 SLOW rows on 11-15)."""
+    return resumes or kind != "file"
 
 
 HEAD_RX = re.compile(r"# gate (quick|full|rerun) agent=(\S*)")
@@ -576,12 +585,15 @@ def audit(h, hub, since):
                         "runs": p["runs"], "fails": p["fails"]} for t, p in per.items()}
     # waits
     allw = [(a, *w) for a, v in ws.items() for w in v]
-    rep["waits"] = {"set": len(allw), "by_kind": {}, "ended_at_max": [], "queued_at_max": [], "open_now": 0}
-    for a, s, e, k, why in allw:
+    rep["waits"] = {"set": len(allw), "by_kind": {}, "ended_at_max": [], "queued_at_max": [], "quiet_alarms_at_max": 0,
+                    "open_now": 0}
+    for a, s, e, k, why, res in allw:
         bk = rep["waits"]["by_kind"].setdefault(k or "?", {"n": 0, "hours": 0.0})
         bk["n"] += 1
         bk["hours"] = round(bk["hours"] + (e - s) / 3600, 2)
-        if why == "max":
+        if why == "max" and not stuck_at_max(k, res):
+            rep["waits"]["quiet_alarms_at_max"] += 1
+        elif why == "max":
             # its job still in heavy-run's queue at --max: alive, waiting for a slot, not dead
             q = queued_at(hv, a, s, e)
             rep["waits"]["queued_at_max" if q else "ended_at_max"].append(
@@ -861,6 +873,9 @@ def report(rep):
     for k, v in rep["waits"]["by_kind"].items():
         w("- %s: %d, %.1f h" % (k, v["n"], v["hours"]))
     w("- ran to --max: %s" % rep["waits"]["ended_at_max"])
+    if rep["waits"].get("quiet_alarms_at_max"):
+        w("- file alarms that reached --max with nothing written (no red came: not a stuck wait): %d"
+          % rep["waits"]["quiet_alarms_at_max"])
     if rep["waits"]["queued_at_max"]:
         w("- ran to --max with its job still in heavy-run's queue (not dead; watch the job's pid, or a --max over the queue): %s"
           % rep["waits"]["queued_at_max"])
@@ -961,6 +976,8 @@ def self_test():
                 fh.write(tip_check.verdict_line({"tip": "t%d" % i, "base": "b", "state": "red" if named else "green",
                                                  "start": int(day0 + i * 3600 + (86400 if i == 2 else 0)), "secs": 100,
                                                  "cpu": cpu, "commits": 1, "log": "l", "named": named}))
+        # a wake at --max: a quiet file alarm (no red came) is no stuck wait; a pause or a pid alarm is
+        assert not stuck_at_max("file", False) and stuck_at_max("file", True) and stuck_at_max("pid", False)
         tc = tip_check_section(hd, 0)
         assert tc["cpu_min_per_day"] == {"2026-11-07": 70.0, "2026-11-08": 10.0} and tc["cpu_min_max_day"] == 70.0, tc
         assert tc["states"] == {"green": 2, "red": 1} and tc["named"] == ["abc123456"], tc
