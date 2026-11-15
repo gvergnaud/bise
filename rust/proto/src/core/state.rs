@@ -972,8 +972,9 @@ pub const STATE: State = State {
         Record {
             name: "Moved",
             doc: "his \"Move to task…\" on an artifact or a page (`page`: the target is the page store's page `art`, typed from the row he acted on, never looked up; an old line: an artifact): its works from now on, an agent's turn never moves it back (law moved_by_you_sticks)",
-            fields: &[f("art", Str), f("works", Strs), f("page", Bool)],
-            shapes: &[Shape { name: "journal", read: true, keys: &[k("art", W::Str), k("works", W::Strs), k("page", W::Flag)] }],
+            // `by`: main on his word (`sb task move`), "" him (an older line)
+            fields: &[f("art", Str), f("works", Strs), f("page", Bool), f("by", Str)],
+            shapes: &[Shape { name: "journal", read: true, keys: &[k("art", W::Str), k("works", W::Strs), k("page", W::Flag), k("by", W::StrOmit)] }],
         },
         Record {
             name: "WTurn",
@@ -984,8 +985,9 @@ pub const STATE: State = State {
         Record {
             name: "CardMove",
             doc: "his \"Move to task…\" on a card: its works from now on",
-            fields: &[f("card", Nat), f("works", Strs)],
-            shapes: &[Shape { name: "journal", read: true, keys: &[k("card", W::Nat), k("works", W::Strs)] }],
+            // `by`: main on his word (`sb task move`), "" him (an older line)
+            fields: &[f("card", Nat), f("works", Strs), f("by", Str)],
+            shapes: &[Shape { name: "journal", read: true, keys: &[k("card", W::Nat), k("works", W::Strs), k("by", W::StrOmit)] }],
         },
         Record {
             name: "St",

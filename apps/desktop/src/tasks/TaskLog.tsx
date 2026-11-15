@@ -60,9 +60,10 @@ function Made({ r, project, testId }: { r: LogRow; project: string; testId: stri
   const art = r.l.art ?? '';
   return (
     <span className="tk-log-made">
-      <span>{m.who}</span>
+      {/* a verb on every row: 'perf made', 'perf updated' (designer m_65569) */}
+      <span>{m.verb}</span>
       {/* an artifact is a pink chip, everywhere (taste 13) */}
-      <ArtChip title={r.l.text ?? art} glyph={r.l.page === true ? '▤' : '↗'} meta={m.v} keep={24} onClick={() => {
+      <ArtChip title={r.l.text ?? art} glyph={r.l.page === true ? '▤' : '↗'} meta={m.v === '' ? undefined : m.v} keep={24} onClick={() => {
         openTab({ kind: 'artifact', project, id: art });
       }} testId={`${testId}.art`} />
     </span>

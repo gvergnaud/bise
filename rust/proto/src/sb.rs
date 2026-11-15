@@ -529,6 +529,21 @@ pub enum Task {
         #[serde(default)]
         id: String,
     },
+    /// `sb task move <id>... (--art <id> | --page <id> | --card <n>)`:
+    /// main on his word (architect m_65565) puts an artifact, a page or a
+    /// card on exactly `works` (none: out of every task); the same step
+    /// as his "Move to task…", journaled by main
+    Move {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "ts", ts(optional))]
+        card: Option<u64>,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        art: String,
+        #[serde(default, skip_serializing_if = "crate::is_false")]
+        page: bool,
+        #[serde(default)]
+        works: Vec<String>,
+    },
     Rename {
         #[serde(default)]
         id: String,

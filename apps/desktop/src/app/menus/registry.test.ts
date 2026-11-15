@@ -133,8 +133,12 @@ describe('the other things', () => {
   it('an artifact: its file items only with a file there', () => {
     const e = { kind: 'artifact', project: P, id: 'a1' } as const;
     // a file no app opens: Open with › your Mac (never a dead click)
-    expect(actsOf(menuOf({ e, row: artifact({ path: '/w/acme/notes.md' }) }))).toEqual(['pin', 'open-mac', 'move-right', 'new-window', 'quick-look', 'show-in-finder', 'copy-link', 'copy-path']);
-    expect(actsOf(menuOf({ e, row: artifact({ path: '/w/acme/notes.md', gone: true }) }))).toEqual(['pin', 'move-right', 'new-window', 'copy-link']);
+    expect(actsOf(menuOf({ e, row: artifact({ path: '/w/acme/notes.md' }) }))).toEqual(['pin', 'open-mac', 'move-right', 'new-window', 'move-task', 'also-task', 'quick-look', 'show-in-finder', 'copy-link', 'copy-path']);
+    expect(actsOf(menuOf({ e, row: artifact({ path: '/w/acme/notes.md', gone: true }) }))).toEqual(['pin', 'move-right', 'new-window', 'move-task', 'also-task', 'copy-link']);
+    // Move to task… (F9): with 2+ tasks, one Remove from <task> each, its name in the words
+    const two = menuOf({ e, row: artifact({ path: '/w/acme/notes.md', works: ['login', 'pdf'] }), tasks: ['Fix the login timeout on slow networks', 'PDF'] });
+    expect(actsOf(two)).toContain('remove-task:1');
+    expect(two.some((i) => 'label' in i && i.label === 'Remove from Fix the login timeout…')).toBe(true);
     // pinned (pins.ts, his m_49100): Unpin in Pin's place
     expect(actsOf(menuOf({ e, row: artifact({ path: '/w/acme/notes.md' }), pinned: true }))[0]).toBe('unpin');
   });
@@ -143,7 +147,7 @@ describe('the other things', () => {
     const url = 'https://github.com/acme/web/pull/412';
     const status: Pr = { number: 412, url, branch: 'sb/perf', agents: ['perf'], state: 'open', checks: 'pass', review: 'approved', words: '', text: '' };
     const row = artifact({ id: 'pr-412', kind: 'pr', url, pr: { repo: 'acme/web', number: 412, tag: '#412', status } });
-    expect(actsOf(menuOf({ e: { kind: 'artifact', project: P, id: 'pr-412' }, row }))).toEqual(['pin', 'move-right', 'new-window', 'copy-link', 'copy-branch']);
+    expect(actsOf(menuOf({ e: { kind: 'artifact', project: P, id: 'pr-412' }, row }))).toEqual(['pin', 'move-right', 'new-window', 'move-task', 'also-task', 'copy-link', 'copy-branch']);
     expect(actsOf(menuOf({ e: { kind: 'pr', project: P, url }, row }))).toEqual(['move-right', 'new-window', 'copy-link', 'copy-branch']);
     expect(actsOf(menuOf({ e: { kind: 'pr', project: P, url }, row: undefined }))).toEqual(['move-right', 'new-window', 'copy-link']);
   });

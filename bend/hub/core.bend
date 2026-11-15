@@ -134,6 +134,7 @@ type TaskV is Data:
   TVReopen{}
   TVMerge{}
   TVRestart{}
+  TVMove{}
   TVOther{}
 
 # tasks: who asks for a change of a work. An agent's `sb task` (its
@@ -3798,7 +3799,8 @@ def task_verb(+s: String) -> TaskV:
   Bool.pick(TaskV, String.eq(s, "done"), TVDone{},
   Bool.pick(TaskV, String.eq(s, "reopen"), TVReopen{},
   Bool.pick(TaskV, String.eq(s, "merge"), TVMerge{},
-  Bool.pick(TaskV, String.eq(s, "restart"), TVRestart{}, TVOther{})))))))))))))
+  Bool.pick(TaskV, String.eq(s, "restart"), TVRestart{},
+  Bool.pick(TaskV, String.eq(s, "move"), TVMove{}, TVOther{}))))))))))))))
 
 # the change a verb makes (new and an unknown verb: none)
 def task_op(v: TaskV, +q: J.Json) -> S.WOp:
@@ -4115,21 +4117,6 @@ def req_task.new(-o: S.St, +cx: X.Cx<o>, +a: TAsk, +by: String, +q: J.Json) -> X
     u => task_err(o, a, cx, "say its name: sb task new \"<name>\" [--why \"…\"] [--done-when \"…\"]..."),
     u => req_task.born(o, cx, a, by, WO.with_said(WO.born(WO.free(st(o, cx), slug), name, K.get_s(q, "why"), gs, WO.origin(st(o, cx), by), by, now(o, cx)), K.get_n(q, "said_msg"), K.get_s(q, "said"))))
 
-def req_task.verb(-o: S.St, v: TaskV, +cx: X.Cx<o>, +a: TAsk, +by: String, +is_main: Bool, +q: J.Json) -> X.Cx<o>:
-  match v:
-    case TVNew{}:
-      req_task.new(o, cx, a, by, q)
-    case TVOther{}:
-      task_err(o, a, cx, String.append("sb task: unknown verb ", K.get_s(q, "step")))
-    case other:
-      +id = K.get_s(q, "id")
-      req_task.change(o, WO.find(S.St.works(st(o, cx)), id), cx, a, by, is_main, id, task_op(other, q))
-
-# `from`: the agent that asked (an agent's request), never him: only his
-# gesture (TAHim) acts as him, and may change any work
-def req_task(-o: S.St, +cx: X.Cx<o>, +a: TAsk, +from: String, +q: J.Json) -> X.Cx<o>:
-  req_task.verb(o, task_verb(K.get_s(q, "step")), cx, a, task_by(a, from), task_all(a, from), q)
-
 # `--task <id>`: each id read as the live work it names (a merged one's
 # target: law merge_redirects); an unknown one is the sender's error
 def task_flag.one(m: Maybe<&2, String>, +h: String, rest: TaskFlag) -> TaskFlag:
@@ -4147,6 +4134,80 @@ def task_flag(xs: List<&2, String>, +works: List<&2, S.Work>) -> TaskFlag:
       TFOk{Nil{}}
     case Con{+h, +t}:
       task_flag.one(WO.target(works, h), h, task_flag(t, works))
+
+# tasks: his "Move to task…" on a card: its works from then, the lock
+# St's apply sets (Card.moved: law moved_by_you_sticks)
+# (`by`: "" him, `main` on his word, sb task move; architect m_65565)
+def work_move.card(-o: S.St, m: Maybe<&2, S.Card>, +cx: X.Cx<o>, +a: TAsk, +id: Nat, +ws: List<&2, String>, +by: String) -> X.Cx<o>:
+  match m:
+    case None{}:
+      task_err(o, a, cx, cat(["no card #", ns(id), " to move"]))
+    case Some{_}:
+      emit(o, cx, M.ECardMoved{S.CardMove.with_by(S.CardMove.with_works(S.CardMove.with_card(S.CardMove.empty(), id), ws), by)}, Unit{}, Unit{}, Unit{})
+
+# ...or on an artifact (`art`: its id in the shell's store; `page`: the
+# page store's page, typed from the row he acted on, never looked up):
+# his act journaled, and that store's Meta told (fx art_works: the one
+# owner of its works; architect m_64740, m_64769)
+def work_move.art(-o: S.St, +cx: X.Cx<o>, +art: String, +ws: List<&2, String>, +page: Bool, +by: String) -> X.Cx<o>:
+  LZ.pick(X.Cx<o>, String.is_empty(art), u => cx,
+    u => out(o, emit(o, cx, M.EArtMoved{S.Moved.with_by(S.Moved.with_page(S.Moved.with_works(S.Moved.with_art(S.Moved.empty(), art), ws), page), by)}, Unit{}, Unit{}, Unit{}), F.art_works(art, ws, page)))
+
+def work_move.go(-o: S.St, card: Maybe<&2, Nat>, +cx: X.Cx<o>, +a: TAsk, +art: String, +ws: List<&2, String>, +page: Bool, +by: String) -> X.Cx<o>:
+  match card:
+    case Some{+id}:
+      work_move.art(o, work_move.card(o, M.card_of(S.St.cards(st(o, cx)), id), cx, a, id, ws, by), art, ws, page, by)
+    case None{}:
+      work_move.art(o, cx, art, ws, page, by)
+
+# its works read as the live ones they name (task_flag: a merged one's
+# target; an unknown one refused, nothing moved); a refusal is the
+# asker's (his gesture: a notice; main's sb task move: its reply)
+def work_move.as(-o: S.St, f: TaskFlag, +cx: X.Cx<o>, +a: TAsk, +card: Maybe<&2, Nat>, +art: String, +page: Bool, +by: String) -> X.Cx<o>:
+  match f:
+    case TFErr{+e}:
+      task_err(o, a, cx, e)
+    case TFOk{+ws}:
+      task_ok(o, a, work_move.go(o, card, cx, a, art, ws, page, by), ok_body(Nil{}))
+
+# his gesture (the window's task_move): journaled with no `by`
+def work_move(-o: S.St, f: TaskFlag, +cx: X.Cx<o>, +card: Maybe<&2, Nat>, +art: String, +page: Bool) -> X.Cx<o>:
+  work_move.as(o, f, cx, TAHim{}, card, art, page, "")
+
+# who a move is by, on its line: "" for his gesture (an older line reads
+# the same), else the agent that asked: main on his word (laws
+# a_move_by_main_says_main, an_agent_never_acts_as_him)
+def move_by(a: TAsk, +from: String) -> String:
+  match a:
+    case TAReq{_}:
+      from
+    case TAHim{}:
+      ""
+
+# `sb task move <id>... (--art|--page|--card)`: main only, on his word
+# (architect m_65565): exact works, the same step as his gesture
+def req_task.move(-o: S.St, +cx: X.Cx<o>, +a: TAsk, +by: String, +is_main: Bool, +q: J.Json) -> X.Cx<o>:
+  +card = LZ.pick(Maybe<&2, Nat>, Maybe.is_some(&2, J.Json, J.get(q, "card")), u => Some{K.get_n(q, "card")}, u => None{})
+  LZ.pick(X.Cx<o>, is_main,
+    u => work_move.as(o, task_flag(K.get_ss(q, "works"), S.St.works(st(o, cx))), cx, a, card, K.get_s(q, "art"), K.get_b(q, "page"), move_by(a, by)),
+    u => task_err(o, a, cx, "only main moves an artifact or a card to a task, on the user's word"))
+
+def req_task.verb(-o: S.St, v: TaskV, +cx: X.Cx<o>, +a: TAsk, +by: String, +is_main: Bool, +q: J.Json) -> X.Cx<o>:
+  match v:
+    case TVNew{}:
+      req_task.new(o, cx, a, by, q)
+    case TVMove{}:
+      req_task.move(o, cx, a, by, is_main, q)
+    case TVOther{}:
+      task_err(o, a, cx, String.append("sb task: unknown verb ", K.get_s(q, "step")))
+    case other:
+      +id = K.get_s(q, "id")
+      req_task.change(o, WO.find(S.St.works(st(o, cx)), id), cx, a, by, is_main, id, task_op(other, q))
+
+# `from`: the agent that asked (an agent's request), never him: only his
+# gesture (TAHim) acts as him, and may change any work
+def req_task(-o: S.St, +cx: X.Cx<o>, +a: TAsk, +from: String, +q: J.Json) -> X.Cx<o>:
+  req_task.verb(o, task_verb(K.get_s(q, "step")), cx, a, task_by(a, from), task_all(a, from), q)
 
 def cmd_tag(+c: String) -> Cmd:
   Bool.pick(Cmd, String.eq(c, "send"), CSend{},
@@ -4916,39 +4977,6 @@ def page_waits.in(-o: S.St, same: Bool, +cx: X.Cx<o>, +ws: List<&2, String>, +ns
       set_r(o, cx, X.R.with_pw(rr(o, cx), page_waits(ws, ns)))
     case False{}:
       cx
-
-# tasks: his "Move to task…" on a card: its works from then, the lock
-# St's apply sets (Card.moved: law moved_by_you_sticks)
-def work_move.card(-o: S.St, m: Maybe<&2, S.Card>, +cx: X.Cx<o>, +id: Nat, +ws: List<&2, String>) -> X.Cx<o>:
-  match m:
-    case None{}:
-      notice(o, cx, cat(["no card #", ns(id), " to move"]))
-    case Some{_}:
-      emit(o, cx, M.ECardMoved{S.CardMove.with_works(S.CardMove.with_card(S.CardMove.empty(), id), ws)}, Unit{}, Unit{}, Unit{})
-
-# ...or on an artifact (`art`: its id in the shell's store; `page`: the
-# page store's page, typed from the row he acted on, never looked up):
-# his act journaled, and that store's Meta told (fx art_works: the one
-# owner of its works; architect m_64740, m_64769)
-def work_move.art(-o: S.St, +cx: X.Cx<o>, +art: String, +ws: List<&2, String>, +page: Bool) -> X.Cx<o>:
-  LZ.pick(X.Cx<o>, String.is_empty(art), u => cx,
-    u => out(o, emit(o, cx, M.EArtMoved{S.Moved.with_page(S.Moved.with_works(S.Moved.with_art(S.Moved.empty(), art), ws), page)}, Unit{}, Unit{}, Unit{}), F.art_works(art, ws, page)))
-
-def work_move.go(-o: S.St, card: Maybe<&2, Nat>, +cx: X.Cx<o>, +art: String, +ws: List<&2, String>, +page: Bool) -> X.Cx<o>:
-  match card:
-    case Some{+id}:
-      work_move.art(o, work_move.card(o, M.card_of(S.St.cards(st(o, cx)), id), cx, id, ws), art, ws, page)
-    case None{}:
-      work_move.art(o, cx, art, ws, page)
-
-# its works read as the live ones they name (task_flag: a merged one's
-# target; an unknown one refused, nothing moved)
-def work_move(-o: S.St, f: TaskFlag, +cx: X.Cx<o>, +card: Maybe<&2, Nat>, +art: String, +page: Bool) -> X.Cx<o>:
-  match f:
-    case TFErr{+e}:
-      notice(o, cx, e)
-    case TFOk{+ws}:
-      work_move.go(o, card, cx, art, ws, page)
 
 # one input, decoded by the generated codec (gen/in.bend, from
 # bise_proto::core::In): an unknown tag is INone, a missing field its

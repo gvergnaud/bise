@@ -67,6 +67,19 @@ happened, never rebuilt later:
   merged or paused task. Journaled `restart` by whoever made it: the Log says "main restarted it"
   for main's, never "you".
 
+## Move to task… (F9; tasks-ux m_65409, designer m_65406, architect m_65565)
+
+His gesture on an artifact (its native menu: the Library row's ⋯, its frame's ⋯, a right click:
+Move to task…, Also add to task…, Remove from <task> with 2+ tasks) or a card (the Task tab's
+Needs you ⋯): `tasks/moveTo.ts` says what the picker offers (open tasks, the ones he opened lately
+first, then the Board's order; done lately at the end for an artifact; 'No task' last) and what a
+pick makes of the works; `tasks/MoveHost.tsx` (mounted once in App.tsx) draws the picker where he
+clicked and the 6 s toast. A pick sends `task_move` with exactly the new works (his for good:
+moved_by_you_sticks); Undo sends the works before, exactly, a new gesture. Main moves on his word
+with `sb task move <task-id>... (--art|--page|--card) [--none]`: main only (an agent is refused),
+the same sb-core step, the line's `by` main (absent: him; laws a_move_by_main_says_main,
+a_move_as_him_is_his_gesture_only); the Log says "main moved … here", never "you".
+
 ## A joining agent's context (roma idea 5; architect m_65317, m_65509)
 
 An agent's delivery for a task it never served (it is not in `Work.agents`, read before the step's

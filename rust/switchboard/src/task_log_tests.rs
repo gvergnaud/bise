@@ -149,8 +149,12 @@ fn an_artifacts_versions_come_from_their_own_works_and_fold() {
     let a: Vec<(&str, u64, bool)> = l.iter().filter(|x| x.kind == LogKind::Artifact).map(|x| (x.art.as_str(), x.v, x.page)).collect();
     assert_eq!(a, vec![("trace", 3, false), ("trace", 2, false), ("repro", 1, true)], "v1 read with the Meta's works (pricing), v4 made under pricing");
     let w = words(&l, |_| String::new());
-    assert!(w.iter().any(|s| s.ends_with("auth made login-3g.trace v2→v3")), "{w:?}");
-    assert!(w.iter().any(|s| s.ends_with("auth made repro page v1")), "{w:?}");
+    // a verb on every row (designer m_65569): a run is 'updated', a first version 'made'
+    assert!(w.iter().any(|s| s.ends_with("auth updated login-3g.trace v2→v3")), "{w:?}");
+    assert!(w.iter().any(|s| s.ends_with("auth made repro page")), "{w:?}");
+    // a crash's reason that starts with 'crash:' says it once
+    let l = LogLine { kind: LogKind::Break, who: "auth".into(), life: "stopped".into(), text: "crash: the hub lost its socket while the turn ran".into(), ..LogLine::default() };
+    assert_eq!(words(&[l], |_| String::new())[0], "  auth stopped (crash): the hub lost its socket while the turn ran");
 }
 
 #[test]

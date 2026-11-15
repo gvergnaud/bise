@@ -41,6 +41,9 @@ export interface MenuFx {
   readonly openWith: (project: string, id: string, pick: { readonly plugin: string; readonly tool: string }) => void;
   /** his pick kept for a type ('Always open .xlsx with', the core's opener_set, A2) */
   readonly setOpener: (project: string, type: string, pick: { readonly plugin: string; readonly tool: string }) => void;
+  /** Move to task… on an artifact (tasks/moveTo.ts): the picker (move, also add), or off the
+   *  task at its works' place `remove` */
+  readonly moveTask?: (project: string, id: string, how: 'move' | 'also' | { readonly remove: number }) => void;
 }
 
 /** An Open with pick: the app's place in openersOf and whether he keeps it for the type; null: another act. Pure. */
@@ -125,6 +128,12 @@ export function runAct(act: Act, f: MenuFacts, fx: MenuFx): void {
     // 'Always open .xlsx with': his pick for the type (the hub keeps it, A2), and this one opens with it now
     if (ow.always) fx.setOpener(e.project, o.type, pick);
     fx.openWith(e.project, e.id, pick);
+    return;
+  }
+  // Move to task… (F9): its picker, or Remove from <task>
+  const rm = /^remove-task:(\d+)$/.exec(act);
+  if (act === 'move-task' || act === 'also-task' || rm !== null) {
+    if (e.kind === 'artifact') fx.moveTask?.(e.project, e.id, rm !== null ? { remove: Number(rm[1]) } : act === 'also-task' ? 'also' : 'move');
     return;
   }
   if (act.startsWith('copy-')) {

@@ -6789,48 +6789,68 @@ law Tomb.journal_list_round:
 def Tomb.journal_list_round(xs):
   Tomb.journal_list_round.go(xs)
 
-# ---- Moved, its journal shape: art, works, page ----
+# ---- Moved, its journal shape: art, works, page, by ----
 
 def Moved.journal_kvs(r: S.Moved) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
   match r:
-    case S.Moved{+art, +works, +page}:
-      K.cat([[J.kv("art", J.JStr{art}), J.kv("works", J.JArr{K.jstrs(works)})], K.flag("page", page)])
+    case S.Moved{+art, +works, +page, +by}:
+      K.cat([[J.kv("art", J.JStr{art}), J.kv("works", J.JArr{K.jstrs(works)})], K.flag("page", page), K.omit_s("by", by)])
 
 def Moved.journal_json(r: S.Moved) -> J.Json:
   J.obj(Moved.journal_kvs(r))
 
 def Moved.journal_of(+j: J.Json) -> S.Moved:
-  S.Moved{rd.s(J.get(j, "art")), rd.ss(J.get(j, "works")), rd.b(J.get(j, "page"))}
+  S.Moved{rd.s(J.get(j, "art")), rd.ss(J.get(j, "works")), rd.b(J.get(j, "page")), rd.s(J.get(j, "by"))}
 
 law Moved.journal.art:
   for +art: String
   for +works: List<&2, String>
   for +page: Bool
-  {rd.s(J.get(J.obj(Moved.journal_kvs(S.Moved{art, works, page})), "art")) == art : String}
+  for +by: String
+  {rd.s(J.get(J.obj(Moved.journal_kvs(S.Moved{art, works, page, by})), "art")) == art : String}
 
-def Moved.journal.art(art, works, page):
+def Moved.journal.art(art, works, page, by):
   {==}
 
 law Moved.journal.works:
   for +art: String
   for +works: List<&2, String>
   for +page: Bool
-  {rd.ss(J.get(J.obj(Moved.journal_kvs(S.Moved{art, works, page})), "works")) == works : List<&2, String>}
+  for +by: String
+  {rd.ss(J.get(J.obj(Moved.journal_kvs(S.Moved{art, works, page, by})), "works")) == works : List<&2, String>}
 
-def Moved.journal.works(art, works, page):
+def Moved.journal.works(art, works, page, by):
   K.strs_round(works)
 
 law Moved.journal.page:
   for +art: String
   for +works: List<&2, String>
   for +page: Bool
-  {rd.b(J.get(J.obj(Moved.journal_kvs(S.Moved{art, works, page})), "page")) == page : Bool}
+  for +by: String
+  {rd.b(J.get(J.obj(Moved.journal_kvs(S.Moved{art, works, page, by})), "page")) == page : Bool}
 
-def Moved.journal.page(art, works, page):
+def Moved.journal.page(art, works, page, by):
   match page:
     case True{}:
       {==}
     case False{}:
+      %skip_s("by", by, [], "page", {==}) : {rd.b(_) == False{} : Bool}
+      {==}
+
+law Moved.journal.by:
+  for +art: String
+  for +works: List<&2, String>
+  for +page: Bool
+  for +by: String
+  {rd.s(J.get(J.obj(Moved.journal_kvs(S.Moved{art, works, page, by})), "by")) == by : String}
+
+def Moved.journal.by(art, works, page, by):
+  match by:
+    case SNil{}:
+      %skip_flag("page", page, [K.omit_s("by", SNil{})], "by", {==}) : {rd.s(_) == SNil{} : String}
+      {==}
+    case SCon{by_h, by_t}:
+      %skip_flag("page", page, [K.omit_s("by", SCon{by_h, by_t})], "by", {==}) : {rd.s(_) == SCon{by_h, by_t} : String}
       {==}
 
 # the fields it carries come back (the others at their default)
@@ -6838,12 +6858,14 @@ law Moved.journal_round_by_fields:
   for +art: String
   for +works: List<&2, String>
   for +page: Bool
-  {Moved.journal_of(Moved.journal_json(S.Moved{art, works, page})) == S.Moved{art, works, page} : S.Moved}
+  for +by: String
+  {Moved.journal_of(Moved.journal_json(S.Moved{art, works, page, by})) == S.Moved{art, works, page, by} : S.Moved}
 
-def Moved.journal_round_by_fields(art, works, page):
-  %Equal.sym(String, rd.s(J.get(J.obj(Moved.journal_kvs(S.Moved{art, works, page})), "art")), art, Moved.journal.art(art, works, page)) : {S.Moved{_, rd.ss(J.get(J.obj(Moved.journal_kvs(S.Moved{art, works, page})), "works")), rd.b(J.get(J.obj(Moved.journal_kvs(S.Moved{art, works, page})), "page"))} == S.Moved{art, works, page} : S.Moved}
-  %Equal.sym(List<&2, String>, rd.ss(J.get(J.obj(Moved.journal_kvs(S.Moved{art, works, page})), "works")), works, Moved.journal.works(art, works, page)) : {S.Moved{art, _, rd.b(J.get(J.obj(Moved.journal_kvs(S.Moved{art, works, page})), "page"))} == S.Moved{art, works, page} : S.Moved}
-  %Equal.sym(Bool, rd.b(J.get(J.obj(Moved.journal_kvs(S.Moved{art, works, page})), "page")), page, Moved.journal.page(art, works, page)) : {S.Moved{art, works, _} == S.Moved{art, works, page} : S.Moved}
+def Moved.journal_round_by_fields(art, works, page, by):
+  %Equal.sym(String, rd.s(J.get(J.obj(Moved.journal_kvs(S.Moved{art, works, page, by})), "art")), art, Moved.journal.art(art, works, page, by)) : {S.Moved{_, rd.ss(J.get(J.obj(Moved.journal_kvs(S.Moved{art, works, page, by})), "works")), rd.b(J.get(J.obj(Moved.journal_kvs(S.Moved{art, works, page, by})), "page")), rd.s(J.get(J.obj(Moved.journal_kvs(S.Moved{art, works, page, by})), "by"))} == S.Moved{art, works, page, by} : S.Moved}
+  %Equal.sym(List<&2, String>, rd.ss(J.get(J.obj(Moved.journal_kvs(S.Moved{art, works, page, by})), "works")), works, Moved.journal.works(art, works, page, by)) : {S.Moved{art, _, rd.b(J.get(J.obj(Moved.journal_kvs(S.Moved{art, works, page, by})), "page")), rd.s(J.get(J.obj(Moved.journal_kvs(S.Moved{art, works, page, by})), "by"))} == S.Moved{art, works, page, by} : S.Moved}
+  %Equal.sym(Bool, rd.b(J.get(J.obj(Moved.journal_kvs(S.Moved{art, works, page, by})), "page")), page, Moved.journal.page(art, works, page, by)) : {S.Moved{art, works, _, rd.s(J.get(J.obj(Moved.journal_kvs(S.Moved{art, works, page, by})), "by"))} == S.Moved{art, works, page, by} : S.Moved}
+  %Equal.sym(String, rd.s(J.get(J.obj(Moved.journal_kvs(S.Moved{art, works, page, by})), "by")), by, Moved.journal.by(art, works, page, by)) : {S.Moved{art, works, page, _} == S.Moved{art, works, page, by} : S.Moved}
   {==}
 
 law Moved.journal_round:
@@ -6852,8 +6874,8 @@ law Moved.journal_round:
 
 def Moved.journal_round(x):
   match x:
-    case S.Moved{art, works, page}:
-      Moved.journal_round_by_fields(art, works, page)
+    case S.Moved{art, works, page, by}:
+      Moved.journal_round_by_fields(art, works, page, by)
 
 # ---- WTurn, its journal shape: agent, works, add, at ----
 
@@ -6932,44 +6954,61 @@ def WTurn.journal_round(x):
     case S.WTurn{agent, works, add, at}:
       WTurn.journal_round_by_fields(agent, works, add, at)
 
-# ---- CardMove, its journal shape: card, works ----
+# ---- CardMove, its journal shape: card, works, by ----
 
 def CardMove.journal_kvs(r: S.CardMove) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
   match r:
-    case S.CardMove{+card, +works}:
-      [J.kv("card", J.JNum{card}), J.kv("works", J.JArr{K.jstrs(works)})]
+    case S.CardMove{+card, +works, +by}:
+      K.cat([[J.kv("card", J.JNum{card}), J.kv("works", J.JArr{K.jstrs(works)})], K.omit_s("by", by)])
 
 def CardMove.journal_json(r: S.CardMove) -> J.Json:
   J.obj(CardMove.journal_kvs(r))
 
 def CardMove.journal_of(+j: J.Json) -> S.CardMove:
-  S.CardMove{rd.n(J.get(j, "card")), rd.ss(J.get(j, "works"))}
+  S.CardMove{rd.n(J.get(j, "card")), rd.ss(J.get(j, "works")), rd.s(J.get(j, "by"))}
 
 law CardMove.journal.card:
   for +card: Nat
   for +works: List<&2, String>
-  {rd.n(J.get(J.obj(CardMove.journal_kvs(S.CardMove{card, works})), "card")) == card : Nat}
+  for +by: String
+  {rd.n(J.get(J.obj(CardMove.journal_kvs(S.CardMove{card, works, by})), "card")) == card : Nat}
 
-def CardMove.journal.card(card, works):
+def CardMove.journal.card(card, works, by):
   {==}
 
 law CardMove.journal.works:
   for +card: Nat
   for +works: List<&2, String>
-  {rd.ss(J.get(J.obj(CardMove.journal_kvs(S.CardMove{card, works})), "works")) == works : List<&2, String>}
+  for +by: String
+  {rd.ss(J.get(J.obj(CardMove.journal_kvs(S.CardMove{card, works, by})), "works")) == works : List<&2, String>}
 
-def CardMove.journal.works(card, works):
+def CardMove.journal.works(card, works, by):
   K.strs_round(works)
+
+law CardMove.journal.by:
+  for +card: Nat
+  for +works: List<&2, String>
+  for +by: String
+  {rd.s(J.get(J.obj(CardMove.journal_kvs(S.CardMove{card, works, by})), "by")) == by : String}
+
+def CardMove.journal.by(card, works, by):
+  match by:
+    case SNil{}:
+      {==}
+    case SCon{by_h, by_t}:
+      {==}
 
 # the fields it carries come back (the others at their default)
 law CardMove.journal_round_by_fields:
   for +card: Nat
   for +works: List<&2, String>
-  {CardMove.journal_of(CardMove.journal_json(S.CardMove{card, works})) == S.CardMove{card, works} : S.CardMove}
+  for +by: String
+  {CardMove.journal_of(CardMove.journal_json(S.CardMove{card, works, by})) == S.CardMove{card, works, by} : S.CardMove}
 
-def CardMove.journal_round_by_fields(card, works):
-  %Equal.sym(Nat, rd.n(J.get(J.obj(CardMove.journal_kvs(S.CardMove{card, works})), "card")), card, CardMove.journal.card(card, works)) : {S.CardMove{_, rd.ss(J.get(J.obj(CardMove.journal_kvs(S.CardMove{card, works})), "works"))} == S.CardMove{card, works} : S.CardMove}
-  %Equal.sym(List<&2, String>, rd.ss(J.get(J.obj(CardMove.journal_kvs(S.CardMove{card, works})), "works")), works, CardMove.journal.works(card, works)) : {S.CardMove{card, _} == S.CardMove{card, works} : S.CardMove}
+def CardMove.journal_round_by_fields(card, works, by):
+  %Equal.sym(Nat, rd.n(J.get(J.obj(CardMove.journal_kvs(S.CardMove{card, works, by})), "card")), card, CardMove.journal.card(card, works, by)) : {S.CardMove{_, rd.ss(J.get(J.obj(CardMove.journal_kvs(S.CardMove{card, works, by})), "works")), rd.s(J.get(J.obj(CardMove.journal_kvs(S.CardMove{card, works, by})), "by"))} == S.CardMove{card, works, by} : S.CardMove}
+  %Equal.sym(List<&2, String>, rd.ss(J.get(J.obj(CardMove.journal_kvs(S.CardMove{card, works, by})), "works")), works, CardMove.journal.works(card, works, by)) : {S.CardMove{card, _, rd.s(J.get(J.obj(CardMove.journal_kvs(S.CardMove{card, works, by})), "by"))} == S.CardMove{card, works, by} : S.CardMove}
+  %Equal.sym(String, rd.s(J.get(J.obj(CardMove.journal_kvs(S.CardMove{card, works, by})), "by")), by, CardMove.journal.by(card, works, by)) : {S.CardMove{card, works, _} == S.CardMove{card, works, by} : S.CardMove}
   {==}
 
 law CardMove.journal_round:
@@ -6978,8 +7017,8 @@ law CardMove.journal_round:
 
 def CardMove.journal_round(x):
   match x:
-    case S.CardMove{card, works}:
-      CardMove.journal_round_by_fields(card, works)
+    case S.CardMove{card, works, by}:
+      CardMove.journal_round_by_fields(card, works, by)
 
 # ---- St, its photo shape: agents, order, hot, cards, notes, next_msg, next_card, tm, x, paused, old, gone, arch, works, tombs ----
 

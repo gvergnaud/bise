@@ -224,14 +224,56 @@ export const tasks = {
   log_moved_in: (a: { what: string | number }): string => "you moved " + String(a.what) + " here",
   /** he moved an artifact, a page or a card off it */
   log_moved_out: (a: { what: string | number }): string => "you moved " + String(a.what) + " away",
+  /** the menu item on an artifact or a card */
+  move_to: "Move to task…",
+  /** the menu item on an artifact: one more task, the others kept */
+  move_also: "Also add to task…",
+  /** the menu item on an artifact with 2+ tasks: off that one */
+  move_remove: (a: { name: string | number }): string => "Remove from " + String(a.name),
+  /** the picker's title when moving */
+  move_head: "Move to task",
+  /** the picker's title when adding */
+  move_also_head: "Also add to task",
+  /** under the title: where it is now (its tasks follow) */
+  move_now_in: "now in",
+  /** under the title: in no task now */
+  move_now_none: "in no task now",
+  /** the picker's filter field */
+  move_filter: "Filter tasks",
+  /** the last row (artifacts): out of every task */
+  move_no_task: "No task",
+  /** no task matches what he typed */
+  move_no_match: "no task matches",
+  /** the picker's foot hint */
+  move_hint: "⌘⏎ also add",
+  /** a current task's row tip */
+  move_current_tip: "It is in this task now",
+  /** the toast after a move */
+  move_done: (a: { what: string | number; task: string | number }): string => String(a.what) + " moved to " + String(a.task),
+  /** the toast after Also add */
+  move_added: (a: { what: string | number; task: string | number }): string => String(a.what) + " added to " + String(a.task),
+  /** the toast after Remove from */
+  move_removed: (a: { what: string | number; task: string | number }): string => String(a.what) + " removed from " + String(a.task),
+  /** the toast after No task */
+  move_none_done: (a: { what: string | number }): string => String(a.what) + " is in no task now",
+  /** main moved an artifact, a page or a card onto it, on his word */
+  log_moved_in_by: (a: { who: string | number; what: string | number }): string => String(a.who) + " moved " + String(a.what) + " here",
+  /** main moved one off it, on his word */
+  log_moved_out_by: (a: { who: string | number; what: string | number }): string => String(a.who) + " moved " + String(a.what) + " away",
   /** a moved card (no title to name it) */
   log_a_card: "a question",
   /** one of its agents asked him (a question, a pick, a block) */
   log_asked: (a: { who: string | number; text: string | number }): string => String(a.who) + " asked: " + String(a.text),
-  /** one of its agents made a version of an artifact or a page */
-  log_made: (a: { who: string | number; title: string | number; v: string | number }): string => String(a.who) + " made " + String(a.title) + " v" + String(a.v),
+  /** one of its agents made an artifact or a page (its first version) */
+  log_made: (a: { who: string | number; title: string | number }): string => String(a.who) + " made " + String(a.title),
+  /** one of its agents made a later version of it */
+  log_updated: (a: { who: string | number; title: string | number; v: string | number }): string => String(a.who) + " updated " + String(a.title) + " v" + String(a.v),
   /** back-to-back versions of one artifact, folded into one line */
-  log_made_range: (a: { who: string | number; title: string | number; from: string | number; to: string | number }): string => String(a.who) + " made " + String(a.title) + " v" + String(a.from) + "→v" + String(a.to),
+  log_made_range: (a: { who: string | number; title: string | number; from: string | number; to: string | number }): string => String(a.who) + " updated " + String(a.title) + " v" + String(a.from) + "→v" + String(a.to),
+  /** the window's artifact row, before its chip: its first version */
+  log_made_verb: (a: { who: string | number }): string => String(a.who) + " made",
+  /** the window's artifact row, before its chip: a later version or a run of them */
+  log_updated_verb: (a: { who: string | number }): string => String(a.who) + " updated",
   /** one of its agents failed in its turn, and why */
   log_crashed: (a: { who: string | number; why: string | number }): string => String(a.who) + " stopped (crash): " + String(a.why),
   /** one of its agents was stopped in its turn, and why */

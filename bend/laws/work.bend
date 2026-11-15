@@ -140,6 +140,19 @@ law a_restart_by_main_never_says_him:
   for +name: String
   {HC.work_restart.text(HM.MAIN(), id, name) == HCW.restart_note_main(id, name) : String}
 
+# LAW: main's `sb task move` is journaled by main, never as his: the
+# Log says "main moved…" for it (architect m_65565).
+law a_move_by_main_says_main:
+  for +t: Nat
+  for +from: String
+  {HC.move_by(HC.TAReq{t}, from) == from : String}
+
+# LAW: only his gesture moves as him: its line carries no `by` (an older
+# line reads the same).
+law a_move_as_him_is_his_gesture_only:
+  for +from: String
+  {HC.move_by(HC.TAHim{}, from) == "" : String}
+
 # ---- a Restart (roma idea 3; architect m_65554, m_65555) ----
 
 # LAW: a Restart changes no field of its work: its effects are its

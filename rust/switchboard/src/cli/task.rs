@@ -6,9 +6,12 @@ use bise_proto::sb::Task;
 
 pub(super) const TASK_USAGE: &str = "usage: sb task new \"<name>\" [--why \"<why>\"] [--done-when \"<item>\"]... | sb task list [--all] | sb task show <id> [--log] | sb task done|reopen|resume|restart|ongoing <id> | sb task pause <id> [--until <18:00|tomorrow 09:00|2h>] | sb task rename <id> \"<name>\" | sb task why <id> \"<why>\" | sb task goal <id> \"<item>\" | sb task tick|untick <id> <n> | sb task merge <id> --into <id>";
 
+/// `sb task move`'s usage (main only, on his word).
+const MOVE_USAGE: &str = "usage: sb task move <task-id>... (--art <id> | --page <id> | --card <n>) | sb task move --none (--art <id> | --page <id> | --card <n>)";
+
 /// `sb task <verb> ...` as its request.
 pub(super) fn task_req(rest: &[String]) -> Result<Task, String> {
-    let (pos, o) = parse_args(rest, &["why", "done-when", "until", "into"], &["all", "log"])?;
+    let (pos, o) = parse_args(rest, &["why", "done-when", "until", "into", "art", "page", "card"], &["all", "log", "none"])?;
     let verb = pos.first().ok_or(TASK_USAGE)?.as_str();
     let id = || pos.get(1).map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).ok_or_else(|| TASK_USAGE.to_string());
     let words = |from: usize| text_of(pos.get(from..).unwrap_or(&[]));
@@ -43,6 +46,18 @@ pub(super) fn task_req(rest: &[String]) -> Result<Task, String> {
                 return Err(TASK_USAGE.into());
             }
             Task::Merge { id: id()?, into }
+        }
+        // main on his word: exactly these tasks (none with --none)
+        "move" => {
+            let works: Vec<String> = pos.get(1..).unwrap_or(&[]).iter().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+            let (art, page, card) = (str_of(&o, "art"), str_of(&o, "page"), str_of(&o, "card"));
+            let card = if card.is_empty() { None } else { Some(card.trim_start_matches('#').parse::<u64>().map_err(|_| MOVE_USAGE.to_string())?) };
+            let one = [!art.is_empty(), !page.is_empty(), card.is_some()].iter().filter(|x| **x).count() == 1;
+            if !one || works.is_empty() == !o.contains_key("none") {
+                return Err(MOVE_USAGE.into());
+            }
+            let page_ = !page.is_empty();
+            Task::Move { card, art: if page_ { page } else { art }, page: page_, works }
         }
         _ => return Err(TASK_USAGE.into()),
     })

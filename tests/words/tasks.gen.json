@@ -365,11 +365,10 @@
   "tasks.log_made": {
     "args": [
       "who",
-      "title",
-      "v"
+      "title"
     ],
     "one": null,
-    "text": "{who} made {title} v{v}"
+    "text": "{who} made {title}"
   },
   "tasks.log_made_range": {
     "args": [
@@ -379,7 +378,14 @@
       "to"
     ],
     "one": null,
-    "text": "{who} made {title} v{from}→v{to}"
+    "text": "{who} updated {title} v{from}→v{to}"
+  },
+  "tasks.log_made_verb": {
+    "args": [
+      "who"
+    ],
+    "one": null,
+    "text": "{who} made"
   },
   "tasks.log_merged": {
     "args": [
@@ -395,12 +401,28 @@
     "one": null,
     "text": "you moved {what} here"
   },
+  "tasks.log_moved_in_by": {
+    "args": [
+      "who",
+      "what"
+    ],
+    "one": null,
+    "text": "{who} moved {what} here"
+  },
   "tasks.log_moved_out": {
     "args": [
       "what"
     ],
     "one": null,
     "text": "you moved {what} away"
+  },
+  "tasks.log_moved_out_by": {
+    "args": [
+      "who",
+      "what"
+    ],
+    "one": null,
+    "text": "{who} moved {what} away"
   },
   "tasks.log_none": {
     "args": [],
@@ -477,6 +499,22 @@
     "one": null,
     "text": "you unticked done-when {n}"
   },
+  "tasks.log_updated": {
+    "args": [
+      "who",
+      "title",
+      "v"
+    ],
+    "one": null,
+    "text": "{who} updated {title} v{v}"
+  },
+  "tasks.log_updated_verb": {
+    "args": [
+      "who"
+    ],
+    "one": null,
+    "text": "{who} updated"
+  },
   "tasks.log_why": {
     "args": [
       "text"
@@ -493,6 +531,99 @@
     "args": [],
     "one": null,
     "text": "No other open task"
+  },
+  "tasks.move_added": {
+    "args": [
+      "what",
+      "task"
+    ],
+    "one": null,
+    "text": "{what} added to {task}"
+  },
+  "tasks.move_also": {
+    "args": [],
+    "one": null,
+    "text": "Also add to task…"
+  },
+  "tasks.move_also_head": {
+    "args": [],
+    "one": null,
+    "text": "Also add to task"
+  },
+  "tasks.move_current_tip": {
+    "args": [],
+    "one": null,
+    "text": "It is in this task now"
+  },
+  "tasks.move_done": {
+    "args": [
+      "what",
+      "task"
+    ],
+    "one": null,
+    "text": "{what} moved to {task}"
+  },
+  "tasks.move_filter": {
+    "args": [],
+    "one": null,
+    "text": "Filter tasks"
+  },
+  "tasks.move_head": {
+    "args": [],
+    "one": null,
+    "text": "Move to task"
+  },
+  "tasks.move_hint": {
+    "args": [],
+    "one": null,
+    "text": "⌘⏎ also add"
+  },
+  "tasks.move_no_match": {
+    "args": [],
+    "one": null,
+    "text": "no task matches"
+  },
+  "tasks.move_no_task": {
+    "args": [],
+    "one": null,
+    "text": "No task"
+  },
+  "tasks.move_none_done": {
+    "args": [
+      "what"
+    ],
+    "one": null,
+    "text": "{what} is in no task now"
+  },
+  "tasks.move_now_in": {
+    "args": [],
+    "one": null,
+    "text": "now in"
+  },
+  "tasks.move_now_none": {
+    "args": [],
+    "one": null,
+    "text": "in no task now"
+  },
+  "tasks.move_remove": {
+    "args": [
+      "name"
+    ],
+    "one": null,
+    "text": "Remove from {name}"
+  },
+  "tasks.move_removed": {
+    "args": [
+      "what",
+      "task"
+    ],
+    "one": null,
+    "text": "{what} removed from {task}"
+  },
+  "tasks.move_to": {
+    "args": [],
+    "one": null,
+    "text": "Move to task…"
   },
   "tasks.needs_page": {
     "args": [

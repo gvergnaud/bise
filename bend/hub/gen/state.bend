@@ -191,7 +191,7 @@ type Tomb is Data:
 
 # his "Move to task…" on an artifact or a page (`page`: the target is the page store's page `art`, typed from the row he acted on, never looked up; an old line: an artifact): its works from now on, an agent's turn never moves it back (law moved_by_you_sticks)
 type Moved is Data:
-  Moved{art: String, works: List<&2, String>, page: Bool}
+  Moved{art: String, works: List<&2, String>, page: Bool, by: String}
 
 # an agent's turn's works as they change (work_turn): a new turn sets them, a steered delivery (`add`) adds to them
 type WTurn is Data:
@@ -199,7 +199,7 @@ type WTurn is Data:
 
 # his "Move to task…" on a card: its works from now on
 type CardMove is Data:
-  CardMove{card: Nat, works: List<&2, String>}
+  CardMove{card: Nat, works: List<&2, String>, by: String}
 
 # the hub's durable state; `paused` since that ms (None runs); `hot`/`old` the messages split (hot ids ascending, old newest first); `gone` the withdrawn cards he may still answer, newest first; `agents`/`arch` the agents split (agents: not archived, in creation order; arch: archived, newest archived first; `order` every name, in creation order)
 type St is Data:
@@ -3093,55 +3093,70 @@ def Tomb.open(+r: Tomb) -> Tomb:
 # ---- Moved ----
 
 def Moved.empty() -> Moved:
-  Moved{"", Nil{}, False{}}
+  Moved{"", Nil{}, False{}, ""}
 
 def Moved.art(r: Moved) -> String:
   match r:
-    case Moved{f0, _, _}:
+    case Moved{f0, _, _, _}:
       f0
 
 def Moved.with_art(r: Moved, v: String) -> Moved:
   match r:
-    case Moved{_, f1, f2}:
-      Moved{v, f1, f2}
+    case Moved{_, f1, f2, f3}:
+      Moved{v, f1, f2, f3}
 
 def Moved.over_art(r: Moved, g: String -> String) -> Moved:
   match r:
-    case Moved{f0, f1, f2}:
-      Moved{g(f0), f1, f2}
+    case Moved{f0, f1, f2, f3}:
+      Moved{g(f0), f1, f2, f3}
 
 def Moved.works(r: Moved) -> List<&2, String>:
   match r:
-    case Moved{_, f1, _}:
+    case Moved{_, f1, _, _}:
       f1
 
 def Moved.with_works(r: Moved, v: List<&2, String>) -> Moved:
   match r:
-    case Moved{f0, _, f2}:
-      Moved{f0, v, f2}
+    case Moved{f0, _, f2, f3}:
+      Moved{f0, v, f2, f3}
 
 def Moved.over_works(r: Moved, g: List<&2, String> -> List<&2, String>) -> Moved:
   match r:
-    case Moved{f0, f1, f2}:
-      Moved{f0, g(f1), f2}
+    case Moved{f0, f1, f2, f3}:
+      Moved{f0, g(f1), f2, f3}
 
 def Moved.page(r: Moved) -> Bool:
   match r:
-    case Moved{_, _, f2}:
+    case Moved{_, _, f2, _}:
       f2
 
 def Moved.with_page(r: Moved, v: Bool) -> Moved:
   match r:
-    case Moved{f0, f1, _}:
-      Moved{f0, f1, v}
+    case Moved{f0, f1, _, f3}:
+      Moved{f0, f1, v, f3}
 
 def Moved.over_page(r: Moved, g: Bool -> Bool) -> Moved:
   match r:
-    case Moved{f0, f1, f2}:
-      Moved{f0, f1, g(f2)}
+    case Moved{f0, f1, f2, f3}:
+      Moved{f0, f1, g(f2), f3}
+
+def Moved.by(r: Moved) -> String:
+  match r:
+    case Moved{_, _, _, f3}:
+      f3
+
+def Moved.with_by(r: Moved, v: String) -> Moved:
+  match r:
+    case Moved{f0, f1, f2, _}:
+      Moved{f0, f1, f2, v}
+
+def Moved.over_by(r: Moved, g: String -> String) -> Moved:
+  match r:
+    case Moved{f0, f1, f2, f3}:
+      Moved{f0, f1, f2, g(f3)}
 
 def Moved.open(+r: Moved) -> Moved:
-  Moved.with_page(Moved.with_works(Moved.with_art(Moved.empty(), Moved.art(r)), Moved.works(r)), Moved.page(r))
+  Moved.with_by(Moved.with_page(Moved.with_works(Moved.with_art(Moved.empty(), Moved.art(r)), Moved.works(r)), Moved.page(r)), Moved.by(r))
 
 # ---- WTurn ----
 
@@ -3214,40 +3229,55 @@ def WTurn.open(+r: WTurn) -> WTurn:
 # ---- CardMove ----
 
 def CardMove.empty() -> CardMove:
-  CardMove{0n, Nil{}}
+  CardMove{0n, Nil{}, ""}
 
 def CardMove.card(r: CardMove) -> Nat:
   match r:
-    case CardMove{f0, _}:
+    case CardMove{f0, _, _}:
       f0
 
 def CardMove.with_card(r: CardMove, v: Nat) -> CardMove:
   match r:
-    case CardMove{_, f1}:
-      CardMove{v, f1}
+    case CardMove{_, f1, f2}:
+      CardMove{v, f1, f2}
 
 def CardMove.over_card(r: CardMove, g: Nat -> Nat) -> CardMove:
   match r:
-    case CardMove{f0, f1}:
-      CardMove{g(f0), f1}
+    case CardMove{f0, f1, f2}:
+      CardMove{g(f0), f1, f2}
 
 def CardMove.works(r: CardMove) -> List<&2, String>:
   match r:
-    case CardMove{_, f1}:
+    case CardMove{_, f1, _}:
       f1
 
 def CardMove.with_works(r: CardMove, v: List<&2, String>) -> CardMove:
   match r:
-    case CardMove{f0, _}:
-      CardMove{f0, v}
+    case CardMove{f0, _, f2}:
+      CardMove{f0, v, f2}
 
 def CardMove.over_works(r: CardMove, g: List<&2, String> -> List<&2, String>) -> CardMove:
   match r:
-    case CardMove{f0, f1}:
-      CardMove{f0, g(f1)}
+    case CardMove{f0, f1, f2}:
+      CardMove{f0, g(f1), f2}
+
+def CardMove.by(r: CardMove) -> String:
+  match r:
+    case CardMove{_, _, f2}:
+      f2
+
+def CardMove.with_by(r: CardMove, v: String) -> CardMove:
+  match r:
+    case CardMove{f0, f1, _}:
+      CardMove{f0, f1, v}
+
+def CardMove.over_by(r: CardMove, g: String -> String) -> CardMove:
+  match r:
+    case CardMove{f0, f1, f2}:
+      CardMove{f0, f1, g(f2)}
 
 def CardMove.open(+r: CardMove) -> CardMove:
-  CardMove.with_works(CardMove.with_card(CardMove.empty(), CardMove.card(r)), CardMove.works(r))
+  CardMove.with_by(CardMove.with_works(CardMove.with_card(CardMove.empty(), CardMove.card(r)), CardMove.works(r)), CardMove.by(r))
 
 # ---- St ----
 

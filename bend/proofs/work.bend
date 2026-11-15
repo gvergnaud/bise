@@ -65,6 +65,12 @@ def Laws.only_main_changes_any_work(t, from):
 def Laws.a_restart_by_main_never_says_him(id, name):
   {==}
 
+def Laws.a_move_by_main_says_main(t, from):
+  {==}
+
+def Laws.a_move_as_him_is_his_gesture_only(from):
+  {==}
+
 def Laws.work_restart_changes_no_field(w, by, at):
   {==}
 

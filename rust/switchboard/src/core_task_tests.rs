@@ -666,6 +666,30 @@ fn a_restart_restores_its_failed_agent_once_tells_the_idle_one_and_says_who() {
     assert!(notice_to(&fx, 7).is_some_and(|n| n.contains("reopen it first")), "{:?}", notice_to(&fx, 7));
 }
 
+/// Move to task… F9e (architect m_65565): main's `sb task move` on his
+/// word is the same step as his gesture, journaled by main (the Log
+/// says "main moved…"); an agent's is refused; his own carries no `by`.
+#[test]
+fn main_moves_on_his_word_by_main_and_an_agent_never_moves() {
+    let mut t = T::new();
+    let a = new(&mut t, MAIN, "Fix the login timeout", &[]);
+    let b = new(&mut t, MAIN, "Write the PDF export", &[]);
+    t.spawn_task("auth");
+    let r = task(&mut t, MAIN, Task::Move { card: None, art: "a_41".into(), page: false, works: vec![b.clone()] });
+    assert_eq!(r["ok"], true, "{r}");
+    let m = lines(&t, "art_moved").last().unwrap().clone();
+    assert_eq!((m["moved"]["works"].clone(), m["moved"]["by"].as_str()), (json!([b]), Some("main")), "law a_move_by_main_says_main: {m}");
+    let r = task(&mut t, "auth", Task::Move { card: None, art: "a_41".into(), page: false, works: vec![a.clone()] });
+    assert_eq!(r["ok"], false, "an agent never moves: {r}");
+    assert_eq!(lines(&t, "art_moved").len(), 1);
+    let r = task(&mut t, MAIN, Task::Move { card: Some(99), art: String::new(), page: false, works: vec![a.clone()] });
+    assert_eq!(r["ok"], false, "no such card: {r}");
+    // his gesture: no `by` on its line (an older line reads the same)
+    t.go(Input::ClientWorkMove { client: 7, card: None, art: "a_41".into(), page: false, works: vec![a.clone()] });
+    let m = lines(&t, "art_moved").last().unwrap().clone();
+    assert_eq!(m["moved"].get("by"), None, "{m}");
+}
+
 fn first_delivery(t: &mut T, to: &str, text: &str, a: &str) -> String {
     let (_, fx) = t.req(MAIN, send(to, text, &[a]));
     say_to(&fx, to).or_else(|| steer_to(&fx, to)).unwrap_or_default()

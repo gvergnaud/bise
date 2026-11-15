@@ -60,6 +60,7 @@ import { doPanelKey } from './panel/keys';
 import { TipLayer } from './TipLayer';
 import { noteJump, numbersOf } from '@/agents/model';
 import { HubMoments } from './HubMoments';
+import { MoveHost } from '@/tasks/MoveHost';
 import { ReportScreen } from './ReportScreen';
 import { Palette, usePaletteOpen } from './Palette';
 import { Help } from '@/help/Help';
@@ -445,6 +446,7 @@ function Current() {
   return (
     <Main testId="app.main">
       <HubMoments />
+      <MoveHost />
       <AddHost />
       <NewAgentHost />
       <div className="app-screen" inert={full} data-testid="app.screen">

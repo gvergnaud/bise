@@ -9241,17 +9241,17 @@ law Moved.art.get_with:
 
 def Moved.art.get_with(r, v):
   match r:
-    case S.Moved{f0, f1, f2}:
+    case S.Moved{f0, f1, f2, f3}:
       {==}
 
 law Moved.art.eta:
   for r: S.Moved
   for v: String
-  {S.Moved{v, S.Moved.works(r), S.Moved.page(r)} == S.Moved.with_art(r, v) : S.Moved}
+  {S.Moved{v, S.Moved.works(r), S.Moved.page(r), S.Moved.by(r)} == S.Moved.with_art(r, v) : S.Moved}
 
 def Moved.art.eta(r, v):
   match r:
-    case S.Moved{f0, f1, f2}:
+    case S.Moved{f0, f1, f2, f3}:
       {==}
 
 law Moved.art.set_get:
@@ -9260,7 +9260,7 @@ law Moved.art.set_get:
 
 def Moved.art.set_get(r):
   match r:
-    case S.Moved{f0, f1, f2}:
+    case S.Moved{f0, f1, f2, f3}:
       {==}
 
 law Moved.art.set_set:
@@ -9271,7 +9271,7 @@ law Moved.art.set_set:
 
 def Moved.art.set_set(r, a, b):
   match r:
-    case S.Moved{f0, f1, f2}:
+    case S.Moved{f0, f1, f2, f3}:
       {==}
 
 law Moved.art.over:
@@ -9281,7 +9281,7 @@ law Moved.art.over:
 
 def Moved.art.over(r, g):
   match r:
-    case S.Moved{f0, f1, f2}:
+    case S.Moved{f0, f1, f2, f3}:
       {==}
 
 law Moved.works.get_with:
@@ -9291,17 +9291,17 @@ law Moved.works.get_with:
 
 def Moved.works.get_with(r, v):
   match r:
-    case S.Moved{f0, f1, f2}:
+    case S.Moved{f0, f1, f2, f3}:
       {==}
 
 law Moved.works.eta:
   for r: S.Moved
   for v: List<&2, String>
-  {S.Moved{S.Moved.art(r), v, S.Moved.page(r)} == S.Moved.with_works(r, v) : S.Moved}
+  {S.Moved{S.Moved.art(r), v, S.Moved.page(r), S.Moved.by(r)} == S.Moved.with_works(r, v) : S.Moved}
 
 def Moved.works.eta(r, v):
   match r:
-    case S.Moved{f0, f1, f2}:
+    case S.Moved{f0, f1, f2, f3}:
       {==}
 
 law Moved.works.set_get:
@@ -9310,7 +9310,7 @@ law Moved.works.set_get:
 
 def Moved.works.set_get(r):
   match r:
-    case S.Moved{f0, f1, f2}:
+    case S.Moved{f0, f1, f2, f3}:
       {==}
 
 law Moved.works.set_set:
@@ -9321,7 +9321,7 @@ law Moved.works.set_set:
 
 def Moved.works.set_set(r, a, b):
   match r:
-    case S.Moved{f0, f1, f2}:
+    case S.Moved{f0, f1, f2, f3}:
       {==}
 
 law Moved.works.over:
@@ -9331,7 +9331,7 @@ law Moved.works.over:
 
 def Moved.works.over(r, g):
   match r:
-    case S.Moved{f0, f1, f2}:
+    case S.Moved{f0, f1, f2, f3}:
       {==}
 
 law Moved.page.get_with:
@@ -9341,17 +9341,17 @@ law Moved.page.get_with:
 
 def Moved.page.get_with(r, v):
   match r:
-    case S.Moved{f0, f1, f2}:
+    case S.Moved{f0, f1, f2, f3}:
       {==}
 
 law Moved.page.eta:
   for r: S.Moved
   for v: Bool
-  {S.Moved{S.Moved.art(r), S.Moved.works(r), v} == S.Moved.with_page(r, v) : S.Moved}
+  {S.Moved{S.Moved.art(r), S.Moved.works(r), v, S.Moved.by(r)} == S.Moved.with_page(r, v) : S.Moved}
 
 def Moved.page.eta(r, v):
   match r:
-    case S.Moved{f0, f1, f2}:
+    case S.Moved{f0, f1, f2, f3}:
       {==}
 
 law Moved.page.set_get:
@@ -9360,7 +9360,7 @@ law Moved.page.set_get:
 
 def Moved.page.set_get(r):
   match r:
-    case S.Moved{f0, f1, f2}:
+    case S.Moved{f0, f1, f2, f3}:
       {==}
 
 law Moved.page.set_set:
@@ -9371,7 +9371,7 @@ law Moved.page.set_set:
 
 def Moved.page.set_set(r, a, b):
   match r:
-    case S.Moved{f0, f1, f2}:
+    case S.Moved{f0, f1, f2, f3}:
       {==}
 
 law Moved.page.over:
@@ -9381,7 +9381,57 @@ law Moved.page.over:
 
 def Moved.page.over(r, g):
   match r:
-    case S.Moved{f0, f1, f2}:
+    case S.Moved{f0, f1, f2, f3}:
+      {==}
+
+law Moved.by.get_with:
+  for r: S.Moved
+  for v: String
+  {S.Moved.by(S.Moved.with_by(r, v)) == v : String}
+
+def Moved.by.get_with(r, v):
+  match r:
+    case S.Moved{f0, f1, f2, f3}:
+      {==}
+
+law Moved.by.eta:
+  for r: S.Moved
+  for v: String
+  {S.Moved{S.Moved.art(r), S.Moved.works(r), S.Moved.page(r), v} == S.Moved.with_by(r, v) : S.Moved}
+
+def Moved.by.eta(r, v):
+  match r:
+    case S.Moved{f0, f1, f2, f3}:
+      {==}
+
+law Moved.by.set_get:
+  for r: S.Moved
+  {S.Moved.with_by(r, S.Moved.by(r)) == r : S.Moved}
+
+def Moved.by.set_get(r):
+  match r:
+    case S.Moved{f0, f1, f2, f3}:
+      {==}
+
+law Moved.by.set_set:
+  for r: S.Moved
+  for a: String
+  for b: String
+  {S.Moved.with_by(S.Moved.with_by(r, a), b) == S.Moved.with_by(r, b) : S.Moved}
+
+def Moved.by.set_set(r, a, b):
+  match r:
+    case S.Moved{f0, f1, f2, f3}:
+      {==}
+
+law Moved.by.over:
+  for r: S.Moved
+  for g: String -> String
+  {S.Moved.over_by(r, g) == S.Moved.with_by(r, g(S.Moved.by(r))) : S.Moved}
+
+def Moved.by.over(r, g):
+  match r:
+    case S.Moved{f0, f1, f2, f3}:
       {==}
 
 law Moved.open_eq:
@@ -9390,7 +9440,7 @@ law Moved.open_eq:
 
 def Moved.open_eq(r):
   match r:
-    case S.Moved{f0, f1, f2}:
+    case S.Moved{f0, f1, f2, f3}:
       {==}
 
 # ---- WTurn ----
@@ -9613,17 +9663,17 @@ law CardMove.card.get_with:
 
 def CardMove.card.get_with(r, v):
   match r:
-    case S.CardMove{f0, f1}:
+    case S.CardMove{f0, f1, f2}:
       {==}
 
 law CardMove.card.eta:
   for r: S.CardMove
   for v: Nat
-  {S.CardMove{v, S.CardMove.works(r)} == S.CardMove.with_card(r, v) : S.CardMove}
+  {S.CardMove{v, S.CardMove.works(r), S.CardMove.by(r)} == S.CardMove.with_card(r, v) : S.CardMove}
 
 def CardMove.card.eta(r, v):
   match r:
-    case S.CardMove{f0, f1}:
+    case S.CardMove{f0, f1, f2}:
       {==}
 
 law CardMove.card.set_get:
@@ -9632,7 +9682,7 @@ law CardMove.card.set_get:
 
 def CardMove.card.set_get(r):
   match r:
-    case S.CardMove{f0, f1}:
+    case S.CardMove{f0, f1, f2}:
       {==}
 
 law CardMove.card.set_set:
@@ -9643,7 +9693,7 @@ law CardMove.card.set_set:
 
 def CardMove.card.set_set(r, a, b):
   match r:
-    case S.CardMove{f0, f1}:
+    case S.CardMove{f0, f1, f2}:
       {==}
 
 law CardMove.card.over:
@@ -9653,7 +9703,7 @@ law CardMove.card.over:
 
 def CardMove.card.over(r, g):
   match r:
-    case S.CardMove{f0, f1}:
+    case S.CardMove{f0, f1, f2}:
       {==}
 
 law CardMove.works.get_with:
@@ -9663,17 +9713,17 @@ law CardMove.works.get_with:
 
 def CardMove.works.get_with(r, v):
   match r:
-    case S.CardMove{f0, f1}:
+    case S.CardMove{f0, f1, f2}:
       {==}
 
 law CardMove.works.eta:
   for r: S.CardMove
   for v: List<&2, String>
-  {S.CardMove{S.CardMove.card(r), v} == S.CardMove.with_works(r, v) : S.CardMove}
+  {S.CardMove{S.CardMove.card(r), v, S.CardMove.by(r)} == S.CardMove.with_works(r, v) : S.CardMove}
 
 def CardMove.works.eta(r, v):
   match r:
-    case S.CardMove{f0, f1}:
+    case S.CardMove{f0, f1, f2}:
       {==}
 
 law CardMove.works.set_get:
@@ -9682,7 +9732,7 @@ law CardMove.works.set_get:
 
 def CardMove.works.set_get(r):
   match r:
-    case S.CardMove{f0, f1}:
+    case S.CardMove{f0, f1, f2}:
       {==}
 
 law CardMove.works.set_set:
@@ -9693,7 +9743,7 @@ law CardMove.works.set_set:
 
 def CardMove.works.set_set(r, a, b):
   match r:
-    case S.CardMove{f0, f1}:
+    case S.CardMove{f0, f1, f2}:
       {==}
 
 law CardMove.works.over:
@@ -9703,7 +9753,57 @@ law CardMove.works.over:
 
 def CardMove.works.over(r, g):
   match r:
-    case S.CardMove{f0, f1}:
+    case S.CardMove{f0, f1, f2}:
+      {==}
+
+law CardMove.by.get_with:
+  for r: S.CardMove
+  for v: String
+  {S.CardMove.by(S.CardMove.with_by(r, v)) == v : String}
+
+def CardMove.by.get_with(r, v):
+  match r:
+    case S.CardMove{f0, f1, f2}:
+      {==}
+
+law CardMove.by.eta:
+  for r: S.CardMove
+  for v: String
+  {S.CardMove{S.CardMove.card(r), S.CardMove.works(r), v} == S.CardMove.with_by(r, v) : S.CardMove}
+
+def CardMove.by.eta(r, v):
+  match r:
+    case S.CardMove{f0, f1, f2}:
+      {==}
+
+law CardMove.by.set_get:
+  for r: S.CardMove
+  {S.CardMove.with_by(r, S.CardMove.by(r)) == r : S.CardMove}
+
+def CardMove.by.set_get(r):
+  match r:
+    case S.CardMove{f0, f1, f2}:
+      {==}
+
+law CardMove.by.set_set:
+  for r: S.CardMove
+  for a: String
+  for b: String
+  {S.CardMove.with_by(S.CardMove.with_by(r, a), b) == S.CardMove.with_by(r, b) : S.CardMove}
+
+def CardMove.by.set_set(r, a, b):
+  match r:
+    case S.CardMove{f0, f1, f2}:
+      {==}
+
+law CardMove.by.over:
+  for r: S.CardMove
+  for g: String -> String
+  {S.CardMove.over_by(r, g) == S.CardMove.with_by(r, g(S.CardMove.by(r))) : S.CardMove}
+
+def CardMove.by.over(r, g):
+  match r:
+    case S.CardMove{f0, f1, f2}:
       {==}
 
 law CardMove.open_eq:
@@ -9712,7 +9812,7 @@ law CardMove.open_eq:
 
 def CardMove.open_eq(r):
   match r:
-    case S.CardMove{f0, f1}:
+    case S.CardMove{f0, f1, f2}:
       {==}
 
 # ---- St ----

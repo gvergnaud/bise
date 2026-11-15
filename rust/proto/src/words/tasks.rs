@@ -240,14 +240,57 @@ crate::words! { tasks:
     log_moved_in(what) = "you moved {what} here";
     /// he moved an artifact, a page or a card off it
     log_moved_out(what) = "you moved {what} away";
+    // ---- Move to task… (F9; tasks-ux m_65409, designer m_65406)
+    /// the menu item on an artifact or a card
+    move_to = "Move to task…";
+    /// the menu item on an artifact: one more task, the others kept
+    move_also = "Also add to task…";
+    /// the menu item on an artifact with 2+ tasks: off that one
+    move_remove(name) = "Remove from {name}";
+    /// the picker's title when moving
+    move_head = "Move to task";
+    /// the picker's title when adding
+    move_also_head = "Also add to task";
+    /// under the title: where it is now (its tasks follow)
+    move_now_in = "now in";
+    /// under the title: in no task now
+    move_now_none = "in no task now";
+    /// the picker's filter field
+    move_filter = "Filter tasks";
+    /// the last row (artifacts): out of every task
+    move_no_task = "No task";
+    /// no task matches what he typed
+    move_no_match = "no task matches";
+    /// the picker's foot hint
+    move_hint = "⌘⏎ also add";
+    /// a current task's row tip
+    move_current_tip = "It is in this task now";
+    /// the toast after a move
+    move_done(what, task) = "{what} moved to {task}";
+    /// the toast after Also add
+    move_added(what, task) = "{what} added to {task}";
+    /// the toast after Remove from
+    move_removed(what, task) = "{what} removed from {task}";
+    /// the toast after No task
+    move_none_done(what) = "{what} is in no task now";
+    /// main moved an artifact, a page or a card onto it, on his word
+    log_moved_in_by(who, what) = "{who} moved {what} here";
+    /// main moved one off it, on his word
+    log_moved_out_by(who, what) = "{who} moved {what} away";
     /// a moved card (no title to name it)
     log_a_card = "a question";
     /// one of its agents asked him (a question, a pick, a block)
     log_asked(who, text) = "{who} asked: {text}";
-    /// one of its agents made a version of an artifact or a page
-    log_made(who, title, v) = "{who} made {title} v{v}";
+    /// one of its agents made an artifact or a page (its first version)
+    log_made(who, title) = "{who} made {title}";
+    /// one of its agents made a later version of it
+    log_updated(who, title, v) = "{who} updated {title} v{v}";
     /// back-to-back versions of one artifact, folded into one line
-    log_made_range(who, title, from, to) = "{who} made {title} v{from}→v{to}";
+    log_made_range(who, title, from, to) = "{who} updated {title} v{from}→v{to}";
+    /// the window's artifact row, before its chip: its first version
+    log_made_verb(who) = "{who} made";
+    /// the window's artifact row, before its chip: a later version or a run of them
+    log_updated_verb(who) = "{who} updated";
     /// one of its agents failed in its turn, and why
     log_crashed(who, why) = "{who} stopped (crash): {why}";
     /// one of its agents was stopped in its turn, and why

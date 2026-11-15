@@ -29,6 +29,7 @@ import { lineAt } from './Side';
 import { markLooked, markSeen } from './seen';
 import { UndoToast, useUndo } from './UndoToast';
 import type { Did } from './undo';
+import { askMove, lastAt } from './moveTo';
 
 /** His message's words by its id among a thread's entries; null when this window doesn't hold it. Pure. */
 export function originText(entries: readonly (Pick<Entry, 'kind' | 'msg_id' | 'text'> | undefined)[], id: number): string | null {
@@ -206,7 +207,15 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
           <h3 className="tk-h">{tasks.sec_needs}</h3>
           {asks.map((c) => (
             <div key={c.id} className="tk-q" data-testid={`${t}.q.${String(c.id)}`}>
-              <p className="tk-q-text">{c.question}</p>
+              <div className="tk-q-head">
+                <p className="tk-q-text">{c.question}</p>
+                {/* Move to task… (F9): a card belongs to one task, this one */}
+                <Dropdown look="pop" label="⋯" name={tasks.act_more} tip={tasks.act_more} testId={`${t}.q.${String(c.id)}.more`}
+                  groups={[{ id: 'move', rows: [{ id: 'move', name: tasks.move_to, testId: `${t}.q.${String(c.id)}.move` }] }]}
+                  onPick={() => {
+                    askMove({ thing: { kind: 'card', project, card: c.id, title: firstLine(c.question), works: [w.id] }, mode: 'move', x: lastAt.x, y: lastAt.y });
+                  }} />
+              </div>
               {/* the inbox's keys (1-9) on its options, then his own words (tasks-ux m_64959) */}
               <ol className="tk-q-opts">
                 {askButtons(c).opts.map((o) => (

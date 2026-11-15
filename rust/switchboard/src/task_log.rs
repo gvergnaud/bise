@@ -115,6 +115,19 @@ struct MovedRec {
     #[serde(default)]
     art: String,
     works: Vec<String>,
+    /// main on his word (`sb task move`); "" him (an older line too)
+    #[serde(default)]
+    by: String,
+}
+
+/// Who a move's line names: him, or main on his word (architect m_65565:
+/// never "you" for main's).
+fn mover(by: String) -> String {
+    if by.is_empty() {
+        "user".into()
+    } else {
+        by
+    }
 }
 
 /// `work_created {work}`
@@ -157,8 +170,8 @@ enum Fact {
     Reported(String, Rep),
     Opened(Card),
     Closed(Closed, u64),
-    CardMoved(u64, Vec<String>, u64),
-    ArtMoved(String, Vec<String>, u64),
+    CardMoved(u64, Vec<String>, u64, String),
+    ArtMoved(String, Vec<String>, u64, String),
     Life(Life, u64),
 }
 
@@ -342,16 +355,16 @@ impl Scan {
                     life: l.lifecycle,
                     ..LogLine::default()
                 }),
-                Fact::CardMoved(card, works, at) => {
+                Fact::CardMoved(card, works, at, by) => {
                     let was = cards.insert(card, works.clone()).unwrap_or_default();
                     if let Some(g) = moved(has(&was), has(&works)) {
-                        out.push(LogLine { at_ms: when(at), kind: LogKind::Gesture, who: "user".into(), gesture: Some(g), card: Some(card), ..LogLine::default() });
+                        out.push(LogLine { at_ms: when(at), kind: LogKind::Gesture, who: mover(by), gesture: Some(g), card: Some(card), ..LogLine::default() });
                     }
                 }
-                Fact::ArtMoved(art, works, at) => {
+                Fact::ArtMoved(art, works, at, by) => {
                     let was = arts.insert(art.clone(), works.clone()).unwrap_or_default();
                     if let Some(g) = moved(has(&was), has(&works)) {
-                        out.push(LogLine { at_ms: when(at), kind: LogKind::Gesture, who: "user".into(), text: art, gesture: Some(g), ..LogLine::default() });
+                        out.push(LogLine { at_ms: when(at), kind: LogKind::Gesture, who: mover(by), text: art, gesture: Some(g), ..LogLine::default() });
                     }
                 }
             }
@@ -398,8 +411,8 @@ fn parse(line: &str, at: u64) -> Option<Result<Fact, serde_json::Error>> {
         "card_opened" => serde_json::from_str::<Opened>(line).map(|o| Fact::Opened(o.card)),
         "card_closed" => serde_json::from_str::<Closed>(line).map(|c| Fact::Closed(c, at)),
         // a card's move names its card; an artifact's or a page's its `art`
-        "card_moved" => serde_json::from_str::<MovedLine>(line).map(|m| Fact::CardMoved(m.moved.card.unwrap_or_default(), m.moved.works, at)),
-        "art_moved" => serde_json::from_str::<MovedLine>(line).map(|m| Fact::ArtMoved(m.moved.art, m.moved.works, at)),
+        "card_moved" => serde_json::from_str::<MovedLine>(line).map(|m| Fact::CardMoved(m.moved.card.unwrap_or_default(), m.moved.works, at, m.moved.by)),
+        "art_moved" => serde_json::from_str::<MovedLine>(line).map(|m| Fact::ArtMoved(m.moved.art, m.moved.works, at, m.moved.by)),
         "lifecycle" => serde_json::from_str::<Life>(line).map(|l| Fact::Life(l, at)),
         _ => return None,
     };
@@ -475,9 +488,9 @@ pub fn words(lines: &[LogLine], when: impl Fn(u64) -> String) -> Vec<String> {
                     s
                 }
                 LogKind::Artifact if from < l.v => tasks::log_made_range(&l.who, &l.text, from, l.v),
-                LogKind::Artifact => tasks::log_made(&l.who, &l.text, l.v),
-                LogKind::Break if l.life == "failed" => tasks::log_crashed(&l.who, &l.text),
-                LogKind::Break => tasks::log_stopped(&l.who, &l.text),
+                LogKind::Artifact if l.v > 1 => tasks::log_updated(&l.who, &l.text, l.v),
+                LogKind::Artifact => tasks::log_made(&l.who, &l.text),
+                LogKind::Break => break_words(l),
                 LogKind::Report => {
                     let mut s = tasks::log_report(&l.who, &l.report, &l.text);
                     // its decisions under it, indented
@@ -497,6 +510,22 @@ pub fn words(lines: &[LogLine], when: impl Fn(u64) -> String) -> Vec<String> {
             format!("{}  {}", w, what)
         })
         .collect()
+}
+
+/// A break in words: a crash says so once, 'auth stopped (crash): <why>', never 'crash:' twice
+/// (designer m_65569); a stop, 'docs was stopped: <why>'.
+fn break_words(l: &LogLine) -> String {
+    use bise_proto::words::tasks;
+    let why = l.text.trim();
+    let (crash, why) = match why.strip_prefix("crash:") {
+        Some(rest) => (true, rest.trim()),
+        None => (l.life == "failed", why),
+    };
+    if crash {
+        tasks::log_crashed(&l.who, why)
+    } else {
+        tasks::log_stopped(&l.who, why)
+    }
 }
 
 fn short(sha: &str) -> &str {
@@ -519,6 +548,9 @@ pub fn gesture_words(l: &LogLine) -> String {
         LogGesture::Tick => tasks::log_ticked(t),
         LogGesture::Untick => tasks::log_unticked(t),
         LogGesture::Ongoing => tasks::log_ongoing.to_string(),
+        // main's move on his word is said as main's (architect m_65565)
+        LogGesture::MoveIn if l.who != "user" => tasks::log_moved_in_by(&l.who, if t.is_empty() { tasks::log_a_card } else { t }),
+        LogGesture::MoveOut if l.who != "user" => tasks::log_moved_out_by(&l.who, if t.is_empty() { tasks::log_a_card } else { t }),
         LogGesture::MoveIn => tasks::log_moved_in(if t.is_empty() { tasks::log_a_card } else { t }),
         LogGesture::MoveOut => tasks::log_moved_out(if t.is_empty() { tasks::log_a_card } else { t }),
         // main's Restart is said as main's, never his (architect m_65555)

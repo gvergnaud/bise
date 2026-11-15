@@ -24,12 +24,15 @@ import { openChange } from '@/review/openChange';
 import { menuOf, type Act, type MenuFacts } from './registry';
 import { runAct, type MenuFx } from './run';
 import { viewsStore } from '@/views/window';
+import { askMove, lastAt, movedWords, tellMoved, worksWithout } from '@/tasks/moveTo';
 
 /** What the facts are read from: the store's rows, and the app's own view state. */
 export interface FactReads {
   readonly projects: () => readonly ProjectRow[];
   readonly agents: (project: string) => readonly Agent[];
   readonly artifacts: (project: string) => readonly Artifact[];
+  /** a task's name by its id (an artifact's Remove from <task>); none: its id */
+  readonly taskName?: (project: string, id: string) => string | undefined;
   readonly processes: (project: string) => readonly Proc[];
   readonly scheduled: (project: string) => readonly ScheduledTask[];
   readonly pinned: (project: string, agent: string) => boolean;
@@ -49,8 +52,11 @@ export function factsOf(e: Entity, r: FactReads): MenuFacts {
     }
     case 'project':
       return { e, row: r.projects().find((p) => p.project === e.project) };
-    case 'artifact':
-      return { e, row: r.artifacts(e.project).find((a) => a.id === e.id), pinned: r.pinnedThing('artifact', e.project, e.id) };
+    case 'artifact': {
+      const row = r.artifacts(e.project).find((a) => a.id === e.id);
+      const tasks = (row?.works ?? []).map((w) => r.taskName?.(e.project, w) ?? w);
+      return { e, row, pinned: r.pinnedThing('artifact', e.project, e.id), tasks };
+    }
     case 'process':
       return { e, row: r.processes(e.project).find((p) => p.agent === e.agent && p.id === e.id), pinned: r.pinnedThing('process', e.project, procPinId(e.agent, e.id)) };
     case 'scheduled':
@@ -88,6 +94,7 @@ function readsOf(store: Store): FactReads {
     projects: () => store.projects(),
     agents: (p) => store.agents(p),
     artifacts: (p) => store.artifacts(p),
+    taskName: (p, id) => store.works(p).works.find((w) => w.id === id)?.name,
     processes: (p) => store.processes(p),
     scheduled: (p) => store.scheduled(p),
     pinned: (p, a) => isPinned(pinsOf(store.prefs() as Prefs | null), p, a),
@@ -133,6 +140,21 @@ function fxOf(store: Store, router: Router | null): MenuFx {
     // Open with: the document's tab (opened, or brought to the front) swaps its app (views store)
     setOpener: (project, type, pick) => {
       store.command({ cmd: 'opener_set', project, type, ...pick });
+    },
+    // Move to task… (F9, tasks/moveTo.ts): the picker where he clicked, or off one task at once
+    moveTask: (project, id, how) => {
+      const a = store.artifacts(project).find((x) => x.id === id);
+      if (a === undefined) return;
+      const thing = { kind: 'art' as const, project, id, page: a.kind === 'page', title: a.title, works: a.works ?? [] };
+      if (how === 'move' || how === 'also') {
+        askMove({ thing, mode: how, x: lastAt.x, y: lastAt.y });
+        return;
+      }
+      const off = thing.works[how.remove];
+      if (off === undefined) return;
+      store.command({ cmd: 'task_move', project, art: id, page: thing.page, works: worksWithout(thing.works, off) });
+      const name = store.works(project).works.find((w) => w.id === off)?.name ?? off;
+      tellMoved({ thing, before: thing.works, words: movedWords('removed', a.title, name), at: Date.now() });
     },
     openWith: (project, id, pick) => {
       openTab({ kind: 'artifact', project, id });

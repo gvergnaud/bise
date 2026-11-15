@@ -3,6 +3,7 @@
 // formatted at render. Pure. Owner: tasks.
 import type { LogLine } from '@/proto';
 import { tasks } from '@/proto/words_tasks.gen';
+import { shownName } from '@/agents/model';
 
 /** a land's tip, short */
 const short = (sha: string): string => sha.slice(0, 9);
@@ -34,13 +35,14 @@ function gestureWords(l: LogLine): string {
       return tasks.log_unticked({ n: t });
     case 'ongoing':
       return tasks.log_ongoing;
+    // main's move or Restart is said as bise's ('main' never shows in the app, designer m_65569),
+    // never his (architect m_65555, m_65565)
     case 'move_in':
-      return tasks.log_moved_in({ what });
+      return l.who === 'user' ? tasks.log_moved_in({ what }) : tasks.log_moved_in_by({ who: shownName(l.who), what });
     case 'move_out':
-      return tasks.log_moved_out({ what });
-    // main's Restart is said as main's, never his (architect m_65555)
+      return l.who === 'user' ? tasks.log_moved_out({ what }) : tasks.log_moved_out_by({ who: shownName(l.who), what });
     case 'restart':
-      return l.who === 'user' ? tasks.log_restarted : tasks.log_restarted_by({ who: l.who });
+      return l.who === 'user' ? tasks.log_restarted : tasks.log_restarted_by({ who: shownName(l.who) });
     default:
       return '';
   }
@@ -68,10 +70,21 @@ export function foldLog(lines: readonly LogLine[]): LogRow[] {
   return out;
 }
 
-/** An artifact row's words around its chip: who made it, and the version or the run. */
-export function madeWords(r: LogRow): { readonly who: string; readonly v: string } {
+/** An artifact row's words around its chip: who and its verb ('perf made', 'perf updated'), and
+ *  the version or the run ('' for a first version alone; designer m_65569). Pure. */
+export function madeWords(r: LogRow): { readonly verb: string; readonly v: string } {
   const v = r.l.v ?? 0;
-  return { who: r.l.who, v: r.from < v ? `v${String(r.from)}→v${String(v)}` : `v${String(v)}` };
+  const who = shownName(r.l.who);
+  if (r.from < v) return { verb: tasks.log_updated_verb({ who }), v: `v${String(r.from)}→v${String(v)}` };
+  return v > 1 ? { verb: tasks.log_updated_verb({ who }), v: `v${String(v)}` } : { verb: tasks.log_made_verb({ who }), v: '' };
+}
+
+/** A break in words: a crash says so once ('auth stopped (crash): <why>', designer m_65569). Pure. */
+function breakWords(l: LogLine): string {
+  const why = (l.text ?? '').trim();
+  const crash = why.startsWith('crash:');
+  const rest = crash ? why.slice('crash:'.length).trim() : why;
+  return crash || l.life === 'failed' ? tasks.log_crashed({ who: l.who, why: rest }) : tasks.log_stopped({ who: l.who, why: rest });
 }
 
 /** A line's words (its decisions apart: the row lists them under it); '' a kind this window
@@ -91,9 +104,9 @@ export function logWords(l: LogLine): string {
     case 'question':
       return tasks.log_asked({ who: l.who, text: l.text ?? '' });
     case 'artifact':
-      return tasks.log_made({ who: l.who, title: l.text ?? '', v: l.v ?? 0 });
+      return (l.v ?? 0) > 1 ? tasks.log_updated({ who: shownName(l.who), title: l.text ?? '', v: l.v ?? 0 }) : tasks.log_made({ who: shownName(l.who), title: l.text ?? '' });
     case 'break':
-      return l.life === 'failed' ? tasks.log_crashed({ who: l.who, why: l.text ?? '' }) : tasks.log_stopped({ who: l.who, why: l.text ?? '' });
+      return breakWords(l);
     default:
       return '';
   }

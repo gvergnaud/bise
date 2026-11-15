@@ -13,6 +13,7 @@
 import type { Agent, Artifact, Opener, Proc, ProjectRow, ScheduledTask } from '../../proto';
 import { menus } from '../../proto/words_menus.gen';
 import { common } from '../../proto/words_common.gen';
+import { tasks } from '../../proto/words_tasks.gen';
 import type { PopupItem } from '../../shared/api';
 import type { Entity } from '../../shared/entity';
 
@@ -48,7 +49,13 @@ export type Act =
   /** Open with › an app (its place in openersOf: the row's opener, then its others) */
   | `open-with:${number}`
   /** Open with › Always open .xlsx with › an app: his pick for the type */
-  | `always-open:${number}`;
+  | `always-open:${number}`
+  /** Move to task… (F9, tasks/moveTo.ts): the picker, onto one task */
+  | 'move-task'
+  /** Also add to task…: the picker, one more task */
+  | 'also-task'
+  /** Remove from <task>: off that task (its place in the artifact's works) */
+  | `remove-task:${number}`;
 
 type Of<K extends Entity['kind']> = Extract<Entity, { kind: K }>;
 
@@ -59,7 +66,8 @@ type Of<K extends Entity['kind']> = Extract<Entity, { kind: K }>;
 export type MenuFacts =
   | { readonly e: Of<'agent'>; readonly row: Agent | undefined; readonly pinned: boolean; readonly reply: boolean }
   | { readonly e: Of<'project'>; readonly row: ProjectRow | undefined }
-  | { readonly e: Of<'artifact'>; readonly row: Artifact | undefined; readonly pinned?: boolean }
+  /** `tasks`: the names of its tasks, in its works' order (Remove from <task>) */
+  | { readonly e: Of<'artifact'>; readonly row: Artifact | undefined; readonly pinned?: boolean; readonly tasks?: readonly string[] }
   | { readonly e: Of<'process'>; readonly row: Proc | undefined; readonly pinned?: boolean }
   | { readonly e: Of<'scheduled'>; readonly row: ScheduledTask | undefined; readonly pinned?: boolean }
   /** a panel tab: the menu of the thing in it (`inner`, none for Overview, New tab, a terminal) under its own items */
@@ -109,7 +117,18 @@ export const ICONS: Record<Act, string> = {
   'close-others': 'xmark.square',
   'move-bottom': 'rectangle.bottomhalf.inset.filled',
   'change-model': 'cpu',
+  'move-task': 'arrow.right.square',
+  'also-task': 'plus.square.on.square',
 };
+
+/** A task's name in a menu item, cut at a word with one '…' (designer m_65406 7). Pure. */
+function cutName(name: string): string {
+  const max = 24;
+  if (name.length <= max) return name;
+  const head = name.slice(0, max);
+  const at = head.lastIndexOf(' ');
+  return `${(at > 8 ? head.slice(0, at) : head).trimEnd()}…`;
+}
 
 const COPY_ICON = 'doc.on.doc';
 const OPEN_IN_ICON = 'arrow.up.forward.app';
@@ -234,12 +253,16 @@ export function openWithSub(a: Artifact): PopupItem[] {
   return sub(menus.open_with, OPEN_IN_ICON, [...apps, ...mac, { type: 'separator' }, ...sub(menus.always_open({ ending: endingOf(first) }), '', always)]);
 }
 
-function artifactMenu(a: Artifact, pinned: boolean): PopupItem[] {
+function artifactMenu(a: Artifact, pinned: boolean, names: readonly string[]): PopupItem[] {
   const file = present(a.path) && a.gone !== true;
+  // Move to task… (F9, spec tasks-ux m_65409): move, also add, and with 2+ tasks one Remove each
+  const works = a.works ?? [];
+  const remove = works.length >= 2 ? works.map((w, i) => item(`remove-task:${String(i)}` as `remove-task:${number}`, tasks.move_remove({ name: cutName(names[i] ?? w) }))) : [];
   return grouped([
     [pinItem(pinned)],
     openWithSub(a),
     [item('move-right', menus.move_right), item('new-window', menus.new_window)],
+    [item('move-task', tasks.move_to), item('also-task', tasks.move_also), ...remove],
     when(file, item('quick-look', menus.quick_look), item('show-in-finder', menus.show_in_finder)),
     copySub([
       ...when(present(a.url), item('copy-link', menus.copy_link)),
@@ -287,7 +310,7 @@ export function menuOf(f: MenuFacts): PopupItem[] {
     }
     case 'artifact': {
       const a = f as Extract<MenuFacts, { e: Of<'artifact'> }>;
-      return a.row === undefined ? [] : artifactMenu(a.row, a.pinned === true);
+      return a.row === undefined ? [] : artifactMenu(a.row, a.pinned === true, a.tasks ?? []);
     }
     case 'process': {
       const p = f as Extract<MenuFacts, { e: Of<'process'> }>;
