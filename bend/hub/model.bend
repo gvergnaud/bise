@@ -77,7 +77,9 @@ type Ev is Data:
   # tasks (hub/work.bend): a work made, one change of it, folded to a
   # tomb; an agent's turn's works (`add`: steered in); his moves
   EWorkCreated{w: S.Work}
-  EWorkChanged{id: String, op: S.WOp, by: String, at: Nat}
+  # `restored`, `noted`: whom a Restart acted on (lists of names), None on
+  # any other change (architect m_65602)
+  EWorkChanged{id: String, op: S.WOp, by: String, at: Nat, restored: Maybe<&2, J.Json>, noted: Maybe<&2, J.Json>}
   EWorkFolded{id: String, at: Nat}
   EWorkTurn{t: S.WTurn}
   ECardMoved{m: S.CardMove}
@@ -842,7 +844,7 @@ def apply(+st: S.St, e: Ev) -> S.St:
       S.St.with_paused(st, None{})
     case EWorkCreated{+w}:
       S.St.over_works(st, xs => WO.put(xs, w))
-    case EWorkChanged{+id, +op, +by, +at}:
+    case EWorkChanged{+id, +op, +by, +at, _, _}:
       S.St.over_works(st, xs => WO.changed(xs, id, op, by, at))
     case EWorkFolded{+id, _}:
       WO.folded(st, id)

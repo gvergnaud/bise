@@ -169,7 +169,7 @@ def WorkCreated.of(+i: J.Json) -> Maybe<&2, M.Ev>:
   Some{M.EWorkCreated{SC.Work.journal_of(K.get_j(i, "work"))}}
 
 def WorkChanged.of(+i: J.Json) -> Maybe<&2, M.Ev>:
-  Some{M.EWorkChanged{K.get_s(i, "id"), SC.WOp.journal_of(i), K.get_s(i, "by"), K.get_n(i, "at")}}
+  Some{M.EWorkChanged{K.get_s(i, "id"), SC.WOp.journal_of(i), K.get_s(i, "by"), K.get_n(i, "at"), J.get(i, "restored"), J.get(i, "noted")}}
 
 def WorkFolded.of(+i: J.Json) -> Maybe<&2, M.Ev>:
   Some{M.EWorkFolded{K.get_s(i, "id"), K.get_n(i, "at")}}
@@ -747,8 +747,8 @@ def kvs(e: M.Ev) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
       [J.kv("type", J.JStr{"resumed"}), J.kv("at", J.JNum{at})]
     case M.EWorkCreated{+work}:
       [J.kv("type", J.JStr{"work_created"}), J.kv("work", SC.Work.journal_json(work))]
-    case M.EWorkChanged{+id, +op, +by, +at}:
-      K.cat([[J.kv("type", J.JStr{"work_changed"}), J.kv("id", J.JStr{id})], SC.WOp.journal_kvs(op), [J.kv("by", J.JStr{by}), J.kv("at", J.JNum{at})]])
+    case M.EWorkChanged{+id, +op, +by, +at, +restored, +noted}:
+      K.cat([[J.kv("type", J.JStr{"work_changed"}), J.kv("id", J.JStr{id})], SC.WOp.journal_kvs(op), [J.kv("by", J.JStr{by}), J.kv("at", J.JNum{at})], K.omit_mj("restored", restored), K.omit_mj("noted", noted)])
     case M.EWorkFolded{+id, +at}:
       [J.kv("type", J.JStr{"work_folded"}), J.kv("id", J.JStr{id}), J.kv("at", J.JNum{at})]
     case M.EWorkTurn{+turn}:

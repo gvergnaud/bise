@@ -123,6 +123,24 @@ fn a_break_comes_from_its_lines_works_and_a_restart_says_who() {
     assert!(w.iter().any(|s| s.ends_with("auth stopped (crash): the REPL crashed 3 times: oom")), "{w:?}");
 }
 
+/// architect m_65602, tasks-ux m_65604: a Restart names whom its line
+/// recorded (restored: crashed ones brought back; noted: idle ones told to
+/// go on); main's says main in the CLI.
+#[test]
+fn a_restart_names_whom_its_line_recorded() {
+    let j = [
+        created("login", "main", 100),
+        json!({"type": "work_changed", "id": "login", "op": "restart", "by": "user", "at": 200, "restored": ["auth"]}),
+        json!({"type": "work_changed", "id": "login", "op": "restart", "by": "user", "at": 300, "noted": ["ui"]}),
+        json!({"type": "work_changed", "id": "login", "op": "restart", "by": "main", "at": 400, "restored": ["auth", "kb"], "noted": ["ui"]}),
+    ];
+    let l = log(&["login"], &j, &[]);
+    let w = words(&l, |_| String::new());
+    for want in ["you restarted auth", "you asked ui to go on", "main restarted auth, kb and asked ui to go on"] {
+        assert!(w.iter().any(|s| s.ends_with(want)), "{want}: {w:?}");
+    }
+}
+
 /// chunk 2b (architect m_65507): an artifact's versions in the Log come
 /// from each version's own works; one from before the stamp reads the
 /// Meta's; back-to-back versions fold into one line in words.

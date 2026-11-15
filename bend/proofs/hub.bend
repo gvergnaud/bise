@@ -1271,7 +1271,7 @@ def apply_order.go(+e: HM.Ev, +s: HS.St, k: {HM.order_ev(e) == False{} : Bool}) 
       {==}
     case HM.EWorkCreated{w0}:
       {==}
-    case HM.EWorkChanged{w0, w1, w2, w3}:
+    case HM.EWorkChanged{w0, w1, w2, w3, w4, w5}:
       {==}
     case HM.EWorkFolded{w0, w1}:
       {==}

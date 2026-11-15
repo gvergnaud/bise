@@ -77,6 +77,31 @@ def Laws.work_restart_changes_no_field(w, by, at):
 def Laws.restart_note_carries_only_its_work(n, id, text):
   {==}
 
+def Laws.restart_records_whom_it_acted_on(id, by, at, rs, ns):
+  {==}
+
+def Laws.a_change_records_no_whom(id, op, by, at):
+  {==}
+
+def Laws.restart_restores_a_failed_agent(idle):
+  {==}
+
+def Laws.restart_tells_a_failed_agent_once(idle):
+  {==}
+
+def Laws.restart_notes_an_idle_agent():
+  {==}
+
+def Laws.restart_leaves_a_busy_agent(failed):
+  match failed:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+def Laws.restart_leaves_a_stopped_agent(idle, failed):
+  {==}
+
 def Laws.restart_on_a_closed_work_is_refused(f, p, id):
   {==}
 

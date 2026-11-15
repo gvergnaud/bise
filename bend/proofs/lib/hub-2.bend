@@ -459,7 +459,7 @@ def hub_apply_ucards.go(+e: HM.Ev, +s: HS.St, u: HI.UniqueCards(s), k: HX.FreshE
       u
     case HM.EWorkCreated{w0}:
       u
-    case HM.EWorkChanged{w0, w1, w2, w3}:
+    case HM.EWorkChanged{w0, w1, w2, w3, w4, w5}:
       u
     case HM.EWorkFolded{w0, w1}:
       u

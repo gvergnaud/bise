@@ -47,6 +47,11 @@ struct Changed {
     why: String,
     #[serde(default)]
     n: u64,
+    /// a Restart's: whom it acted on (absent on an older line)
+    #[serde(default)]
+    restored: Vec<String>,
+    #[serde(default)]
+    noted: Vec<String>,
 }
 
 /// `work_turn {turn}` (WTurn.journal)
@@ -307,7 +312,16 @@ impl Scan {
                         "ongoing" => (LogGesture::Ongoing, String::new()),
                         _ => continue,
                     };
-                    out.push(LogLine { at_ms: c.at, kind: LogKind::Gesture, who: c.by, text, gesture: Some(g), ..LogLine::default() });
+                    out.push(LogLine {
+                        at_ms: c.at,
+                        kind: LogKind::Gesture,
+                        who: c.by,
+                        text,
+                        gesture: Some(g),
+                        restored: c.restored,
+                        noted: c.noted,
+                        ..LogLine::default()
+                    });
                 }
                 Fact::Reported(name, r) => out.push(LogLine {
                     at_ms: r.at_ms,
@@ -532,6 +546,17 @@ fn short(sha: &str) -> &str {
     &sha[..sha.len().min(9)]
 }
 
+/// A Restart that names whom it acted on: 'you restarted auth, kb and
+/// asked ui to go on' (either part alone when the other is empty).
+fn restart_words(who: &str, restored: &str, noted: &str) -> String {
+    use bise_proto::words::tasks;
+    match (restored.is_empty(), noted.is_empty()) {
+        (false, false) => tasks::log_restarted_and_asked(who, restored, noted),
+        (false, true) => tasks::log_restarted_whom(who, restored),
+        _ => tasks::log_asked_on(who, noted),
+    }
+}
+
 /// His gesture in words (the window has the same words, words::tasks).
 pub fn gesture_words(l: &LogLine) -> String {
     use bise_proto::words::tasks;
@@ -553,6 +578,12 @@ pub fn gesture_words(l: &LogLine) -> String {
         LogGesture::MoveOut if l.who != "user" => tasks::log_moved_out_by(&l.who, if t.is_empty() { tasks::log_a_card } else { t }),
         LogGesture::MoveIn => tasks::log_moved_in(if t.is_empty() { tasks::log_a_card } else { t }),
         LogGesture::MoveOut => tasks::log_moved_out(if t.is_empty() { tasks::log_a_card } else { t }),
+        // whom it acted on, as its line recorded it (architect m_65602,
+        // tasks-ux m_65604); an older line names no one
+        LogGesture::Restart if !l.restored.is_empty() || !l.noted.is_empty() => {
+            let who = if l.who == "user" { tasks::log_you } else { l.who.as_str() };
+            restart_words(who, &l.restored.join(", "), &l.noted.join(", "))
+        }
         // main's Restart is said as main's, never his (architect m_65555)
         LogGesture::Restart if l.who != "user" => tasks::log_restarted_by(&l.who),
         LogGesture::Restart => tasks::log_restarted.to_string(),

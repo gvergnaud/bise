@@ -171,6 +171,48 @@ law restart_note_carries_only_its_work:
   for +text: String
   {HC.Snd.works(HC.work_restart_note(n, id, text)) == Some{[id]} : Maybe<&2, List<&2, String>>}
 
+# LAW: a Restart records whom it acted on (architect m_65602): its line
+# carries the lists the step then acts on (its failed agents, restored;
+# its idle live ones, told to go on), and no other change carries any.
+law restart_records_whom_it_acted_on:
+  for +id: String
+  for +by: String
+  for +at: Nat
+  for +rs: List<&2, String>
+  for +ns: List<&2, String>
+  {HC.req_task.line(id, HS.WRestart{}, by, at, Some{rs}, Some{ns}) == HM.EWorkChanged{id, HS.WRestart{}, by, at, Some{J.JArr{HC.jstrs(rs)}}, Some{J.JArr{HC.jstrs(ns)}}} : HM.Ev}
+
+law a_change_records_no_whom:
+  for +id: String
+  for +op: HS.WOp
+  for +by: String
+  for +at: Nat
+  {HC.req_task.line(id, op, by, at, None{}, None{}) == HM.EWorkChanged{id, op, by, at, None{}, None{}} : HM.Ev}
+
+# LAW: whom a Restart acts on, one agent at a time (True: the restored
+# list, False: the told one): a failed one is restored and only restored,
+# an idle live one told to go on, a busy live one and a stopped or
+# archived one are left alone.
+law restart_restores_a_failed_agent:
+  for +idle: Bool
+  {HC.restart_whom.life(HS.LFailed{}, idle, True{}) == True{} : Bool}
+
+law restart_tells_a_failed_agent_once:
+  for +idle: Bool
+  {HC.restart_whom.life(HS.LFailed{}, idle, False{}) == False{} : Bool}
+
+law restart_notes_an_idle_agent:
+  {HC.restart_whom.life(HS.LActive{}, True{}, False{}) == True{} : Bool}
+
+law restart_leaves_a_busy_agent:
+  for +failed: Bool
+  {HC.restart_whom.life(HS.LActive{}, False{}, failed) == False{} : Bool}
+
+law restart_leaves_a_stopped_agent:
+  for +idle: Bool
+  for +failed: Bool
+  {HC.restart_whom.life(HS.LStopped{}, idle, failed) == False{} : Bool}
+
 # LAW: a closed task (done or merged) is never restarted: reopen it first.
 law restart_on_a_closed_work_is_refused:
   for +f: HS.Fin

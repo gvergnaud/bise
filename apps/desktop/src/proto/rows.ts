@@ -1932,4 +1932,10 @@ art?: string, v?: number, page?: boolean,
 /**
  * a break's life: `failed` or `stopped` (`text` its reason)
  */
-life?: string, };
+life?: string, 
+/**
+ * a Restart: the agents it brought back (they had crashed) and the
+ * idle ones it told to go on, as its line recorded them (architect
+ * m_65602); both empty on an older line
+ */
+restored?: Array<string>, noted?: Array<string>, };

@@ -282,6 +282,14 @@ export const tasks = {
   log_restarted: "you restarted it",
   /** main's Restart (sb task restart), never said as his */
   log_restarted_by: (a: { who: string | number }): string => String(a.who) + " restarted it",
+  /** a Restart's actor when it is him */
+  log_you: "you",
+  /** a Restart that brought crashed agents back (`names`: "auth, kb"; tasks-ux m_65604) */
+  log_restarted_whom: (a: { who: string | number; names: string | number }): string => String(a.who) + " restarted " + String(a.names),
+  /** a Restart that told idle agents to go on */
+  log_asked_on: (a: { who: string | number; names: string | number }): string => String(a.who) + " asked " + String(a.names) + " to go on",
+  /** a Restart that did both */
+  log_restarted_and_asked: (a: { who: string | number; restored: string | number; noted: string | number }): string => String(a.who) + " restarted " + String(a.restored) + " and asked " + String(a.noted) + " to go on",
   /** the footer's ⋯: its tip */
   act_more: "More: Rename, Merge into…",
   /** the ⋯ menu: rename the task (his name: an agent never renames it after) */

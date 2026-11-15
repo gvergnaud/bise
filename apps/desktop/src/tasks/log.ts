@@ -8,6 +8,17 @@ import { shownName } from '@/agents/model';
 /** a land's tip, short */
 const short = (sha: string): string => sha.slice(0, 9);
 
+/** A Restart in words: whom it acted on as its line recorded it, 'you restarted auth, kb and asked
+ *  ui to go on' (tasks-ux m_65604; architect m_65602); an older line names no one: 'you restarted it'. */
+function restartWords(l: LogLine): string {
+  const restored = (l.restored ?? []).join(', ');
+  const noted = (l.noted ?? []).join(', ');
+  if (restored === '' && noted === '') return l.who === 'user' ? tasks.log_restarted : tasks.log_restarted_by({ who: shownName(l.who) });
+  const who = l.who === 'user' ? tasks.log_you : shownName(l.who);
+  if (restored !== '' && noted !== '') return tasks.log_restarted_and_asked({ who, restored, noted });
+  return restored !== '' ? tasks.log_restarted_whom({ who, names: restored }) : tasks.log_asked_on({ who, names: noted });
+}
+
 /** His gesture's words. */
 function gestureWords(l: LogLine): string {
   const t = l.text ?? '';
@@ -42,7 +53,7 @@ function gestureWords(l: LogLine): string {
     case 'move_out':
       return l.who === 'user' ? tasks.log_moved_out({ what }) : tasks.log_moved_out_by({ who: shownName(l.who), what });
     case 'restart':
-      return l.who === 'user' ? tasks.log_restarted : tasks.log_restarted_by({ who: shownName(l.who) });
+      return restartWords(l);
     default:
       return '';
   }

@@ -65,7 +65,13 @@ happened, never rebuilt later:
   failed: the next Restart is his act again), each restored or idle one gets one hub note with
   works exactly [id] (law restart_note_carries_only_its_work), main aside; refused on a done,
   merged or paused task. Journaled `restart` by whoever made it: the Log says "main restarted it"
-  for main's, never "you".
+  for main's, never "you". Whom it acts on is decided once, before its line (`restart_whom`), and
+  the line records it: `restored` (its failed agents, brought back) and `noted` (its idle ones,
+  told to go on), lists of names, absent on an older line; the step acts on exactly those (laws
+  restart_records_whom_it_acted_on, restart_restores_a_failed_agent, restart_notes_an_idle_agent;
+  architect m_65602). The Log names them: "you restarted auth, kb and asked ui to go on"
+  (tasks-ux m_65604; "bise" for main's in the window, "main" in the CLI); an older line keeps
+  "you restarted it".
 
 ## Move to task… (F9; tasks-ux m_65409, designer m_65406, architect m_65565)
 

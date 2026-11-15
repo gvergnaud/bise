@@ -299,6 +299,14 @@ crate::words! { tasks:
     log_restarted = "you restarted it";
     /// main's Restart (sb task restart), never said as his
     log_restarted_by(who) = "{who} restarted it";
+    /// a Restart's actor when it is him
+    log_you = "you";
+    /// a Restart that brought crashed agents back (`names`: "auth, kb"; tasks-ux m_65604)
+    log_restarted_whom(who, names) = "{who} restarted {names}";
+    /// a Restart that told idle agents to go on
+    log_asked_on(who, names) = "{who} asked {names} to go on";
+    /// a Restart that did both
+    log_restarted_and_asked(who, restored, noted) = "{who} restarted {restored} and asked {noted} to go on";
     /// the footer's ⋯: its tip
     act_more = "More: Rename, Merge into…";
     /// the ⋯ menu: rename the task (his name: an agent never renames it after)

@@ -298,7 +298,7 @@ def journal_work_created_bare():
   {==}
 
 law journal_work_changed_bare:
-  {GJ.of(J.obj([J.kv("type", J.JStr{"work_changed"})])) == Some{M.EWorkChanged{"", SC.WOp.journal_of(J.obj([J.kv("type", J.JStr{"work_changed"})])), "", 0n}} : Maybe<&2, M.Ev>}
+  {GJ.of(J.obj([J.kv("type", J.JStr{"work_changed"})])) == Some{M.EWorkChanged{"", SC.WOp.journal_of(J.obj([J.kv("type", J.JStr{"work_changed"})])), "", 0n, None{}, None{}}} : Maybe<&2, M.Ev>}
 
 def journal_work_changed_bare():
   {==}
@@ -903,39 +903,131 @@ law journal_work_changed_round:
   for op: S.WOp
   for by: String
   for at: Nat
-  {GJ.of(GJ.json(M.EWorkChanged{id, op, by, at})) == Some{M.EWorkChanged{id, op, by, at}} : Maybe<&2, M.Ev>}
+  for restored: Maybe<&2, J.Json>
+  for noted: Maybe<&2, J.Json>
+  {GJ.of(GJ.json(M.EWorkChanged{id, op, by, at, restored, noted})) == Some{M.EWorkChanged{id, op, by, at, restored, noted}} : Maybe<&2, M.Ev>}
 
-def journal_work_changed_round(id, op, by, at):
-  match op:
-    case S.WRename{op_a}:
+def journal_work_changed_round(id, op, by, at, restored, noted):
+  match op restored noted:
+    case S.WRename{op_a} None{} None{}:
       {==}
-    case S.WWhy{op_a}:
+    case S.WRename{op_a} None{} Some{x_noted}:
       {==}
-    case S.WGoal{op_a}:
+    case S.WRename{op_a} Some{x_restored} None{}:
       {==}
-    case S.WTick{op_a}:
+    case S.WRename{op_a} Some{x_restored} Some{x_noted}:
       {==}
-    case S.WUntick{op_a}:
+    case S.WWhy{op_a} None{} None{}:
       {==}
-    case S.WMakeOngoing{}:
+    case S.WWhy{op_a} None{} Some{x_noted}:
       {==}
-    case S.WPause{op_a}:
+    case S.WWhy{op_a} Some{x_restored} None{}:
       {==}
-    case S.WResume{}:
+    case S.WWhy{op_a} Some{x_restored} Some{x_noted}:
       {==}
-    case S.WDone{}:
+    case S.WGoal{op_a} None{} None{}:
       {==}
-    case S.WReopen{}:
+    case S.WGoal{op_a} None{} Some{x_noted}:
       {==}
-    case S.WMerge{op_a}:
+    case S.WGoal{op_a} Some{x_restored} None{}:
       {==}
-    case S.WAddAgent{op_a}:
+    case S.WGoal{op_a} Some{x_restored} Some{x_noted}:
       {==}
-    case S.WUntilTimer{op_a}:
+    case S.WTick{op_a} None{} None{}:
       {==}
-    case S.WRestart{}:
+    case S.WTick{op_a} None{} Some{x_noted}:
       {==}
-    case S.WNoop{}:
+    case S.WTick{op_a} Some{x_restored} None{}:
+      {==}
+    case S.WTick{op_a} Some{x_restored} Some{x_noted}:
+      {==}
+    case S.WUntick{op_a} None{} None{}:
+      {==}
+    case S.WUntick{op_a} None{} Some{x_noted}:
+      {==}
+    case S.WUntick{op_a} Some{x_restored} None{}:
+      {==}
+    case S.WUntick{op_a} Some{x_restored} Some{x_noted}:
+      {==}
+    case S.WMakeOngoing{} None{} None{}:
+      {==}
+    case S.WMakeOngoing{} None{} Some{x_noted}:
+      {==}
+    case S.WMakeOngoing{} Some{x_restored} None{}:
+      {==}
+    case S.WMakeOngoing{} Some{x_restored} Some{x_noted}:
+      {==}
+    case S.WPause{op_a} None{} None{}:
+      {==}
+    case S.WPause{op_a} None{} Some{x_noted}:
+      {==}
+    case S.WPause{op_a} Some{x_restored} None{}:
+      {==}
+    case S.WPause{op_a} Some{x_restored} Some{x_noted}:
+      {==}
+    case S.WResume{} None{} None{}:
+      {==}
+    case S.WResume{} None{} Some{x_noted}:
+      {==}
+    case S.WResume{} Some{x_restored} None{}:
+      {==}
+    case S.WResume{} Some{x_restored} Some{x_noted}:
+      {==}
+    case S.WDone{} None{} None{}:
+      {==}
+    case S.WDone{} None{} Some{x_noted}:
+      {==}
+    case S.WDone{} Some{x_restored} None{}:
+      {==}
+    case S.WDone{} Some{x_restored} Some{x_noted}:
+      {==}
+    case S.WReopen{} None{} None{}:
+      {==}
+    case S.WReopen{} None{} Some{x_noted}:
+      {==}
+    case S.WReopen{} Some{x_restored} None{}:
+      {==}
+    case S.WReopen{} Some{x_restored} Some{x_noted}:
+      {==}
+    case S.WMerge{op_a} None{} None{}:
+      {==}
+    case S.WMerge{op_a} None{} Some{x_noted}:
+      {==}
+    case S.WMerge{op_a} Some{x_restored} None{}:
+      {==}
+    case S.WMerge{op_a} Some{x_restored} Some{x_noted}:
+      {==}
+    case S.WAddAgent{op_a} None{} None{}:
+      {==}
+    case S.WAddAgent{op_a} None{} Some{x_noted}:
+      {==}
+    case S.WAddAgent{op_a} Some{x_restored} None{}:
+      {==}
+    case S.WAddAgent{op_a} Some{x_restored} Some{x_noted}:
+      {==}
+    case S.WUntilTimer{op_a} None{} None{}:
+      {==}
+    case S.WUntilTimer{op_a} None{} Some{x_noted}:
+      {==}
+    case S.WUntilTimer{op_a} Some{x_restored} None{}:
+      {==}
+    case S.WUntilTimer{op_a} Some{x_restored} Some{x_noted}:
+      {==}
+    case S.WRestart{} None{} None{}:
+      {==}
+    case S.WRestart{} None{} Some{x_noted}:
+      {==}
+    case S.WRestart{} Some{x_restored} None{}:
+      {==}
+    case S.WRestart{} Some{x_restored} Some{x_noted}:
+      {==}
+    case S.WNoop{} None{} None{}:
+      {==}
+    case S.WNoop{} None{} Some{x_noted}:
+      {==}
+    case S.WNoop{} Some{x_restored} None{}:
+      {==}
+    case S.WNoop{} Some{x_restored} Some{x_noted}:
       {==}
 
 law journal_work_folded_round:

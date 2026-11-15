@@ -832,7 +832,7 @@ def lv_apply.go(+e: HM.Ev, +s: HS.St, la: HI.Lives(HS.St.agents(s), True{}), lr:
       HX.Both{la, lr}
     case HM.EWorkCreated{w0}:
       HX.Both{la, lr}
-    case HM.EWorkChanged{w0, w1, w2, w3}:
+    case HM.EWorkChanged{w0, w1, w2, w3, w4, w5}:
       HX.Both{la, lr}
     case HM.EWorkFolded{w0, w1}:
       HX.Both{la, lr}

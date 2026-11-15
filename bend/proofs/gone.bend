@@ -193,7 +193,7 @@ def gone_bound.go(+e: HM.Ev, +s: HS.St, h: {Nat.is_le(List.length(&2, HS.Item, H
           h
         case HM.EWorkCreated{w0}:
           h
-        case HM.EWorkChanged{w0, w1, w2, w3}:
+        case HM.EWorkChanged{w0, w1, w2, w3, w4, w5}:
           h
         case HM.EWorkFolded{w0, w1}:
           h

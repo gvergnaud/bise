@@ -41,6 +41,10 @@ describe('a Log line', () => {
     expect(logWords({ at_ms: 1, kind: 'break', who: 'docs', life: 'stopped', text: 'dropped by main' })).toBe('docs was stopped: dropped by main');
     expect(logWords({ at_ms: 1, kind: 'gesture', who: 'user', gesture: 'restart' })).toBe('you restarted it');
     expect(logWords({ at_ms: 1, kind: 'gesture', who: 'main', gesture: 'restart' })).toBe('bise restarted it');
+    // whom it acted on, as its line recorded it (tasks-ux m_65604)
+    expect(logWords({ at_ms: 1, kind: 'gesture', who: 'user', gesture: 'restart', restored: ['auth'] })).toBe('you restarted auth');
+    expect(logWords({ at_ms: 1, kind: 'gesture', who: 'user', gesture: 'restart', noted: ['ui'] })).toBe('you asked ui to go on');
+    expect(logWords({ at_ms: 1, kind: 'gesture', who: 'main', gesture: 'restart', restored: ['auth', 'kb'], noted: ['ui'] })).toBe('bise restarted auth, kb and asked ui to go on');
     expect(logWords({ at_ms: 1, kind: 'gesture', who: 'main', gesture: 'move_in', text: 'trace' })).toBe('bise moved trace here');
   });
 

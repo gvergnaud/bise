@@ -306,6 +306,14 @@
     "one": null,
     "text": "{who} asked: {text}"
   },
+  "tasks.log_asked_on": {
+    "args": [
+      "who",
+      "names"
+    ],
+    "one": null,
+    "text": "{who} asked {names} to go on"
+  },
   "tasks.log_crashed": {
     "args": [
       "who",
@@ -465,12 +473,29 @@
     "one": null,
     "text": "you restarted it"
   },
+  "tasks.log_restarted_and_asked": {
+    "args": [
+      "who",
+      "restored",
+      "noted"
+    ],
+    "one": null,
+    "text": "{who} restarted {restored} and asked {noted} to go on"
+  },
   "tasks.log_restarted_by": {
     "args": [
       "who"
     ],
     "one": null,
     "text": "{who} restarted it"
+  },
+  "tasks.log_restarted_whom": {
+    "args": [
+      "who",
+      "names"
+    ],
+    "one": null,
+    "text": "{who} restarted {names}"
   },
   "tasks.log_resumed": {
     "args": [],
@@ -521,6 +546,11 @@
     ],
     "one": null,
     "text": "you set its why: {text}"
+  },
+  "tasks.log_you": {
+    "args": [],
+    "one": null,
+    "text": "you"
   },
   "tasks.merge_head": {
     "args": [],

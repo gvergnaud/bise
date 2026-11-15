@@ -504,7 +504,7 @@ def ail.go(+e: HM.Ev, +s: HS.St, +x: Nat, -r: HS.MRec, +n: {HM.nat_in(N.Needs.ms
       {==}
     case HM.EWorkCreated{w0}:
       {==}
-    case HM.EWorkChanged{w0, w1, w2, w3}:
+    case HM.EWorkChanged{w0, w1, w2, w3, w4, w5}:
       {==}
     case HM.EWorkFolded{w0, w1}:
       {==}
@@ -708,7 +708,7 @@ def cs_keep.go(+e: HM.Ev, +s: HS.St, +x: Nat, -r: HS.MRec, +n: {HM.nat_in(N.Need
       o
     case HM.EWorkCreated{w0}:
       o
-    case HM.EWorkChanged{w0, w1, w2, w3}:
+    case HM.EWorkChanged{w0, w1, w2, w3, w4, w5}:
       o
     case HM.EWorkFolded{w0, w1}:
       o

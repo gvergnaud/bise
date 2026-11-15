@@ -654,7 +654,7 @@ def ev_works(e: M.Ev) -> List<&2, String>:
   match e:
     case M.EWorkCreated{+w}:
       [S.Work.id(w)]
-    case M.EWorkChanged{+id, _, _, _}:
+    case M.EWorkChanged{+id, _, _, _, _, _}:
       [id]
     case M.EWorkTurn{+t}:
       S.WTurn.works(t)

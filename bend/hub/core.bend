@@ -2641,7 +2641,7 @@ def work_until.go(-o: S.St, due: Bool, +cx: X.Cx<o>, +id: String) -> X.Cx<o>:
     case False{}:
       cx
     case True{}:
-      work_resumed(o, emit(o, cx, M.EWorkChanged{id, S.WResume{}, M.HUB(), now(o, cx)}, Unit{}, Unit{}, Unit{}))
+      work_resumed(o, emit(o, cx, M.EWorkChanged{id, S.WResume{}, M.HUB(), now(o, cx), None{}, None{}}, Unit{}, Unit{}, Unit{}))
 
 # its until act fired: it resumes only if still paused with that end
 # come (law stale_until_never_resumes)
@@ -3555,7 +3555,7 @@ def report_ticks(-o: S.St, ws: List<&2, String>, +cx: X.Cx<o>, +by: String, +n: 
     case Nil{}:
       cx
     case Con{+h, +t}:
-      report_ticks(o, t, emit(o, cx, M.EWorkChanged{h, S.WTick{n}, by, now(o, cx)}, Unit{}, Unit{}, Unit{}), by, n)
+      report_ticks(o, t, emit(o, cx, M.EWorkChanged{h, S.WTick{n}, by, now(o, cx), None{}, None{}}, Unit{}, Unit{}, Unit{}), by, n)
 
 def report_tick(-o: S.St, n: Nat, +cx: X.Cx<o>, +from: String, +q: J.Json) -> X.Cx<o>:
   match n:
@@ -3980,7 +3980,7 @@ def work_pause.each(-o: S.St, ns: List<&2, String>, +cx: X.Cx<o>, +id: String) -
 def work_pause.until(-o: S.St, +cx: X.Cx<o>, +id: String, +until: Nat, +by: String) -> X.Cx<o>:
   +aid = S.Tms.next_act(tms(o, cx))
   LZ.pick(X.Cx<o>, Nat.is_eq(until, 0n), u => cx,
-    u => emit(o, aemit(o, cx, TM.ActSet{TM.act_of(aid, until, S.WorkResume{id})}), M.EWorkChanged{id, S.WUntilTimer{aid}, by, now(o, cx)}, Unit{}, Unit{}, Unit{}))
+    u => emit(o, aemit(o, cx, TM.ActSet{TM.act_of(aid, until, S.WorkResume{id})}), M.EWorkChanged{id, S.WUntilTimer{aid}, by, now(o, cx), None{}, None{}}, Unit{}, Unit{}, Unit{}))
 
 # ---- a Restart (roma idea 3; architect m_65554, m_65555) ----
 
@@ -4002,49 +4002,111 @@ def work_restart.restored(-o: S.St, p: X.Cx<o> & TaskR, +n: String, +id: String,
     case (+cx, _):
       work_restart.note(o, cx, n, id, text)
 
-# one of its agents: failed, restored once (the restore path; one that
-# fails again stays failed: the next Restart is his act again) and told;
-# active and idle, told; busy, starting or stopped, nothing
-def work_restart.life(-o: S.St, l: S.Life, +cx: X.Cx<o>, +n: String, +id: String, +text: String) -> X.Cx<o>:
+# whom a Restart acts on, decided once before its line (architect
+# m_65602): the line records these lists and the step acts on them, so
+# what it says is what it did (law restart_records_whom_it_acted_on)
+# one of its agents by its life and its run, for the list `failed` names
+# (True: restored, False: noted): failed, restored once (the restore path;
+# one that fails again stays failed: the next Restart is his act again)
+# and told; active and idle, told; busy, starting or stopped, nothing
+def restart_whom.life(l: S.Life, +idle: Bool, +failed: Bool) -> Bool:
   match l:
     case S.LFailed{}:
-      work_restart.restored(o, restore.agent(o, M.get_agent(st(o, cx), n), cx, n), n, id, text)
+      failed
     case S.LActive{}:
-      LZ.pick(X.Cx<o>, is_idle(X.Rt.run(rt(o, cx, n))), u => work_restart.note(o, cx, n, id, text), u => cx)
+      Bool.not(failed) && idle
     case _:
-      cx
+      False{}
 
-def work_restart.one(-o: S.St, m: Maybe<&2, S.Agent>, +cx: X.Cx<o>, +n: String, +id: String, +text: String) -> X.Cx<o>:
+def restart_whom.one(-o: S.St, m: Maybe<&2, S.Agent>, +cx: X.Cx<o>, +n: String, +failed: Bool) -> Bool:
   match m:
     case None{}:
-      cx
+      False{}
     case Some{+a}:
-      work_restart.life(o, S.Agent.life(a), cx, n, id, text)
+      restart_whom.life(S.Agent.life(a), is_idle(X.Rt.run(rt(o, cx, n))), failed)
 
-def work_restart.each(-o: S.St, ns: List<&2, String>, +cx: X.Cx<o>, +id: String, +text: String) -> X.Cx<o>:
+def restart_whom.each(-o: S.St, ns: List<&2, String>, +cx: X.Cx<o>, +failed: Bool) -> List<&2, String>:
+  match ns:
+    case Nil{}:
+      Nil{}
+    case Con{+n, +rest}:
+      +rest2 = restart_whom.each(o, rest, cx, failed)
+      +keep = Bool.not(String.eq(n, M.MAIN())) && restart_whom.one(o, M.get_agent(st(o, cx), n), cx, n, failed)
+      Bool.pick(List<&2, String>, keep, n <> rest2, rest2)
+
+def restart_whom.of(-o: S.St, m: Maybe<&2, S.Work>, +cx: X.Cx<o>, +failed: Bool) -> List<&2, String>:
+  match m:
+    case None{}:
+      Nil{}
+    case Some{+w}:
+      restart_whom.each(o, S.Work.agents(w), cx, failed)
+
+# whom his (or main's) Restart of work `id` acts on, in its agents'
+# order, main aside (it routes): `failed` True its failed ones (restored),
+# False its idle live ones (told to go on)
+def restart_whom(-o: S.St, +cx: X.Cx<o>, +id: String, +failed: Bool) -> List<&2, String>:
+  restart_whom.of(o, WO.find(S.St.works(st(o, cx)), id), cx, failed)
+
+def work_restart.restore_each(-o: S.St, ns: List<&2, String>, +cx: X.Cx<o>, +id: String, +text: String) -> X.Cx<o>:
   match ns:
     case Nil{}:
       cx
     case Con{+n, +rest}:
-      +skip = String.eq(n, M.MAIN())
-      +cx2 = LZ.pick(X.Cx<o>, skip, u => cx, u => work_restart.one(o, M.get_agent(st(o, cx), n), cx, n, id, text))
-      work_restart.each(o, rest, cx2, id, text)
+      +cx2 = work_restart.restored(o, restore.agent(o, M.get_agent(st(o, cx), n), cx, n), n, id, text)
+      work_restart.restore_each(o, rest, cx2, id, text)
 
-def work_restart.of(-o: S.St, m: Maybe<&2, S.Work>, +cx: X.Cx<o>, +id: String, +by: String) -> X.Cx<o>:
+def work_restart.note_each(-o: S.St, ns: List<&2, String>, +cx: X.Cx<o>, +id: String, +text: String) -> X.Cx<o>:
+  match ns:
+    case Nil{}:
+      cx
+    case Con{+n, +rest}:
+      work_restart.note_each(o, rest, work_restart.note(o, cx, n, id, text), id, text)
+
+def work_restart.of(-o: S.St, m: Maybe<&2, S.Work>, +cx: X.Cx<o>, +id: String, +by: String, +rs: List<&2, String>, +ns: List<&2, String>) -> X.Cx<o>:
   match m:
     case None{}:
       cx
     case Some{+w}:
-      work_restart.each(o, S.Work.agents(w), cx, id, work_restart.text(by, id, S.Work.name(w)))
+      +text = work_restart.text(by, id, S.Work.name(w))
+      work_restart.note_each(o, ns, work_restart.restore_each(o, rs, cx, id, text), id, text)
 
-# his (or main's) Restart of work `id`: its agents, main aside (it routes)
-def work_restart(-o: S.St, +cx: X.Cx<o>, +id: String, +by: String) -> X.Cx<o>:
-  work_restart.of(o, WO.find(S.St.works(st(o, cx)), id), cx, id, by)
+# his (or main's) Restart of work `id`: exactly whom its line records
+# (`rs` restored, `ns` told to go on)
+def work_restart(-o: S.St, +cx: X.Cx<o>, +id: String, +by: String, +rs: List<&2, String>, +ns: List<&2, String>) -> X.Cx<o>:
+  work_restart.of(o, WO.find(S.St.works(st(o, cx)), id), cx, id, by, rs, ns)
+
+# whom a change acts on, for the list `failed` names: a Restart's, none
+# for any other change
+def req_task.whom(-o: S.St, op: S.WOp, +cx: X.Cx<o>, +id: String, +failed: Bool) -> Maybe<&2, List<&2, String>>:
+  match op:
+    case S.WRestart{}:
+      Some{restart_whom(o, cx, id, failed)}
+    case _:
+      None{}
+
+def req_task.json(m: Maybe<&2, List<&2, String>>) -> Maybe<&2, J.Json>:
+  match m:
+    case None{}:
+      None{}
+    case Some{+xs}:
+      Some{J.JArr{jstrs(xs)}}
+
+def req_task.whom_or(m: Maybe<&2, List<&2, String>>) -> List<&2, String>:
+  match m:
+    case None{}:
+      Nil{}
+    case Some{+xs}:
+      xs
+
+# the work_changed line of `by`'s change `op` of work `id`, with whom a
+# Restart acts on (`rs` restored, `ns` told to go on)
+def req_task.line(+id: String, +op: S.WOp, +by: String, +at: Nat, +rs: Maybe<&2, List<&2, String>>, +ns: Maybe<&2, List<&2, String>>) -> M.Ev:
+  M.EWorkChanged{id, op, by, at, req_task.json(rs), req_task.json(ns)}
 
 # what a change makes happen after its line: a pause's notes (once, at
 # the pause: a paused work's new until changes only its end) and its
 # until act; a resume's held deliveries
-def req_task.after(-o: S.St, op: S.WOp, +cx: X.Cx<o>, +was: Bool, +id: String, +by: String) -> X.Cx<o>:
+def req_task.after(-o: S.St, op: S.WOp, +cx: X.Cx<o>, +was: Bool, +id: String, +by: String, +rs: List<&2, String>, +ns: List<&2, String>) -> X.Cx<o>:
   match op:
     case S.WPause{+until}:
       +cx2 = LZ.pick(X.Cx<o>, was, u => cx, u => work_pause.each(o, work_pause.agents(S.St.order(st(o, cx)), st(o, cx), id), cx, id))
@@ -4052,7 +4114,7 @@ def req_task.after(-o: S.St, op: S.WOp, +cx: X.Cx<o>, +was: Bool, +id: String, +
     case S.WResume{}:
       work_resumed(o, cx)
     case S.WRestart{}:
-      work_restart(o, cx, id, by)
+      work_restart(o, cx, id, by, rs, ns)
     # a paused work closed: its pause ended with it, what it held goes
     # (law a_closed_work_holds_nothing)
     case S.WDone{}:
@@ -4068,8 +4130,11 @@ def req_task.go(-o: S.St, r: Maybe<&2, String>, +cx: X.Cx<o>, +a: TAsk, +by: Str
     case Some{+e}:
       task_err(o, a, cx, e)
     case None{}:
-      +cx2 = emit(o, cx, M.EWorkChanged{id, op, by, now(o, cx)}, Unit{}, Unit{}, Unit{})
-      task_ok(o, a, req_task.after(o, op, cx2, was, id, by), ok_body([J.kv("id", J.JStr{id})]))
+      # whom a Restart acts on, read before its line (the line says it)
+      +rs = req_task.whom(o, op, cx, id, True{})
+      +ns = req_task.whom(o, op, cx, id, False{})
+      +cx2 = emit(o, cx, req_task.line(id, op, by, now(o, cx), rs, ns), Unit{}, Unit{}, Unit{})
+      task_ok(o, a, req_task.after(o, op, cx2, was, id, by, req_task.whom_or(rs), req_task.whom_or(ns)), ok_body([J.kv("id", J.JStr{id})]))
 
 # a folded work is refused with its word (reopen on a tomb: v1, m_64425)
 def req_task.missing(+st: S.St, +id: String) -> String:

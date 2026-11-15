@@ -167,7 +167,11 @@ pub const JOURNAL: Table = Table {
         // done; an agent's turn's works when they change (`add`: a steered
         // delivery adds, a new turn sets); his moves of a card or an artifact
         k("work_created", "WorkCreated", "M.EWorkCreated{work}", &[f("work", Rec(&WORK))]),
-        k("work_changed", "WorkChanged", "M.EWorkChanged{id, op, by, at}", &[f("id", Str), f("op", Inline(&WOP)), f("by", Str), f("at", Nat)]),
+        // `restored`, `noted`: whom a Restart acted on (its failed agents
+        // brought back, its idle ones told to go on; architect m_65602),
+        // lists of names, absent on any other change and on an older line
+        k("work_changed", "WorkChanged", "M.EWorkChanged{id, op, by, at, restored, noted}",
+            &[f("id", Str), f("op", Inline(&WOP)), f("by", Str), f("at", Nat), f("restored", OptJsonOmit), f("noted", OptJsonOmit)]),
         k("work_folded", "WorkFolded", "M.EWorkFolded{id, at}", &[f("id", Str), f("at", Nat)]),
         k("work_turn", "WorkTurn", "M.EWorkTurn{turn}", &[f("turn", Rec(&WTURN))]),
         k("card_moved", "CardMoved", "M.ECardMoved{moved}", &[f("moved", Rec(&CARD_MOVE))]),

@@ -166,6 +166,13 @@ pub struct LogLine {
     /// a break's life: `failed` or `stopped` (`text` its reason)
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub life: String,
+    /// a Restart: the agents it brought back (they had crashed) and the
+    /// idle ones it told to go on, as its line recorded them (architect
+    /// m_65602); both empty on an older line
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub restored: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub noted: Vec<String>,
 }
 
 /// One task with its status.

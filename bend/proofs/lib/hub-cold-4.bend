@@ -232,7 +232,7 @@ def hc_apply.go(+e: HM.Ev, +s: HS.St, sp: HI.Split(s), k: hc_GeEv(s, e)) -> hc_S
       HX.Both{{==}, sp}
     case HM.EWorkCreated{w0}:
       HX.Both{{==}, sp}
-    case HM.EWorkChanged{w0, w1, w2, w3}:
+    case HM.EWorkChanged{w0, w1, w2, w3, w4, w5}:
       HX.Both{{==}, sp}
     case HM.EWorkFolded{w0, w1}:
       HX.Both{{==}, sp}
@@ -347,7 +347,7 @@ def hc_fresh_ge(+s: HS.St, e: HM.Ev, k: HX.FreshEv(s, e)) -> hc_GeEv(s, e):
       Unit{}
     case HM.EWorkCreated{w0}:
       Unit{}
-    case HM.EWorkChanged{w0, w1, w2, w3}:
+    case HM.EWorkChanged{w0, w1, w2, w3, w4, w5}:
       Unit{}
     case HM.EWorkFolded{w0, w1}:
       Unit{}
@@ -447,7 +447,7 @@ def hc_replay_ge(+st: HS.St, e: HM.Ev, ok: {CO.replay_fresh(st, e) == True{} : B
       Unit{}
     case HM.EWorkCreated{w0}:
       Unit{}
-    case HM.EWorkChanged{w0, w1, w2, w3}:
+    case HM.EWorkChanged{w0, w1, w2, w3, w4, w5}:
       Unit{}
     case HM.EWorkFolded{w0, w1}:
       Unit{}
@@ -562,7 +562,7 @@ def hc_kept1(+xs: List<&2, HS.MRec>, e: HM.Ev) -> HI.IsPrefix(HI.ids(xs), HI.ids
       PL1.hub_prefix_refl(HI.ids(xs))
     case HM.EWorkCreated{w0}:
       PL1.hub_prefix_refl(HI.ids(xs))
-    case HM.EWorkChanged{w0, w1, w2, w3}:
+    case HM.EWorkChanged{w0, w1, w2, w3, w4, w5}:
       PL1.hub_prefix_refl(HI.ids(xs))
     case HM.EWorkFolded{w0, w1}:
       PL1.hub_prefix_refl(HI.ids(xs))
