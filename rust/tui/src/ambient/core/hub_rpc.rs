@@ -123,6 +123,9 @@ pub struct RpcConn {
     pub ready: bool,
     /// the hub's page server (`initialize`'s), if it serves pages
     pub pages_url: Option<String>,
+    /// the hub answers a bise page's `view/open` with its frame
+    /// (`initialize`'s `page_frame`; an older hub: false)
+    pub page_frame: bool,
 }
 
 impl RpcConn {
@@ -259,6 +262,7 @@ impl RpcConn {
         self.ready = true;
         self.wm = res.hub.watermark;
         self.pages_url = res.pages_url.clone();
+        self.page_frame = res.page_frame;
         let cmds: Vec<String> = res.methods.iter().filter_map(|m| rpc::method_row(m)).map(|r| r.cmd.to_string()).collect();
         let built = res.version.get("built").and_then(Value::as_str).map(str::trim).filter(|b| !b.is_empty()).map(String::from);
         let welcome = HubEv::Welcome { project: res.project, proto: res.proto, workspace: res.workspace, name: res.name, cmds, built };
@@ -348,6 +352,7 @@ mod tests {
             version: Value::Null,
             reload: String::new(),
             pages_url: None,
+            page_frame: false,
             methods: rpc::methods(),
             notifications: rpc::notifications(),
             hub: HubState { watermark: Watermark { epoch: 9, seq }, state: vec![agents] },

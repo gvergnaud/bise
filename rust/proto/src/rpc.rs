@@ -723,6 +723,11 @@ pub struct InitializeResult {
     pub reload: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pages_url: Option<String>,
+    /// `view/open` answers a bise page's frame (views-broken, architect
+    /// m_65319): an older hub refused a page as bad-handle, so the
+    /// desktop falls back to today's page only when this is absent
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub page_frame: bool,
     pub methods: Vec<String>,
     pub notifications: Vec<String>,
     pub hub: HubState,

@@ -18,6 +18,8 @@
 //!
 //! One of bise's own types not migrated yet (a BUILTIN opener) answers
 //! its frame today ([`frame_of`], the row's own rule: a bise page's page).
+//! A bise page has no file (its source is its URL): its frame is answered
+//! before step 1 resolves anything ([`page_frame`]).
 
 use super::views::{gone, read_view, server_error, static_folder, ViewDone};
 use super::Shell;
@@ -75,6 +77,16 @@ pub fn frame_of(meta: &crate::artifacts::Meta, version: Option<u64>, base: &str)
     Some(format!("{base}{}", crate::pages::site::copy_href(&meta.id, n, copy)))
 }
 
+/// A bise page's frame, before any file is resolved: a page has no file
+/// (its `source` is its URL, which `view_files_disk` refuses as a bad
+/// handle), so its built-in frame is the whole answer. None: not a page
+/// (resolve it as a file); an error: a page with no such version.
+fn page_frame(store: &crate::artifacts::Store, target: &OpenTarget, base: &str) -> Option<Result<String, RpcError>> {
+    let OpenTarget::Artifact { id, version } = target else { return None };
+    let meta = store.get(id).filter(|m| m.by == "page")?;
+    Some(frame_of(&meta, *version, base).ok_or_else(|| ViewError::BadHandle.rpc(WHAT)))
+}
+
 /// Step 1's answer: a BUILTIN's frame (the whole answer), or a plugin's
 /// app to call.
 enum Found {
@@ -112,6 +124,9 @@ impl Shell {
         let step = self.view_step();
         std::thread::spawn(move || {
             let chose = || -> Result<Found, RpcError> {
+                if let Some(frame) = page_frame(&store, &target, &pages.base()) {
+                    return frame.map(Found::Frame);
+                }
                 let resolved = match (&target, &entry) {
                     (OpenTarget::Entry { id }, Some((ask, links))) => {
                         let path = ask.path(id, super::files_ids::PATH_WAIT).map_err(|e| match e {
@@ -241,5 +256,27 @@ mod tests {
         assert_eq!(frame_of(&meta("page", &[(1, None)]), None, base).as_deref(), Some("http://127.0.0.1:4/p/q3"), "a page: its page");
         assert_eq!(frame_of(&meta("t1", &[(1, None)]), None, base), None, "no copy: nothing to frame");
         assert_eq!(frame_of(&meta("t1", &[]), None, base), None);
+    }
+
+    /// His click on a bise page (by 'page', its source a URL, no file)
+    /// opens its frame: never the file path's bad-handle (views-broken,
+    /// his m_65273: 'the view didn't load' on every page).
+    #[test]
+    fn a_page_opens_in_its_frame_without_a_file() {
+        let d = std::env::temp_dir().join(format!("bise-vo-page-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        let page = d.join("state/pages/plan");
+        std::fs::create_dir_all(&page).unwrap();
+        let vs = json!([{"n": 1, "at_ms": 2, "blocks": []}, {"n": 2, "at_ms": 3, "blocks": []}]);
+        std::fs::write(page.join("meta.json"), json!({"id": "plan", "title": "plan", "agent": "a", "created_ms": 1, "versions": vs, "state": "ready"}).to_string()).unwrap();
+        let store = crate::artifacts::Store::new(&d.join("state"));
+        let base = "http://127.0.0.1:4";
+        let at = |id: &str, version: Option<u64>| page_frame(&store, &OpenTarget::Artifact { id: id.into(), version }, base);
+        assert_eq!(at("plan", None).map(|r| r.ok()), Some(Some("http://127.0.0.1:4/p/plan".into())));
+        assert_eq!(at("plan", Some(1)).map(|r| r.ok()), Some(Some("http://127.0.0.1:4/p/plan".into())), "a page's frame is its page");
+        assert_eq!(at("plan", Some(9)).map(|r| r.map_err(|e| e.code)), Some(Err(ViewError::BadHandle.code())), "no such version");
+        assert!(at("nope", None).is_none(), "no page: resolved as a file");
+        assert!(page_frame(&store, &OpenTarget::Entry { id: "e:1".into() }, base).is_none());
+        let _ = std::fs::remove_dir_all(&d);
     }
 }

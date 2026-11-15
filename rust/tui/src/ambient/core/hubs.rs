@@ -1060,6 +1060,11 @@ impl Core {
                     false => conns.get(&f.row.id).filter(|_| held).and_then(|c| c.rpc.pages_url.clone()),
                 }
                 .filter(|u| !u.is_empty());
+                // its held hub opens a page's view/open as its frame (an older one: the window's fallback)
+                row.page_frame = match f.row.home {
+                    true => self.home.rpc.page_frame,
+                    false => conns.get(&f.row.id).filter(|_| held).is_some_and(|c| c.rpc.page_frame),
+                };
                 row
             })
             .collect();

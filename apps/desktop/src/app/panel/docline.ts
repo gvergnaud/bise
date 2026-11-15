@@ -18,6 +18,11 @@ export interface RowFacts {
   readonly gone: boolean;
   /** who saved its newest version (ArtifactVersion.by); none: not said */
   readonly by?: SavedBy;
+  /**
+   * TODO(page-open-old-hub): a bise page's row (kind 'page') on a hub without initialize's
+   * page_frame (ProjectRow.page_frame), which refuses its view/open as a bad handle
+   */
+  readonly oldHubPage?: boolean;
 }
 
 /** The head's line. `app` is the app's name ('Sheets'); `version` the one shown. */
@@ -47,6 +52,10 @@ export function docLine(state: ViewState, row: RowFacts | undefined, rowApp: str
     case 'failed':
       // a hub that doesn't know view/open yet (method not found): today's page draws it (F0, apps-lead m_62087)
       if (state.code === RPC.notFound) return { kind: 'page' };
+      // TODO(page-open-old-hub): a hub before views-broken's fix refuses a page's view/open as a
+      // bad handle (its source is a URL, no file): today's page draws it, never 'didn't load'.
+      // A hub with the fix (page_frame) is believed: a page it refuses stays said
+      if (row?.oldHubPage === true && state.code === DOC_ERR.badHandle) return { kind: 'page' };
       if (state.code === DOC_ERR.gone) return { kind: 'gone' };
       if (state.code === VIEW_ERR.pluginOff) return { kind: 'off', app: rowApp };
       return { kind: 'failed' };

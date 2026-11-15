@@ -57,6 +57,12 @@ pub struct ProjectRow {
     /// pages server
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pages_url: Option<String>,
+    /// its held hub answers a bise page's `view/open` with its frame
+    /// (`initialize`'s `page_frame`): absent, the window draws a page
+    /// that hub refuses as bad-handle as today's page (views-broken,
+    /// architect m_65319; shim page-open-old-hub)
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub page_frame: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

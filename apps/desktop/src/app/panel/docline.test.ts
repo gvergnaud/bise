@@ -38,6 +38,14 @@ describe('docLine', () => {
     expect(docLine({ kind: 'failed', message: 'x', code: DOC_ERR.gone }, ROW, 'Fake')).toEqual({ kind: 'gone' });
   });
 
+  it("a page's bad handle from an older hub draws today's page, never 'didn't load' (views-broken, his m_65273)", () => {
+    const page = { newest: 2, gone: false, oldHubPage: true };
+    expect(docLine({ kind: 'failed', message: 'x', code: DOC_ERR.badHandle }, page, '')).toEqual({ kind: 'page' });
+    expect(docLine({ kind: 'failed', message: 'x', code: DOC_ERR.badHandle }, { newest: 2, gone: false }, ''), 'a hub with page_frame: its refusal is said').toEqual({ kind: 'failed' });
+    expect(docLine({ kind: 'failed', message: 'x', code: DOC_ERR.badHandle }, ROW, 'Fake'), 'a file: its refusal stays said').toEqual({ kind: 'failed' });
+    expect(docLine({ kind: 'failed', message: 'x', code: VIEW_ERR.notVisible }, page, ''), "another refusal on a page: said").toEqual({ kind: 'failed' });
+  });
+
   it("the app off says the row's app; another failure is plain", () => {
     expect(docLine({ kind: 'failed', message: 'off', code: VIEW_ERR.pluginOff }, ROW, 'Sheets')).toEqual({ kind: 'off', app: 'Sheets' });
     expect(docLine({ kind: 'failed', message: 'x' }, ROW, 'Sheets')).toEqual({ kind: 'failed' });

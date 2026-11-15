@@ -134,7 +134,13 @@ version: JsonValue,
 /**
  * set when a reload started this hub (BISE-131)
  */
-reload: string, pages_url?: string | null, methods: Array<string>, notifications: Array<string>, hub: HubState, };
+reload: string, pages_url?: string | null, 
+/**
+ * `view/open` answers a bise page's frame (views-broken, architect
+ * m_65319): an older hub refused a page as bad-handle, so the
+ * desktop falls back to today's page only when this is absent
+ */
+page_frame?: boolean, methods: Array<string>, notifications: Array<string>, hub: HubState, };
 
 /**
  * `commands/list`'s result: every slash command, owned rows.

@@ -294,6 +294,7 @@ impl Shell {
             version: crate::switch::version_info(&self.opts.app_root),
             reload: self.reload_id.clone(),
             pages_url: self.pg.pages.as_ref().map(|p| p.base()),
+            page_frame: true,
             methods: rpc::methods(),
             notifications: rpc::notifications(),
             hub: self.hub_state(id),
