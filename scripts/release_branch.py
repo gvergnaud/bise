@@ -24,7 +24,9 @@ release_slot.py.
                                                 a backport carrying Backport-of: <main sha>), never
                                                 a merge; the quick gate (GATE_BASE: the line's tip
                                                 before), then the line moves, pushed
-  release_branch.py candidates                  main's fix: commits since the line's base that it lacks
+  release_branch.py candidates                  suggested picks, by subject only: main's fix: commits
+                                                since the line's base that it lacks (a fix landed as
+                                                feat: won't show; the release manager decides each)
   release_branch.py hold <sha> "<why>" [--by <who>]
   release_branch.py unhold <sha>
   release_branch.py holds
@@ -319,6 +321,7 @@ def cmd_candidates(r):
         return 1
     have = {n for row in r.line_rows() for n in row[3]}
     plus = {l[2:].strip() for l in (git(r.path, "cherry", r.line, "main", r.base) or "").splitlines() if l.startswith("+ ")}
+    print("suggested by subject (fix: commits on main the line lacks; a fix landed as feat: won't show):")
     n = 0
     for l in (git(r.path, "log", "--first-parent", "--reverse", "--format=%H %s", "%s..main" % r.base) or "").splitlines():
         sha, _, subject = l.partition(" ")
