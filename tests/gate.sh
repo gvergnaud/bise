@@ -1030,6 +1030,16 @@ if [ "$mode" = full ]; then
   # runs in heavy-run's quiet window, no new job starting beside it (main m_63082, architect m_63085)
   quiet=(); hq="$HOME/.bise/run/heavy-run"
   [ -n "${GATE_QUIET:-}" ] && [ -x "$hq" ] && quiet=("$hq" quiet "$GATE_QUIET" --)
+  # the desktop's checks beside the e2e/tmux part, one way (fast-loop's A/B, architect m_64910:
+  # 2026-11-15 00:30-03:04, sha 7c09ce329, load x1.0, 3 runs each alternating: the gate's own time
+  # 1305/1186/1197 s one after the other, 916/836/838 s beside, -30% at the median; the e2e part
+  # 856/764/776 vs 850/770/771 s, desktop 360/356/355 vs 512/342/357 s; 0 reds in the six). Its
+  # lines print where it ran before; on_exit kills it with the gate.
+  fdesk=""
+  if [ -n "$dwhy" ]; then
+    { desktop_check strict >"$run/fdesk.res" 2>&1; echo $? >"$run/fdesk.rc"; } &
+    fdesk=$!
+  fi
   ${quiet[@]+"${quiet[@]}"} tests/run_all.sh ${pick_args[@]+"${pick_args[@]}"} & wait $!; rc=$?
   # which reds are known (tests/known_reds.txt, their owner on it) and which are new
   [ $rc = 0 ] || { [ -s "$red" ] && python3 tests/known_reds.py split $(cat "$red"); }
@@ -1043,7 +1053,9 @@ if [ "$mode" = full ]; then
   # the office skills' scripts run on the SDK of this tree (plugins/{sheets,slides,docs})
   if [ $rc = 0 ]; then python3 tests/office_skills_check.py strict || { echo "FAIL office_skills"; rc=1; }; fi
   # and the desktop itself builds and passes its checks on those types (B3)
-  if [ $rc = 0 ] && [ -n "$dwhy" ]; then desktop_check strict || rc=1; fi
+  if [ -n "$fdesk" ]; then
+    wait "$fdesk"; cat "$run/fdesk.res"; [ "$(cat "$run/fdesk.rc" 2>/dev/null)" = 0 ] || rc=1
+  fi
   # every binary built runs on the macOS target (BISE-164): the Bend ones,
   # bise, and the engine when this tree has one
   bins=(./repl-live ./repl-scripted ./sb-core "${CARGO_TARGET_DIR:-rust/target}/debug/bise")
