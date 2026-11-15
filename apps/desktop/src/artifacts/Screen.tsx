@@ -20,6 +20,7 @@ import { hero } from '@/proto/words_hero.gen';
 import { library } from '@/proto/words_library.gen';
 import { useFolders, usePlugins, useProjects, useStore } from '@/store';
 import { resolveMerged } from '@/tasks/model';
+import { askMove } from '@/tasks/moveTo';
 import { DEPTH, useRouter } from '@/app/router';
 import { libraryExit } from '@/app/escape';
 import { usePageSearchKeys } from '@/app/searchkeys';
@@ -504,6 +505,13 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
       case 'look': look(it); return;
       case 'put': for (const x of itemsOfKeys(keys)) putIt(x); return;
       case 'move': setOver({ k: 'move', keys, at: boxOf(key) }); return;
+      // Move to task… (F9a): the task picker from the card's box (tasks/moveTo.ts)
+      case 'task':
+      case 'also': {
+        const at = boxOf(key);
+        askMove({ thing: { kind: 'art', project: it.project, id: it.a.id, page: it.a.kind === 'page', title: it.a.title, works: it.a.works ?? [] }, mode: act === 'task' ? 'move' : 'also', x: at.x, y: at.y + (at.h ?? 0) });
+        return;
+      }
       case 'keep':
       case 'let_go': for (const c of keepCmds(itemsOfKeys(keys), act === 'keep')) store.command(c); return;
       case 'with': setOver({ k: 'with', key, at: boxOf(key) }); return;

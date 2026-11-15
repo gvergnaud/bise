@@ -158,6 +158,9 @@
 .art-ghost > :first-child{display:block;width:100%;aspect-ratio:16/10;border-radius:var(--r-2);overflow:hidden}
 .art-ghost-n{position:absolute;top:calc(-1 * var(--s-2));right:calc(-1 * var(--s-2));min-width:var(--s-5);height:var(--s-5);padding:0 var(--s-1);border-radius:var(--s-3);background:var(--c-ink);color:var(--c-on-ink);font-size:var(--t-12);font-weight:600;line-height:20px;text-align:center}
 .art-menu-at{position:fixed;width:0;height:0}
+/* a card menu's task rows (Move to task…, Also add to task…): after the menu's own 1 px rule,
+   apart from Move to folder… (designer m_65623) */
+.b-picker-group.art-menu-tasks{margin-top:var(--s-2);padding-top:var(--s-2);border-top:1px solid var(--c-line)}
 
 /* the m picker's head: its title and its field */
 .b-picker-head:has(.art-move-head){height:auto;padding:var(--s-2) var(--s-3)}

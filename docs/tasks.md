@@ -76,7 +76,8 @@ happened, never rebuilt later:
 ## Move to task… (F9; tasks-ux m_65409, designer m_65406, architect m_65565)
 
 His gesture on an artifact (its native menu: the Library row's ⋯, its frame's ⋯, a right click:
-Move to task…, Also add to task…, Remove from <task> with 2+ tasks) or a card. Where the native
+Move to task…, Also add to task…, Remove from <task> with 2+ tasks; the Library gallery's own card
+menu: Move to task… beside Move to folder…, tasks-ux m_65621) or a card. Where the native
 menu doesn't reach, `tasks/MoveMenus.tsx` draws the same items in a ⋯ (tip "More") on the row:
 an inbox card on the inbox page (a right click too) and in the thread's strip (beside the row,
 never in its button), the Task tab's Needs you and Artifacts rows. It shows on the row's hover and

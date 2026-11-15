@@ -14,9 +14,8 @@ import { tasks } from '@/proto/words_tasks.gen';
 import { useNowFor } from '@/app/clock';
 import { aboutOf, barRows, crewOf, cutAtWord, goalsOf, saidOf, STATUS_ORDER, type ProjWork } from './model';
 import { ago } from '@/agents/model';
-import { age } from '@/inbox/InboxCard';
 import { useAllWorks, useNewestArts } from './hooks';
-import { NewDot, openTask, StatusMark } from './Marks';
+import { NewDot, openTask, pausedWords, StatusMark } from './Marks';
 import { isNew } from './news';
 import { markActed, markLooked, markSeen, useSeenTasks, useSettleActed } from './seen';
 import { UndoToast, useUndo } from './UndoToast';
@@ -104,7 +103,7 @@ function Card({ x, now, fresh, onDid }: { x: ProjWork; now: number; fresh: boole
   // a paused card says its pause, never a stale report (designer m_65397)
   const paused = x.w.status === 'paused';
   const sentence = paused
-    ? tasks.paused_since({ ago: age(now - (x.w.paused_ms ?? now)) })
+    ? pausedWords(now - (x.w.paused_ms ?? now))
     : (said?.text ?? (aboutOf(line) !== '' ? aboutOf(line) : line));
   return (
     <div className="tk-card" data-st={x.w.status} data-testid={id} role="button" tabIndex={0} onClick={() => {

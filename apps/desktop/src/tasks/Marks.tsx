@@ -7,7 +7,14 @@ import { openTab } from '@/app/panel/tabs';
 import type { WorkRow, WorkStatus } from '@/proto';
 import { tasks } from '@/proto/words_tasks.gen';
 import { cutAtWord } from './model';
+import { age } from '@/inbox/InboxCard';
 import './tasks.css';
+
+/** The paused line: 'paused by you · just now' in its first minute, then '· 4 h ago' ('ago' only
+ *  after a real duration, tasks-ux m_65628). Pure. */
+export function pausedWords(ms: number): string {
+  return ms < 60_000 ? tasks.paused_just_now : tasks.paused_since({ ago: age(ms) });
+}
 
 /** 'new since you looked' (roma idea 2, designer): our 6 px ink dot after the name, never blue,
  *  never pink (pink is what waits on him); its words for a reader in its label. */

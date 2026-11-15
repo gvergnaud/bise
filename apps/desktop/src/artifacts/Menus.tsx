@@ -8,6 +8,7 @@ import { useRef, type RefObject } from 'react';
 import { AppIcon, PickerPop, type PickerGroup, type PickerRow } from '@/ds';
 import { library } from '@/proto/words_library.gen';
 import { menus } from '@/proto/words_menus.gen';
+import { tasks } from '@/proto/words_tasks.gen';
 import type { PopupItem } from '@/shared/api';
 import type { Library } from './folders';
 
@@ -31,7 +32,7 @@ export function MenuAnchor({ at, anchor }: { at: MenuAt; anchor: RefObject<HTMLS
 }
 
 /** A card's menu's actions. */
-export type CardAct = 'open' | 'with' | 'look' | 'versions' | 'put' | 'copy' | 'finder' | 'move' | 'archive' | KeepAct;
+export type CardAct = 'open' | 'with' | 'look' | 'versions' | 'put' | 'copy' | 'finder' | 'move' | 'task' | 'also' | 'archive' | KeepAct;
 
 /** His Keep (◆, it never goes to Done) or Let go (sections.ts; page artifacts-signal v3). */
 export type KeepAct = 'keep' | 'let_go';
@@ -62,9 +63,19 @@ export function cardRows(o: { finder: boolean; several: number; openWith?: boole
     { id: 'copy', name: library.menu_copy, key: '⌘C' },
   ];
   if (o.finder) rows.push({ id: 'finder', name: library.menu_finder, key: 'r' });
-  rows.push({ id: 'move', name: library.menu_move, key: 'm' }, { id: 'archive', name: library.archive, key: '⌫' });
+  // Move to folder…, then Move to task… and Also add to task…, worded apart (F9a, tasks-ux m_65621;
+  // CardMenu draws a rule between the two groups, designer m_65623)
+  rows.push(
+    { id: 'move', name: library.menu_move, key: 'm' },
+    { id: 'task', name: tasks.move_to, key: '' },
+    { id: 'also', name: tasks.move_also, key: '' },
+    { id: 'archive', name: library.archive, key: '⌫' },
+  );
   return rows;
 }
+
+/** The task rows of a card's menu: their own group, after a rule. */
+const TASK_ACTS: readonly CardAct[] = ['task', 'also'];
 
 export function CardMenu({ at, finder, several, kept, openWith = false, onAct, onClose, testId }: {
   at: MenuAt;
@@ -78,12 +89,21 @@ export function CardMenu({ at, finder, several, kept, openWith = false, onAct, o
   testId: string;
 }) {
   const anchor = useRef<HTMLSpanElement>(null);
-  const rows: PickerRow[] = cardRows({ finder, several, openWith }).map((r) => ({ id: r.id, name: r.name, ...(r.key === '' ? {} : { trailing: r.key }), testId: `${testId}.${r.id}` }));
+  const all: { act: CardAct; row: PickerRow }[] = cardRows({ finder, several, openWith }).map((r) => ({ act: r.id, row: { id: r.id, name: r.name, ...(r.key === '' ? {} : { trailing: r.key }), testId: `${testId}.${r.id}` } }));
+  const at0 = all.findIndex((r) => TASK_ACTS.includes(r.act));
+  const rows = (at0 < 0 ? all : all.slice(0, at0)).map((r) => r.row);
+  const taskRows = all.filter((r) => TASK_ACTS.includes(r.act)).map((r) => r.row);
+  const after = at0 < 0 ? [] : all.slice(at0).filter((r) => !TASK_ACTS.includes(r.act)).map((r) => r.row);
   const keep: PickerRow[] = keepRows(kept).map((r) => ({ id: r.id, name: r.name, testId: `${testId}.${r.id}` }));
+  const groups = [
+    { id: 'card', rows },
+    ...(taskRows.length > 0 ? [{ id: 'task', look: 'art-menu-tasks', rows: [...taskRows, ...after] }] : []),
+    { id: 'keep', rows: keep },
+  ];
   return (
     <>
       <MenuAnchor at={at} anchor={anchor} />
-      <PickerPop anchor={anchor} align="start" groups={[{ id: 'card', rows }, { id: 'keep', rows: keep }]} onClose={onClose}
+      <PickerPop anchor={anchor} align="start" groups={groups} onClose={onClose}
         onPick={(id) => { onClose(); onAct(id as CardAct); }} testId={testId} />
     </>
   );

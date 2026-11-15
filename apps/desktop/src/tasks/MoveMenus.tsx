@@ -33,7 +33,7 @@ export function CardMoveMore({ project, card, title, testId }: { project: string
   return (
     // a sibling of the row's own button, never in it: a click on it is its own (open, answer stay theirs)
     <span className="tk-more-slot">
-      <Dropdown look="pop" label="⋯" name={tasks.act_more} tip={tasks.act_more} testId={testId}
+      <Dropdown look="pop" label="⋯" name={tasks.act_more_move} tip={tasks.act_more_move} testId={testId}
         groups={[{ id: 'move', rows: [{ id: 'move', name: tasks.move_to, testId: `${testId}.move` }] }]}
         onPick={() => {
           askMove({ thing: { kind: 'card', project, card, title, works: now }, mode: 'move', x: lastAt.x, y: lastAt.y });
@@ -57,7 +57,7 @@ export function ArtMoveMore({ project, a, testId }: { project: string; a: Pick<A
   ];
   return (
     <span className="tk-more-slot">
-      <Dropdown look="pop" label="⋯" name={tasks.act_more} tip={tasks.act_more} testId={testId}
+      <Dropdown look="pop" label="⋯" name={tasks.act_more_move} tip={tasks.act_more_move} testId={testId}
         groups={[{ id: 'move', rows }]}
         onPick={(id) => {
           if (id === 'move' || id === 'also') {

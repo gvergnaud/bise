@@ -8,7 +8,6 @@ import { useEffect, useRef, useState } from 'react';
 import { ArtChip, Dropdown, Filters, Input, Kbd, Press, tipAttrs } from '@/ds';
 import { TaskLog } from './TaskLog';
 import { dayWords, glyphOf, timeOf } from '@/artifacts/model';
-import { age } from '@/inbox/InboxCard';
 import { inbox } from '@/proto/words_inbox.gen';
 import { sentenceCase } from '@/ds/case';
 import type { Entry } from '@/proto';
@@ -23,7 +22,7 @@ import { askButtons, pickIntent } from '@/app/side3d/model';
 import { tasks } from '@/proto/words_tasks.gen';
 import { useWorks } from '@/store';
 import { aboutOf, artsOf, crewOf, cutAtWord, doingOf, firstLine, goalsOf, isOpen, nowOf } from './model';
-import { openTask, StatusMark, statusWord } from './Marks';
+import { openTask, pausedWords, StatusMark, statusWord } from './Marks';
 import { useTaskAct, useTaskReq } from './Board';
 import { lineAt } from './Side';
 import { markLooked, markSeen } from './seen';
@@ -188,7 +187,7 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
       {w.status === 'paused' && (
         // one Resume, the footer's (tasks-ux m_64959): the line says since when
         <p className="tk-paused" data-testid={`${t}.paused`}>
-          <StatusMark status="paused" /> {tasks.paused_since({ ago: age(now - (w.paused_ms ?? now)) })}
+          <StatusMark status="paused" /> {pausedWords(now - (w.paused_ms ?? now))}
         </p>
       )}
 

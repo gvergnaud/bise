@@ -150,6 +150,8 @@ crate::words! { tasks:
     sec_now = "Now";
     /// the paused line under its name (tasks-ux m_64959): since when, its Resume in the footer
     paused_since(ago) = "paused by you · {ago} ago";
+    /// the paused line in its first minute ('ago' only after a real duration; tasks-ux m_65628)
+    paused_just_now = "paused by you · just now";
     /// a section head
     sec_agents = "Agents";
     /// a section head: the 3 newest artifacts for him that serve it
@@ -309,6 +311,8 @@ crate::words! { tasks:
     log_restarted_and_asked(who, restored, noted) = "{who} restarted {restored} and asked {noted} to go on";
     /// the footer's ⋯: its tip
     act_more = "More: Rename, Merge into…";
+    /// a row's ⋯ that holds only the Move items (an inbox card, an artifact row; tasks-ux m_65621)
+    act_more_move = "More";
     /// the ⋯ menu: rename the task (his name: an agent never renames it after)
     act_rename = "Rename";
     /// the merge picker's head

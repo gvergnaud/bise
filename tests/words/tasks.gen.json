@@ -15,6 +15,11 @@
     "one": null,
     "text": "More: Rename, Merge into…"
   },
+  "tasks.act_more_move": {
+    "args": [],
+    "one": null,
+    "text": "More"
+  },
   "tasks.act_pause": {
     "args": [],
     "one": null,
@@ -693,6 +698,11 @@
     "args": [],
     "one": null,
     "text": "paused · by you"
+  },
+  "tasks.paused_just_now": {
+    "args": [],
+    "one": null,
+    "text": "paused by you · just now"
   },
   "tasks.paused_since": {
     "args": [

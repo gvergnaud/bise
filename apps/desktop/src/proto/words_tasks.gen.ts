@@ -136,6 +136,8 @@ export const tasks = {
   sec_now: "Now",
   /** the paused line under its name (tasks-ux m_64959): since when, its Resume in the footer */
   paused_since: (a: { ago: string | number }): string => "paused by you · " + String(a.ago) + " ago",
+  /** the paused line in its first minute ('ago' only after a real duration; tasks-ux m_65628) */
+  paused_just_now: "paused by you · just now",
   /** a section head */
   sec_agents: "Agents",
   /** a section head: the 3 newest artifacts for him that serve it */
@@ -292,6 +294,8 @@ export const tasks = {
   log_restarted_and_asked: (a: { who: string | number; restored: string | number; noted: string | number }): string => String(a.who) + " restarted " + String(a.restored) + " and asked " + String(a.noted) + " to go on",
   /** the footer's ⋯: its tip */
   act_more: "More: Rename, Merge into…",
+  /** a row's ⋯ that holds only the Move items (an inbox card, an artifact row; tasks-ux m_65621) */
+  act_more_move: "More",
   /** the ⋯ menu: rename the task (his name: an agent never renames it after) */
   act_rename: "Rename",
   /** the merge picker's head */

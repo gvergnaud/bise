@@ -185,7 +185,7 @@ describe('the scope, the menus, the drag, the commands', () => {
 
   it('a card menu has its keys; several picked: what applies to all', () => {
     expect(cardRows({ finder: true, several: 1 }).map((r) => `${r.name} ${r.key}`)).toEqual([
-      'Open ⏎', 'Quick look space', 'Versions v', 'Put in a message @', 'Copy link ⌘C', 'Show in Finder r', 'Move to… m', 'Archive ⌫',
+      'Open ⏎', 'Quick look space', 'Versions v', 'Put in a message @', 'Copy link ⌘C', 'Show in Finder r', 'Move to folder… m', 'Move to task… ', 'Also add to task… ', 'Archive ⌫',
     ]);
     expect(cardRows({ finder: false, several: 1 }).some((r) => r.id === 'finder')).toBe(false);
     expect(cardRows({ finder: true, several: 3 }).map((r) => r.id)).toEqual(['move', 'put', 'archive']);

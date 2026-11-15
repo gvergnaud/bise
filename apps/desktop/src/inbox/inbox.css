@@ -144,11 +144,12 @@
 /* one inbox (designer m_19631, page desktop-right-bar): the row is the same everywhere: n, the
    sign, the agent in 500, the question dim cut with …, then '<project> · <age>' mono t-12 faint */
 /* the same 28 px row in the block and the capsule (designer m_20053) */
-.inbox-block > .b-row { height: var(--h-row-tight); padding: 0 var(--pad-row-x); gap: var(--gap-inline); }
-.inbox-block > .b-row .nm { display: flex; gap: var(--gap-inline); flex: 1; min-width: 0; }
+/* a card row sits in its .strip-line beside its ⋯ (Move to task…, tasks-ux m_65591) */
+.inbox-block > .b-row, .inbox-block > .strip-line > .b-row { height: var(--h-row-tight); padding: 0 var(--pad-row-x); gap: var(--gap-inline); }
+.inbox-block > .b-row .nm, .inbox-block > .strip-line > .b-row .nm { display: flex; gap: var(--gap-inline); flex: 1; min-width: 0; }
 .inbox-block .strip-who { font-weight: 500; }
 /* the project tag ('bise', 'shop · 5 min'): words, not machine text, so sans (designer m_20986) */
-.inbox-block > .b-row .end { flex: none; font: var(--t-13) var(--font-ui); color: var(--c-text-3); }
+.inbox-block > .b-row .end, .inbox-block > .strip-line > .b-row .end { flex: none; font: var(--t-13) var(--font-ui); color: var(--c-text-3); }
 
 /* inbox zero (designer's desktop-delight TOUCH 3, Zero.tsx): in the folded block's place for 2 s, then
    fades; reduced motion: shown, no fade */

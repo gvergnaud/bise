@@ -72,8 +72,13 @@
 /* Move to task… (designer m_65406): 320 wide, the head's 'now in' text-3 with neutral chips, the
    filter under it, done tasks text-3, the foot hint text-3; the toast at the window's foot */
 .tk-move-at{position:fixed;width:1px;height:1px;pointer-events:none}
-.tk-move-head{display:flex;flex-direction:column;gap:var(--s-2);width:300px;padding:var(--s-1) 0}
-.tk-move-title{color:var(--c-text);font-size:var(--t-13);font-weight:600}
+/* the picker's head holds the title, 'now in' and the filter: it grows to them, never a one-line
+   row (ui-review m_65615: the title was clipped and the filter drawn over the first row) */
+.b-picker-head:has(.tk-move-head){height:auto;padding:var(--s-2) var(--s-3);white-space:normal}
+.tk-move-head{display:flex;flex-direction:column;gap:var(--s-2);width:300px;min-width:0}
+.tk-move-title{color:var(--c-text);font-size:var(--t-13);font-weight:500}
+/* 'No task' after the menu's own 1 px rule (designer m_65623) */
+.b-picker-group.tk-move-none{margin-top:var(--s-2);padding-top:var(--s-2);border-top:1px solid var(--c-line)}
 .tk-move-now{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-1);color:var(--c-text-3);font-size:var(--t-12)}
 .tk-move-chip{padding:0 var(--s-2);border-radius:var(--r-2);background:var(--c-hover);color:var(--c-text-2);white-space:nowrap}
 .tk-move-filter{width:100%}

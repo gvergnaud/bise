@@ -444,7 +444,7 @@
   "library.menu_move": {
     "args": [],
     "one": null,
-    "text": "Move to…"
+    "text": "Move to folder…"
   },
   "library.menu_new_inside": {
     "args": [],

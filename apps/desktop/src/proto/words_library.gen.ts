@@ -187,7 +187,7 @@ export const library = {
   /** a card's menu: show in Finder */
   menu_finder: "Show in Finder",
   /** a card's menu: move it */
-  menu_move: "Move to…",
+  menu_move: "Move to folder…",
   /** a card's menu, a folder's menu: rename it */
   menu_rename: "Rename",
   /** a folder's menu */

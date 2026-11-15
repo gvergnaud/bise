@@ -85,7 +85,7 @@ function MovePicker({ ask }: { ask: Ask }) {
     { id: 'open', rows: shownOpen.map((w) => row(w, cur.has(w.id), false)) },
     ...(shownDone.length > 0 ? [{ id: 'done', rows: shownDone.map((w) => row(w, cur.has(w.id), true)) }] : []),
     // 'No task' last, after a divider (artifacts only: a card belongs to one task)
-    ...(thing.kind === 'art' && thing.works.length > 0 ? [{ id: 'none', rows: [{ id: `none:${NO_TASK}`, name: tasks.move_no_task, testId: 'tasks.move.none' }] }] : []),
+    ...(thing.kind === 'art' && thing.works.length > 0 ? [{ id: 'none', look: 'tk-move-none', rows: [{ id: `none:${NO_TASK}`, name: tasks.move_no_task, testId: 'tasks.move.none' }] }] : []),
   ];
   const ids = groups.flatMap((g) => g.rows).filter((r) => r.disabled !== true).map((r) => r.id);
   const on = active !== null && ids.includes(active) ? active : (ids[0] ?? null);
