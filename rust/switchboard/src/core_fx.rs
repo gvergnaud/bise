@@ -114,7 +114,7 @@ pub(super) fn plain(f: CoreFx) -> Plain {
 /// The text a delivery puts in the agent's context: main's `notes`, the
 /// task `status` block (None or "": none), then each message as the
 /// recipient reads it.
-pub(super) fn delivery(notes: &[String], status: Option<String>, msgs: Vec<String>) -> String {
+pub(super) fn delivery(notes: &[String], status: Option<String>, ctx: &str, msgs: Vec<String>) -> String {
     let mut parts: Vec<String> = Vec::new();
     if !notes.is_empty() {
         let mut t = String::from("<bise_notes>\n");
@@ -125,6 +125,12 @@ pub(super) fn delivery(notes: &[String], status: Option<String>, msgs: Vec<Strin
         parts.push(t);
     }
     parts.extend(status.filter(|s| !s.is_empty()));
+    // roma idea 5: the context of the tasks it joins (sb-core's wctx.bend,
+    // Fx deliver's `ctx`), a hub part before the messages, never in them
+    if !ctx.trim().is_empty() {
+        let nl = char::from(10u8);
+        parts.push(format!("<task_context>{nl}{}{nl}</task_context>", ctx.trim()));
+    }
     parts.extend(msgs);
     parts.join("\n\n")
 }

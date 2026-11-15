@@ -272,7 +272,7 @@ impl Hub {
             // the step's own messages: its view sent them whole
             .filter_map(|m| Some(prompts::tagged(self.st.msg(m.id)?, &text(m.id), &m.rel)))
             .collect();
-        let text = core_fx::delivery(&d.notes, status, msgs);
+        let text = core_fx::delivery(&d.notes, status, &d.ctx, msgs);
         let agent = d.agent;
         if d.mode == "steer" {
             fx.push(Effect::Steer { agent, text });

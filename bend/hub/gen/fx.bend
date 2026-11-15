@@ -37,7 +37,7 @@ type Fx is Data:
   # notice
   FNotice{text: String}
   # deliver
-  FDeliver{mode: String, agent: String, notes: List<&2, String>, status: Bool, msgs: List<&2, K.Delivered>}
+  FDeliver{mode: String, agent: String, notes: List<&2, String>, status: Bool, msgs: List<&2, K.Delivered>, ctx: String}
   # xdeliver
   FXDeliver{xid: Nat, project: String, kind: String, msg: Nat, text: String, context: String, parts: String}
   # xreply
@@ -118,7 +118,7 @@ def FNotice.of(+i: J.Json) -> Fx:
   FNotice{K.get_s(i, "text")}
 
 def FDeliver.of(+i: J.Json) -> Fx:
-  FDeliver{K.get_s(i, "mode"), K.get_s(i, "agent"), K.get_ss(i, "notes"), K.get_b(i, "status"), K.get_ms(i, "msgs")}
+  FDeliver{K.get_s(i, "mode"), K.get_s(i, "agent"), K.get_ss(i, "notes"), K.get_b(i, "status"), K.get_ms(i, "msgs"), K.get_s(i, "ctx")}
 
 def FXDeliver.of(+i: J.Json) -> Fx:
   FXDeliver{K.get_n(i, "xid"), K.get_s(i, "project"), K.get_s(i, "kind"), K.get_n(i, "msg"), K.get_s(i, "text"), K.get_s(i, "context"), K.get_s(i, "parts")}
@@ -488,8 +488,8 @@ def kvs(x: Fx) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
       K.cat([[J.kv("fx", J.JStr{"spoke"}), J.kv("token", J.JNum{token}), J.kv("ok", J.JBool{ok})], K.omit_s("why", why)])
     case FNotice{+text}:
       [J.kv("fx", J.JStr{"notice"}), J.kv("text", J.JStr{text})]
-    case FDeliver{+mode, +agent, +notes, +status, +msgs}:
-      [J.kv("fx", J.JStr{"deliver"}), J.kv("mode", J.JStr{mode}), J.kv("agent", J.JStr{agent}), J.kv("notes", J.JArr{K.jstrs(notes)}), J.kv("status", J.JBool{status}), J.kv("msgs", J.JArr{K.jmsgs(msgs)})]
+    case FDeliver{+mode, +agent, +notes, +status, +msgs, +ctx}:
+      K.cat([[J.kv("fx", J.JStr{"deliver"}), J.kv("mode", J.JStr{mode}), J.kv("agent", J.JStr{agent}), J.kv("notes", J.JArr{K.jstrs(notes)}), J.kv("status", J.JBool{status}), J.kv("msgs", J.JArr{K.jmsgs(msgs)})], K.omit_s("ctx", ctx)])
     case FXDeliver{+xid, +project, +kind, +msg, +text, +context, +parts}:
       K.cat([[J.kv("fx", J.JStr{"xdeliver"}), J.kv("xid", J.JNum{xid}), J.kv("project", J.JStr{project}), J.kv("kind", J.JStr{kind}), J.kv("msg", J.JNum{msg}), J.kv("text", J.JStr{text}), J.kv("context", J.JStr{context})], K.omit_s("parts", parts)])
     case FXReply{+hub, +xid, +text}:
@@ -573,8 +573,8 @@ def spoke(+token: Nat, +ok: Bool, +why: String) -> List<&2, Sigma<&2, &2, String
 def notice(+text: String) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
   kvs(FNotice{text})
 
-def deliver(+mode: String, +agent: String, +notes: List<&2, String>, +status: Bool, +msgs: List<&2, K.Delivered>) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
-  kvs(FDeliver{mode, agent, notes, status, msgs})
+def deliver(+mode: String, +agent: String, +notes: List<&2, String>, +status: Bool, +msgs: List<&2, K.Delivered>, +ctx: String) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
+  kvs(FDeliver{mode, agent, notes, status, msgs, ctx})
 
 def xdeliver(+xid: Nat, +project: String, +kind: String, +msg: Nat, +text: String, +context: String, +parts: String) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
   kvs(FXDeliver{xid, project, kind, msg, text, context, parts})

@@ -15,6 +15,8 @@ import ../hub/wstatus.bend as HWS
 import ../hub/wakes.bend as HWK
 import ../hub/view.bend as HV
 import ../hub/keyed.bend as HKY
+import ../hub/wctx.bend as HWC
+import ../hub/text.bend as HT
 
 # LAW: `--task <id>` gives the message its works, whatever the sender's
 # turn serves.
@@ -450,3 +452,29 @@ law his_work_birth_takes_no_turn:
   for +by: String
   for +id: String
   {HC.req_task.turn(o, HC.TAHim{}, cx, by, id) == cx : HX.Cx<o>}
+
+# ---- a joining agent's context (roma idea 5; architect m_65317, m_65509) ----
+
+# LAW: a delivery for a work its agent already serves (the agent is in its
+# agents) gives it no context: the context is only for the works it joins.
+law work_context_only_for_new_works:
+  for +w: HS.Work
+  for +agent: String
+  for e: {HWO.has(HS.Work.agents(w), agent) == True{} : Bool}
+  {HWC.fresh([HS.Work.id(w)], [w], agent) == Nil{} : List<&2, String>}
+
+# LAW: a work its agent does not serve yet is one it joins: its context
+# comes with the delivery.
+law work_context_for_a_joined_work:
+  for +w: HS.Work
+  for +agent: String
+  for e: {HWO.has(HS.Work.agents(w), agent) == False{} : Bool}
+  {HWC.fresh([HS.Work.id(w)], [w], agent) == [HS.Work.id(w)] : List<&2, String>}
+
+# LAW: the context is its blocks clipped at CTX_MAX chars, a function of
+# the state and the works alone (never a message's words): what an agent
+# reads instead of main's thread, bounded.
+law work_context_is_capped:
+  for ids: List<&2, String>
+  for +st: HS.St
+  {HWC.ctx(ids, st) == HT.clip(HWC.raw(ids, st), HWC.CTX_MAX()) : String}

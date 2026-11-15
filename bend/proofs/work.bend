@@ -13,6 +13,8 @@ import ../hub/wstatus.bend as HWS
 import ../hub/view.bend as HV
 import ../hub/keyed.bend as HKY
 import ../hub/lazy.bend as HLZ
+import ../hub/wctx.bend as HWC
+import ./lib/hub-2.bend as PL2
 import ../laws/work.bend as Laws
 
 def Laws.task_flag_replaces_turn_works(ws, s, from):
@@ -209,4 +211,24 @@ def Laws.main_never_holds_a_work_out_of_review(ns, s):
   {==}
 
 def Laws.a_reply_watch_names_who_it_waits_on(to, msg):
+  {==}
+
+# ---- a joining agent's context: fresh finds the work by its own id, then
+# reads whether the agent is in its agents ----
+
+def Laws.work_context_only_for_new_works(w, agent, e):
+  %Equal.sym(Bool, String.eq(HS.Work.id(w), HS.Work.id(w)), True{}, PL2.hub_str_eq_refl(HS.Work.id(w)))
+    : {Bool.pick(List<&2, String>, HWC.fresh.one(HLZ.pick(Maybe<&2, HS.Work>, _, u => Some{w}, u => HWO.find(Nil{}, HS.Work.id(w))), agent), [HS.Work.id(w)], Nil{}) == Nil{} : List<&2, String>}
+  %Equal.sym(Bool, HWO.has(HS.Work.agents(w), agent), True{}, e)
+    : {Bool.pick(List<&2, String>, Bool.not(_), [HS.Work.id(w)], Nil{}) == Nil{} : List<&2, String>}
+  {==}
+
+def Laws.work_context_for_a_joined_work(w, agent, e):
+  %Equal.sym(Bool, String.eq(HS.Work.id(w), HS.Work.id(w)), True{}, PL2.hub_str_eq_refl(HS.Work.id(w)))
+    : {Bool.pick(List<&2, String>, HWC.fresh.one(HLZ.pick(Maybe<&2, HS.Work>, _, u => Some{w}, u => HWO.find(Nil{}, HS.Work.id(w))), agent), [HS.Work.id(w)], Nil{}) == [HS.Work.id(w)] : List<&2, String>}
+  %Equal.sym(Bool, HWO.has(HS.Work.agents(w), agent), False{}, e)
+    : {Bool.pick(List<&2, String>, Bool.not(_), [HS.Work.id(w)], Nil{}) == [HS.Work.id(w)] : List<&2, String>}
+  {==}
+
+def Laws.work_context_is_capped(ids, st):
   {==}

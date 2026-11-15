@@ -1411,7 +1411,7 @@ def fx_notice_bare():
   {==}
 
 law fx_deliver_bare:
-  {FX.of(J.obj([J.kv("fx", J.JStr{"deliver"})])) == FX.FDeliver{"", "", Nil{}, False{}, Nil{}} : FX.Fx}
+  {FX.of(J.obj([J.kv("fx", J.JStr{"deliver"})])) == FX.FDeliver{"", "", Nil{}, False{}, Nil{}, ""} : FX.Fx}
 
 def fx_deliver_bare():
   {==}
@@ -1670,12 +1670,19 @@ law fx_FDeliver_round:
   for notes: List<&2, String>
   for status: Bool
   for msgs: List<&2, K.Delivered>
-  {FX.of(FX.json(FX.FDeliver{mode, agent, notes, status, msgs})) == FX.FDeliver{mode, agent, notes, status, msgs} : FX.Fx}
+  for ctx: String
+  {FX.of(FX.json(FX.FDeliver{mode, agent, notes, status, msgs, ctx})) == FX.FDeliver{mode, agent, notes, status, msgs, ctx} : FX.Fx}
 
-def fx_FDeliver_round(mode, agent, notes, status, msgs):
-  %K.strs_round(notes) : {FX.of(FX.json(FX.FDeliver{mode, agent, notes, status, msgs})) == FX.FDeliver{mode, agent, _, status, msgs} : FX.Fx}
-  %K.msgs_round(msgs) : {FX.of(FX.json(FX.FDeliver{mode, agent, notes, status, msgs})) == FX.FDeliver{mode, agent, K.strs(K.jstrs(notes)), status, _} : FX.Fx}
-  {==}
+def fx_FDeliver_round(mode, agent, notes, status, msgs, ctx):
+  match ctx:
+    case SNil{}:
+      %K.strs_round(notes) : {FX.of(FX.json(FX.FDeliver{mode, agent, notes, status, msgs, SNil{}})) == FX.FDeliver{mode, agent, _, status, msgs, SNil{}} : FX.Fx}
+      %K.msgs_round(msgs) : {FX.of(FX.json(FX.FDeliver{mode, agent, notes, status, msgs, SNil{}})) == FX.FDeliver{mode, agent, K.strs(K.jstrs(notes)), status, _, SNil{}} : FX.Fx}
+      {==}
+    case SCon{h_ctx, t_ctx}:
+      %K.strs_round(notes) : {FX.of(FX.json(FX.FDeliver{mode, agent, notes, status, msgs, SCon{h_ctx, t_ctx}})) == FX.FDeliver{mode, agent, _, status, msgs, SCon{h_ctx, t_ctx}} : FX.Fx}
+      %K.msgs_round(msgs) : {FX.of(FX.json(FX.FDeliver{mode, agent, notes, status, msgs, SCon{h_ctx, t_ctx}})) == FX.FDeliver{mode, agent, K.strs(K.jstrs(notes)), status, _, SCon{h_ctx, t_ctx}} : FX.Fx}
+      {==}
 
 law fx_FXDeliver_round:
   for xid: Nat

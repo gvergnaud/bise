@@ -50,6 +50,7 @@ import ./disk.bend as DK
 import ./forward.bend as FW
 import ./viewctx.bend as VC
 import ./work.bend as WO
+import ./wctx.bend as WC
 
 type Snd is Data:
   Snd{from: String, to: String, text: String, expect: Bool,
@@ -689,22 +690,23 @@ def pump.flush(-o: S.St, flush: Bool, +cx: X.Cx<o>) -> X.Cx<o>:
     case False{}:
       cx
 
-# the delivery (`notes`: main's, `status`: the task status block)
-def pump.send.go(-o: S.St, busy: Bool, +cx: X.Cx<o>, +name: String, +ids: List<&2, Nat>, +notes: List<&2, String>, +status: Bool, +msgs: List<&2, K.Delivered>) -> X.Cx<o>:
+# the delivery (`notes`: main's, `status`: the task status block, `ctx`:
+# the context of the tasks it joins, a hub part before the messages)
+def pump.send.go(-o: S.St, busy: Bool, +cx: X.Cx<o>, +name: String, +ids: List<&2, Nat>, +notes: List<&2, String>, +status: Bool, +msgs: List<&2, K.Delivered>, +ctx: String) -> X.Cx<o>:
   match busy:
     case True{}:
       +r = rr(o, cx)
       +cx2 = set_r(o, cx, X.R.with_steered(r, KL.steer_add(X.R.steered(r), name, ids)))
-      dirty(o, out(o, cx2, F.deliver("steer", name, notes, status, msgs)))
+      dirty(o, out(o, cx2, F.deliver("steer", name, notes, status, msgs, ctx)))
     case False{}:
       # the turn starts now: nothing else may `say` meanwhile
       +cx2 = upd_rt(o, cx, X.Rt{name, S.RBusy{}, X.Rt.waiting(rt(o, cx, name)), Some{now(o, cx)}, 0n})
-      dirty(o, out(o, cx2, F.deliver("say", name, notes, status, msgs)))
+      dirty(o, out(o, cx2, F.deliver("say", name, notes, status, msgs, ctx)))
 
-def pump.send(-o: S.St, busy: Bool, p: X.Cx<o> & List<&2, K.Delivered>, +name: String, +ids: List<&2, Nat>, +notes: List<&2, String>, +status: Bool) -> X.Cx<o>:
+def pump.send(-o: S.St, busy: Bool, p: X.Cx<o> & List<&2, K.Delivered>, +name: String, +ids: List<&2, Nat>, +notes: List<&2, String>, +status: Bool, +ctx: String) -> X.Cx<o>:
   match p:
     case (+cx, +msgs):
-      pump.send.go(o, busy, cx, name, ids, notes, status, msgs)
+      pump.send.go(o, busy, cx, name, ids, notes, status, msgs, ctx)
 
 def jstrs(xs: List<&2, String>) -> List<&2, J.Json>:
   match xs:
@@ -731,8 +733,13 @@ def pump.batch(-o: S.St, batch: List<&2, S.Msg>, +cx: X.Cx<o>, +name: String, +b
       +notes = Bool.pick(List<&2, String>, is_main, S.St.notes(st(o, cx)), Nil{})
       +cx2 = pump.flush(o, Bool.not(List.is_empty(&2, String, notes)), cx)
       +status = is_main && M.any_from_user(b)
-      +cx3 = work_turn(o, WO.turn_change(works_of_agent(M.get_agent(st(o, cx2), name)), WO.retarget(WO.batch_works(b), S.St.works(st(o, cx2))), busy), cx2, name, busy)
-      pump.send(o, busy, deliver_each(o, b, cx3, name, Nil{}), name, ids_of(b), notes, status)
+      +ws = WO.retarget(WO.batch_works(b), S.St.works(st(o, cx2)))
+      # roma idea 5: the context of the works it joins, read before this
+      # step's work_turn makes it their agent (law work_context_only_for_new_works);
+      # main routes, it joins none
+      +ctx = Bool.pick(String, is_main, "", WC.ctx(WC.fresh(ws, S.St.works(st(o, cx2)), name), st(o, cx2)))
+      +cx3 = work_turn(o, WO.turn_change(works_of_agent(M.get_agent(st(o, cx2), name)), ws, busy), cx2, name, busy)
+      pump.send(o, busy, deliver_each(o, b, cx3, name, Nil{}), name, ids_of(b), notes, status, ctx)
 
 def pump.run(-o: S.St, run: S.Run, +cx: X.Cx<o>, +name: String, +queued: List<&2, S.Msg>, +is_main: Bool) -> X.Cx<o>:
   match run:

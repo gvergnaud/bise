@@ -126,10 +126,13 @@ fn answers_give_their_view_and_skips() {
 
 #[test]
 fn a_delivery_is_notes_then_status_then_messages() {
-    assert_eq!(delivery(&[], None, vec!["m".into()]), "m");
-    assert_eq!(delivery(&[], Some(String::new()), vec![]), "");
+    assert_eq!(delivery(&[], None, "", vec!["m".into()]), "m");
+    assert_eq!(delivery(&[], Some(String::new()), " ", vec![]), "");
+    // roma idea 5: the context of the tasks it joins, a hub part before the messages
+    let nl = char::from(10u8);
+    assert_eq!(delivery(&[], None, "## Task `t`: Fix it", vec!["m".into()]), format!("<task_context>{nl}## Task `t`: Fix it{nl}</task_context>{nl}{nl}m"));
     assert_eq!(
-        delivery(&["n1".into(), "n2".into()], Some("S".into()), vec!["a".into(), "b".into()]),
+        delivery(&["n1".into(), "n2".into()], Some("S".into()), "", vec!["a".into(), "b".into()]),
         "<bise_notes>\n- n1\n- n2\n</bise_notes>\n\nS\n\na\n\nb"
     );
 }

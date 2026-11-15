@@ -49,6 +49,18 @@ task's birth, and the land records; `switchboard/src/task_log.rs` makes the line
 records are pinned by the journal codec's fixture (`core_journal.jsonl`). Worst case on a 116 MB
 journal: 0.46 s.
 
+## A joining agent's context (roma idea 5; architect m_65317, m_65509)
+
+An agent's delivery for a task it never served (it is not in `Work.agents`, read before the step's
+`work_turn`) carries the task's context in front of its messages: Fx deliver's `ctx`, a hub part
+the shell renders as `<task_context>…</task_context>`, never added to anyone's words. A brief that
+carries the task is its first such delivery. The context is `bend/hub/wctx.bend`'s `ctx(ids, st)`:
+its name, why, pause, done-when ticked or not, its agents' newest reports with their decisions,
+clipped at 2000 chars; main gets none (it routes). Its words are the catalog's `core` area
+(`rust/proto/src/words/core.rs`), generated into `bend/hub/gen/words.bend` (core_gen): sb-core's
+inline English moves there one at a time. Laws: work_context_only_for_new_works,
+work_context_for_a_joined_work, work_context_is_capped (bend/laws/work.bend).
+
 ## His gestures' Undo, the dot (roma ideas 2, 4)
 
 Desktop only (`apps/desktop/src/tasks`): Undo sends the inverse gesture (undo.ts; Merge has none);

@@ -55,7 +55,7 @@ core_kinds! {
         Notice = "notice" => FNotice { text: Str },
         /// messages for an agent: `mode` `say` (a new turn) or `steer`;
         /// main's `notes`, the task `status` block, then each message
-        Deliver = "deliver" => FDeliver { mode: Str, agent: Str, notes: Strs, status: Bool, msgs: Msgs },
+        Deliver = "deliver" => FDeliver { mode: Str, agent: Str, notes: Strs, status: Bool, msgs: Msgs, ctx: StrOmit },
         /// bise's home hub: a message to a project hub
         XDeliver = "xdeliver" => FXDeliver { xid: Nat, project: Str, kind: Str, msg: Nat, text: Str, context: Str, parts: StrOmit },
         /// a project hub: the answer to bise's home hub

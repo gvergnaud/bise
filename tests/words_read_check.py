@@ -2,7 +2,7 @@
 """Every word of the catalog is read by a client (architect m_27078 c, m_58405): Rust reads it as
 `<area>::<name>` (rust/, outside the catalog rust/proto/src/words), the desktop, the kit and the
 plugins' views as `<area>.<name>` (apps/desktop/src, kit/, plugins/; architect m_61995), outside
-SKIP_FILES. A word nothing reads is a dead key: delete it. In kit/ and plugins/ an area is read by
+SKIP_FILES, and sb-core as `core.<name>` (bend/, outside bend/hub/gen; architect m_65509). A word nothing reads is a dead key: delete it. In kit/ and plugins/ an area is read by
 its own name only: an alias import or a destructured area is red (a read it would hide).
 
 The keys come from tests/words/*.gen.json (generated from the catalog, pinned to it by bise-proto's
@@ -115,6 +115,10 @@ def dead(root, js=None):
     rust = pairs(sources(os.path.join(root, "rust"), (".rs",), lambda p: p.startswith(catalog)), "::")
     ts = pairs(sources(os.path.join(root, "apps", "desktop", "src"), (".ts", ".tsx"), no_read), ".")
     ts |= pairs((js if js is not None else js_readers(root)).values(), ".")
+    # sb-core reads its words (the `core` area, generated into bend/hub/gen/words.bend) as
+    # `core.<name>`: the generated file itself is no read (architect m_65509)
+    gen = os.path.join(root, "bend", "hub", "gen")
+    ts |= pairs(sources(os.path.join(root, "bend"), (".bend",), lambda p: p.startswith(gen)), ".")
     return [k for k in keys(root) if k not in rust and k not in ts]
 
 

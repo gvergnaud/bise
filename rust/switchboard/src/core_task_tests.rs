@@ -571,3 +571,45 @@ fn his_new_ask_to_main_after_a_report_starts_a_task_alone() {
     his_words(&mut t, "fixer", "one more thing");
     assert_eq!(sent_to(&t, "fixer").last().unwrap()["works"], json!([a]));
 }
+
+/// roma idea 5 (laws work_context_only_for_new_works,
+/// work_context_for_a_joined_work): an agent's first delivery for a task
+/// it never served carries the task's context in front of its messages
+/// (Fx deliver's ctx, a hub part); its next one for the same task none.
+#[test]
+fn a_joining_agent_gets_its_tasks_context_once() {
+    let mut t = T::new();
+    // spawned before the task: its brief serves none
+    t.spawn_task("auth");
+    let a = new(&mut t, MAIN, "Fix the login timeout", &["it logs in on 3G"]);
+    let (_, fx) = t.req(MAIN, send("auth", "start with a repro", &[a.as_str()]));
+    let first = say_to(&fx, "auth").or_else(|| steer_to(&fx, "auth")).unwrap_or_default();
+    assert!(first.contains("<task_context>"), "the first delivery joins it: {first}");
+    assert!(first.contains(&format!("## Task `{a}`: Fix the login timeout")), "{first}");
+    assert!(first.contains("- [ ] it logs in on 3G"), "{first}");
+    // the context comes before the message, never inside it
+    assert!(first.find("</task_context>").unwrap() < first.find("start with a repro").unwrap(), "{first}");
+    let m = last_msg_to(&t, "auth");
+    let sent = lines(&t, "message_sent").into_iter().rev().find(|j| j["msg"]["id"] == m["id"]).unwrap();
+    assert!(!sent["text"].as_str().unwrap_or_default().contains("task_context"), "his words stay his: {sent}");
+    t.turn("auth", "repro done");
+    let (_, fx) = t.req(MAIN, send("auth", "and now the fix", &[a.as_str()]));
+    let next = say_to(&fx, "auth").or_else(|| steer_to(&fx, "auth")).unwrap_or_default();
+    assert!(next.contains("and now the fix") && !next.contains("<task_context>"), "it serves it already: {next}");
+}
+
+/// roma idea 5: an agent spawned for a task (its brief carries the task)
+/// joins it at its brief: the brief's delivery has the context.
+#[test]
+fn an_agent_spawned_for_a_task_reads_its_context_with_its_brief() {
+    let mut t = T::new();
+    let a = new(&mut t, MAIN, "Write the pricing page v2", &[]);
+    t.spawn_task("pricing");
+    // the brief went out in the spawn's steps; the agent's first turn reads it
+    let fx = t.turn("pricing", "on it");
+    let _ = fx;
+    let sent = lines(&t, "message_sent").into_iter().find(|j| j["msg"]["to"] == "pricing").expect("its brief");
+    assert_eq!(sent["msg"]["works"], json!([a]), "its brief carries its task: {sent}");
+    let turns = lines(&t, "work_turn");
+    assert!(turns.iter().any(|j| j["turn"]["agent"] == "pricing"), "it joined at its brief: {turns:?}");
+}
