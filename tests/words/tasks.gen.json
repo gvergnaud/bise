@@ -152,6 +152,19 @@
     "one": null,
     "text": "Tasks"
   },
+  "tasks.change_no_pr": {
+    "args": [],
+    "one": null,
+    "text": "no PR yet"
+  },
+  "tasks.change_pr": {
+    "args": [
+      "n",
+      "state"
+    ],
+    "one": null,
+    "text": "PR #{n} {state}"
+  },
   "tasks.change_tip": {
     "args": [],
     "one": null,

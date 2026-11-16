@@ -309,6 +309,35 @@ fn his_words(t: &mut T, to: &str, text: &str) {
     t.go(Input::ClientInput { client: 1, focus: to.into(), text: text.into(), queued: false, parts: String::new(), from: String::new(), works: Vec::new() });
 }
 
+fn his_parts(t: &mut T, to: &str, text: &str, parts: &str) {
+    t.go(Input::ClientInput { client: 1, focus: to.into(), text: text.into(), queued: false, parts: parts.into(), from: String::new(), works: Vec::new() });
+}
+
+/// His m_65766, architect m_65793: Work.said is his words from the
+/// message's parts, never the model's template (an image's tag, its
+/// path); an image alone says nothing, and the context has no quote line.
+#[test]
+fn a_tasks_said_is_his_words_never_an_images_tag() {
+    let mut t = T::new();
+    let tag = r#"<image name="[Image #1]" path="/Users/g/.bise/images/f8.png" mime="image/png">"#;
+    let img = r#"{"kind":"image","name":"[Image #1]","source":"/Users/g/.bise/images/f8.png","mime":"image/png"}"#;
+    his_parts(&mut t, MAIN, &format!("{tag} the chat takes too much space"), &format!(r#"[{img},{{"kind":"text","text":" the chat takes too much space"}}]"#));
+    new(&mut t, MAIN, "Fold the chat", &[]);
+    let born = lines(&t, "work_created").last().unwrap().clone();
+    assert_eq!(born["work"]["said"], "the chat takes too much space", "{born}");
+    // an older message (no parts): its text read back into parts
+    his_words(&mut t, MAIN, &format!("{tag} fold it"));
+    new(&mut t, MAIN, "Fold it", &[]);
+    assert_eq!(lines(&t, "work_created").last().unwrap()["work"]["said"], "fold it");
+    // an image alone: no words, no quote line in the joining context
+    t.spawn_task("kb");
+    his_parts(&mut t, MAIN, tag, &format!("[{img}]"));
+    let a = new(&mut t, MAIN, "Look at this", &[]);
+    assert!(lines(&t, "work_created").last().unwrap()["work"].get("said").map_or(true, |s| s == ""));
+    let ctx = first_delivery(&mut t, "kb", "see", &a);
+    assert!(!ctx.contains("He asked") && !ctx.contains("/Users/g/.bise"), "{ctx}");
+}
+
 fn his_task_words(t: &mut T, to: &str, text: &str, works: &[&str]) -> Vec<Effect> {
     t.go(Input::ClientInput { client: 1, focus: to.into(), text: text.into(), queued: false, parts: String::new(), from: String::new(), works: works.iter().map(|w| w.to_string()).collect() })
 }

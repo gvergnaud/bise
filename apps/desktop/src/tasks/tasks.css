@@ -106,8 +106,9 @@
 .tk-board-none .b-empty .more:has(>.tk-step){display:flex;flex-direction:column;gap:var(--s-1);margin-top:var(--s-1);color:var(--c-text-2)}
 .tk-step{display:flex;gap:var(--s-2)}
 
-/* the Task tab, 384 wide */
-.tk-tab{display:flex;flex-direction:column;gap:var(--s-4);height:100%;max-width:384px;overflow:auto;padding:var(--s-4) var(--s-4) 0;color:var(--c-text);font-size:var(--t-13);box-sizing:border-box}
+/* the Task tab: it fills the panel; past the shell's one column (--w-col) its column stops and
+   centres, as a shell page (designer m_65783, m_65791) */
+.tk-tab{display:flex;flex-direction:column;gap:var(--s-4);height:100%;min-height:0;overflow:auto;padding:var(--s-4) max(var(--s-4),calc((100% - var(--w-col)) / 2)) 0;color:var(--c-text);font-size:var(--t-13);box-sizing:border-box;container-type:inline-size}
 /* a task's tab: its body scrolls, the footer stays below it (tasks-ux m_64967) */
 .tk-tab:has(> .tk-body){overflow:hidden}
 .tk-body{display:flex;flex-direction:column;gap:var(--s-4);flex:1 1 auto;min-height:0;overflow:auto;padding-bottom:var(--s-4)}
@@ -115,10 +116,13 @@
 .tk-pill{display:inline-flex;align-self:flex-start;align-items:center;gap:var(--s-2);height:var(--s-5);padding:0 var(--s-2);border-radius:var(--r-1);background:var(--c-hover);color:var(--c-text-2);font-size:var(--t-12)}
 .tk-pill[data-st="needs_you"]{color:var(--c-accent)}
 .tk-pill[data-st="stalled"]{color:var(--c-err)}
-.tk-tab-name{margin:0;font:600 var(--f-lead)}
-.tk-meta{margin:0;color:var(--c-text-3);font-size:var(--t-12)}
-.tk-origin{align-self:flex-start;max-width:100%;padding:0 0 0 var(--s-3);border:0;border-left:2px solid var(--c-line-strong);background:none;color:var(--c-text-2);font:inherit;font-style:italic;text-align:left}
-.tk-origin:hover{color:var(--c-text)}
+/* t-15 600 ink, two lines at most (designer m_65780) */
+.tk-tab-name{display:-webkit-box;margin:0;overflow:hidden;color:var(--c-text);font:600 var(--f-lead);-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow-wrap:anywhere}
+.tk-meta{margin:0;color:var(--c-text-3);font-size:var(--t-13)}
+/* his words: his images' chips, then his first line, italic text-2, a thin rule on the left */
+.tk-origin{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-2);min-width:0;padding-left:var(--s-3);border-left:2px solid var(--c-line)}
+.tk-origin-words{min-width:0;max-width:100%;padding:0;border:0;background:none;color:var(--c-text-2);font:inherit;font-style:italic;text-align:left;overflow-wrap:anywhere}
+.tk-origin-words:hover{color:var(--c-text)}
 .tk-why{margin:0;color:var(--c-text);line-height:1.5}
 .tk-sec{display:flex;flex-direction:column;gap:var(--s-2)}
 .tk-none{margin:0;color:var(--c-text-3)}
@@ -130,14 +134,23 @@
 .tk-check{flex:none;width:var(--s-4);color:var(--c-text-3)}
 .tk-checks li[data-done] .tk-check{color:var(--c-text-2)}
 .tk-agents{display:flex;flex-direction:column;gap:var(--s-1);margin:0;padding:0;list-style:none}
-.tk-agents li{display:flex;align-items:center;gap:var(--s-2);height:var(--s-7);padding:0 var(--s-2);border-radius:var(--r-1)}
+/* one line each (designer m_65783): dot · name · its line (1fr, cut) · state; the name and the
+   state never wrap or cut */
+.tk-agents li{display:grid;grid-template-columns:var(--s-3) auto minmax(0,1fr) auto;align-items:center;gap:var(--s-2);height:var(--s-6);padding:0 var(--s-1);border-radius:var(--r-1);white-space:nowrap}
 .tk-agents li:hover{background:var(--c-hover)}
 .tk-agents li[data-archived]{color:var(--c-text-3)}
 .tk-live{flex:none;width:6px;height:6px;border-radius:50%;border:1px solid var(--c-text-3);box-sizing:border-box}
 .tk-live[data-on]{border:0;background:var(--c-text)}
-.tk-agent{font-weight:500}
-.tk-agent-state{margin-left:auto;color:var(--c-text-3);font-size:var(--t-12)}
-.tk-agent-doing{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--c-text-2)}
+.tk-agent{font-weight:500;white-space:nowrap}
+.tk-agent-state{margin-left:auto;color:var(--c-text-3);font-size:var(--t-12);white-space:nowrap}
+.tk-agent-doing{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--c-text-3);font-size:var(--t-12)}
+/* a narrow panel: its line goes first, the name and the state stay */
+@container (max-width: 420px){.tk-agent-doing{visibility:hidden}}
+/* Now: two lines at most, the whole in its tip */
+.tk-now{display:-webkit-box;margin:0;overflow:hidden;color:var(--c-text);line-height:1.5;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+/* Changes: the branch in mono · its PR · its land in text-3 */
+.tk-mono{font:var(--f-mono)}
+.tk-change-pr,.tk-change-sha{flex:none;color:var(--c-text-3);white-space:nowrap}
 /* 'All n in Library →': a quiet act, text-2, ink and underlined on hover (designer m_64958) */
 .tk-more{align-self:flex-start;padding:0;border:0;background:none;color:var(--c-text-2);font:inherit}
 .tk-more:hover{color:var(--c-text);text-decoration:underline}
@@ -164,6 +177,8 @@
 .tk-q-opt-w{min-width:0}
 .tk-q-type{width:100%}
 .tk-paused{display:flex;align-items:center;gap:var(--s-2);margin:0;color:var(--c-text-2)}
+/* pinned under the scrolling body, inside the panel (his m_65766); ⋯ alone at the far right */
 .tk-foot{flex:none;display:flex;align-items:center;gap:var(--s-2);margin-top:auto;padding:var(--s-3) 0;border-top:1px solid var(--c-line);background:var(--c-surface)}
+.tk-foot-more{margin-left:auto}
 .tk-gone{margin:0;padding:var(--s-4);color:var(--c-text-3)}
 .tk-rename{width:100%;box-sizing:border-box}

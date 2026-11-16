@@ -162,6 +162,10 @@ crate::words! { tasks:
     sec_changes = "Changes";
     /// a change row's tip
     change_tip = "open its changes";
+    /// a change row's PR, its number and state (designer m_65783: the branch, the PR, the sha)
+    change_pr(n, state) = "PR #{n} {state}";
+    /// a change row with no PR on its branch
+    change_no_pr = "no PR yet";
     /// an agent of it in a turn
     agent_live = "working";
     /// an agent of it, idle

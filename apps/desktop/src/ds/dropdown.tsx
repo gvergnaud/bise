@@ -20,6 +20,8 @@ import { cx } from "./cx";
 import { useOpen, usePop } from "./hooks";
 import { Picker, PickerPair, type PickerPairProps, type PickerProps } from "./picker";
 import { tipAttrs } from "./tip";
+import { AppIcon } from "./icons-app";
+import { ds } from "@/proto/words_ds.gen";
 
 /** The trigger's caret: an 8x5 chevron, stroke 1.5, text-3 (designer m_24786). */
 export function Caret() {
@@ -34,7 +36,7 @@ export interface PickerTriggerProps {
   /** its words (the current value) */
   children: ReactNode;
   /** chip (default): the 28 px tool chip; field: the settings' Field, full width; pop: a page's filter menu (28, a 1 px ring: native-mac §6) */
-  look?: "chip" | "field" | "pop";
+  look?: "chip" | "field" | "pop" | "more";
   /** a screen's own signed addition (a class with its rule in the screen's css: the ds lint checks it) */
   extra?: string;
   /** its menu shows (aria-expanded, the chip's tint) */
@@ -50,8 +52,17 @@ export interface PickerTriggerProps {
   testId?: string;
   ref?: Ref<HTMLButtonElement>;
 }
-/** The one trigger of a menu: its words, then the caret, centered. */
+/** The one trigger of a menu: its words, then the caret, centered; "more": the ds '…' (MoreButton's
+ *  look, 28 × 28, no caret: designer m_65791), its words its VoiceOver name. */
 export function PickerTrigger({ children, look = "chip", extra, open, label, tip, placeholder, disabled, onClick, testId, ref }: PickerTriggerProps) {
+  if (look === "more") {
+    return (
+      <button ref={ref} type="button" className={cx("b-more", extra)} aria-haspopup="menu" aria-expanded={open ?? false} aria-label={label ?? ds.more_actions}
+        disabled={disabled} {...tipAttrs(tip ?? ds.more_actions)} onClick={onClick} data-testid={testId}>
+        <AppIcon name="more" size={16} />
+      </button>
+    );
+  }
   return (
     <button ref={ref} type="button" className={cx("b-ptrig", look, look === "field" && "b-field b-select", extra, placeholder && "ph")} aria-haspopup="menu" aria-expanded={open ?? false} aria-label={label}
       disabled={disabled} {...tipAttrs(tip)} onClick={onClick} data-testid={testId}>
@@ -97,7 +108,7 @@ export function PickerPop({ anchor, box, align = "auto", side = "below", match =
 export interface DropdownProps extends Omit<PickerPopProps, "anchor" | "onClose" | "testId"> {
   /** the trigger's words */
   label: ReactNode;
-  look?: "chip" | "field" | "pop";
+  look?: "chip" | "field" | "pop" | "more";
   extra?: string;
   /** the trigger's name in words (aria-label) */
   name?: string;

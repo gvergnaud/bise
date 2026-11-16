@@ -125,12 +125,24 @@ pub(super) const SAID_MAX: usize = 300;
 /// `said_msg`, his newest message to `agent` (the work's origin, the
 /// same rule as sb-core's work.bend `origin`) as one line, clipped:
 /// sb-core keeps no message's words, it stamps these once at birth when
-/// `said_msg` is its origin. None from him: no keys.
+/// `said_msg` is its origin. None from him: no keys. His words only
+/// (architect m_65793): read from the message's parts, else its text read
+/// back into parts (an older one), never the model's template (an
+/// image's tag and path, his m_65766); an image alone says ''.
 pub(super) fn said_keys(st: &crate::model::State, q: &mut Value, agent: &str) {
     let Some(n) = st.peeks().rev().find(|m| m.from == "user" && m.to == agent).map(|m| m.id) else { return };
-    let text = crate::util::clip(&crate::util::one_line(&st.text(n)), SAID_MAX);
-    q["said"] = serde_json::json!(text);
+    let words = st.words(n).map(|w| his_words(&w.text, &w.parts)).unwrap_or_default();
+    q["said"] = serde_json::json!(crate::util::clip(&crate::util::one_line(&words), SAID_MAX));
     q["said_msg"] = serde_json::json!(n);
+}
+
+/// His words in a message: its parts' (the JSON the clients sent), else
+/// its text read back into parts, as every surface reads them
+/// (bise_proto::thread::marks::mark_of). Pure.
+pub(super) fn his_words(text: &str, parts: &str) -> String {
+    let typed: Vec<bise_proto::parts::Part> = serde_json::from_str(parts).unwrap_or_default();
+    let parts = if typed.is_empty() { bise_proto::parts::parse(text) } else { typed };
+    bise_proto::parts::words(&parts)
 }
 
 /// Issue 37 #2: an agent request core.rs turns into sb-core's `req` step

@@ -1,7 +1,7 @@
 // The tasks' pure model for the desktop: the order of the statuses (the Board's columns, signed by
 // designer and tasks-ux), the right bar's rows (open first, then a fold for the ongoing ones and the
 // ones done this week), its counts, a row's done-when count, a name cut at a word. Pure. Owner: tasks.
-import type { Agent, Artifact, WorkRow, WorkStatus, WorkTomb } from '@/proto';
+import type { Agent, Artifact, LogLine, Part, WorkRow, WorkStatus, WorkTomb } from '@/proto';
 
 /** A task with its project (the bar lists every project's on bise's own). */
 export interface ProjWork {
@@ -90,6 +90,85 @@ export function artsOf<A extends Pick<Artifact, 'works' | 'at_ms' | 'archived' |
 /** A message's first line (his origin is quoted by it). Pure. */
 export function firstLine(text: string): string {
   return text.trim().split('\n')[0]?.trim() ?? '';
+}
+
+/** His message as the Task tab quotes it: his own words read from its parts (never the model's
+ *  template text: tags, paths; his m_65766), and his images; an older entry with no parts, its text. */
+export interface Origin {
+  readonly words: string;
+  readonly images: readonly { readonly name: string; readonly path: string; readonly b64: string; readonly mime: string }[];
+}
+
+/** The most letters of his words the quote shows: about two lines of the tab; the rest is in his thread. */
+export const ORIGIN_MAX = 160;
+
+/** His first line of words, cut at a word, and his images; null when he wrote no words (an image
+ *  alone: no quote line, never an empty one; architect m_65793). Pure. */
+export function originOf(e: { readonly text: string; readonly parts?: readonly Part[] | null }): Origin | null {
+  const parts = e.parts ?? [];
+  const typed = parts.length > 0;
+  let said = typed ? '' : e.text;
+  const images: Origin['images'][number][] = [];
+  for (const p of parts) {
+    if (p.kind === 'text') said += p.text;
+    else if (p.kind === 'plugin') said += `@${p.name}`;
+    else if (p.kind === 'image') images.push({ name: p.name, path: p.source, b64: p.b64_file ?? '', mime: p.mime ?? '' });
+  }
+  const words = cutAtWord(firstLine(said.replace(/[ \t]{2,}/gu, ' ')), ORIGIN_MAX);
+  return words === '' ? null : { words, images };
+}
+
+/** A report's first sentence (its kind's prefix out), the Task tab's Now and an agent's line: the
+ *  rest is in the Log (tasks-ux m_65775). Pure. */
+export function firstSentence(text: string): string {
+  const one = firstLine(text.replace(/^\[report: [a-z]+\]\s*/u, ''));
+  const m = /^(.+?[.!?])(\s|$)/u.exec(one);
+  return (m?.[1] ?? one).trim();
+}
+
+/** The most letters of a Now line or an agent's line: two lines at most; the whole one in its tip. */
+export const SAID_MAX = 200;
+
+/** Its agents' newest report on THIS task, by agent, from its Log (newest first): an agent on many
+ *  tasks says here only what it reported on this one (tasks-ux m_65775). Pure. */
+export function reportsOf(lines: readonly Pick<LogLine, 'kind' | 'who' | 'text' | 'at_ms'>[]): ReadonlyMap<string, { readonly text: string; readonly at: number }> {
+  const out = new Map<string, { text: string; at: number }>();
+  for (const l of lines) {
+    const text = (l.text ?? '').trim();
+    if (l.kind !== 'report' || text === '') continue;
+    const was = out.get(l.who);
+    if (was === undefined || l.at_ms > was.at) out.set(l.who, { text, at: l.at_ms });
+  }
+  return out;
+}
+
+/** The agents that serve no other open task than `id`: their status note is about this one. Pure. */
+export function soloOn(works: readonly Pick<WorkRow, 'id' | 'status' | 'agents'>[], id: string, names: readonly string[]): ReadonlySet<string> {
+  return new Set(names.filter((n) => !works.some((o) => o.id !== id && isOpen(o) && (o.agents ?? []).includes(n))));
+}
+
+/** An agent's line on this task: its newest report on it (first sentence), else its status note
+ *  when it serves only this task, else nothing; cut at a word. Pure. */
+export function agentLineOf(name: string, reports: ReadonlyMap<string, { readonly text: string }>, a: Pick<Agent, 'note' | 'title' | 'status'> | undefined, solo: boolean): string {
+  const r = reports.get(name);
+  const said = r !== undefined ? firstSentence(r.text) : a !== undefined && solo ? doingOf(a) : '';
+  return cutAtWord(said, SAID_MAX);
+}
+
+/** The task's Now: its agents' newest report on it (first sentence), else a note of an agent on it
+ *  alone, else null; cut at a word. Pure. */
+export function nowOfTask(reports: ReadonlyMap<string, { readonly text: string; readonly at: number }>, solos: readonly Pick<Agent, 'note'>[]): string | null {
+  const newest = [...reports.values()].sort((a, b) => b.at - a.at)[0];
+  const said = newest !== undefined ? firstSentence(newest.text) : (solos.map((a) => (a.note ?? '').trim()).find((n) => n !== '') ?? '');
+  return said === '' ? null : cutAtWord(said, SAID_MAX);
+}
+
+/** An agent's state on this task: waits for him only for an open card of this task from it
+ *  (tasks-ux m_65775: never another task's card). Pure. */
+export function agentStateOf(a: Pick<Agent, 'status'> | undefined, waitsHere: boolean): 'archived' | 'working' | 'waits' | 'idle' {
+  if (a === undefined) return 'archived';
+  if (a.status === 'working') return 'working';
+  return waitsHere ? 'waits' : 'idle';
 }
 
 /** The agents a Task tab lists (tasks-ux m_64959): main starts the work, it is not on the task, so it

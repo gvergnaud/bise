@@ -84,7 +84,12 @@ export function ThingTab({ e, tabId }: { e: Exclude<Entity, { kind: 'tab' }>; ta
     case 'tasks':
       return <BoardTab project={e.project} />;
     case 'task':
-      return <TaskTab project={e.project} id={e.id} />;
+      // in the panel's screen box like the others: its body scrolls and its footer stays inside (his m_65766)
+      return (
+        <div className="pn-screen" data-testid="app.panel.task">
+          <TaskTab project={e.project} id={e.id} />
+        </div>
+      );
     case 'file':
       // a ~/bise file that is no artifact, drawn by its app (docs/plugin-apps.md A6)
       return <DocumentTab docRef={{ project: e.project, target: { kind: 'entry', id: e.entry } }} tabId={tabId} store={viewsStore} title={e.name ?? ''} rowApp="" />;

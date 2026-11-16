@@ -5,7 +5,8 @@ import { barRows, cutAtWord, goalsOf, type ProjWork } from './model';
 import { sinceLooked } from './since';
 import { tasksOf } from './chips';
 import { artsOf, resolveMerged } from './model';
-import { originText } from './TaskTab';
+import { originIn } from './TaskTab';
+import { agentLineOf, agentStateOf, firstSentence, nowOfTask, originOf, reportsOf, soloOn } from './model';
 
 const NOW = 1_700_000_000_000;
 const H = 3_600_000;
@@ -89,11 +90,62 @@ describe('a merged task read as the one it went into', () => {
 describe("his message quoted on the Task tab", () => {
   it('reads his message by its id, none when this window does not hold it', () => {
     const es = [undefined, { kind: 'agent', msg_id: 7, text: 'not his' }, { kind: 'you', msg_id: 7, text: ' make the app feel native ' }] as const;
-    expect(originText(es as never, 7)).toBe('make the app feel native');
-    expect(originText(es as never, 8)).toBeNull();
+    expect(originIn(es as never, 7)?.words).toBe('make the app feel native');
+    expect(originIn(es as never, 8)).toBeNull();
+  });
+
+  it('quotes his words from the parts, never the model\'s tags or paths; his image apart (his m_65766)', () => {
+    const o = originOf({
+      text: '<image name="[Image #1]" path="/Users/g/.bise/images/f8.png" mime="image/png"> the chat takes too much space',
+      parts: [
+        { kind: 'image', name: '[Image #1]', source: '/Users/g/.bise/images/f8.png', mime: 'image/png' },
+        { kind: 'text', text: ' the chat takes too much space\nsecond line' },
+      ],
+    });
+    expect(o?.words).toBe('the chat takes too much space');
+    expect(o?.images.map((i) => i.path)).toEqual(['/Users/g/.bise/images/f8.png']);
+  });
+
+  it('an image alone: no quote line, never an empty one (architect m_65793)', () => {
+    expect(originOf({ text: '<image …>', parts: [{ kind: 'image', name: '[Image #1]', source: '/x.png' }] })).toBeNull();
   });
 });
 
+describe("what its agents say on the Task tab is about this task (tasks-ux m_65775)", () => {
+  const lines = [
+    { kind: 'report' as const, who: 'chat-collapse', text: '[report: progress] landed 59ea752f7. waiting on ui-review for shots', at_ms: 3 },
+    { kind: 'report' as const, who: 'chat-collapse', text: 'older', at_ms: 1 },
+    { kind: 'land' as const, who: 'chat-collapse', at_ms: 2 },
+    { kind: 'report' as const, who: 'ui-review', text: 'shots green? not yet', at_ms: 2 },
+  ];
+
+  it('Now is the newest report on it, its first sentence', () => {
+    const r = reportsOf(lines);
+    expect(r.get('chat-collapse')?.text).toContain('landed 59ea752f7');
+    expect(nowOfTask(r, [])).toBe('landed 59ea752f7.');
+    expect(firstSentence('one line, no stop')).toBe('one line, no stop');
+  });
+
+  it('a note counts only from an agent on this task alone', () => {
+    const works = [
+      { id: 'a', status: 'working' as const, agents: ['designer', 'solo'] },
+      { id: 'b', status: 'working' as const, agents: ['designer'] },
+    ];
+    const solo = soloOn(works, 'a', ['designer', 'solo']);
+    expect([...solo]).toEqual(['solo']);
+    const designer = { note: 'inbox-scroll pick', title: '', status: 'idle' as const };
+    expect(agentLineOf('designer', new Map(), designer, solo.has('designer'))).toBe('');
+    expect(agentLineOf('solo', new Map(), { ...designer, note: 'on it' }, true)).toBe('on it');
+    expect(nowOfTask(new Map(), [{ note: 'on it' }])).toBe('on it');
+  });
+
+  it('waits for him only on a card of this task', () => {
+    expect(agentStateOf({ status: 'idle' }, false)).toBe('idle');
+    expect(agentStateOf({ status: 'idle' }, true)).toBe('waits');
+    expect(agentStateOf({ status: 'working' }, true)).toBe('working');
+    expect(agentStateOf(undefined, true)).toBe('archived');
+  });
+});
 describe('artsOf: a task\'s artifacts in its tab', () => {
   it('the newest first, archived out, a merged task\'s read as its target, his before the agents\'', () => {
     const tombs = [{ id: 'old', merged_into: 'kb' }];

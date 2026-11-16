@@ -5,23 +5,26 @@
 // · Pause/Resume (Reopen when done, Restart when stalled). A merged or folded one says where it went.
 // Gestures go through the hub's task_act. Owner: tasks.
 import { useEffect, useRef, useState } from 'react';
-import { ArtChip, Dropdown, Filters, Input, Kbd, Press, tipAttrs } from '@/ds';
+import { ArtChip, Dropdown, Input, Kbd, Press, Seg, tipAttrs } from '@/ds';
 import { TaskLog } from './TaskLog';
 import { dayWords, glyphOf, timeOf } from '@/artifacts/model';
 import { inbox } from '@/proto/words_inbox.gen';
 import { sentenceCase } from '@/ds/case';
 import type { Entry } from '@/proto';
-import { threadKey, useAgents, useArtifacts, useCards, useProjects, useStore, useThreadOrder } from '@/store';
+import { threadKey, useAgents, useArtifacts, useCards, useProjects, useStore, useTaskLog, useThreadOrder } from '@/store';
 import { openTab } from '@/app/panel/tabs';
 import { presetLibraryQuery } from '@/artifacts/preset';
 import { changeDoor } from '@/review/openChange';
+import { openPrOf } from '@/review/model';
+import { PartImageChip } from '@/thread/ImageGone';
+import { chipName, storeImage } from '@/thread/parts';
 import { useRouter } from '@/app/router';
 import { MAIN } from '@/app/route';
 import { useNowFor } from '@/app/clock';
 import { askButtons, pickIntent } from '@/app/side3d/model';
 import { tasks } from '@/proto/words_tasks.gen';
 import { useWorks } from '@/store';
-import { aboutOf, artsOf, crewOf, cutAtWord, doingOf, firstLine, goalsOf, isOpen, nowOf } from './model';
+import { aboutOf, agentLineOf, agentStateOf, artsOf, crewOf, firstLine, goalsOf, isOpen, nowOfTask, originOf, reportsOf, soloOn, type Origin } from './model';
 import { openTask, pausedWords, StatusMark, statusWord } from './Marks';
 import { useTaskAct, useTaskReq } from './Board';
 import { lineAt } from './Side';
@@ -30,12 +33,15 @@ import { UndoToast, useUndo } from './UndoToast';
 import { flipTo, shownStatus, type Did, type Flip } from './undo';
 import { ArtMoveMore, CardMoveMore } from './MoveMenus';
 
-/** His message's words by its id among a thread's entries; null when this window doesn't hold it. Pure. */
-export function originText(entries: readonly (Pick<Entry, 'kind' | 'msg_id' | 'text'> | undefined)[], id: number): string | null {
+/** His message by its id among a thread's entries, as the tab quotes it (his words from its parts,
+ *  his images: originOf); null when this window doesn't hold it or he wrote no words. Pure. */
+export function originIn(entries: readonly (Pick<Entry, 'kind' | 'msg_id' | 'text' | 'parts'> | undefined)[], id: number): Origin | null {
   const e = entries.find((x) => x !== undefined && x.kind === 'you' && x.msg_id === id);
-  const text = e?.text.trim() ?? '';
-  return text === '' ? null : text;
+  return e === undefined ? null : originOf(e);
 }
+
+/** an agent's state on this task in words (agentStateOf) */
+const STATE_WORD = { archived: tasks.agent_archived, working: tasks.agent_live, waits: tasks.agent_waits, idle: tasks.agent_idle } as const;
 
 /** a start's words: today's hour, else the date */
 function started(ms: number, now: number): string {
@@ -94,7 +100,14 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
   // his message that started it, quoted from main's thread when this window holds it (by its id)
   const mainKey = threadKey(project, MAIN);
   const order = useThreadOrder(mainKey);
-  const origin = w?.origin == null ? null : originText(order.order.map((p) => store.entry(mainKey, p)), w.origin);
+  const origin = w?.origin == null ? null : originIn(order.order.map((p) => store.entry(mainKey, p)), w.origin);
+  // its Log, asked as the Log pane does: what its agents reported on THIS task (Now, their lines)
+  const log = useTaskLog(project, id);
+  const lastMs = hubRow?.last_ms ?? 0;
+  useEffect(() => {
+    store.askTaskLog(project, id);
+  }, [store, project, id, lastMs]);
+  const reports = reportsOf(log?.lines ?? []);
   // after his '+ Agent' words: main's reply in its thread (an entry of main's after he asked)
   const replied = asked !== null && order.order.some((p) => {
     const e = store.entry(mainKey, p);
@@ -127,16 +140,23 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
   const t = `tasks.tab.${w.id}`;
   // main starts the work, it is not on the task: listed only when alone or in a turn for it
   const crew = crewOf(names, (n) => live(n)?.status === 'working');
-  const said = nowOf(names.flatMap((n) => {
+  // what an agent says here is about THIS task: its reports on it, its note only when it serves no other
+  const solo = soloOn(works.works, w.id, names);
+  const said = nowOfTask(reports, names.flatMap((n) => {
     const a = live(n);
-    return a === undefined ? [] : [a];
+    return a === undefined || !solo.has(n) ? [] : [a];
   }));
   const nowLine = said ?? aboutOf(lineAt(x, now));
   const arts = artsOf(allArts, w.id, works.tombs);
-  // its agents that work on a branch of their own (a worktree)
+  // its agents that work on a branch of their own (a worktree): the branch, its PR, its newest land
+  const places = store.places(project);
+  const lands = (log?.lines ?? []).filter((l) => l.kind === 'land' && (l.sha ?? '') !== '');
   const changes = names.flatMap((n) => {
     const a = live(n);
-    return a?.branch == null || a.branch === '' ? [] : [{ name: n, branch: a.branch }];
+    if (a?.branch == null || a.branch === '') return [];
+    const pr = openPrOf(n, agents, places);
+    const sha = lands.find((l) => l.who === n)?.sha ?? '';
+    return [{ name: n, branch: a.branch, pr: pr === null ? tasks.change_no_pr : tasks.change_pr({ n: pr.number, state: pr.state }), sha: sha.slice(0, 9) }];
   });
   return (
     <div className="tk-tab" data-testid={t}>
@@ -160,27 +180,33 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
               setRenaming(false);
             }} />
         ) : (
-          <h2 className="tk-tab-name">{w.name}</h2>
+          // two lines at most, the whole name in its tip (designer m_65780)
+          <h2 className="tk-tab-name" {...tipAttrs(w.name)}>{w.name}</h2>
         )}
-        <p className="tk-meta">{tasks.tab_meta({ project: x.projectName, agents: names.length === 0 ? tasks.tab_no_agents : tasks.tab_agents({ n: names.length }), when: started(w.created_ms, now) })}</p>
+        {/* the agents it lists, never main hidden by crewOf (tasks-ux m_65775) */}
+        <p className="tk-meta">{tasks.tab_meta({ project: x.projectName, agents: crew.length === 0 ? tasks.tab_no_agents : tasks.tab_agents({ n: crew.length }), when: started(w.created_ms, now) })}</p>
       </header>
 
-      {/* roma idea 3: its Log beside what it is now */}
-      {/* the pill group's own selected state, no ink ring, like For you | All (designer m_65519) */}
-      <Filters testId={`${t}.panes`} label={tasks.tab_log} on={pane} onPick={(p) => {
-        setPane(p === 'log' ? 'log' : 'overview');
-      }} items={[
-        { id: 'overview', label: tasks.tab_overview },
-        { id: 'log', label: tasks.tab_log },
-      ]} />
+      {/* roma idea 3: its Log beside what it is now; the tab's own sections: the ds underline Seg (designer m_65783) */}
+      <Seg testId={`${t}.panes`} on={pane === 'log' ? 1 : 0} onPick={(i) => {
+        setPane(i === 1 ? 'log' : 'overview');
+      }} items={[tasks.tab_overview, tasks.tab_log]} />
 
       {pane === 'log' ? <TaskLog project={project} id={w.id} last={w.last_ms} now={now} testId={`${t}.log`} /> : (<>
 
       {origin !== null && (
-        // his message itself, its first line cut at a word, linked to its place in main's thread (no origin: no block)
-        <Press look="tk-origin" {...tipAttrs(tasks.origin_tip)} onClick={() => {
-          router.go({ screen: 'thread', project, agent: MAIN });
-        }} data-testid={`${t}.origin`}>{`“${cutAtWord(firstLine(origin), 160)}”`}</Press>
+        // his message from its parts (never the model's tags; his m_65766): his images as the
+        // thread's image chips, then his first line, linked to its place in main's thread
+        <div className="tk-origin" data-testid={`${t}.origin`}>
+          {origin.images.map((img, i) => (
+            <PartImageChip key={`${img.path}#${String(i)}`} path={img.path} store={storeImage(img.b64, img.mime)} lit={false} on={{}} testId={`${t}.origin.image.${String(i + 1)}`}>
+              {chipName(img.name)}
+            </PartImageChip>
+          ))}
+          <Press look="tk-origin-words" {...tipAttrs(tasks.origin_tip)} onClick={() => {
+            router.go({ screen: 'thread', project, agent: MAIN });
+          }} data-testid={`${t}.origin.words`}>{`“${origin.words}”`}</Press>
+        </div>
       )}
       {(w.why ?? '') !== '' && <p className="tk-why">{w.why}</p>}
 
@@ -243,11 +269,12 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
       )}
 
       {nowLine !== '' && (
-        // the newest report or status note of its agents; none said: what the status is about, past the
-        // pill's own word ('no agent yet', 'quiet since 14:20'): never a bare pill (tasks-ux m_64959, m_65131)
+        // its agents' newest report on it, first sentence, else a note of an agent on it alone; none
+        // said: what the status is about, past the pill's own word ('no agent yet', 'quiet since 14:20'):
+        // never a bare pill (tasks-ux m_64959, m_65131, m_65775); two lines, the whole in its tip
         <section className="tk-sec">
           <h3 className="tk-h">{tasks.sec_now}</h3>
-          <p className="tk-why" data-testid={`${t}.now`}>{nowLine}</p>
+          <p className="tk-now" {...tipAttrs(nowLine)} data-testid={`${t}.now`}>{nowLine}</p>
         </section>
       )}
 
@@ -266,8 +293,9 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
             {crew.map((n) => {
               const a = live(n);
               const on = a?.status === 'working';
-              const state = a === undefined ? tasks.agent_archived : on ? tasks.agent_live : a.waits > 0 ? tasks.agent_waits : tasks.agent_idle;
-              const doing = a === undefined ? '' : doingOf(a);
+              // its state and line on THIS task (tasks-ux m_65775): waits for him only on a card of this task
+              const state = STATE_WORD[agentStateOf(a, asks.some((c) => c.agent === n))];
+              const doing = agentLineOf(n, reports, a, solo.has(n));
               return (
                 <li key={n} role="link" tabIndex={0} data-archived={a === undefined || undefined} onClick={() => {
                   router.go({ screen: 'thread', project, agent: n });
@@ -275,8 +303,9 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
                   if (e.key === 'Enter') router.go({ screen: 'thread', project, agent: n });
                 }} data-testid={`${t}.agent.${n}`}>
                   <span className="tk-live" data-on={on || undefined} />
+                  {/* one line (designer m_65783): dot · name · its line (cut, whole in its tip) · state */}
                   <span className="tk-agent">{n}</span>
-                  {doing !== '' && <span className="tk-agent-doing">· {doing}</span>}
+                  <span className="tk-agent-doing" {...(doing === '' ? {} : tipAttrs(doing))}>{doing}</span>
                   <span className="tk-agent-state">{state}</span>
                 </li>
               );
@@ -317,11 +346,13 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
             {changes.map((a) => (
               <li key={a.name}>
                 <Press look="tk-row" {...tipAttrs(tasks.change_tip)} onClick={() => {
-                  const door = changeDoor(project, { agent: a.name }, { agents, places: store.places(project), worktrees: store.worktrees(project) });
+                  const door = changeDoor(project, { agent: a.name }, { agents, places, worktrees: store.worktrees(project) });
                   openTab(door.tab);
                 }} data-testid={`${t}.change.${a.name}`}>
-                  <span className="tk-row-name">{a.branch}</span>
-                  <span className="tk-agent-state">{a.name}</span>
+                  {/* the branch in mono · its PR or 'no PR yet' · its newest land (designer m_65783) */}
+                  <span className="tk-row-name tk-mono">{a.branch}</span>
+                  <span className="tk-change-pr">· {a.pr}</span>
+                  {a.sha !== '' && <span className="tk-change-sha tk-mono">· {a.sha}</span>}
                 </Press>
               </li>
             ))}
@@ -397,7 +428,7 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
             setAsking(true);
           }} data-testid={`${t}.agent.add`}>{tasks.act_agent}</Press>
         )}
-        <Dropdown look="pop" label="⋯" name={tasks.act_more} tip={tasks.act_more} testId={`${t}.more`}
+        <Dropdown look="more" extra="tk-foot-more" label="⋯" name={tasks.act_more} tip={tasks.act_more_move} testId={`${t}.more`}
           groups={[
             { id: 'acts', rows: [{ id: 'rename', name: tasks.act_rename, testId: `${t}.more.rename` }] },
             {
