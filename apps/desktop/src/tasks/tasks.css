@@ -217,6 +217,9 @@
 .tk-rename{width:100%;box-sizing:border-box}
 /* renaming: the ds Field at the title's own type and place (designer m_65952): t-15 600 ink, its
    text on the title's x and baseline, nothing jumps */
-/* the field 28 high (--h-control-sm) over the title's 22 px line (--f-lead): 3 px out above and
-   below, so the head keeps its height; its text on the title's x */
-.tk-tab-head>.b-field{height:var(--h-control-sm);margin:calc((var(--s-5) + var(--s-1) / 2 - var(--h-control-sm)) / 2) calc(-1 * var(--pad-control-x));font:600 var(--f-lead);color:var(--c-text)}
+/* renaming (designer m_65966): one 32 box (--h-control: the title's 22 line, 4 above and below, a
+   1 px border), 5 out above and below so its text keeps the title's baseline and nothing under it
+   moves; 8 inside and 9 out on the sides so its first letter stays where the title's was; the ds
+   focus ring outside the border, 1 px off it, never clipped (the body's scroll box leaves it room) */
+.tk-tab-head>.b-field{box-sizing:border-box;height:var(--h-control);margin:calc((var(--s-5) + var(--s-1) / 2 - var(--h-control)) / 2) calc(-1 * (var(--s-2) + var(--s-1) / 4));padding:var(--s-1) var(--s-2);border:1px solid var(--c-line);box-shadow:none;font:600 var(--f-lead);color:var(--c-text)}
+.tk-tab-head>.b-field:focus-within{box-shadow:none;outline:2px solid var(--c-focus);outline-offset:1px}
