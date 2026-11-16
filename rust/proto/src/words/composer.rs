@@ -476,6 +476,10 @@ crate::words! { composer:
     float_open = "show the thread";
     /// the floating composer's grip, open: its mini thread folds
     float_close = "hide the thread";
+    /// the floating composer's chevron over a full-width artifact while items wait, folded: the inbox view opens
+    float_inbox_open = "show the inbox";
+    /// the floating composer's chevron over a full-width artifact while items wait, open: the inbox folds to its line
+    float_inbox_close = "fold the inbox";
     /// the floating composer, for VoiceOver
     float_name = "composer";
     /// the floating composer's mini thread with nothing in it yet

@@ -749,7 +749,7 @@ describe("inbox-scope: a project's view lists its own items; bise's view and the
     expect(inboxScope({ project: P }, HOME)).toBe(P);
     expect(inboxScope({ project: null }, HOME)).toBeNull();
     expect(inboxScope({ project: HOME }, HOME)).toBeNull();
-    expect(inboxScope({ project: P }, HOME, 'open-only')).toBeNull();
+    expect(inboxScope({ project: P }, HOME, true)).toBeNull();
     expect(inScope(P, { project: P })).toBe(true);
     expect(inScope(P, { project: SHOP })).toBe(false);
     expect(inScope(null, { project: SHOP })).toBe(true);

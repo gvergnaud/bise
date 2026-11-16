@@ -7,11 +7,11 @@ import { isUpdate, type PlaceCard } from '@/shared/update';
 
 /**
  * The project the block lists here, or null for every project's items: the screen's project, unless
- * it is bise's home (global bise and its agents) or the block sits on the inbox screen
- * (`rest: 'open-only'`). Pure.
+ * it is bise's home (global bise and its agents) or the block lists every project's anyway (`every`:
+ * the inbox screen, the floating composer). Pure.
  */
-export function inboxScope(here: { readonly project: string | null }, home: string, rest?: 'open-only' | 'line'): string | null {
-  if (rest === 'open-only' || here.project === null || here.project === home) return null;
+export function inboxScope(here: { readonly project: string | null }, home: string, every = false): string | null {
+  if (every || here.project === null || here.project === home) return null;
   return here.project;
 }
 

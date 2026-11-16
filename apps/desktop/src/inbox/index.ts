@@ -8,7 +8,7 @@
 export { InboxCard, kindTitle, titleOf, PICKED_MS, type InboxCardActs, type InboxCardProps } from './InboxCard';
 export { sortCards, cardKey } from './order';
 export { takesWords, pickWaits } from './model';
-export { InboxBlock, openInbox, inboxItemOpen, leaveClosed, answeringOf, closedAnswering, useNotifyAuth, useWaitingCount, type Answering, type Here, type InboxBlockProps } from './Block';
+export { InboxBlock, openInbox, inboxItemOpen, leaveClosed, answeringOf, closedAnswering, useNotifyAuth, useWaitingCount, type Answering, type Here, type InboxBlockProps, type InboxFold } from './Block';
 export { blockList } from './listed';
 export { cardDraftKey } from './drafts';
 export { inboxOf } from './screen';

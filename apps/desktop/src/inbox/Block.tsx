@@ -11,7 +11,8 @@
 // them as its answer ('↳ answering search · …', 'esc to perf instead'); every other item takes free
 // text too and closes (his rule m_44704, model.ts freeWords): a tool call's approval is refused with
 // his text as the reason, any other item ('to perf · the merge waits for 1 or 2') steers its agent.
-// Owner: amb-home.
+// A holder may fold it (`fold`, the float over a full-width artifact): its line, or nothing while an
+// item is open (its words still answer it, no key picks), until the holder shows it. Owner: amb-home.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Card, ProjectRow } from '@/proto';
 import type { NotifyAuth } from '@/shared/api';
@@ -92,6 +93,27 @@ export interface InboxBlockProps {
    * under a page off the thread: designer m_41569, ui-review-app #1). Absent: folded as signed.
    */
   readonly rest?: 'open-only' | 'line';
+  /**
+   * Folded by its holder (the floating composer over a full-width artifact, his m_65744, designer
+   * m_65748): every project's items; folded, it is the rest='line' row between the holder's ends
+   * while nothing is open, and nothing while an item is open (the holder's head says
+   * '↳ answering …', his words still answer it; no key picks an option he cannot see); shown, the
+   * signed rows and the open card. Absent: `rest` decides.
+   */
+  readonly fold?: InboxFold;
+}
+
+/** How the holder folds the block (InboxBlockProps.fold). */
+export interface InboxFold {
+  /** the inbox view shown (the holder's ^): its rows and the open card; else folded */
+  readonly shown: boolean;
+  /** he asked to see an item (⌃n, ⌘I, a notification click, a click on the line): the holder shows the view.
+   *  A notification that only arrives, or an item carried over from 'open beside', stays folded */
+  readonly onShow: () => void;
+  /** how many items it lists, told on each change (the holder's ^ opens the inbox while one waits) */
+  readonly onCount: (n: number) => void;
+  /** the line's two ends, in its one row: the holder's ─ and its chevron */
+  readonly ends: { readonly start: ReactNode; readonly end: ReactNode };
 }
 
 // ---- openInbox: ⌘I and a notification click (amb-win's keys and router call it; no route change)
@@ -368,7 +390,17 @@ function typing(t: EventTarget | null): boolean {
 // The block never folds, opens or changes height when he scrolls the thread (designer m_21505,
 // ambient-lead m_21498): only his hand (a click, esc, ctrl+o) or its content changes it. The H10
 // one-line form while he read up the thread (m_19835) is gone: the layout jumped under him.
-export function InboxBlock({ here, onAnswer, now: pinned, only, rest }: InboxBlockProps) {
+export function InboxBlock({ here, onAnswer, now: pinned, only, rest, fold }: InboxBlockProps) {
+  // folded by its holder: no option, no row shows; the keys pick nothing (fold)
+  const hidden = fold !== undefined && !fold.shown;
+  // he asked to see an item: the holder shows the view (read from the last render, the openers' listener is the block's life)
+  const foldNow = useRef(fold);
+  useEffect(() => {
+    foldNow.current = fold;
+  });
+  const asked = () => {
+    foldNow.current?.onShow();
+  };
   const cmd = useModHeld('Meta');
   // ctrl held (the TUI's card_draw.rs number_style): each row's number in accent, ctrl+N opens it
   const ctrl = useModHeld('Control');
@@ -392,7 +424,7 @@ export function InboxBlock({ here, onAnswer, now: pinned, only, rest }: InboxBlo
   const all = useInboxItems();
   const home = rows.find((r) => r.home)?.project ?? '';
   // a project's view lists that project's items; bise's view and the inbox screen every project's (scope.ts)
-  const scope = inboxScope(here, home, rest);
+  const scope = inboxScope(here, home, rest === 'open-only' || fold !== undefined);
   // a paused task's questions leave the block's top as the inbox page's (tasks-ux m_64959): the
   // head counts them apart, its link opens the inbox where they fold
   const works = useAllWorks();
@@ -451,6 +483,11 @@ export function InboxBlock({ here, onAnswer, now: pinned, only, rest }: InboxBlo
   // inbox zero (desktop-delight TOUCH 3): his answer to the last item, ':* nothing waits for you' for 2 s
   // scoped to a project, 'nothing waits for you' only when nothing waits in any project either
   const zero = useInboxZero(list.length, acted.length) && all.length === 0;
+  // its holder's ^ opens the inbox while one waits (fold): told before paint, its head never blinks
+  const count = list.length;
+  useLayoutEffect(() => {
+    foldNow.current?.onCount(count);
+  }, [count]);
 
   // a card answered or closed anywhere takes its half answer with it (drafts.ts; 2b); the closed
   // one in view keeps it until he sends it or leaves
@@ -466,7 +503,7 @@ export function InboxBlock({ here, onAnswer, now: pinned, only, rest }: InboxBlo
   // undone (none shows again); the one already there when the block mounts is old, never acted on.
   const voice = useVoiceAnswer();
   const [done, setDone] = useState(() => voice);
-  const heard = voice !== null && voice !== done && openCard !== undefined && openCard.project === voice.project && openCard.id === voice.card ? voice : null;
+  const heard = voice !== null && voice !== done && !hidden && openCard !== undefined && openCard.project === voice.project && openCard.id === voice.card ? voice : null;
   const answerHeard = useRef<(project: string, card: number, n: number) => void>(() => undefined);
   useEffect(() => {
     if (heard === null) return;
@@ -554,6 +591,7 @@ export function InboxBlock({ here, onAnswer, now: pinned, only, rest }: InboxBlo
       keyAt.current = { open: cardKey(want), on: null };
       setOpen(cardKey(want));
       setOn(null);
+      asked();
       return true;
     };
     openers.add(f);
@@ -587,9 +625,10 @@ export function InboxBlock({ here, onAnswer, now: pinned, only, rest }: InboxBlo
     [],
   );
 
-  // bar N14: the open item is the card in front of him (fn's talk answers it)
-  const openProject = openCard === undefined || isNotify(openCard) ? null : openCard.project;
-  const openId = openCard === undefined || isNotify(openCard) ? null : openCard.id;
+  // bar N14: the open item is the card in front of him (fn's talk answers it); folded, none is
+  const inView = hidden || openCard === undefined || isNotify(openCard) ? undefined : openCard;
+  const openProject = inView === undefined ? null : inView.project;
+  const openId = inView === undefined ? null : inView.id;
   useEffect(() => {
     store.cardInView(openProject !== null && openId !== null && document.hasFocus() ? openProject : null, openProject !== null && openId !== null && document.hasFocus() ? openId : null);
     return () => {
@@ -665,12 +704,13 @@ export function InboxBlock({ here, onAnswer, now: pinned, only, rest }: InboxBlo
         e.preventDefault();
         e.stopPropagation();
         openTo(cardKey(c));
+        asked();
         return;
       }
       const { open, on } = keyAt.current;
       const openCard = list.find((c) => cardKey(c) === open) ?? (closed !== null && cardKey(closed) === open ? closed : undefined);
       if (openCard === undefined) return;
-      if (e.key === 'Enter' && e.metaKey && !e.ctrlKey && !e.altKey && on !== null) {
+      if (e.key === 'Enter' && e.metaKey && !e.ctrlKey && !e.altKey && on !== null && !hidden) {
         e.preventDefault();
         e.stopPropagation();
         pick(openCard, on);
@@ -711,7 +751,8 @@ export function InboxBlock({ here, onAnswer, now: pinned, only, rest }: InboxBlo
         openTo(cardKey(next));
         return;
       }
-      const k = cardKeyOf(e, openCard, on);
+      // folded, its options and its ⌘⌫ are not in view: the keys pick and close nothing (esc took its 'later' above)
+      const k = hidden ? null : cardKeyOf(e, openCard, on);
       if (k === null) return;
       e.preventDefault();
       e.stopPropagation();
@@ -763,13 +804,16 @@ export function InboxBlock({ here, onAnswer, now: pinned, only, rest }: InboxBlo
   }, [folded, items]);
 
   if (list.length === 0 && !isClosed) return zero ? <InboxZero /> : null;
-  if (rest === 'open-only' && openCard === undefined) return null;
-  if (rest === 'line' && openCard === undefined && !isClosed) {
+  // folded by its holder with an item open: its head says it ('↳ answering …'), nothing here
+  if (hidden && openCard !== undefined) return null;
+  if (fold === undefined && rest === 'open-only' && openCard === undefined) return null;
+  if ((hidden || (fold === undefined && rest === 'line')) && openCard === undefined && !isClosed) {
     // list holds one item at least here (the empty list returned above)
     const newest = list.reduce((a, c) => (c.since_ms > a.since_ms ? c : a));
     const w = rowWords(newest);
     return (
       <section className="inbox-strip inbox-block inbox-line" aria-label={inbox.head} data-testid="inbox.block" data-rest="line" data-count={list.length} data-ctrl={ctrl || undefined}>
+        {fold?.ends.start}
         <Row
           lead={<span className="strip-title">{inbox.head}</span>}
           name={
@@ -782,9 +826,11 @@ export function InboxBlock({ here, onAnswer, now: pinned, only, rest }: InboxBlo
           end={<span className="strip-keys"><Kbd>{list.length > 1 ? `⌃1–${String(Math.min(list.length, STRIP_KEYS))}` : '⌃1'}</Kbd> {inbox.key_open}</span>}
           onClick={() => {
             openTo(cardKey(newest));
+            asked();
           }}
           testId="inbox.block.line"
         />
+        {fold?.ends.end}
       </section>
     );
   }

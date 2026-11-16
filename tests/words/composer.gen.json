@@ -646,6 +646,16 @@
     "one": null,
     "text": "fold it"
   },
+  "composer.float_inbox_close": {
+    "args": [],
+    "one": null,
+    "text": "fold the inbox"
+  },
+  "composer.float_inbox_open": {
+    "args": [],
+    "one": null,
+    "text": "show the inbox"
+  },
   "composer.float_name": {
     "args": [],
     "one": null,
