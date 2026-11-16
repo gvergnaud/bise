@@ -106,7 +106,8 @@ describe('the inbox block (b2)', () => {
     vi.useFakeTimers();
     try {
       const sent: CoreCmd[] = [];
-      const store = new Store({ send: (c) => sent.push(c), onEvent: () => () => undefined, onState: () => () => undefined, state: () => Promise.resolve('up') });
+      const port: CorePort = { send: (c) => sent.push(c), onEvent: () => () => undefined, onState: () => () => undefined, state: () => Promise.resolve('up') };
+      const store = new Store(port);
       replay(store, core_ev);
       render(
         <StoreProvider store={store}>
