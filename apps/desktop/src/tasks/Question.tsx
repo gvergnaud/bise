@@ -2,7 +2,7 @@
 // his own words in the ds Field (tasks-ux m_64959, designer m_65805). The Task tab's Needs you and a
 // Board card's '1 question ▾' draw it (designer m_65852). Owner: tasks.
 import type { Card } from '@/proto';
-import { Field, Kbd, Press } from '@/ds';
+import { Field, Kbd, Press, tipAttrs } from '@/ds';
 import { useStore } from '@/store';
 import { inbox } from '@/proto/words_inbox.gen';
 import { tasks } from '@/proto/words_tasks.gen';
@@ -10,28 +10,30 @@ import { pickIntent } from '@/app/side3d/model';
 import { firstLine } from './model';
 import { CardMoveMore } from './MoveMenus';
 
-export function Question({ c, project, testId }: { c: Card; project: string; testId: string }) {
+/** `card`: on a Board card (designer m_65893): no box of its own, no ⋯ (Move lives on the tab), options
+ *  one line each, the short placeholder. */
+export function Question({ c, project, testId, card = false }: { c: Card; project: string; testId: string; card?: boolean }) {
   const store = useStore();
   // every option: the inbox shows two (SHOWN_OPTS), a task's question has the room (tasks-ui-qa m_65864 T22)
   const opts = c.options.map((o) => ({ n: o.n, label: o.label }));
   return (
-    <div className="tk-q" data-testid={testId}>
+    <div className={card ? 'tk-q on-card' : 'tk-q'} data-testid={testId}>
       <div className="tk-q-head">
         <p className="tk-q-text">{c.question}</p>
         {/* Move to task… (F9): a card belongs to one task, this one */}
-        <CardMoveMore project={project} card={c.id} title={firstLine(c.question)} testId={`${testId}.more`} />
+        {!card && <CardMoveMore project={project} card={c.id} title={firstLine(c.question)} testId={`${testId}.more`} />}
       </div>
       <ol className="tk-q-opts">
         {opts.map((o) => (
           <li key={o.n}>
-            <Press look="tk-q-opt" onClick={() => store.do(pickIntent(c, o.n, null))} data-testid={`${testId}.${String(o.n)}`}>
+            <Press look="tk-q-opt" {...(card ? tipAttrs(o.label) : {})} onClick={() => store.do(pickIntent(c, o.n, null))} data-testid={`${testId}.${String(o.n)}`}>
               <Kbd>{String(o.n)}</Kbd>
               <span className="tk-q-opt-w">{o.label}</span>
             </Press>
           </li>
         ))}
       </ol>
-      <Field placeholder={opts.length > 0 ? inbox.hint_or_answer : tasks.q_type} aria-label={c.question} testId={`${testId}.type`}
+      <Field placeholder={card ? tasks.q_type_card : opts.length > 0 ? inbox.hint_or_answer : tasks.q_type} aria-label={c.question} testId={`${testId}.type`}
         onKeyDown={(e) => {
           const words = e.currentTarget.value.trim();
           if (e.key === 'Enter' && words !== '') store.do({ i: 'answer', project: c.project, card: c.id, reply: words });

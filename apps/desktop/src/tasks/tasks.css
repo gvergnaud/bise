@@ -29,7 +29,7 @@
 .tk-under-you{display:flex;justify-content:flex-end;margin-top:var(--s-1)}
 
 /* the Tasks head in the agents coin's card, under its agents, a rule above it (designer m_65859) */
-.tk-float{display:flex;flex-direction:column;margin-top:var(--s-2);padding-top:var(--s-2);border-top:1px solid var(--c-line)}
+.tk-float{position:sticky;bottom:0;z-index:1;display:flex;flex-direction:column;margin-top:var(--s-2);padding-top:var(--s-2);border-top:1px solid var(--c-line);background:var(--c-overlay)}
 
 /* the right bar's Tasks section: the agents' row shape (s3-orow), a mark in the mark's column */
 .tk-orow .s3-orow-mark{display:inline-flex;align-items:center;justify-content:center}
@@ -57,7 +57,7 @@
 .tk-cols-box::after{right:0;background:linear-gradient(to left,var(--c-surface),transparent)}
 .tk-cols-box[data-more-l]::before,.tk-cols-box[data-more-r]::after{opacity:1}
 @media (prefers-reduced-motion:reduce){.tk-cols-box::before,.tk-cols-box::after{transition:none}}
-.tk-cols{flex:1;min-width:0;min-height:0;display:flex;gap:var(--s-3);padding:0 var(--s-6) var(--s-4);overflow-x:auto;overflow-y:hidden;scroll-snap-type:x proximity}
+.tk-cols{flex:1;min-width:0;min-height:0;display:flex;gap:var(--s-3);padding:0 var(--s-6) var(--s-4);overflow-x:auto;overflow-y:hidden;scroll-snap-type:x proximity;scroll-padding-inline:var(--s-6)}
 .tk-col{flex:1 0 240px;display:flex;flex-direction:column;gap:var(--s-2);max-width:320px;min-height:0;padding:var(--s-2);border-radius:var(--r-2);background:var(--c-sunken);box-sizing:border-box;scroll-snap-align:start}
 .tk-col.empty{flex:none;width:var(--s-8);padding:var(--s-2) 0;align-items:center}
 .tk-col-head{display:flex;align-items:center;gap:var(--s-2);height:var(--s-6);margin:0;padding:0 var(--s-1);font-size:var(--t-12);font-weight:600;color:var(--c-text-2)}
@@ -76,7 +76,11 @@
 .tk-card-asks{display:flex;flex-direction:column;align-items:flex-start;gap:var(--s-2)}
 .tk-card-q{display:inline-flex;align-items:center;height:var(--s-6);padding:0 var(--s-2);border:0;border-radius:var(--r-1);background:var(--c-accent-soft);color:var(--c-accent);font:inherit;font-size:var(--t-12)}
 .tk-card-q:hover{background:color-mix(in srgb,var(--c-accent) 18%,var(--c-accent-soft))}
+/* the question on a card: no box of its own, the card's full inner width, options one line each */
 .tk-card-asks>.tk-q{align-self:stretch}
+.tk-q.on-card{padding:0;background:none}
+.tk-q.on-card .tk-q-opt{min-height:var(--s-6)}
+.tk-q.on-card .tk-q-opt-w{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 /* the Task tab's Log (roma idea 3): newest first, its time text-3 on the left, a report's
    decisions under it in text-2 */
 .tk-log{display:flex;flex-direction:column;gap:var(--s-3);margin:0;padding:0;list-style:none}

@@ -176,6 +176,8 @@ crate::words! { tasks:
     agent_waits = "waits for you";
     /// the typed answer's placeholder on a question with no options
     q_type = "type your answer, ⏎ sends it";
+    /// the typed answer's placeholder on a Board card: short, never cut (designer m_65893)
+    q_type_card = "your answer";
     /// an agent of it, archived: its thread stays readable
     agent_archived = "archived";
     /// a goal ticked by an agent's report

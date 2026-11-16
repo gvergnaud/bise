@@ -171,9 +171,10 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
           {sentenceCase(statusWord(w.status))}
         </span>
         {renaming ? (
-          <Input look="tk-tab-name tk-rename" defaultValue={w.name} autoFocus aria-label={tasks.act_rename} data-testid={`${t}.rename`}
+          <Input data-esc-own="" look="tk-tab-name tk-rename" defaultValue={w.name} autoFocus aria-label={tasks.act_rename} data-testid={`${t}.rename`}
             onKeyDown={(e) => {
-              // esc closes the field only, never the sheet around the tab (tasks-ui-qa m_65864 T20)
+              // esc closes the field only, never the sheet around the tab: data-esc-own tells app/escape.ts
+              // the field takes it first (tasks-ui-qa m_65864, m_65884 T20)
               if (e.key === 'Escape') {
                 e.stopPropagation();
                 setRenaming(false);
@@ -362,7 +363,7 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
       {asking ? (
         // '+ Agent' (tasks-ux m_64875): his words for main in place of the footer; esc closes, an empty ⏎ does nothing
         <footer className="tk-foot">
-          <Input look="tk-rename" autoFocus placeholder={tasks.agent_ask} aria-label={tasks.agent_tip} data-testid={`${t}.agent.ask`}
+          <Input data-esc-own="" look="tk-rename" autoFocus placeholder={tasks.agent_ask} aria-label={tasks.agent_tip} data-testid={`${t}.agent.ask`}
             onKeyDown={(e) => {
               if (e.key === 'Escape') {
                 e.stopPropagation();

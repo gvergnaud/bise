@@ -755,6 +755,11 @@
     "one": null,
     "text": "type your answer, ⏎ sends it"
   },
+  "tasks.q_type_card": {
+    "args": [],
+    "one": null,
+    "text": "your answer"
+  },
   "tasks.review_pr": {
     "args": [
       "n"

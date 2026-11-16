@@ -12,7 +12,7 @@ import { useAgents, useCards, useStore, useWorks } from '@/store';
 import type { Task as TaskReq, WorkStatus } from '@/proto';
 import { tasks } from '@/proto/words_tasks.gen';
 import { useNowFor } from '@/app/clock';
-import { aboutOf, barRows, cardCrew, cardSaid, cutAtWord, goalsOf, SAID_MAX, soloOn, STATUS_ORDER, type ProjWork } from './model';
+import { barRows, cardCrew, cardSaid, cutAtWord, goalsOf, SAID_MAX, soloOn, STATUS_ORDER, type ProjWork } from './model';
 import { Question } from './Question';
 import { ago } from '@/agents/model';
 import { useAllWorks, useNewestArts } from './hooks';
@@ -107,9 +107,11 @@ function Card({ x, now, fresh, onDid, withProject }: { x: ProjWork; now: number;
   const line = lineAt(x, now);
   // a paused card says its pause, never a stale report (designer m_65397)
   const paused = x.w.status === 'paused';
+  // never a count or a bare name (designer m_65891): Needs you with no report has no line (its chip
+  // says it); else the whole line ('working · ui-review', 'waiting · no agent yet')
   const sentence = cutAtWord(paused
     ? pausedWords(now - (x.w.paused_ms ?? now))
-    : (said?.text ?? (aboutOf(line) !== '' ? aboutOf(line) : line)), SAID_MAX);
+    : (said?.text ?? (x.w.status === 'needs_you' ? '' : line)), SAID_MAX);
   // the meta line: its project on the all-projects Board · n/m · its first agent +n, never main (designer m_65805)
   const crew = cardCrew(names);
   const meta = [withProject ? x.projectName : '', goals === null ? '' : tasks.goals_of(goals), crew].filter((m) => m !== '');
@@ -131,10 +133,12 @@ function Card({ x, now, fresh, onDid, withProject }: { x: ProjWork; now: number;
       {meta.length > 0 && (
         <span className="tk-card-meta" data-testid={`${id}.meta`} {...(goals === null ? {} : tipAttrs(tasks.goals_tip(goals)))}>{meta.join(' · ')}</span>
       )}
-      <span className={`tk-card-what${paused ? ' paused' : ''}`} data-testid={`${id}.said`} {...tipAttrs(sentence)}>
-        <span className="tk-card-said">{sentence}</span>
-        {!paused && said?.at != null && <span className="tk-card-age">{ago(said.at, now)}</span>}
-      </span>
+      {sentence !== '' && (
+        <span className={`tk-card-what${paused ? ' paused' : ''}`} data-testid={`${id}.said`} {...tipAttrs(sentence)}>
+          <span className="tk-card-said">{sentence}</span>
+          {!paused && said?.at != null && <span className="tk-card-age">{ago(said.at, now)}</span>}
+        </span>
+      )}
       {asks.length > 0 && (
         // its questions, answered in place on the card; a click or a key in them never opens the task
         <span className="tk-card-asks" role="group" aria-label={tasks.card_questions({ n: asks.length })} onClick={(e) => {
@@ -145,7 +149,7 @@ function Card({ x, now, fresh, onDid, withProject }: { x: ProjWork; now: number;
           <Press look="tk-card-q" aria-expanded={open} onClick={() => {
             setOpen(!open);
           }} data-testid={`${id}.questions`}>{`${tasks.card_questions({ n: asks.length })} ${open ? '▾' : '▸'}`}</Press>
-          {open && asks.map((c) => <Question key={c.id} c={c} project={x.project} testId={`${id}.q.${String(c.id)}`} />)}
+          {open && asks.map((c) => <Question key={c.id} c={c} project={x.project} card testId={`${id}.q.${String(c.id)}`} />)}
         </span>
       )}
       {x.w.status === 'stalled' && (
