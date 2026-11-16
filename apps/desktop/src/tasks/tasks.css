@@ -132,11 +132,16 @@
    centres, as a shell page (designer m_65783, m_65791) */
 .tk-tab{display:flex;flex-direction:column;gap:var(--s-4);height:100%;min-height:0;overflow:auto;padding:var(--s-4) max(var(--s-4),calc((100% - var(--w-col)) / 2)) 0;color:var(--c-text);font-size:var(--t-13);box-sizing:border-box;container-type:inline-size}
 /* a task's tab: its body scrolls, the footer stays below it (tasks-ux m_64967) */
-.tk-tab:has(> .tk-body){overflow:hidden}
+/* a task's tab: its head on top, its body scrolls, the footer stays below it (tasks-ux m_64967);
+   clip, never a scroll box of its own: nothing scrolls the head (designer m_65990) */
+.tk-tab:has(> .tk-body){overflow:clip}
+/* the head out of the scroll box: pill, title, meta, then Overview | Log, whose own rule is its
+   bottom edge; on the tab's surface */
+.tk-top{flex:none;display:flex;flex-direction:column;gap:var(--s-4);background:var(--c-surface)}
 /* its scrollbar keeps its own gutter, never over the agents' state (tasks-ui-qa m_65864 T18) */
-/* its scroll box reaches 16 px into the tab's padding on the sides and 8 above, its content where
-   it was: room for the rename field's whole focus ring (tasks-ui-qa m_65961) */
-.tk-body{display:flex;flex-direction:column;gap:var(--s-4);flex:1 1 auto;min-height:0;overflow:auto;margin:calc(-1 * var(--s-2)) calc(-1 * var(--s-4)) 0;padding:var(--s-2) var(--s-4) var(--s-4);scrollbar-gutter:stable}
+/* its scroll box reaches 16 px into the tab's padding on the sides, its content where it was: its
+   scrollbar in that margin, never over the agents' state */
+.tk-body{display:flex;flex-direction:column;gap:var(--s-4);flex:1 1 auto;min-height:0;overflow:auto;margin:0 calc(-1 * var(--s-4));padding:0 var(--s-4) var(--s-4);scrollbar-gutter:stable}
 .tk-tab-head{display:flex;flex-direction:column;gap:var(--s-1)}
 .tk-pill{display:inline-flex;align-self:flex-start;align-items:center;gap:var(--s-2);height:var(--s-5);padding:0 var(--s-2);border-radius:var(--r-1);background:var(--c-hover);color:var(--c-text-2);font-size:var(--t-12)}
 .tk-pill[data-st="needs_you"]{color:var(--c-accent)}

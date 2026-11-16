@@ -94,13 +94,7 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
   // the rename field takes the focus without scrolling the tab (designer m_65980): typing scrolls
   // only its own text, never the body (tasks-ui-qa m_65973)
   const renameField = useRef<HTMLInputElement>(null);
-  // the browser reveals the caret by scrolling every box around the field, the body too, as its
-  // text scrolls past the field's width (tasks-ui-qa m_65985: 90, 178 px): while he renames, the
-  // body holds where it was, as a Finder rename holds its window
-  const body = useRef<HTMLDivElement>(null);
-  const heldTop = useRef<number | null>(null);
   useEffect(() => {
-    heldTop.current = renaming ? (body.current?.scrollTop ?? 0) : null;
     if (renaming) renameField.current?.focus({ preventScroll: true });
   }, [renaming]);
   const [pane, setPane] = useState<'overview' | 'log'>('overview');
@@ -176,11 +170,10 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
   });
   return (
     <div className="tk-tab" data-testid={t}>
-      {/* the body scrolls above the footer, never under it (tasks-ux m_64967) */}
-      <div className="tk-body" ref={body} onScroll={(e) => {
-        const top = heldTop.current;
-        if (top !== null && e.currentTarget.scrollTop !== top) e.currentTarget.scrollTop = top;
-      }}>
+      {/* its head (pill, title, meta, Overview | Log) out of the body's scroll box: the rename field
+          lives in a box that never scrolls, so the browser's caret reveal has nothing to move
+          (designer m_65990, tasks-ui-qa m_65985), and the tabs stay in reach on a long task */}
+      <div className="tk-top">
       <header className="tk-tab-head">
         <span className="tk-pill" data-st={w.status} data-testid={`${t}.status`}>
           <StatusMark status={w.status} />
@@ -215,7 +208,10 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
       <Seg testId={`${t}.panes`} on={pane === 'log' ? 1 : 0} onPick={(i) => {
         setPane(i === 1 ? 'log' : 'overview');
       }} items={[tasks.tab_overview, tasks.tab_log]} />
+      </div>
 
+      {/* the body scrolls above the footer, never under it (tasks-ux m_64967) */}
+      <div className="tk-body">
       {pane === 'log' ? <TaskLog project={project} id={w.id} last={w.last_ms} now={now} testId={`${t}.log`} /> : (<>
 
       {origin !== null && (
