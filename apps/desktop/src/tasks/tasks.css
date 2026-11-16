@@ -213,3 +213,6 @@
 .tk-foot .tk-foot-more{margin-left:auto}
 .tk-gone{margin:0;padding:var(--s-4);color:var(--c-text-3)}
 .tk-rename{width:100%;box-sizing:border-box}
+/* renaming: the ds Field at the title's own type and place (designer m_65952): t-15 600 ink, its
+   text on the title's x and baseline, nothing jumps */
+.tk-tab-head>.b-field{height:auto;margin-inline:calc(-1 * var(--pad-control-x));font:600 var(--f-lead);color:var(--c-text)}
