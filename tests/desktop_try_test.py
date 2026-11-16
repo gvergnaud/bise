@@ -451,10 +451,17 @@ def real_opens_with_nothing():
 
 
 def real_open_fronts_a_running_app():
-    """--real on an app already open with nothing staged brings it to the front, never quits it
-    (app-quits: his launcher click restarted the same build); a staged build or an open try restarts."""
+    """--real on an app already open brings it to the front, never quits it (app-quits: his launcher
+    click restarted the same build; try-closes: a staged build made his click, and keep-current's
+    idle '--real --background', quit his open app); only --restart (his 'relaunch now') or an open
+    try restarts it."""
     check(T.real_plan([4242], False, False) == "front", "open, nothing staged: to the front")
-    check(T.real_plan([4242], True, False) == "restart", "a staged build waits: restart to swap it in")
+    check(T.real_plan([4242], True, False) == "front", "open, a staged build waits: to the front, never quit")
+    check(T.real_plan([4242], True, False, restart=True) == "restart", "his 'relaunch now' (--restart): it swaps")
+    check(T.real_plan([], True, False) == "restart", "not running, a staged build: it swaps and opens")
+    check(T.real_plan([4242], True, False, True) == "restart", "open off every display, a staged build: restart on screen")
+    check("b51422c0" in T.staged_waits("b51422c0") and "--restart" in T.staged_waits("b51422c0"),
+          "the staged line names the build and his way to take it: %s" % T.staged_waits("b51422c0"))
     check(T.real_plan([4242], False, True) == "restart", "the try is open: it stops, then the real one opens")
     check(T.real_plan([], False, False) == "restart", "not running: it opens")
     # open on no display (its env says BISE_DESKTOP_OFFSCREEN=1): the front would show him nothing

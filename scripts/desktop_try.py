@@ -2,11 +2,20 @@
 """desktop-try: the user's first try of bise desktop (the new app, apps/desktop), on a bise home of its own.
 
   bise-ambient --real                                the promoted bundle on YOUR bise home and hubs (no build, no
-                                                     try world): stops any open try or instance first, opens it
-                                                     with no variable, says the sha, the bundle and the home;
-                                                     never BISE_DESKTOP_OFFSCREEN on your home (refused)
-  bise-ambient --real --background                   the same behind your windows (open -g, window on screen):
-                                                     keep-current's relaunch; already open: left as it is
+                                                     try world): already open on a display, brought to the front,
+                                                     never quit, even with a staged build (it says it waits);
+                                                     else stops any open try first, swaps a staged build in,
+                                                     opens it with no variable, says the sha, the bundle and the
+                                                     home; never BISE_DESKTOP_OFFSCREEN on your home (refused)
+  bise-ambient --real --background                   the same behind your windows (open -g, window on screen);
+                                                     already open: left as it is, never quit
+  bise-ambient --real --restart                      his 'relaunch now' only (his word, or a card he answered):
+                                                     quits his open app, swaps the staged build in, reopens
+
+No script quits his running try app on his home (try-closes, architect m_66021): only his act does
+(his quit, the app's 'restart to update', or --real --restart run on his word). keep-current's idle
+relaunches ('--real --background' after 120 s of idle) quit it while he was away, 14 times on
+2026-11-12..14, and reopened it behind his windows: to him, it closed on its own.
   bise-ambient --real --stop                         quits it; on a stand-in home (a test's) also its hubs
   bise-ambient --try [repo…] [--fresh] [--replace]   build, set up the try home, open the app on it (internal
                                                      fallback until --real is proven: ambient-lead m_18348)
@@ -72,7 +81,7 @@ import time
 
 from desktop_try_env import (GATE, SELF_CONTAINED, TryError, clone_names, config_for_try, guard, his_env,  # one module,
                              his_bise, his_repos, holds_bundle, homes, keep_old_root, live_build, not_swapped,
-                             self_contained, try_env, under)  # split for its size
+                             self_contained, staged_waits, try_env, under)  # split for its size
 import cand_lock  # cand.sh's lock on a candidate, held by --promote
 from heavy_slot import HEAVY_RUN, heavy_argv, under_heavy_slot  # noqa: F401  (desktop_dmg, the tests read them here)
 from try_procs import hub_socks, stop_hub, try_pids  # split for its size
@@ -824,14 +833,20 @@ def open_bundle(real, app, extra, environ, background=False):
         run(real_open_cmd(app, extra, environ, background), his_env(environ))
 
 
-def real_plan(running, staged, try_open, offscreen=False):
-    """What --real does (pure): 'front' when the bundle already runs on his home with no staged build
-    to swap in, no try open, and its window placed on a display: it is brought to the front, never
-    quit (app-quits: his '~/Applications/bise (try)' click at 08:28 on 2026-11-13 quit and reopened
-    the same dd93c388 for nothing); else 'restart' (quit, swap the staged build in, open). `offscreen`:
-    a running instance carries BISE_DESKTOP_OFFSCREEN=1 (offscreen_apps): its window is on no display,
-    so the front shows him nothing (real-onscreen: 12:50, pid 30078) and it restarts."""
-    return "front" if running and not staged and not try_open and not offscreen else "restart"
+def real_plan(running, staged, try_open, offscreen=False, restart=False):
+    """What --real does (pure): 'front' when the bundle already runs on his home, no try open, and
+    its window placed on a display: it is brought to the front (or left as it is: --background),
+    never quit, even with a staged build waiting (`staged`: the caller names it). No script quits
+    his running app; only his act does: his quit, the app's 'restart to update', or `restart`
+    (--real --restart, his 'relaunch now'). app-quits: his '~/Applications/bise (try)' click at
+    08:28 on 2026-11-13 quit and reopened the same dd93c388; try-closes: his click at 23:49:54 on
+    2026-11-16, and keep-current's idle '--real --background' relaunches (11-12..11-14), quit his
+    open app because a build was staged. Else 'restart' (quit what runs, swap the staged build in,
+    open). `offscreen`: a running instance carries BISE_DESKTOP_OFFSCREEN=1 (offscreen_apps): its
+    window is on no display, so the front shows him nothing (real-onscreen: 12:50, pid 30078) and
+    it restarts."""
+    del staged  # a staged build never decides a quit (try-closes); open_real says it waits
+    return "front" if running and not try_open and not offscreen and not restart else "restart"
 
 
 def ps_env_offscreen(line):
@@ -854,24 +869,29 @@ def real_front_cmd(app):
     return ["open", "-a", app]
 
 
-def open_real(real, tryh, paths, environ=None, timeout=20, background=False):
+def open_real(real, tryh, paths, environ=None, timeout=20, background=False, restart=False):
     """bise-ambient --real (ambient-lead m_18348): the promoted bundle on his real bise home, his
-    running hubs; no build, no try world. Already open with nothing staged and on a display: brought
-    to the front (real_plan), or with `background` (--background) left as it is. Else any open try is
-    stopped and any instance of the bundle quits first; the bundle is opened with no variable
-    (real_app_env), behind his windows with `background` (open -g). Says what it opened."""
+    running hubs; no build, no try world. Already open on a display: brought to the front
+    (real_plan), or with `background` (--background) left as it is, never quit, a staged build
+    named as waiting (try-closes). `restart` (--restart, his 'relaunch now' only): it quits, swaps
+    and reopens. Else any open try is stopped and any instance of the bundle quits first; the
+    bundle is opened with no variable (real_app_env), behind his windows with `background`
+    (open -g). Says what it opened."""
     environ = os.environ if environ is None else environ
     app = paths["app"]
     extra = real_app_env(environ, real, his_bise())
     try_open = os.path.isdir(tryh) and (app_running(app, tryh) or any(os.path.exists(s) for s in hub_socks(tryh)))
     running = bundle_apps(app)
-    staged = (read_stamp(paths) or {}).get("where") == "staged"
-    if not extra and real_plan(running, staged, try_open, bool(offscreen_apps(running))) == "front":
+    saved = read_stamp(paths) or {}
+    staged = saved.get("where") == "staged"
+    if not extra and real_plan(running, staged, try_open, bool(offscreen_apps(running)), restart) == "front":
         if not background:
             run(real_front_cmd(app), his_env(environ))
         say("bise desktop was already open on your home %s: %s (%s, pid %d): %s, not restarted"
             % (real, app, live_build(app).get("commit", "")[:8] or "unknown build", running[0],
                "left as it is" if background else "brought to the front"))
+        if staged:
+            say(staged_waits(saved.get("head", "")[:8]))
         return running[0]
     if try_open:
         r = stop(real, tryh, app)
@@ -987,10 +1007,10 @@ def stop(real, tryh, app=None):
 def main(argv):
     args = [a for a in argv if not a.startswith("--")]
     flags = {a for a in argv if a.startswith("--")}
-    bad = flags - {"--try", "--real", "--stop", "--background", "--fresh", "--replace", "--no-build", "--no-open", "--candidate",
-                   "--promote", "--team-sign"}
+    bad = flags - {"--try", "--real", "--stop", "--background", "--restart", "--fresh", "--replace", "--no-build", "--no-open",
+                   "--candidate", "--promote", "--team-sign"}
     if bad:
-        raise TryError("unknown option %s (--real [--background], --try [repo…] [--fresh|--replace], --try --stop, --candidate <sha> [--team-sign], "
+        raise TryError("unknown option %s (--real [--background] [--restart], --try [repo…] [--fresh|--replace], --try --stop, --candidate <sha> [--team-sign], "
                        "--promote <sha>)" % ", ".join(sorted(bad)))
     cand = os.environ.get("BISE_TRY_CANDIDATE") if "--promote" not in flags else None
     if "--team-sign" in flags and ("--candidate" not in flags or flags - {"--candidate", "--team-sign"}):
@@ -1016,9 +1036,11 @@ def main(argv):
         return 0
     if "--background" in flags and ("--real" not in flags or "--stop" in flags):
         raise TryError("--background goes with --real only (it opens the bundle behind your windows)")
+    if "--restart" in flags and ("--real" not in flags or "--stop" in flags):
+        raise TryError("--restart goes with --real only (his 'relaunch now': it quits his open app and swaps)")
     if "--real" in flags:
-        if flags - {"--real", "--stop", "--background"} or args:
-            raise TryError("--real [--background|--stop] takes nothing else: it opens (or stops) the promoted bundle on your home")
+        if flags - {"--real", "--stop", "--background", "--restart"} or args:
+            raise TryError("--real [--background] [--restart] | --real --stop takes nothing else: it opens (or stops) the promoted bundle on your home")
         real, tryh = homes()
         paths = try_paths(his_env(os.environ))
         if "--stop" in flags:
@@ -1026,7 +1048,7 @@ def main(argv):
             say("stopped bise desktop (%d instances, %d hubs, %d processes left killed)%s"
                 % (len(r["app"]), len(r["hubs"]), len(r["killed"]), "" if r["hubs"] or r["killed"] else "; your hubs weren't touched"))
             return 0
-        open_real(real, tryh, paths, background="--background" in flags)
+        open_real(real, tryh, paths, background="--background" in flags, restart="--restart" in flags)
         return 0
     real, tryh = homes()
     guard(real, tryh)

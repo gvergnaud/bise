@@ -98,6 +98,13 @@ def not_swapped(staged, live, procs, most=6):
             % (live or "unknown", staged or "unknown", len(procs), held or "none seen"))
 
 
+def staged_waits(staged):
+    """The line of --real when his app is open and a build is staged (try-closes): never quit for
+    it; it goes live at his own quit, the app's 'restart to update', or --real --restart. Pure."""
+    return ("the staged build %s waits: it goes live when you quit bise try, or from its 'restart to update'"
+            " (or bise-ambient --real --restart)" % (staged or "unknown"))
+
+
 def guard(real, tryh, paths=()):
     """The try home is under his ~/.bise/try (or a test's ~/.bise/gate), never his home itself;
     every path the try writes is under it."""

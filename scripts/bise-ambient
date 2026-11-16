@@ -2,7 +2,8 @@
 # bise-ambient: Gabriel's desktop app, always prebuilt (docs/desktop-try.md).
 #
 #   bise-ambient --real [args]   the promoted 'bise try' app on his real ~/.bise and hubs
-#                                (quits the open one, swaps in a staged build, reopens)
+#                                (open already: to the front, never quit; else swaps in a
+#                                staged build and opens; --restart: his 'relaunch now' only)
 #   bise-ambient --try [repo…]   the same app on its try home (~/.bise/try/desktop), with
 #                                throwaway clones of his repos
 #   bise-ambient [folder]        dev only: build bise from $BISE_AMBIENT_CHECKOUT and run

@@ -151,9 +151,16 @@ If his app is open it says `staged`; otherwise it goes live at once.
 
 Check the staged build: id `dev.bise.desktop.try`, `codesign --verify --deep --strict`,
 VERSION `id=root-<sha12>`. Then tell main: the sha, what's new in his words, his live build.
-Main puts the relaunch card; the relaunch is `bise-ambient --real` (it quits the open app,
-swaps in the staged build, reopens). A build with app-swap (f054ccf7) also offers
-"restart to update" in settings › general.
+Main puts the relaunch card; on his "now", the relaunch is `bise-ambient --real --restart` (it
+quits the open app, swaps in the staged build, reopens). A build with app-swap (f054ccf7) also
+offers "restart to update" in settings › general, and his own quit swaps it at his next open.
+
+No script quits his running try app (try-closes, architect m_66021): `--real` and
+`--real --background` on an open app bring it to the front or leave it, never quit it, staged
+build or not. Only his act quits it: his quit, "restart to update", or `--real --restart` run on
+his word or a card he answered. Never a relaunch at idle (an idle keyboard is no sign he left):
+keep-current's `relaunch*.sh` (wait 120 s of HIDIdleTime, then `--real --background`) quit it
+14 times on 2026-11-12..14 and reopened it behind his windows; to him, it closed on its own.
 
 ## Off-screen rules and incidents never to repeat
 
