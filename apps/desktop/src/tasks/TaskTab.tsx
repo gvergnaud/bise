@@ -5,7 +5,7 @@
 // · Pause/Resume (Reopen when done, Restart when stalled). A merged or folded one says where it went.
 // Gestures go through the hub's task_act. Owner: tasks.
 import { useEffect, useRef, useState } from 'react';
-import { ArtChip, Dropdown, Input, Press, Seg, tipAttrs } from '@/ds';
+import { ArtChip, Dropdown, Field, Input, Press, Seg, tipAttrs } from '@/ds';
 import { TaskLog } from './TaskLog';
 import { dayWords, glyphOf, timeOf } from '@/artifacts/model';
 import { sentenceCase } from '@/ds/case';
@@ -149,7 +149,8 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
   // paused: its line under the meta says the pause; Now keeps what was happening, never a bare 'until …' (tasks-ux m_65804)
   // done: the pill says it, never a bare 'yesterday' (tasks-ui-qa m_65864 T19)
   // Needs you: its block says it, never '1 question' again under it (tasks-ux m_65871)
-  const nowLine = said ?? (w.status === 'paused' || w.status === 'done' || w.status === 'needs_you' ? '' : aboutOf(lineAt(x, now)));
+  // working: the pill and its Agents rows say who, never a bare name as Now (tasks-ui-qa m_65946 N3)
+  const nowLine = said ?? (w.status === 'paused' || w.status === 'done' || w.status === 'needs_you' || w.status === 'working' ? '' : aboutOf(lineAt(x, now)));
   const arts = artsOf(allArts, w.id, works.tombs);
   // its agents that work on a branch of their own (a worktree): the branch, its PR, its newest land
   const places = store.places(project);
@@ -171,7 +172,7 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
           {sentenceCase(statusWord(w.status))}
         </span>
         {renaming ? (
-          <Input data-esc-own="" look="tk-tab-name tk-rename" defaultValue={w.name} autoFocus aria-label={tasks.act_rename} data-testid={`${t}.rename`}
+          <Field data-esc-own="" defaultValue={w.name} autoFocus aria-label={tasks.act_rename} testId={`${t}.rename`}
             onKeyDown={(e) => {
               // esc closes the field only, never the sheet around the tab: data-esc-own tells app/escape.ts
               // the field takes it first (tasks-ui-qa m_65864, m_65884 T20)
