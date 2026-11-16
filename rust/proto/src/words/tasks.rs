@@ -218,10 +218,6 @@ crate::words! { tasks:
     log_more = "more";
     /// a Needs you card's chip on the Board: its open questions, opened in place (designer m_65852)
     card_questions(n) = one "{n} question" | "{n} questions";
-    /// the Tasks island's tip when the right bar folds to islands (designer m_65852)
-    island_tip(n) = "Tasks · {n} need you";
-    /// the Tasks island's tip when nothing needs him
-    island_tip_none = "Tasks";
     /// a `--decision` of that report
     log_decision(text) = "decided: {text}";
     /// his answer to one of its questions
