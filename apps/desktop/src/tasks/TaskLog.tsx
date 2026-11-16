@@ -2,12 +2,15 @@
 // their decisions, his answers, its lands, his gestures, agents joining. Asked of the hub when the
 // tab shows it and again when the task moves (its last fact); the hub reads it off its loop and
 // keeps nothing. Owner: tasks.
-import { Fragment, useEffect } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { sentenceCase } from '@/ds/case';
 import { useStore, useTaskLog } from '@/store';
 import { tasks } from '@/proto/words_tasks.gen';
 import { dayWords, timeOf } from '@/artifacts/model';
-import { ArtChip } from '@/ds';
+import { ArtChip, Fold } from '@/ds';
+import type { LogLine } from '@/proto';
+import { shownName } from '@/agents/model';
+import { firstSentence } from './model';
 import { openTab } from '@/app/panel/tabs';
 import { dayHeads, foldLog, logWords, madeWords, type LogRow } from './log';
 
@@ -46,8 +49,8 @@ export function TaskLog({ project, id, last, now, testId }: { project: string; i
           <li className="tk-log-row" data-kind={l.kind} data-testid={row}>
             <span className="tk-log-at">{days ? timeOf(l.at_ms) : when(l.at_ms, now)}</span>
             <span className="tk-log-what">
-              {l.kind === 'artifact' ? <Made r={r} project={project} testId={row} /> : words}
-              {(l.decisions ?? []).map((d) => (
+              {l.kind === 'artifact' ? <Made r={r} project={project} testId={row} /> : l.kind === 'report' ? <Report l={l} testId={row} /> : words}
+              {l.kind !== 'report' && (l.decisions ?? []).map((d) => (
                 <span key={d} className="tk-log-dec">{tasks.log_decision({ text: d })}</span>
               ))}
               {/* his answer folded under its question: one entry (tasks-ux m_65504) */}
@@ -58,6 +61,31 @@ export function TaskLog({ project, id, last, now, testId }: { project: string; i
         );
       })}
     </ol>
+  );
+}
+
+/** A report: its first sentence in ink; the rest and its decisions under the ds Fold, closed
+ *  (designer m_65808: one line a report, never its whole body; tasks-ui-qa m_65799 #14). */
+function Report({ l, testId }: { l: LogLine; testId: string }) {
+  const [open, setOpen] = useState(false);
+  const text = (l.text ?? '').replace(/^\[report: [a-z]+\]\s*/u, '').trim();
+  const head = firstSentence(text);
+  const rest = text.slice(text.indexOf(head) + head.length).trim();
+  const decisions = l.decisions ?? [];
+  const more = rest !== '' || decisions.length > 0;
+  return (
+    <>
+      <span>{tasks.log_report({ who: shownName(l.who), kind: l.report ?? '', text: head })}</span>
+      {more && (
+        <Fold open={open} onToggle={() => {
+          setOpen(!open);
+        }} testId={`${testId}.more`}>{tasks.log_more}</Fold>
+      )}
+      {open && rest !== '' && <span className="tk-log-dec tk-log-rest">{rest}</span>}
+      {open && decisions.map((d) => (
+        <span key={d} className="tk-log-dec">{tasks.log_decision({ text: d })}</span>
+      ))}
+    </>
   );
 }
 

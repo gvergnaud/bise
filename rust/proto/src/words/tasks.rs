@@ -152,6 +152,8 @@ crate::words! { tasks:
     paused_since(ago) = "paused by you · {ago} ago";
     /// the paused line in its first minute ('ago' only after a real duration; tasks-ux m_65628)
     paused_just_now = "paused by you · just now";
+    /// the paused line when it resumes by itself (designer m_65808)
+    paused_line_until(at) = "paused by you · until {at}";
     /// a section head
     sec_agents = "Agents";
     /// a section head: the 3 newest artifacts for him that serve it
@@ -212,6 +214,8 @@ crate::words! { tasks:
     log_failed(why) = "its Log can't be read: {why}";
     /// an agent's `sb report` (kind: progress, done, blocked, failed)
     log_report(who, kind, text) = "{who} reported {kind}: {text}";
+    /// a Log report row's fold: the rest of the report and its decisions (designer m_65808)
+    log_more = "more";
     /// a `--decision` of that report
     log_decision(text) = "decided: {text}";
     /// his answer to one of its questions

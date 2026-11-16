@@ -138,6 +138,8 @@ export const tasks = {
   paused_since: (a: { ago: string | number }): string => "paused by you · " + String(a.ago) + " ago",
   /** the paused line in its first minute ('ago' only after a real duration; tasks-ux m_65628) */
   paused_just_now: "paused by you · just now",
+  /** the paused line when it resumes by itself (designer m_65808) */
+  paused_line_until: (a: { at: string | number }): string => "paused by you · until " + String(a.at),
   /** a section head */
   sec_agents: "Agents",
   /** a section head: the 3 newest artifacts for him that serve it */
@@ -196,6 +198,8 @@ export const tasks = {
   log_failed: (a: { why: string | number }): string => "its Log can't be read: " + String(a.why),
   /** an agent's `sb report` (kind: progress, done, blocked, failed) */
   log_report: (a: { who: string | number; kind: string | number; text: string | number }): string => String(a.who) + " reported " + String(a.kind) + ": " + String(a.text),
+  /** a Log report row's fold: the rest of the report and its decisions (designer m_65808) */
+  log_more: "more",
   /** a `--decision` of that report */
   log_decision: (a: { text: string | number }): string => "decided: " + String(a.text),
   /** his answer to one of its questions */

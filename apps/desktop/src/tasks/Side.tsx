@@ -20,7 +20,7 @@ import { askBise } from './BoardEmpty';
 import { useRouter } from '@/app/router';
 
 /** how a past and a coming time read in a row's line: the hour, a date past a day */
-function clock(ms: number, now: number): string {
+export function clock(ms: number, now: number): string {
   // 24 h like the rest of the app ('14:20'); another day: 'yesterday 14:20', 'sun 5 oct 14:20' (designer m_64958)
   const day = dayWords(ms, now);
   return day === 'today' ? timeOf(ms) : `${day} ${timeOf(ms)}`;

@@ -162,11 +162,17 @@
 /* Move to task…'s ⋯ on a row (F9, tasks-ux m_65591): hidden until the row's hover or keyboard focus,
    its space always kept so nothing shifts; beside the row's own acts, never over them */
 .tk-more-slot{display:inline-flex;flex:none;align-items:center;min-width:var(--s-6);visibility:hidden}
-.tk-more-slot:focus-within,.ip-row:hover .tk-more-slot,.ip-row:focus-within .tk-more-slot,.strip-line:hover .tk-more-slot,.strip-line:focus-within .tk-more-slot,.tk-rows li:hover .tk-more-slot,.tk-rows li:focus-within .tk-more-slot,.tk-q:hover .tk-more-slot,.tk-q:focus-within .tk-more-slot{visibility:visible}
+.tk-more-slot:focus-within,.ip-row:hover .tk-more-slot,.ip-row:focus-within .tk-more-slot,.strip-line:hover .tk-more-slot,.strip-line:focus-within .tk-more-slot,.tk-rows li:hover .tk-more-slot,.tk-rows li:focus-within .tk-more-slot,.tk-arts li:hover .tk-more-slot,.tk-arts li:focus-within .tk-more-slot,.tk-q:hover .tk-more-slot,.tk-q:focus-within .tk-more-slot{visibility:visible}
 /* the thread's strip row and its ⋯, side by side (a button never holds a button) */
 .strip-line{display:flex;align-items:center;min-width:0}
 .strip-line>.b-row{flex:1;min-width:0}
 .tk-rows li{display:flex;align-items:center;gap:var(--s-2)}
+/* the Task tab's artifacts: chips in one wrapping row, each with its ⋯ on hover (designer m_65808) */
+.tk-arts{display:flex;flex-wrap:wrap;gap:var(--s-2);margin:0;padding:0;list-style:none}
+.tk-arts li{display:inline-flex;align-items:center;min-width:0}
+.tk-h-end{margin-left:auto;font-size:var(--t-12);font-weight:400}
+/* a Log report's rest, opened under its Fold */
+.tk-log-rest{white-space:pre-wrap}
 .tk-q{display:flex;flex-direction:column;gap:var(--s-2);padding:var(--s-2) var(--s-3);border-radius:var(--r-2);background:var(--c-sunken)}
 .tk-q-text{margin:0;line-height:1.5}
 .tk-q-head{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--s-2)}
@@ -175,8 +181,10 @@
 .tk-q-opt{display:flex;align-items:center;gap:var(--s-2);width:100%;min-height:var(--s-7);padding:0 var(--s-2);border:0;border-radius:var(--r-1);background:none;color:var(--c-text);font:inherit;text-align:left}
 .tk-q-opt:hover{background:var(--c-hover)}
 .tk-q-opt-w{min-width:0}
-.tk-q-type{width:100%}
-.tk-paused{display:flex;align-items:center;gap:var(--s-2);margin:0;color:var(--c-text-2)}
+/* his answer: the ds Field on the card's surface (designer m_65805) */
+.tk-q .b-field{background:var(--c-surface)}
+.tk-paused{display:flex;align-items:center;gap:var(--s-2);margin:0;color:var(--c-text-3)}
+.tk-paused .tk-mark[data-st="paused"]{color:var(--c-text-3)}
 /* pinned under the scrolling body, inside the panel (his m_65766); ⋯ alone at the far right */
 .tk-foot{flex:none;display:flex;align-items:center;gap:var(--s-2);margin-top:auto;padding:var(--s-3) 0;border-top:1px solid var(--c-line);background:var(--c-surface)}
 .tk-foot-more{margin-left:auto}

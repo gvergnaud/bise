@@ -5,7 +5,7 @@
 // · Pause/Resume (Reopen when done, Restart when stalled). A merged or folded one says where it went.
 // Gestures go through the hub's task_act. Owner: tasks.
 import { useEffect, useRef, useState } from 'react';
-import { ArtChip, Dropdown, Input, Kbd, Press, Seg, tipAttrs } from '@/ds';
+import { ArtChip, Dropdown, Field, Input, Kbd, Press, Seg, tipAttrs } from '@/ds';
 import { TaskLog } from './TaskLog';
 import { dayWords, glyphOf, timeOf } from '@/artifacts/model';
 import { inbox } from '@/proto/words_inbox.gen';
@@ -27,7 +27,7 @@ import { useWorks } from '@/store';
 import { aboutOf, agentLineOf, agentStateOf, artsOf, crewOf, firstLine, goalsOf, isOpen, nowOfTask, originOf, reportsOf, soloOn, type Origin } from './model';
 import { openTask, pausedWords, StatusMark, statusWord } from './Marks';
 import { useTaskAct, useTaskReq } from './Board';
-import { lineAt } from './Side';
+import { clock, lineAt } from './Side';
 import { markLooked, markSeen } from './seen';
 import { UndoToast, useUndo } from './UndoToast';
 import { flipTo, shownStatus, type Did, type Flip } from './undo';
@@ -146,7 +146,8 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
     const a = live(n);
     return a === undefined || !solo.has(n) ? [] : [a];
   }));
-  const nowLine = said ?? aboutOf(lineAt(x, now));
+  // paused: its line under the meta says the pause; Now keeps what was happening, never a bare 'until …' (tasks-ux m_65804)
+  const nowLine = said ?? (w.status === 'paused' ? '' : aboutOf(lineAt(x, now)));
   const arts = artsOf(allArts, w.id, works.tombs);
   // its agents that work on a branch of their own (a worktree): the branch, its PR, its newest land
   const places = store.places(project);
@@ -213,7 +214,8 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
       {w.status === 'paused' && (
         // one Resume, the footer's (tasks-ux m_64959): the line says since when
         <p className="tk-paused" data-testid={`${t}.paused`}>
-          <StatusMark status="paused" /> {pausedWords(now - (w.paused_ms ?? now))}
+          {/* until a time when it resumes by itself, else since when (designer m_65808: text-3) */}
+          <StatusMark status="paused" /> {w.until_ms != null && w.until_ms > now ? tasks.paused_line_until({ at: clock(w.until_ms, now) }) : pausedWords(now - (w.paused_ms ?? now))}
         </p>
       )}
 
@@ -254,7 +256,8 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
                   </li>
                 ))}
               </ol>
-              <Input look="tk-q-type" placeholder={askButtons(c).opts.length > 0 ? inbox.hint_or_answer : tasks.q_type} aria-label={c.question} data-testid={`${t}.q.${String(c.id)}.type`}
+              {/* the ds Field, on the card's surface (designer m_65805, m_65808) */}
+              <Field placeholder={askButtons(c).opts.length > 0 ? inbox.hint_or_answer : tasks.q_type} aria-label={c.question} testId={`${t}.q.${String(c.id)}.type`}
                 onKeyDown={(e) => {
                   const words = e.currentTarget.value.trim();
                   if (e.key === 'Enter' && words !== '') store.do({ i: 'answer', project: c.project, card: c.id, reply: words });
@@ -315,26 +318,28 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
       )}
 
       {arts.all.length > 0 && (
-        // the 3 newest for him, then the Library on this task (`task:<id>`, brief "Task tab")
+        // the 3 newest for him in one wrapping row (the proto's), the Library on this task at the
+        // head's right (`task:<id>`, brief "Task tab"; designer m_65808)
         <section className="tk-sec" data-testid={`${t}.arts`}>
-          <h3 className="tk-h">{tasks.sec_artifacts} <span className="tk-count">{arts.all.length}</span></h3>
-          <ul className="tk-rows">
+          <h3 className="tk-h">
+            {tasks.sec_artifacts}
+            <Press look="tk-more tk-h-end" onClick={() => {
+              presetLibraryQuery(`task:${w.id}`);
+              router.go({ screen: 'artifacts', project });
+            }} data-testid={`${t}.arts.all`}>{tasks.arts_all({ n: arts.all.length })}</Press>
+          </h3>
+          <ul className="tk-arts">
             {arts.mine.slice(0, 3).map((a) => (
               <li key={a.id}>
-                {/* an artifact is a pink chip, everywhere (taste 13); its kind at the right, text-3 */}
-                <ArtChip title={a.title} glyph={glyphOf(a.kind)} keep={24} onClick={() => {
+                {/* an artifact is a pink chip, everywhere (taste 13); its glyph says its kind */}
+                <ArtChip title={a.title} glyph={glyphOf(a.kind)} keep={24} tip={`${a.title} · ${a.kind}`} onClick={() => {
                   openTab({ kind: 'artifact', project, id: a.id });
                 }} testId={`${t}.art.${a.id}`} />
-                <span className="tk-agent-state">{a.kind}</span>
-                {/* Move to task… (F9, tasks-ux m_65591): the visible ⋯, beside its kind */}
+                {/* Move to task… (F9, tasks-ux m_65591): its ⋯ on the chip's hover */}
                 <ArtMoveMore project={project} a={a} testId={`${t}.art.${a.id}.more`} />
               </li>
             ))}
           </ul>
-          <Press look="tk-more" onClick={() => {
-            presetLibraryQuery(`task:${w.id}`);
-            router.go({ screen: 'artifacts', project });
-          }} data-testid={`${t}.arts.all`}>{tasks.arts_all({ n: arts.all.length })}</Press>
         </section>
       )}
 

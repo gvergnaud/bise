@@ -420,6 +420,11 @@
     "one": null,
     "text": "you merged it into {into}"
   },
+  "tasks.log_more": {
+    "args": [],
+    "one": null,
+    "text": "more"
+  },
   "tasks.log_moved_in": {
     "args": [
       "what"
@@ -716,6 +721,13 @@
     "args": [],
     "one": null,
     "text": "paused by you · just now"
+  },
+  "tasks.paused_line_until": {
+    "args": [
+      "at"
+    ],
+    "one": null,
+    "text": "paused by you · until {at}"
   },
   "tasks.paused_since": {
     "args": [
