@@ -57,6 +57,9 @@ function row(w: WorkRow, current: boolean, faded: boolean): PickerRow {
     name: faded ? <span className="tk-move-done">{name}</span> : name,
     text: w.name,
     glyph: <StatusMark status={w.status} tip={statusWord(w.status)} />,
+    // its kind is its status: the ds picker shows the column when the statuses differ, as on the
+    // artifact's picker (a card's has no 'No task' row to mix it; tasks-ui-qa m_65954 N1)
+    glyphKind: `status:${w.status}`,
     current,
     disabled: current,
     tip: current ? tasks.move_current_tip : name === w.name ? undefined : w.name,
