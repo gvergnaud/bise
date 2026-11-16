@@ -88,6 +88,12 @@ export function escapeAct(f: EscFacts): EscAct {
 /** Open, these take esc first (esc-up.ts's POPUP: a menu, a dialog, a composer list). */
 const POPUP = '[role="dialog"],[role="alertdialog"],[role="menu"],[aria-modal="true"],.app-menu,.b-composer-pick,.b-picker-pop';
 
+/** A press inside a menu, a dialog or a picker that floats over the window (portaled to its body):
+ *  theirs, never 'outside' the surface that opened them (the sheet's fold: panel/Host useSheetOut). */
+export function inPopup(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest(POPUP) !== null;
+}
+
 const layers = new Map<EscLayer, (() => void)[]>();
 
 /** The artifact in front of the open panel, if any. */

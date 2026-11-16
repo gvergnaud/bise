@@ -21,7 +21,7 @@ import { shownName } from '@/agents/model';
 import { useAboutWords } from '@/artifacts/maker';
 import { Breath } from '@/working/Signs';
 import { MAIN } from '@/app/route';
-import { useEscLayer } from '@/app/escape';
+import { inPopup, useEscLayer } from '@/app/escape';
 import { panel } from '@/proto/words_panel.gen';
 import { useAgents, useProjects, useStore } from '@/store';
 import { TerminalTab } from '@/terminal/Terminal';
@@ -86,7 +86,9 @@ function useSheetOut(on: boolean, box: RefObject<HTMLElement | null>): void {
     if (!on) return;
     const down = (e: PointerEvent) => {
       const el = box.current;
-      if (el !== null && e.target instanceof Node && !el.contains(e.target)) panelToggle();
+      // a menu or a picker it opened floats outside its box (a portal): a press there is the sheet's
+      // own, never outside it (tasks-ui-qa m_65940: Move to task… from a tab's ⋯ folded the sheet)
+      if (el !== null && e.target instanceof Node && !el.contains(e.target) && !inPopup(e.target)) panelToggle();
     };
     document.addEventListener('pointerdown', down, true);
     return () => {

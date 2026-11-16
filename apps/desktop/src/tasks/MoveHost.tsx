@@ -4,7 +4,7 @@
 // works, his for good) and shows '<thing> moved to <task> · Undo' for 6 s; Undo sends the works it
 // had before, exactly (a new gesture, never a rewind). Owner: tasks.
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { Input, PickerPop, Toast, tipAttrs, type PickerGroup, type PickerRow } from '@/ds';
+import { Field, PickerPop, Toast, tipAttrs, type PickerGroup, type PickerRow } from '@/ds';
 import type { WorkRow } from '@/proto';
 import { tasks } from '@/proto/words_tasks.gen';
 import { useStore, useWorks } from '@/store';
@@ -73,9 +73,6 @@ function MovePicker({ ask }: { ask: Ask }) {
   const [q, setQ] = useState('');
   const [active, setActive] = useState<string | null>(null);
   const field = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    field.current?.focus();
-  }, []);
   const now = useNow();
   const { open, done } = offered(thing, works, (id) => seen.seen(thing.project, id)?.at ?? 0, now);
   const shownOpen = filtered(open, q);
@@ -132,11 +129,13 @@ function MovePicker({ ask }: { ask: Ask }) {
               ))}
               {nowIn.length > 2 && <span className="tk-move-chip">+{String(nowIn.length - 2)}</span>}
             </span>
-            <Input ref={field} look="tk-move-filter" placeholder={tasks.move_filter} value={q} onKeyDown={onKey}
+            {/* the ds Field, focused as it mounts: the pop draws its head only once placed, after this
+                host's first effect (tasks-ui-qa m_65940 M2) */}
+            <Field ref={field} autoFocus placeholder={tasks.move_filter} value={q} onKeyDown={onKey}
               onChange={(e) => {
                 setQ(e.target.value);
                 setActive(null);
-              }} data-testid="tasks.move.filter" />
+              }} testId="tasks.move.filter" />
           </span>
         }
         groups={groups}
