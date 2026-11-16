@@ -319,7 +319,7 @@ fn his_parts(t: &mut T, to: &str, text: &str, parts: &str) {
 #[test]
 fn a_tasks_said_is_his_words_never_an_images_tag() {
     let mut t = T::new();
-    let tag = r#"<image name="[Image #1]" path="/Users/g/.bise/images/f8.png" mime="image/png">"#;
+    let tag = r#"<image name="[Image #1]" path="/Users/g/.bise/images/f8.png" mime="image/png" b64="/h/images/f8.b64">"#;
     let img = r#"{"kind":"image","name":"[Image #1]","source":"/Users/g/.bise/images/f8.png","mime":"image/png"}"#;
     his_parts(&mut t, MAIN, &format!("{tag} the chat takes too much space"), &format!(r#"[{img},{{"kind":"text","text":" the chat takes too much space"}}]"#));
     new(&mut t, MAIN, "Fold the chat", &[]);
