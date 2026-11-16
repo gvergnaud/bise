@@ -333,7 +333,7 @@ fn a_tasks_said_is_his_words_never_an_images_tag() {
     t.spawn_task("kb");
     his_parts(&mut t, MAIN, tag, &format!("[{img}]"));
     let a = new(&mut t, MAIN, "Look at this", &[]);
-    assert!(lines(&t, "work_created").last().unwrap()["work"].get("said").map_or(true, |s| s == ""));
+    assert!(lines(&t, "work_created").last().unwrap()["work"].get("said").is_none_or(|s| s == ""));
     let ctx = first_delivery(&mut t, "kb", "see", &a);
     assert!(!ctx.contains("He asked") && !ctx.contains("/Users/g/.bise"), "{ctx}");
 }
