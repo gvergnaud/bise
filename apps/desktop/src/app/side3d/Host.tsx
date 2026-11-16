@@ -529,11 +529,12 @@ function Side({ project, scope, home, world, at: coinsAt, right, outerW, room }:
             <>
               {ov.live.length === 0 ? <Empty>{side.no_agents}</Empty> : <FloatAgents live={ov.live} agents={ov.agents} cards={listed.cards} at={at} onOpen={openRow} onOpenPr={openPr} groupOf={groupOf} onHandoff={() => { setOpen(null); }} />}
               {archivedOpen && ov.archived.length > 0 && <ArchivedRows rows={ov.archived} onOpen={openRow} />}
-              {/* Tasks under its agents, as the wide bar has it: the Board at every width (designer m_65859); its
-                  first 3 rows only while the card has room (a few agents), else its head alone */}
-              <FloatTasks all={works} scope={scope} now={now} groupOf={groupOf} rows={ov.live.length <= TASK_ROOM ? 3 : 0} />
             </>
           ),
+          // Tasks under its agents, as the wide bar has it: the Board at every width (designer m_65859),
+          // out of the agents' scroll box so nothing scrolls under it (designer m_65917); its first 3
+          // rows only while the card has room (a few agents), else its head alone
+          below: <FloatTasks all={works} scope={scope} now={now} groupOf={groupOf} rows={ov.live.length <= TASK_ROOM ? 3 : 0} />,
         };
       case 'artifacts':
         return {

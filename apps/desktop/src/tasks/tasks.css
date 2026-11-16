@@ -28,10 +28,9 @@
 /* a chip under his message, at his bubble's right edge */
 .tk-under-you{display:flex;justify-content:flex-end;margin-top:var(--s-1)}
 
-/* the Tasks head in the agents coin's card, under its agents, a rule above it (designer m_65859);
-   pinned at the card's bottom on the card's own glass, the rows under it never show through
-   (tasks-ui-qa m_65913) */
-.tk-float{position:sticky;bottom:0;z-index:1;display:flex;flex-direction:column;margin-top:var(--s-2);padding-top:var(--s-2);border-top:1px solid var(--c-line);background:var(--c-overlay);-webkit-backdrop-filter:var(--glass);backdrop-filter:var(--glass)}
+/* the Tasks head in the agents coin's card, under its agents' scroll box and above its foot, a
+   rule above it: nothing scrolls under it (designer m_65859, m_65917) */
+.tk-float{flex:none;display:flex;flex-direction:column;padding-top:var(--s-2);border-top:1px solid var(--c-line)}
 
 /* the right bar's Tasks section: the agents' row shape (s3-orow), a mark in the mark's column */
 .tk-orow .s3-orow-mark{display:inline-flex;align-items:center;justify-content:center}

@@ -56,6 +56,9 @@ export interface FloatContent {
   /** its foot: what it says on the left ('3 archived'), or a fold there (the agents' '▸ 3 archived'); its full page's link on the right */
   readonly foot: { readonly left: string; readonly fold?: ReactNode; readonly links: readonly FootLink[] };
   readonly rows: ReactNode;
+  /** a block between its rows and its foot, out of their scroll box: nothing scrolls under it (the
+   *  agents card's Tasks, designer m_65917) */
+  readonly below?: ReactNode;
   /** a line under its head: its scope on a sub-agent's thread ('by perf', the Overview's, folded-side v9) */
   readonly scope?: { readonly words: string; readonly tip: string };
 }
@@ -91,6 +94,7 @@ export function FloatLayer({ c, scrolls = false, leaving = false }: { c: FloatCo
       <div className="s3-card-body" data-scrolls={scrolls || undefined}>
         {c.rows}
       </div>
+      {c.below}
       <footer className="s3-card-foot">
         <span className="s3-card-foot-left">{c.foot.fold ?? c.foot.left}</span>
         <span className="s3-card-links">
