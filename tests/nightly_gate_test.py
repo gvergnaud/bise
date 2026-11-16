@@ -116,7 +116,8 @@ def main():
         repo, home = os.path.join(t, "harness"), os.path.join(t, "home")
         os.makedirs(os.path.join(repo, "scripts"))
         os.makedirs(os.path.join(repo, "tests"))
-        for f in ("nightly_gate.sh", "tip_blame.py"):
+        # tip_blame imports release_branch (the release lines): copy it too
+        for f in ("nightly_gate.sh", "tip_blame.py", "release_branch.py"):
             shutil.copy(os.path.join(ROOT, "scripts", f), os.path.join(repo, "scripts"))
         with open(os.path.join(repo, "tests", "gate.sh"), "w") as f:
             f.write(FAKE_GATE)
