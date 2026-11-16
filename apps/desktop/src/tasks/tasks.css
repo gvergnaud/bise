@@ -134,7 +134,9 @@
 /* a task's tab: its body scrolls, the footer stays below it (tasks-ux m_64967) */
 .tk-tab:has(> .tk-body){overflow:hidden}
 /* its scrollbar keeps its own gutter, never over the agents' state (tasks-ui-qa m_65864 T18) */
-.tk-body{display:flex;flex-direction:column;gap:var(--s-4);flex:1 1 auto;min-height:0;overflow:auto;padding-bottom:var(--s-4);scrollbar-gutter:stable}
+/* its scroll box reaches 16 px into the tab's padding on the sides and 8 above, its content where
+   it was: room for the rename field's whole focus ring (tasks-ui-qa m_65961) */
+.tk-body{display:flex;flex-direction:column;gap:var(--s-4);flex:1 1 auto;min-height:0;overflow:auto;margin:calc(-1 * var(--s-2)) calc(-1 * var(--s-4)) 0;padding:var(--s-2) var(--s-4) var(--s-4);scrollbar-gutter:stable}
 .tk-tab-head{display:flex;flex-direction:column;gap:var(--s-1)}
 .tk-pill{display:inline-flex;align-self:flex-start;align-items:center;gap:var(--s-2);height:var(--s-5);padding:0 var(--s-2);border-radius:var(--r-1);background:var(--c-hover);color:var(--c-text-2);font-size:var(--t-12)}
 .tk-pill[data-st="needs_you"]{color:var(--c-accent)}
@@ -215,4 +217,6 @@
 .tk-rename{width:100%;box-sizing:border-box}
 /* renaming: the ds Field at the title's own type and place (designer m_65952): t-15 600 ink, its
    text on the title's x and baseline, nothing jumps */
-.tk-tab-head>.b-field{height:auto;margin-inline:calc(-1 * var(--pad-control-x));font:600 var(--f-lead);color:var(--c-text)}
+/* the field 28 high (--h-control-sm) over the title's 22 px line (--f-lead): 3 px out above and
+   below, so the head keeps its height; its text on the title's x */
+.tk-tab-head>.b-field{height:var(--h-control-sm);margin:calc((var(--s-5) + var(--s-1) / 2 - var(--h-control-sm)) / 2) calc(-1 * var(--pad-control-x));font:600 var(--f-lead);color:var(--c-text)}
