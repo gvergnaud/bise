@@ -717,16 +717,30 @@ def t_ask_and_wait(E, c):
 def t_escalation_card(E, c):
     c.wait_idle("main")
     # BISE-299: two agents message main (a question each, a blocked
-    # status, a report): all of it is main's, nothing reaches the user's inbox
+    # status, a report): only a blocked report reaches the user's inbox on
+    # its own (tasks: law blocked_report_opens_one_card, architect m_65722);
+    # an agent's plain messages to main stay main's
     seen = []
+    others = lambda: [cd for cd in c.cards() if not (cd["kind"] == "blocked" and cd["agent"] == "t3b")]
     c.say('/new t3: {{bash: sb send main --expect-reply "v1 ou v2 ?"}}')
     c.say('/new t3b: {{bash: sb send main --expect-reply "t3b asks main" && sb status blocked --note "t3b needs a key" && sb report blocked "t3b is stuck"}}')
     c.wait(lambda: c.agent("t3") is not None and c.agent("t3b") is not None, 60, "t3 and t3b")
-    c.wait(lambda: seen.append(len(c.cards())) or (any(r["from"] == "t3" for r in c.feed("main", "msg-in"))
+    c.wait(lambda: seen.append(len(others())) or (any(r["from"] == "t3" for r in c.feed("main", "msg-in"))
                    and any("[report: blocked] t3b is stuck" in l for l in c.lines("main"))), 90 * 2,
            "both agents' messages in main's feed")
     c.wait_idle("main", "t3", "t3b")
-    check(not c.cards() and not any(seen), "no card in the user's inbox: %r / %r" % (c.cards(), seen))
+    # t3b's blocked report: exactly one card, kind blocked (the wire card has
+    # no from_report: kind and agent name it)
+    c.wait(lambda: c.cards(), 30, "t3b's blocked card")
+    cards = c.cards()
+    check(len(cards) == 1 and cards[0]["kind"] == "blocked" and cards[0]["agent"] == "t3b",
+          "one blocked card from t3b's report: %r" % cards)
+    # t3's message to main: no card until main's sb notify
+    check(not any(seen), "no card for an agent's message to main: %r" % seen)
+    # t3b moves on (a progress report): its blocked card ends
+    c.say('[[bash: sb send t3b "{{bash: sb report progress t3b-has-the-key}}"]]')
+    c.wait(lambda: not c.cards(), 90, "t3b's blocked card ended by its progress report")
+    c.wait_idle("main", "t3b")
     # hub/agents leaves a 0 count out
     check(isinstance(c.agent("main").get("inbox", 0), int), "main's inbox count in the state: %r" % c.agent("main"))
     # as a new turn's message, or (a fast hub) steered into main's turn
