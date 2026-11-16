@@ -6,13 +6,14 @@ import { Field, Kbd, Press } from '@/ds';
 import { useStore } from '@/store';
 import { inbox } from '@/proto/words_inbox.gen';
 import { tasks } from '@/proto/words_tasks.gen';
-import { askButtons, pickIntent } from '@/app/side3d/model';
+import { pickIntent } from '@/app/side3d/model';
 import { firstLine } from './model';
 import { CardMoveMore } from './MoveMenus';
 
 export function Question({ c, project, testId }: { c: Card; project: string; testId: string }) {
   const store = useStore();
-  const opts = askButtons(c).opts;
+  // every option: the inbox shows two (SHOWN_OPTS), a task's question has the room (tasks-ui-qa m_65864 T22)
+  const opts = c.options.map((o) => ({ n: o.n, label: o.label }));
   return (
     <div className="tk-q" data-testid={testId}>
       <div className="tk-q-head">

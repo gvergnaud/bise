@@ -67,10 +67,10 @@
 /* the card (designer m_65805): its title ink t-13 600 on two lines; the meta line text-3; the
    sentence text-2 on two lines; on Needs you its questions' accent chip */
 .tk-card-name{display:flex;align-items:flex-start;gap:var(--s-2);min-width:0;font-weight:600}
-.tk-card-name>.tk-mark{margin-top:7px}
+.tk-card-name>.tk-mark{margin-top:var(--s-2)}
 .tk-card-title{display:-webkit-box;min-width:0;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow-wrap:anywhere}
 .tk-card-meta{min-width:0;overflow:hidden;color:var(--c-text-3);font-size:var(--t-12);white-space:nowrap;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
-.tk-card-asks{display:flex;flex-direction:column;align-items:flex-start;gap:var(--s-2);cursor:auto}
+.tk-card-asks{display:flex;flex-direction:column;align-items:flex-start;gap:var(--s-2)}
 .tk-card-q{display:inline-flex;align-items:center;height:var(--s-6);padding:0 var(--s-2);border:0;border-radius:var(--r-1);background:var(--c-accent-soft);color:var(--c-accent);font:inherit;font-size:var(--t-12)}
 .tk-card-q:hover{background:color-mix(in srgb,var(--c-accent) 18%,var(--c-accent-soft))}
 .tk-card-asks>.tk-q{align-self:stretch}
@@ -126,7 +126,8 @@
 .tk-tab{display:flex;flex-direction:column;gap:var(--s-4);height:100%;min-height:0;overflow:auto;padding:var(--s-4) max(var(--s-4),calc((100% - var(--w-col)) / 2)) 0;color:var(--c-text);font-size:var(--t-13);box-sizing:border-box;container-type:inline-size}
 /* a task's tab: its body scrolls, the footer stays below it (tasks-ux m_64967) */
 .tk-tab:has(> .tk-body){overflow:hidden}
-.tk-body{display:flex;flex-direction:column;gap:var(--s-4);flex:1 1 auto;min-height:0;overflow:auto;padding-bottom:var(--s-4)}
+/* its scrollbar keeps its own gutter, never over the agents' state (tasks-ui-qa m_65864 T18) */
+.tk-body{display:flex;flex-direction:column;gap:var(--s-4);flex:1 1 auto;min-height:0;overflow:auto;padding-bottom:var(--s-4);scrollbar-gutter:stable}
 .tk-tab-head{display:flex;flex-direction:column;gap:var(--s-1)}
 .tk-pill{display:inline-flex;align-self:flex-start;align-items:center;gap:var(--s-2);height:var(--s-5);padding:0 var(--s-2);border-radius:var(--r-1);background:var(--c-hover);color:var(--c-text-2);font-size:var(--t-12)}
 .tk-pill[data-st="needs_you"]{color:var(--c-accent)}
@@ -202,6 +203,6 @@
 .tk-paused .tk-mark[data-st="paused"]{color:var(--c-text-3)}
 /* pinned under the scrolling body, inside the panel (his m_65766); ⋯ alone at the far right */
 .tk-foot{flex:none;display:flex;align-items:center;gap:var(--s-2);margin-top:auto;padding:var(--s-3) 0;border-top:1px solid var(--c-line);background:var(--c-surface)}
-.tk-foot-more{margin-left:auto}
+.tk-foot .tk-foot-more{margin-left:auto}
 .tk-gone{margin:0;padding:var(--s-4);color:var(--c-text-3)}
 .tk-rename{width:100%;box-sizing:border-box}

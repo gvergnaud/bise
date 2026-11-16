@@ -16,6 +16,7 @@ import { presetLibraryQuery } from '@/artifacts/preset';
 import { changeDoor } from '@/review/openChange';
 import { openPrOf } from '@/review/model';
 import { PartImageChip } from '@/thread/ImageGone';
+import { partImageWords } from '@/thread/YouBody';
 import { chipName, storeImage } from '@/thread/parts';
 import { useRouter } from '@/app/router';
 import { MAIN } from '@/app/route';
@@ -146,7 +147,9 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
     return a === undefined || !solo.has(n) ? [] : [a];
   }));
   // paused: its line under the meta says the pause; Now keeps what was happening, never a bare 'until …' (tasks-ux m_65804)
-  const nowLine = said ?? (w.status === 'paused' ? '' : aboutOf(lineAt(x, now)));
+  // done: the pill says it, never a bare 'yesterday' (tasks-ui-qa m_65864 T19)
+  // Needs you: its block says it, never '1 question' again under it (tasks-ux m_65871)
+  const nowLine = said ?? (w.status === 'paused' || w.status === 'done' || w.status === 'needs_you' ? '' : aboutOf(lineAt(x, now)));
   const arts = artsOf(allArts, w.id, works.tombs);
   // its agents that work on a branch of their own (a worktree): the branch, its PR, its newest land
   const places = store.places(project);
@@ -170,7 +173,11 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
         {renaming ? (
           <Input look="tk-tab-name tk-rename" defaultValue={w.name} autoFocus aria-label={tasks.act_rename} data-testid={`${t}.rename`}
             onKeyDown={(e) => {
-              if (e.key === 'Escape') setRenaming(false);
+              // esc closes the field only, never the sheet around the tab (tasks-ui-qa m_65864 T20)
+              if (e.key === 'Escape') {
+                e.stopPropagation();
+                setRenaming(false);
+              }
               if (e.key !== 'Enter') return;
               const name = e.currentTarget.value.trim();
               if (name !== '' && name !== w.name) req(project, { step: 'rename', id: w.id, name });
@@ -200,7 +207,8 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
         <div className="tk-origin" data-testid={`${t}.origin`}>
           {origin.images.map((img, i) => (
             <PartImageChip key={`${img.path}#${String(i)}`} path={img.path} store={storeImage(img.b64, img.mime)} lit={false} on={{}} testId={`${t}.origin.image.${String(i + 1)}`}>
-              {chipName(img.name)}
+              {/* the thread's own chip words: its file name, else 'image 1', never '[Image #1]' (designer m_65870) */}
+              {partImageWords(chipName(img.name), i + 1)}
             </PartImageChip>
           ))}
           <Press look="tk-origin-words" {...tipAttrs(tasks.origin_tip)} onClick={() => {
@@ -356,7 +364,10 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
         <footer className="tk-foot">
           <Input look="tk-rename" autoFocus placeholder={tasks.agent_ask} aria-label={tasks.agent_tip} data-testid={`${t}.agent.ask`}
             onKeyDown={(e) => {
-              if (e.key === 'Escape') setAsking(false);
+              if (e.key === 'Escape') {
+                e.stopPropagation();
+                setAsking(false);
+              }
               if (e.key !== 'Enter') return;
               const words = e.currentTarget.value.trim();
               if (words === '') return;

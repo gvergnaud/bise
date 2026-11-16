@@ -137,7 +137,7 @@ function Card({ x, now, fresh, onDid, withProject }: { x: ProjWork; now: number;
       </span>
       {asks.length > 0 && (
         // its questions, answered in place on the card; a click or a key in them never opens the task
-        <span className="tk-card-asks" onClick={(e) => {
+        <span className="tk-card-asks" role="group" aria-label={tasks.card_questions({ n: asks.length })} onClick={(e) => {
           e.stopPropagation();
         }} onKeyDown={(e) => {
           e.stopPropagation();
