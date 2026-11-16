@@ -217,9 +217,9 @@
 .tk-rename{width:100%;box-sizing:border-box}
 /* renaming: the ds Field at the title's own type and place (designer m_65952): t-15 600 ink, its
    text on the title's x and baseline, nothing jumps */
-/* renaming (designer m_65966): one 32 box (--h-control: the title's 22 line, 4 above and below, a
-   1 px border), 5 out above and below so its text keeps the title's baseline and nothing under it
-   moves; 8 inside and 9 out on the sides so its first letter stays where the title's was; the ds
-   focus ring outside the border, 1 px off it, never clipped (the body's scroll box leaves it room) */
-.tk-tab-head>.b-field{box-sizing:border-box;height:var(--h-control);margin:calc((var(--s-5) + var(--s-1) / 2 - var(--h-control)) / 2) calc(-1 * (var(--s-2) + var(--s-1) / 4));padding:var(--s-1) var(--s-2);border:1px solid var(--c-line);box-shadow:none;font:600 var(--f-lead);color:var(--c-text)}
-.tk-tab-head>.b-field:focus-within{box-shadow:none;outline:2px solid var(--c-focus);outline-offset:1px}
+/* renaming, a Finder-style inline rename (designer m_65980): one box exactly the title's 22 line
+   (--f-lead), its 1 px border inset, 8 inside and 9 out on the sides so its first letter stays where
+   the title's was; the ds focus outline 1 px off it fits in the head's 4 px gaps: nothing spills,
+   nothing moves (tasks-ui-qa m_65973) */
+.tk-tab-head>.b-field{box-sizing:border-box;height:calc(var(--s-5) + var(--s-1) / 2);margin:0 calc(-1 * (var(--s-2) + var(--s-1) / 4));padding:0 var(--s-2);box-shadow:inset 0 0 0 1px var(--c-line);font:600 var(--f-lead);color:var(--c-text)}
+.tk-tab-head>.b-field:focus-within{box-shadow:inset 0 0 0 1px var(--c-line);outline:2px solid var(--c-focus);outline-offset:1px}

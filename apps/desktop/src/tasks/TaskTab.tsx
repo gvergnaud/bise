@@ -91,6 +91,12 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
     if (r !== undefined) markSeen([{ project, projectName: project, w: r }]);
   }, [project]);
   const [renaming, setRenaming] = useState(false);
+  // the rename field takes the focus without scrolling the tab (designer m_65980): typing scrolls
+  // only its own text, never the body (tasks-ui-qa m_65973)
+  const renameField = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (renaming) renameField.current?.focus({ preventScroll: true });
+  }, [renaming]);
   const [pane, setPane] = useState<'overview' | 'log'>('overview');
   // '+ Agent': the field open; asked: how many agents it had when he asked (its line goes when one more comes)
   const [asking, setAsking] = useState(false);
@@ -172,7 +178,7 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
           {sentenceCase(statusWord(w.status))}
         </span>
         {renaming ? (
-          <Field data-esc-own="" defaultValue={w.name} autoFocus aria-label={tasks.act_rename} testId={`${t}.rename`}
+          <Field ref={renameField} data-esc-own="" defaultValue={w.name} aria-label={tasks.act_rename} testId={`${t}.rename`}
             onKeyDown={(e) => {
               // esc closes the field only, never the sheet around the tab: data-esc-own tells app/escape.ts
               // the field takes it first (tasks-ui-qa m_65864, m_65884 T20)
