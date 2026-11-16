@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // The inbox block (b2): one inbox for every project, an item opened in place, what his words do told
 // to the composer, approvals only by their options, ⌘I / a notification click through openInbox.
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { CoreCmd, CorePort } from '@/shared/api';
 import { core_ev } from '@/proto/fixtures.gen';
@@ -100,6 +100,42 @@ describe('the inbox block (b2)', () => {
     expect(screen.getByTestId('inbox.block.open.4')).toBeTruthy();
     // open further down: rows 1-3 stay, the open item where its number puts it, the last one folds
     expect(screen.getByTestId('inbox.block.more').textContent).toBe('+ 1 more · perf · which port 14?');
+  });
+
+  it("esc on the heard line undoes the heard answer, nothing sent, and the card stays open (it never closes it first)", () => {
+    vi.useFakeTimers();
+    try {
+      const sent: CoreCmd[] = [];
+      const store = new Store({ send: (c) => sent.push(c), onEvent: () => () => undefined, onState: () => () => undefined, state: () => Promise.resolve('up') });
+      replay(store, core_ev);
+      render(
+        <StoreProvider store={store}>
+          <RouterContext value={createRouter({ screen: 'thread', project: P, agent: 'perf' })}>
+            <InboxBlock here={{ project: P, agent: 'perf' }} onAnswer={() => undefined} now={NOW} />
+          </RouterContext>
+        </StoreProvider>,
+      );
+      act(() => {
+        openInbox({ project: P, card: 9 });
+      });
+      // what the core heard now (a new event: the one at mount is old)
+      act(() => {
+        store.apply({ ev: 'voice_answer', project: P, card: 9, n: 1, line: 'heard "the first one" → 1 cold', ms: 1500 });
+      });
+      expect(screen.getByTestId('inbox.heard')).toBeTruthy();
+      act(() => {
+        fireEvent.keyDown(document.body, { key: 'Escape' });
+      });
+      expect(screen.queryByTestId('inbox.heard')).toBeNull();
+      expect(screen.getByTestId(`inbox.block.card.${P}-9`)).toBeTruthy();
+      act(() => {
+        vi.advanceTimersByTime(2000);
+      });
+      expect(sent.filter((c) => c.cmd !== 'card_in_view' && 'card' in c)).toEqual([]);
+      expect(screen.getByTestId(`inbox.block.card.${P}-9`)).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('a question opens in place: its options, and the composer answers it; a digit picks, the line leaves', () => {

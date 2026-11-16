@@ -515,20 +515,6 @@ export function InboxBlock({ here, onAnswer, now: pinned, only, rest, fold }: In
       clearTimeout(t);
     };
   }, [heard]);
-  useEffect(() => {
-    if (heard === null) return;
-    const esc = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      setDone(heard);
-    };
-    // first in line: esc undoes the heard answer before it folds the block
-    window.addEventListener('keydown', esc, true);
-    return () => {
-      window.removeEventListener('keydown', esc, true);
-    };
-  }, [heard]);
 
   // ctrl+o (and ⌘E), focus anywhere, the composer's too: the window's capture listener sends
   // 'fold-all' (app/keys.ts, the TUI's ctrl+o); the open item's folded lines open whole, again fold
@@ -697,6 +683,14 @@ export function InboxBlock({ here, onAnswer, now: pinned, only, rest, fold }: In
   const keyNow = useRef<(e: KeyboardEvent) => void>(() => undefined);
   useEffect(() => {
     keyNow.current = (e: KeyboardEvent) => {
+      // esc while the heard line shows undoes the heard answer, first, in this one listener: the card
+      // stays open (a listener of its own came after this one, so esc closed the card first)
+      if (e.key === 'Escape' && heard !== null) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        setDone(heard);
+        return;
+      }
       const n = stripKey(e);
       if (n !== undefined) {
         const c = n <= STRIP_KEYS ? list[n - 1] : undefined;
