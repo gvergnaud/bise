@@ -28,6 +28,9 @@
 /* a chip under his message, at his bubble's right edge */
 .tk-under-you{display:flex;justify-content:flex-end;margin-top:var(--s-1)}
 
+/* the Tasks head in the agents coin's card, under its agents, a rule above it (designer m_65859) */
+.tk-float{display:flex;flex-direction:column;margin-top:var(--s-2);padding-top:var(--s-2);border-top:1px solid var(--c-line)}
+
 /* the right bar's Tasks section: the agents' row shape (s3-orow), a mark in the mark's column */
 .tk-orow .s3-orow-mark{display:inline-flex;align-items:center;justify-content:center}
 .tk-goals{color:var(--c-text-3);font-size:var(--t-12);font-variant-numeric:tabular-nums}

@@ -5,7 +5,7 @@
 // opens its Task tab. None ever: 'No tasks yet · Ask bise'; only ongoing or done: 'Nothing in
 // progress' and the fold. Owner: tasks.
 import { Press, tipAttrs } from '@/ds';
-import { OuterList } from '@/app/side3d/OuterCard';
+import { OuterHead, OuterList } from '@/app/side3d/OuterCard';
 import { Empty } from '@/app/side3d/Flyout';
 import { groupParts } from '@/app/side3d/lists';
 import { tasks } from '@/proto/words_tasks.gen';
@@ -83,5 +83,25 @@ export function OuterTasks({ all, scope, now, groupOf }: { all: readonly ProjWor
           <StatusMark status="ongoing" /> {tasks.fold_rest({ ongoing: ongoing.length, done: done.length })}
         </Press>
       )} />
+  );
+}
+
+/** At widths where the right bar folds to coins: the Tasks head in the agents coin's card, under its
+ *  agents, as the wide bar has it ('Tasks 7 · 1 needs you', all › opens the Board; designer m_65859,
+ *  tasks-ux m_65804: the Board reachable at every width); its first `rows` open tasks under it, none
+ *  when the card has no room. */
+export function FloatTasks({ all, scope, now, groupOf, rows }: { all: readonly ProjWork[]; scope: string; now: number; groupOf: (project: string) => string | undefined; rows: number }) {
+  const { seen, looked } = useSeenTasks();
+  const arts = useNewestArts(scope);
+  const { open } = barRows(all, now);
+  const needs = open.filter((x) => needsHim(x.w)).length;
+  if (all.length === 0) return null;
+  return (
+    <div className="tk-float" data-testid="app.flyout.agents.tasks">
+      <OuterHead id="tasks" name={tasks.section} count={String(open.length)} {...(needs > 0 ? { loud: tasks.head_needs({ n: needs }) } : {})} onAll={() => {
+        openBoard(scope);
+      }} />
+      {open.slice(0, rows).map((x) => <TaskRow key={`${x.project}/${x.w.id}`} x={x} now={now} group={groupOf(x.project)} fresh={isNew(x.w, seen(x.project, x.w.id), arts.get(`${x.project}/${x.w.id}`) ?? 0, looked)} />)}
+    </div>
   );
 }
