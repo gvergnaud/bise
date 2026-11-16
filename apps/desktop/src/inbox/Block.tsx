@@ -16,7 +16,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Card, ProjectRow } from '@/proto';
 import type { NotifyAuth } from '@/shared/api';
-import { Act, Dot, Kbd, Row, RowMark } from '@/ds';
+import { Act, Dot, Kbd, Row, RowMark, tipAttrs, WordCut } from '@/ds';
 import { actedKeys, useActed, useInboxItems, useProjects, useRefusedList, useStore, useVoiceAnswer, type AnswerAt } from '@/store';
 import { shownName } from '@/agents/model';
 import { TaskChipsOf } from '@/tasks';
@@ -817,10 +817,13 @@ export function InboxBlock({ here, onAnswer, now: pinned, only, rest, fold }: In
         <Row
           lead={<span className="strip-title">{inbox.head}</span>}
           name={
-            <span className="line-what">
+            // the item's words cut after a whole word with one '…', all of them in its tip (designer m_65784)
+            <span className="line-what" {...tipAttrs(`${headWords(list)} · ${shownName(w.who)} ${w.what}`)}>
               <span className="strip-count">{headWords(list)}</span>
-              {' · '}
-              <span className="strip-who">{shownName(w.who)}</span> {w.what}
+              <span>{' · '}</span>
+              <span className="strip-who">{shownName(w.who)}</span>
+              <span>{' '}</span>
+              <WordCut className="line-cut" text={w.what} />
             </span>
           }
           end={<span className="strip-keys"><Kbd>{list.length > 1 ? `⌃1–${String(Math.min(list.length, STRIP_KEYS))}` : '⌃1'}</Kbd> {inbox.key_open}</span>}

@@ -30,7 +30,11 @@
 .inbox-line { padding: 0; }
 .inbox-line .b-row { height: var(--h-row); }
 .inbox-line .strip-title { padding: 0; font-size: var(--t-13); color: var(--c-text-2); }
-.inbox-line .line-what { display: block; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--t-13); }
+/* the item's words cut after a whole word (ds WordCut, designer m_65784): the count and the name
+   stay whole, the words take the room left, never a mid-word cut */
+.inbox-line .line-what { display: flex; min-width: 0; overflow: hidden; white-space: pre; font-size: var(--t-13); }
+.inbox-line .line-what > :not(.line-cut) { flex: none; }
+.inbox-line .line-cut { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; }
 .inbox-line .strip-keys { font-size: var(--t-12); }
 .strip-what { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--c-text-2); }
 .strip-more { color: var(--c-text-3); font-size: var(--t-12); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; min-width: 0; }

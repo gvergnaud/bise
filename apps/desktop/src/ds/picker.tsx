@@ -14,7 +14,7 @@
 // PickerPop or Dropdown (dropdown.tsx), never a Picker placed by a screen. css/picker.css.
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { cx, sub } from "./cx";
-import { useFitText, usePickerList } from "./hooks";
+import { useFitText, usePickerList, useRoom } from "./hooks";
 import { PICKER_CAP } from "./place";
 
 export { PICKER_CAP, pickerPlace, type PickerPlace } from "./place";
@@ -163,6 +163,19 @@ export function PickerCut({ text }: { text: string }) {
   return (
     <span ref={ref} className="s">
       {shown}
+    </span>
+  );
+}
+
+/** Words cut after a whole word with one '…' to the room their box has, again when it changes
+ *  (a line in a box that grows: the float's inbox line, designer m_65784); never a mid-word cut. */
+export function WordCut({ text, className }: { text: string; className?: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const room = useRoom(ref);
+  useFitText(ref, text, cutWords, false, room.avail === Infinity ? 0 : room.avail);
+  return (
+    <span ref={ref} className={className}>
+      {text}
     </span>
   );
 }

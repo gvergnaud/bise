@@ -15,7 +15,7 @@ import { createRouter, RouterContext } from '@/app/router';
 import { FOLDED } from '@/app/panel/model';
 import { EMPTY_REC, putView, switchTo } from '@/app/panel/scope';
 import { panelState } from '@/app/panel/state';
-import { openInbox } from '@/inbox';
+import { InboxBlock, openInbox } from '@/inbox';
 import { FloatHost } from './Host';
 
 /** what the field was given last: its placeholder, its pink and its send */
@@ -157,6 +157,38 @@ describe('the inbox on the float over a full-width artifact', () => {
       field.onSend?.({ text: 'warm' });
     });
     expect(v.hub()).toContainEqual(expect.objectContaining({ project: P, card: 9 }));
+  });
+
+  it("'open beside' keeps the card open in the docked block, and full width carries it to the float, folded (designer m_65784)", () => {
+    const sent: CoreCmd[] = [];
+    const port: CorePort = { send: (c) => sent.push(c), onEvent: () => () => undefined, onState: () => () => undefined, state: () => Promise.resolve('up') };
+    const store = new Store(port);
+    store.setCore('up');
+    // card 9 ('which bench?') about the page
+    replay(store, cardsBy((cs) => cs.map((c) => (c.id === 9 ? { ...c, page: { id: PAGE.id, url: PAGE.url } } : c))));
+    store.apply({ ev: 'artifacts', project: P, items: [PAGE] });
+    store.apply({ ev: 'agents', project: P, agents: [agent('main'), agent('taux-immo')] });
+    // the thread's docked block, then the panel full width: the screen goes, the float comes (panel/Full.tsx)
+    const shell = (full: boolean) => (
+      <StoreProvider store={store}>
+        <RouterContext value={createRouter({ screen: 'thread', project: P, agent: 'perf' })}>
+          {full ? <FloatHost /> : <InboxBlock here={{ project: P, agent: 'perf' }} onAnswer={() => undefined} />}
+        </RouterContext>
+      </StoreProvider>
+    );
+    const v = render(shell(false));
+    act(() => {
+      openInbox({ project: P, card: 9 });
+    });
+    key({ key: 'o', metaKey: true });
+    // the page opens beside; the card stays open as it is, nothing answered
+    expect(screen.getByTestId(`inbox.block.card.${P}-9`)).toBeTruthy();
+    expect(sent.filter((c) => c.cmd !== 'card_in_view' && 'card' in c)).toEqual([]);
+    v.rerender(shell(true));
+    expect(block()).toBeNull();
+    expect(head()?.textContent).toContain('which bench?');
+    expect(grip().getAttribute('aria-expanded')).toBe('false');
+    expect(field.answering).toBe(true);
   });
 
   it("nothing waits: as everywhere else, the bare pill at rest; focused, ^ opens the mini thread (designer m_65750)", () => {

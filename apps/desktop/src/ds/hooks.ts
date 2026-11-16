@@ -238,14 +238,15 @@ function fitAll(): void {
 
 /** `el`'s words cut to its room by `cut` (picker.tsx cutWords: after a whole word, one '…'), again
  *  when `text` changes; the cuts of one render go together (fitAll). `more`: `text` is the start
- *  of longer words, always cut. */
-export function useFitText(ref: RefObject<HTMLElement | null>, text: string, cut: Cut, more = false): void {
+ *  of longer words, always cut. `room`: the box's width when it can change (useRoom): cut again
+ *  when it does. */
+export function useFitText(ref: RefObject<HTMLElement | null>, text: string, cut: Cut, more = false, room = 0): void {
   useLayoutEffect(() => {
     const el = ref.current;
     if (el === null) return;
     if (pending.length === 0) queueMicrotask(fitAll);
     pending.push({ el, text, cut, more });
-  }, [ref, text, cut, more]);
+  }, [ref, text, cut, more, room]);
 }
 
 /** An open/closed state: `toggle` flips it, `close` closes it (a Dropdown's menu). */
