@@ -6,7 +6,8 @@ import { sinceLooked } from './since';
 import { tasksOf } from './chips';
 import { artsOf, resolveMerged } from './model';
 import { originIn } from './TaskTab';
-import { agentLineOf, agentStateOf, firstSentence, nowOfTask, originOf, reportsOf, soloOn } from './model';
+import { edgesOf } from './Board';
+import { agentLineOf, agentStateOf, cardCrew, cardSaid, firstSentence, nowOfTask, originOf, reportsOf, soloOn } from './model';
 
 const NOW = 1_700_000_000_000;
 const H = 3_600_000;
@@ -160,5 +161,28 @@ describe('artsOf: a task\'s artifacts in its tab', () => {
     expect(r.all.map((a) => a.id)).toEqual(['e', 'b', 'a']);
     expect(r.mine.map((a) => a.id)).toEqual(['e', 'a']);
     expect(artsOf(arts.slice(1, 2), 'kb', tombs).mine.map((a) => a.id)).toEqual(['b']);
+  });
+});
+
+describe('a Board card (designer m_65805, tasks-ui-qa m_65799)', () => {
+  it('names its first agent and how many more, never main', () => {
+    expect(cardCrew(['main', 'auth-fix', 'kb', 'ui'])).toBe('auth-fix +2');
+    expect(cardCrew(['main'])).toBe('');
+    expect(cardCrew(['auto-approve-lead'])).toBe('auto-approve-lead');
+  });
+
+  it("says only an agent's report when it is on this task alone", () => {
+    const designer = { name: 'designer', report: { kind: 'progress' as const, text: 'chat-collapse: folded float line agreed. more', at_ms: 5 }, note: '' };
+    const solo = { name: 'kb', report: { kind: 'progress' as const, text: 'found the cause. the proxy', at_ms: 2 }, note: '' };
+    expect(cardSaid([designer], new Set())).toBeNull();
+    expect(cardSaid([designer, solo], new Set(['kb']))).toEqual({ text: 'found the cause.', at: 2 });
+  });
+});
+
+describe('the Board edge fades', () => {
+  it('show on the side that has more columns past the edge', () => {
+    expect(edgesOf({ scrollLeft: 0, clientWidth: 600, scrollWidth: 600 })).toEqual({ l: false, r: false });
+    expect(edgesOf({ scrollLeft: 0, clientWidth: 600, scrollWidth: 1400 })).toEqual({ l: false, r: true });
+    expect(edgesOf({ scrollLeft: 800, clientWidth: 600, scrollWidth: 1400 })).toEqual({ l: true, r: false });
   });
 });

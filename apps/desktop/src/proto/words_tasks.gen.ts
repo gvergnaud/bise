@@ -200,6 +200,12 @@ export const tasks = {
   log_report: (a: { who: string | number; kind: string | number; text: string | number }): string => String(a.who) + " reported " + String(a.kind) + ": " + String(a.text),
   /** a Log report row's fold: the rest of the report and its decisions (designer m_65808) */
   log_more: "more",
+  /** a Needs you card's chip on the Board: its open questions, opened in place (designer m_65852) */
+  card_questions: (a: { n: number }): string => a.n === 1 ? String(a.n) + " question" : String(a.n) + " questions",
+  /** the Tasks island's tip when the right bar folds to islands (designer m_65852) */
+  island_tip: (a: { n: string | number }): string => "Tasks · " + String(a.n) + " need you",
+  /** the Tasks island's tip when nothing needs him */
+  island_tip_none: "Tasks",
   /** a `--decision` of that report */
   log_decision: (a: { text: string | number }): string => "decided: " + String(a.text),
   /** his answer to one of its questions */

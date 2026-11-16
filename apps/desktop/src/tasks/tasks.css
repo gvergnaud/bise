@@ -46,9 +46,17 @@
 .tk-pink{color:var(--c-accent)}
 .tk-dim{color:var(--c-text-3)}
 .tk-err{color:var(--c-err)}
-.tk-cols{flex:1;min-height:0;display:flex;gap:var(--s-3);padding:0 var(--s-6) var(--s-4);overflow-x:auto;overflow-y:hidden;scroll-snap-type:x proximity}
-.tk-col{flex:none;display:flex;flex-direction:column;gap:var(--s-2);width:240px;min-height:0;padding:var(--s-2);border-radius:var(--r-2);background:var(--c-sunken);box-sizing:border-box;scroll-snap-align:start}
-.tk-col.empty{width:var(--s-8);padding:var(--s-2) 0;align-items:center}
+/* the columns fill the Board (240 to 320 each, designer m_65805); past its width they scroll
+   sideways, an edge fade on the side that has more (designer m_65852: 24 px, 120 ms) */
+.tk-cols-box{position:relative;flex:1;min-height:0;display:flex}
+.tk-cols-box::before,.tk-cols-box::after{content:"";position:absolute;top:0;bottom:0;width:var(--s-6);pointer-events:none;opacity:0;transition:opacity 120ms var(--ease-out);z-index:1}
+.tk-cols-box::before{left:0;background:linear-gradient(to right,var(--c-surface),transparent)}
+.tk-cols-box::after{right:0;background:linear-gradient(to left,var(--c-surface),transparent)}
+.tk-cols-box[data-more-l]::before,.tk-cols-box[data-more-r]::after{opacity:1}
+@media (prefers-reduced-motion:reduce){.tk-cols-box::before,.tk-cols-box::after{transition:none}}
+.tk-cols{flex:1;min-width:0;min-height:0;display:flex;gap:var(--s-3);padding:0 var(--s-6) var(--s-4);overflow-x:auto;overflow-y:hidden;scroll-snap-type:x proximity}
+.tk-col{flex:1 0 240px;display:flex;flex-direction:column;gap:var(--s-2);max-width:320px;min-height:0;padding:var(--s-2);border-radius:var(--r-2);background:var(--c-sunken);box-sizing:border-box;scroll-snap-align:start}
+.tk-col.empty{flex:none;width:var(--s-8);padding:var(--s-2) 0;align-items:center}
 .tk-col-head{display:flex;align-items:center;gap:var(--s-2);height:var(--s-6);margin:0;padding:0 var(--s-1);font-size:var(--t-12);font-weight:600;color:var(--c-text-2)}
 .tk-col-strip{display:inline-flex;align-items:center;gap:var(--s-2);writing-mode:vertical-rl;color:var(--c-text-2);font-size:var(--t-12);font-weight:600}
 .tk-col-strip .tk-mark{writing-mode:horizontal-tb}
@@ -56,8 +64,16 @@
 .tk-card{display:flex;flex-direction:column;gap:var(--s-1);margin:0;padding:var(--s-2) var(--s-3);border:1px solid var(--c-line);border-radius:var(--r-2);background:var(--c-surface);color:var(--c-text);font:inherit;text-align:left}
 .tk-card:hover{border-color:var(--c-line-strong)}
 .tk-card:focus-visible{outline:2px solid var(--c-focus);outline-offset:2px}
-.tk-card-name{display:flex;align-items:center;gap:var(--s-2);min-width:0;font-weight:500}
-.tk-card-title{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+/* the card (designer m_65805): its title ink t-13 600 on two lines; the meta line text-3; the
+   sentence text-2 on two lines; on Needs you its questions' accent chip */
+.tk-card-name{display:flex;align-items:flex-start;gap:var(--s-2);min-width:0;font-weight:600}
+.tk-card-name>.tk-mark{margin-top:7px}
+.tk-card-title{display:-webkit-box;min-width:0;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow-wrap:anywhere}
+.tk-card-meta{min-width:0;overflow:hidden;color:var(--c-text-3);font-size:var(--t-12);white-space:nowrap;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.tk-card-asks{display:flex;flex-direction:column;align-items:flex-start;gap:var(--s-2);cursor:auto}
+.tk-card-q{display:inline-flex;align-items:center;height:var(--s-6);padding:0 var(--s-2);border:0;border-radius:var(--r-1);background:var(--c-accent-soft);color:var(--c-accent);font:inherit;font-size:var(--t-12)}
+.tk-card-q:hover{background:color-mix(in srgb,var(--c-accent) 18%,var(--c-accent-soft))}
+.tk-card-asks>.tk-q{align-self:stretch}
 /* the Task tab's Log (roma idea 3): newest first, its time text-3 on the left, a report's
    decisions under it in text-2 */
 .tk-log{display:flex;flex-direction:column;gap:var(--s-3);margin:0;padding:0;list-style:none}
@@ -91,11 +107,10 @@
 .tk-new{flex:none;width:6px;height:6px;border-radius:50%;background:var(--c-text)}
 .tk-card-what{display:flex;align-items:baseline;gap:var(--s-2);min-width:0;color:var(--c-text-2);font-size:var(--t-12)}
 /* one line, cut at a word in the text (model's cutAtWord); the CSS cut only guards a narrow column */
-.tk-card-said{flex:1 1 auto;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.tk-card-said{display:-webkit-box;flex:1 1 auto;min-width:0;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2}
 .tk-card-age{flex:none;color:var(--c-text-3);font-variant-numeric:tabular-nums}
 /* the sentence is text-2 on every card: pink stays on the mark and the column's count (designer m_65397) */
 .tk-card-what.paused{color:var(--c-text-3)}
-.tk-card-foot{display:flex;align-items:center;gap:var(--s-2);color:var(--c-text-3);font-size:var(--t-12)}
 .tk-card-acts{display:flex;gap:var(--s-2);margin-top:var(--s-1)}
 /* the Board with nothing on it (BoardEmpty, designer m_65123): the kit's Empty centred in the Board's
    space, its top at ~40 %, 56ch, its lines on one left edge; the title in ink t-15 500; the steps

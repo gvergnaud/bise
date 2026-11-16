@@ -81,7 +81,8 @@ export interface SearchTask {
 }
 
 /** What ⏎ on a page row does: go to a route (its string form), or open the inbox or the key list in place. */
-export type PageGo = { readonly route: string } | { readonly inbox: true } | { readonly help: true };
+/** what a page does when picked: a route, the inbox in place, the key list, or a project's tasks Board ('' every project's) in the panel */
+export type PageGo = { readonly route: string } | { readonly inbox: true } | { readonly help: true } | { readonly board: string };
 
 /** A page of the app (the window's src/app/pages.ts lists them; the spotlight has none). */
 export interface SearchPage {

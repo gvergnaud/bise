@@ -8,11 +8,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Press, tipAttrs } from '@/ds';
 import { keep } from '@/app/keep';
-import { useAgents, useStore } from '@/store';
+import { useAgents, useCards, useStore, useWorks } from '@/store';
 import type { Task as TaskReq, WorkStatus } from '@/proto';
 import { tasks } from '@/proto/words_tasks.gen';
 import { useNowFor } from '@/app/clock';
-import { aboutOf, barRows, crewOf, cutAtWord, goalsOf, saidOf, STATUS_ORDER, type ProjWork } from './model';
+import { aboutOf, barRows, cardCrew, cardSaid, cutAtWord, goalsOf, SAID_MAX, soloOn, STATUS_ORDER, type ProjWork } from './model';
+import { Question } from './Question';
 import { ago } from '@/agents/model';
 import { useAllWorks, useNewestArts } from './hooks';
 import { NewDot, openTask, pausedWords, StatusMark } from './Marks';
@@ -80,7 +81,7 @@ export function useTaskReq(): (project: string, req: TaskReq) => void {
   };
 }
 
-function Card({ x, now, fresh, onDid }: { x: ProjWork; now: number; fresh: boolean; onDid: (d: Did) => void }) {
+function Card({ x, now, fresh, onDid, withProject }: { x: ProjWork; now: number; fresh: boolean; onDid: (d: Did) => void; withProject: boolean }) {
   const doAct = useTaskAct();
   // his gesture on the card: where it goes is his, not news (news.ts); its short Undo (undo.ts)
   const act = (project: string, step: 'resume', id: string): void => {
@@ -88,43 +89,63 @@ function Card({ x, now, fresh, onDid }: { x: ProjWork; now: number; fresh: boole
     doAct(project, step, id);
     onDid({ project, step, row: x.w });
   };
-  // its agents as the Task tab lists them: main only when alone or working on it (designer m_64968)
   const agents = useAgents(x.project);
-  const crew = crewOf(x.w.agents ?? [], (n) => agents.find((a) => a.name === n)?.status === 'working');
+  const works = useWorks(x.project);
+  const cards = useCards(x.project);
+  // its questions open under it ('1 question ▾', designer m_65852)
+  const [open, setOpen] = useState(false);
   const goals = goalsOf(x.w);
   const id = `tasks.board.card.${x.project}.${x.w.id}`;
-  // its sentence: the newest report of its agents with its age (roma idea 1, designer); nothing
-  // said yet: what its status is about ('no agent yet', 'quiet since 14:20')
-  const said = saidOf((x.w.agents ?? []).flatMap((n) => {
+  const names = x.w.agents ?? [];
+  // its sentence: the newest report of an agent on this task alone (never another task's: tasks-ui-qa
+  // m_65799 #4), with its age; none: what its status is about ('no agent yet', 'quiet since 14:20')
+  const solo = soloOn(works.works, x.w.id, names);
+  const said = cardSaid(names.flatMap((n) => {
     const a = agents.find((g) => g.name === n);
     return a === undefined ? [] : [a];
-  }));
+  }), solo);
   const line = lineAt(x, now);
   // a paused card says its pause, never a stale report (designer m_65397)
   const paused = x.w.status === 'paused';
-  const sentence = paused
+  const sentence = cutAtWord(paused
     ? pausedWords(now - (x.w.paused_ms ?? now))
-    : (said?.text ?? (aboutOf(line) !== '' ? aboutOf(line) : line));
+    : (said?.text ?? (aboutOf(line) !== '' ? aboutOf(line) : line)), SAID_MAX);
+  // the meta line: its project on the all-projects Board · n/m · its first agent +n, never main (designer m_65805)
+  const crew = cardCrew(names);
+  const meta = [withProject ? x.projectName : '', goals === null ? '' : tasks.goals_of(goals), crew].filter((m) => m !== '');
+  const mine = new Set(x.w.cards ?? []);
+  const asks = x.w.status === 'needs_you' ? cards.filter((c) => mine.has(c.id)) : [];
   return (
     <div className="tk-card" data-st={x.w.status} data-testid={id} role="button" tabIndex={0} onClick={() => {
       openTask(x.project, x.w.id);
     }} onKeyDown={(e) => {
-      if (e.key === 'Enter') openTask(x.project, x.w.id);
-    }} {...tipAttrs(x.w.name)}>
+      if (e.key === 'Enter' && e.target === e.currentTarget) openTask(x.project, x.w.id);
+    }}>
       <span className="tk-card-name">
         <StatusMark status={x.w.status} />
-        <span className="tk-card-title">{cutAtWord(x.w.name, 40)}</span>
+        {/* two lines at most, the whole name in its tip (designer m_65805) */}
+        <span className="tk-card-title" {...tipAttrs(x.w.name)}>{x.w.name}</span>
         {/* new since he looked: the ink dot (designer: never blue, never pink) */}
         <NewDot on={fresh} testId={`${id}.new`} />
       </span>
+      {meta.length > 0 && (
+        <span className="tk-card-meta" data-testid={`${id}.meta`} {...(goals === null ? {} : tipAttrs(tasks.goals_tip(goals)))}>{meta.join(' · ')}</span>
+      )}
       <span className={`tk-card-what${paused ? ' paused' : ''}`} data-testid={`${id}.said`} {...tipAttrs(sentence)}>
-        <span className="tk-card-said">{cutAtWord(sentence, 46)}</span>
+        <span className="tk-card-said">{sentence}</span>
         {!paused && said?.at != null && <span className="tk-card-age">{ago(said.at, now)}</span>}
       </span>
-      {(goals !== null || crew.length > 0) && (
-        <span className="tk-card-foot">
-          {goals !== null && <span {...tipAttrs(tasks.goals_tip(goals))}>{tasks.goals_of(goals)}</span>}
-          {crew.length > 0 && <span>{crew.join(', ')}</span>}
+      {asks.length > 0 && (
+        // its questions, answered in place on the card; a click or a key in them never opens the task
+        <span className="tk-card-asks" onClick={(e) => {
+          e.stopPropagation();
+        }} onKeyDown={(e) => {
+          e.stopPropagation();
+        }}>
+          <Press look="tk-card-q" aria-expanded={open} onClick={() => {
+            setOpen(!open);
+          }} data-testid={`${id}.questions`}>{`${tasks.card_questions({ n: asks.length })} ${open ? '▾' : '▸'}`}</Press>
+          {open && asks.map((c) => <Question key={c.id} c={c} project={x.project} testId={`${id}.q.${String(c.id)}`} />)}
         </span>
       )}
       {x.w.status === 'stalled' && (
@@ -150,6 +171,15 @@ function Card({ x, now, fresh, onDid }: { x: ProjWork; now: number; fresh: boole
   );
 }
 
+/** Which sides of a sideways scroller have more past the edge (a pixel of slack for rounding). Pure. */
+export interface Edges {
+  readonly l: boolean;
+  readonly r: boolean;
+}
+export function edgesOf(el: Pick<HTMLElement, 'scrollLeft' | 'scrollWidth' | 'clientWidth'>): Edges {
+  return { l: el.scrollLeft > 1, r: el.scrollLeft + el.clientWidth < el.scrollWidth - 1 };
+}
+
 /** The Board of `project` ('' every project's). */
 export function BoardTab({ project }: { project: string }) {
   const all = useAllWorks(project);
@@ -162,6 +192,8 @@ export function BoardTab({ project }: { project: string }) {
   const arts = useNewestArts(project);
   useSettleActed(all);
   const shownRef = useRef<readonly ProjWork[]>([]);
+  // which sides have more columns past the edge: their fade (designer m_65852)
+  const [more, setMore] = useState<Edges>({ l: false, r: false });
   const [did, offer] = useUndo();
   const req = useTaskReq();
   useEffect(() => () => {
@@ -169,6 +201,23 @@ export function BoardTab({ project }: { project: string }) {
     markSeen(shownRef.current);
     markLooked();
   }, [project]);
+  // the fades follow the Board's width and its columns, not only a scroll
+  useEffect(() => {
+    const el = box.current;
+    if (el === null) return;
+    const fit = (): void => {
+      setMore((was) => {
+        const now = edgesOf(el);
+        return now.l === was.l && now.r === was.r ? was : now;
+      });
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+    };
+  });
   // sideways with the wheel too (a trackpad scrolls both ways by itself)
   useEffect(() => {
     const el = box.current;
@@ -215,7 +264,10 @@ export function BoardTab({ project }: { project: string }) {
           )}
         </p>
       </header>
-      <div className="tk-cols" ref={box}>
+      <div className="tk-cols-box" data-more-l={more.l || undefined} data-more-r={more.r || undefined} data-testid="tasks.board.cols">
+      <div className="tk-cols" ref={box} onScroll={(e) => {
+        setMore(edgesOf(e.currentTarget));
+      }}>
           {STATUS_ORDER.filter((s) => s !== 'unknown' || shown.some((x) => x.w.status === 'unknown')).map((s) => {
             const list = shown.filter((x) => x.w.status === s).sort((a, b) => b.w.last_ms - a.w.last_ms);
             const label = colWord(s);
@@ -236,12 +288,13 @@ export function BoardTab({ project }: { project: string }) {
                 </h3>
                 <div className="tk-col-cards">
                   {list.map((x) => (
-                    <Card key={`${x.project}/${x.w.id}`} x={x} now={now} fresh={isNew(x.w, seen(x.project, x.w.id), arts.get(`${x.project}/${x.w.id}`) ?? 0, looked)} onDid={offer} />
+                    <Card key={`${x.project}/${x.w.id}`} x={x} now={now} withProject={project === ''} fresh={isNew(x.w, seen(x.project, x.w.id), arts.get(`${x.project}/${x.w.id}`) ?? 0, looked)} onDid={offer} />
                   ))}
                 </div>
               </div>
             );
           })}
+      </div>
       </div>
       <UndoToast did={did} works={all.filter((x) => x.project === did?.project).map((x) => x.w)} name={did?.row.name ?? ''} send={req} done={() => {
         offer(null);

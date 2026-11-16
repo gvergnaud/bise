@@ -152,6 +152,13 @@
     "one": null,
     "text": "Tasks"
   },
+  "tasks.card_questions": {
+    "args": [
+      "n"
+    ],
+    "one": "{n} question",
+    "text": "{n} questions"
+  },
   "tasks.change_no_pr": {
     "args": [],
     "one": null,
@@ -303,6 +310,18 @@
     "args": [],
     "one": null,
     "text": "show the questions of the tasks you paused"
+  },
+  "tasks.island_tip": {
+    "args": [
+      "n"
+    ],
+    "one": null,
+    "text": "Tasks · {n} need you"
+  },
+  "tasks.island_tip_none": {
+    "args": [],
+    "one": null,
+    "text": "Tasks"
   },
   "tasks.log_a_card": {
     "args": [],

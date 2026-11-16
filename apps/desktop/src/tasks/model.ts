@@ -163,6 +163,22 @@ export function nowOfTask(reports: ReadonlyMap<string, { readonly text: string; 
   return said === '' ? null : cutAtWord(said, SAID_MAX);
 }
 
+/** A Board card's agents: the first one and how many more, never main (designer m_65805:
+ *  'auth-fix +2', never every name); '' none. Pure. */
+export function cardCrew(names: readonly string[]): string {
+  const rest = names.filter((n) => n !== 'main');
+  const first = rest[0];
+  return first === undefined ? '' : rest.length === 1 ? first : `${first} +${String(rest.length - 1)}`;
+}
+
+/** A Board card's sentence: the newest report of an agent on this task alone (a report of an agent
+ *  on many tasks may be another's: only the Task tab, which reads this task's Log, shows it;
+ *  tasks-ui-qa m_65799 #4), with its time; null: none said. Pure. */
+export function cardSaid(agents: readonly (Pick<Agent, 'name' | 'report' | 'note'>)[], solo: ReadonlySet<string>): { readonly text: string; readonly at: number | null } | null {
+  const said = saidOf(agents.filter((a) => solo.has(a.name)));
+  return said === null ? null : { text: firstSentence(said.text), at: said.at };
+}
+
 /** An agent's state on this task: waits for him only for an open card of this task from it
  *  (tasks-ux m_65775: never another task's card). Pure. */
 export function agentStateOf(a: Pick<Agent, 'status'> | undefined, waitsHere: boolean): 'archived' | 'working' | 'waits' | 'idle' {

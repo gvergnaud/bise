@@ -5,10 +5,9 @@
 // · Pause/Resume (Reopen when done, Restart when stalled). A merged or folded one says where it went.
 // Gestures go through the hub's task_act. Owner: tasks.
 import { useEffect, useRef, useState } from 'react';
-import { ArtChip, Dropdown, Field, Input, Kbd, Press, Seg, tipAttrs } from '@/ds';
+import { ArtChip, Dropdown, Input, Press, Seg, tipAttrs } from '@/ds';
 import { TaskLog } from './TaskLog';
 import { dayWords, glyphOf, timeOf } from '@/artifacts/model';
-import { inbox } from '@/proto/words_inbox.gen';
 import { sentenceCase } from '@/ds/case';
 import type { Entry } from '@/proto';
 import { threadKey, useAgents, useArtifacts, useCards, useProjects, useStore, useTaskLog, useThreadOrder } from '@/store';
@@ -21,17 +20,17 @@ import { chipName, storeImage } from '@/thread/parts';
 import { useRouter } from '@/app/router';
 import { MAIN } from '@/app/route';
 import { useNowFor } from '@/app/clock';
-import { askButtons, pickIntent } from '@/app/side3d/model';
 import { tasks } from '@/proto/words_tasks.gen';
 import { useWorks } from '@/store';
-import { aboutOf, agentLineOf, agentStateOf, artsOf, crewOf, firstLine, goalsOf, isOpen, nowOfTask, originOf, reportsOf, soloOn, type Origin } from './model';
+import { aboutOf, agentLineOf, agentStateOf, artsOf, crewOf, goalsOf, isOpen, nowOfTask, originOf, reportsOf, soloOn, type Origin } from './model';
 import { openTask, pausedWords, StatusMark, statusWord } from './Marks';
 import { useTaskAct, useTaskReq } from './Board';
 import { clock, lineAt } from './Side';
 import { markLooked, markSeen } from './seen';
 import { UndoToast, useUndo } from './UndoToast';
 import { flipTo, shownStatus, type Did, type Flip } from './undo';
-import { ArtMoveMore, CardMoveMore } from './MoveMenus';
+import { ArtMoveMore } from './MoveMenus';
+import { Question } from './Question';
 
 /** His message by its id among a thread's entries, as the tab quotes it (his words from its parts,
  *  his images: originOf); null when this window doesn't hold it or he wrote no words. Pure. */
@@ -239,34 +238,7 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
         <section className="tk-sec">
           <h3 className="tk-h">{tasks.sec_needs}</h3>
           {asks.map((c) => (
-            <div key={c.id} className="tk-q" data-testid={`${t}.q.${String(c.id)}`}>
-              <div className="tk-q-head">
-                <p className="tk-q-text">{c.question}</p>
-                {/* Move to task… (F9): a card belongs to one task, this one */}
-                <CardMoveMore project={project} card={c.id} title={firstLine(c.question)} testId={`${t}.q.${String(c.id)}.more`} />
-              </div>
-              {/* the inbox's keys (1-9) on its options, then his own words (tasks-ux m_64959) */}
-              <ol className="tk-q-opts">
-                {askButtons(c).opts.map((o) => (
-                  <li key={o.n}>
-                    <Press look="tk-q-opt" onClick={() => store.do(pickIntent(c, o.n, null))} data-testid={`${t}.q.${String(c.id)}.${String(o.n)}`}>
-                      <Kbd>{String(o.n)}</Kbd>
-                      <span className="tk-q-opt-w">{o.label}</span>
-                    </Press>
-                  </li>
-                ))}
-              </ol>
-              {/* the ds Field, on the card's surface (designer m_65805, m_65808) */}
-              <Field placeholder={askButtons(c).opts.length > 0 ? inbox.hint_or_answer : tasks.q_type} aria-label={c.question} testId={`${t}.q.${String(c.id)}.type`}
-                onKeyDown={(e) => {
-                  const words = e.currentTarget.value.trim();
-                  if (e.key === 'Enter' && words !== '') store.do({ i: 'answer', project: c.project, card: c.id, reply: words });
-                  else if (e.key >= '1' && e.key <= '9' && e.currentTarget.value === '' && askButtons(c).opts.some((o) => String(o.n) === e.key)) {
-                    e.preventDefault();
-                    store.do(pickIntent(c, Number(e.key), null));
-                  }
-                }} />
-            </div>
+            <Question key={c.id} c={c} project={project} testId={`${t}.q.${String(c.id)}`} />
           ))}
         </section>
       )}

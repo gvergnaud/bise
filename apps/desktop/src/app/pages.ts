@@ -10,6 +10,7 @@
 import type { SearchPage } from '@/search/rank';
 import { running } from '@/proto/words_running.gen';
 import { panel } from '@/proto/words_panel.gen';
+import { tasks } from '@/proto/words_tasks.gen';
 import { PLACE_KEYS } from '@/settings/keys';
 import { formatRoute, MAIN, projectOf, type Route, type Screen } from './route';
 
@@ -106,6 +107,9 @@ export function appPages(c: PagesCtx): SearchPage[] {
         const key = to.screen === 'changes' ? dKey(p) : '';
         out.push(route(to, r.project, { of: pname(p), key }));
       }
+  // the tasks Board, reachable at every width (tasks-ux m_65804, designer m_65852): the project in
+  // view's, else every project's
+  out.push({ id: 'tasks', name: tasks.board_title, words: ['board', 'tasks', 'kanban'], glyph: '▦', key: '', go: { board: here ?? '' }, ...(here === undefined ? {} : { of: pname(here) }) });
   if (c.route.screen === 'thread')
     for (const r of rules)
       if ('agent' in r) {

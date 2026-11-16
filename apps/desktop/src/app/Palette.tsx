@@ -18,7 +18,7 @@ import type { Ev } from '@/store/store';
 import { flatHits, marks, nextScope, SCOPES, searchList, type Hit, type Scope, type SearchList } from '@/search/rank';
 import { searchDataOf } from '@/search/data';
 import { useGoArtifact } from '@/artifacts/leave';
-import { lineAt, openTask } from '@/tasks';
+import { lineAt, openBoard, openTask } from '@/tasks';
 import { PAGES } from '@/settings';
 import { useNow } from './clock';
 import { inboxFromMenu } from './inboxAsk';
@@ -220,6 +220,7 @@ export function Palette({ onClose }: { onClose: () => void }) {
           router.go(to);
         });
       else if ('help' in go) window.dispatchEvent(new Event(HELP_EVENT));
+      else if ('board' in go) openBoard(go.board);
       else router.go(parseRoute(go.route));
       return;
     }
