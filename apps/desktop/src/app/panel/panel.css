@@ -1148,17 +1148,24 @@
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-/* bise's copy of a file gone (designer m_66162): the copy part in text-2 and never cut, 'read only'
-   shrinks first, then the app and version */
+/* bise's copy of a file gone (designer m_66162): the copy part in text-2 and never cut; 'read only'
+   with its separator goes first, whole (it wraps to a second row, out of the one-row box: never
+   cut mid-word, ui-review m_66203), then the app and version take an ellipsis */
 .pn-doc-copy {
   display: flex;
+  flex-wrap: wrap;
+  height: 1lh;
 }
-.pn-doc-copy > span {
-  overflow: hidden;
-  text-overflow: ellipsis;
+.pn-doc-copy-main {
+  display: flex;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 .pn-doc-copy-lead {
   flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 /* its ' · ' as their own spans, --s-1 each side, about a space (designer m_66189) */
 .pn-doc-copy-sep {
@@ -1170,10 +1177,9 @@
   flex: none;
   color: var(--c-text-2);
 }
-/* 'read only' with its separator: shrinks first, then gone */
+/* 'read only' with its separator: never shrinks, so it fits whole or wraps away */
 .pn-doc-copy-tail {
-  flex: 0 1000 auto;
-  min-width: 0;
+  flex: none;
   display: flex;
 }
 .pn-doc-act {

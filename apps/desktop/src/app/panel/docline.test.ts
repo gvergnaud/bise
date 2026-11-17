@@ -5,7 +5,7 @@ import { IDLE, type Save } from '@/views/doc';
 import { DOC_ERR, VIEW_ERR } from '@/views/port';
 import type { ViewState } from '@/views/store';
 import { views } from '@/proto/words_views.gen';
-import { copyWords, factsWords, newerAct, whoWord } from './Document';
+import { copyTip, copyWords, factsWords, newerAct, whoWord } from './Document';
 import { asksHub, docLine } from './docline';
 
 function live(version: number | undefined, save: Save = { kind: 'idle' }, writable = true, savedHere = false): ViewState {
@@ -42,6 +42,9 @@ describe('docLine', () => {
     expect(docLine({ kind: 'loading', height: 96 }, kept, 'Markdown'), 'loading the copy').toEqual({ kind: 'loading' });
     expect(docLine({ kind: 'failed', message: 'x', code: DOC_ERR.gone }, kept, 'Markdown'), 'the copy gone too').toEqual({ kind: 'gone' });
     expect(docLine(live(3), { newest: 3, gone: true }, 'Markdown')).toEqual({ kind: 'gone' });
+    // designer m_66162: the tip says where it was, his home as '~'
+    expect(copyTip('/Users/me/.bise/tmp/guide.md', '/Users/me')).toBe(views.doc_copy_was({ path: '~/.bise/tmp/guide.md' }));
+    expect(copyTip('/w/tmp/guide.md', undefined), 'no home known: the path as is').toBe(views.doc_copy_was({ path: '/w/tmp/guide.md' }));
     expect(copyWords({ kind: 'copy', app: 'Markdown', version: 3, was: '/w/tmp/guide.md' }).join(' · ')).toBe(`Markdown · ${views.doc_version({ n: 3 })} · ${views.doc_copy} · ${views.doc_read_only}`);
   });
 
