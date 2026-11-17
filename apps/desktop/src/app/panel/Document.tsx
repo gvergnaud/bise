@@ -24,7 +24,8 @@ import { closeTabId } from './state';
 import { tilde } from '@/app/barplaces';
 import { asksHub, docLine, type DocLine, type RowFacts } from './docline';
 
-const HOME = (globalThis as { bise?: { home?: string } }).bise?.home;
+/** his home from the window's bridge, read when drawn (none in a plain browser: the path as is) */
+const homeNow = (): string | undefined => (globalThis as { bise?: { home?: string } }).bise?.home;
 
 /** bise's copy of a file gone: 'Markdown · v3 · bise's copy, the file is gone · read only' (designer m_66162). Pure. */
 export function copyWords(l: Extract<DocLine, { kind: 'copy' }>): readonly [lead: string, copy: string, tail: string] {
@@ -191,7 +192,7 @@ function Line({ line, store, docRef, turnOn }: { line: DocLine; store: ViewsStor
         'copy',
         <span className="pn-doc-line-t pn-doc-copy">
           <span className="pn-doc-copy-lead">{lead} · </span>
-          <span className="pn-doc-copy-what" title={views.doc_copy_was({ path: tilde(line.was, HOME) })} data-testid="app.panel.doc.copy">
+          <span className="pn-doc-copy-what" data-tip={views.doc_copy_was({ path: tilde(line.was, homeNow()) })} data-testid="app.panel.doc.copy">
             {copy}
           </span>
           <span className="pn-doc-copy-tail"> · {tail}</span>

@@ -1154,6 +1154,8 @@
   display: flex;
 }
 .pn-doc-copy > span {
+  /* each part is a flex item: its own ' · ' spaces kept (ui-review m_66188) */
+  white-space: pre;
   overflow: hidden;
   text-overflow: ellipsis;
 }
