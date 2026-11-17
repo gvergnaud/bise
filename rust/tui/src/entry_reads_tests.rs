@@ -103,6 +103,12 @@ fn level3_is_a_live_message_between_agents_in_view() {
     assert!(!reads_of(&mut s, At { live: false, ..LIVE }, &m).level3, "a page");
     let sent = entry(serde_json::json!({"pos": 5, "at_ms": 0, "kind": "to_agent", "text": "x", "to": "main"}));
     assert!(!reads_of(&mut Seen::default(), LIVE, &sent).level3, "what it sent is not a message between agents in view");
+    // bise's own notice ('@t1 is blocked') is no message between agents
+    // (tui_onboarding_tmux: it brought the hint up before t2 and t3 spoke)
+    for hub in ["switchboard", "bise"] {
+        let n = entry(serde_json::json!({"pos": 6, "at_ms": 0, "kind": "from_agent", "text": "@t1 is blocked", "from": hub}));
+        assert!(!reads_of(&mut Seen::default(), LIVE, &n).level3, "a notice from {hub}");
+    }
 }
 
 /// Read 2: BISE-15: his message in view goes from received to read (the

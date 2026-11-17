@@ -30,6 +30,7 @@
 
 use crate::app::App;
 use crate::wire::Ev;
+use bise_proto::thread::lines::is_hub_sender;
 use bise_proto::thread::{Delivery, Entry, EntryKind};
 use bise_proto::Pos;
 
@@ -121,7 +122,8 @@ pub(crate) fn reads_of(seen: &mut Seen, at: At, e: &Entry) -> Reads {
     let once = at.live && new;
     let reply = e.kind == EntryKind::Agent && !e.to_you && !e.text.is_empty();
     Reads {
-        level3: once && at.in_focus && e.kind == EntryKind::FromAgent,
+        // bise's own notice to an agent is no message between agents
+        level3: once && at.in_focus && e.kind == EntryKind::FromAgent && !is_hub_sender(e.from.as_deref().unwrap_or_default()),
         steered: at.live && at.in_focus && was == Some(Delivery::Received) && e.delivery == Some(Delivery::Read),
         call: once && (e.kind == EntryKind::Card || e.to_you),
         activity: once && !at.in_focus && lights(e.kind),
