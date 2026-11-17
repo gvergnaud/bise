@@ -32,6 +32,7 @@ sys.path.insert(0, HERE)
 import fake_provider as F  # noqa: E402
 import obs_lines  # noqa: E402
 import wait  # noqa: E402
+from say_port import SayPort  # noqa: E402
 
 FAILS = []
 LIMIT = 1.0  # seconds, the desktop bar's stop
@@ -60,16 +61,14 @@ def main():
         % fport)
     cfg = os.path.join(tmp, "config.toml")
     open(cfg, "w").write('model = "fake/claude-x"\n')
-    s = socket.socket()
-    s.bind(("127.0.0.1", 0))
-    port = s.getsockname()[1]
-    s.close()
+    sp = SayPort()
+    port = sp.port
     session = os.path.join(tmp, "session.txt")
     dump = os.path.join(tmp, "requests") + "/"
     os.makedirs(dump, exist_ok=True)
     env = {k: v for k, v in os.environ.items() if not k.startswith(("BEND_", "SB_", "BISE_"))}
     env.update(HOME=tmp, XDG_STATE_HOME=os.path.join(tmp, "state"), BISE_MODELS_FILE=models, BEND_CONFIG=cfg,
-               BEND_REPL_PORT=str(port), BEND_SESSION_FILE=session, BEND_WIRE_LOG=os.path.join(tmp, "wire.log"),
+               BEND_REPL_PORT=str(port), BISE_REPL_TOKEN=sp.token, BEND_SESSION_FILE=session, BEND_WIRE_LOG=os.path.join(tmp, "wire.log"),
                BEND_BG_ROOT=os.path.join(tmp, "bg"), BEND_BG_AFTER="3", SB_AGENT="probe", TMPDIR=tmp,
                BEND_WIRE_DUMP=dump)
     log, err = os.path.join(tmp, "repl.log"), os.path.join(tmp, "repl.err")
@@ -101,7 +100,7 @@ def main():
     def turn(text, stop_when=None, who="main"):
         """one message; stop_when(): when true, the flag is written.
         Returns (lines, seconds from the flag to turn_done or None)."""
-        sock = socket.create_connection(("127.0.0.1", port), timeout=60)
+        sock = sp.connect(timeout=60)
         sock.sendall(("say " + text + "\n").encode())
         f = sock.makefile("rb")
         out, t0, took = [], None, None

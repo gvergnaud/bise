@@ -27,6 +27,7 @@ import copy, json, os, re, shutil, socket, subprocess, sys, tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import wait  # noqa: E402
+from say_port import SayPort  # noqa: E402
 ROOT = os.path.abspath(os.path.join(HERE, ".."))
 REPL = os.path.join(ROOT, "repl-scripted")
 FIX = os.path.join(HERE, "fixtures", "session")
@@ -75,12 +76,13 @@ def run_repl(script, sends, resume_txt=None, restored_turn=True):
     try:
         env = {k: v for k, v in os.environ.items()
                if not k.startswith(("SB_", "BEND_", "BISE_"))}
-        port = free_port()
+        sp = SayPort()
+        port = sp.port
         sess = os.path.join(home, "session.txt")
         with open(os.path.join(home, "script.json"), "w") as f:
             json.dump(script, f)
         env.update(HOME=home, BISE_HOME=os.path.join(home, "bise"),
-                   BEND_REPL_PORT=str(port), BEND_SESSION_FILE=sess,
+                   BEND_REPL_PORT=str(port), BISE_REPL_TOKEN=sp.token, BEND_SESSION_FILE=sess,
                    BEND_DEBUG_DIR=os.path.join(home, "debug"),
                    BEND_SCRIPT_FILE=os.path.join(home, "script.json"))
         if resume_txt is not None:
@@ -96,7 +98,7 @@ def run_repl(script, sends, resume_txt=None, restored_turn=True):
                     fail("repl-scripted exited before its banner")
                 if b"REPL on" in line:
                     break
-            sock = socket.create_connection(("127.0.0.1", port), timeout=60)
+            sock = sp.connect(timeout=60)
             f = sock.makefile("rb")
             wire = []
 

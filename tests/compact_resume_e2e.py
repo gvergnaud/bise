@@ -27,6 +27,7 @@ import fake_provider as F  # noqa: E402
 import obs_lines  # noqa: E402
 import scripted_ts  # noqa: E402
 import wait  # noqa: E402
+from say_port import SayPort  # noqa: E402
 
 FAILS = []
 JSRT = {}
@@ -59,12 +60,13 @@ class Repl:
             % fport)
         cfg = os.path.join(self.dir, "config.toml")
         open(cfg, "w").write('model = "fake/claude-x"\n')
-        self.port = free_port()
+        self.sp = SayPort()
+        self.port = self.sp.port
         self.dump = os.path.join(self.dir, "requests") + "/"
         os.makedirs(self.dump)
         env = {k: v for k, v in os.environ.items() if not k.startswith(("BEND_", "SB_", "BISE_"))}
         env.update(HOME=self.dir, XDG_STATE_HOME=os.path.join(self.dir, "state"), BISE_MODELS_FILE=models,
-                   BEND_CONFIG=cfg, BEND_REPL_PORT=str(self.port),
+                   BEND_CONFIG=cfg, BEND_REPL_PORT=str(self.port), BISE_REPL_TOKEN=self.sp.token,
                    BEND_SESSION_FILE=os.path.join(self.dir, "session.txt"),
                    BEND_WIRE_LOG=os.path.join(self.dir, "wire.log"),
                    BEND_BG_ROOT=os.path.join(self.dir, "bg"), SB_AGENT="probe", TMPDIR=self.dir,
@@ -84,7 +86,7 @@ class Repl:
 
     def turn(self, text, timeout=120):
         """one message, then read until the turn ends; nothing else is sent"""
-        sock = socket.create_connection(("127.0.0.1", self.port), timeout=timeout)
+        sock = self.sp.connect(timeout=timeout)
         sock.sendall(("say " + text + "\n").encode())
         f = sock.makefile("rb")
         out = []
