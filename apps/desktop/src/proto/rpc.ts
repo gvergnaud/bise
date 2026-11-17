@@ -360,9 +360,12 @@ export type ViewOpened = { "kind": "view" } & DocView | { "kind": "frame", frame
 /**
  * Why a view may not write its file: `data.reason` of a
  * [`ViewError::NoWrite`] (architect m_59962 #3: the host says "there's a
- * newer version" on the second, never "not allowed").
+ * newer version" on the second, never "not allowed"). `SourceGone`: the
+ * artifact's file is gone and the view reads bise's kept copy (a write
+ * would land in a deleted folder, architect m_66163). A reason a newer
+ * hub adds reads as [`NoWrite::Unknown`]: plain read only.
  */
-export type NoWrite = "no_grant" | "older_version";
+export type NoWrite = "no_grant" | "older_version" | "source_gone" | "unknown";
 
 /**
  * A `resources/read`'s `_meta` (A4): what a view needs to save it back.

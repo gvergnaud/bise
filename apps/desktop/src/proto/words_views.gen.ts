@@ -104,6 +104,10 @@ export const views = {
   doc_turn_on: "Turn on",
   /** the line when the document's file is gone */
   doc_gone: "this file was removed",
+  /** the line's part when the file is gone and the tab shows bise's kept copy of its newest version, read only (designer m_66162): 'Markdown · v3 · bise's copy, the file is gone · read only' */
+  doc_copy: "bise's copy, the file is gone",
+  /** the copy part's tip: where its file was ('was at ~/…/notes.md') */
+  doc_copy_was: (a: { path: string | number }): string => "was at " + String(a.path),
   /** the line when a save was over the hub's limit: 'too large to save (24 MB at most)' */
   doc_too_large: (a: { max: string | number }): string => "too large to save (" + String(a.max) + " at most)",
   /** the line when a save failed for another reason */

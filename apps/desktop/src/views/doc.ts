@@ -9,6 +9,7 @@ import type { Json, JsonObject } from './protocol';
 import { resourceOf, ungranted } from './resource';
 import type { ViewResource } from './session';
 import type { ViewPerm } from '@/shared/viewperms';
+import type { NoWrite } from '@/proto/rpc';
 
 /** The view → host methods of a document view (A5), beside C7's. */
 export const DOC = {
@@ -276,18 +277,28 @@ export type Save =
   /** someone saved a newer version while he edited: Reload / Keep mine as a copy */
   | { readonly kind: 'conflict' }
   | { readonly kind: 'too-large'; readonly maxBytes: number }
-  /** the hub refused the write: no grant, or this is an older version (architect m_59962 #3) */
-  | { readonly kind: 'refused'; readonly why: 'no_grant' | 'older_version' }
+  /**
+   * the hub refused the write: no grant, an older version (architect m_59962 #3), bise's copy of a
+   * file gone; a reason this app doesn't know is plain read only (architect m_66163)
+   */
+  | { readonly kind: 'refused'; readonly why: NoWrite }
   | { readonly kind: 'failed'; readonly message: string };
 
 export const IDLE: Save = { kind: 'idle' };
+
+const NO_WRITES: readonly NoWrite[] = ['no_grant', 'older_version', 'source_gone'];
+
+/** A refused write's `data.reason`: one the hub sends, else 'unknown' (a newer hub's: read only). Pure. */
+export function noWriteOf(reason: Json | undefined): NoWrite {
+  return NO_WRITES.find((w) => w === reason) ?? 'unknown';
+}
 
 /** A write's answer as the save state (`at`: now, ms). Pure. */
 export function saveOf(a: { readonly result: Json } | { readonly error: { readonly code: number; readonly message: string; readonly data?: Json } }, at: number, noWrite: number): Save {
   if ('error' in a) {
     if (a.error.code === noWrite) {
       const d = a.error.data;
-      return { kind: 'refused', why: isObj(d) && d['reason'] === 'older_version' ? 'older_version' : 'no_grant' };
+      return { kind: 'refused', why: noWriteOf(isObj(d) ? d['reason'] : undefined) };
     }
     return { kind: 'failed', message: a.error.message };
   }

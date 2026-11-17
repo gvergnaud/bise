@@ -1,12 +1,12 @@
 // A document tab's head line (docs/plugin-apps.md A6b): its facts, or the one thing that changes
 // what he can do, in its order (gone, off, failed, loading, a conflict, an older or newer version, read only).
 import { describe, expect, it } from 'vitest';
-import type { Save } from '@/views/doc';
+import { IDLE, type Save } from '@/views/doc';
 import { DOC_ERR, VIEW_ERR } from '@/views/port';
 import type { ViewState } from '@/views/store';
 import { views } from '@/proto/words_views.gen';
-import { factsWords, newerAct, whoWord } from './Document';
-import { docLine } from './docline';
+import { copyWords, factsWords, newerAct, whoWord } from './Document';
+import { asksHub, docLine } from './docline';
 
 function live(version: number | undefined, save: Save = { kind: 'idle' }, writable = true, savedHere = false): ViewState {
   return {
@@ -31,6 +31,18 @@ describe('docLine', () => {
     expect(docLine(live(3), ROW, 'Fake')).toEqual({ kind: 'facts', app: 'Fake', version: 3, save: { kind: 'idle' }, readOnly: false });
     expect(docLine(live(3, { kind: 'saving' }), ROW, 'Fake')).toMatchObject({ kind: 'facts', save: { kind: 'saving' } });
     expect(docLine(live(undefined), undefined, ''), 'a ~/bise file: no version').toEqual({ kind: 'facts', app: 'Fake', save: { kind: 'idle' }, readOnly: false });
+  });
+
+  it("his m_66157: a file gone with bise's copy opens the copy, read only, saying so; none kept: removed", () => {
+    const kept = { newest: 3, gone: true, kept: { was: '/w/tmp/guide.md' } };
+    expect(asksHub(kept), 'the hub serves the copy').toBe(true);
+    expect(asksHub({ newest: 3, gone: true }), 'no copy: nothing to ask').toBe(false);
+    expect(asksHub(ROW)).toBe(true);
+    expect(docLine(live(3, IDLE, false), kept, 'Markdown'), "the view's app, the copy's version").toEqual({ kind: 'copy', app: 'Fake', version: 3, was: '/w/tmp/guide.md' });
+    expect(docLine({ kind: 'loading', height: 96 }, kept, 'Markdown'), 'loading the copy').toEqual({ kind: 'loading' });
+    expect(docLine({ kind: 'failed', message: 'x', code: DOC_ERR.gone }, kept, 'Markdown'), 'the copy gone too').toEqual({ kind: 'gone' });
+    expect(docLine(live(3), { newest: 3, gone: true }, 'Markdown')).toEqual({ kind: 'gone' });
+    expect(copyWords({ kind: 'copy', app: 'Markdown', version: 3, was: '/w/tmp/guide.md' }).join(' · ')).toBe(`Markdown · ${views.doc_version({ n: 3 })} · ${views.doc_copy} · ${views.doc_read_only}`);
   });
 
   it('a file gone wins over everything, from the row or the hub', () => {

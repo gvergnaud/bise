@@ -135,6 +135,9 @@ describe('save', () => {
     expect(saveOf({ result: { outcome: 'too-large', maxBytes: 100 } }, 5, DOC_ERR.noWrite)).toEqual({ kind: 'too-large', maxBytes: 100 });
     expect(saveOf({ error: { code: DOC_ERR.noWrite, message: 'no', data: { reason: 'older_version' } } }, 5, DOC_ERR.noWrite)).toEqual({ kind: 'refused', why: 'older_version' });
     expect(saveOf({ error: { code: DOC_ERR.noWrite, message: 'no', data: { reason: 'no_grant' } } }, 5, DOC_ERR.noWrite)).toEqual({ kind: 'refused', why: 'no_grant' });
+    expect(saveOf({ error: { code: DOC_ERR.noWrite, message: 'no', data: { reason: 'source_gone' } } }, 5, DOC_ERR.noWrite)).toEqual({ kind: 'refused', why: 'source_gone' });
+    // architect m_66163: a reason a newer hub adds is plain read only
+    expect(saveOf({ error: { code: DOC_ERR.noWrite, message: 'no', data: { reason: 'cosmic_rays' } } }, 5, DOC_ERR.noWrite)).toEqual({ kind: 'refused', why: 'unknown' });
     expect(saveOf({ error: { code: DOC_ERR.badHandle, message: 'bad' } }, 5, DOC_ERR.noWrite)).toEqual({ kind: 'failed', message: 'bad' });
   });
 

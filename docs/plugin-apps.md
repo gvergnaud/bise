@@ -253,9 +253,13 @@ Methods for a view (through the host, C7):
 - Errors (`bise_proto::view_rpc`, architect m_59962): a refused handle,
   whatever the reason (made up, another session's, another artifact's,
   path-shaped), is one answer, `-32039 bad-handle`; a write without the
-  grant or on an older version: `-32040 no-write` with `data.reason`
-  `no_grant` | `older_version` (an older version's read says
-  `writable: false`); a file or version no more: `-32041 gone`.
+  grant, on an older version or on bise's copy of a file gone:
+  `-32040 no-write` with `data.reason` `no_grant` | `older_version` |
+  `source_gone` (their reads say `writable: false`; a reason a client
+  doesn't know reads as plain read only, `unknown`, architect m_66163);
+  a file or version no more: `-32041 gone`. An artifact whose file is
+  gone opens bise's copy of its newest version (`source_gone`: the
+  source missing, the copy kept), its tab saying so; no copy kept: gone.
 - Writes are idempotent: `view/call` for
   `ai.mistral.vibe/resources/write` carries `seq` (u64 from 1, per doc;
   the same seq on a retry); the hub keeps one version per sitting (doc)

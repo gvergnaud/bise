@@ -173,7 +173,7 @@ impl Shell {
         if let Some(a) = b.replay(seq) {
             return done(Ok(json!(a)));
         }
-        if let Err(why) = disk::may_write(&b) {
+        if let Err(why) = disk::may_write(&arts(&pages), &b) {
             return done(Err(ViewError::no_write(why, WRITE)));
         }
         let bytes = match body_of(p, WRITE) {
@@ -255,7 +255,7 @@ impl Shell {
     pub(super) fn view_copy(&mut self, doc: String, p: Value, done: ViewDone) {
         let Some(pages) = self.doc_pages() else { return done(Err(ViewError::Expired.rpc(COPY))) };
         let Some(b) = pages.doc_of(&doc) else { return done(Err(ViewError::BadHandle.rpc(COPY))) };
-        if let Err(NoWrite::NoGrant) = disk::may_write(&b) {
+        if let Err(NoWrite::NoGrant) = disk::may_write(&arts(&pages), &b) {
             return done(Err(ViewError::no_write(NoWrite::NoGrant, COPY)));
         }
         let bytes = match body_of(&p, COPY) {
@@ -315,10 +315,11 @@ fn doc_seed(pages: Arc<Pages>, b: Binding, done: ViewDone) {
 
 fn doc_read(pages: Arc<Pages>, b: Binding, uri: String, p: &Value, done: ViewDone) {
     let range = p.get("range").map(|r| Range { offset: r.get("offset").and_then(Value::as_u64).unwrap_or(0), length: r.get("length").and_then(Value::as_u64).unwrap_or(0) });
-    let writable = disk::may_write(&b).is_ok();
     std::thread::spawn(move || {
+        let store = arts(&pages);
+        let writable = disk::may_write(&store, &b).is_ok();
         let r = (|| {
-            let at = disk::file_at(&arts(&pages), &pages.bise_root, &b.target)?;
+            let at = disk::file_at(&store, &pages.bise_root, &b.target)?;
             let (offset, length) = crate::view_files::window(at.size, range)?;
             let bytes = disk::read(&at, offset, length)?;
             let whole = offset == 0 && length == at.size;

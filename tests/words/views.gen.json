@@ -34,6 +34,18 @@
     "one": null,
     "text": "{app} is off"
   },
+  "views.doc_copy": {
+    "args": [],
+    "one": null,
+    "text": "bise's copy, the file is gone"
+  },
+  "views.doc_copy_was": {
+    "args": [
+      "path"
+    ],
+    "one": null,
+    "text": "was at {path}"
+  },
   "views.doc_detached": {
     "args": [
       "n"

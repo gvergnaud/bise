@@ -210,20 +210,31 @@ pub enum ViewError {
 
 /// Why a view may not write its file: `data.reason` of a
 /// [`ViewError::NoWrite`] (architect m_59962 #3: the host says "there's a
-/// newer version" on the second, never "not allowed").
+/// newer version" on the second, never "not allowed"). `SourceGone`: the
+/// artifact's file is gone and the view reads bise's kept copy (a write
+/// would land in a deleted folder, architect m_66163). A reason a newer
+/// hub adds reads as [`NoWrite::Unknown`]: plain read only.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
 pub enum NoWrite {
     NoGrant,
     OlderVersion,
+    SourceGone,
+    #[serde(other)]
+    Unknown,
 }
 
 impl NoWrite {
+    /// Every reason a hub sends (never [`NoWrite::Unknown`]).
+    pub const SENT: [NoWrite; 3] = [NoWrite::NoGrant, NoWrite::OlderVersion, NoWrite::SourceGone];
+
     pub fn reason(self) -> &'static str {
         match self {
             NoWrite::NoGrant => "no_grant",
             NoWrite::OlderVersion => "older_version",
+            NoWrite::SourceGone => "source_gone",
+            NoWrite::Unknown => "unknown",
         }
     }
 }
@@ -317,7 +328,7 @@ impl ViewError {
 
     /// The error a `data.reason` names (a [`NoWrite`]'s: `NoWrite`).
     pub fn from_reason(reason: &str) -> Option<ViewError> {
-        if [NoWrite::NoGrant, NoWrite::OlderVersion].iter().any(|w| w.reason() == reason) {
+        if NoWrite::SENT.iter().any(|w| w.reason() == reason) {
             return Some(ViewError::NoWrite);
         }
         ViewError::ALL.into_iter().find(|e| e.reason() == reason)
@@ -331,6 +342,9 @@ impl ViewError {
         }
         if why == NoWrite::OlderVersion {
             e.message = format!("{what}: this is an older version; open the newest to save");
+        }
+        if why == NoWrite::SourceGone {
+            e.message = format!("{what}: this file is gone; this is bise's copy, read only");
         }
         e
     }
@@ -391,13 +405,21 @@ mod tests {
     /// architect m_59962 #3: a refused write says why, as an enum.
     #[test]
     fn a_refused_write_says_no_grant_or_older_version() {
-        for (why, reason) in [(NoWrite::NoGrant, "no_grant"), (NoWrite::OlderVersion, "older_version")] {
+        for (why, reason) in [(NoWrite::NoGrant, "no_grant"), (NoWrite::OlderVersion, "older_version"), (NoWrite::SourceGone, "source_gone")] {
             let e = ViewError::no_write(why, "ai.mistral.vibe/resources/write");
             assert_eq!(e.code, -32040);
             assert_eq!(e.data.and_then(|d| d.reason).as_deref(), Some(reason));
             assert_eq!(ViewError::from_reason(reason), Some(ViewError::NoWrite));
             assert_eq!(serde_json::to_value(why).unwrap(), serde_json::json!(reason));
+            assert_eq!(serde_json::from_value::<NoWrite>(serde_json::json!(reason)).unwrap(), why);
         }
+    }
+
+    /// architect m_66163: a reason a newer hub adds reads as plain read only, never a parse error.
+    #[test]
+    fn an_unknown_no_write_reason_reads_as_unknown() {
+        assert_eq!(serde_json::from_value::<NoWrite>(serde_json::json!("cosmic_rays")).unwrap(), NoWrite::Unknown);
+        assert!(!NoWrite::SENT.contains(&NoWrite::Unknown));
     }
 
     #[test]

@@ -180,9 +180,10 @@ impl Shell {
         let ws = self.opts.paths.workspace.clone();
         let bridge = self.views_bridge();
         let step = self.view_step();
+        let store = crate::pages::artifact::notes::arts(&pages);
         std::thread::spawn(move || {
-            // the grant is read fresh from plugins.json: off the loop
-            let writable = crate::view_files_disk::may_write(&binding).is_ok();
+            // the grant is read fresh from plugins.json, the file's presence from disk: off the loop
+            let writable = crate::view_files_disk::may_write(&store, &binding).is_ok();
             let args = json!({"file": {"name": c.resolved.name, "resourceUri": handle}});
             let call = || -> Result<(Value, view_call::ResourceRead, Value, Vec<String>), RpcError> {
                 let base = bridge.map_err(|e| gone(&e)).and_then(|p| crate::view_bridge::wait_base(&p).ok_or_else(|| gone("no bridge")))?;

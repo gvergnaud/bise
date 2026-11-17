@@ -16,6 +16,11 @@ export interface RowFacts {
   readonly newest: number;
   /** its file is gone from disk (the row's `gone`) */
   readonly gone: boolean;
+  /**
+   * bise kept a copy of its newest version (the row's `copy`): a gone file opens it, read only
+   * (his m_66157); `was` is where its file was
+   */
+  readonly kept?: { readonly was: string };
   /** who saved its newest version (ArtifactVersion.by); none: not said */
   readonly by?: SavedBy;
   /**
@@ -29,6 +34,8 @@ export interface RowFacts {
 export type DocLine =
   | { readonly kind: 'loading' }
   | { readonly kind: 'gone' }
+  /** its file is gone, the tab shows bise's copy of its newest version, read only; `was` its tip */
+  | { readonly kind: 'copy'; readonly app: string; readonly version?: number; readonly was: string }
   | { readonly kind: 'off'; readonly app: string }
   | { readonly kind: 'failed' }
   /** a built-in page draws it: its own head says the rest */
@@ -40,14 +47,23 @@ export type DocLine =
   | { readonly kind: 'facts'; readonly app: string; readonly version?: number; readonly save: Save; readonly readOnly: boolean };
 
 /**
- * The line, in this order: gone, off, failed, loading, a conflict, an older version, else the
- * facts with the save state ('read only' when it can't save). An older version: one he opened so
- * (`follows` false: a chip's version, Open with's) says Open vN; under a tab that follows the
- * newest, a newer one saved meanwhile says who saved it when he can edit (else the tab reopens on
- * it by itself: newerAct). `app` when the view never said one: the opener the row named. Pure.
+ * Whether the tab asks the hub for its document: not for a file gone with no copy kept (its line
+ * says it was removed); a gone file with bise's copy opens the copy (the hub serves it). Pure.
+ */
+export function asksHub(row: RowFacts | undefined): boolean {
+  return row?.gone !== true || row.kept !== undefined;
+}
+
+/**
+ * The line, in this order: gone (no copy kept), off, failed, loading, bise's copy of a file gone,
+ * a conflict, an older version, else the facts with the save state ('read only' when it can't
+ * save). An older version: one he opened so (`follows` false: a chip's version, Open with's) says
+ * Open vN; under a tab that follows the newest, a newer one saved meanwhile says who saved it when
+ * he can edit (else the tab reopens on it by itself: newerAct). `app` when the view never said
+ * one: the opener the row named. Pure.
  */
 export function docLine(state: ViewState, row: RowFacts | undefined, rowApp: string, follows = true): DocLine {
-  if (row?.gone === true) return { kind: 'gone' };
+  if (!asksHub(row)) return { kind: 'gone' };
   switch (state.kind) {
     case 'failed':
       // a hub that doesn't know view/open yet (method not found): today's page draws it (F0, apps-lead m_62087)
@@ -76,6 +92,8 @@ export function docLine(state: ViewState, row: RowFacts | undefined, rowApp: str
   // (the write's answer has no version, A4)
   const mine = d.savedHere && row?.by?.kind === 'you' && d.document.version !== undefined && d.document.version < row.newest;
   const version = mine ? row.newest : d.document.version;
+  // the file gone, bise's copy shown: read only, no save state (designer m_66162)
+  if (row?.gone === true && row.kept !== undefined) return { kind: 'copy', app, ...(version === undefined ? {} : { version }), was: row.kept.was };
   if (d.save.kind === 'conflict') return { kind: 'conflict', app, ...(version === undefined ? {} : { version }) };
   const newest = row?.newest;
   if (version !== undefined && newest !== undefined && version < newest) {
@@ -84,6 +102,7 @@ export function docLine(state: ViewState, row: RowFacts | undefined, rowApp: str
     if (!follows) return { kind: 'older', app, version, newest };
     if (d.document.writable) return { kind: 'newer', app, version, newest, by: row?.by ?? { kind: 'unknown' } };
   }
-  const readOnly = !d.document.writable || (d.save.kind === 'refused' && d.save.why === 'no_grant');
+  // refused for any reason but an older version (its own line) reads as read only
+  const readOnly = !d.document.writable || (d.save.kind === 'refused' && d.save.why !== 'older_version');
   return { kind: 'facts', app, ...(version === undefined ? {} : { version }), save: d.save, readOnly };
 }

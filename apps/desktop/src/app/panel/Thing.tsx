@@ -119,6 +119,8 @@ function ArtifactTab({ project, id, tabId }: { project: string; id: string; tabI
   if (a === undefined || opener == null) return <Browser project={project} id={id} tabId={tabId} />;
   // who saved its newest version (the newer line's 'perf saved v4')
   const by = a.versions?.find((v) => v.v === a.version)?.by;
+  // bise's copy of its newest version: a gone file opens it (his m_66157)
+  const kept = a.copy != null && a.copy !== '' ? { was: a.path ?? a.target ?? '' } : null;
   return (
     <DocumentTab
       docRef={{ project, target: { kind: 'artifact', id } }}
@@ -126,7 +128,7 @@ function ArtifactTab({ project, id, tabId }: { project: string; id: string; tabI
       store={viewsStore}
       title={a.title}
       rowApp={opener.app}
-      row={{ newest: a.version, gone: a.gone === true, oldHubPage: oldHub && a.kind === 'page', ...(by == null ? {} : { by }) }}
+      row={{ newest: a.version, gone: a.gone === true, oldHubPage: oldHub && a.kind === 'page', ...(by == null ? {} : { by }), ...(kept === null ? {} : { kept }) }}
       turnOn={() => {
         store.command({ cmd: 'plugin_set', project, name: opener.plugin, on: true });
       }}

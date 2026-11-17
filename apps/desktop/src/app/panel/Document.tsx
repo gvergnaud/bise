@@ -21,7 +21,15 @@ import type { ViewState, ViewsStore } from '@/views/store';
 import type { SavedBy } from '@/proto/rows';
 import { docEntity } from '@/views/window';
 import { closeTabId } from './state';
-import { docLine, type DocLine, type RowFacts } from './docline';
+import { tilde } from '@/app/barplaces';
+import { asksHub, docLine, type DocLine, type RowFacts } from './docline';
+
+const HOME = (globalThis as { bise?: { home?: string } }).bise?.home;
+
+/** bise's copy of a file gone: 'Markdown · v3 · bise's copy, the file is gone · read only' (designer m_66162). Pure. */
+export function copyWords(l: Extract<DocLine, { kind: 'copy' }>): readonly [lead: string, copy: string, tail: string] {
+  return [[l.app, ...(l.version === undefined ? [] : [views.doc_version({ n: l.version })])].join(' · '), views.doc_copy, views.doc_read_only];
+}
 
 /** A document tab's words for its line's facts: 'Sheets · v3 · saved 09:41'. Pure. */
 export function factsWords(l: Extract<DocLine, { kind: 'facts' }>): string {
@@ -76,11 +84,11 @@ export function DocumentTab({ docRef, tabId, store, title, rowApp, row, turnOn }
   const state = useViewState(store, ref);
   const box = useRef<HTMLDivElement>(null);
   const menu = useEntityMenu(docEntity(ref));
-  // a removed file asks the hub nothing: its line says so
-  const gone = row?.gone === true;
+  // a removed file with no copy kept asks the hub nothing: its line says so; one with bise's copy opens it
+  const asks = asksHub(row);
   useEffect(() => {
-    if (!gone) store.ensure(ref);
-  }, [store, ref, gone]);
+    if (asks) store.ensure(ref);
+  }, [store, ref, asks]);
   useEffect(() => {
     store.anchor(ref, 'tab', box.current);
     return () => {
@@ -176,6 +184,20 @@ function Line({ line, store, docRef, turnOn }: { line: DocLine; store: ViewsStor
       return null;
     case 'gone':
       return row('gone', <span className="pn-doc-line-t">{views.doc_gone}</span>);
+    case 'copy': {
+      // the copy part is never cut; 'read only' goes first when the line is narrow (designer m_66162)
+      const [lead, copy, tail] = copyWords(line);
+      return row(
+        'copy',
+        <span className="pn-doc-line-t pn-doc-copy">
+          <span className="pn-doc-copy-lead">{lead} · </span>
+          <span className="pn-doc-copy-what" title={views.doc_copy_was({ path: tilde(line.was, HOME) })} data-testid="app.panel.doc.copy">
+            {copy}
+          </span>
+          <span className="pn-doc-copy-tail"> · {tail}</span>
+        </span>,
+      );
+    }
     case 'off':
       return row(
         'off',

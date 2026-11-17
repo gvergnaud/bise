@@ -1148,6 +1148,26 @@
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+/* bise's copy of a file gone (designer m_66162): the copy part in text-2 and never cut, 'read only'
+   shrinks first, then the app and version */
+.pn-doc-copy {
+  display: flex;
+}
+.pn-doc-copy > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pn-doc-copy-lead {
+  flex: 0 1 auto;
+}
+.pn-doc-copy-what {
+  flex: none;
+  color: var(--c-text-2);
+}
+.pn-doc-copy-tail {
+  flex: 0 1000 auto;
+  min-width: 0;
+}
 .pn-doc-act {
   flex: none;
   color: var(--c-text-2);

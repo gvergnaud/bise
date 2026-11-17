@@ -79,9 +79,10 @@ pub fn resolve_entry(store: &Store, root: &Path, path: &Path, links: &std::colle
 }
 
 /// Whether the view of `b` may write its file now: its `write` grant
-/// (read fresh from `plugins.json`: he may have taken it back), and not
-/// an older version. A read's `_meta.writable` and every write ask it.
-pub fn may_write(b: &crate::view_files::Binding) -> Result<(), bise_proto::view_rpc::NoWrite> {
+/// (read fresh from `plugins.json`: he may have taken it back), not an
+/// older version, and not bise's copy of a file gone ([`source_gone`]). A
+/// read's `_meta.writable` and every write ask it.
+pub fn may_write(store: &Store, b: &crate::view_files::Binding) -> Result<(), bise_proto::view_rpc::NoWrite> {
     use bise_proto::view_rpc::NoWrite;
     let grants = bend_plugins::state::grants(&bend_plugins::state::state_path());
     if !bend_plugins::state::view_allows(&grants, &b.opener.plugin, &b.opener.uri, bise_proto::view_rules::ViewPerm::Write) {
@@ -90,7 +91,22 @@ pub fn may_write(b: &crate::view_files::Binding) -> Result<(), bise_proto::view_
     if b.older {
         return Err(NoWrite::OlderVersion);
     }
+    if source_gone(store, &b.target) {
+        return Err(NoWrite::SourceGone);
+    }
     Ok(())
+}
+
+/// An artifact whose file is gone from disk (a dropped agent's temp
+/// folder) while bise kept a copy of its newest version: the view reads
+/// that copy, read only (a write would land in a deleted folder, lost at
+/// the next sweep: architect m_66163). Asked fresh: a file back is
+/// writable again.
+pub fn source_gone(store: &Store, target: &FileTarget) -> bool {
+    let FileTarget::Artifact { id, .. } = target else { return false };
+    let Some(m) = store.get(id) else { return false };
+    let kept = m.current().and_then(|v| store.copy_path(&m, v)).is_some_and(|p| p.exists());
+    kept && !Path::new(&m.source).exists()
 }
 
 
@@ -321,6 +337,36 @@ mod tests {
         assert_eq!(resolve_artifact(&store, &id, Some(7)).err(), Some(ViewError::BadHandle), "a version it never had");
         assert_eq!(resolve_artifact(&store, "nope", None).err(), Some(ViewError::BadHandle));
         assert_eq!(file_at(&store, &d, &FileTarget::Artifact { id: "nope".into(), version: 1 }).err(), Some(ViewError::Gone));
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// his m_66157: a doc in a dropped agent's temp folder. Its file gone, bise's copy of its
+    /// newest version opens, read only (a write would land in a deleted folder, architect
+    /// m_66163); no copy kept: gone.
+    #[test]
+    fn a_gone_file_opens_its_kept_copy_read_only() {
+        let d = tmp("gone");
+        let work = d.join("agent-tmp");
+        std::fs::create_dir_all(&work).unwrap();
+        let f = work.join("guide.md");
+        std::fs::write(&f, b"# loops").unwrap();
+        let store = Store::new(&d.join("state"));
+        let add = crate::artifacts::Add { target: f.to_string_lossy().to_string(), agent: "loop-guide".into(), by: "loop-guide".into(), cwd: work.to_string_lossy().to_string(), ..Default::default() };
+        let id = store.add(&add, 10).unwrap().meta.id;
+        let target = FileTarget::Artifact { id: id.clone(), version: 1 };
+        assert!(!source_gone(&store, &target), "its file still there: writable");
+        std::fs::remove_dir_all(&work).unwrap();
+        let r = resolve_artifact(&store, &id, None).unwrap();
+        assert_eq!((r.target.clone(), r.name.as_str()), (target.clone(), "guide.md"));
+        let at = file_at(&store, &d, &target).unwrap();
+        assert_eq!(read(&at, 0, 100).unwrap(), b"# loops", "bise's copy");
+        assert!(source_gone(&store, &target), "the copy: read only");
+        // no copy kept: gone, never a read-only nothing
+        let m = store.get(&id).unwrap();
+        std::fs::remove_file(store.copy_path(&m, m.current().unwrap()).unwrap()).unwrap();
+        assert_eq!(file_at(&store, &d, &target).err(), Some(ViewError::Gone));
+        assert!(!source_gone(&store, &target));
+        assert!(!source_gone(&store, &FileTarget::RootFile { path: f.clone() }), "a root file is no artifact");
         let _ = std::fs::remove_dir_all(&d);
     }
 
