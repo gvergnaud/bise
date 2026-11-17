@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BOTTOM, capsuleBounds, CORNER, fitBounds, MENU_GAP, OFF_DISPLAY, onScreen, pinnedBounds, pinOf, TOP, type DisplayBox } from './place';
+import { BOTTOM, capsuleBounds, CORNER, fitBounds, MENU_GAP, OFF_DISPLAY, onScreen, pinnedBounds, pinOf, recentred, TOP, type DisplayBox } from './place';
 
 // a 1512x982 MacBook display: the menu bar 33 px, the Dock 70 px
 const mac: DisplayBox = {
@@ -219,5 +219,44 @@ describe('corner: the fn talk, his pick C (designer m_22119)', () => {
       expect(glassBR(b, g)).toEqual(glassBR(b0, g0));
       expect(b.y + g.y).toBeGreaterThanOrEqual(mac.workArea.y);
     }
+  });
+});
+
+describe("the thread pane opening or closing re-centres it on its screen (his ask m_66232, designer m_66237)", () => {
+  const wa = { x: 0, y: 25, width: 1470, height: 900 };
+  const d13: DisplayBox = { bounds: { x: 0, y: 0, width: 1470, height: 956 }, workArea: wa };
+  const small = { width: 640, height: 400 };
+  const big = { width: 1120, height: 500 };
+  it('centred 640 -> 1120: both edges move 240, its top stays', () => {
+    const b0 = capsuleBounds(small, d13, { at: 'top' });
+    const r = recentred(big, pinOf(b0, small, { at: 'top' }), d13);
+    expect(b0.x - r.bounds.x).toBe(240);
+    expect(r.bounds.x + r.bounds.width - (b0.x + b0.width)).toBe(240);
+    expect(r.bounds.y).toBe(b0.y);
+    expect(r.bounds.height).toBe(500);
+  });
+  it('and back: 1120 -> 640 ends where a fresh spotlight goes', () => {
+    const b0 = capsuleBounds(small, d13, { at: 'top' });
+    const wide = recentred(big, pinOf(b0, small, { at: 'top' }), d13);
+    expect(recentred(small, wide.pin, d13).bounds).toEqual({ ...b0, height: 400 });
+  });
+  it('a capsule that sat off-centre glides to the centre', () => {
+    const b0 = { x: 700, y: 195, width: 640, height: 400 };
+    const r = recentred(big, pinOf(b0, small, { at: 'top' }), d13);
+    expect(r.bounds.x).toBe((1470 - 1120) / 2);
+    // the pin follows: a later size keeps the new place
+    expect(pinnedBounds({ width: 1120, height: 700 }, r.pin).x).toBe(r.bounds.x);
+  });
+  it('a second display left of the main one: centred on that one, never on the main display', () => {
+    const left: DisplayBox = { bounds: { x: -1920, y: 0, width: 1920, height: 1080 }, workArea: { x: -1920, y: 25, width: 1920, height: 1055 } };
+    const b0 = capsuleBounds(small, left, { at: 'top' });
+    const r = recentred(big, pinOf(b0, small, { at: 'top' }), left);
+    expect(r.bounds.x).toBe(-1920 + (1920 - 1120) / 2);
+  });
+  it('a screen narrower than the window: kept inside its work area, its left edge on the left', () => {
+    const narrow: DisplayBox = { bounds: { x: 0, y: 0, width: 1024, height: 768 }, workArea: { x: 0, y: 25, width: 1024, height: 700 } };
+    const b0 = capsuleBounds(small, narrow, { at: 'top' });
+    const r = recentred(big, pinOf(b0, small, { at: 'top' }), narrow);
+    expect(r.bounds.x).toBe(0);
   });
 });

@@ -415,6 +415,45 @@
   max-height: var(--spot-max, 70vh);
   border-left: 1px solid var(--c-line);
 }
+/* its open and close (capsule/morph.ts, designer m_66237): main glides the window re-centred in
+   220 ms; the line between the two is there at t=0. Its content fades in and slides 12 px from the
+   left (80-220 ms), his message rises 8 px (120-260), bise's ∿ right after (260-400). Closing, its
+   content fades out in 80 ms before the window glides back. Reduced motion: none of it */
+.b-spot-pane[data-enter] > * {
+  animation: b-pane-in var(--d-fast) var(--ease-out) var(--d-press) both;
+}
+.b-spot-pane[data-enter] .r.you:nth-last-child(1 of .r.you) {
+  animation: b-pane-rise var(--d-fast) var(--ease-out) 120ms both;
+}
+.b-spot-pane[data-enter] .r.wait {
+  animation: b-pane-rise var(--d-fast) var(--ease-out) 260ms both;
+}
+.b-spot-pane[data-leaving] > * {
+  opacity: 0;
+  transition: opacity var(--d-press) var(--ease-out);
+}
+@keyframes b-pane-in {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+}
+@keyframes b-pane-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .b-spot-pane[data-enter] > *,
+  .b-spot-pane[data-enter] .r.you,
+  .b-spot-pane[data-enter] .r.wait {
+    animation: none;
+  }
+  .b-spot-pane[data-leaving] > * {
+    transition: none;
+  }
+}
 .b-spot-pane .hd {
   display: flex;
   align-items: center;

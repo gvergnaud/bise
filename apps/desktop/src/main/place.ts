@@ -15,7 +15,10 @@
 // move while he types): `pinned` notes where its glass sits at show, and each
 // new size keeps that glass's left edge and its anchored edge (top for the
 // spotlight and the menu, bottom for what bise brings) where they were; it
-// grows right and away from that edge only. A bottom view that grows while
+// grows right and away from that edge only. One exception: the spotlight's
+// thread pane opening or closing re-centres it on the screen it was pinned on
+// (`recentred`; his ask m_66232, designer m_66237): he has just sent, not
+// typing, and main glides it there (morph.ts). A bottom view that grows while
 // shown (the voice view, lead m_11532: `fitBounds`) is placed so its glass at
 // its max height would still end above the Dock, then pinned by its top-left
 // and grows down.
@@ -156,6 +159,22 @@ export function onScreen(b: Rect, pin: Pin, wa: Rect): { readonly bounds: Rect; 
   const dx = Math.min(b.x + b.width - (wa.x + wa.width), b.x - wa.x);
   if (dx <= 0) return { bounds: b, pin };
   return { bounds: { ...b, x: b.x - dx }, pin: { ...pin, x: pin.x - dx } };
+}
+
+/**
+ * The spotlight's thread pane opening or closing (capsule-morph, his ask m_66232, designer
+ * m_66237): the one move of a shown window, centred again on the screen it was pinned on, its
+ * pinned edge where it was (a top-pinned spotlight keeps its top), inside the work area. The
+ * pin follows. Pure.
+ */
+export function recentred(size: { width: number; height: number }, pin: Pin, d: DisplayBox, glass?: Rect): { readonly bounds: Rect; readonly pin: Pin } {
+  const g = glass ?? { x: 0, y: 0, width: size.width, height: size.height };
+  const b = pinnedBounds(size, pin, glass);
+  const wa = d.workArea;
+  const centred = d.bounds.x + d.bounds.width / 2 - (g.x + g.width / 2);
+  const x = Math.round(Math.min(Math.max(centred, wa.x), wa.x + wa.width - Math.min(b.width, wa.width)));
+  const dx = x - b.x;
+  return { bounds: { ...b, x }, pin: { ...pin, x: pin.x + dx } };
 }
 
 /**

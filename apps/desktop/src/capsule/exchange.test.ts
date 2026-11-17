@@ -47,6 +47,13 @@ describe("the pane's rows", () => {
     expect(paneRows(landed, 9, { text: 'Une commande : down', done: false }).at(-1)).toEqual({ kind: 'bise', pos: 14, text: 'Une commande : down', live: true });
     expect(paneRows(landed, 9, { text: 'Une commande : down', done: true }).at(-1)).toEqual({ kind: 'bise', pos: 14, text: 'Une commande : down', live: false });
   });
+  it('his message on its way shows at once, after the thread and before the wait (the pane opens with it)', () => {
+    const rows = paneRows(thread, 9, { text: '', done: false }, [{ text: 'et le cluster ?' }]);
+    expect(rows.slice(-2)).toEqual([{ kind: 'you', pos: -1, text: 'et le cluster ?' }, { kind: 'wait' }]);
+    // landed: the entry, once
+    const landed = [...thread, you(14, 'et le cluster ?')];
+    expect(paneRows(landed, 9, { text: '', done: false }, []).filter((r) => r.kind === 'you')).toHaveLength(3);
+  });
   it('an ask routed to another project: one dim line', () => {
     expect(paneRows(thread, 9, { text: "sent to acme · its answer is in acme's thread", done: true, note: true }).at(-1)?.kind).toBe('note');
   });

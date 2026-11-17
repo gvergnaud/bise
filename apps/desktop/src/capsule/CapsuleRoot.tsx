@@ -17,7 +17,7 @@ import { newAgent } from "@/agents/actions";
 import { InboxCard } from "@/inbox";
 import { cardKeyOf } from "@/inbox/stripRows";
 import type { Card, Grant, HelperEv, Part } from "@/proto";
-import { threadKey, useHeard, useLevel, usePrefs, useProjects, useRefusedList, useShot, useStore, useThreadOrder } from "@/store";
+import { threadKey, useHeard, useLevel, usePending, usePrefs, useProjects, useRefusedList, useShot, useStore, useThreadOrder } from "@/store";
 import { asked as askedIn, closed, ended, opened, paneRows, type Exchange } from "./exchange";
 import { withRefused } from "@/inbox/listed";
 import type { SpotFront, SpotItem, SpotQuote, SpotRoute } from "@/spotlight";
@@ -192,6 +192,8 @@ export function CapsuleRoot(): JSX.Element {
   });
   const mainKey = home === null ? "" : threadKey(home, "main");
   const mainOrder = useThreadOrder(mainKey);
+  // his messages to main on their way: the pane shows the one that opened it at once
+  const mainSending = usePending(mainKey);
   const rows = useMemo(
     () =>
       ex === null || !ex.pane
@@ -200,8 +202,9 @@ export function CapsuleRoot(): JSX.Element {
             mainOrder.order.flatMap((pos) => store.entry(mainKey, pos) ?? []),
             ex.after,
             last,
+            mainSending,
           ),
-    [ex, mainOrder, store, mainKey, last],
+    [ex, mainOrder, store, mainKey, last, mainSending],
   );
   // the exchange's end (kept past KEEP_MS): no pane, no answer under the field
   const endExchange = useCallback((): void => {
@@ -743,8 +746,8 @@ export function CapsuleRoot(): JSX.Element {
               bise.quit();
             }
       }
-      onSize={(w, h, glass) => {
-        bise?.capsule.size(w, h, glass);
+      onSize={(w, h, glass, morph) => {
+        bise?.capsule.size(w, h, glass, morph);
       }}
     />
   );

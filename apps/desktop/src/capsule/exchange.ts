@@ -3,7 +3,7 @@
 // messages and bise's answers from main's thread since that first ask. It is kept 10 min after
 // the spotlight closed (fn space brings it back as he left it), ended by the pane's ✕ or ⌘W.
 // Pure: the state, its steps, and the pane's rows; CapsuleRoot holds it, ThreadPane draws it.
-import type { Entry } from '@/proto';
+import type { Entry, Part } from '@/proto';
 import type { SpotAnswer } from '@/spotlight';
 
 /** The exchange is kept this long after the spotlight closed. */
@@ -47,7 +47,9 @@ export function opened(x: Exchange | null, now: number): Exchange | null {
 }
 
 export type PaneRow =
-  | { readonly kind: 'you'; readonly pos: number; readonly text: string }
+  /** his message: drawn from its typed parts when it has them (the hub's hint and the image tags
+   *  never shown, designer m_66238), else from its text with the capsule's hint cut */
+  | { readonly kind: 'you'; readonly pos: number; readonly text: string; readonly parts?: readonly Part[] }
   | { readonly kind: 'bise'; readonly pos: number; readonly text: string; readonly live: boolean }
   /** asked, no word back yet */
   | { readonly kind: 'wait' }
@@ -56,16 +58,19 @@ export type PaneRow =
 
 /**
  * The pane's rows: his messages and bise's answers after `after` (no tool calls, no notices),
- * then the answer being written (`last` live) when it is not an entry yet: its words, or the wait.
- * While main works, its newest answer keeps its ∿. Pure.
+ * his messages still on their way (`sending`: shown at once, as the thread shows them, so the
+ * pane opens with the message that opened it: capsule/morph.ts), then the answer being written
+ * (`last` live) when it is not an entry yet: its words, or the wait. While main works, its newest
+ * answer keeps its ∿. Pure.
  */
-export function paneRows(entries: readonly Entry[], after: number, last: SpotAnswer | null): PaneRow[] {
+export function paneRows(entries: readonly Entry[], after: number, last: SpotAnswer | null, sending: readonly { readonly text: string; readonly parts?: readonly Part[] }[] = []): PaneRow[] {
   const rows: PaneRow[] = [];
   for (const e of entries) {
     if (e.pos <= after) continue;
-    if (e.kind === 'you') rows.push({ kind: 'you', pos: e.pos, text: e.text });
+    if (e.kind === 'you') rows.push({ kind: 'you', pos: e.pos, text: e.text, ...(e.parts == null ? {} : { parts: e.parts }) });
     else if (e.kind === 'agent') rows.push({ kind: 'bise', pos: e.pos, text: e.text, live: false });
   }
+  for (const s of sending) rows.push({ kind: 'you', pos: -1, text: s.text, ...(s.parts === undefined ? {} : { parts: s.parts }) });
   if (last === null) return rows;
   if (last.note === true) return [...rows, { kind: 'note', text: last.text }];
   if (last.done) return rows;
@@ -74,6 +79,10 @@ export function paneRows(entries: readonly Entry[], after: number, last: SpotAns
   if (end?.kind === 'bise' && end.text === last.text) return [...rows.slice(0, -1), { ...end, live: true }];
   return [...rows, { kind: 'bise', pos: -1, text: last.text, live: true }];
 }
+
+/** His message's text with no parts (an older hub's entry): the hub's capsule hint at its end cut,
+ *  a line for the model, never his words (designer m_66238). Pure. */
+export const withoutHint = (text: string): string => text.replace(/\s*\[from the capsule[^\]\n]*\]\s*$/u, '');
 
 /** The newest answer's words (⌘C with nothing selected in the pane copies them), or null. Pure. */
 export function lastAnswer(rows: readonly PaneRow[]): string | null {

@@ -41,6 +41,8 @@ import { fileUrl } from "@/thread/rows";
 import { Answer as MdAnswer } from "@/thread/Markdown";
 import "@/thread/thread.css";
 import { TrayMenu } from "./TrayMenu";
+import type { CapsuleMorph } from "@/shared/api";
+import { PANE_ENTER_MS, PANE_LEAVE_MS, stillMotion } from "./morph";
 import "./capsule.css";
 
 export const W = {
@@ -127,10 +129,12 @@ export interface CapsuleProps {
   /** Gives the root the act for fn space with the pane's composer focused: the focus goes to the
    *  left field (true), the window stays; false: the pane didn't have it (the key does what it did). */
   readonly onFocusLeft?: (act: (() => boolean) | null) => void;
+  /** `morph`: this size is the thread pane opening or closing (the window glides, re-centred). */
   readonly onSize: (
     width: number,
     height: number,
     glass: { x: number; y: number; width: number; height: number },
+    morph?: CapsuleMorph,
   ) => void;
 }
 
@@ -161,27 +165,39 @@ export function Capsule(p: CapsuleProps): JSX.Element {
   useEffect(() => {
     size.current = p.onSize;
   });
+  // the thread pane just opened or closed: the next size says so, and the window glides there
+  // re-centred (main/morph.ts; his ask m_66232, designer m_66237)
+  const morphNext = useRef<CapsuleMorph | undefined>(undefined);
+  /** the size sent now (the pane's open and close send theirs at their commit, not a frame later) */
+  const measureNow = useRef<(() => void) | null>(null);
   useEffect(() => {
     const el = box.current;
     if (el === null) return;
     const measure = (): void => {
       const r = el.getBoundingClientRect();
-      // the thread pane open: the glass main places is the left part (the spotlight, or a card
-      // answered in place), so a reopen centres it where a fresh spotlight goes and the pane
-      // grows to the right; it never moves (designer's condition 1, page spotlight-reponse)
-      const g = (el.querySelector(".b-cap-glass.with-pane > :first-child") ?? el.querySelector("[data-glass]"))?.getBoundingClientRect() ?? r;
-      size.current(Math.ceil(r.width), Math.ceil(r.height), {
-        x: Math.round(g.x - r.x),
-        y: Math.round(g.y - r.y),
-        width: Math.round(g.width),
-        height: Math.round(g.height),
-      });
+      // the glass main places and centres is the whole view, the thread pane in it when open
+      const g = el.querySelector("[data-glass]")?.getBoundingClientRect() ?? r;
+      const morph = morphNext.current;
+      morphNext.current = undefined;
+      size.current(
+        Math.ceil(r.width),
+        Math.ceil(r.height),
+        {
+          x: Math.round(g.x - r.x),
+          y: Math.round(g.y - r.y),
+          width: Math.round(g.width),
+          height: Math.round(g.height),
+        },
+        morph,
+      );
     };
+    measureNow.current = measure;
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     const mo = new MutationObserver(measure); // a view change swaps the glass without resizing the page
     mo.observe(el, { childList: true });
     return () => {
+      measureNow.current = null;
       ro.disconnect();
       mo.disconnect();
     };
@@ -192,10 +208,45 @@ export function Capsule(p: CapsuleProps): JSX.Element {
   const paneActs = useRef<ComposerActions | null>(null);
   const pane = p.pane ?? null;
   const paneOpen = pane !== null;
-  // a follow-up opened the pane: its composer has the focus (the left field is empty, lists whole)
+  // a follow-up opened the pane: its composer has the focus at once, typing works mid-move (the
+  // left field is empty, lists whole)
   useEffect(() => {
     if (paneOpen) paneActs.current?.focusEnd();
   }, [paneOpen]);
+  // the pane opening or closing: the next size is a morph (set before the size is measured); its
+  // content comes in on the open (data-enter, capsule.css), a while, then plays no more
+  const [entering, setEntering] = useState(false);
+  const paneWas = useRef(paneOpen);
+  useLayoutEffect(() => {
+    if (paneWas.current === paneOpen) return;
+    paneWas.current = paneOpen;
+    morphNext.current = paneOpen ? "open" : "close";
+    measureNow.current?.();
+    setEntering(paneOpen && !stillMotion());
+  }, [paneOpen]);
+  useEffect(() => {
+    if (!entering) return undefined;
+    const t = window.setTimeout(() => {
+      setEntering(false);
+    }, PANE_ENTER_MS);
+    return () => {
+      window.clearTimeout(t);
+    };
+  }, [entering]);
+  // ✕ or ⌘W: the pane's content fades out first (PANE_LEAVE_MS), then it closes and the window
+  // glides back to a centred spotlight; under reduced motion it closes at once
+  const [leavingPane, setLeavingPane] = useState(false);
+  const endPane = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    if (!leavingPane) return undefined;
+    const t = window.setTimeout(() => {
+      setLeavingPane(false);
+      endPane.current?.();
+    }, PANE_LEAVE_MS);
+    return () => {
+      window.clearTimeout(t);
+    };
+  }, [leavingPane]);
   const onFocusLeft = p.onFocusLeft;
   useEffect(() => {
     if (onFocusLeft === undefined) return undefined;
@@ -216,10 +267,17 @@ export function Capsule(p: CapsuleProps): JSX.Element {
         onSend={pane.onSend}
         onOpen={pane.onOpen}
         onEnd={() => {
-          // the pane closes, the window shrinks from the right, the focus to the left field
-          pane.onEnd();
+          // the pane closes (after its fade out), the window glides back centred, the focus to the left field
           leftActs.current?.focusEnd();
+          if (stillMotion()) {
+            pane.onEnd();
+            return;
+          }
+          endPane.current = pane.onEnd;
+          setLeavingPane(true);
         }}
+        enter={entering}
+        leaving={leavingPane}
         onCopy={pane.onCopy}
         onBack={() => {
           leftActs.current?.focusEnd();
@@ -268,8 +326,8 @@ export function Capsule(p: CapsuleProps): JSX.Element {
         />
       </div>
       {v.kind === "spot" && (
-        // the pane open: the spotlight keeps its 640 px on the left, the pane widens the window to
-        // the right (main's place.ts onScreen keeps it on its screen, never re-centred)
+        // the pane open: the spotlight keeps its 640 px on the left, the pane's 480 on the right;
+        // the window glides re-centred to the whole (main/morph.ts, designer m_66237)
         <div data-glass className={`b-cap-glass${paneOpen ? " with-pane" : ""}`}>
           <Spotlight
             data={p.spot}

@@ -234,8 +234,8 @@ const api: BiseApi = {
     hide: () => {
       ipcRenderer.send(IPC.capsuleHide);
     },
-    size: (width, height, glass) => {
-      ipcRenderer.send(IPC.capsuleSize, width, height, glass);
+    size: (width, height, glass, morph) => {
+      ipcRenderer.send(IPC.capsuleSize, width, height, glass, morph);
     },
     onState: (listener) => listen(IPC.capsuleState, listener),
   },

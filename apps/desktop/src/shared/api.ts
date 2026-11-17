@@ -441,6 +441,9 @@ export interface CapsuleFit {
   readonly maxHeight: number;
 }
 
+/** A size that is the spotlight's thread pane opening or closing (CapsuleApi.size): the window glides, re-centred. */
+export type CapsuleMorph = 'open' | 'close';
+
 export interface CapsuleState {
   readonly shown: boolean;
   readonly at: CapsuleAt;
@@ -462,8 +465,12 @@ export interface CapsuleApi {
    */
   readonly show: (at: CapsuleAt, keys: boolean, fit?: CapsuleFit) => void;
   readonly hide: () => void;
-  /** Its content's size, and the glass inside a transparent margin when there is one. */
-  readonly size: (width: number, height: number, glass?: { x: number; y: number; width: number; height: number }) => void;
+  /**
+   * Its content's size, and the glass inside a transparent margin when there is one. `morph`: this
+   * size is the spotlight's thread pane opening or closing: the window re-centres and glides there
+   * (main/morph.ts, capsule-morph).
+   */
+  readonly size: (width: number, height: number, glass?: { x: number; y: number; width: number; height: number }, morph?: CapsuleMorph) => void;
   /** Every change (shown, hidden, the tray's click, a blur); returns the unsubscribe. */
   readonly onState: (listener: (s: CapsuleState) => void) => () => void;
 }

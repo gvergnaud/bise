@@ -15,7 +15,11 @@ import type { Store } from "@/composer/drafts";
 import { keptStorage } from "@/app/keep";
 import { Answer } from "@/thread/Markdown";
 import "@/thread/thread.css";
-import { lastAnswer, type PaneRow } from "@/capsule/exchange";
+import { lastAnswer, withoutHint, type PaneRow } from "@/capsule/exchange";
+import type { Part } from "@/proto";
+import { drawnParts, youView } from "@/thread/parts";
+import { PartImageChip } from "@/thread/ImageGone";
+import { partImageWords } from "@/thread/YouBody";
 import { LiveText } from "./LiveText";
 import { W } from "./words";
 import { spotMax } from "./Spotlight";
@@ -41,6 +45,10 @@ export interface ThreadPaneProps {
   readonly store?: Store;
   /** The work area's height of the screen it shows on: the same cap as the spotlight's (spotMax). */
   readonly room?: number | null;
+  /** It just opened: its content comes in (capsule/morph.ts, capsule.css's data-enter). */
+  readonly enter?: boolean;
+  /** ✕ or ⌘W: its content fades out before it closes (capsule/morph.ts). */
+  readonly leaving?: boolean;
   readonly testId?: string;
 }
 
@@ -54,6 +62,40 @@ const stillNow = (): boolean => window.matchMedia("(prefers-reduced-motion: redu
 
 /** Nothing selected in the page (the composer's own selection counts as none: ⌘C copies the answer then). */
 const nothingSelected = (): boolean => (window.getSelection()?.toString() ?? "") === "";
+
+/**
+ * His message as the thread draws it (designer m_66238): from its typed parts, his words, then his
+ * images as the thread's image chips with their caption under them; the hub's capsule hint and the
+ * '<image …>' tags never show. No parts (an older hub's entry): its text, the hint cut.
+ */
+function YouBubble({ parts, text, testId }: { parts: readonly Part[] | undefined; text: string; testId: string }): JSX.Element {
+  const drawn = drawnParts(parts);
+  const view = drawn === null ? null : youView(drawn);
+  const words = view === null ? withoutHint(text) : view.words;
+  return (
+    <div className="bubble" data-testid={testId}>
+      {words}
+      {view !== null && view.images.length > 0 && (
+        <>
+          <div className="th-parts" data-testid={`${testId}.parts`}>
+            {view.images.map((img, i) => (
+              <PartImageChip key={`${img.path}#${String(i)}`} path={img.path} store={img.store} lit={false} on={{}} testId={`${testId}.image.${String(i + 1)}`}>
+                {partImageWords(img.name, img.n ?? i + 1)}
+              </PartImageChip>
+            ))}
+          </div>
+          {view.images.map((img, i) =>
+            img.caption === "" ? null : (
+              <p key={`c${String(i)}`} className="th-part-caption" data-testid={`${testId}.image.${String(i + 1)}.caption`}>
+                {img.caption}
+              </p>
+            ),
+          )}
+        </>
+      )}
+    </div>
+  );
+}
 
 export function ThreadPane(p: ThreadPaneProps): JSX.Element {
   const testId = p.testId ?? "spot.pane";
@@ -107,6 +149,8 @@ export function ThreadPane(p: ThreadPaneProps): JSX.Element {
       className="b-spot-pane"
       data-pane=""
       data-testid={testId}
+      data-enter={p.enter === true ? "" : undefined}
+      data-leaving={p.leaving === true ? "" : undefined}
       // the spotlight's own cap (its --spot-max is on its root, a sibling): the pane is as tall
       // as the window, its thread scrolls above the composer and the keys
       style={{ "--spot-max": `${String(spotMax(p.room ?? window.screen.availHeight))}px` } as CSSProperties}
@@ -131,12 +175,19 @@ export function ThreadPane(p: ThreadPaneProps): JSX.Element {
         }}
       >
         {p.rows.map((r, i) => {
-          const key = "pos" in r && r.pos >= 0 ? `${r.kind}.${String(r.pos)}` : `${r.kind}.end.${String(i)}`;
+          // his messages by their rank: his message sending, then landed, is the same bubble (no
+          // remount, so its entrance never plays twice)
+          const key =
+            r.kind === "you"
+              ? `you.${String(p.rows.slice(0, i).filter((x) => x.kind === "you").length)}`
+              : "pos" in r && r.pos >= 0
+                ? `${r.kind}.${String(r.pos)}`
+                : `${r.kind}.end.${String(i)}`;
           switch (r.kind) {
             case "you":
               return (
                 <div key={key} className="r you" data-testid={`${testId}.row.you`}>
-                  <div className="bubble">{r.text}</div>
+                  <YouBubble parts={r.parts} text={r.text} testId={`${testId}.row.you.${String(i)}`} />
                 </div>
               );
             case "bise":
@@ -147,7 +198,7 @@ export function ThreadPane(p: ThreadPaneProps): JSX.Element {
               );
             case "wait":
               return (
-                <div key={key} className="r note" data-testid={`${testId}.row.wait`}>
+                <div key={key} className="r note wait" data-testid={`${testId}.row.wait`}>
                   <LiveText text={W.asked} live testId={`${testId}.row.wait.text`} />
                 </div>
               );

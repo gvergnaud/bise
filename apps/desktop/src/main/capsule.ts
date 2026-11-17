@@ -20,7 +20,8 @@ import { CAPSULE_LINE, IPC, type CapsuleAt, type CapsuleFit, type CapsuleState }
 import { a11yNow } from './a11y';
 import { appendCapsuleFrame, capsuleFrame } from './capsuleframe';
 import { glassOf } from './glass';
-import { capsuleBounds, fitBounds, OFF_DISPLAY, onScreen, pinnedBounds, pinOf, type Anchor, type DisplayBox, type Pin, type Rect } from './place';
+import { frameAt, MORPH_STEP_MS, retarget, startMorph, type Morph, type MorphKind } from './morph';
+import { capsuleBounds, fitBounds, OFF_DISPLAY, onScreen, pinnedBounds, pinOf, recentred, type Anchor, type DisplayBox, type Pin, type Rect } from './place';
 import { loadRenderer, OFF, webPreferences } from './windows';
 
 const START = { width: 640, height: 120 };
@@ -36,8 +37,11 @@ export class Capsule {
   private glass: Rect | undefined;
   /** where the glass was put at show: it stays there while shown (place.ts) */
   private pin: Pin | null = null;
-  /** the work area of the screen it was pinned on: a wider content stays inside it */
-  private pinArea: Rect | null = null;
+  /** the screen it was pinned on: a wider content stays inside its work area, the thread pane re-centres on it */
+  private pinDisplay: DisplayBox | null = null;
+  /** the thread pane's frame move, under way (morph.ts), and its timer */
+  private morph: Morph | null = null;
+  private morphing: ReturnType<typeof setInterval> | null = null;
   /** this show grows down from a pinned top-left (the voice view) */
   private fit: CapsuleFit | null = null;
   private state: CapsuleState = { shown: false, at: 'bottom', keys: false, why: 'asked' };
@@ -112,6 +116,7 @@ export class Capsule {
     this.would = null;
     this.fit = at === 'bottom' ? fit : null;
     this.stopFade();
+    this.stopMorph();
     this.place();
     if (this.testMode) {
       process.stdout.write(`${CAPSULE_LINE} show ${at}${keys ? ' keys' : ''}\n`);
@@ -133,6 +138,7 @@ export class Capsule {
     const at = this.state.at;
     const fades = (): boolean => at === 'corner' || (at === 'menu' && !a11yNow().reduceMotion);
     this.state = { ...this.state, shown: false, keys: false, why };
+    this.stopMorph();
     this.pin = null;
     this.would = null;
     if (this.testMode) process.stdout.write(`${CAPSULE_LINE} hide\n`);
@@ -168,11 +174,60 @@ export class Capsule {
     if (!this.win.isDestroyed()) this.win.setOpacity(1);
   }
 
-  resize(width: number, height: number, glass?: Rect): void {
+  /** A new size of its page; `morph`: the spotlight's thread pane opened or closed (the page's own word). */
+  resize(width: number, height: number, glass?: Rect, morph?: MorphKind): void {
     if (!(width > 0 && height > 0 && width < 10_000 && height < 10_000)) return;
     this.size = { width, height };
     this.glass = glass;
-    this.place();
+    if (morph !== undefined && this.state.shown && this.pin !== null && this.pinDisplay !== null) this.recentre(morph);
+    else this.place();
+  }
+
+  /**
+   * The thread pane opened or closed: the window re-centres on the screen it was pinned on, its top
+   * kept, and glides there on the page's curve (morph.ts) while the page, laid out at its end
+   * already, rides its left edge. Reduced motion, a test or off-screen run: there at once.
+   */
+  private recentre(kind: MorphKind): void {
+    const d = this.pinDisplay;
+    if (d === null || this.pin === null) return;
+    const r = recentred(this.size, this.pin, d, this.glass);
+    this.pin = r.pin;
+    // off-screen: where it would sit on his display re-centres the same way (record)
+    const w = this.would;
+    if (w !== null) this.would = { pin: recentred(this.size, w.pin, w.d, this.glass).pin, d: w.d };
+    if (this.testMode || this.offscreen || a11yNow().reduceMotion) {
+      this.stopMorph();
+      this.win.setBounds(r.bounds);
+      this.record();
+      return;
+    }
+    const from = this.morph === null ? this.win.getBounds() : frameAt(this.morph, Date.now()).rect;
+    this.morph = startMorph(from, r.bounds, Date.now(), kind);
+    if (this.morphing === null) this.morphing = setInterval(() => { this.morphStep(); }, MORPH_STEP_MS);
+    this.morphStep();
+  }
+
+  /** one step of the frame's move: the frame at this time, and the timer's end once there */
+  private morphStep(): void {
+    const m = this.morph;
+    if (m === null || this.win.isDestroyed()) {
+      this.stopMorph();
+      return;
+    }
+    const f = frameAt(m, Date.now());
+    const b = this.win.getBounds();
+    if (f.rect.x !== b.x || f.rect.y !== b.y || f.rect.width !== b.width || f.rect.height !== b.height) this.win.setBounds(f.rect);
+    if (f.done) this.stopMorph();
+  }
+
+  /** a running move ends (a show, a hide, its last step): the frame at its end */
+  private stopMorph(): void {
+    if (this.morphing !== null) clearInterval(this.morphing);
+    this.morphing = null;
+    const m = this.morph;
+    this.morph = null;
+    if (m !== null && !this.win.isDestroyed()) this.win.setBounds(m.to);
   }
 
   /** the tray's click: its dropdown under the pearl, again: gone */
@@ -204,18 +259,19 @@ export class Capsule {
   /** At show: centred on its anchor, inside the screen, and pinned. Shown: a new size keeps the glass's left and anchored edge. */
   private place(): void {
     if (this.pin !== null) {
-      // a wider content (the spotlight's thread pane) grows right, shifted left only as much as
-      // keeps it on its screen (place.ts onScreen)
-      const kept = onScreen(pinnedBounds(this.size, this.pin, this.glass), this.pin, this.pinArea ?? this.display().workArea);
+      // a new size while shown keeps its pinned edge; a wider one is shifted left only as much as
+      // keeps it on its screen (place.ts onScreen). Mid-move (the thread pane), the move goes there
+      const kept = onScreen(pinnedBounds(this.size, this.pin, this.glass), this.pin, (this.pinDisplay ?? this.display()).workArea);
       this.pin = kept.pin;
-      this.win.setBounds(kept.bounds);
+      if (this.morph !== null) this.morph = retarget(this.morph, kept.bounds);
+      else this.win.setBounds(kept.bounds);
     } else {
       const d = this.display();
       const b = this.boundsOn(d);
       this.win.setBounds(b);
       if (this.state.shown) {
         this.pin = this.pinAt(b);
-        this.pinArea = d.workArea;
+        this.pinDisplay = d;
       }
     }
     this.record();
@@ -272,9 +328,9 @@ export function installCapsuleIpc(c: Capsule): void {
   ipcMain.on(IPC.capsuleHide, () => {
     c.hide();
   });
-  ipcMain.on(IPC.capsuleSize, (_e, width: unknown, height: unknown, glass: unknown) => {
+  ipcMain.on(IPC.capsuleSize, (_e, width: unknown, height: unknown, glass: unknown, morph: unknown) => {
     if (typeof width !== 'number' || typeof height !== 'number') return;
-    c.resize(width, height, isRect(glass) ? glass : undefined);
+    c.resize(width, height, isRect(glass) ? glass : undefined, morph === 'open' || morph === 'close' ? morph : undefined);
   });
 }
 

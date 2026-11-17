@@ -104,6 +104,34 @@ describe("the thread pane (pick B)", () => {
   });
 });
 
+describe("his bubbles in the pane (designer m_66238)", () => {
+  it("from his parts: his words, his image as the thread's chip with its caption; never the hub's hint nor an image tag", () => {
+    const tagged = '<image b64="/Users/x/.bise/images/ab.b64" caption="Zed · ai-docs — tools.ts">\nC\'est quoi comme language\n\n[from the capsule: answer in one short line]';
+    const s = pane([
+      {
+        kind: "you",
+        pos: 3,
+        text: tagged,
+        parts: [
+          { kind: "image", name: "[Image #1]", source: "/Users/x/shot.png", mime: "image/png", b64_file: "/Users/x/.bise/images/ab.b64", caption: "Zed · ai-docs — tools.ts" },
+          { kind: "text", text: "C'est quoi comme language" },
+          { kind: "hint", of: "capsule", text: "\n\n[from the capsule: answer in one short line]" },
+        ],
+      },
+      // an older hub's entry, no parts: the hint cut from its text
+      { kind: "you", pos: 5, text: "C'est populaire\n\n[from the capsule: answer in one short line]" },
+    ]);
+    const rows = s.ui.getAllByTestId("spot.pane.row.you");
+    const all = rows.map((r) => r.textContent).join(" | ");
+    expect(all).not.toContain("[from the capsule");
+    expect(all).not.toContain("b64=");
+    expect(rows[0]?.textContent).toContain("C'est quoi comme language");
+    expect(s.ui.getByTestId("spot.pane.row.you.0.image.1")).toBeTruthy();
+    expect(s.ui.getByTestId("spot.pane.row.you.0.image.1.caption").textContent).toBe("Zed · ai-docs — tools.ts");
+    expect(rows[1]?.textContent).toBe("C'est populaire");
+  });
+});
+
 describe("the capsule's two inputs (pick B)", () => {
   const base: CapsuleProps = {
     view: { kind: "spot" }, spot: { agents: [], projects: [], cards: [] }, answer: { text: "the **index** is missing", done: true }, heard: "", level: 0,
@@ -146,17 +174,6 @@ describe("the capsule's two inputs (pick B)", () => {
     expect((await press(solo.getByTestId("spot.input.field"), "Tab")).defaultPrevented).toBe(false);
   });
 
-  it("✕ ends the exchange and the focus goes back to the left field", async () => {
-    const onEnd = vi.fn();
-    const ui = render(<Capsule {...base} pane={paneOf({ onEnd })} />);
-    await act(async () => {
-      ui.getByTestId("spot.pane.end").click();
-      await Promise.resolve();
-    });
-    expect(onEnd).toHaveBeenCalledTimes(1);
-    expect(inLeft()).toBe(true);
-  });
-
   it("fn space with the pane's composer focused: the root gets the act that moves the focus left", async () => {
     const got: { act: (() => boolean) | null } = { act: null };
     const ui = render(<Capsule {...base} pane={paneOf()} onFocusLeft={(a) => { got.act = a; }} />);
@@ -175,6 +192,73 @@ describe("the capsule's two inputs (pick B)", () => {
     expect(got.act?.()).toBe(false);
     ui.unmount();
     expect(got.act).toBeNull();
+  });
+
+  it("the pane opening: the window's next size says 'open' (main glides it re-centred), the glass is the whole view, the content comes in", async () => {
+    const onSize = vi.fn();
+    const ui = render(<Capsule {...base} onSize={onSize} />);
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(onSize.mock.calls.every((c) => c[3] === undefined)).toBe(true);
+    onSize.mockClear();
+    await act(async () => {
+      ui.rerender(<Capsule {...base} onSize={onSize} pane={paneOf()} />);
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    const morphs = (onSize.mock.calls as unknown[][]).filter((c) => c[3] !== undefined);
+    expect(morphs.map((c) => c[3])).toEqual(["open"]);
+    expect(ui.getByTestId("spot.pane").hasAttribute("data-enter")).toBe(true);
+    // the glass main centres: the whole view (spotlight + pane), never the left part alone
+    const glass = ui.container.querySelector("[data-glass]")?.getBoundingClientRect();
+    expect(morphs[0]?.[2]).toMatchObject({ width: Math.round(glass?.width ?? -1) });
+  });
+
+  it("✕: the pane's content fades out 80 ms, then it closes; the size after says 'close'", async () => {
+    vi.useFakeTimers();
+    try {
+      const onEnd = vi.fn();
+      const onSize = vi.fn();
+      const ui = render(<Capsule {...base} onSize={onSize} pane={paneOf({ onEnd })} />);
+      act(() => {
+        ui.getByTestId("spot.pane.end").click();
+      });
+      expect(onEnd).not.toHaveBeenCalled();
+      expect(ui.getByTestId("spot.pane").hasAttribute("data-leaving")).toBe(true);
+      expect(inLeft()).toBe(true);
+      act(() => {
+        vi.advanceTimersByTime(80);
+      });
+      expect(onEnd).toHaveBeenCalledTimes(1);
+      onSize.mockClear();
+      act(() => {
+        ui.rerender(<Capsule {...base} onSize={onSize} />);
+      });
+      await act(async () => {
+        await vi.runAllTimersAsync();
+      });
+      expect((onSize.mock.calls as unknown[][]).filter((c) => c[3] !== undefined).map((c) => c[3])).toEqual(["close"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reduced motion: ✕ closes at once and the open plays no entrance", () => {
+    const mm = vi.spyOn(window, "matchMedia").mockImplementation((q: string) => ({ matches: q.includes("reduced-motion"), media: q, onchange: null, addListener: vi.fn(), removeListener: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn(), dispatchEvent: () => false }) as MediaQueryList);
+    try {
+      const onEnd = vi.fn();
+      const ui = render(<Capsule {...base} />);
+      act(() => {
+        ui.rerender(<Capsule {...base} pane={paneOf({ onEnd })} />);
+      });
+      expect(ui.getByTestId("spot.pane").hasAttribute("data-enter")).toBe(false);
+      act(() => {
+        ui.getByTestId("spot.pane.end").click();
+      });
+      expect(onEnd).toHaveBeenCalledTimes(1);
+    } finally {
+      mm.mockRestore();
+    }
   });
 
   it("⏎ on a waiting card answers it in place: the card on the left, the pane stays", () => {
