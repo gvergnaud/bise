@@ -98,6 +98,21 @@ Context matters: bise compacts a conversation before it fills the
 model's window, so a window set too large ends in an error from the
 server instead.
 
+A gateway bise knows as one (`gateway = true`, like the built-in
+`litellm`) needs less of this: a model it serves under a name bise
+knows from another provider (`claude-opus-5-5`, or with one route in
+front, `azure_ai/claude-opus-5-5`) takes that model's settings: context,
+max output, images, reasoning and its efforts, thinking, the output
+cap's name, and its wire (Anthropic's for a Claude model). The
+connection stays the gateway's (its URL, key, headers, timeout). A key
+you set on the model under `[models]` wins over the borrowed one, and
+the borrowed one over the gateway's own line. bise gives these settings
+to a gateway model that is in your setup (main, agents, the small and
+checker models) or in your gateway's list (read at sign-in); a model you
+type by hand runs with the gateway's line unless you list it under
+`[models]`. If your gateway caps output lower than the model's own
+limit, set `max_output` on that model under `[models]`.
+
 Two more keys, per model or for the whole provider:
 
 | key | what it does | default |

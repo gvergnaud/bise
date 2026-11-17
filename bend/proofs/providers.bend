@@ -110,6 +110,9 @@ def Laws.provider_from_models_file():
 def Laws.provider_model_key_wins():
   {==}
 
+def Laws.provider_gateway_model_reads_its_borrowed_section():
+  {==}
+
 def Laws.provider_file_over_builtin():
   {==}
 

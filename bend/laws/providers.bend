@@ -342,6 +342,32 @@ law provider_model_key_wins:
     == Pv.ROk{Pv.Prov{"local", "m", Api.Anthropic{},
       "http://localhost:1234/v1/messages", "", Api.MFacts{False{}, 0n, "max_tokens", "", "", "", False{}}}} : Pv.Resolved}
 
+# LAW (gateway-caps, architect m_66306): a gateway's model the catalog
+# knows elsewhere runs with the caps the Rust handoff writes in its own
+# section (Catalog::resolve's borrow, own > borrowed > gateway; pinned by
+# rust/catalog gateway_caps_tests.rs): the known model's family,
+# reasoning, max output and thinking, on the gateway's URL and key, never
+# the gateway's line. The runtime borrows nothing itself.
+law provider_gateway_model_reads_its_borrowed_section:
+  {Pv.resolve("", "", "", "", "model = \"litellm/azure_ai/claude-opus-5-5\"",
+      "[providers.litellm]
+api = \"openai-chat\"
+base_url = \"https://gw.example.test/v1\"
+key_env = \"LITELLM_API_KEY\"
+needs = \"\"
+max_output = 4096
+
+[models.\"litellm/azure_ai/claude-opus-5-5\"]
+api = \"anthropic\"
+max_output = 32
+vision = true
+reasoning = true
+thinking = \"adaptive\"",
+      "")
+    == Pv.ROk{Pv.Prov{"litellm", "azure_ai/claude-opus-5-5", Api.Anthropic{},
+      "https://gw.example.test/v1/messages", "LITELLM_API_KEY", Api.MFacts{True{}, 32n, "max_tokens", "adaptive", "", "", False{}}}}
+    : Pv.Resolved}
+
 # LAW: the models file wins over the built-in entries, key by key; its
 # aliases and default_model are used.
 law provider_file_over_builtin:
