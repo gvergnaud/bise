@@ -10,7 +10,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Agent, Proc, ScheduledTask, WorkRow } from '@/proto';
 import type { CorePort } from '@/shared/api';
 import { Store, StoreProvider } from '@/store';
-import { tasks as taskWords } from '@/proto/words_tasks.gen';
 import { artifact, artifacts, ev, projects, row } from '../../../tests/feature/inputs';
 import { createRouter, RouterContext } from '../router';
 import type { Route } from '../route';
@@ -81,7 +80,8 @@ describe('the outer card hides a section with nothing (his m_66323)', () => {
     const { v, shown } = world();
     expect(v.getByTestId('app.outer.agents')).toBeTruthy();
     expect(shown()).toEqual([]);
-    expect(v.getByTestId('app.outer').textContent).not.toContain(taskWords.none_yet);
+    // and no Tasks' 'Ask bise' line: the Board keeps its empty state
+    expect(v.queryByTestId('app.outer.tasks.ask')).toBeNull();
   });
 
   it('each section comes back with its first item, at its place in the card', () => {
