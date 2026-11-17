@@ -49,6 +49,18 @@ export function keyOf(i: Pick<Input, 'type' | 'key' | 'code' | 'meta' | 'control
   return null;
 }
 
+const ADOPT = 'adopt:';
+
+/** The key main holds a page's new tab under until the window's tab adopts it: never a tab's key, which has a '|'. Pure. */
+export function adoptKey(id: string): string {
+  return `${ADOPT}${id}`;
+}
+
+/** Is `raw` such a key? Pure. */
+export function isAdoptKey(raw: unknown): raw is string {
+  return typeof raw === 'string' && raw.startsWith(ADOPT) && !raw.includes('|') && raw.length <= KEY_MAX;
+}
+
 /** The window's tab key, checked. Pure. */
 export function keyIn(raw: unknown): string | null {
   return typeof raw === 'string' && raw !== '' && raw.length <= KEY_MAX ? raw : null;
@@ -68,7 +80,7 @@ export function rectIn(raw: unknown): WebRect | null {
 export function startIn(raw: unknown): WebStart | null {
   if (raw === null || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
-  if (typeof r['url'] === 'string') return { url: r['url'], typed: r['typed'] === true };
+  if (typeof r['url'] === 'string') return { url: r['url'], typed: r['typed'] === true, ...(isAdoptKey(r['adopt']) ? { adopt: r['adopt'] } : {}) };
   if (!Array.isArray(r['entries']) || typeof r['index'] !== 'number') return null;
   const entries = (r['entries'] as unknown[]).flatMap((e) => {
     const x = e as Record<string, unknown> | null;

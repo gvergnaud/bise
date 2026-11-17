@@ -625,8 +625,12 @@ export interface WebEntry {
   readonly title: string;
 }
 
-/** How a web tab starts: a URL (`typed`: he typed it in the bar), or its kept entries and the one in front. */
-export type WebStart = { readonly url: string; readonly typed?: boolean } | { readonly entries: readonly WebEntry[]; readonly index: number };
+/**
+ * How a web tab starts: a URL (`typed`: he typed it in the bar; `adopt`: the page main already holds
+ * for it, a page's new window with its opener, from a 'new-tab' event: the URL only when main has
+ * it no more), or its kept entries and the one in front.
+ */
+export type WebStart = { readonly url: string; readonly typed?: boolean; readonly adopt?: string } | { readonly entries: readonly WebEntry[]; readonly index: number };
 
 /** A web tab's rect in the window's CSS pixels, and whether it shows (its tab in front, nothing over it). */
 export interface WebRect {
@@ -657,8 +661,14 @@ export interface WebTabState {
 /** What main tells the window of its web tabs, each by its key. */
 export type WebEvent =
   | { readonly kind: 'state'; readonly key: string; readonly state: WebTabState }
-  /** a page asked for a new window (target=_blank, window.open): a web tab next to it */
-  | { readonly kind: 'new-tab'; readonly key: string; readonly url: string }
+  /**
+   * a page asked for a new tab (target=_blank, window.open without features): a web tab next to it,
+   * whose start adopts the page main holds as `adopt` (its opener kept); a window that opens no tab
+   * for it closes `adopt` (web close)
+   */
+  | { readonly kind: 'new-tab'; readonly key: string; readonly url: string; readonly adopt: string }
+  /** the tab's page closed itself (window.close): the tab goes, its opener's tab (a key, if still open) in front */
+  | { readonly kind: 'gone'; readonly key: string; readonly opener: string | null }
   /** a key the panel owns, pressed in the page (⌘T, ⌘L, ⌘P...): the window plays it */
   | { readonly kind: 'key'; readonly key: string; readonly code: string; readonly k: string; readonly meta: boolean; readonly ctrl: boolean; readonly alt: boolean; readonly shift: boolean }
   /** a download he saved where he picked (the save panel) */

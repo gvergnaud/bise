@@ -1,7 +1,8 @@
 // src/app/panel · the window's side of its web tabs (page newtab-browser; main/webview/views.ts is
 // their one owner, architect m_64682): each tab's key ('<project>|<tab id>'), the page states and
 // events main sends (kept outside React's tree, one per key), what they do here (the tab's page
-// kept in its tab: URL, title, back/forward; a page's new window opens a web tab next to it; a key
+// kept in its tab: URL, title, back/forward; a page's new tab opens next to it, adopting the page
+// main holds for it (its opener kept); a page that closed itself takes its tab, its opener's in front; a key
 // the panel owns, pressed in the page, played as the window's own; a saved download's line; find's
 // count; a tab that never showed a page closed when his go went out or was refused), the views of
 // tabs gone closed, and where a link he clicks goes (openWebLink: a page of one of his hubs in the
@@ -12,7 +13,7 @@ import type { WebEvent, WebTabState } from '@/shared/api';
 import { pageLinkOf, type PagesOf } from '@/shared/pagelink';
 import { getAppStore } from '@/store';
 import { openAtVersion } from '@/artifacts/links';
-import { closeTabId, onPanelChange, openWebPage, panelAt, setWebPage, webTabKeys } from './state';
+import { activateTab, closeTabId, onPanelChange, openWebPage, panelAt, setWebPage, webTabKeys } from './state';
 import { openTab } from './tabs';
 
 /** A web tab's key for main: its project's panel and its tab id. Pure. */
@@ -67,8 +68,20 @@ function onEvent(ev: WebEvent): void {
       return;
     }
     case 'new-tab':
-      if (ev.key.startsWith(`${panelAt()}|`)) openWebPage(ev.url, {});
+      // its page adopted by the new tab (its opener kept); no tab for it here: main lets it go
+      if (ev.key.startsWith(`${panelAt()}|`)) openWebPage(ev.url, { adopt: ev.adopt });
+      else api()?.close(ev.adopt);
       return;
+    case 'gone': {
+      // the page closed itself (a sign-in page done): its tab goes, its opener's tab in front
+      opened.delete(ev.key);
+      sides.delete(ev.key);
+      if (!ev.key.startsWith(`${panelAt()}|`)) return;
+      closeTabId(tabOfKey(ev.key), { remember: false });
+      const back = goneFront(ev.opener, panelAt());
+      if (back !== null && webTabKeys().has(ev.opener ?? '')) activateTab(back);
+      return;
+    }
     case 'key':
       playKey(ev);
       return;
@@ -84,6 +97,11 @@ function onEvent(ev: WebEvent): void {
       if (closesOnVerdict(ev.to, sides.get(ev.key)?.state ?? null) && ev.key.startsWith(`${panelAt()}|`)) closeTabId(tabOfKey(ev.key));
       return;
   }
+}
+
+/** The tab put in front when a page closed itself: its opener's, when in this panel (else the panel's own pick). Pure. */
+export function goneFront(opener: string | null, project: string): string | null {
+  return opener !== null && opener.startsWith(`${project}|`) ? tabOfKey(opener) : null;
 }
 
 /** Does his go's verdict close its tab? Only a tab that never showed a page, when the page isn't shown there. Pure. */

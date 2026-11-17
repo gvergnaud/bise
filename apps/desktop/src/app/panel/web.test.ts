@@ -1,6 +1,6 @@
 // Where a link he clicks goes, and a web tab's title (page newtab-browser, designer m_64680).
 import { describe, expect, it } from 'vitest';
-import { closesOnVerdict, linkGoes, linkPlan, siteOfUrl, webKey } from './web';
+import { closesOnVerdict, goneFront, linkGoes, linkPlan, siteOfUrl, webKey } from './web';
 import { webTitle } from './look';
 
 describe('a link he clicks', () => {
@@ -31,6 +31,11 @@ describe('a link he clicks', () => {
     expect(closesOnVerdict('refused', { ...page, url: '', entries: [] })).toBe(true);
     expect(closesOnVerdict('external', page)).toBe(false);
     expect(closesOnVerdict('shown', null)).toBe(false);
+  });
+  it("a page that closed itself: its opener's tab in front when it is in this panel, else the panel's pick (browser-oauth)", () => {
+    expect(goneFront('acme|web:1', 'acme')).toBe('web:1');
+    expect(goneFront('other|web:1', 'acme')).toBeNull();
+    expect(goneFront(null, 'acme')).toBeNull();
   });
   it("a tab's key names its project's panel", () => {
     expect(webKey('acme-1', 'web:2')).toBe('acme-1|web:2');

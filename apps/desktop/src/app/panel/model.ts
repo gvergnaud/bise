@@ -34,6 +34,8 @@ export interface WebPageOf {
   readonly url: string;
   readonly title?: string;
   readonly typed?: boolean;
+  /** a page's new tab: the page main holds for it (its opener kept), adopted at its start */
+  readonly adopt?: string;
   readonly entries?: readonly WebEntry[];
   readonly index?: number;
 }

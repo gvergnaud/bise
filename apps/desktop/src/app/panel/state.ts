@@ -405,11 +405,11 @@ export function openBrowser(instead?: string): void {
  * blank browser becomes the page, as Chrome's), else a new tab after the one in front; `behind`:
  * the tab in front stays in front (⌘⏎, ⌘click). `typed`: he typed it in the bar.
  */
-export function openWebPage(url: string, o: { readonly instead?: string; readonly behind?: boolean; readonly typed?: boolean } = {}): void {
+export function openWebPage(url: string, o: { readonly instead?: string; readonly behind?: boolean; readonly typed?: boolean; readonly adopt?: string } = {}): void {
   const was = state.tabs.active;
   const at = o.instead === undefined ? undefined : state.tabs.list.find((t) => t.id === o.instead);
   const n = at?.what.kind === 'browser' ? at.what.n : (nextBrowser(state.tabs) as { readonly n: number }).n;
-  openWhat({ kind: 'browser', n, page: { url, ...(o.typed === true ? { typed: true } : {}) } }, o.instead);
+  openWhat({ kind: 'browser', n, page: { url, ...(o.typed === true ? { typed: true } : {}), ...(o.adopt === undefined ? {} : { adopt: o.adopt }) } }, o.instead);
   if (o.behind === true && was !== '') activateTab(was);
 }
 

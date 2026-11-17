@@ -41,6 +41,11 @@ export function webSession(o: { readonly ports: () => ReadonlySet<number>; reado
   return s;
 }
 
+/** Is `s` the web session? Every web tab's and popup's contents are on it (Chromium keeps a popup in its opener's session). */
+export function isWebSession(s: Session): boolean {
+  return made !== null && s === made;
+}
+
 function download(item: DownloadItem, wc: WebContents, o: { readonly testMode: boolean; readonly saved: (wc: WebContents, s: Saved) => void }): void {
   if (o.testMode) {
     process.stdout.write(`${DOWNLOAD_LINE} ${item.getFilename()}\n`);

@@ -63,7 +63,7 @@ export function WebTab({ tabId, shown, page }: { tabId: string; shown: boolean; 
   useEffect(() => {
     if (web === undefined || webOpened(key)) return;
     noteOpened(key);
-    web.open(key, page.entries !== undefined && page.index !== undefined ? { entries: page.entries, index: page.index } : { url: page.url, typed: page.typed === true });
+    web.open(key, page.entries !== undefined && page.index !== undefined ? { entries: page.entries, index: page.index } : { url: page.url, typed: page.typed === true, ...(page.adopt === undefined ? {} : { adopt: page.adopt }) });
     // its first page only: the tab keeps what main says after
   }, [web, key, page]);
   // the box's rect, at each layout, and hidden when the tab goes

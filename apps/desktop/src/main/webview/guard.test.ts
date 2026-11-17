@@ -1,7 +1,7 @@
 // The web view's guard, pure (webview/guard.ts; architect m_64682 rules 2 and 4): navigations and
 // the requests to bise itself, with a pages server's port as main would learn it.
 import { describe, expect, it } from 'vitest';
-import { bisePortsOf, blockedRequest, goVerdict, isLoopback, webNav } from './guard';
+import { bisePortsOf, blockedRequest, goVerdict, isLoopback, openVerdict, webNav } from './guard';
 
 const PAGES = 47438;
 const PORTS = new Set([PAGES]);
@@ -12,10 +12,7 @@ describe('webNav: what a navigation in a web tab does', () => {
     ['http://localhost:5173/', 'main', 'allow'],
     ['http://127.0.0.1:3000/x', 'main', 'allow'],
     ['about:blank', 'main', 'allow'],
-    ['https://github.com/', 'window', 'new-tab'],
-    ['about:blank', 'window', 'refuse'],
     ['mailto:a@b.c', 'main', 'external'],
-    ['mailto:a@b.c', 'window', 'external'],
     ['file:///etc/passwd', 'main', 'refuse'],
     ['javascript:alert(1)', 'main', 'refuse'],
     ['data:text/html,<b>x</b>', 'main', 'refuse'],
@@ -33,6 +30,33 @@ describe('webNav: what a navigation in a web tab does', () => {
     ['not a url', 'main', 'refuse'],
   ] as const)('%s in a %s frame: %s', (url, frame, want) => {
     expect(webNav(url, frame, PORTS)).toBe(want);
+  });
+});
+
+describe("openVerdict: a page's new window keeps its opener (browser-oauth, architect m_66128)", () => {
+  it.each([
+    // a sign-in popup (window.open with features): a popup window, blank first or not
+    ['new-window', 'https://app.notion.com/verifyNoPopupBlockerHtmlAndRedirect?redirectUri=x', 'popup'],
+    ['new-window', 'about:blank', 'popup'],
+    ['new-window', 'http://localhost:5173/oauth/start', 'popup'],
+    // target=_blank, window.open without features: a web tab next to it
+    ['foreground-tab', 'https://github.com/', 'tab'],
+    ['background-tab', 'https://github.com/', 'tab'],
+    ['default', 'https://github.com/', 'tab'],
+    ['other', 'about:blank', 'tab'],
+    // mailto out to his Mac, whatever the disposition
+    ['new-window', 'mailto:a@b.c', 'external'],
+    ['foreground-tab', 'mailto:a@b.c', 'external'],
+    // bise's own ports refused in every disposition, and what no tab loads
+    ['new-window', `http://127.0.0.1:${String(PAGES)}/p/x`, 'refuse'],
+    ['foreground-tab', `http://127.0.0.1:${String(PAGES)}/p/x`, 'refuse'],
+    ['new-window', 'http://v-0123456789abcdef.localhost:9999/mcp-app', 'refuse'],
+    ['new-window', 'javascript:alert(1)', 'refuse'],
+    ['foreground-tab', 'data:text/html,x', 'refuse'],
+    ['new-window', 'file:///etc/passwd', 'refuse'],
+    ['new-window', 'https://u:p@github.com/', 'refuse'],
+  ] as const)('%s to %s: %s', (disposition, url, want) => {
+    expect(openVerdict(disposition, url, PORTS)).toBe(want);
   });
 });
 
