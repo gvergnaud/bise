@@ -49,6 +49,20 @@ export function keyOf(i: Pick<Input, 'type' | 'key' | 'code' | 'meta' | 'control
   return null;
 }
 
+/**
+ * The web session's user agent from Electron's own (architect m_66128): its engine's real UA, with
+ * Electron's token and the app's own (what Electron puts between '(KHTML, like Gecko)' and 'Chrome/')
+ * dropped, so a site sees the Chromium it runs on; Chrome/<v> stays the engine's own after every
+ * Electron bump. Not a fake browser: Google may still refuse sign-in in an embedded browser. Pure.
+ */
+export function webUserAgent(ua: string): string {
+  return ua
+    .replace(/ Electron\/\S+/gu, '')
+    .replace(/(\(KHTML, like Gecko\)) .*?(?=Chrome\/)/u, '$1 ')
+    .replace(/ {2,}/gu, ' ')
+    .trim();
+}
+
 const ADOPT = 'adopt:';
 
 /** The key main holds a page's new tab under until the window's tab adopts it: never a tab's key, which has a '|'. Pure. */

@@ -1,7 +1,22 @@
 // What the window and a page's keys give a web tab (webview/input.ts; architect m_64682): main
 // checks every call, and owns only its verbs' keys.
 import { describe, expect, it } from 'vitest';
-import { ENTRIES_MAX, keyIn, keyOf, rectIn, startIn, webPartitionDir, zoomStep } from './input';
+import { ENTRIES_MAX, keyIn, keyOf, rectIn, startIn, webPartitionDir, webUserAgent, zoomStep } from './input';
+
+describe("the web session's user agent (architect m_66128)", () => {
+  const chrome = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.7339.133 Safari/537.36';
+  it.each([
+    ['the shipped app', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) bise/0.9.4 Chrome/140.0.7339.133 Electron/38.2.0 Safari/537.36'],
+    ['the try app (a name with a space)', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) bise try/0.9.4-try.2 Chrome/140.0.7339.133 Electron/38.2.0 Safari/537.36'],
+    ['no app token', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.7339.133 Electron/38.2.0 Safari/537.36'],
+    ["Chrome's own: as is", chrome],
+  ])('%s: the engine\'s Chrome UA, its version kept', (_what, ua) => {
+    expect(webUserAgent(ua)).toBe(chrome);
+  });
+  it('a later engine keeps its own Chrome version', () => {
+    expect(webUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) bise/1.0.0 Chrome/150.0.1.2 Electron/48.0.0 Safari/537.36')).toBe('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.1.2 Safari/537.36');
+  });
+});
 import { standInPaths } from '../userdata';
 
 const key = (code: string, o: Partial<{ meta: boolean; control: boolean; alt: boolean; shift: boolean; key: string; type: 'keyDown' | 'keyUp' }> = {}) =>

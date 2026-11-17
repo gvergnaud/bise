@@ -96,6 +96,8 @@ const fake = vi.hoisted(() => {
     setDisplayMediaRequestHandler: () => undefined,
     webRequest: { onBeforeRequest: () => undefined },
     on: () => undefined,
+    getUserAgent: () => 'Mozilla/5.0 (KHTML, like Gecko) bise/1 Chrome/140.0.0.0 Electron/38.0.0 Safari/537.36',
+    setUserAgent: () => undefined,
   };
   /** As electron's: its webContents reads undefined once its page is destroyed (his crash). */
   class View {

@@ -8,7 +8,7 @@
 import { basename, dirname, join } from 'node:path';
 import { app, session, type DownloadItem, type Session, type WebContents } from 'electron';
 import { blockedRequest } from './guard';
-import { WEB_PARTITION } from './input';
+import { WEB_PARTITION, webUserAgent } from './input';
 
 /** Test mode: a download a web tab started, on stdout instead of a save panel. */
 export const DOWNLOAD_LINE = 'BISE_TEST_DOWNLOAD';
@@ -23,6 +23,8 @@ let lastFolder: string | null = null;
 export function webSession(o: { readonly ports: () => ReadonlySet<number>; readonly testMode: boolean; readonly saved: (wc: WebContents, s: Saved) => void }): Session {
   if (made !== null) return made;
   const s = session.fromPartition(WEB_PARTITION);
+  // the engine's own UA without Electron's and bise's tokens (input.ts webUserAgent); this session only
+  s.setUserAgent(webUserAgent(s.getUserAgent()));
   s.setPermissionRequestHandler((_wc, _p, done) => {
     done(false);
   });
