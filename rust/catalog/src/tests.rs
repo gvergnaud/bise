@@ -543,6 +543,11 @@ fn a_gateway_id_borrowing_an_openai_model_takes_max_completion_tokens() {
     // a Claude or Mistral id on the same gateway: no field, max_tokens
     assert_eq!(c.resolve("litellm/claude-opus-5-5").caps.max_tokens_field, None);
     assert_eq!(c.resolve("litellm/mistral/mistral-large-4").caps.max_tokens_field, None);
+    // and the runtime gets it: the handoff's section of that gateway model
+    // (gateway-caps, architect m_66306)
+    let s = setup("model = \"litellm/openai/gpt-6-luna\"\n");
+    let text = s.handoff_toml();
+    assert!(model_section(&text, "litellm/openai/gpt-6-luna").contains(&"max_tokens_field = \"max_completion_tokens\""), "{text}");
 }
 
 #[test]

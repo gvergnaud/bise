@@ -335,7 +335,9 @@ pub struct Provider {
     /// `gateway = true`: a gateway in front of other providers (LiteLLM,
     /// onboarding-models): a model it serves that the catalog knows
     /// under another provider takes that model's caps and wire family
-    /// ([`gateway_id`]); an unknown one gets the defaults
+    /// ([`gateway_id`]; a listed entry's own keys win over them), and the
+    /// hand-off writes them for the runtime; an unknown one gets the
+    /// defaults
     pub gateway: bool,
     /// its recommended voice model (the voice screen's pick, BISE-298),
     /// its id without the provider; "" = its first listed one
@@ -423,6 +425,13 @@ pub enum Known {
     Unlisted,
     /// neither: no base URL, the call will fail with a clear message
     NoProvider,
+}
+
+/// What a gateway's model borrows ([`Catalog::borrowed`]).
+struct Borrowed {
+    caps: Caps,
+    price: Price,
+    api: String,
 }
 
 /// A model name resolved to everything a provider call needs.
@@ -606,6 +615,26 @@ impl Catalog {
         p.caps.over(&DEFAULT_CAPS)
     }
 
+    /// What a gateway's model `mid` borrows from the model the catalog
+    /// knows it as ([`gateway_id`]): that model's caps and price, its
+    /// family's wire, and the gateway's own connection (`base`, the
+    /// gateway's caps: its headers, key command, timeout; no cache
+    /// routing). None: not a gateway, or no known model.
+    fn borrowed(&self, p: &Provider, mid: &str, base: &Caps) -> Option<Borrowed> {
+        let r = self.resolve(&gateway_id(self, p, mid)?);
+        let caps = Caps {
+            headers_env: base.headers_env.clone(),
+            headers: base.headers.clone(),
+            key_command: base.key_command.clone(),
+            idle_timeout_sec: base.idle_timeout_sec,
+            cache_key: String::new(),
+            cache_header: String::new(),
+            ..r.caps
+        };
+        let api = if r.api == "anthropic" { "anthropic" } else { "openai-chat" };
+        Some(Borrowed { caps, price: r.price, api: api.to_string() })
+    }
+
     /// Whether a model reads images, as far as the catalog knows: Some
     /// only for a listed model (its `vision` cap); None for an empty name,
     /// an unlisted model or an unknown provider (the provider decides, so
@@ -641,33 +670,20 @@ impl Catalog {
         };
         let base = self.provider_caps(p);
         let base_price = p.caps.price_over(&Price::default());
-        let (caps, price, api, known) = match self.models.iter().find(|m| m.provider == pid && m.id == mid) {
-            Some(m) => (
+        // a key of a gateway's model: its own entry's > the borrowed
+        // model's > the gateway's (gateway-caps, architect m_66306)
+        let borrowed = self.borrowed(p, &mid, &base);
+        let listed = self.models.iter().find(|m| m.provider == pid && m.id == mid);
+        let (caps, price, api, known) = match (listed, borrowed) {
+            (Some(m), Some(b)) => (m.caps.over(&b.caps), m.caps.price_over(&b.price), m.api.clone().unwrap_or(b.api), Known::Listed),
+            (Some(m), None) => (
                 m.caps.over(&base),
                 m.caps.price_over(&base_price),
                 m.api.clone().unwrap_or_else(|| p.api.clone()),
                 Known::Listed,
             ),
-            // a gateway's model the catalog knows elsewhere: that model's
-            // caps and family, the gateway's own connection (its headers,
-            // key command, timeout)
-            None => match gateway_id(self, p, &mid) {
-                Some(known) => {
-                    let r = self.resolve(&known);
-                    let caps = Caps {
-                        headers_env: base.headers_env.clone(),
-                        headers: base.headers.clone(),
-                        key_command: base.key_command.clone(),
-                        idle_timeout_sec: base.idle_timeout_sec,
-                        cache_key: String::new(),
-                        cache_header: String::new(),
-                        ..r.caps
-                    };
-                    let api = if r.api == "anthropic" { "anthropic" } else { "openai-chat" };
-                    (caps, r.price, api.to_string(), Known::Listed)
-                }
-                None => (base, base_price, p.api.clone(), Known::Unlisted),
-            },
+            (None, Some(b)) => (b.caps, b.price, b.api, Known::Listed),
+            (None, None) => (base, base_price, p.api.clone(), Known::Unlisted),
         };
         Resolved {
             name: full.clone(),
@@ -1485,70 +1501,102 @@ impl Setup {
             headers_table(&mut o, &format!("providers.{}", key(&p.id)), &caps.headers);
         }
         for m in c.models.iter().filter(|m| !m.stt) {
-            let r = c.resolve(&m.name());
-            o.push_str(&format!("\n[models.{}]\n", q(&m.name())));
-            let Some(p) = c.provider(&m.provider) else {
-                caps_lines(&mut o, &r.caps); // no provider to fall back to
-                headers_table(&mut o, &format!("models.{}", q(&m.name())), &r.caps.headers);
-                continue;
-            };
-            if r.api != p.api {
-                o.push_str(&format!("api = {}\n", q(&r.api)));
-            }
-            let base = c.provider_caps(p);
-            let (a, b) = (&r.caps, &base);
-            if a.context != b.context {
-                o.push_str(&format!("context = {}\n", a.context));
-            }
-            if a.max_output != b.max_output {
-                o.push_str(&format!("max_output = {}\n", a.max_output));
-            }
-            if a.idle_timeout_sec != b.idle_timeout_sec {
-                o.push_str(&format!("idle_timeout_sec = {}\n", a.idle_timeout_sec));
-            }
-            if let Some(f) = a.max_tokens_field.filter(|_| a.max_tokens_field != b.max_tokens_field) {
-                o.push_str(&format!("max_tokens_field = {}\n", q(f.word())));
-            }
-            // every listed model says its own `vision = true|false`, even
-            // when its provider's line says the same: the runtime never
-            // sends an image part to a model whose own line says false (a
-            // provider behind a gateway refuses the whole request for
-            // one), and a model the file does not list has no line (its
-            // provider decides, Catalog::vision). The runtime reads the
-            // line, never this inheritance (bend/runtime/provider-pure.bend
-            // model_blind; pinned by tests.rs
-            // the_handoff_says_each_listed_models_vision and the law
-            // provider_blind_is_a_listed_vision_false)
-            o.push_str(&format!("vision = {}\n", a.vision));
-            for (k, x, y) in [
-                ("reasoning", a.reasoning, b.reasoning),
-                ("tools", a.tools, b.tools),
-            ] {
-                if x != y {
-                    o.push_str(&format!("{} = {}\n", k, x));
-                }
-            }
-            for (k, x, y) in [
-                ("thinking", a.thinking.clone(), b.thinking.clone()),
-                ("betas", a.betas.clone(), b.betas.clone()),
-                ("efforts", a.efforts.clone(), b.efforts.clone()),
-                ("effort", a.effort.clone(), b.effort.clone()),
-                ("cache_key", a.cache_key.clone(), b.cache_key.clone()),
-                ("cache_header", a.cache_header.clone(), b.cache_header.clone()),
-                ("headers_env", a.headers_env.clone(), b.headers_env.clone()),
-                ("key_command", a.key_command.clone(), b.key_command.clone()),
-            ] {
-                if x != y {
-                    o.push_str(&format!("{} = {}\n", k, q(&x)));
-                }
-            }
-            if a.headers != b.headers {
-                headers_table(&mut o, &format!("models.{}", q(&m.name())), &a.headers);
-            }
+            model_section(&mut o, c, &m.name());
+        }
+        // the gateway models bise knows of that borrow (gateway-caps,
+        // architect m_66306): the runtime reads no borrow of its own
+        for name in self.borrowing_gateway_models() {
+            model_section(&mut o, c, &name);
         }
         o
     }
 
+    /// The gateway models bise knows of that the catalog does not list
+    /// and that borrow a known model's caps ([`gateway_id`]): the roles'
+    /// models and the gateways' own lists (`gateway-models.json`, read
+    /// again at each hand-off by [`export_handoff`]), sorted, once each.
+    /// An id that borrows nothing has no section: its gateway's line
+    /// decides.
+    fn borrowing_gateway_models(&self) -> Vec<String> {
+        let c = &self.catalog;
+        let roles = [&self.model, &self.agent_model, &self.small_model, &self.classify_model].into_iter().cloned();
+        let lists = c.plan.listed.iter().flat_map(|(p, ids)| ids.iter().map(move |id| format!("{p}/{id}")));
+        let mut names: Vec<String> = roles
+            .chain(lists)
+            .filter(|n| {
+                let Some((pid, mid)) = split_name(n) else { return false };
+                c.model(n).is_none() && c.provider(pid).is_some_and(|p| p.chats() && gateway_id(c, p, mid).is_some())
+            })
+            .collect();
+        names.sort();
+        names.dedup();
+        names
+    }
+}
+
+/// One `[models."<name>"]` section of the hand-off: the keys of its
+/// resolved caps that differ from its provider's, and its own vision.
+fn model_section(o: &mut String, c: &Catalog, name: &str) {
+    let r = c.resolve(name);
+    o.push_str(&format!("\n[models.{}]\n", q(name)));
+    let Some(p) = c.provider(&r.provider) else {
+        caps_lines(o, &r.caps); // no provider to fall back to
+        headers_table(o, &format!("models.{}", q(name)), &r.caps.headers);
+        return;
+    };
+    if r.api != p.api {
+        o.push_str(&format!("api = {}\n", q(&r.api)));
+    }
+    let base = c.provider_caps(p);
+    let (a, b) = (&r.caps, &base);
+    if a.context != b.context {
+        o.push_str(&format!("context = {}\n", a.context));
+    }
+    if a.max_output != b.max_output {
+        o.push_str(&format!("max_output = {}\n", a.max_output));
+    }
+    if a.idle_timeout_sec != b.idle_timeout_sec {
+        o.push_str(&format!("idle_timeout_sec = {}\n", a.idle_timeout_sec));
+    }
+    if let Some(f) = a.max_tokens_field.filter(|_| a.max_tokens_field != b.max_tokens_field) {
+        o.push_str(&format!("max_tokens_field = {}\n", q(f.word())));
+    }
+    // every model the file has a section for says its own `vision =
+    // true|false`, even when its provider's line says the same: the
+    // runtime never sends an image part to a model whose own line says
+    // false (a provider behind a gateway refuses the whole request for
+    // one), and a model the file does not list has no line (its
+    // provider decides, Catalog::vision). The runtime reads the line,
+    // never this inheritance (bend/runtime/provider-pure.bend
+    // model_blind; pinned by tests.rs
+    // the_handoff_says_each_listed_models_vision and the law
+    // provider_blind_is_a_listed_vision_false)
+    o.push_str(&format!("vision = {}\n", a.vision));
+    for (k, x, y) in [("reasoning", a.reasoning, b.reasoning), ("tools", a.tools, b.tools)] {
+        if x != y {
+            o.push_str(&format!("{} = {}\n", k, x));
+        }
+    }
+    for (k, x, y) in [
+        ("thinking", &a.thinking, &b.thinking),
+        ("betas", &a.betas, &b.betas),
+        ("efforts", &a.efforts, &b.efforts),
+        ("effort", &a.effort, &b.effort),
+        ("cache_key", &a.cache_key, &b.cache_key),
+        ("cache_header", &a.cache_header, &b.cache_header),
+        ("headers_env", &a.headers_env, &b.headers_env),
+        ("key_command", &a.key_command, &b.key_command),
+    ] {
+        if x != y {
+            o.push_str(&format!("{} = {}\n", k, q(x)));
+        }
+    }
+    if a.headers != b.headers {
+        headers_table(o, &format!("models.{}", q(name)), &a.headers);
+    }
+}
+
+impl Setup {
     /// Write the hand-off file atomically (temp file + rename).
     pub fn write_handoff(&self, path: &Path) -> std::io::Result<()> {
         if let Some(d) = path.parent() {
@@ -1784,6 +1832,8 @@ pub use live_fetch::export_handoff;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod gateway_caps_tests;
 #[cfg(test)]
 mod auth_tests;
 #[cfg(test)]
