@@ -1154,21 +1154,27 @@
   display: flex;
 }
 .pn-doc-copy > span {
-  /* each part is a flex item: its own ' · ' spaces kept (ui-review m_66188) */
-  white-space: pre;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .pn-doc-copy-lead {
   flex: 0 1 auto;
 }
+/* its ' · ' as their own spans, a space's width each side (designer m_66189) */
+.pn-doc-copy-sep {
+  flex: none;
+  margin-inline: 0.28em;
+  color: var(--c-text-3);
+}
 .pn-doc-copy-what {
   flex: none;
   color: var(--c-text-2);
 }
+/* 'read only' with its separator: shrinks first, then gone */
 .pn-doc-copy-tail {
   flex: 0 1000 auto;
   min-width: 0;
+  display: flex;
 }
 .pn-doc-act {
   flex: none;

@@ -191,11 +191,20 @@ function Line({ line, store, docRef, turnOn }: { line: DocLine; store: ViewsStor
       return row(
         'copy',
         <span className="pn-doc-line-t pn-doc-copy">
-          <span className="pn-doc-copy-lead">{lead} · </span>
+          <span className="pn-doc-copy-lead">{lead}</span>
+          <span className="pn-doc-copy-sep" aria-hidden="true">
+            ·
+          </span>
           <span className="pn-doc-copy-what" data-tip={views.doc_copy_was({ path: tilde(line.was, homeNow()) })} data-testid="app.panel.doc.copy">
             {copy}
           </span>
-          <span className="pn-doc-copy-tail"> · {tail}</span>
+          {/* 'read only' and its separator drop together when the line is narrow */}
+          <span className="pn-doc-copy-tail">
+            <span className="pn-doc-copy-sep" aria-hidden="true">
+              ·
+            </span>
+            {tail}
+          </span>
         </span>,
       );
     }
