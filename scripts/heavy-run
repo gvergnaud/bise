@@ -610,6 +610,10 @@ fi
 # (CARGO_BUILD_JOBS above); each cargo test binary ran 12 test threads and a
 # gate 4 e2e hubs at once: RUST_TEST_THREADS=4 and SB_TEST_JOBS=2 in a slot.
 # A caller's value wins; an --alone job has the machine, it keeps them.
+# The full gate's e2e pool stays at 2 (A/B on 96c09355d, 2026-11-17 night, architect
+# m_65415, bar -20% and 0 new reds): e2e span 785/870/795 s at 2 vs 730/691/649 s at
+# 4 (p50 -13%), peak load1 27-34 vs 38-40, peak RSS 3.9-6.6 vs 4.1-4.9 GB; 4 had a
+# timing flake a run (hub_loop_e2e, send_latency_e2e, provider_families).
 if [ "$ALONE" = 0 ]; then
   export RUST_TEST_THREADS="${RUST_TEST_THREADS:-${HEAVY_THREADS:-4}}"
   export SB_TEST_JOBS="${SB_TEST_JOBS:-$(( (${HEAVY_THREADS:-4} + 1) / 2 ))}"
