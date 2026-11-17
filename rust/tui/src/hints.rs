@@ -10,9 +10,7 @@
 //! `hints::once(app, Hint::X)` asks for one (the event handling in
 //! `sb.rs` calls it); it is marked seen in the `hints` preference
 //! (`{ "first_agent": true, … }`: `bise_home` keeps it in `prefs.json`, or
-//! the old `hints.json`) once it has been up 2 s, or when he uses its
-//! thing (designer m_66054): one his next message takes down sooner comes
-//! back at its next trigger. `SB_ONBOARDING=off` turns the
+//! the old `hints.json`) the first time it is really drawn. `SB_ONBOARDING=off` turns the
 //! hints off too (the tmux tests). Under `cargo test` they are off unless
 //! a test gives a store ([`use_store`]).
 //!
@@ -31,7 +29,6 @@ use ratatui::widgets::{Block, BorderType, Borders, Clear, Padding, Paragraph};
 use ratatui::Frame;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
-use std::time::{Duration, Instant};
 use bise_home::Slot;
 #[cfg(test)]
 use std::path::PathBuf;
@@ -152,65 +149,14 @@ struct State {
     seen: Option<BTreeMap<String, bool>>,
     /// asked for, waiting for their thing to be on screen
     pending: Vec<Hint>,
-    /// the one drawn now
+    /// the one drawn now (marked seen when it came up)
     active: Option<Hint>,
-    /// when `active` came up, and whether it is marked seen yet
-    up_at: Option<Instant>,
-    up_seen: bool,
 }
-
-/// A hint counts as read once it has been up this long (designer
-/// m_66054): his message before that leaves it unseen, and it comes back
-/// at its next trigger (tui_onboarding_tmux: one frame up, then his Enter).
-const READ_AFTER: Duration = Duration::from_secs(2);
 
 thread_local! {
     static STATE: RefCell<State> = RefCell::new(State::default());
     #[cfg(test)]
     static STORE: RefCell<Option<Slot>> = const { RefCell::new(None) };
-    #[cfg(test)]
-    static CLOCK: std::cell::Cell<Option<Instant>> = const { std::cell::Cell::new(None) };
-}
-
-fn now() -> Instant {
-    #[cfg(test)]
-    {
-        CLOCK.with(|c| c.get()).unwrap_or_else(Instant::now)
-    }
-    #[cfg(not(test))]
-    {
-        Instant::now()
-    }
-}
-
-/// Tests: the clock reads `t`.
-#[cfg(test)]
-fn set_clock(t: Instant) {
-    CLOCK.with(|c| c.set(Some(t)));
-}
-
-/// Mark `h` seen, in memory and in the store.
-fn mark_seen(st: &mut State, store: &Slot, h: Hint) {
-    st.seen.get_or_insert_with(BTreeMap::new).insert(h.key().to_string(), true);
-    let _ = mark_in(store, h.key());
-}
-
-/// The hint up is marked seen once it has been up [`READ_AFTER`], or at
-/// once with `now_read` (he used its thing).
-fn read_up(st: &mut State, now_read: bool) {
-    let (Some(h), Some(at)) = (st.active, st.up_at) else { return };
-    if st.up_seen || !(now_read || now().saturating_duration_since(at) >= READ_AFTER) {
-        return;
-    }
-    let Some(path) = store() else { return };
-    mark_seen(st, &path, h);
-    st.up_seen = true;
-}
-
-fn take_down(st: &mut State) {
-    st.active = None;
-    st.up_at = None;
-    st.up_seen = false;
 }
 
 /// Tests: hints on, with this store (per thread).
@@ -242,10 +188,9 @@ fn request(h: Hint) -> bool {
         if is_seen(&mut st, &path, h) {
             return false;
         }
-        // the mode's tip gives way to the thing's own
+        // the mode's tip (seen once drawn) gives way to the thing's own
         if matches!(st.active, Some(Hint::FirstYolo | Hint::FirstAuto)) && !matches!(h, Hint::FirstYolo | Hint::FirstAuto) {
-            read_up(&mut st, false);
-            take_down(&mut st);
+            st.active = None;
         }
         st.pending.push(h);
         true
@@ -258,40 +203,31 @@ pub(crate) fn active() -> Option<Hint> {
     STATE.with(|s| s.borrow().active)
 }
 
-/// `h` was used (the agent looked into, the card answered): it goes away
-/// (up or waiting), seen when it was up.
+/// `h` was used, or its thing is gone: it goes away (up or waiting).
 pub(crate) fn used(h: Hint) {
     STATE.with(|s| {
         let mut st = s.borrow_mut();
         st.pending.retain(|p| *p != h);
         if st.active == Some(h) {
-            read_up(&mut st, true);
-            take_down(&mut st);
+            st.active = None;
         }
     });
 }
 
-/// The user sent a message, or the hint's thing left the screen: the hint
-/// up goes away, seen only when it was up [`READ_AFTER`].
+/// The user sent a message: the hint up goes away.
 pub(crate) fn user_message() {
-    STATE.with(|s| {
-        let mut st = s.borrow_mut();
-        read_up(&mut st, false);
-        take_down(&mut st);
-    });
+    STATE.with(|s| s.borrow_mut().active = None);
 }
 
-/// `h` comes up: out of the queue; seen once up [`READ_AFTER`] ([`read_up`]).
+/// `h` comes up: out of the queue, marked seen in the store.
 fn bring_up(h: Hint) {
-    if store().is_none() {
-        return;
-    }
+    let Some(path) = store() else { return };
     STATE.with(|s| {
         let mut st = s.borrow_mut();
         st.pending.retain(|p| *p != h);
         st.active = Some(h);
-        st.up_at = Some(now());
-        st.up_seen = false;
+        st.seen.get_or_insert_with(BTreeMap::new).insert(h.key().to_string(), true);
+        let _ = mark_in(&path, h.key());
     });
 }
 
@@ -505,9 +441,7 @@ pub(crate) fn draw(f: &mut Frame, digits: bool) {
         Some(h) => match anchor(f.buffer_mut(), h, feed, panel) {
             Some(y) => Some((h, y)),
             None => {
-                // its thing left the screen: gone, read only if up long enough
-                STATE.with(|s| s.borrow_mut().pending.retain(|p| *p != h));
-                user_message();
+                used(h);
                 None
             }
         },
@@ -524,8 +458,6 @@ pub(crate) fn draw(f: &mut Frame, digits: bool) {
     draw_box(f, r, lines);
     if active.is_none() {
         bring_up(h);
-    } else {
-        STATE.with(|s| read_up(&mut s.borrow_mut(), false));
     }
 }
 
@@ -555,9 +487,10 @@ pub(crate) fn covered(h: Hint) {
         }
         st.pending.retain(|p| *p != h);
         if st.active == Some(h) {
-            take_down(&mut st);
+            st.active = None;
         }
-        mark_seen(&mut st, &path, h);
+        st.seen.get_or_insert_with(BTreeMap::new).insert(h.key().to_string(), true);
+        let _ = mark_in(&path, h.key());
     });
 }
 
@@ -626,15 +559,11 @@ mod tests {
         // waiting, not up: nothing is seen yet
         assert_eq!(active(), None);
         assert!(!p.exists());
-        let t0 = Instant::now();
-        set_clock(t0);
         bring_up(Hint::FirstCard);
         assert_eq!(active(), Some(Hint::FirstCard));
-        assert!(request(Hint::FirstCard));
-        // up 2 s, then his message: read
-        set_clock(t0 + READ_AFTER);
-        user_message();
         assert!(seen_in(&std::fs::read_to_string(&p).unwrap())["first_card"]);
+        assert!(request(Hint::FirstCard));
+        user_message();
         assert_eq!(active(), None);
         assert!(!request(Hint::FirstCard));
         // a restart reads the store again; the one never shown can come
@@ -643,36 +572,6 @@ mod tests {
         assert!(request(Hint::FirstAgent));
         used(Hint::FirstAgent);
         assert!(STATE.with(|s| s.borrow().pending.is_empty()));
-    }
-
-    /// designer m_66054: a hint his next message takes down before it was
-    /// up 2 s is not read: not seen, it comes back at its next trigger;
-    /// using its thing reads it at once.
-    #[test]
-    fn a_hint_taken_down_before_2_s_comes_back() {
-        let p = tmp("unread");
-        use_store(Some(p.clone()));
-        let t0 = Instant::now();
-        set_clock(t0);
-        assert!(request(Hint::FirstLevel3));
-        bring_up(Hint::FirstLevel3);
-        set_clock(t0 + READ_AFTER - Duration::from_millis(1));
-        user_message();
-        assert_eq!(active(), None);
-        assert!(!seen_in(&std::fs::read_to_string(&p).unwrap_or_default()).contains_key("first_level3"));
-        // its next trigger: it waits again, then reads once up 2 s
-        assert!(request(Hint::FirstLevel3));
-        bring_up(Hint::FirstLevel3);
-        set_clock(t0 + READ_AFTER * 3);
-        STATE.with(|s| read_up(&mut s.borrow_mut(), false));
-        assert!(seen_in(&std::fs::read_to_string(&p).unwrap())["first_level3"]);
-        user_message();
-        assert!(!request(Hint::FirstLevel3));
-        // used at once: read, whatever the time up
-        assert!(request(Hint::FirstAgent));
-        bring_up(Hint::FirstAgent);
-        used(Hint::FirstAgent);
-        assert!(seen_in(&std::fs::read_to_string(&p).unwrap())["first_agent"]);
     }
 
     #[test]
@@ -701,13 +600,6 @@ mod tests {
         assert_eq!(active(), Some(Hint::FirstCard));
         let sc = screen(&t);
         assert!(sc.contains("this is your inbox."), "{sc}");
-        // still drawn 2 s later: read
-        set_clock(Instant::now() + READ_AFTER);
-        t.draw(|f| {
-            f.render_widget(Paragraph::new(card.as_str()), Rect::new(3, 18, 80, 1));
-            draw(f, true)
-        })
-        .unwrap();
         assert!(seen_in(&std::fs::read_to_string(&p).unwrap())["first_card"]);
         // the card is gone: so is the hint; the level-3 one waits its turn
         t.draw(|f| draw(f, true)).unwrap();
