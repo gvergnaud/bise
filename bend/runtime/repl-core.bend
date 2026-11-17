@@ -600,21 +600,17 @@ def serve_hello(+live: Bool, +token: String,
     case Some{got}:
       serve_hello.got(live, token, got, l2, greet, sess, mem, quiet, next)
 
-# a REPL with no token opens every connection (nc, the tests' bare
-# REPLs); with one, only a connection whose first line is its hello
+# a connection opens only when its first line is the REPL's hello (no
+# tokenless mode: say_token)
 @unsafe
-def serve_gate(+live: Bool, open: Bool, +token: String, s: Socket, l2: Listener,
+def serve_gate(+live: Bool, +token: String, s: Socket, l2: Listener,
     +greet: Maybe<&2, Nat>, +sess: T.Session, +mem: Pvp.CallMem, +quiet: Nat,
     next: Listener -> Maybe<&2, Nat> -> T.Session -> Pvp.CallMem -> Nat -> IO(Flow))
     -> IO(Flow):
-  match open:
-    case True{}:
-      serve_open(live, s, l2, greet, sess, mem, quiet, next)
-    case False{}:
-      do IO<Flow>:
-        r : Maybe<&1, Socket & Maybe<&2, String>> <- IO.within(Socket & Maybe<&2, String>,
-          Rcp.hello_wait_ms(), hello_read(Rcp.hello_max(), s, Nil{}))
-        serve_hello(live, token, r, l2, greet, sess, mem, quiet, next)
+  do IO<Flow>:
+    r : Maybe<&1, Socket & Maybe<&2, String>> <- IO.within(Socket & Maybe<&2, String>,
+      Rcp.hello_wait_ms(), hello_read(Rcp.hello_max(), s, Nil{}))
+    serve_hello(live, token, r, l2, greet, sess, mem, quiet, next)
 
 @unsafe
 def serve_after(+live: Bool, +token: String,
@@ -628,8 +624,7 @@ def serve_after(+live: Bool, +token: String,
         u : Unit <- IO.print("accept failed")
         IO.pure(Flow, Stop{})
     case (l2, Done{s}):
-      serve_gate(live, String.is_empty(token), token, s, l2, greet, sess, mem,
-        quiet, next)
+      serve_gate(live, token, s, l2, greet, sess, mem, quiet, next)
 
 @unsafe
 def serve.go(+live: Bool, +token: String, l: Listener, greet: Maybe<&2, Nat>,
@@ -639,14 +634,29 @@ def serve.go(+live: Bool, +token: String, l: Listener, greet: Maybe<&2, Nat>,
     serve_after(live, token, am, greet, sess, mem, quiet,
       l2 => g2 => s2 => +m2 => +q2 => serve.go(live, token, l2, g2, s2, m2, q2))
 
-# the accept loop, from an empty memory of calls (a new process); the
-# say port's token from BISE_REPL_TOKEN (the hub's; none: no hello)
+# the accept loop, from an empty memory of calls (a new process), its
+# connections opened by `token`'s hello
 @unsafe
-def serve(+live: Bool, l: Listener, greet: Maybe<&2, Nat>, sess: T.Session) -> IO(Flow):
-  do IO<Flow>:
+def serve(+live: Bool, +token: String, l: Listener, greet: Maybe<&2, Nat>, sess: T.Session) -> IO(Flow):
+  serve.go(live, token, l, greet, sess, Pvp.mem0(), 0n)
+
+# the say port's token, BISE_REPL_TOKEN: the hub's, bise --headless's or
+# tests/say_port.py's. None: the REPL exits before it listens, since a say
+# port with no hello takes any local bytes as his words (the hub's own
+# HTTP probe was three turns; architect m_66084)
+@unsafe
+def say_token() -> IO(String):
+  do IO<String>:
     tk : Result<&1, &1, U32 & String, String> <- IO.get_env("BISE_REPL_TOKEN")
     +token : String <- IO.pure(String, String.trim(P.env_or(tk, "")))
-    serve.go(live, token, l, greet, sess, Pvp.mem0(), 0n)
+    say_token.or_exit(String.is_empty(token), token)
+
+def say_token.or_exit(empty: Bool, +token: String) -> IO(String):
+  match empty:
+    case True{}:
+      IO.die(String, 2, "say port: no BISE_REPL_TOKEN, so no say port: start this REPL through the hub, bise --headless or tests/say_port.py (a connection opens with 'hello <token>')")
+    case False{}:
+      IO.pure(String, token)
 
 # the REPL listen port: BEND_REPL_PORT env (default: the entry's) so several
 # harness instances can run side by side

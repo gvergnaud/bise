@@ -38,6 +38,8 @@ import sys
 import time
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(REPO, "tests"))
+from say_port import SayPort  # noqa: E402
 RUN = os.path.join(REPO, "run.sh")
 SESSIONS_DIR = "/tmp/bend-sessions"
 # the session's side channels (plugins/ready, report, indexes, by port):
@@ -107,7 +109,9 @@ class BendSession:
         if not ready:
             proc.kill()
             raise RuntimeError("bend-harness did not become READY")
-        sock = socket.create_connection(("127.0.0.1", int(ready["port"])), timeout=10)
+        # the say port opens with READY's token's hello (tests/say_port.py,
+        # the one Python place for it; no token, no say port)
+        sock = SayPort(int(ready["port"]), ready["token"]).connect(timeout=10)
         sock.settimeout(1.0)
         sess = cls(ready, proc, sock)
         sess._drain(2.0)  # the --continue greeting, if any

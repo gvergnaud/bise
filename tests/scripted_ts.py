@@ -15,6 +15,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import bise_env  # noqa: E402
 import wait  # noqa: E402
+from say_port import SayPort  # noqa: E402
 ROOT = os.path.abspath(os.path.join(HERE, ".."))
 EXE = os.path.join(os.path.abspath(os.environ.get("CARGO_TARGET_DIR") or os.path.join(ROOT, "rust", "target")),
                    "debug", "bise")
@@ -100,8 +101,8 @@ def run_session(env, codes):
         ready = proc.stdout.readline()
         if not ready.startswith("READY "):
             sys.exit("FAIL no READY: %r\n%s" % (ready, proc.stderr.read()[-2000:] if proc.poll() is not None else ""))
-        port = int(dict(kv.split("=", 1) for kv in ready.split()[1:] if "=" in kv)["port"])
-        sock = socket.create_connection(("127.0.0.1", port), timeout=60)
+        kv = dict(kv.split("=", 1) for kv in ready.split()[1:] if "=" in kv)
+        sock = SayPort(int(kv["port"]), kv["token"]).connect(timeout=60)
         f = sock.makefile("rb")
         for code in codes:
             sock.sendall(("prog: %s\n" % code).encode())

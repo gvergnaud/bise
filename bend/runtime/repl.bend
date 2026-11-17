@@ -1,7 +1,7 @@
 # runtime/repl.bend — the scripted REPL entry (no API, no real tools).
 #
-#   bend runtime/repl.bend -o repl-scripted && ./repl-scripted
-#   nc 127.0.0.1 7700
+#   bend runtime/repl.bend -o repl-scripted
+#   BISE_REPL_TOKEN=t ./repl-scripted & { echo "hello t"; cat; } | nc 127.0.0.1 7700
 #
 # Model replies come from the script each user line selects
 # (Rc.script_for_entry). The line server is runtime/repl-core.bend.
@@ -16,6 +16,8 @@ def main() -> IO(Unit):
   do IO<Unit>:
     dbg : Unit <- Dbg.start()
     +p : U32 <- Rc.repl_port(7700)
+    # no token, no say port: it exits here (Rc.say_token)
+    +token : String <- Rc.say_token()
     l : Listener <- IO.try(Listener, TCP.listen("127.0.0.1", p))
     +ps : String <- IO.pure(String, U32.show(p))
     # the same info line as the live REPL: no provider here
@@ -26,7 +28,7 @@ def main() -> IO(Unit):
         String.append(" — connect with: nc 127.0.0.1 ",
           ps))))
     +ld : P.Load <- P.load(T.new_session(R.cfg(400n, 3n)))
-    f : Rc.Flow <- Rc.serve(False{}, l, Rc.ld_greet(ld), Rc.ld_sess(ld))
+    f : Rc.Flow <- Rc.serve(False{}, token, l, Rc.ld_greet(ld), Rc.ld_sess(ld))
     # Stop (a /reload) lands here: main returns, the process exits 0,
     # and the parent respawns the latest code on the same session.
     # The marker line lets the parent tell a reload from a crash.

@@ -456,9 +456,52 @@ def case_queue():
         fail("13-queue: queue consumed %r, left %r" % (froms, w.queue))
     print("ok 13-queue: %d facts" % len(w.log))
 
+def case_say_port():
+    """No bare say port (architect m_66084): with no BISE_REPL_TOKEN the
+    REPL exits before it listens, saying why; with one, a connection whose
+    first line is not its hello is closed, its line never a turn."""
+    home = tempfile.mkdtemp(prefix="sb-session-ev-port-")
+    try:
+        env = {k: v for k, v in os.environ.items() if not k.startswith(("SB_", "BEND_", "BISE_"))}
+        sp = SayPort()
+        sess = os.path.join(home, "session.txt")
+        env.update(HOME=home, BISE_HOME=os.path.join(home, "bise"), BEND_REPL_PORT=str(sp.port),
+                   BEND_SESSION_FILE=sess, BEND_DEBUG_DIR=os.path.join(home, "debug"))
+        r = subprocess.run([REPL], cwd=home, env=env, capture_output=True, text=True, timeout=30)
+        if r.returncode == 0 or "no BISE_REPL_TOKEN" not in r.stdout + r.stderr:
+            fail("a REPL with no token: rc %s, %r" % (r.returncode, (r.stdout + r.stderr)[-400:]))
+        env["BISE_REPL_TOKEN"] = sp.token
+        proc = subprocess.Popen([REPL], cwd=home, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        try:
+            while b"REPL on" not in proc.stdout.readline():
+                if proc.poll() is not None:
+                    fail("repl-scripted exited before its banner")
+            bare = socket.create_connection(("127.0.0.1", sp.port), timeout=10)
+            bare.sendall(b"run a bare line\n")
+            got = b""
+            while True:
+                chunk = bare.recv(4096)   # closed: b"" (refused), never a turn's lines
+                if not chunk:
+                    break
+                got += chunk
+            bare.close()
+            if b"--- idle" in got or os.path.exists(sess):
+                fail("a bare connection's line became a turn: %r" % got[-300:])
+            # the hello'd one is still served
+            sock = sp.connect(timeout=30)
+            sock.sendall(b"quit\n")
+            sock.close()
+        finally:
+            proc.kill()
+            proc.wait()
+        print("ok say port: no token, no port; a bare line is closed, never a turn")
+    finally:
+        shutil.rmtree(home, ignore_errors=True)
+
 def main():
     if not os.path.exists(REPL):
         fail("no ./repl-scripted: scripts/bins.sh repl-scripted")
+    case_say_port()
     case_short()
     case_compaction()
     case_queue()

@@ -703,6 +703,9 @@ fn run_main() -> std::io::Result<()> {
             probe.local_addr()?.port()
         }
     };
+    // its say port opens only with this token's hello (repl-core's
+    // say_token: no token, no say port); READY hands it to the client
+    let repl_token = switchboard::pages::new_token();
 
     // session persistence, codex-style: every fresh run checkpoints to
     // its OWN file (~/.bise/sessions/<id>.txt, id = UTC timestamp + pid),
@@ -830,6 +833,7 @@ fn run_main() -> std::io::Result<()> {
             bise_home::env::Child::Repl,
             [
                 ("BEND_REPL_PORT", std::ffi::OsString::from(repl_port.to_string())),
+                ("BISE_REPL_TOKEN", repl_token.clone().into()),
                 ("BEND_SESSION_FILE", session_file.clone().into()),
                 ("BEND_DEBUG_DIR", dbg.dir().as_os_str().to_os_string()),
                 // the REPL starts its plugins bridge with this binary
@@ -921,8 +925,9 @@ fn run_main() -> std::io::Result<()> {
             // the machine handshake: one line, what the REPL
             // announced, plus where the child logs
             println!(
-                "READY port={} session={} model={} threshold={} steer={} interrupt={} log={}",
+                "READY port={} token={} session={} model={} threshold={} steer={} interrupt={} log={}",
                 repl_port,
+                repl_token,
                 session_id,
                 info.model,
                 info.threshold,

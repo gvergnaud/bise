@@ -243,6 +243,8 @@ def live_main() -> IO(Unit):
       "BEND_COMPACT_KEEP")
     +keep : Nat <- IO.pure(Nat, keep_of_cfg(P.env_or(kenv, ""), cfgt))
     +p : U32 <- Rc.repl_port(7702)
+    # no token, no say port: it exits here (Rc.say_token)
+    +token : String <- Rc.say_token()
     l : Listener <- IO.try(Listener, TCP.listen("127.0.0.1", p))
     # the single source of truth for every client: printed BEFORE the
     # banner the parent waits for
@@ -261,7 +263,7 @@ def live_main() -> IO(Unit):
     u3 : Unit <- Sh.bash_cleanup(U32.show(p))
     u6 : Unit <- Sh.views_cleanup(U32.show(p))
     w : Unit <- hub_watch_start()
-    f : Rc.Flow <- Rc.serve(True{}, l, Rc.ld_greet(ld), Rc.ld_sess(ld))
+    f : Rc.Flow <- Rc.serve(True{}, token, l, Rc.ld_greet(ld), Rc.ld_sess(ld))
     # Stop (a /reload) lands here: main returns, the process exits 0,
     # and the parent respawns the latest code on the same session.
     # The marker line lets the parent tell a reload from a crash.

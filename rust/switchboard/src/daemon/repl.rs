@@ -419,6 +419,9 @@ mod tests {
     fn the_hub_opens_a_repl_with_its_token() {
         use std::os::unix::fs::PermissionsExt;
         assert_eq!(hello("ab12"), "hello ab12\n");
+        // the line tests/say_port.py writes too (tests/say_port_test.py)
+        let fx: Value = serde_json::from_str(include_str!("../../../../tests/fixtures/say_hello.json")).unwrap();
+        assert_eq!(hello(fx["token"].as_str().unwrap()), fx["line"].as_str().unwrap());
         let d = std::env::temp_dir().join(format!("say-port-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&d);
         let f = d.join("repl.json");

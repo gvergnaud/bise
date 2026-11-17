@@ -1,0 +1,1 @@
+{"why": "a REPL's say-port hello, pinned for its two writers: the hub (rust/switchboard/src/daemon/repl.rs hello) and the Python clients (tests/say_port.py hello); repl-core's Rcp.hello_ok reads it", "token": "t0k", "line": "hello t0k\n"}
