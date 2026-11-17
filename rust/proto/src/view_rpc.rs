@@ -344,7 +344,7 @@ impl ViewError {
             e.message = format!("{what}: this is an older version; open the newest to save");
         }
         if why == NoWrite::SourceGone {
-            e.message = format!("{what}: this file is gone; this is bise's copy, read only");
+            e.message = crate::words::views::doc_copy_no_write(what);
         }
         e
     }

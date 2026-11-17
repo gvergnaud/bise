@@ -39,6 +39,13 @@
     "one": null,
     "text": "bise's copy, the file is gone"
   },
+  "views.doc_copy_no_write": {
+    "args": [
+      "what"
+    ],
+    "one": null,
+    "text": "{what}: this file is gone; this is bise's copy, read only"
+  },
   "views.doc_copy_was": {
     "args": [
       "path"

@@ -108,6 +108,8 @@ export const views = {
   doc_copy: "bise's copy, the file is gone",
   /** the copy part's tip: where its file was ('was at ~/…/notes.md') */
   doc_copy_was: (a: { path: string | number }): string => "was at " + String(a.path),
+  /** a refused write's message on bise's copy of a file gone (NoWrite source_gone), for the view and its developer: '<method>: this file is gone; this is bise's copy, read only' */
+  doc_copy_no_write: (a: { what: string | number }): string => String(a.what) + ": this file is gone; this is bise's copy, read only",
   /** the line when a save was over the hub's limit: 'too large to save (24 MB at most)' */
   doc_too_large: (a: { max: string | number }): string => "too large to save (" + String(a.max) + " at most)",
   /** the line when a save failed for another reason */
