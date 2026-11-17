@@ -46,7 +46,7 @@ const timer = (id: number, who: string): ScheduledTask => ({ id, agent: who, by:
 const proc = (id: string, who: string): Proc => ({
   id, agent: who, kind: 'bg', cmd: `run ${who}`, pid: 100, started_ms: NOW - 1000, state: { is: 'running' }, cpu: 0, rss_mb: 1, procs: 1, out: 'none',
 }) as unknown as Proc;
-const work = (id: string, status: WorkRow['status']): WorkRow => ({ id, name: `task ${id}`, by: 'main', created_ms: NOW - 1000, last_ms: NOW - 1000, status } as WorkRow);
+const work = (id: string, status: WorkRow['status']): WorkRow => ({ id, name: `task ${id}`, by: 'main', created_ms: NOW - 1000, last_ms: NOW - 1000, status });
 
 const SECTIONS = ['tasks', 'artifacts', 'scheduled', 'processes'] as const;
 
