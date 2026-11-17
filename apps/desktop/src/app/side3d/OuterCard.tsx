@@ -10,7 +10,7 @@
 // his m_47261): the row hovered rings its bim, the bim hovered gives its row the hover tint. A click opens its thread; an ask's click opens it in place,
 // its options and 'answer…' / 'write to perf…' under it. The other sections keep the floats' rows
 // (FlyoutLists). Each section shows its first rows (Agents 10, the others 5), then '+ N more' adds
-// 50 (outerrows.ts); an empty one keeps its empty line. The card scrolls as a whole, a 16 fade at
+// 50 (outerrows.ts); one with nothing is not drawn (Agents always has main). The card scrolls as a whole, a 16 fade at
 // the edge that has more, macOS's overlay scrollbar. Owner: nm-side.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { bimsLit, useBimsLit } from '@/bims/focus';
@@ -346,9 +346,18 @@ export function OuterSection({ id, name, count, loud, onAll, onCube, children }:
   );
 }
 
-/** A section of rows: its first 5, then '+ N more' adds 50; `rows(n)` draws the first n; none: its empty line; `after`: a line under its rows (Tasks' fold). */
-export function OuterList({ total, rows, empty, after, ...head }: SectionProps & { total: number; rows: (n: number) => ReactNode; empty: ReactNode; after?: ReactNode }) {
+/** A section with nothing in it: no row and no line under them. Pure. */
+export const sectionEmpty = (total: number, after: ReactNode): boolean => total === 0 && (after === undefined || after === null || after === false);
+
+/**
+ * A section of rows: its first 5, then '+ N more' adds 50; `rows(n)` draws the first n; `after`: a
+ * line under its rows (Tasks' fold), `empty` the line over it when no row shows. With nothing at all
+ * the section is not drawn: no head, count, 'all ›' nor empty line (his m_66323, designer m_66328);
+ * it comes back at its place in the card with its first item.
+ */
+export function OuterList({ total, rows, empty, after, ...head }: SectionProps & { total: number; rows: (n: number) => ReactNode; empty?: ReactNode; after?: ReactNode }) {
   const { shown, more, less } = useShown(FIRST_ROWS);
+  if (sectionEmpty(total, after)) return null;
   return (
     <OuterSection {...head}>
       {total === 0 ? empty : rows(shown)}

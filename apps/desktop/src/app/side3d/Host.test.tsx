@@ -653,7 +653,9 @@ describe('the outer card (page outer-side v2, his pick)', () => {
     // at rest the line never grows: no question under it until a click
     expect(v.queryByTestId(`app.outer.agents.${ACME}.perf.ask`)).toBeNull();
     expect(v.getByTestId('app.outer.agents.loud').textContent).toContain(side.head_waits({ n: 1 }));
-    for (const s of ['artifacts', 'scheduled', 'processes']) expect(v.getByTestId(`app.outer.${s}`)).toBeTruthy();
+    expect(v.getByTestId('app.outer.artifacts')).toBeTruthy();
+    // nothing scheduled, no process: no section (outer-empty.test.tsx)
+    for (const s of ['scheduled', 'processes']) expect(v.queryByTestId(`app.outer.${s}`)).toBeNull();
   });
 
   it('a click on an asking line opens its ask in place, its options one click; on another line it opens that thread', () => {
@@ -937,7 +939,7 @@ describe('the bims\' tile over the outer card (page outer-world v2, his pick #79
     outerWorld.height(400, 800);
     const { v } = side3d(1440);
     expect(v.getByTestId('app.outer.artifacts').querySelectorAll('.s3-row').length).toBe(2);
-    expect(v.getByTestId('app.outer.processes').textContent).toContain(side.no_processes);
+    expect(v.queryByTestId('app.outer.processes')).toBeNull();
     expect(v.queryByTestId('app.outer.artifacts.more')).toBeNull();
   });
 });
@@ -1003,14 +1005,14 @@ describe('the outer card\'s rows: Agents 10, the others 5, then \'+ N more\' add
     expect(v.getByTestId('app.outer.artifacts.all')).toBeTruthy();
   });
 
-  it('5 or fewer: no \'more\' row; none: the empty line', () => {
+  it('5 or fewer: no \'more\' row; none: no section', () => {
     tall(900);
     const { v, store } = side3d(1440);
     crowd(store, 3, 5);
     expect(lines(v, 'artifacts')).toBe(5);
     expect(v.queryByTestId('app.outer.artifacts.more')).toBeNull();
     expect(v.queryByTestId('app.outer.processes.more')).toBeNull();
-    expect(v.getByTestId('app.outer.processes').textContent).toContain(side.no_processes);
+    expect(v.queryByTestId('app.outer.processes')).toBeNull();
   });
 
   it('back to the first rows when the card remounts (a panel opened and folded again)', () => {

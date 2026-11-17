@@ -622,18 +622,18 @@ function Side({ project, scope, home, world, at: coinsAt, right, outerW, room }:
         <OuterTasks all={works} scope={scope} now={now} groupOf={groupOf} />
         <OuterList id="artifacts" name={bubbleName('artifacts')} count={String(artifacts.length)} onAll={() => {
           router.go({ screen: 'artifacts', project: scope });
-        }} total={artifacts.length} empty={<Empty>{artScope?.empty ?? side.no_artifacts}</Empty>}
+        }} total={artifacts.length}
           rows={(n) => artifacts.slice(0, n).map((it) => <ArtifactRow key={`${it.project}/${it.a.id}`} it={it} now={now} group={groupOf(it.project)} pinned={artPinned(it)} />)} />
         <OuterList id="scheduled" name={bubbleName('scheduled')} count={String(sched)} onAll={() => {
           router.go({ screen: 'scheduled' });
-        }} total={sched} empty={<Empty>{side.no_scheduled}</Empty>} rows={(n) => (
+        }} total={sched} rows={(n) => (
           <>
             {schedRows(n)}
           </>
         )} />
         <OuterList id="processes" name={bubbleName('processes')} count={String(running.length)} onAll={() => {
           router.go(all ? { screen: 'running' } : { screen: 'running', scope: { project } });
-        }} total={running.length} empty={<Empty>{side.no_processes}</Empty>}
+        }} total={running.length}
           rows={(n) => running.slice(0, n).map((x) => <ProcRow key={`${x.project}/${x.p.agent}/${x.p.id}`} x={x} now={now} group={groupOf(x.project)} pinned={procPinned(x)} />)} />
       </OuterCard>
       </>

@@ -709,11 +709,6 @@
     "one": null,
     "text": "Nothing in progress"
   },
-  "tasks.none_yet": {
-    "args": [],
-    "one": null,
-    "text": "No tasks yet"
-  },
   "tasks.origin_tip": {
     "args": [],
     "one": null,

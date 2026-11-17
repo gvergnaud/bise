@@ -60,8 +60,6 @@ export const tasks = {
   head_needs: (a: { n: number }): string => a.n === 1 ? String(a.n) + " needs you" : String(a.n) + " need you",
   /** no open task in the scope, only ongoing or done ones (its fold line follows) */
   none_open: "Nothing in progress",
-  /** the right bar's Tasks section when the scope has none at all, done or not ('· Ask bise' follows) */
-  none_yet: "No tasks yet",
   /** a row's done-when count, ticked of all */
   goals_of: (a: { done: string | number; all: string | number }): string => String(a.done) + "/" + String(a.all),
   /** a row's done-when count's tip */

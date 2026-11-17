@@ -70,8 +70,6 @@ crate::words! { tasks:
     head_needs(n) = one "{n} needs you" | "{n} need you";
     /// no open task in the scope, only ongoing or done ones (its fold line follows)
     none_open = "Nothing in progress";
-    /// the right bar's Tasks section when the scope has none at all, done or not ('· Ask bise' follows)
-    none_yet = "No tasks yet";
     /// a row's done-when count, ticked of all
     goals_of(done, all) = "{done}/{all}";
     /// a row's done-when count's tip
