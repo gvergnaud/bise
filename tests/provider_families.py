@@ -235,13 +235,18 @@ def part_d():
         '[models."fakegw/broken"]\nkey_command = "echo nope; exit 3"\n\n'
         # a keychain that locks after its first read (the night: security exits 36)
         '[models."fakegw/flaky"]\nkey_command = "f=$TMPDIR/flaky-key; if test -e $f; then echo keychain locked >&2; exit 36; fi; touch $f; echo flaky-tok"\n\n'
+        # fix-gpt-6: one openai-chat gateway for GPT-6 and GLM (Gauthier's
+        # Datadog AI Gateway); the fake refuses max_tokens for the gpt-6 ids
+        '[providers.fakegwoai]\nname = "Fake AI Gateway"\napi = "openai-chat"\nbase_url = "%s"\nkey_env = ""\n'
+        'max_output = 200\n\n'
+        '[models."fakegwoai/gpt-6.2-sol"]\nmax_tokens_field = "max_completion_tokens"\n\n'
         '[providers.fakeslow]\nname = "Fake Slow"\napi = "openai-chat"\nbase_url = "%s"\nkey_env = ""\n'
         'idle_timeout_sec = 1\n\n'
         '[providers.fakepatient]\nname = "Fake Patient"\napi = "openai-chat"\nbase_url = "%s"\nkey_env = ""\n'
         'idle_timeout_sec = 8\n'
         '\n[providers.fakehang]\nname = "Fake Hang"\napi = "openai-chat"\nbase_url = "%s"\nkey_env = ""\n'
         'idle_timeout_sec = 2\n'
-        % (base, base, base, base, base, base, base))
+        % (base, base, base, base, base, base, base, base))
     cfg = os.path.join(tmp, "config.toml")
     s = socket.socket()
     s.bind(("127.0.0.1", 0))
@@ -318,6 +323,33 @@ def part_d():
               "a config.toml model switch goes to openai-chat at the next call, streamed (BISE-144): %r"
               % [(r["family"], r["stream"]) for r in recs])
         n += len(recs)
+        # fix-gpt-6: GPT-6 through the gateway gets max_completion_tokens
+        # (its entry's field), GLM on the same provider keeps max_tokens; a
+        # GPT-6 id without the field gets the 400 once, and the line says
+        # the setting that fixes it
+        os.environ["FAKE_REFUSE_MAX_TOKENS"] = "gpt-6.2-sol,gpt-6-luna"
+        try:
+            out = turn("fakegwoai/gpt-6.2-sol", "hello gpt-6")
+            recs = recs_of("gpt-6.2-sol")
+            check([(r["status"], r["cap"]) for r in recs] == [(200, "max_completion_tokens")],
+                  "gpt-6 on an openai-chat gateway: max_completion_tokens, answered: %r"
+                  % [(r["status"], r["cap"]) for r in recs])
+            n += len(recs)
+            out = turn("fakegwoai/glm-5", "hello glm")
+            recs = recs_of("glm-5")
+            check([(r["status"], r["cap"]) for r in recs] == [(200, "max_tokens")],
+                  "glm on the same gateway keeps max_tokens: %r" % [(r["status"], r["cap"]) for r in recs])
+            n += len(recs)
+            out = turn("fakegwoai/gpt-6-luna", "hello luna")
+            recs = recs_of("gpt-6-luna")
+            hint = 'max_tokens_field = \\"max_completion_tokens\\" under [models.\\"fakegwoai/gpt-6-luna\\"]'
+            check([(r["status"], r["cap"]) for r in recs] == [(400, "max_tokens")]
+                  and any(hint in l or hint.replace('\\"', '"') in l for l in out),
+                  "a gpt-6 id without the field: one 400, the line names the setting: %r %r"
+                  % ([(r["status"], r["cap"]) for r in recs], out[-3:]))
+            n += len(recs)
+        finally:
+            del os.environ["FAKE_REFUSE_MAX_TOKENS"]
         out = turn("fakegem/g", "hello")
         # a reply or an error: no line to wait for, its own model's only
         recs = [r for r in [json.loads(l) for l in open(F.LOG)][n:] if r.get("model") == "g"]

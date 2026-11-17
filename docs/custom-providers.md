@@ -98,6 +98,58 @@ Context matters: bise compacts a conversation before it fills the
 model's window, so a window set too large ends in an error from the
 server instead.
 
+Two more keys, per model or for the whole provider:
+
+| key | what it does | default |
+| --- | --- | --- |
+| `api` | the model's own wire API, over its provider's (one model of a chat gateway on `/responses`) | the provider's |
+| `max_tokens_field` | the name of the output cap on `openai-chat`: `"max_tokens"` or `"max_completion_tokens"` | `max_completion_tokens` on `openai`, else `max_tokens` |
+
+OpenAI's newer models (GPT-6, gpt-5, the o models) refuse `max_tokens`
+on Chat Completions: `400 unsupported_parameter: 'max_tokens' is not
+supported with this model`. Most other servers take only `max_tokens`.
+So a gateway that serves both needs the name per model; when the server
+refuses it, bise's error line says the setting to add.
+
+## One gateway for Claude and GPT-6
+
+A gateway that routes Claude, GLM and GPT-6 (Datadog's AI Gateway,
+LiteLLM, a company proxy) is one provider. Its GPT-6 models get
+`max_completion_tokens`, the others keep `max_tokens`:
+
+```toml
+[providers.ai-gw]
+name = "AI Gateway"
+api = "openai-chat"
+base_url = "https://ai-gateway.example.com/v1"
+key_env = "AI_GW_KEY"
+
+[models."ai-gw/openai/gpt-6.2-sol"]
+max_tokens_field = "max_completion_tokens"
+reasoning = true
+
+[models."ai-gw/openai/gpt-6.2-astra"]
+max_tokens_field = "max_completion_tokens"
+reasoning = true
+
+[models."ai-gw/openai/gpt-6-luna"]
+max_tokens_field = "max_completion_tokens"
+reasoning = true
+
+[models."ai-gw/anthropic/claude-sonnet-4-5"]
+reasoning = true    # max_tokens, the provider's default
+```
+
+To send one model to the Responses API instead (when the gateway serves
+`/responses` for OpenAI's models only), give that model its own `api`:
+
+```toml
+[models."ai-gw/openai/gpt-6.2-sol"]
+api = "openai-responses"
+```
+
+The other models of the provider stay on `/chat/completions`.
+
 ## Gateways behind a login (key_command, headers_env)
 
 Some gateways want a short-lived token or extra headers, the way Claude

@@ -1276,6 +1276,18 @@ class H(http.server.BaseHTTPRequestHandler):
             err = {"error": {"type": "authentication_error" if bad else "billing_error", "message": said}}
             self.send(401 if bad else 402, json.dumps(err).encode())
             return
+        # fix-gpt-6: $FAKE_REFUSE_MAX_TOKENS (model ids, comma-separated)
+        # refuse max_tokens on Chat Completions with OpenAI's 400, as GPT-6
+        # does behind Datadog's AI Gateway (Gauthier's report)
+        refuse = os.environ.get("FAKE_REFUSE_MAX_TOKENS", "").split(",")
+        if family == "openai-chat" and "max_tokens" in body and body.get("model") in refuse:
+            with open(LOG, "a") as f:
+                f.write(json.dumps({"agent": "", "family": family, "path": self.path, "status": 400,
+                                    "model": body.get("model"), "cap": cap_of(body)}) + "\n")
+            self.send(400, json.dumps(oai_error(
+                "max_tokens", "Unsupported parameter: 'max_tokens' is not supported with this model. "
+                "Use 'max_completion_tokens' instead.", "unsupported_parameter")).encode())
+            return
         # BISE-293: the real APIs refuse a tool name off their pattern
         # (OpenAI refused "self.compact" on the user's first message)
         bad_name = name_error(family, body) or request_error(family, body)
@@ -1386,6 +1398,8 @@ class H(http.server.BaseHTTPRequestHandler):
                                 "error": turn["error"], "fixture": turn["fixture"],
                                 # BISE-135: the model and effort the call asked for
                                 "model": model, "effort": effort_of(body),
+                                # fix-gpt-6: the output cap's field it sent
+                                "cap": cap_of(body),
                                 # BISE-232: the AGENTS.md block of the system prompt
                                 "agents_md": agents_md_of(conv),
                                 # approvals-edit: the request's tools, each
@@ -1457,6 +1471,11 @@ def tool_names(family, body):
 
 def oai_error(where, message, code="invalid_value"):
     return {"error": {"message": message, "type": "invalid_request_error", "param": where, "code": code}}
+
+
+def cap_of(body):
+    """The name of the output cap a Chat Completions body sent, None for none."""
+    return next((k for k in ("max_completion_tokens", "max_tokens") if k in body), None)
 
 
 def b64_ok(data):

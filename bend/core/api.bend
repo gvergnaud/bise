@@ -208,6 +208,11 @@ type MFacts is Data:
   MFacts{reasoning: Bool, output: Nat, max_key: String, thinking: String,
     betas: String, effort: String, plan: Bool}
 
+def facts_max_key(f: MFacts) -> String:
+  match f:
+    case MFacts{_, _, +max_key, _, _, _, _}:
+      max_key
+
 def facts_betas(f: MFacts) -> String:
   match f:
     case MFacts{_, _, _, _, +betas, _, _}:

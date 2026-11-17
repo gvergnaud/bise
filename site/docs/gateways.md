@@ -81,6 +81,40 @@ output_price = 15.0
 
 the context matters: bise compacts a conversation before it fills the window. a window set too large ends in an error from the server instead.
 
+two more keys, per model or for the whole provider:
+
+| key | what it does | unset |
+|---|---|---|
+| `api` | the model's own wire API, over its provider's | the provider's |
+| `max_tokens_field` | the name of the output cap on `openai-chat`: `"max_tokens"` or `"max_completion_tokens"` | `max_completion_tokens` on `openai`, else `max_tokens` |
+
+OpenAI's newer models (GPT-6, gpt-5, the o models) refuse `max_tokens` on Chat Completions (`400 unsupported_parameter`), and most other servers take only `max_tokens`. when a server refuses it, bise's error line says the setting to add.
+
+## one gateway for Claude and GPT-6
+
+a gateway that routes Claude, GLM and GPT-6 (Datadog's AI Gateway, LiteLLM, a company proxy) is one provider. its GPT-6 models get `max_completion_tokens`, the others keep `max_tokens`:
+
+```toml title="~/.bise/config.toml"
+[providers.ai-gw]
+name = "AI Gateway"
+api = "openai-chat"
+base_url = "https://ai-gateway.example.com/v1"
+key_env = "AI_GW_KEY"
+
+[models."ai-gw/openai/gpt-6.2-sol"]
+max_tokens_field = "max_completion_tokens"
+reasoning = true
+
+[models."ai-gw/openai/gpt-6-luna"]
+max_tokens_field = "max_completion_tokens"
+reasoning = true
+
+[models."ai-gw/anthropic/claude-sonnet-4-5"]
+reasoning = true    # max_tokens, the provider's default
+```
+
+to send one model to the Responses API instead (a gateway that serves `/responses` for OpenAI's models only), give that model its own `api = "openai-responses"`. the provider's other models stay on `/chat/completions`.
+
 ## gateways behind a login
 
 some gateways want a short-lived token or extra headers, the way Claude Code uses `apiKeyHelper` and `ANTHROPIC_CUSTOM_HEADERS`:
