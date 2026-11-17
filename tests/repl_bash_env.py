@@ -33,6 +33,7 @@ import bise_env  # noqa: E402
 import scripted_ts  # noqa: E402  (EXE, jsrt_env, run_session)
 import obs_lines  # noqa: E402
 import wait  # noqa: E402
+from say_port import SayPort  # noqa: E402
 
 
 # a process that holds 300 MB (touched pages), then sleeps 30 s
@@ -76,7 +77,8 @@ def part_a(tmp):
     fake = subprocess.Popen([sys.executable, "-u", os.path.join(HERE, "fake_provider.py")],
                             stdout=subprocess.PIPE, text=True,
                             env={**env, "FAKE_LOG": os.path.join(tmp, "fake.log")})
-    port = free_port()
+    sp = SayPort()
+    port = sp.port
     session = os.path.join(tmp, "session.txt")
     bg = os.path.join(tmp, "bg")
     env.update({
@@ -86,7 +88,7 @@ def part_a(tmp):
         # each way (the job outlives the window, the wait does not, the job
         # ends before 3 runs). With 2 / 3 / 1.5 a full gate at load 12 made
         # the job end in the window and `echo before; cat` hand off
-        "BEND_BG_ROOT": bg, "BEND_BG_AFTER": "6", "BEND_REPL_PORT": str(port),
+        "BEND_BG_ROOT": bg, "BEND_BG_AFTER": "6", "BEND_REPL_PORT": str(port), "BISE_REPL_TOKEN": sp.token,
         "BEND_SESSION_FILE": session, "BEND_WIRE_LOG": os.path.join(tmp, "wire.log"),
         "SB_AGENT": "probe",
         # the memory watchdog's limit, per process (the hogs below: 300 MB)
@@ -119,7 +121,7 @@ def part_a(tmp):
                 % ((os.path.join(tmp, "big.bin"),) * 3),
                 # an output without end: stopped at 5 MB, its line after the first MiB
                 "while :; do head -c 4194304 /dev/zero | tr '\\0' a; sleep 0.5; done"]
-        sock = socket.create_connection(("127.0.0.1", port), timeout=120)
+        sock = sp.connect(timeout=120)
         sock.sendall(("run " + " ".join("[[bash: %s]]" % c for c in cmds) + "\n").encode())
         f = sock.makefile("rb")
         while True:

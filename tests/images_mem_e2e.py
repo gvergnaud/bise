@@ -18,6 +18,7 @@ ROOT = os.path.abspath(os.path.join(HERE, ".."))
 sys.path.insert(0, HERE)
 import obs_lines  # noqa: E402
 import wait  # noqa: E402
+from say_port import SayPort  # noqa: E402
 N = 20
 LIMIT_MB = 300
 tmp = tempfile.mkdtemp(prefix="sb-imgmem-")
@@ -36,10 +37,11 @@ env = {k: v for k, v in os.environ.items() if not k.startswith(("BEND_", "SB_", 
 env.update(HOME=tmp, XDG_STATE_HOME=os.path.join(tmp, "state"))
 fake = subprocess.Popen([sys.executable, "-u", os.path.join(HERE, "fake_provider.py")], stdout=subprocess.PIPE, text=True,
                         env={**env, "FAKE_LOG": os.path.join(tmp, "fake.log")})
-s = socket.socket(); s.bind(("127.0.0.1", 0)); port = s.getsockname()[1]; s.close()
+sp = SayPort()
+env.update(sp.env())
 env.update({"BEND_PROVIDER_URL": "http://127.0.0.1:%s/v1/chat/completions" % fake.stdout.readline().split()[1],
             "BEND_MODEL": "mistral-small-latest", "MISTRAL_API_KEY": "fake-key", "BEND_IMAGE_DIR": imgs,
-            "BEND_BG_ROOT": os.path.join(tmp, "bg"), "BEND_REPL_PORT": str(port),
+            "BEND_BG_ROOT": os.path.join(tmp, "bg"),
             "BEND_SESSION_FILE": os.path.join(tmp, "session.txt"), "BEND_WIRE_LOG": os.path.join(tmp, "wire.log")})
 log = os.path.join(tmp, "repl.log")
 repl = subprocess.Popen([os.path.join(ROOT, "repl-live")], cwd=ROOT, env=env, stdout=open(log, "w"), stderr=open(os.path.join(tmp, "err"), "w"))
@@ -61,7 +63,7 @@ try:
         return "REPL on" in open(log).read()
     wait.until(banner, 60, "the REPL banner")
     before = mb()
-    sock = socket.create_connection(("127.0.0.1", port), timeout=300)
+    sock = sp.connect(timeout=300)
     t1 = time.time()
     sock.sendall(("run look at these " + " ".join(markers) + "\n").encode())
     f = sock.makefile("rb")

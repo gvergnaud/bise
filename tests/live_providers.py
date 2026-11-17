@@ -30,6 +30,7 @@ import provider_folds as P  # noqa: E402
 import bise_env  # noqa: E402
 import obs_lines  # noqa: E402
 import wait  # noqa: E402
+from say_port import SayPort  # noqa: E402
 
 # row -> (catalog provider, model, family override). The cheapest
 # tool-capable model of each provider of rust/catalog/models.toml.
@@ -196,17 +197,15 @@ def harness_turn(row, prov, model, family, base, key_env, env):
         'vision = %s\nreasoning = %s\ntools = true\n%s' % (
             pid, model, pid, row, family, base, key_env, f["context"], f["max_output"],
             str(f["vision"]).lower(), str(f["reasoning"]).lower(), extra))
-    s = socket.socket()
-    s.bind(("127.0.0.1", 0))
-    port = s.getsockname()[1]
-    s.close()
+    sp = SayPort()
+    port = sp.port
     session = os.path.join(tmp, "session.txt")
     # an own HOME: none of the caller's path overrides (his BEND_RUN_DIR...) either
     e = {k: v for k, v in env.items()
          if k not in bise_env.NOT_INHERITED + bise_env.OWN_PATHS + ("BEND_PROVIDER_URL", "BEND_MODEL", "BISE_MODEL")}
     legacy = {"foundry": model, "mistral": model}.get(pid, "%s/%s" % (pid, model))
     e.update(HOME=tmp, XDG_STATE_HOME=os.path.join(tmp, "state"), BISE_MODELS_FILE=os.path.join(tmp, "models.toml"),
-             BISE_MODEL="%s/%s" % (pid, model), BEND_MODEL=legacy, BEND_REPL_PORT=str(port),
+             BISE_MODEL="%s/%s" % (pid, model), BEND_MODEL=legacy, BEND_REPL_PORT=str(port), BISE_REPL_TOKEN=sp.token,
              BEND_SESSION_FILE=session, BEND_WIRE_LOG=os.path.join(tmp, "wire.log"),
              BEND_BG_ROOT=os.path.join(tmp, "bg"))
     log, err = os.path.join(tmp, "repl.log"), os.path.join(tmp, "repl.err")
@@ -219,7 +218,7 @@ def harness_turn(row, prov, model, family, base, key_env, env):
             pass
         if "REPL on" not in open(log).read():
             return "FAIL %s: no REPL banner %s" % (row, open(err).read()[-300:])
-        sock = socket.create_connection(("127.0.0.1", port), timeout=300)
+        sock = sp.connect(timeout=300)
         sock.sendall(("run Run `echo %s` with your bash tool, then say done.\n" % token).encode())
         f = sock.makefile("rb")
         lines = []

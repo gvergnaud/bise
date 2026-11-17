@@ -33,6 +33,7 @@ import fake_provider as F  # noqa: E402
 import provider_folds as P  # noqa: E402
 import obs_lines  # noqa: E402
 import wait  # noqa: E402
+from say_port import SayPort  # noqa: E402
 
 FAILS = []
 
@@ -248,14 +249,13 @@ def part_d():
         'idle_timeout_sec = 2\n'
         % (base, base, base, base, base, base, base, base))
     cfg = os.path.join(tmp, "config.toml")
-    s = socket.socket()
-    s.bind(("127.0.0.1", 0))
-    port = s.getsockname()[1]
-    s.close()
+    sp = SayPort()
+    port = sp.port
     session = os.path.join(tmp, "session.txt")
     env = {k: v for k, v in os.environ.items() if not k.startswith(("BEND_", "SB_", "BISE_"))}
+    env.update(sp.env())
     env.update(HOME=tmp, XDG_STATE_HOME=os.path.join(tmp, "state"), BISE_MODELS_FILE=models, BEND_CONFIG=cfg,
-               BEND_REPL_PORT=str(port), BEND_SESSION_FILE=session, BEND_WIRE_LOG=os.path.join(tmp, "wire.log"),
+               BEND_SESSION_FILE=session, BEND_WIRE_LOG=os.path.join(tmp, "wire.log"),
                BEND_BG_ROOT=os.path.join(tmp, "bg"), SB_AGENT="probe", TMPDIR=tmp,
                FAKE_GW_HEADERS="source: bise\norg-id : 2\nnot a header", EMPTY_GW_HEADERS="   ")
     log, err = os.path.join(tmp, "repl.log"), os.path.join(tmp, "repl.err")
@@ -267,7 +267,7 @@ def part_d():
 
     def turn(model, text, ctrl_c_on=None, extra=""):
         open(cfg, "w").write('model = "%s"\n%s' % (model, extra))
-        sock = socket.create_connection(("127.0.0.1", port), timeout=60)
+        sock = sp.connect(timeout=60)
         sock.sendall(("run " + text + "\n").encode())
         f = sock.makefile("rb")
         out = []
