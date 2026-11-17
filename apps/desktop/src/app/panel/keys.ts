@@ -2,7 +2,7 @@
 // ⌘W closes the tab in front (folded: nothing, never the window; cmd-w-artifact), ⌃⇧T the last closed
 // tab back (⇧⌘T is File › Reopen Closed Tab's, App.tsx), ⌘⇧] and ⌘⇧[ the next and previous tab, and the launcher's rows: ⌘P Artifacts (the picker of the latest), ⌥⌘D
 // Changes (nothing when the agent in view has none), ⌘L Browser (a browser
-// tab). ⌥⌘0 (the panel) and ⌃` (the terminal) keep their arms in app/keys.ts and
+// tab; in a browser tab, its address selected: web.ts selectFocusedAddress). ⌥⌘0 (the panel) and ⌃` (the terminal) keep their arms in app/keys.ts and
 // terminal/model.ts. panelKeyOf decides, pure (app/keys.ts's one arm calls it); doPanelKey acts.
 // Owner: nm-panel.
 import type { KeyLike } from '@/app/keys';
@@ -11,6 +11,7 @@ import type { Agent, Place } from '@/proto';
 import { changeDoor } from '@/review/openChange';
 import { closeActive, openArtifacts, openBrowser, openLauncher, openShell, openWhat, reopenClosed, stepTab } from './state';
 import { hasChanges, type OpenRow } from './launch';
+import { selectFocusedAddress } from './web';
 
 /** Full width on and off (panel-full, designer m_45445): View › Panel Full Width, app/keys.ts. */
 export const PANEL_FULL_KEY = '⇧⌥⌘B';
@@ -119,6 +120,9 @@ export function doPanelKey(k: PanelKey | OpenRow, c: PanelCtx, instead?: string)
       return;
     }
     case 'browser':
+      // ⌘L in a browser tab (its page or its bar): its address selected (make-l-focus); the
+      // launcher's Browser row always opens one
+      if (instead === undefined && selectFocusedAddress()) return;
       openBrowser(instead);
       return;
     case 'office':

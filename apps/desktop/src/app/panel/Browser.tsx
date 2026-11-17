@@ -21,7 +21,8 @@ import { PRIMARY_KEY } from '@/artifacts/front';
 import { useModHeld } from '@/app/held';
 import { useEntityMenu } from '@/app/menus/use';
 import { artifactGesture, countGesture } from '@/app/usage';
-import { closeTabId, takeOpened } from './state';
+import { closeTabId, panelAt, takeOpened } from './state';
+import { putAddress, webKey } from './web';
 import { OmniList, useOmni } from './Omnibox';
 import { isFrameEsc } from '@/app/ArtifactView';
 import { frameEsc } from '@/app/escape';
@@ -170,9 +171,19 @@ export function BlankBrowser({ tabId, shown }: { tabId: string; shown: boolean }
   useEffect(() => {
     if (shown && takeOpened(tabId)) field.current?.focus();
   }, [shown, tabId]);
+  // ⌘L in it (web.ts selectFocusedAddress): its field, his words selected, never another blank tab
+  const [key] = useState(() => webKey(panelAt(), tabId));
+  useEffect(
+    () =>
+      putAddress(key, () => {
+        field.current?.focus();
+        field.current?.select();
+      }),
+    [key],
+  );
   const optId = (i: number) => `${tabId}.opt.${String(i)}`;
   return (
-    <div className="pn-browser" data-testid="app.panel.browser.blank">
+    <div className="pn-browser" data-testid="app.panel.browser.blank" data-web-key={key}>
       <div className="pn-addr" data-testid="app.panel.addr">
         <IconButton label={panel.addr_back} size="bar" disabled onClick={() => undefined} testId="app.panel.addr.back">
           <AppIcon name="back" size={16} />

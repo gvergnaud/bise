@@ -16,7 +16,7 @@ import { useActionTaker } from '@/app/menu';
 import { panelAt, takeOpened } from './state';
 import { OmniList, useOmni } from './Omnibox';
 import { shownUrl } from './omni';
-import { dropSaved, noteOpened, siteOfUrl, useWebSide, webKey, webOpened } from './web';
+import { dropSaved, noteOpened, putAddress, siteOfUrl, useWebSide, webKey, webOpened } from './web';
 import { useWebHistory } from './webpages';
 import type { WebPageOf } from './model';
 
@@ -92,7 +92,19 @@ export function WebTab({ tabId, shown, page }: { tabId: string; shown: boolean; 
       web.rect(key, { ...rectOf(el, false), visible: false });
     };
   }, [web, key, visible]);
-  // ⌘L on a web tab (or just opened by its launcher): the address, selected
+  // ⌘L in this tab (its page or its bar; web.ts selectFocusedAddress): the address field takes the
+  // keys, the URL selected (its focus starts the edit, which selects it; already editing: selected again)
+  useEffect(
+    () =>
+      putAddress(key, () => {
+        const f = field.current;
+        if (f === null) return;
+        if (document.activeElement === f) f.select();
+        else f.focus();
+      }),
+    [key],
+  );
+  // just opened (a link, the launcher): a blank one's field takes the keys, else its page
   useEffect(() => {
     if (!shown || !takeOpened(tabId)) return;
     if (page.url === '') field.current?.focus();
@@ -131,7 +143,7 @@ export function WebTab({ tabId, shown, page }: { tabId: string; shown: boolean; 
   };
   const optId = (i: number) => `${tabId}.opt.${String(i)}`;
   return (
-    <div className="pn-browser" data-testid="app.panel.web" data-url={url}>
+    <div className="pn-browser" data-testid="app.panel.web" data-url={url} data-web-key={key}>
       <div className="pn-addr" data-testid="app.panel.addr">
         <IconButton label={panel.addr_back} size="bar" disabled={s?.back !== true} onClick={() => { web?.act(key, 'back'); }} testId="app.panel.addr.back">
           <AppIcon name="back" size={16} />

@@ -3,7 +3,8 @@
 // events main sends (kept outside React's tree, one per key), what they do here (the tab's page
 // kept in its tab: URL, title, back/forward; a page's new tab opens next to it, adopting the page
 // main holds for it (its opener kept); a page that closed itself takes its tab, its opener's in front; a key
-// the panel owns, pressed in the page, played as the window's own; a saved download's line; find's
+// the panel owns, pressed in the page, played as the window's own from that page's tab (⌘L there
+// selects its address: selectFocusedAddress, over the bars the tabs put); a saved download's line; find's
 // count; a tab that never showed a page closed when his go went out or was refused), the views of
 // tabs gone closed, and where a link he clicks goes (openWebLink: a page of one of his hubs in the
 // panel as its artifact, else a web tab, his browser with ⌘ or for a site he always opens there).
@@ -52,9 +53,45 @@ function put(key: string, part: Partial<WebSide>): void {
   emit();
 }
 
-/** A key the panel owns, pressed in a page, played as the window's own keydown (app/keys.ts). */
+/** Each mounted browser tab's address bar, by its key (WebTab.tsx, Browser.tsx): ⌘L selects it. */
+const addresses = new Map<string, () => void>();
+/** The page whose key the window plays now (playKey): the web tab that has the focus meanwhile. */
+let playing: string | null = null;
+
+/** A key the panel owns, pressed in a page, played as the window's own keydown (app/keys.ts), from that page's tab. */
 function playKey(ev: Extract<WebEvent, { kind: 'key' }>): void {
-  window.dispatchEvent(new KeyboardEvent('keydown', { key: ev.k, code: ev.code, metaKey: ev.meta, ctrlKey: ev.ctrl, altKey: ev.alt, shiftKey: ev.shift, bubbles: true, cancelable: true }));
+  playing = ev.key;
+  try {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: ev.k, code: ev.code, metaKey: ev.meta, ctrlKey: ev.ctrl, altKey: ev.alt, shiftKey: ev.shift, bubbles: true, cancelable: true }));
+  } finally {
+    playing = null;
+  }
+}
+
+/** The tab `key`'s address bar, selected on ⌘L while it is mounted; the unput it returns. */
+export function putAddress(key: string, select: () => void): () => void {
+  addresses.set(key, select);
+  return () => {
+    if (addresses.get(key) === select) addresses.delete(key);
+  };
+}
+
+/** The web tab an element is in (its bar, the box of its page), by its `data-web-key`, else null. */
+export function webKeyIn(el: Element | null): string | null {
+  return el?.closest('[data-web-key]')?.getAttribute('data-web-key') ?? null;
+}
+
+/**
+ * ⌘L (make-l-focus, his m_66239): the browser tab that has the focus (its page, whose key the
+ * window plays, else the window's focus in its bar) gets its address selected, as Chrome's. False:
+ * no web tab has the focus, ⌘L opens one (panel/keys.ts doPanelKey).
+ */
+export function selectFocusedAddress(): boolean {
+  const key = playing ?? webKeyIn(document.activeElement);
+  const select = key === null ? undefined : addresses.get(key);
+  if (select === undefined) return false;
+  select();
+  return true;
 }
 
 function onEvent(ev: WebEvent): void {
