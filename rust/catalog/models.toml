@@ -246,6 +246,10 @@ efforts = "low,medium,high,xhigh,max"
 # Codex's default for OpenAI's models (issue #18: high spent a plan's
 # 5 hours on one issue; Gabriel's pick, page token-audit)
 effort = "medium"
+# on Chat Completions (a gateway's route to these models, or api =
+# "openai-chat"): the gpt-6 family refuses max_tokens (400
+# unsupported_parameter, Gauthier's report on the Datadog AI Gateway)
+max_tokens_field = "max_completion_tokens"
 
 # the flagship, for complex reasoning and coding
 [models."openai/gpt-6-astra"]

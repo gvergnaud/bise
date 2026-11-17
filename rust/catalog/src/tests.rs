@@ -106,7 +106,7 @@ fn a_listed_model_takes_its_own_fields_then_its_providers() {
     let c = Catalog::builtin();
     let r = c.resolve("anthropic/claude-haiku-4-5");
     assert_eq!(r.known, Known::Listed);
-    assert_eq!(r.caps, Caps { context: 200_000, max_output: 64_000, vision: true, reasoning: true, tools: true, thinking: "budget".into(), betas: ANTH_BETAS.into(), efforts: "none,low,medium,high,max".into(), effort: String::new(), cache_key: String::new(), cache_header: String::new(), headers_env: String::new(), headers: Default::default(), key_command: String::new(), idle_timeout_sec: 0 });
+    assert_eq!(r.caps, Caps { context: 200_000, max_output: 64_000, vision: true, reasoning: true, tools: true, thinking: "budget".into(), betas: ANTH_BETAS.into(), efforts: "none,low,medium,high,max".into(), effort: String::new(), cache_key: String::new(), cache_header: String::new(), headers_env: String::new(), headers: Default::default(), key_command: String::new(), idle_timeout_sec: 0, max_tokens_field: None });
     let r = c.resolve("mistral/mistral-large-latest");
     assert_eq!((r.caps.context, r.caps.reasoning, r.caps.vision), (262_144, false, true));
     let r = c.resolve("mistral/mistral-large-4");
@@ -484,6 +484,65 @@ vision = true
         let sec = model_section(&text, &m.name());
         assert_eq!(sec.iter().filter(|l| l.starts_with("vision = ")).collect::<Vec<_>>(), [&want.as_str()], "{}", m.name());
     }
+}
+
+// Gauthier's bug (fix-gpt-6): GPT-6 behind a gateway refuses max_tokens.
+// The cap's name is a model fact, model > provider; the handoff carries
+// it to the runtime (bend/laws/providers.bend provider_max_tokens_field_*).
+#[test]
+fn max_tokens_field_is_a_model_fact_carried_to_the_handoff() {
+    let s = setup(
+        r#"
+[providers.ai-gw]
+base_url = "https://gw.example/v1"
+key_env = "GW"
+[models."ai-gw/openai/gpt-6.2-sol"]
+max_tokens_field = "max_completion_tokens"
+[models."ai-gw/anthropic/claude-x"]
+[providers.vllm]
+base_url = "http://localhost:8000/v1"
+key_env = ""
+max_tokens_field = "max_completion_tokens"
+[models."vllm/old"]
+max_tokens_field = "max_tokens"
+[models."vllm/typo"]
+max_tokens_field = "max_completion"
+"#,
+    );
+    let field = |n: &str| s.catalog.resolve(n).caps.max_tokens_field;
+    assert_eq!(field("ai-gw/openai/gpt-6.2-sol"), Some(MaxTokensField::MaxCompletionTokens));
+    assert_eq!(field("ai-gw/anthropic/claude-x"), None);
+    assert_eq!(field("ai-gw/unlisted"), None);
+    assert_eq!(field("vllm/old"), Some(MaxTokensField::MaxTokens));
+    assert_eq!(field("vllm/any"), Some(MaxTokensField::MaxCompletionTokens));
+    // a bad word warns and is ignored: the provider's then
+    assert_eq!(field("vllm/typo"), Some(MaxTokensField::MaxCompletionTokens));
+    assert!(s.catalog.warnings.iter().any(|w| w.contains("vllm/typo") && w.contains("max_tokens_field")), "{:?}", s.catalog.warnings);
+    let text = s.handoff_toml();
+    assert!(model_section(&text, "ai-gw/openai/gpt-6.2-sol").contains(&"max_tokens_field = \"max_completion_tokens\""), "{text}");
+    assert!(!model_section(&text, "ai-gw/anthropic/claude-x").iter().any(|l| l.starts_with("max_tokens_field")), "{text}");
+    assert!(model_section(&text, "vllm/old").contains(&"max_tokens_field = \"max_tokens\""), "{text}");
+    let vllm: Vec<&str> = text.lines().skip_while(|l| *l != "[providers.vllm]").take_while(|l| !l.starts_with("[models")).collect();
+    assert!(vllm.contains(&"max_tokens_field = \"max_completion_tokens\""), "{text}");
+    // the handoff reads back the same
+    let back = Setup::from_text(Some(&text), &no_env);
+    for n in ["ai-gw/openai/gpt-6.2-sol", "ai-gw/anthropic/claude-x", "vllm/old", "vllm/any"] {
+        assert_eq!(back.catalog.resolve(n).caps.max_tokens_field, field(n), "{n}");
+    }
+}
+
+// OpenAI's own models carry the field at the provider level, so a gateway
+// id that borrows one of them by exact id gets it through resolve (the
+// handoff carries borrowed caps in task pass-a-gateway)
+#[test]
+fn a_gateway_id_borrowing_an_openai_model_takes_max_completion_tokens() {
+    let c = Catalog::builtin();
+    assert_eq!(c.resolve("openai/gpt-6-luna").caps.max_tokens_field, Some(MaxTokensField::MaxCompletionTokens));
+    let r = c.resolve("litellm/openai/gpt-6-luna");
+    assert_eq!((r.known, r.api.as_str(), r.caps.max_tokens_field), (Known::Listed, "openai-chat", Some(MaxTokensField::MaxCompletionTokens)));
+    // a Claude or Mistral id on the same gateway: no field, max_tokens
+    assert_eq!(c.resolve("litellm/claude-opus-5-5").caps.max_tokens_field, None);
+    assert_eq!(c.resolve("litellm/mistral/mistral-large-4").caps.max_tokens_field, None);
 }
 
 #[test]

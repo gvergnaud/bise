@@ -861,6 +861,82 @@ law resp_no_shape_no_namespace:
       Api.MFacts{True{}, 4096n, "max_tokens", "", "", "medium", False{}}, plan.req()),
     "namespace") == False{} : Bool}
 
+# ---- the name of the output cap (fix-gpt-6, Gauthier's report) ----
+# GPT-6 behind a gateway (provider ai-gw, Datadog's AI Gateway) refuses
+# max_tokens with a 400 unsupported_parameter; Claude and GLM on the
+# same provider take it. The name is the handoff's max_tokens_field (a
+# model's over its provider's, rust/catalog MaxTokensField), else
+# max_completion_tokens on OpenAI itself, max_tokens elsewhere.
+
+# LAW: a gateway model whose entry says max_completion_tokens gets it;
+# the provider's other models (Claude on the same gateway) keep max_tokens.
+law provider_max_tokens_field_of_the_model:
+  {Pv.resolve("", "", "", "", "model = \"ai-gw/openai/gpt-6.2-sol\"",
+      "[providers.ai-gw]
+api = \"openai-chat\"
+base_url = \"https://gw.example/v1\"
+key_env = \"GW_KEY\"
+[models.\"ai-gw/openai/gpt-6.2-sol\"]
+max_tokens_field = \"max_completion_tokens\"",
+      "")
+    == Pv.ROk{Pv.Prov{"ai-gw", "openai/gpt-6.2-sol", Api.OpenAI{},
+      "https://gw.example/v1/chat/completions", "GW_KEY",
+      Api.MFacts{False{}, 0n, "max_completion_tokens", "", "", "", False{}}}}
+    : Pv.Resolved}
+
+law provider_max_tokens_field_absent_is_max_tokens:
+  {Api.facts_max_key(Pv.facts(Cf.parse_toml("[providers.ai-gw]
+api = \"openai-chat\"
+[models.\"ai-gw/openai/gpt-6.2-sol\"]
+max_tokens_field = \"max_completion_tokens\"
+"), "ai-gw", "ai-gw/anthropic/claude-sonnet", ""))
+    == "max_tokens" : String}
+
+# LAW: the setting overrides both ways: a model's max_tokens over its
+# provider's max_completion_tokens, and over OpenAI's own default.
+law provider_max_tokens_field_overrides_both_ways:
+  {[Api.facts_max_key(Pv.facts(Cf.parse_toml("[providers.vllm]
+max_tokens_field = \"max_completion_tokens\"
+[models.\"vllm/old\"]
+max_tokens_field = \"max_tokens\"
+"), "vllm", "vllm/old", "")),
+    Api.facts_max_key(Pv.facts(Cf.parse_toml("[providers.vllm]
+max_tokens_field = \"max_completion_tokens\"
+"), "vllm", "vllm/new", "")),
+    Api.facts_max_key(Pv.facts(Cf.parse_toml("[providers.openai]
+api = \"openai-chat\"
+[models.\"openai/old\"]
+max_tokens_field = \"max_tokens\"
+"), "openai", "openai/old", "")),
+    Api.facts_max_key(Pv.facts(Cf.parse_toml("[providers.openai]
+api = \"openai-chat\"
+"), "openai", "openai/gpt-6-luna", ""))]
+    == ["max_tokens", "max_completion_tokens", "max_tokens",
+      "max_completion_tokens"] : List<&2, String>}
+
+# LAW: the gateway's 400 for max_tokens (OpenAI's structured error,
+# tests/fake_provider.py's cap mode sends the same body) ends bise's
+# line with the setting that fixes it, for that model.
+law cap_refused_names_the_setting:
+  {Pv.attempt_cap(400, "{\"error\":{\"message\":\"Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.\",\"type\":\"invalid_request_error\",\"param\":\"max_tokens\",\"code\":\"unsupported_parameter\"}}",
+      "ai-gw/openai/gpt-6.2-sol", Pv.AFail{"ai-gw refused the request (400)."})
+    == Pv.AFail{"ai-gw refused the request (400). set max_tokens_field = \"max_completion_tokens\" under [models.\"ai-gw/openai/gpt-6.2-sol\"] in ~/.bise/config.toml."}
+    : Pv.Attempt}
+
+# LAW: only the structured fields count: another parameter, another
+# code, or the same words in a plain message leave the line as it is.
+law cap_refused_reads_fields_not_words:
+  {[Pv.attempt_cap(400, "{\"error\":{\"param\":\"temperature\",\"code\":\"unsupported_parameter\"}}",
+      "p/m", Pv.AFail{"x"}),
+    Pv.attempt_cap(400, "{\"error\":{\"param\":\"max_tokens\",\"code\":\"invalid_value\"}}",
+      "p/m", Pv.AFail{"x"}),
+    Pv.attempt_cap(400, "{\"error\":{\"message\":\"'max_tokens' is not supported with this model. unsupported_parameter\"}}",
+      "p/m", Pv.AFail{"x"}),
+    Pv.attempt_cap(422, "{\"error\":{\"param\":\"max_tokens\",\"code\":\"unsupported_parameter\"}}",
+      "p/m", Pv.AFail{"x"})]
+    == [Pv.AFail{"x"}, Pv.AFail{"x"}, Pv.AFail{"x"}, Pv.AFail{"x"}]
+    : List<&2, Pv.Attempt>}
+
 # LAW: the shape comes from the models file: providers.<p>.shape =
 # "chatgpt-plan" is the plan; absent, or another word, is not.
 law plan_shape_from_models_file:

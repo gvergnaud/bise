@@ -119,6 +119,28 @@ tools = true
 input_price = 3.0
 output_price = 15.0</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
 <p>the context matters: bise compacts a conversation before it fills the window. a window set too large ends in an error from the server instead.</p>
+<p>two more keys, per model or for the whole provider:</p>
+<div class="table"><table><thead><tr><th>key</th><th>what it does</th><th>unset</th></tr></thead><tbody><tr><td><code>api</code></td><td>the model's own wire API, over its provider's</td><td>the provider's</td></tr><tr><td><code>max_tokens_field</code></td><td>the name of the output cap on <code>openai-chat</code>: <code>&quot;max_tokens&quot;</code> or <code>&quot;max_completion_tokens&quot;</code></td><td><code>max_completion_tokens</code> on <code>openai</code>, else <code>max_tokens</code></td></tr></tbody></table></div>
+<p>OpenAI's newer models (GPT-6, gpt-5, the o models) refuse <code>max_tokens</code> on Chat Completions (<code>400 unsupported_parameter</code>), and most other servers take only <code>max_tokens</code>. when a server refuses it, bise's error line says the setting to add.</p>
+<h2 id="one-gateway-for-claude-and-gpt-6"><a class="anchor" href="#one-gateway-for-claude-and-gpt-6" aria-hidden="true">#</a>one gateway for Claude and GPT-6</h2>
+<p>a gateway that routes Claude, GLM and GPT-6 (Datadog's AI Gateway, LiteLLM, a company proxy) is one provider. its GPT-6 models get <code>max_completion_tokens</code>, the others keep <code>max_tokens</code>:</p>
+<div class="code"><div class="file">~/.bise/config.toml</div><div class="box"><pre><code class="lang-toml">[providers.ai-gw]
+name = &quot;AI Gateway&quot;
+api = &quot;openai-chat&quot;
+base_url = &quot;https://ai-gateway.example.com/v1&quot;
+key_env = &quot;AI_GW_KEY&quot;
+
+[models.&quot;ai-gw/openai/gpt-6.2-sol&quot;]
+max_tokens_field = &quot;max_completion_tokens&quot;
+reasoning = true
+
+[models.&quot;ai-gw/openai/gpt-6-luna&quot;]
+max_tokens_field = &quot;max_completion_tokens&quot;
+reasoning = true
+
+[models.&quot;ai-gw/anthropic/claude-sonnet-4-5&quot;]
+reasoning = true    <span class="c"># max_tokens, the provider&#x27;s default</span></code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<p>to send one model to the Responses API instead (a gateway that serves <code class="key">/responses</code> for OpenAI's models only), give that model its own <code>api = &quot;openai-responses&quot;</code>. the provider's other models stay on <code>/chat/completions</code>.</p>
 <h2 id="gateways-behind-a-login"><a class="anchor" href="#gateways-behind-a-login" aria-hidden="true">#</a>gateways behind a login</h2>
 <p>some gateways want a short-lived token or extra headers, the way Claude Code uses <code>apiKeyHelper</code> and <code>ANTHROPIC_CUSTOM_HEADERS</code>:</p>
 <div class="code"><div class="file">~/.bise/config.toml</div><div class="box"><pre><code class="lang-toml">[providers.gateway]
@@ -176,7 +198,7 @@ base_url = &quot;https://openai-proxy.example.com/v1&quot;</code></pre><button c
       <p><a href="https://github.com/gvergnaud/bise/blob/main/site/docs/gateways.md">edit this page on GitHub</a></p>
     </footer>
   </main>
-  <aside class="toc"><div class="toch">on this page</div><ul><li class="l2"><a href="#litellm-in-three-steps">LiteLLM in three steps</a></li><li class="l2"><a href="#the-provider-table">the provider table</a></li><li class="l2"><a href="#model-limits">model limits</a></li><li class="l2"><a href="#gateways-behind-a-login">gateways behind a login</a></li><li class="l2"><a href="#headers-in-configtoml">headers in config.toml</a></li><li class="l2"><a href="#local-models">local models</a></li><li class="l3"><a href="#a-slow-server-idle-timeout-sec">a slow server: idle_timeout_sec</a></li><li class="l2"><a href="#change-a-built-in-provider">change a built-in provider</a></li><li class="l2"><a href="#when-something-is-wrong">when something is wrong</a></li><li class="l2"><a href="#coming-from-opencode">coming from OpenCode</a></li></ul></aside>
+  <aside class="toc"><div class="toch">on this page</div><ul><li class="l2"><a href="#litellm-in-three-steps">LiteLLM in three steps</a></li><li class="l2"><a href="#the-provider-table">the provider table</a></li><li class="l2"><a href="#model-limits">model limits</a></li><li class="l2"><a href="#one-gateway-for-claude-and-gpt-6">one gateway for Claude and GPT-6</a></li><li class="l2"><a href="#gateways-behind-a-login">gateways behind a login</a></li><li class="l2"><a href="#headers-in-configtoml">headers in config.toml</a></li><li class="l2"><a href="#local-models">local models</a></li><li class="l3"><a href="#a-slow-server-idle-timeout-sec">a slow server: idle_timeout_sec</a></li><li class="l2"><a href="#change-a-built-in-provider">change a built-in provider</a></li><li class="l2"><a href="#when-something-is-wrong">when something is wrong</a></li><li class="l2"><a href="#coming-from-opencode">coming from OpenCode</a></li></ul></aside>
 </div>
 <script src="/docs/docs.js" defer></script>
 </body>

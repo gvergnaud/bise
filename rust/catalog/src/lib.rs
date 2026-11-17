@@ -106,6 +106,36 @@ pub struct Caps {
     /// gateway or local model; 0 = the runtime's 90 s
     /// (runtime/provider-pure.bend stream_wait)
     pub idle_timeout_sec: u64,
+    /// the name of the output cap in an OpenAI Chat body; None = the
+    /// runtime's default (max_completion_tokens on the `openai`
+    /// provider, max_tokens elsewhere: runtime/provider-pure.bend max_key)
+    pub max_tokens_field: Option<MaxTokensField>,
+}
+
+/// The name of the output cap in an OpenAI Chat body (`max_tokens_field`
+/// in models.toml and config.toml): OpenAI's gpt-5+ and o models refuse
+/// `max_tokens` (400 unsupported_parameter) and take
+/// `max_completion_tokens`; most other servers take only `max_tokens`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MaxTokensField {
+    MaxTokens,
+    MaxCompletionTokens,
+}
+
+impl MaxTokensField {
+    pub const ALL: [MaxTokensField; 2] = [MaxTokensField::MaxTokens, MaxTokensField::MaxCompletionTokens];
+
+    /// its word in a TOML file and in the request body
+    pub fn word(self) -> &'static str {
+        match self {
+            MaxTokensField::MaxTokens => "max_tokens",
+            MaxTokensField::MaxCompletionTokens => "max_completion_tokens",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<MaxTokensField> {
+        MaxTokensField::ALL.into_iter().find(|f| f.word() == s.trim())
+    }
 }
 
 /// The thinking modes of the Anthropic family.
@@ -128,6 +158,7 @@ pub const DEFAULT_CAPS: Caps = Caps {
     headers: BTreeMap::new(),
     key_command: String::new(),
     idle_timeout_sec: 0,
+    max_tokens_field: None,
 };
 
 /// Caps as written in a table: a missing field comes from the level below
@@ -149,6 +180,7 @@ pub struct PartialCaps {
     pub headers: Option<BTreeMap<String, String>>,
     pub key_command: Option<String>,
     pub idle_timeout_sec: Option<u64>,
+    pub max_tokens_field: Option<MaxTokensField>,
     /// prices (BISE-150), in [`Price`]'s unit
     pub input_price: Option<u64>,
     pub output_price: Option<u64>,
@@ -209,6 +241,7 @@ impl PartialCaps {
             },
             key_command: self.key_command.clone().unwrap_or_else(|| base.key_command.clone()),
             idle_timeout_sec: self.idle_timeout_sec.unwrap_or(base.idle_timeout_sec),
+            max_tokens_field: self.max_tokens_field.or(base.max_tokens_field),
         }
     }
     fn price_over(&self, base: &Price) -> Price {
@@ -237,6 +270,7 @@ impl PartialCaps {
         }
         self.key_command = o.key_command.clone().or(self.key_command.take());
         self.idle_timeout_sec = o.idle_timeout_sec.or(self.idle_timeout_sec);
+        self.max_tokens_field = o.max_tokens_field.or(self.max_tokens_field);
         self.input_price = o.input_price.or(self.input_price);
         self.output_price = o.output_price.or(self.output_price);
         self.cache_read_price = o.cache_read_price.or(self.cache_read_price);
@@ -949,6 +983,10 @@ fn cap_field(caps: &mut PartialCaps, k: &str, v: &toml::Value, where_: &str, war
             Some(n) => caps.idle_timeout_sec = Some(n),
             None => warn(bad("a number of seconds, 1 to 86400")),
         },
+        "max_tokens_field" => match v.as_str().and_then(MaxTokensField::parse) {
+            Some(f) => caps.max_tokens_field = Some(f),
+            None => warn(bad("\"max_tokens\" or \"max_completion_tokens\"")),
+        },
         "input_price" | "output_price" | "cache_read_price" | "cache_write_price" => {
             // USD per million tokens, stored in millionths of a dollar
             let usd = v.as_float().or_else(|| v.as_integer().map(|n| n as f64));
@@ -1468,6 +1506,9 @@ impl Setup {
             if a.idle_timeout_sec != b.idle_timeout_sec {
                 o.push_str(&format!("idle_timeout_sec = {}\n", a.idle_timeout_sec));
             }
+            if let Some(f) = a.max_tokens_field.filter(|_| a.max_tokens_field != b.max_tokens_field) {
+                o.push_str(&format!("max_tokens_field = {}\n", q(f.word())));
+            }
             // every listed model says its own `vision = true|false`, even
             // when its provider's line says the same: the runtime never
             // sends an image part to a model whose own line says false (a
@@ -1684,6 +1725,9 @@ fn caps_lines(o: &mut String, c: &Caps) {
     }
     if c.idle_timeout_sec > 0 {
         o.push_str(&format!("idle_timeout_sec = {}\n", c.idle_timeout_sec));
+    }
+    if let Some(f) = c.max_tokens_field {
+        o.push_str(&format!("max_tokens_field = {}\n", q(f.word())));
     }
 }
 

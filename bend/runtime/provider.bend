@@ -542,13 +542,17 @@ def model_call.log(+call: Nat, +tries: Nat, +model: String, +url: String,
 # the attempt the Core reads (Pvp.attempt_for, BISE-293); on a ChatGPT
 # plan provider, its failures read as the plan's lines (Pvp.attempt_plan)
 # (a model the plan refuses: Plan.refused_line, model = the id called)
+# (a 400 refusing max_tokens by name: the line says the setting that
+# fixes it, Pvp.attempt_cap; id = the model's "provider/model")
 def got_for(+tools: List<&2, W.WTool>, +name: String, +key: String,
-    +plan: Bool, +model: String, +st: Api.Style, g: Got) -> Pvp.Attempt:
+    +plan: Bool, +model: String, +id: String, +st: Api.Style, g: Got)
+    -> Pvp.Attempt:
   match g:
     case Got{+a, +status, +raw, _}:
       Pvp.attempt_plan.line(Plan.refused_line(plan, status, raw, model),
         Pvp.attempt_plan(plan, status, Api.error_code(st, raw),
-          Pvp.attempt_for(tools, name, key, status, raw, a)))
+          Pvp.attempt_cap(status, raw, id,
+            Pvp.attempt_for(tools, name, key, status, raw, a))))
 
 def got_attempt(g: Got) -> Pvp.Attempt:
   match g:
@@ -863,7 +867,7 @@ def model_call.sent(b: Built, +k: Nat, +tries: Nat, +bd: Pvp.Budget, n: Out,
                     Pvp.size_retry_why(label, got_status(g),
                       Nat.div(fill_bytes(fill), 2n)),
                     +b4 => n3 => model_call.step(got_for(W.req_tools(wreq),
-                        label, key, Api.facts_plan(facts), model, st, g),
+                        label, key, Api.facts_plan(facts), model, id, st, g),
                       n3, b4, tries, req,
                       +b2 => n2 => model_call.try(k, Nat.add(tries, 1n), b2, n2,
                         request, ctx, call, limit, shrunk)),

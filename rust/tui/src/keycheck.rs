@@ -153,13 +153,13 @@ pub(crate) fn request(c: &Call, env: &dyn Fn(&str) -> Option<String>) -> crate::
             serde_json::json!({ "model": c.model, "input": "hi", "max_output_tokens": 16, "store": false }),
         )
     } else {
-        // OpenAI's reasoning models take max_completion_tokens only
-        let cap = if c.provider == "openai" { "max_completion_tokens" } else { "max_tokens" };
-        let mut b = serde_json::json!({
+        // no output cap: its name depends on the server (max_tokens or
+        // max_completion_tokens, runtime/provider-pure.bend max_key, the
+        // one rule) and a wrong one is a 400; a reply to "hi" is short
+        let b = serde_json::json!({
             "model": c.model,
             "messages": [{ "role": "user", "content": "hi" }],
         });
-        b[cap] = serde_json::json!(16);
         (format!("{base}/chat/completions"), vec![("Authorization".to_string(), format!("Bearer {}", c.key))], b)
     };
     headers.push(("Content-Type".into(), "application/json".into()));
@@ -541,10 +541,13 @@ mod tests {
         let r = request(&call("openai-chat", "mistral"), &none);
         assert_eq!(r.url, "https://x.test/v1/chat/completions");
         assert!(r.headers.contains(&("Authorization".into(), "Bearer k-secret".into())));
-        let b: serde_json::Value = serde_json::from_slice(&r.body).unwrap();
-        assert_eq!(b["max_tokens"].as_u64(), Some(16));
-        let b: serde_json::Value = serde_json::from_slice(&request(&call("openai-chat", "openai"), &none).body).unwrap();
-        assert_eq!((b["max_completion_tokens"].as_u64(), b.get("max_tokens")), (Some(16), None));
+        // an OpenAI Chat check sends no cap, under either name: a server
+        // that refuses one of them (GPT-6 behind a gateway refuses
+        // max_tokens) never fails the key check on it
+        for provider in ["mistral", "openai", "ai-gw"] {
+            let b: serde_json::Value = serde_json::from_slice(&request(&call("openai-chat", provider), &none).body).unwrap();
+            assert_eq!((b.get("max_tokens"), b.get("max_completion_tokens"), b["model"].as_str()), (None, None, Some("m1")), "{provider}");
+        }
         let r = request(&call("openai-responses", "openai"), &none);
         assert_eq!(r.url, "https://x.test/v1/responses");
         let b: serde_json::Value = serde_json::from_slice(&r.body).unwrap();

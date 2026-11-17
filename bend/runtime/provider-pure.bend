@@ -530,12 +530,21 @@ def fact_nat(m: Maybe<&2, String>) -> Nat:
     case None{}:
       0n
 
-def max_key.pick(is_openai: Bool) -> String:
+def max_key.dflt(is_openai: Bool) -> String:
   match is_openai:
     case True{}:
       "max_completion_tokens"
     case False{}:
       "max_tokens"
+
+# the name of the output cap in an OpenAI Chat body: the model's
+# `max_tokens_field`, else its provider's (the catalog writes only
+# "max_tokens" or "max_completion_tokens", rust/catalog MaxTokensField),
+# else max_completion_tokens on OpenAI itself and max_tokens elsewhere
+# (a handoff without the field: the body as before it)
+def max_key(+reg: List<&2, Cf.KV>, +prov: String, +id: String) -> String:
+  Cf.cfg_or(model_key(reg, prov, id, "max_tokens_field"),
+    max_key.dflt(String.eq(prov, "openai")))
 
 # ---- the reasoning effort (BISE-135) ----
 # The words a model takes: its `efforts` key, else its provider's
@@ -625,7 +634,7 @@ def facts(+reg: List<&2, Cf.KV>, +prov: String, +id: String, +asked: String)
   Api.MFacts{String.eq(Cf.cfg_or(model_key(reg, prov, id, "reasoning"), ""),
       "true"),
     fact_nat(model_key(reg, prov, id, "max_output")),
-    max_key.pick(String.eq(prov, "openai")),
+    max_key(reg, prov, id),
     Cf.cfg_or(model_key(reg, prov, id, "thinking"), ""),
     Cf.cfg_or(model_key(reg, prov, id, "betas"), ""),
     effort_of(reg, prov, id, asked),
@@ -1302,6 +1311,47 @@ def refusal(+name: String, +status: U32, +body: String, +key: String)
   String.append(refusal.head(who, status, W.size_refused(status, body),
       W.history_refused(status, body)),
     refusal.said(String.is_empty(said), who, said))
+
+# a 400 that refuses the max_tokens field by name, read from OpenAI's
+# structured error (error.code "unsupported_parameter", error.param
+# "max_tokens"; GPT-6 behind Datadog's AI Gateway, fix-gpt-6), never
+# from its message's words
+def cap_refused(+status: U32, +body: String) -> Bool:
+  +e = W.field_or(W.parse_json(body), "error", J.JNull{})
+  Bool.and(U32.is_eq(status, 400),
+    Bool.and(String.eq(J.get_str_or(e, "code", ""), "unsupported_parameter"),
+      String.eq(J.get_str_or(e, "param", ""), "max_tokens")))
+
+# what fixes it, after bise's line: the model's setting (max_key above)
+def cap_hint(+id: String) -> String:
+  String.concat([" set max_tokens_field = \"max_completion_tokens\" under [models.\"",
+    id, "\"] in ~/.bise/config.toml."])
+
+def attempt_cap.add(a: Attempt, +id: String) -> Attempt:
+  match a:
+    case AFail{+why}:
+      AFail{String.append(why, cap_hint(id))}
+    case AOk{+reply}:
+      AOk{reply}
+    case ARetry{+ms, +why}:
+      ARetry{ms, why}
+    case AWait{+why}:
+      AWait{why}
+    case ATimeout{+l, +ms, +why}:
+      ATimeout{l, ms, why}
+
+def attempt_cap.pick(refused: Bool, +id: String, a: Attempt) -> Attempt:
+  match refused:
+    case True{}:
+      attempt_cap.add(a, id)
+    case False{}:
+      a
+
+# a failed call refused for its cap's name says the setting that fixes
+# it; `id` is the model's "provider/model"
+def attempt_cap(+status: U32, +body: String, +id: String, a: Attempt)
+    -> Attempt:
+  attempt_cap.pick(cap_refused(status, body), id, a)
 
 def attempt_for.fail(refused: Bool, +why: String, +name: String,
     +status: U32, +body: String, +key: String) -> Attempt:

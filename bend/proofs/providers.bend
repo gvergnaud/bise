@@ -293,6 +293,21 @@ def Laws.resp_no_shape_tools_unchanged(ts):
 def Laws.resp_no_shape_no_namespace():
   {==}
 
+def Laws.provider_max_tokens_field_of_the_model():
+  {==}
+
+def Laws.provider_max_tokens_field_absent_is_max_tokens():
+  {==}
+
+def Laws.provider_max_tokens_field_overrides_both_ways():
+  {==}
+
+def Laws.cap_refused_names_the_setting():
+  {==}
+
+def Laws.cap_refused_reads_fields_not_words():
+  {==}
+
 def Laws.plan_shape_from_models_file():
   {==}
 
