@@ -750,6 +750,8 @@ fn no_words(kind: &str) -> bool {
 pub(super) fn open_view(app: &mut App, id: Option<u64>) {
     let ids = app.sb.card_ids();
     let Some(id) = id.filter(|i| ids.contains(i)).or_else(|| ids.first().copied()) else { return };
+    // BISE-61: opening a card is what the first-card hint asks
+    crate::hints::used(crate::hints::Hint::FirstCard);
     if !app.sb.card.open {
         app.sb.card.thread = Some(std::mem::take(&mut app.ed));
         app.sb.card.open = true;

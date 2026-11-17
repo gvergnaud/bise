@@ -199,9 +199,13 @@ def main():
         t.keys("Enter")
         sc = t.wait("agents talk to each other.", 60)
         shot("10-hint-first-level3", sc)
-        seen = prefs(root).get("hints")
-        # approvals-design.md §8: the first launch's yolo tip, seen too
-        assert seen == {"first_agent": True, "first_card": True, "first_level3": True, "first_yolo": True}, seen
+        # approvals-design.md §8: the first launch's yolo tip, seen too; a
+        # hint counts as read once up 2 s (designer m_66054): the level-3
+        # one's mark comes while it stays up
+        want = {"first_agent": True, "first_card": True, "first_level3": True, "first_yolo": True}
+        seen = wait.until(lambda: (prefs(root).get("hints") or {}) == want and want, 10,
+                          "the four hints marked seen (prefs.json): %r" % prefs(root).get("hints"))
+        assert seen == want, seen
         # the second launch: no onboarding
         t.start(120, 34, env(root, home))
         sc = t.wait(NORMAL)
