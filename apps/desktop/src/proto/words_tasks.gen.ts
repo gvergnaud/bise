@@ -148,8 +148,8 @@ export const tasks = {
   sec_changes: "Changes",
   /** a change row's tip */
   change_tip: "open its changes",
-  /** a change row's PR, its number and state (designer m_65783: the branch, the PR, the sha) */
-  change_pr: (a: { n: string | number; state: string | number }): string => "PR #" + String(a.n) + " " + String(a.state),
+  /** a change row's PR, its number and state, with the right bar's ⑂ (designer m_65783: the branch, the PR, the sha; tasks-shine batch 4, designer m_66679: '⑂ #924 open') */
+  change_pr: (a: { n: string | number; state: string | number }): string => "⑂ #" + String(a.n) + " " + String(a.state),
   /** a change row with no PR on its branch */
   change_no_pr: "no PR yet",
   /** an agent of it in a turn */

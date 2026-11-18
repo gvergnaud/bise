@@ -12,7 +12,7 @@ import { useAllArtifacts } from '@/artifacts';
 import { useAllProcesses } from '@/running';
 import { useProjects, useStore, type Works } from '@/store';
 import { tasks } from '@/proto/words_tasks.gen';
-import { cutAtWord, StatusMark, useAllWorks } from '@/tasks';
+import { cutAtWord, TaskMark, useAllWorks } from '@/tasks';
 import type { Tab } from './model';
 import { shownUrl } from './omni';
 import { panelAt } from './state';
@@ -118,7 +118,7 @@ function lookOf(tab: Tab, projects: ReturnType<typeof useProjects>, arts: Return
       // the task's name cut at a word, its status mark for an icon; a gone one keeps its id
       const w = works(e.project).works.find((x) => x.id === e.id);
       // short enough that the tab never cuts it again with its own ellipsis (designer m_65397: 'Speed up…')
-      return w === undefined ? { title: e.id, icon: <AppIcon name="list" size={14} /> } : { title: cutAtWord(w.name, TASK_TITLE_MAX, 1), icon: <StatusMark status={w.status} /> };
+      return w === undefined ? { title: e.id, icon: <AppIcon name="list" size={14} /> } : { title: cutAtWord(w.name, TASK_TITLE_MAX, 1), icon: <TaskMark status={w.status} /> };
     }
     case 'tab':
       return { title: e.id, icon: null };

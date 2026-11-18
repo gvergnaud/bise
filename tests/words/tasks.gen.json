@@ -170,7 +170,7 @@
       "state"
     ],
     "one": null,
-    "text": "PR #{n} {state}"
+    "text": "⑂ #{n} {state}"
   },
   "tasks.change_tip": {
     "args": [],

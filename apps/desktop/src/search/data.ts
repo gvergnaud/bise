@@ -92,7 +92,7 @@ export function searchDataOf(v: StoreView): SearchData {
       if (w === undefined) return [];
       return [
         ...w.works.map((x) => ({ project: p.id, id: x.id, name: x.name, status: x.status, what: v.taskLine?.(p.id, x) ?? x.status, at_ms: x.last_ms })),
-        ...w.tombs.filter((t) => (t.merged_into ?? null) === null).map((t) => ({ project: p.id, id: t.id, name: t.name, status: 'done', what: 'done', at_ms: t.done_ms })),
+        ...w.tombs.filter((t) => (t.merged_into ?? null) === null).map((t) => ({ project: p.id, id: t.id, name: t.name, status: 'done' as const, what: 'done', at_ms: t.done_ms })),
       ];
     }),
   };
