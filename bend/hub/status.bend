@@ -22,7 +22,7 @@ def status_of_decl(d: Maybe<&2, S.Decl>) -> String:
 
 def status_of_run(+a: S.Agent, x: X.Rt) -> String:
   match x:
-    case X.Rt{_, run, +w, _, _}:
+    case X.Rt{_, run, +w, _, _, _}:
       match run:
         case S.RDown{}:
           "starting"

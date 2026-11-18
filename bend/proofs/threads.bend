@@ -22,15 +22,15 @@ import ../laws/threads.bend as Laws
 
 # putting an agent's runtime state and reading it back gives it (rt_put
 # puts it at the head: the find's first step)
-def hub_rt_put_find(+xs: List<&2, HX.Rt>, +n: String, +run: HS.Run, +w: Bool, +tm: Maybe<&2, Nat>, +k: Nat)
-    -> {HC.rt_find(HC.rt_put(xs, HX.Rt{n, run, w, tm, k}), n) == HX.Rt{n, run, w, tm, k} : HX.Rt}:
-  %Equal.sym(Bool, String.eq(n, n), True{}, PL2.hub_str_eq_refl(n)) : {HLZ.pick(HX.Rt, _, u => HX.Rt{n, run, w, tm, k}, u => HC.rt_find(HC.rt_del(xs, n), n)) == HX.Rt{n, run, w, tm, k} : HX.Rt}
+def hub_rt_put_find(+xs: List<&2, HX.Rt>, +n: String, +run: HS.Run, +w: Bool, +tm: Maybe<&2, Nat>, +k: Nat, +c: List<&2, String>)
+    -> {HC.rt_find(HC.rt_put(xs, HX.Rt{n, run, w, tm, k, c}), n) == HX.Rt{n, run, w, tm, k, c} : HX.Rt}:
+  %Equal.sym(Bool, String.eq(n, n), True{}, PL2.hub_str_eq_refl(n)) : {HLZ.pick(HX.Rt, _, u => HX.Rt{n, run, w, tm, k, c}, u => HC.rt_find(HC.rt_del(xs, n), n)) == HX.Rt{n, run, w, tm, k, c} : HX.Rt}
   {==}
 
 def Laws.rt_put_finds_it(xs, x):
   match x:
-    case HX.Rt{n, run, w, tm, k}:
-      hub_rt_put_find(xs, n, run, w, tm, k)
+    case HX.Rt{n, run, w, tm, k, c}:
+      hub_rt_put_find(xs, n, run, w, tm, k, c)
 
 # the runtime named h's is m's, and m is not n: h's is not n's
 def hub_rt_del_other.ne(+h: HX.Rt, +m: String, +n: String, ec: {String.eq(HX.Rt.name(h), m) == True{} : Bool}, e: {String.eq(m, n) == False{} : Bool})
@@ -494,12 +494,12 @@ def Laws.hub_turns_never_moves_otherwise(was, now, n, e):
 
 def Laws.hub_set_rt_counts_turns(o, cx, x):
   match x:
-    case HX.Rt{+n, +run, +w, +tm, +k}:
+    case HX.Rt{+n, +run, +w, +tm, +k, +c}:
       +t = {HC.turns_after(HX.Rt.run(HC.rt(o, cx, n)), run, HX.Rt.turns(HC.rt(o, cx, n))) : Nat}
-      %Equal.sym(List<&2, HX.Rt>, hub_rts(o, HC.set_rt(o, cx, HX.Rt{n, run, w, tm, k})), HC.rt_put(hub_rts(o, cx), HX.Rt{n, run, w, tm, t}),
-          hub_rts_set_rt(o, cx, HX.Rt{n, run, w, tm, k})) : {HX.Rt.turns(HC.rt_find(_, n)) == t : Nat}
-      %Equal.sym(HX.Rt, HC.rt_find(HC.rt_put(hub_rts(o, cx), HX.Rt{n, run, w, tm, t}), n), HX.Rt{n, run, w, tm, t},
-          hub_rt_put_find(hub_rts(o, cx), n, run, w, tm, t)) : {HX.Rt.turns(_) == t : Nat}
+      %Equal.sym(List<&2, HX.Rt>, hub_rts(o, HC.set_rt(o, cx, HX.Rt{n, run, w, tm, k, c})), HC.rt_put(hub_rts(o, cx), HX.Rt{n, run, w, tm, t, c}),
+          hub_rts_set_rt(o, cx, HX.Rt{n, run, w, tm, k, c})) : {HX.Rt.turns(HC.rt_find(_, n)) == t : Nat}
+      %Equal.sym(HX.Rt, HC.rt_find(HC.rt_put(hub_rts(o, cx), HX.Rt{n, run, w, tm, t, c}), n), HX.Rt{n, run, w, tm, t, c},
+          hub_rt_put_find(hub_rts(o, cx), n, run, w, tm, t, c)) : {HX.Rt.turns(_) == t : Nat}
       {==}
 
 def Laws.live_pieces_cut_anywhere_same_line():

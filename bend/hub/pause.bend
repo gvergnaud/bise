@@ -40,7 +40,7 @@ def run_busy(r: S.Run) -> Bool:
 def rt_of(xs: List<&2, X.Rt>, +n: String) -> X.Rt:
   match xs:
     case Nil{}:
-      X.Rt{n, S.RDown{}, False{}, None{}, 0n}
+      X.Rt{n, S.RDown{}, False{}, None{}, 0n, Nil{}}
     case Con{+h, +t}:
       LZ.pick(X.Rt, String.eq(X.Rt.name(h), n), u => h, u => rt_of(t, n))
 

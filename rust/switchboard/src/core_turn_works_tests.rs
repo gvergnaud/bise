@@ -36,17 +36,23 @@ fn turn_works(t: &T, agent: &str) -> Vec<String> {
     t.hub.st.agents[agent].turn_works.clone().unwrap_or_default()
 }
 
+/// the works of `ids` whose agents hold `agent`, in `ids`' order
+fn on(t: &T, ids: &[String], agent: &str) -> Vec<String> {
+    ids.iter().filter(|id| t.hub.st.works[*id].work.agents.iter().any(|x| x == agent)).cloned().collect()
+}
+
 /// vb-architect in his dashboard hub: five tasks steered into one turn.
 /// Before, the turn collected all five and stamped them on everything
 /// after (73 of its messages carried three tasks at once).
 #[test]
 fn a_coordinator_steered_with_five_tasks_keeps_its_turns_one_and_replies_carry_their_targets() {
     let mut t = T::new();
-    let ids: Vec<String> = ["Pool", "Triggers", "Codeowners", "Infra page", "Blokhus page"].iter().map(|n| new(&mut t, n)).collect();
+    // spawned before the tasks: their briefs carry none
     t.spawn_task("coord");
     t.go(Input::ReplIdle { agent: "coord".into(), leftover: false });
     t.spawn_task("worker");
     t.go(Input::ReplIdle { agent: "worker".into(), leftover: false });
+    let ids: Vec<String> = ["Pool", "Triggers", "Codeowners", "Infra page", "Blokhus page"].iter().map(|n| new(&mut t, n)).collect();
     // the delivery that starts its turn sets its task (law delivered_sets_turn_works)
     t.req(MAIN, send("coord", "start the pool", None, &[ids[0].as_str()]));
     assert_eq!(turn_works(&t, "coord"), vec![ids[0].clone()]);
@@ -57,11 +63,15 @@ fn a_coordinator_steered_with_five_tasks_keeps_its_turns_one_and_replies_carry_t
         asks.push((id.clone(), last_msg(&t, MAIN, "coord")["id"].as_u64().unwrap()));
     }
     assert_eq!(turn_works(&t, "coord"), vec![ids[0].clone()], "law steered_keeps_turn_works");
+    // a member of its starting batch's task only (laws turn_start_joins_its_batch, a_steer_never_joins)
+    assert_eq!(on(&t, &ids, "coord"), vec![ids[0].clone()]);
     // its answer to each steer carries that steer's task (law reply_carries_its_targets_works)
     for (id, m) in &asks {
         t.req("coord", send(MAIN, "on it", Some(*m), &[]));
         assert_eq!(last_msg(&t, "coord", MAIN)["works"], json!([id]), "a reply to {m}");
     }
+    // answering each steer is an act with its task: it joins them (law acting_joins_its_works)
+    assert_eq!(on(&t, &ids, "coord"), ids);
     // anything else it sends carries its turn's one task, never the five
     t.req("coord", send("worker", "build the pool", None, &[]));
     assert_eq!(last_msg(&t, "coord", "worker")["works"], json!([ids[0]]));

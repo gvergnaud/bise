@@ -19,7 +19,7 @@ type Fx is Data:
   FO{o: J.Json}
 
 type Rt is Data:
-  Rt{name: String, run: S.Run, waiting: Bool, turn: Maybe<&2, Nat>, turns: Nat}
+  Rt{name: String, run: S.Run, waiting: Bool, turn: Maybe<&2, Nat>, turns: Nat, ctx: List<&2, String>}
 
 type Waiter is Data:
   Waiter{token: Nat, agent: String, msg: Nat, deadline: Nat}
@@ -67,56 +67,70 @@ type Both<-A: Data, -B: Data> is Data:
 
 def Rt.name(x: Rt) -> String:
   match x:
-    case Rt{+name, _, _, _, _}:
+    case Rt{+name, _, _, _, _, _}:
       name
 
 def Rt.with_name(x: Rt, +v: String) -> Rt:
   match x:
-    case Rt{_, +run, +waiting, +turn, +turns}:
-      Rt{v, run, waiting, turn, turns}
+    case Rt{_, +run, +waiting, +turn, +turns, +ctx}:
+      Rt{v, run, waiting, turn, turns, ctx}
 
 def Rt.run(x: Rt) -> S.Run:
   match x:
-    case Rt{_, +run, _, _, _}:
+    case Rt{_, +run, _, _, _, _}:
       run
 
 def Rt.with_run(x: Rt, +v: S.Run) -> Rt:
   match x:
-    case Rt{+name, _, +waiting, +turn, +turns}:
-      Rt{name, v, waiting, turn, turns}
+    case Rt{+name, _, +waiting, +turn, +turns, +ctx}:
+      Rt{name, v, waiting, turn, turns, ctx}
 
 def Rt.waiting(x: Rt) -> Bool:
   match x:
-    case Rt{_, _, +waiting, _, _}:
+    case Rt{_, _, +waiting, _, _, _}:
       waiting
 
 def Rt.with_waiting(x: Rt, +v: Bool) -> Rt:
   match x:
-    case Rt{+name, +run, _, +turn, +turns}:
-      Rt{name, run, v, turn, turns}
+    case Rt{+name, +run, _, +turn, +turns, +ctx}:
+      Rt{name, run, v, turn, turns, ctx}
 
 def Rt.turn(x: Rt) -> Maybe<&2, Nat>:
   match x:
-    case Rt{_, _, _, +turn, _}:
+    case Rt{_, _, _, +turn, _, _}:
       turn
 
 def Rt.with_turn(x: Rt, +v: Maybe<&2, Nat>) -> Rt:
   match x:
-    case Rt{+name, +run, +waiting, _, +turns}:
-      Rt{name, run, waiting, v, turns}
+    case Rt{+name, +run, +waiting, _, +turns, +ctx}:
+      Rt{name, run, waiting, v, turns, ctx}
 
 # its turns ended since sb-core started (issue 22): set only by set_rt
 # (core.bend), the one writer of a runtime state, +1 each time its run
 # leaves RBusy
 def Rt.turns(x: Rt) -> Nat:
   match x:
-    case Rt{_, _, _, _, +turns}:
+    case Rt{_, _, _, _, +turns, _}:
       turns
 
 def Rt.with_turns(x: Rt, +v: Nat) -> Rt:
   match x:
-    case Rt{+name, +run, +waiting, +turn, _}:
-      Rt{name, run, waiting, turn, v}
+    case Rt{+name, +run, +waiting, +turn, _, +ctx}:
+      Rt{name, run, waiting, turn, v, ctx}
+
+# the works whose context (wctx) this agent got since sb-core started:
+# context once per agent and work without membership (architect
+# m_67149; law work_context_once_per_agent_without_membership); runtime
+# only, so a revived core may give it once more
+def Rt.ctx(x: Rt) -> List<&2, String>:
+  match x:
+    case Rt{_, _, _, _, _, +ctx}:
+      ctx
+
+def Rt.with_ctx(x: Rt, +v: List<&2, String>) -> Rt:
+  match x:
+    case Rt{+name, +run, +waiting, +turn, +turns, _}:
+      Rt{name, run, waiting, turn, turns, v}
 
 def Waiter.token(x: Waiter) -> Nat:
   match x:

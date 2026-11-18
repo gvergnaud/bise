@@ -44,6 +44,24 @@ def fresh(ids: List<&2, String>, +xs: List<&2, S.Work>, +agent: String) -> List<
       +rest = fresh(t, xs, agent)
       Bool.pick(List<&2, String>, fresh.one(WO.find(xs, h), agent), h <> rest, rest)
 
+# the works of `ids` not in `seen` (the ones whose context the agent got
+# already, X.Rt.ctx): a steered agent is not their member yet, so its
+# membership alone would give it the context at every delivery (architect
+# m_67149; law work_context_once_per_agent_without_membership)
+def unseen.pick(seen: Bool, +h: String, +rest: List<&2, String>) -> List<&2, String>:
+  match seen:
+    case True{}:
+      rest
+    case False{}:
+      h <> rest
+
+def unseen(ids: List<&2, String>, +seen: List<&2, String>) -> List<&2, String>:
+  match ids:
+    case Nil{}:
+      Nil{}
+    case Con{+h, +t}:
+      unseen.pick(WO.has(seen, h), h, unseen(t, seen))
+
 # ---- one task's block ----
 
 # lines, each ended by a line's end

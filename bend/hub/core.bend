@@ -245,7 +245,7 @@ def is_active(l: S.Life) -> Bool:
 def rt_find(xs: List<&2, X.Rt>, +n: String) -> X.Rt:
   match xs:
     case Nil{}:
-      X.Rt{n, S.RDown{}, False{}, None{}, 0n}
+      X.Rt{n, S.RDown{}, False{}, None{}, 0n, Nil{}}
     case Con{+h, +t}:
       LZ.pick(X.Rt, String.eq(X.Rt.name(h), n), u => h, u => rt_find(t, n))
 
@@ -704,7 +704,7 @@ def pump.send.go(-o: S.St, busy: Bool, +cx: X.Cx<o>, +name: String, +ids: List<&
       dirty(o, out(o, cx2, F.deliver("steer", name, notes, status, msgs, ctx)))
     case False{}:
       # the turn starts now: nothing else may `say` meanwhile
-      +cx2 = upd_rt(o, cx, X.Rt{name, S.RBusy{}, X.Rt.waiting(rt(o, cx, name)), Some{now(o, cx)}, 0n})
+      +cx2 = upd_rt(o, cx, X.Rt{name, S.RBusy{}, X.Rt.waiting(rt(o, cx, name)), Some{now(o, cx)}, 0n, X.Rt.ctx(rt(o, cx, name))})
       dirty(o, out(o, cx2, F.deliver("say", name, notes, status, msgs, ctx)))
 
 def pump.send(-o: S.St, busy: Bool, p: X.Cx<o> & List<&2, K.Delivered>, +name: String, +ids: List<&2, Nat>, +notes: List<&2, String>, +status: Bool, +ctx: String) -> X.Cx<o>:
@@ -741,22 +741,39 @@ def work_turn(-o: S.St, ch: Maybe<&2, List<&2, String>>, +cx: X.Cx<o>, +name: St
     case Some{+ws}:
       emit(o, cx, M.EWorkTurn{WO.wturn(name, ws, busy, now(o, cx))}, Unit{}, Unit{}, Unit{})
 
-# a steered delivery: its turn's works stay (law steered_keeps_turn_works),
-# but the agent is on each work it got, as before (an add_agent line for
-# each it is not on yet; its context comes once, wctx)
-def steer_join.go(-o: S.St, ids: List<&2, String>, +cx: X.Cx<o>, +name: String) -> X.Cx<o>:
+# joining by act (architect m_67151, m_67152): an agent is on a work once
+# it acts with it in its own name (a send or ask carrying it, a report
+# with it), an explicit add_agent line each for the works it is not on
+# yet; a steer never joins (law a_steer_never_joins), a turn start joins
+# its batch's works (work_turn, law turn_start_joins_its_batch)
+def join.go(-o: S.St, ids: List<&2, String>, +cx: X.Cx<o>, +name: String) -> X.Cx<o>:
   match ids:
     case Nil{}:
       cx
     case Con{+id, +t}:
-      steer_join.go(o, t, emit(o, cx, M.EWorkChanged{id, S.WAddAgent{name}, name, now(o, cx), None{}, None{}}, Unit{}, Unit{}, Unit{}), name)
+      join.go(o, t, emit(o, cx, M.EWorkChanged{id, S.WAddAgent{name}, name, now(o, cx), None{}, None{}}, Unit{}, Unit{}, Unit{}), name)
 
-def steer_join(-o: S.St, busy: Bool, +cx: X.Cx<o>, +name: String, +ws: List<&2, String>) -> X.Cx<o>:
-  match busy:
-    case False{}:
+def act_join.of(-o: S.St, a: Maybe<&2, S.Agent>, +cx: X.Cx<o>, +name: String, +ws: List<&2, String>) -> X.Cx<o>:
+  match a:
+    case None{}:
       cx
-    case True{}:
-      steer_join.go(o, WO.not_joined(ws, S.St.works(st(o, cx)), name), cx, name)
+    case Some{_}:
+      join.go(o, WO.not_joined(ws, S.St.works(st(o, cx)), name), cx, name)
+
+# `name`'s act carrying works `ws`: it joins those it is not on (he, the
+# hub and a gone agent are never a work's agent)
+def act_join(-o: S.St, +cx: X.Cx<o>, +name: String, +ws: List<&2, String>) -> X.Cx<o>:
+  act_join.of(o, M.get_agent(st(o, cx), name), cx, name, ws)
+
+# the context goes once per agent and work (X.Rt.ctx, runtime only): the
+# works whose context this delivery gives, kept on its runtime
+def ctx_seen.go(-o: S.St, ids: List<&2, String>, +cx: X.Cx<o>, +name: String) -> X.Cx<o>:
+  match ids:
+    case Nil{}:
+      cx
+    case Con{+h, +t}:
+      +r = rt(o, cx, name)
+      set_rt(o, cx, X.Rt.with_ctx(r, WO.union(X.Rt.ctx(r), h <> t)))
 
 def pump.batch(-o: S.St, batch: List<&2, S.Msg>, +cx: X.Cx<o>, +name: String, +busy: Bool, +is_main: Bool) -> X.Cx<o>:
   match batch:
@@ -771,8 +788,9 @@ def pump.batch(-o: S.St, batch: List<&2, S.Msg>, +cx: X.Cx<o>, +name: String, +b
       # roma idea 5: the context of the works it joins, read before this
       # step's work_turn makes it their agent (law work_context_only_for_new_works);
       # main routes, it joins none
-      +ctx = Bool.pick(String, is_main, "", WC.ctx(WC.fresh(ws, S.St.works(st(o, cx2)), name), st(o, cx2), X.R.pw(rr(o, cx2))))
-      +cx3 = steer_join(o, busy, work_turn(o, WO.turn_change(works_of_agent(M.get_agent(st(o, cx2), name)), ws, busy), cx2, name, busy), name, ws)
+      +new = Bool.pick(List<&2, String>, is_main, Nil{}, WC.unseen(WC.fresh(ws, S.St.works(st(o, cx2)), name), X.Rt.ctx(rt(o, cx2, name))))
+      +ctx = Bool.pick(String, is_main, "", WC.ctx(new, st(o, cx2), X.R.pw(rr(o, cx2))))
+      +cx3 = ctx_seen.go(o, new, work_turn(o, WO.turn_change(works_of_agent(M.get_agent(st(o, cx2), name)), ws, busy), cx2, name, busy), name)
       pump.send(o, busy, deliver_each(o, b, cx3, name, Nil{}), name, ids_of(b), notes, status, ctx)
 
 def pump.run(-o: S.St, run: S.Run, +cx: X.Cx<o>, +name: String, +queued: List<&2, S.Msg>, +is_main: Bool) -> X.Cx<o>:
@@ -990,8 +1008,10 @@ def send.emit.go(-o: S.St, +cx: X.Cx<o>, +s: Snd, +thread: Nat) -> X.Cx<o> & Sen
         X.waiter_pick(X.R.waiters(rr(o, cx2)), to, reply_to, expect && Bool.not(plain) && Bool.not(String.eq(from, M.USER()))))
       send.waiter(o, w, cx2, m)
 
+# an agent's send or ask joins the works it carries (act_join)
 def send.emit(-o: S.St, +cx: X.Cx<o>, +s0: Snd, +thread: Nat) -> X.Cx<o> & SendR:
-  send.emit.go(o, cx, Snd.resolved(st(o, cx), s0), thread)
+  +s = Snd.resolved(st(o, cx), s0)
+  send.emit.go(o, act_join(o, cx, Snd.sender(s), Maybe.default(&2, List<&2, String>, Snd.works(s), Nil{})), s, thread)
 
 def send.orig(-o: S.St, m: Maybe<&2, S.Msg>, +cx: X.Cx<o>, +s: Snd, +r: Nat) -> X.Cx<o> & SendR:
   match m:
@@ -3640,7 +3660,7 @@ def req_report.go(-o: S.St, is_main: Bool, +cx: X.Cx<o>, +token: Nat, +from: Str
         # tasks-roma (architect m_65317): the works it reports on (its
         # --task, else its turn's), the Log's typed fact
         J.kv("works", J.JArr{jstrs(works_of_send(task_of(q), st(o, cx), from))})])}, Unit{}, Unit{}, Unit{})
-      +cx3 = req_report.kind(o, report_tick(o, K.get_n(q, "done_when"), cx2, from, q), from, kind, summary)
+      +cx3 = req_report.kind(o, report_tick(o, K.get_n(q, "done_when"), act_join(o, cx2, from, works_of_send(task_of(q), st(o, cx2), from)), from, q), from, kind, summary)
       +parent = Maybe.default(&2, String, ST.parent_of(M.get_agent(st(o, cx3), from)), M.MAIN())
       +to = Bool.pick(String, String.eq(parent, M.USER()), M.MAIN(), parent)
       # the report answers the parent's open request, if any: no
@@ -4948,7 +4968,7 @@ def idle.agent(-o: S.St, m: Maybe<&2, S.Agent>, +cx: X.Cx<o>, +agent: String, +l
     case None{}:
       cx
     case Some{+a}:
-      +cx2 = dirty(o, set_rt(o, cx, X.Rt{agent, S.RIdle{}, False{}, None{}, 0n}))
+      +cx2 = dirty(o, set_rt(o, cx, X.Rt{agent, S.RIdle{}, False{}, None{}, 0n, X.Rt.ctx(rt(o, cx, agent))}))
       +r = rr(o, cx2)
       +text = KL.kv_get(X.R.last(r), agent)
       +cx3 = set_r(o, cx2, X.R.with_last(r, KL.kv_del(X.R.last(r), agent)))

@@ -627,3 +627,43 @@ law work_context_is_capped:
   for +st: HS.St
   for +pw: List<&2, HX.Kn>
   {HWC.ctx(ids, st, pw) == HT.clip(HWC.raw(ids, st, pw), HWC.CTX_MAX()) : String}
+
+# ---- joining a task (architect m_67151, m_67152) ----
+
+# LAW: a steer never joins: a delivery into a running turn writes no
+# work_turn line, so it makes its agent no work's member (only its act
+# does, act_join; or a turn start, turn_start_joins_its_batch).
+law a_steer_never_joins:
+  for +cur: List<&2, String>
+  for +got: List<&2, String>
+  {HWO.turn_change(cur, got, True{}) == None{} : Maybe<&2, List<&2, String>>}
+
+# LAW: a delivery that starts a turn with works other than the turn's
+# writes their work_turn line (its fold, WO.served, makes the agent their
+# member).
+law turn_start_joins_its_batch:
+  for +cur: List<&2, String>
+  for +got: List<&2, String>
+  for e: {HWO.same(got, cur) == False{} : Bool}
+  {HWO.turn_change(cur, got, False{}) == Some{got} : Maybe<&2, List<&2, String>>}
+
+# LAW: acting with a work it is not on makes the agent join it (one
+# add_agent line, act_join).
+law acting_joins_its_works:
+  for +w: HS.Work
+  for +agent: String
+  for e: {HWO.has(HS.Work.agents(w), agent) == False{} : Bool}
+  {HWO.not_joined([HS.Work.id(w)], [w], agent) == [HS.Work.id(w)] : List<&2, String>}
+
+# LAW: acting with a work it is on already writes nothing.
+law acting_on_its_work_joins_nothing:
+  for +w: HS.Work
+  for +agent: String
+  for e: {HWO.has(HS.Work.agents(w), agent) == True{} : Bool}
+  {HWO.not_joined([HS.Work.id(w)], [w], agent) == Nil{} : List<&2, String>}
+
+# LAW: a work whose context the agent got already (X.Rt.ctx) gives it
+# none again, member or not (architect m_67149).
+law work_context_once_per_agent_without_membership:
+  for +id: String
+  {HWC.unseen([id], [id]) == Nil{} : List<&2, String>}

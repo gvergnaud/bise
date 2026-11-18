@@ -299,3 +299,31 @@ def Laws.work_context_for_a_joined_work(w, agent, e):
 
 def Laws.work_context_is_capped(ids, st, pw):
   {==}
+
+# ---- joining a task ----
+
+def Laws.a_steer_never_joins(cur, got):
+  {==}
+
+def Laws.turn_start_joins_its_batch(cur, got, e):
+  %Equal.sym(Bool, HWO.same(got, cur), False{}, e) : {HWO.turn_change.go(_, got) == Some{got} : Maybe<&2, List<&2, String>>}
+  {==}
+
+def Laws.acting_joins_its_works(w, agent, e):
+  %Equal.sym(Bool, String.eq(HS.Work.id(w), HS.Work.id(w)), True{}, PL2.hub_str_eq_refl(HS.Work.id(w)))
+    : {Bool.pick(List<&2, String>, HWO.joined(HLZ.pick(Maybe<&2, HS.Work>, _, u => Some{w}, u => HWO.find(Nil{}, HS.Work.id(w))), agent), Nil{}, [HS.Work.id(w)]) == [HS.Work.id(w)] : List<&2, String>}
+  %Equal.sym(Bool, HWO.has(HS.Work.agents(w), agent), False{}, e)
+    : {Bool.pick(List<&2, String>, _, Nil{}, [HS.Work.id(w)]) == [HS.Work.id(w)] : List<&2, String>}
+  {==}
+
+def Laws.acting_on_its_work_joins_nothing(w, agent, e):
+  %Equal.sym(Bool, String.eq(HS.Work.id(w), HS.Work.id(w)), True{}, PL2.hub_str_eq_refl(HS.Work.id(w)))
+    : {Bool.pick(List<&2, String>, HWO.joined(HLZ.pick(Maybe<&2, HS.Work>, _, u => Some{w}, u => HWO.find(Nil{}, HS.Work.id(w))), agent), Nil{}, [HS.Work.id(w)]) == Nil{} : List<&2, String>}
+  %Equal.sym(Bool, HWO.has(HS.Work.agents(w), agent), True{}, e)
+    : {Bool.pick(List<&2, String>, _, Nil{}, [HS.Work.id(w)]) == Nil{} : List<&2, String>}
+  {==}
+
+def Laws.work_context_once_per_agent_without_membership(id):
+  %Equal.sym(Bool, String.eq(id, id), True{}, PL2.hub_str_eq_refl(id))
+    : {HWC.unseen.pick(HLZ.or(_, u => HWO.has(Nil{}, id)), id, Nil{}) == Nil{} : List<&2, String>}
+  {==}
