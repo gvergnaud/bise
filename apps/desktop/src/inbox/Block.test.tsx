@@ -212,7 +212,7 @@ describe('the inbox block (b2)', () => {
       return { x: 0, y: top, top, left: 0, right: 0, bottom: top + h, width: 0, height: h, toJSON: () => ({}) } as DOMRect;
     });
     try {
-      const store = new Store({ send: () => undefined, onEvent: () => () => undefined, onState: () => () => undefined, state: () => Promise.resolve('up') });
+      const store = new Store({ send: () => undefined });
       replay(store, withCards(12));
       const block = (shown: boolean) => (
         <StoreProvider store={store}>
