@@ -69,6 +69,11 @@ pub struct Artifact {
     /// (a video too big to copy still gets its `frame_url`, from its own file)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub no_copy: Option<String>,
+    /// the store's copy of the current version is text (the hub's typed
+    /// fact, read once at the artifact door: what an app's text entry
+    /// opens, docs/plugin-apps.md A2); false: binary, a folder, or unknown
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub text: bool,
     /// its target is a file that is no longer there
     #[serde(default, skip_serializing_if = "crate::is_false")]
     pub gone: bool,

@@ -997,6 +997,12 @@ copy?: string | null,
  */
 no_copy?: string | null, 
 /**
+ * the store's copy of the current version is text (the hub's typed
+ * fact, read once at the artifact door: what an app's text entry
+ * opens, docs/plugin-apps.md A2); false: binary, a folder, or unknown
+ */
+text?: boolean, 
+/**
  * its target is a file that is no longer there
  */
 gone?: boolean, 

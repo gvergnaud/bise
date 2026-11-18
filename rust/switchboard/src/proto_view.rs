@@ -511,6 +511,7 @@ pub fn artifacts(ev: &Value, page_url: impl Fn(&str) -> Option<String>, frame_ba
                 copy: Some(s(r, "copy")).filter(|c| !c.is_empty()),
                 no_copy: Some(s(r, "no_copy")).filter(|w| !w.is_empty()),
                 gone: r.get("gone").and_then(Value::as_bool).unwrap_or(false),
+                text: r.get("text").and_then(Value::as_bool).unwrap_or(false),
                 expired: r.get("expired").and_then(Value::as_bool).unwrap_or(false),
                 detail: s(r, "detail"),
                 pr,
