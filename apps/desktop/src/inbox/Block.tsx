@@ -861,7 +861,7 @@ export function InboxBlock({ here, onAnswer, now: pinned, only, rest, fold }: In
     );
   }
   // a line per item, the open one its card, in place
-  const item = (c: Card): ReactNode => {
+  const item = (c: InboxItem): ReactNode => {
         const n = list.indexOf(c) + 1;
         const row = names.get(c.project);
         if (c === openCard) {
