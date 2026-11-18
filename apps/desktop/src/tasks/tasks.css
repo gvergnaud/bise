@@ -205,7 +205,11 @@
 .tk-check[data-drew] path{stroke-dasharray:1;animation:tk-draw var(--d-fast) var(--ease-out) both}
 .tk-undo .b-toast{animation:tk-rise var(--d-fast) var(--ease-out) both}
 .tk-new{animation:tk-fade-out var(--d-fast) var(--ease-out) 2s forwards}
-@media (prefers-reduced-motion:reduce){.tk-card[data-moved],.tk-check[data-drew] path,.tk-undo .b-toast,.tk-new{animation:none}}
+/* an Activity report's body opens on its height: a grid row from 0fr to 1fr, nothing jumps */
+.tk-log-body{display:grid;grid-template-rows:0fr;transition:grid-template-rows var(--d-fast) var(--ease-out)}
+.tk-log-body[data-open]{grid-template-rows:1fr}
+.tk-log-body-in{display:flex;flex-direction:column;min-height:0;overflow:hidden}
+@media (prefers-reduced-motion:reduce){.tk-card[data-moved],.tk-check[data-drew] path,.tk-undo .b-toast,.tk-new{animation:none}.tk-log-body{transition:none}}
 .tk-agents{display:flex;flex-direction:column;gap:var(--s-1);margin:0;padding:0;list-style:none}
 /* one line each (designer m_65783): dot · name · its line (1fr, cut) · state; the name and the
    state never wrap or cut */

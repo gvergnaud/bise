@@ -101,10 +101,18 @@ function Report({ l, testId }: { l: LogLine; testId: string }) {
           setOpen(!open);
         }} testId={`${testId}.more`}>{tasks.log_more}</Fold>
       )}
-      {open && rest !== '' && <span className="tk-log-dec tk-log-rest">{rest}</span>}
-      {open && decisions.map((d) => (
-        <span key={d} className="tk-log-dec">{tasks.log_decision({ text: d })}</span>
-      ))}
+      {/* its body opens on its height (tasks-shine batch 5, designer m_67174): always there, a grid
+          row from 0fr to 1fr; closed, out of reach (inert) and of a reader's way */}
+      {more && (
+        <span className="tk-log-body" data-open={open || undefined} inert={!open} aria-hidden={!open} data-testid={`${testId}.body`}>
+          <span className="tk-log-body-in">
+            {rest !== '' && <span className="tk-log-dec tk-log-rest">{rest}</span>}
+            {decisions.map((d) => (
+              <span key={d} className="tk-log-dec">{tasks.log_decision({ text: d })}</span>
+            ))}
+          </span>
+        </span>
+      )}
     </>
   );
 }
