@@ -7,6 +7,7 @@
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { CorePort } from '@/shared/api';
+import type { WorkRow } from '@/proto';
 import { Store, StoreProvider } from '@/store';
 import { createRouter, RouterContext } from '@/app/router';
 import { ev, projects, row } from '../../tests/feature/inputs';
@@ -14,13 +15,13 @@ import { TaskTab } from './TaskTab';
 
 const P = 'acme-1a2b3c4d';
 
-function tab() {
+function tab(over: Partial<WorkRow> = {}) {
   const port: CorePort = { send: () => undefined, onEvent: () => () => undefined, onState: () => () => undefined, state: () => Promise.resolve('up') };
   const store = new Store(port);
   store.setCore('up');
   store.apply(projects(row({ project: P, name: 'acme' })));
   const at = Date.now();
-  store.apply(ev('works', { project: P, works: [{ id: 'kb', name: 'Make auto-approve safe enough to turn on by default for every project', by: 'main', created_ms: at, last_ms: at, status: 'working', agents: ['auto-approve-lead'] }], tombs: [] }));
+  store.apply(ev('works', { project: P, works: [{ id: 'kb', name: 'Make auto-approve safe enough to turn on by default for every project', by: 'main', created_ms: at, last_ms: at, status: 'working', agents: ['auto-approve-lead'], ...over }], tombs: [] }));
   return render(
     <StoreProvider store={store}>
       <RouterContext value={createRouter({ screen: 'bise' })}>
@@ -41,5 +42,28 @@ describe('the Task tab head', () => {
     expect(body).not.toBeNull();
     expect(body?.contains(head)).toBe(false);
     expect(body?.contains(panes)).toBe(false);
+  });
+});
+
+describe('the Task tab footer (tasks-shine batch 4, designer m_66679)', () => {
+  const foot = (v: ReturnType<typeof tab>) => [...(v.container.querySelector('.tk-foot')?.querySelectorAll('button') ?? [])].map((b) => b.getAttribute('data-testid'));
+  it('Pause and + Agent quiet first, then Mark done at the right just before ⋯', () => {
+    const v = tab();
+    const ids = foot(v).filter((x) => x !== null && !x.startsWith('tasks.tab.kb.more.'));
+    expect(ids.slice(0, 3)).toEqual(['tasks.tab.kb.pause', 'tasks.tab.kb.agent.add', 'tasks.tab.kb.done']);
+    expect(v.getByTestId('tasks.tab.kb.pause').className).toContain('ghost');
+    expect(v.getByTestId('tasks.tab.kb.agent.add').className).toContain('ghost');
+  });
+  it('Mark done is primary only once every Done when item is ticked, never beside a Restart', () => {
+    const pri = (over: Partial<WorkRow>) => {
+      const v = tab(over);
+      const on = v.getByTestId('tasks.tab.kb.done').className.split(' ').includes('pri');
+      cleanup();
+      return on;
+    };
+    expect(pri({})).toBe(false);
+    expect(pri({ goals: [{ text: 'a', done: true }, { text: 'b' }] })).toBe(false);
+    expect(pri({ goals: [{ text: 'a', done: true }, { text: 'b', done: true }] })).toBe(true);
+    expect(pri({ status: 'stalled', goals: [{ text: 'a', done: true }] })).toBe(false);
   });
 });

@@ -21,6 +21,8 @@ import { chipName, storeImage } from '@/thread/parts';
 import { useRouter } from '@/app/router';
 import { MAIN } from '@/app/route';
 import { useNowFor } from '@/app/clock';
+import { signOf } from '@/app/side';
+import { barSign } from '@/app/barrows';
 import { tasks } from '@/proto/words_tasks.gen';
 import { useWorks } from '@/store';
 import { aboutOf, agentLineOf, agentStateOf, artsOf, crewOf, goalsOf, isOpen, nowOfTask, originOf, reportsOf, soloOn, type Origin } from './model';
@@ -137,6 +139,8 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
   }
   const x = { project, projectName: projects.find((p) => p.project === project)?.name ?? project, w };
   const goals = goalsOf(w);
+  // Mark done turns primary once every Done when item is ✓, never beside a stalled task's Restart
+  const doneReady = goals !== null && goals.done === goals.all && w.status !== 'stalled';
   const names = w.agents ?? [];
   const mine = new Set(w.cards ?? []);
   const asks = cards.filter((c) => mine.has(c.id));
@@ -292,17 +296,23 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
               // its state and line on THIS task (tasks-ux m_65775): waits for him only on a card of this task
               const state = STATE_WORD[agentStateOf(a, asks.some((c) => c.agent === n))];
               const doing = agentLineOf(n, reports, a, solo.has(n));
+              // an archived one (no live row) draws the bar's at-rest sign
+              const face = a === undefined ? barSign({ g: '–', tone: 'dim', end: '', endTone: 'dim', count: 0, title: '' }) : barSign(signOf(a, now));
               return (
                 <li key={n} role="link" tabIndex={0} data-archived={a === undefined || undefined} onClick={() => {
                   router.go({ screen: 'thread', project, agent: n });
                 }} onKeyDown={(e) => {
                   if (e.key === 'Enter') router.go({ screen: 'thread', project, agent: n });
                 }} data-testid={`${t}.agent.${n}`}>
-                  <span className="tk-live" data-on={on || undefined} />
-                  {/* one line (designer m_65783): dot · name · its line (cut, whole in its tip) · state */}
+                  {/* one line (tasks-shine batch 4, designer m_66679): its face, the right bar's own sign
+                      (app/barrows barSign) · name · its line (cut, whole in its tip) · live dot + state */}
+                  <span className={`s3-arow-g ${face.tone}`} aria-hidden="true" data-testid={`${t}.agent.${n}.face`}>{face.g}</span>
                   <span className="tk-agent">{n}</span>
                   <span className="tk-agent-doing" {...(doing === '' ? {} : tipAttrs(doing))}>{doing}</span>
-                  <span className="tk-agent-state">{state}</span>
+                  <span className="tk-agent-end">
+                    <span className="tk-live" data-on={on || undefined} />
+                    <span className="tk-agent-state">{state}</span>
+                  </span>
                 </li>
               );
             })}
@@ -401,17 +411,9 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
             act(project, 'restart', w.id);
           }} data-testid={`${t}.restart`}>{tasks.act_restart}</Press>
         )}
-        {w.status === 'done' ? (
-          <Press look="b-btn sm" onClick={() => {
-            act(project, 'reopen', w.id);
-          }} data-testid={`${t}.reopen`}>{tasks.act_reopen}</Press>
-        ) : (
-          w.status !== 'ongoing' && (
-            <Press look="b-btn sm" onClick={() => {
-              act(project, 'done', w.id);
-            }} data-testid={`${t}.done`}>{tasks.act_done}</Press>
-          )
-        )}
+        {/* a calmer footer (tasks-shine batch 4, designer m_66679): Pause and + Agent quiet (ghost),
+            Mark done at the right before ⋯, primary only once every Done when item is ✓ and no
+            Restart shows: one primary at a time */}
         {w.status === 'paused' ? (
           <Press look="b-btn sm" onClick={() => {
             act(project, 'resume', w.id);
@@ -419,15 +421,26 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
         ) : (
           // no agent on it: Pause would pause nothing (tasks-ux m_65124)
           w.status !== 'done' && names.length > 0 && (
-            <Press look="b-btn sm" onClick={() => {
+            <Press look="b-btn sm ghost" onClick={() => {
               act(project, 'pause', w.id);
             }} data-testid={`${t}.pause`}>{tasks.act_pause}</Press>
           )
         )}
         {w.status !== 'done' && (
-          <Press look="b-btn sm" {...tipAttrs(tasks.agent_tip)} onClick={() => {
+          <Press look="b-btn sm ghost" {...tipAttrs(tasks.agent_tip)} onClick={() => {
             setAsking(true);
           }} data-testid={`${t}.agent.add`}>{tasks.act_agent}</Press>
+        )}
+        {w.status === 'done' ? (
+          <Press look="b-btn sm tk-foot-end" onClick={() => {
+            act(project, 'reopen', w.id);
+          }} data-testid={`${t}.reopen`}>{tasks.act_reopen}</Press>
+        ) : (
+          w.status !== 'ongoing' && (
+            <Press look={doneReady ? 'b-btn sm pri tk-foot-end' : 'b-btn sm tk-foot-end'} onClick={() => {
+              act(project, 'done', w.id);
+            }} data-testid={`${t}.done`}>{tasks.act_done}</Press>
+          )
         )}
         <Dropdown look="more" extra="tk-foot-more" label="⋯" name={tasks.act_more} tip={tasks.act_more_move} testId={`${t}.more`}
           groups={[

@@ -180,7 +180,8 @@
 .tk-why{margin:0;color:var(--c-text);line-height:1.5}
 .tk-sec{display:flex;flex-direction:column;gap:var(--s-2)}
 .tk-none{margin:0;color:var(--c-text-3)}
-.tk-h{display:flex;align-items:center;gap:var(--s-2);margin:0;color:var(--c-text-3);font-size:var(--t-12);font-weight:600}
+/* a section's label (tasks-shine batch 4, designer m_66679): t-13 500 text-3, 8 px to its content */
+.tk-h{display:flex;align-items:center;gap:var(--s-2);margin:0;color:var(--c-text-3);font-size:var(--t-13);font-weight:500}
 .tk-count{color:var(--c-text-3);font-weight:400;font-variant-numeric:tabular-nums}
 .tk-checks{display:flex;flex-direction:column;gap:var(--s-1);margin:0;padding:0;list-style:none}
 .tk-checks li{display:flex;gap:var(--s-2);line-height:1.5}
@@ -190,13 +191,15 @@
 .tk-agents{display:flex;flex-direction:column;gap:var(--s-1);margin:0;padding:0;list-style:none}
 /* one line each (designer m_65783): dot · name · its line (1fr, cut) · state; the name and the
    state never wrap or cut */
-.tk-agents li{display:grid;grid-template-columns:var(--s-3) auto minmax(0,1fr) auto;align-items:center;gap:var(--s-2);height:var(--s-6);padding:0 var(--s-1);border-radius:var(--r-1);white-space:nowrap}
+/* face (the right bar's sign) · name · its line · live dot + state (tasks-shine batch 4) */
+.tk-agents li{display:grid;grid-template-columns:var(--s-4) auto minmax(0,1fr) auto;align-items:center;gap:var(--s-2);height:var(--s-6);padding:0 var(--s-1);border-radius:var(--r-1);white-space:nowrap}
 .tk-agents li:hover{background:var(--c-hover)}
 .tk-agents li[data-archived]{color:var(--c-text-3)}
 .tk-live{flex:none;width:6px;height:6px;border-radius:50%;border:1px solid var(--c-text-3);box-sizing:border-box}
 .tk-live[data-on]{border:0;background:var(--c-text)}
 .tk-agent{font-weight:500;white-space:nowrap}
-.tk-agent-state{margin-left:auto;color:var(--c-text-3);font-size:var(--t-12);white-space:nowrap}
+.tk-agent-end{display:inline-flex;align-items:center;gap:var(--s-2)}
+.tk-agent-state{color:var(--c-text-3);font-size:var(--t-12);white-space:nowrap}
 .tk-agent-doing{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--c-text-3);font-size:var(--t-12)}
 /* a narrow panel: its line goes first, the name and the state stay */
 @container (max-width: 420px){.tk-agent-doing{visibility:hidden}}
@@ -241,7 +244,8 @@
 .tk-paused .tk-mark[data-st="paused"]{color:var(--c-text-3)}
 /* pinned under the scrolling body, inside the panel (his m_65766); ⋯ alone at the far right */
 .tk-foot{flex:none;display:flex;align-items:center;gap:var(--s-2);margin-top:auto;padding:var(--s-3) 0;border-top:1px solid var(--c-line);background:var(--c-surface)}
-.tk-foot .tk-foot-more{margin-left:auto}
+/* Mark done (or Reopen) at the right, just before ⋯ (tasks-shine batch 4) */
+.tk-foot .tk-foot-end{margin-left:auto}
 .tk-gone{margin:0;padding:var(--s-4);color:var(--c-text-3)}
 .tk-rename{width:100%;box-sizing:border-box}
 /* renaming: the ds Field at the title's own type and place (designer m_65952): t-15 600 ink, its
