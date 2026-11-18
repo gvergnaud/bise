@@ -177,6 +177,9 @@ body:has(.app-shell) {
 }
 .app-bar-title .t {
   flex: none;
+  /* cut last of the row, with … (titlefit.ts): never drawn past its box */
+  overflow: hidden;
+  text-overflow: ellipsis;
   font: 600 var(--f-ui);
   color: var(--c-text);
 }
@@ -216,18 +219,37 @@ body:has(.app-shell) {
 }
 /* a thread's agent's links right after its name (BarLinks.tsx, designer m_57254): 12 from the name
    to the first link's text (the title's 8 and the link's 4), 8 between texts, each a 24 high hit
-   area r 6, t-12 text-2; hover a 6 % fill and the text in ink. Never shrunk nor cut: no room, the
-   subtitle gives way first (cut with …, then out), then the links whole, last first (giveway.ts
-   titleFit, BarLinks measures: the title's data-sub, a link's data-out); the name and fact stay */
+   area r 6, t-12 text-2; hover a 6 % fill and the text in ink. No room: the whole title row gives
+   way in one order (titlefit.ts, giveway.ts rowFit, designer m_67200): the subtitle, the page, the
+   branch (each cut, then out), the PR out, the task chip to its mark alone, the fact out, the name
+   cut last; each part draws within its box, never over the next */
 .app-bar-links {
   flex: none;
   display: flex;
   align-self: center;
   margin-left: calc(var(--s-1) * -1);
 }
+/* while titlefit.ts measures, each part at its whole width: none shrunk by the row's flex */
+.app-bar-title[data-measure] > *,
+.app-bar-title[data-measure] .tk-chip,
+.app-bar-title[data-measure] .tk-chip-name {
+  flex-shrink: 0;
+}
 .app-bar-title[data-sub='out'] .s,
-.app-bar-link[data-out] {
+.app-bar-links[data-out],
+.app-bar-link[data-out],
+.app-bar-fact[data-out] {
   display: none;
+}
+/* the task chip given way to its mark alone (24, as the inbox strip's under 560): no name, no +N */
+.app-bar-title > .tk-chips[data-mark] :is(.tk-chip-name, .tk-more) {
+  display: none;
+}
+/* the branch cut with … (an identifier: no words to cut at), its whole name in the link's tip */
+.app-bar-link-x {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .app-bar-link {
   display: inline-flex;
@@ -266,7 +288,7 @@ body:has(.app-shell) {
 .app-bar-link-said {
   font-family: var(--font-ui);
 }
-/* the page's title is prose: cut with … at 24 ch, its whole title in the tip */
+/* the page's title is prose: cut at a word with … (WordCut) at 24 ch at most, its whole title in the tip */
 .app-bar-link-t {
   max-width: 24ch;
   overflow: hidden;

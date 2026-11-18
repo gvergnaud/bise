@@ -168,13 +168,14 @@ export function PickerCut({ text }: { text: string }) {
 }
 
 /** Words cut after a whole word with one '…' to the room their box has, again when it changes
- *  (a line in a box that grows: the float's inbox line, designer m_65784); never a mid-word cut. */
+ *  (a line in a box that grows: the float's inbox line, designer m_65784); never a mid-word cut.
+ *  Its whole words in data-text: a row that gives way measures it whole (app/titlefit.ts). */
 export function WordCut({ text, className }: { text: string; className?: string }) {
   const ref = useRef<HTMLSpanElement>(null);
   const room = useRoom(ref);
   useFitText(ref, text, cutWords, false, room.avail === Infinity ? 0 : room.avail);
   return (
-    <span ref={ref} className={className}>
+    <span ref={ref} className={className} data-text={text}>
       {text}
     </span>
   );

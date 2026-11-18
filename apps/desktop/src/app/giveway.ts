@@ -101,38 +101,55 @@ export function barFit(r: BarFit): BarFits {
   return { fact: false, role: false, narrow: r.pillFull > 0, pill: r.pillSign };
 }
 
-/** The subtitle cut no shorter than this: its … and a few letters, never a letter left over (designer m_57304). */
-export const SUB_MIN_PX = 48;
+/** A cut text keeps at least this: its … and a few letters, never a letter left over (designer m_57304). */
+export const CUT_MIN_PX = 48;
 
-/** A thread's title row in the bar (designer m_57254, m_57304), px, each with its gap before it. */
-export interface TitleRoom {
-  /** what the title can take: its own content box and the status slot's slack */
-  readonly room: number;
-  /** the name, and the state fact (0 when hidden): they stay */
-  readonly fixed: number;
-  /** the agent's links in order (PR, branch, page), each whole */
-  readonly links: readonly number[];
-  /** the subtitle whole, 0 without one */
-  readonly sub: number;
-}
-
-/** What shows: the subtitle whole, cut with … or out; the first `links` links. */
-export interface TitleFits {
-  readonly sub: 'whole' | 'cut' | 'out';
-  readonly links: number;
-}
+/** The parts of a thread's title row (designer m_67200), in the order they give way: the first goes first. */
+export const ROW_ORDER = ['sub', 'page', 'branch', 'pr', 'chip', 'fact', 'name'] as const;
+export type RowKey = (typeof ROW_ORDER)[number];
 
 /**
- * The title's give-way when room runs short (designer m_57304): the subtitle first, cut with …
- * down to SUB_MIN_PX, then dropped whole; then the links whole, last first (page, branch; the PR
- * last); the name and the fact stay. Pure.
+ * A part of the title row, px, its gap before it included; all 0 when it isn't there.
+ * `least`: its narrowest cut (`whole` when it never cuts); `last`: what it keeps once it gave way
+ * (0: out; the task chip its mark alone; the name its least: never out).
  */
-export function titleFit(r: TitleRoom): TitleFits {
-  const sum = (n: number) => r.links.slice(0, n).reduce((a, b) => a + b, 0);
-  const all = r.links.length;
-  if (r.fixed + sum(all) + r.sub <= r.room) return { sub: r.sub > 0 ? 'whole' : 'out', links: all };
-  if (r.sub > SUB_MIN_PX && r.fixed + sum(all) + SUB_MIN_PX <= r.room) return { sub: 'cut', links: all };
-  let n = all;
-  while (n > 0 && r.fixed + sum(n) > r.room) n -= 1;
-  return { sub: 'out', links: n };
+export interface RowPart {
+  readonly whole: number;
+  readonly least: number;
+  readonly last: number;
+}
+
+/** What the title can take (its content box and the status slot's slack), and each part. */
+export type RowRoom = { readonly room: number } & { readonly [K in RowKey]: RowPart };
+
+/** How a part shows: whole, cut to `width`, or in its last form (out, the chip's mark alone, the name at its least). */
+export interface RowShow {
+  readonly form: 'whole' | 'cut' | 'last';
+  readonly width: number;
+}
+export type RowFits = { readonly [K in RowKey]: RowShow };
+
+/**
+ * The title row's give-way when room runs short (designer m_67200): each part in ROW_ORDER, one
+ * at a time, gives the least it can: cut down to its least, else its last form, before the next
+ * part gives anything. So the subtitle goes, then the page link, the branch (each cut, then out),
+ * the PR out, the task chip cut then its mark alone (never out), the state fact out, the name cut
+ * last. Every part shows within its width: the widths shown never add up past the room unless the
+ * name at its least and the chip's mark alone are already more. Pure.
+ */
+export function rowFit(r: RowRoom): RowFits {
+  let over = ROW_ORDER.reduce((n, k) => n + r[k].whole, 0) - r.room;
+  const out = {} as Record<RowKey, RowShow>;
+  for (const k of ROW_ORDER) {
+    const p = r[k];
+    if (over <= 0 || p.whole <= 0) out[k] = { form: 'whole', width: p.whole };
+    else if (p.least < p.whole && over <= p.whole - p.least) {
+      out[k] = { form: 'cut', width: p.whole - over };
+      over = 0;
+    } else {
+      out[k] = { form: 'last', width: p.last };
+      over -= p.whole - p.last;
+    }
+  }
+  return out;
 }

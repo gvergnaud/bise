@@ -44,6 +44,7 @@ import { tabOf } from "./panel/model";
 import { parseStep } from "./panel/steps";
 import { usePlaceCrumb } from "@/artifacts/crumb";
 import { BarLinks } from "./BarLinks";
+import { useTitleFit } from "./titlefit";
 
 export type Width = "narrow" | "mid" | "wide";
 
@@ -320,7 +321,8 @@ function StatusSlot({ children }: { children?: ReactNode }) {
     const read = () => {
       const factHidden = bar.dataset["give"] === "fact";
       const fact = bar.querySelector<HTMLElement>('[data-testid="app.bar.title.fact"]');
-      if (fact !== null && !factHidden) factRoom = fact.offsetWidth + parseFloat(getComputedStyle(fact.parentElement ?? fact).columnGap || "0");
+      // out of the title row's own give-way (titlefit.ts data-out): keep what it took when shown
+      if (fact !== null && !factHidden && fact.dataset["out"] === undefined) factRoom = fact.offsetWidth + parseFloat(getComputedStyle(fact.parentElement ?? fact).columnGap || "0");
       if (fact === null) factRoom = 0;
       const pill = el.querySelector<HTMLElement>(".app-ts");
       const words = pill?.querySelector<HTMLElement>(".app-ts-words") ?? null;
@@ -441,6 +443,9 @@ export function Bar({ frame: state }: { frame: FrameState }) {
   const shown = state.side || state.over === "side";
   // ⌘ held: the sidebar button shows ⌘B in place of its glyph (designer m_45008)
   const cmdHeld = useModHeld("Meta");
+  // the title row's parts give way in one order, never over each other (titlefit.ts, designer m_67200)
+  const titleBox = useRef<HTMLDivElement>(null);
+  useTitleFit(titleBox);
   return (
     <header
       className="app-bar"
@@ -461,7 +466,7 @@ export function Bar({ frame: state }: { frame: FrameState }) {
         />
         <HistoryArrows name={name} />
       </div>
-      <div className="app-bar-title" data-testid="app.bar.title">
+      <div ref={titleBox} className="app-bar-title" data-testid="app.bar.title">
         <TitleSlot text={t.title} />
         {/* the thread's agent's links right after its name: its PR, its branch, its page (designer m_57254) */}
         {route.screen === "thread" && route.agent !== MAIN && <BarLinks project={route.project} agent={route.agent} />}
