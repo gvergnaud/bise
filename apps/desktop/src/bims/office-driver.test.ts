@@ -7,7 +7,7 @@ import { agent, mainAgent, office } from './fixtures';
 import { growOf, STAGE_AT, UNLOCK_LABEL, UNLOCK_WALK } from './growth';
 import { localOf } from './eggs';
 import { makeDriver, NO_ATTENTION, officeKey, type Clock } from './office-driver';
-import { crewOf, objsOf } from './corners.test';
+import { crewOf, objsOf } from './corners-fixtures';
 
 const parts = { activities, labelsOf, layoutOf, newTimeline };
 const T = 1_791_100_000;

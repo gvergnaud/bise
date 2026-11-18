@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { layoutOf } from './maps';
 import { MAP_IDS } from './maps/ids';
 import { objectSpots } from './corners';
-import { breaksOf, crewOf, objsOf } from './corners.test';
+import { breaksOf, crewOf, objsOf } from './corners-fixtures';
 import { GROWS, NO_NEED, either, gardenOf, grownFor, needOf, wingOf, withExtensions } from './extensions';
 import { terraceSlab } from './render/decor';
 import { network } from './paths';

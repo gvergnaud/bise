@@ -49,10 +49,14 @@ const d = 'sb is fine alone, so is sbx land';`;
   });
 
   it('no string of the app names an sb command', () => {
+    // a string's text is in its file's text, so only a file whose text has the phrase is parsed
+    // (parsing all ~1,500 took 33-42 s at load 60-80, over this test's limit)
     const hits = walk(SRC)
       .filter((p) => judged(rel(p)))
-      .flatMap((p) => wordsOf(readFileSync(p, 'utf8'), p.endsWith('.tsx')).filter((w) => SB_CMD.test(w.text)).map((w) => `${rel(p)}:${String(w.line)}: ${w.text.trim()}`));
+      .map((p) => ({ p, code: readFileSync(p, 'utf8') }))
+      .filter(({ code }) => SB_CMD.test(code))
+      .flatMap(({ p, code }) => wordsOf(code, p.endsWith('.tsx')).filter((w) => SB_CMD.test(w.text)).map((w) => `${rel(p)}:${String(w.line)}: ${w.text.trim()}`));
     expect(hits, 'say what happens in plain words, not the sb command agents run').toEqual([]);
-    // it reads every source file: 5.1 s at load 25 (try-build's gate quick runs)
+    // it still reads every file: 6.4 s at load 75, so its own limit stays
   }, 30_000);
 });

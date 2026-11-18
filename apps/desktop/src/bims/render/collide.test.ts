@@ -11,7 +11,7 @@ import { Box3, Mesh, Vector3 } from 'three';
 import { layoutOf } from '../maps';
 import { MAP_IDS, type MapId } from '../maps/ids';
 import { objectSpots, type Placed } from '../corners';
-import { crewOf, objsOf } from '../corners.test';
+import { crewOf, objsOf } from '../corners-fixtures';
 import { grownFor } from '../extensions';
 import { OBJ_IDS, type ObjId } from './objects/ids';
 import type { Office } from '../model';

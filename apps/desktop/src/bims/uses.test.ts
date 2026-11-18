@@ -12,7 +12,7 @@ import { officeObjects } from './plugin-objects';
 import { layoutOf } from './maps';
 import { MAP_IDS } from './maps/ids';
 import { objectSpots } from './corners';
-import { crewOf, objsOf } from './corners.test';
+import { crewOf, objsOf } from './corners-fixtures';
 import { FLOOR_S, HOLD_S, NO_TRIPS, nextTrips, pluginOfUse, standSpotOf } from './uses';
 import type { Box } from './model';
 

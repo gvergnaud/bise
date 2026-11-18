@@ -7,7 +7,7 @@ import { Box3, Mesh, type Object3D } from 'three';
 import { layoutOf } from '../maps';
 import { MAP_IDS } from '../maps/ids';
 import { objectSpots } from '../corners';
-import { crewOf, objsOf } from '../corners.test';
+import { crewOf, objsOf } from '../corners-fixtures';
 import { makeObjectsLayer } from './objects-layer';
 import { STYLE } from './style';
 

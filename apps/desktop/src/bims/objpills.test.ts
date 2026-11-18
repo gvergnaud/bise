@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { layoutOf } from './maps';
 import { objectSpots } from './corners';
-import { crewOf, objsOf } from './corners.test';
+import { crewOf, objsOf } from './corners-fixtures';
 import { settings } from '@/proto/words.gen';
 import { BIM_HALF_OF_HEIGHT, BIM_HALF_PX, bimBox, deskBox, OBJ_PILL_PX, objPillsOf, objTipOf, placeObjTip, TIP_CLEAR, type ObjTip, type Rect } from './objpills';
 import { TIP_GAP } from '@/ds';

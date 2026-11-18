@@ -2,7 +2,7 @@
 // Bar S9: the call at work shows '∿' and its running time under its row's summary line; finished
 // ones keep their marks, under the summary's › (QA §4).
 import { cleanup, fireEvent, render } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Agent } from '@/proto';
 import { Store, StoreProvider, threadKey } from '@/store';
 import { EntryRow, liveTime, type RowCtx } from './rows';
@@ -12,7 +12,15 @@ afterEach(cleanup);
 
 const P = 'acme-1a2b3c4d';
 const ag = (status: Agent['status']): Agent => ({ name: 'perf', dir: 'perf', main: false, status, archived: false, title: '', purpose: '', since_ms: 1, waits: 0, watching: [] });
+// the clock is an input: the row reads Date.now() when drawn, so it is frozen at `now` (a
+// loaded machine took over 1 s between this line and the render: '∿ 13 s')
 const now = Date.now();
+beforeEach(() => {
+  vi.useFakeTimers({ now, toFake: ['Date'] });
+});
+afterEach(() => {
+  vi.useRealTimers();
+});
 const tools = {
   pos: 4,
   at_ms: now - 20_000,
@@ -46,7 +54,7 @@ describe('the call at work (S9)', () => {
     const live = v.getByTestId('thread.tool.2');
     expect(live.getAttribute('data-live')).toBe('true');
     expect(live.textContent).toMatch(/^\$ pnpm build/);
-    expect(v.getByTestId('thread.tool.2.time').textContent).toMatch(/^∿ 1[12] s$/);
+    expect(v.getByTestId('thread.tool.2.time').textContent).toBe('∿ 12 s');
     // the one before is done: folded under the summary, its mark and its length once opened
     expect(v.queryByTestId('thread.tool.1')).toBeNull();
     fireEvent.click(v.getByTestId('thread.tools.4'));
