@@ -499,7 +499,8 @@ pub enum Task {
     Show {
         #[serde(default)]
         id: String,
-        /// `--log`: its Log instead (roma idea 3), read by the hub off its loop
+        /// `--activity` (or `--log`): its Activity instead (roma idea 3),
+        /// read by the hub off its loop
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         log: bool,
     },

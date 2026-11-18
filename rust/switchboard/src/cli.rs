@@ -53,7 +53,7 @@ pub const COMMANDS: &[CmdDoc] = &[
     ),
     cmd("sb tasks", Who::Everyone, "every task in detail: what it is doing now, its last report, its open questions."),
     cmd(
-        "sb task new \"<name>\" [--why \"<why>\"] [--done-when \"<item>\"]... | sb task list [--all] | sb task show <id> [--log] | sb task tick <id> <n>",
+        "sb task new \"<name>\" [--why \"<why>\"] [--done-when \"<item>\"]... | sb task list [--all] | sb task show <id> [--activity] | sb task tick <id> <n>",
         Who::Everyone,
         "the user's tasks: his units of work, many agents each. Every message, turn and what it makes (messages, agents, pages, artifacts, cards, timers, lands) carries its tasks by itself. `new`: a task for new work his direct message sends you on (main makes the others), in his words, its name starting with a verb (\"Fix the login timeout on slow networks\", not \"Login timeout on slow networks\"). `tick <id> <n>` (or `sb report … --done-when <n>`): done-when item n of your turn's task is done. `--task <id>[,<id>]` on send, ask, spawn, notify or report: the tasks it carries instead of your turn's. A task is done only by his word: your report done never makes it done.",
     ),

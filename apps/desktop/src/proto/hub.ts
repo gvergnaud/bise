@@ -247,7 +247,8 @@ goals?: Array<string>, } | { "step": "list",
  */
 all?: boolean, } | { "step": "show", id: string, 
 /**
- * `--log`: its Log instead (roma idea 3), read by the hub off its loop
+ * `--activity` (or `--log`): its Activity instead (roma idea 3),
+ * read by the hub off its loop
  */
 log?: boolean, } | { "step": "done", id: string, } | { "step": "reopen", id: string, } | { "step": "pause", id: string, until_ms?: number, } | { "step": "resume", id: string, } | { "step": "restart", id: string, } | { "step": "move", card?: number, art?: string, page?: boolean, works: Array<string>, } | { "step": "rename", id: string, name: string, } | { "step": "why", id: string, text: string, } | { "step": "goal", id: string, text: string, } | { "step": "tick", id: string, n: number, } | { "step": "untick", id: string, n: number, } | { "step": "ongoing", id: string, } | { "step": "merge", id: string, into: string, };
 

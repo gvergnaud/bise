@@ -59,6 +59,17 @@ function gestureWords(l: LogLine): string {
   }
 }
 
+/** How long the Activity waits for bise before it says so (designer m_66618): never a tab that
+ *  spins forever. */
+export const LATE_MS = 15_000;
+
+/** What the Activity pane shows: its lines (an older answer stays while a new one comes), its
+ *  error, or while none came, reading then late (`late`: LATE_MS passed since it asked). Pure. */
+export function activityShown(log: { readonly error?: string | null } | null, late: boolean): 'lines' | 'failed' | 'loading' | 'late' {
+  if (log === null) return late ? 'late' : 'loading';
+  return log.error != null ? 'failed' : 'lines';
+}
+
 /** A Log row: its line, and for back-to-back versions of one artifact by one agent the oldest
  *  version of the run (`from`; the line is the newest), folded into one row ('v2→v5'). */
 export interface LogRow {

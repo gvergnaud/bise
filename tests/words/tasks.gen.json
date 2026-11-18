@@ -364,7 +364,7 @@
       "why"
     ],
     "one": null,
-    "text": "its Log can't be read: {why}"
+    "text": "its activity can't be read: {why}"
   },
   "tasks.log_goal": {
     "args": [
@@ -372,6 +372,13 @@
     ],
     "one": null,
     "text": "you added done-when: {text}"
+  },
+  "tasks.log_head": {
+    "args": [
+      "id"
+    ],
+    "one": null,
+    "text": "{id} · Activity, newest first"
   },
   "tasks.log_join": {
     "args": [
@@ -390,10 +397,17 @@
     "one": "{who} landed {n} commit on {target} ({sha})",
     "text": "{who} landed {n} commits on {target} ({sha})"
   },
+  "tasks.log_late": {
+    "args": [
+      "s"
+    ],
+    "one": null,
+    "text": "its activity didn't come: bise didn't answer in {s} s"
+  },
   "tasks.log_loading": {
     "args": [],
     "one": null,
-    "text": "reading its Log…"
+    "text": "reading its activity…"
   },
   "tasks.log_made": {
     "args": [
@@ -531,6 +545,11 @@
     "args": [],
     "one": null,
     "text": "you resumed it"
+  },
+  "tasks.log_retry": {
+    "args": [],
+    "one": null,
+    "text": "Try again"
   },
   "tasks.log_stopped": {
     "args": [
@@ -898,7 +917,7 @@
   "tasks.tab_log": {
     "args": [],
     "one": null,
-    "text": "Log"
+    "text": "Activity"
   },
   "tasks.tab_merged": {
     "args": [

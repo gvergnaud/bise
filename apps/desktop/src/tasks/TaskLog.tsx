@@ -1,4 +1,4 @@
-// The Task tab's Log (roma idea 3): who did what and why, newest first: its agents' reports and
+// The Task tab's Activity (roma idea 3; his name for it, m_66595): who did what and why, newest first: its agents' reports and
 // their decisions, his answers, its lands, his gestures, agents joining. Asked of the hub when the
 // tab shows it and again when the task moves (its last fact); the hub reads it off its loop and
 // keeps nothing. Owner: tasks.
@@ -12,7 +12,7 @@ import type { LogLine } from '@/proto';
 import { shownName } from '@/agents/model';
 import { firstSentence } from './model';
 import { openTab } from '@/app/panel/tabs';
-import { dayHeads, foldLog, logWords, madeWords, type LogRow } from './log';
+import { activityShown, dayHeads, foldLog, LATE_MS, logWords, madeWords, type LogRow } from './log';
 
 /** a line's time: the hour today, else its day and hour (24 h, designer m_64958) */
 function when(ms: number, now: number): string {
@@ -23,12 +23,30 @@ function when(ms: number, now: number): string {
 export function TaskLog({ project, id, last, now, testId }: { project: string; id: string; last: number; now: number; testId: string }) {
   const store = useStore();
   const log = useTaskLog(project, id);
-  // asked when shown and when the task's newest fact moves (a report, a gesture, a delivery)
+  // his Try again asks once more
+  const [tries, setTries] = useState(0);
+  const [late, setLate] = useState(false);
+  // asked when shown and when the task's newest fact moves (a report, a gesture, a delivery);
+  // no answer in LATE_MS: said, never a pane that spins forever (designer m_66618)
   useEffect(() => {
     store.askTaskLog(project, id);
-  }, [store, project, id, last]);
-  if (log === null) return <p className="tk-meta" data-testid={`${testId}.loading`}>{tasks.log_loading}</p>;
-  if (log.error != null) return <p className="tk-meta" data-testid={`${testId}.error`}>{tasks.log_failed({ why: log.error })}</p>;
+    setLate(false);
+    const t = setTimeout(() => {
+      setLate(true);
+    }, LATE_MS);
+    return () => {
+      clearTimeout(t);
+    };
+  }, [store, project, id, last, tries]);
+  const retry = (
+    <button type="button" className="tk-retry" data-testid={`${testId}.retry`} onClick={() => {
+      setTries((n) => n + 1);
+    }}>{tasks.log_retry}</button>
+  );
+  const shown = activityShown(log, late);
+  if (shown === 'loading') return <p className="tk-meta" data-testid={`${testId}.loading`}>{tasks.log_loading}</p>;
+  if (shown === 'late') return <p className="tk-meta" data-testid={`${testId}.late`}>{tasks.log_late({ s: String(LATE_MS / 1000) })} · {retry}</p>;
+  if (log === null || log.error != null) return <p className="tk-meta" data-testid={`${testId}.error`}>{tasks.log_failed({ why: log?.error ?? '' })} · {retry}</p>;
   const rows = foldLog(log.lines).flatMap((r) => {
     const words = logWords(r.l);
     return words === '' ? [] : [{ r, words }];

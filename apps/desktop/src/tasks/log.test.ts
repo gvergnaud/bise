@@ -1,6 +1,6 @@
 // A task Log line in words (log.ts): the same words as `sb task show --log`. Owner: tasks.
 import { describe, expect, it } from 'vitest';
-import { dayHeads, foldLog, logWords, madeWords } from './log';
+import { activityShown, dayHeads, foldLog, logWords, madeWords } from './log';
 import { FLIP_MS, flipTo, shownStatus } from './undo';
 
 describe('a gesture shown at once (tasks-ux m_65598)', () => {
@@ -17,6 +17,18 @@ describe('a gesture shown at once (tasks-ux m_65598)', () => {
     // another task, or none
     expect(shownStatus({ id: 'u', status: 'working' }, f, 1500)).toBe('working');
     expect(shownStatus({ id: 't', status: 'working' }, null, 1500)).toBe('working');
+  });
+});
+
+describe('the Activity pane never spins forever (designer m_66618)', () => {
+  it('reads, then says bise is late, until an answer or an error comes', () => {
+    expect(activityShown(null, false)).toBe('loading');
+    expect(activityShown(null, true)).toBe('late');
+    // an answer, even late: its lines; an older answer stays while a new ask runs late
+    expect(activityShown({ error: null }, true)).toBe('lines');
+    expect(activityShown({}, false)).toBe('lines');
+    expect(activityShown({ error: 'no task x' }, false)).toBe('failed');
+    expect(activityShown({ error: 'no task x' }, true)).toBe('failed');
   });
 });
 

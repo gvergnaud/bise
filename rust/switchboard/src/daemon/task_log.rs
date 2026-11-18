@@ -122,7 +122,7 @@ impl Shell {
             let body = match found.and_then(|(live, ids)| read_log(&journal, &lands, &state, &ids, crate::task_log::LIMIT).map(|l| (live, l))) {
                 Ok((live, lines)) if lines.is_empty() => serde_json::json!({"ok": true, "text": format!("{}: {}", live, bise_proto::words::tasks::log_none)}),
                 Ok((live, lines)) => {
-                    let mut out = vec![format!("{} · Log, newest first", live)];
+                    let mut out = vec![bise_proto::words::tasks::log_head(&live)];
                     out.extend(crate::task_log::words(&lines, |t| crate::every::past_label(t, now)));
                     serde_json::json!({"ok": true, "text": out.join(&char::from(NL).to_string())})
                 }

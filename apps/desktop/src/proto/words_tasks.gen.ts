@@ -188,14 +188,20 @@ export const tasks = {
   new_since_looked: "new since you looked",
   /** the Task tab's first pane: what the task is now */
   tab_overview: "Overview",
-  /** the Task tab's second pane: its Log */
-  tab_log: "Log",
-  /** the Log with no line yet */
+  /** the Task tab's second pane: its Activity */
+  tab_log: "Activity",
+  /** the Activity with no line yet */
   log_none: "Nothing yet. Its agents' reports, your answers and what lands show up here.",
-  /** the Log while the hub reads it */
-  log_loading: "reading its Log…",
-  /** the Log the hub couldn't read */
-  log_failed: (a: { why: string | number }): string => "its Log can't be read: " + String(a.why),
+  /** the Activity while the hub reads it */
+  log_loading: "reading its activity…",
+  /** the Activity the hub couldn't read */
+  log_failed: (a: { why: string | number }): string => "its activity can't be read: " + String(a.why),
+  /** no answer in `s` seconds: said, never a tab that spins (designer m_66618) */
+  log_late: (a: { s: string | number }): string => "its activity didn't come: bise didn't answer in " + String(a.s) + " s",
+  /** the late or failed Activity asked again */
+  log_retry: "Try again",
+  /** `sb task show <id> --activity`'s head */
+  log_head: (a: { id: string | number }): string => String(a.id) + " · Activity, newest first",
   /** an agent's `sb report` (kind: progress, done, blocked, failed) */
   log_report: (a: { who: string | number; kind: string | number; text: string | number }): string => String(a.who) + " reported " + String(a.kind) + ": " + String(a.text),
   /** a Log report row's fold: the rest of the report and its decisions (designer m_65808) */

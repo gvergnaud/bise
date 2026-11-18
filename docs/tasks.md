@@ -35,12 +35,12 @@ side.
   (`rust/switchboard/src/task_list.rs`): words only, no decision.
 - The shell stamps artifacts and pages at the door from the view's `turn_works` (as `turn_ms`) and
   writes a `Bise-Task: <id>` trailer per work on a land; it decides nothing. The land record
-  (`lands.jsonl`) keeps the lander's works too (`works`), the Log's typed land fact.
+  (`lands.jsonl`) keeps the lander's works too (`works`), the Activity's typed land fact.
 
-## The Log (roma idea 3; architect m_65317, m_65437)
+## The Activity (roma idea 3; architect m_65317, m_65437; named Activity by him, m_66595)
 
-A task's Log is a read, never rows kept: `task/log` (the Task tab's Log) and `sb task show <id>
---log` read the journal from its end on a thread (`daemon/task_log.rs`, never the loop) until the
+A task's Activity is a read, never rows kept: `task/log` (the Task tab's Activity) and `sb task
+show <id> --activity` (`--log`, its old name, kept as an alias) read the journal from its end on a thread (`daemon/task_log.rs`, never the loop) until the
 task's birth, and the land records; `switchboard/src/task_log.rs` makes the lines
 (`rows::LogLine`): its agents' `sb report`s (the `reported` line's `report.works`, the reporter's
 `--task` or turn's works), his answers (`card_closed` of a card whose works hold it), his gestures
@@ -64,12 +64,12 @@ happened, never rebuilt later:
   unchanged; its failed agents restored once through the restore path (one that fails again stays
   failed: the next Restart is his act again), each restored or idle one gets one hub note with
   works exactly [id] (law restart_note_carries_only_its_work), main aside; refused on a done,
-  merged or paused task. Journaled `restart` by whoever made it: the Log says "main restarted it"
+  merged or paused task. Journaled `restart` by whoever made it: the Activity says "main restarted it"
   for main's, never "you". Whom it acts on is decided once, before its line (`restart_whom`), and
   the line records it: `restored` (its failed agents, brought back) and `noted` (its idle ones,
   told to go on), lists of names, absent on an older line; the step acts on exactly those (laws
   restart_records_whom_it_acted_on, restart_restores_a_failed_agent, restart_notes_an_idle_agent;
-  architect m_65602). The Log names them: "you restarted auth, kb and asked ui to go on"
+  architect m_65602). The Activity names them: "you restarted auth, kb and asked ui to go on"
   (tasks-ux m_65604; "bise" for main's in the window, "main" in the CLI); an older line keeps
   "you restarted it".
 
@@ -89,7 +89,7 @@ clicked and the 6 s toast. A pick sends `task_move` with exactly the new works (
 moved_by_you_sticks); Undo sends the works before, exactly, a new gesture. Main moves on his word
 with `sb task move <task-id>... (--art|--page|--card) [--none]`: main only (an agent is refused),
 the same sb-core step, the line's `by` main (absent: him; laws a_move_by_main_says_main,
-a_move_as_him_is_his_gesture_only); the Log says "main moved … here", never "you".
+a_move_as_him_is_his_gesture_only); the Activity says "main moved … here", never "you".
 
 ## A joining agent's context (roma idea 5; architect m_65317, m_65509)
 
@@ -103,8 +103,8 @@ line, 300 chars, as `said`/`said_msg`; sb-core stamps it once at birth when `sai
 work's origin; an older work has none), why, pause, done-when ticked or not, what waits on him
 (its open cards, one line each, and the count of its items on his pages, R.pw), its agents'
 newest decisions, its agents with their `sb status` note, their newest reports; cut from the end
-at 2000 chars, its last line `More: sb task show <id> --log` kept. No artifact list (sb-core keeps
-none: the Log has them). Main gets none (it routes). Its words are the catalog's `core` area
+at 2000 chars, its last line `More: sb task show <id> --activity` kept. No artifact list (sb-core keeps
+none: the Activity has them). Main gets none (it routes). Its words are the catalog's `core` area
 (`rust/proto/src/words/core.rs`), generated into `bend/hub/gen/words.bend` (core_gen): sb-core's
 inline English moves there one at a time. Laws: work_context_only_for_new_works,
 work_context_for_a_joined_work, work_context_is_capped (bend/laws/work.bend).
