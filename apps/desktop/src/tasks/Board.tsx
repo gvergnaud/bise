@@ -124,7 +124,7 @@ function Card({ x, now, fresh, onDid, withProject }: { x: ProjWork; now: number;
       if (e.key === 'Enter' && e.target === e.currentTarget) openTask(x.project, x.w.id);
     }}>
       <span className="tk-card-name">
-        <TaskMark status={x.w.status} />
+        {/* no status mark: a card sits in its own status's column, which says it (tasks-shine batch 3) */}
         {/* two lines at most, the whole name in its tip (designer m_65805) */}
         <span className="tk-card-title" {...tipAttrs(x.w.name)}>{x.w.name}</span>
         {/* new since he looked: the ink dot (designer: never blue, never pink) */}

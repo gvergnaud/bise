@@ -63,20 +63,26 @@
 .tk-cols-box::after{right:0;background:linear-gradient(to left,var(--c-surface),transparent)}
 .tk-cols-box[data-more-l]::before,.tk-cols-box[data-more-r]::after{opacity:1}
 @media (prefers-reduced-motion:reduce){.tk-cols-box::before,.tk-cols-box::after{transition:none}}
-.tk-cols{flex:1;min-width:0;min-height:0;display:flex;gap:var(--s-3);padding:0 var(--s-6) var(--s-4);overflow-x:auto;overflow-y:hidden;scroll-snap-type:x proximity;scroll-padding-inline:var(--s-6)}
-.tk-col{flex:1 0 240px;display:flex;flex-direction:column;gap:var(--s-2);max-width:320px;min-height:0;padding:var(--s-2);border-radius:var(--r-2);background:var(--c-sunken);box-sizing:border-box;scroll-snap-align:start}
+/* a lighter Board (tasks-shine batch 3, designer m_66624): the columns on the page, no fill and no
+   radius, a 1 px rule between two (8 + 1 + 8 between their cards), the folded strip too; the head
+   outside the column's scroll box, on the page's surface */
+.tk-cols{flex:1;min-width:0;min-height:0;display:flex;gap:0;padding:0 var(--s-6) var(--s-4);overflow-x:auto;overflow-y:hidden;scroll-snap-type:x proximity;scroll-padding-inline:var(--s-6)}
+.tk-col{flex:1 0 240px;display:flex;flex-direction:column;gap:var(--s-2);max-width:320px;min-height:0;padding:0 var(--s-2);box-sizing:border-box;scroll-snap-align:start}
+.tk-col+.tk-col{border-left:1px solid var(--c-line)}
+.tk-col:first-child{padding-left:0}
 .tk-col.empty{flex:none;width:var(--s-8);padding:var(--s-2) 0;align-items:center}
-.tk-col-head{display:flex;align-items:center;gap:var(--s-2);height:var(--s-6);margin:0;padding:0 var(--s-1);font-size:var(--t-12);font-weight:600;color:var(--c-text-2)}
+.tk-col-head{display:flex;align-items:center;gap:var(--s-2);height:var(--s-6);margin:0;padding:0 var(--s-1);background:var(--c-surface);font-size:var(--t-12);font-weight:600;color:var(--c-text-2)}
 .tk-col-strip{display:inline-flex;align-items:center;gap:var(--s-2);writing-mode:vertical-rl;color:var(--c-text-2);font-size:var(--t-12);font-weight:600}
 .tk-col-strip .tk-mark{writing-mode:horizontal-tb}
 .tk-col-cards{display:flex;flex-direction:column;gap:var(--s-2);min-height:0;overflow-y:auto}
 .tk-card{display:flex;flex-direction:column;gap:var(--s-1);margin:0;padding:var(--s-2) var(--s-3);border:1px solid var(--c-line);border-radius:var(--r-2);background:var(--c-surface);color:var(--c-text);font:inherit;text-align:left}
-.tk-card:hover{border-color:var(--c-line-strong)}
+/* hover: the 6 % fill and the border in text-3; pressed: 10 %; only colors change, nothing moves */
+.tk-card:hover{border-color:var(--c-text-3);background-image:linear-gradient(var(--c-hover),var(--c-hover))}
+.tk-card:active{background-image:linear-gradient(var(--c-active),var(--c-active))}
 .tk-card:focus-visible{outline:2px solid var(--c-focus);outline-offset:2px}
 /* the card (designer m_65805): its title ink t-13 600 on two lines; the meta line text-3; the
    sentence text-2 on two lines; on Needs you its questions' accent chip */
 .tk-card-name{display:flex;align-items:flex-start;gap:var(--s-2);min-width:0;font-weight:600}
-.tk-card-name>.tk-mark{margin-top:var(--s-1)}
 .tk-card-title{display:-webkit-box;min-width:0;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow-wrap:anywhere}
 .tk-card-meta{min-width:0;overflow:hidden;color:var(--c-text-3);font-size:var(--t-12);white-space:nowrap;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
 .tk-card-asks{display:flex;flex-direction:column;align-items:flex-start;gap:var(--s-2)}
