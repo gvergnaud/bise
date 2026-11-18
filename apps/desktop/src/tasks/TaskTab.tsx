@@ -53,6 +53,24 @@ function started(ms: number, now: number): string {
   return day === 'today' ? timeOf(d.getTime()) : day;
 }
 
+/** A Done when item's mark: a ring, or TaskMark's done ✓; the ✓ draws once when it flips while
+ *  the tab is open, never on load (tasks-shine batch 5, designer m_67174). */
+function GoalCheck({ done, testId }: { done: boolean; testId: string }) {
+  const [was, setWas] = useState(done);
+  const [drew, setDrew] = useState(false);
+  if (done !== was) {
+    setWas(done);
+    setDrew(done);
+  }
+  return (
+    <span className="tk-check" data-drew={drew || undefined} data-testid={testId}>
+      <svg viewBox="0 0 12 12" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round">
+        {done ? <path d="M3.25 6.25l1.9 1.9 3.6-4.1" pathLength={1} /> : <circle cx="6" cy="6" r="3.5" />}
+      </svg>
+    </span>
+  );
+}
+
 export function TaskTab({ project, id }: { project: string; id: string }) {
   const works = useWorks(project);
   const projects = useProjects();
@@ -251,7 +269,7 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
           <ul className="tk-checks">
             {(w.goals ?? []).map((g, i) => (
               <li key={`${String(i)}.${g.text}`} data-done={g.done === true || undefined} {...((g.by ?? '') !== '' ? tipAttrs(tasks.goal_by({ by: g.by ?? '' })) : {})}>
-                <span className="tk-check">{g.done === true ? '✓' : '○'}</span>
+                <GoalCheck done={g.done === true} testId={`${t}.goal.${String(i)}.check`} />
                 {g.text}
               </li>
             ))}

@@ -188,6 +188,21 @@
 .tk-checks li[data-done]{color:var(--c-text-3)}
 .tk-check{flex:none;width:var(--s-4);color:var(--c-text-3)}
 .tk-checks li[data-done] .tk-check{color:var(--c-text-2)}
+.tk-check{display:inline-flex;align-items:center}
+.tk-check>svg{width:var(--s-3);height:var(--s-3)}
+
+/* motion (tasks-shine batch 5, designer m_67174): --d-fast (140 ms) with --ease-out, none under
+   reduced motion. A card that changed column fades in there; a Done when ✓ draws once on a flip;
+   the Undo toast rises 8 px; the new dot fades 2 s after it shows (a look: seen stays on close) */
+@keyframes tk-fade-in{from{opacity:0}}
+@keyframes tk-draw{from{stroke-dashoffset:1}to{stroke-dashoffset:0}}
+@keyframes tk-rise{from{opacity:0;transform:translateY(var(--s-2))}}
+@keyframes tk-fade-out{to{opacity:0}}
+.tk-card[data-moved]{animation:tk-fade-in var(--d-fast) var(--ease-out)}
+.tk-check[data-drew] path{stroke-dasharray:1;animation:tk-draw var(--d-fast) var(--ease-out) both}
+.tk-undo .b-toast{animation:tk-rise var(--d-fast) var(--ease-out) both}
+.tk-new{animation:tk-fade-out var(--d-fast) var(--ease-out) 2s forwards}
+@media (prefers-reduced-motion:reduce){.tk-card[data-moved],.tk-check[data-drew] path,.tk-undo .b-toast,.tk-new{animation:none}}
 .tk-agents{display:flex;flex-direction:column;gap:var(--s-1);margin:0;padding:0;list-style:none}
 /* one line each (designer m_65783): dot · name · its line (1fr, cut) · state; the name and the
    state never wrap or cut */

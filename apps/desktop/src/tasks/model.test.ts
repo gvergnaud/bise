@@ -1,7 +1,7 @@
 // The right bar's rows and the since line, on plain rows (model.ts, since.ts). Owner: tasks.
 import { describe, expect, it } from 'vitest';
 import type { WorkRow, WorkStatus } from '@/proto';
-import { barRows, cutAtWord, goalsOf, listRows, type ProjWork } from './model';
+import { barRows, cutAtWord, goalsOf, listRows, movedKeys, statusSig, type ProjWork } from './model';
 import { sinceLooked } from './since';
 import { tasksOf } from './chips';
 import { artsOf, resolveMerged } from './model';
@@ -202,5 +202,16 @@ describe('the todo list: a row he checks stays at its place (listRows, designer 
     const kept = new Map([['p/b', { x: open[1] as ProjWork, at: 1, checked: false }]]);
     expect(ids(listRows([open[0] as ProjWork, open[2] as ProjWork], kept))).toEqual(['a', 'b', 'c']);
     expect(ids(listRows(open, kept))).toEqual(['a', 'b', 'c']);
+  });
+});
+
+describe('the Board: a card that changed column (movedKeys, tasks-shine batch 5)', () => {
+  it('only a task whose status changed moves; a new one, a gone one or the first draw move nothing', () => {
+    const one = statusSig([w('a', 'working', NOW), w('b', 'needs_you', NOW)]);
+    expect([...movedKeys(one, one)]).toEqual([]);
+    expect([...movedKeys('', one)]).toEqual([]);
+    const two = statusSig([w('a', 'to_review', NOW), w('b', 'needs_you', NOW), w('c', 'working', NOW)]);
+    expect([...movedKeys(one, two)]).toEqual(['p/a']);
+    expect([...movedKeys(two, statusSig([w('b', 'needs_you', NOW)]))]).toEqual([]);
   });
 });

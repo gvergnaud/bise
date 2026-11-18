@@ -4,7 +4,7 @@
 // reveal, as a long name passes the field's width, has no scroll box to move under it. The scroll
 // itself is the browser's (a real Chromium caret); what this pins is its cause, where the head is.
 // Owner: tasks.
-import { cleanup, render } from '@testing-library/react';
+import { act, cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { CorePort } from '@/shared/api';
 import type { WorkRow } from '@/proto';
@@ -22,13 +22,14 @@ function tab(over: Partial<WorkRow> = {}) {
   store.apply(projects(row({ project: P, name: 'acme' })));
   const at = Date.now();
   store.apply(ev('works', { project: P, works: [{ id: 'kb', name: 'Make auto-approve safe enough to turn on by default for every project', by: 'main', created_ms: at, last_ms: at, status: 'working', agents: ['auto-approve-lead'], ...over }], tombs: [] }));
-  return render(
+  const v = render(
     <StoreProvider store={store}>
       <RouterContext value={createRouter({ screen: 'bise' })}>
         <TaskTab project={P} id="kb" />
       </RouterContext>
     </StoreProvider>,
   );
+  return Object.assign(v, { store });
 }
 
 afterEach(cleanup);
@@ -65,5 +66,20 @@ describe('the Task tab footer (tasks-shine batch 4, designer m_66679)', () => {
     expect(pri({ goals: [{ text: 'a', done: true }, { text: 'b' }] })).toBe(false);
     expect(pri({ goals: [{ text: 'a', done: true }, { text: 'b', done: true }] })).toBe(true);
     expect(pri({ status: 'stalled', goals: [{ text: 'a', done: true }] })).toBe(false);
+  });
+});
+
+describe('a Done when item turning ✓ draws once (tasks-shine batch 5)', () => {
+  it('not on load; only the item that flips while the tab is open', () => {
+    const v = tab({ goals: [{ text: 'a', done: true }, { text: 'b' }] });
+    const check = (i: number) => v.getByTestId(`tasks.tab.kb.goal.${String(i)}.check`);
+    expect(check(0).hasAttribute('data-drew')).toBe(false);
+    expect(check(1).hasAttribute('data-drew')).toBe(false);
+    const at = Date.now();
+    act(() => {
+      v.store.apply(ev('works', { project: P, works: [{ id: 'kb', name: 'kb', by: 'main', created_ms: at, last_ms: at, status: 'working', agents: ['auto-approve-lead'], goals: [{ text: 'a', done: true }, { text: 'b', done: true }] }], tombs: [] }));
+    });
+    expect(check(0).hasAttribute('data-drew')).toBe(false);
+    expect(check(1).hasAttribute('data-drew')).toBe(true);
   });
 });

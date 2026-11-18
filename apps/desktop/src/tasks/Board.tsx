@@ -12,7 +12,7 @@ import { useAgents, useCards, useStore, useWorks } from '@/store';
 import type { Task as TaskReq, WorkStatus } from '@/proto';
 import { tasks } from '@/proto/words_tasks.gen';
 import { useNowFor } from '@/app/clock';
-import { barRows, cardCrew, cardSaid, cutAtWord, goalsOf, SAID_MAX, soloOn, STATUS_ORDER, type ProjWork } from './model';
+import { barRows, cardCrew, cardSaid, cutAtWord, goalsOf, movedKeys, SAID_MAX, soloOn, STATUS_ORDER, statusSig, type ProjWork } from './model';
 import { Question } from './Question';
 import { ago } from '@/agents/model';
 import { useAllWorks, useNewestArts } from './hooks';
@@ -81,7 +81,7 @@ export function useTaskReq(): (project: string, req: TaskReq) => void {
   };
 }
 
-function Card({ x, now, fresh, onDid, withProject }: { x: ProjWork; now: number; fresh: boolean; onDid: (d: Did) => void; withProject: boolean }) {
+function Card({ x, now, fresh, onDid, withProject, moved = false }: { x: ProjWork; now: number; fresh: boolean; onDid: (d: Did) => void; withProject: boolean; moved?: boolean }) {
   const doAct = useTaskAct();
   // his gesture on the card: where it goes is his, not news (news.ts); its short Undo (undo.ts)
   const act = (project: string, step: 'resume', id: string): void => {
@@ -118,7 +118,7 @@ function Card({ x, now, fresh, onDid, withProject }: { x: ProjWork; now: number;
   const mine = new Set(x.w.cards ?? []);
   const asks = x.w.status === 'needs_you' ? cards.filter((c) => mine.has(c.id)) : [];
   return (
-    <div className="tk-card" data-st={x.w.status} data-testid={id} role="button" tabIndex={0} onClick={() => {
+    <div className="tk-card" data-st={x.w.status} data-moved={moved || undefined} data-testid={id} role="button" tabIndex={0} onClick={() => {
       openTask(x.project, x.w.id);
     }} onKeyDown={(e) => {
       if (e.key === 'Enter' && e.target === e.currentTarget) openTask(x.project, x.w.id);
@@ -195,6 +195,15 @@ export function BoardTab({ project }: { project: string }) {
   const { seen, looked } = useSeenTasks();
   const arts = useNewestArts(project);
   useSettleActed(all);
+  // a card whose status changed fades in in its new column; nothing moves on the first draw
+  // (tasks-shine batch 5, designer m_67174): the last statuses kept, compared as he sees them
+  const sig = statusSig(all);
+  const [lastSig, setLastSig] = useState(sig);
+  const [moved, setMoved] = useState<ReadonlySet<string>>(new Set());
+  if (sig !== lastSig) {
+    setLastSig(sig);
+    setMoved(movedKeys(lastSig, sig));
+  }
   const shownRef = useRef<readonly ProjWork[]>([]);
   // which sides have more columns past the edge: their fade (designer m_65852)
   const [more, setMore] = useState<Edges>({ l: false, r: false });
@@ -292,7 +301,7 @@ export function BoardTab({ project }: { project: string }) {
                 </h3>
                 <div className="tk-col-cards">
                   {list.map((x) => (
-                    <Card key={`${x.project}/${x.w.id}`} x={x} now={now} withProject={project === ''} fresh={isNew(x.w, seen(x.project, x.w.id), arts.get(`${x.project}/${x.w.id}`) ?? 0, looked)} onDid={offer} />
+                    <Card key={`${x.project}/${x.w.id}`} x={x} now={now} withProject={project === ''} fresh={isNew(x.w, seen(x.project, x.w.id), arts.get(`${x.project}/${x.w.id}`) ?? 0, looked)} onDid={offer} moved={moved.has(`${x.project}/${x.w.id}`)} />
                   ))}
                 </div>
               </div>

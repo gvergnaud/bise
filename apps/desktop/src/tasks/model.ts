@@ -71,6 +71,20 @@ export function listRows(open: readonly ProjWork[], kept: ReadonlyMap<string, Ke
   return rows;
 }
 
+/** The Board's statuses as one string ('p/a=working p/b=done'; ids and statuses have no space):
+ *  a change of any status changes it. Pure. */
+export function statusSig(all: readonly ProjWork[]): string {
+  return all.map((x) => `${x.project}/${x.w.id}=${x.w.status}`).join(' ');
+}
+
+/** The cards whose status changed between two sigs (tasks-shine batch 5: they fade in in their
+ *  new column); a new or a gone task is no move. Pure. */
+export function movedKeys(was: string, now: string): ReadonlySet<string> {
+  const parse = (s: string) => new Map(s === '' ? [] : s.split(' ').map((l) => [l.slice(0, l.lastIndexOf('=')), l.slice(l.lastIndexOf('=') + 1)] as const));
+  const a = parse(was);
+  return new Set([...parse(now)].filter(([k, st]) => a.has(k) && a.get(k) !== st).map(([k]) => k));
+}
+
 /** A row's done-when count: ticked of all; null when it has none. Pure. */
 export function goalsOf(w: Pick<WorkRow, 'goals'>): { readonly done: number; readonly all: number } | null {
   const g = w.goals ?? [];
