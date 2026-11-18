@@ -10,7 +10,7 @@ import { tasks } from '@/proto/words_tasks.gen';
 import { useStore, useWorks } from '@/store';
 import { useNow } from '@/app/clock';
 import { cutAtWord } from './model';
-import { StatusMark, statusWord } from './Marks';
+import { TaskMark, statusWord } from './Marks';
 import { useSeenTasks } from './seen';
 import { UNDO_MS } from './undo';
 import { askMove, filtered, lastAt, movedWords, NAME_MAX, NO_TASK, offered, tellMoved, useMoveAsk, useMoved, worksAfter, type Ask, type Thing } from './moveTo';
@@ -56,7 +56,7 @@ function row(w: WorkRow, current: boolean, faded: boolean): PickerRow {
     id: w.id,
     name: faded ? <span className="tk-move-done">{name}</span> : name,
     text: w.name,
-    glyph: <StatusMark status={w.status} tip={statusWord(w.status)} />,
+    glyph: <TaskMark status={w.status} tip={statusWord(w.status)} />,
     // its kind is its status: the ds picker shows the column when the statuses differ, as on the
     // artifact's picker (a card's has no 'No task' row to mix it; tasks-ui-qa m_65954 N1)
     glyphKind: `status:${w.status}`,

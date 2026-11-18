@@ -12,6 +12,7 @@
 // them, so a protocol change doesn't reach the rules.
 
 import { ago } from '@/agents/model';
+import type { WorkStatus } from '@/proto';
 
 export type AgentStatus = 'waiting' | 'blocked' | 'working' | 'idle' | 'done' | 'failed';
 
@@ -74,7 +75,7 @@ export interface SearchTask {
   readonly id: string;
   readonly name: string;
   /** rows::WorkStatus ('needs_you', 'working', ... 'done') */
-  readonly status: string;
+  readonly status: WorkStatus;
   /** its line ('waiting · perf's reply'), its why after it */
   readonly what: string;
   readonly at_ms: number;
@@ -155,6 +156,8 @@ export interface Hit {
   readonly of?: string;
   /** a page: its key at the right ('⌘,') */
   readonly key?: string;
+  /** a task: its status, drawn by the tasks' own mark (TaskMark) in the glyph column, never a text glyph */
+  readonly mark?: WorkStatus;
 }
 
 export interface Group {
@@ -397,26 +400,16 @@ function scheduledHit(s: SearchScheduled, pname: string, tz?: string): Hit {
   };
 }
 
-/** A task's sign in the glyph column: its status mark's (tasks/Marks.tsx), as text. */
-const TASK_GLYPH: Readonly<Record<string, readonly [string, Hit['tone']]>> = {
-  needs_you: ['●', 'acc'],
-  working: ['●', 'ink'],
-  waiting: ['○', ''],
-  stalled: ['✗', 'err'],
-  to_review: ['◉', 'ink'],
-  paused: ['‖', ''],
-  done: ['✓', ''],
-  ongoing: ['↻', ''],
-};
-
+/** A task's hit: its sign is its status, which the palette draws with the tasks' TaskMark (one drawn
+ *  set everywhere, tasks-shine batch 2): no text glyph, no tone of its own. */
 function taskHit(t: SearchTask, pname: string): Hit {
-  const [glyph, tone] = TASK_GLYPH[t.status] ?? ['○', ''];
   return {
     kind: 'task',
     id: `task.${t.project}.${t.id}`,
     project: t.project,
-    glyph,
-    tone,
+    glyph: '',
+    tone: '',
+    mark: t.status,
     name: t.name,
     detail: t.what,
     where: pname,

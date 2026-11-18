@@ -24,7 +24,7 @@ import { useNowFor } from '@/app/clock';
 import { tasks } from '@/proto/words_tasks.gen';
 import { useWorks } from '@/store';
 import { aboutOf, agentLineOf, agentStateOf, artsOf, crewOf, goalsOf, isOpen, nowOfTask, originOf, reportsOf, soloOn, type Origin } from './model';
-import { openTask, pausedWords, StatusMark, statusWord } from './Marks';
+import { openTask, pausedWords, TaskMark, statusWord } from './Marks';
 import { useTaskAct, useTaskReq } from './Board';
 import { clock, lineAt } from './Side';
 import { markLooked, markSeen } from './seen';
@@ -176,7 +176,7 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
       <div className="tk-top">
       <header className="tk-tab-head">
         <span className="tk-pill" data-st={w.status} data-testid={`${t}.status`}>
-          <StatusMark status={w.status} />
+          <TaskMark status={w.status} />
           {sentenceCase(statusWord(w.status))}
         </span>
         {renaming ? (
@@ -235,7 +235,7 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
         // one Resume, the footer's (tasks-ux m_64959): the line says since when
         <p className="tk-paused" data-testid={`${t}.paused`}>
           {/* until a time when it resumes by itself, else since when (designer m_65808: text-3) */}
-          <StatusMark status="paused" /> {w.until_ms != null && w.until_ms > now ? tasks.paused_line_until({ at: clock(w.until_ms, now) }) : pausedWords(now - (w.paused_ms ?? now))}
+          <TaskMark status="paused" /> {w.until_ms != null && w.until_ms > now ? tasks.paused_line_until({ at: clock(w.until_ms, now) }) : pausedWords(now - (w.paused_ms ?? now))}
         </p>
       )}
 
@@ -437,7 +437,7 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
               head: tasks.merge_head,
               rows: others.length === 0
                 ? [{ id: 'none', name: tasks.merge_none, disabled: true }]
-                : others.map((o) => ({ id: `merge:${o.id}`, name: o.name, glyph: <StatusMark status={o.status} />, testId: `${t}.more.merge.${o.id}` })),
+                : others.map((o) => ({ id: `merge:${o.id}`, name: o.name, glyph: <TaskMark status={o.status} />, testId: `${t}.more.merge.${o.id}` })),
             },
           ]}
           onPick={(pick) => {

@@ -169,7 +169,8 @@ describe('search: the tasks (tasks-center: results, the done ones too)', () => {
     const hits = l.groups.find((x) => x.id === 'tasks')?.hits ?? [];
     expect(hits.map((h) => h.name)).toEqual(['Checkout flow', 'Old checkout']);
     expect(hits[0]?.open).toEqual({ to: 'task', project: 'sf', id: 'checkout-flow' });
-    expect(hits[0]?.tone).toBe('acc');
+    // its sign is its status, drawn by the tasks' TaskMark: no text glyph, no tone of its own (tasks-shine batch 2)
+    expect(hits.map((h) => [h.mark, h.glyph, h.tone])).toEqual([['needs_you', '', ''], ['done', '', '']]);
   });
   it('a scope other than all leaves them out', () => {
     expect(searchList(T, 'checkout', 'agents', NOW).groups.some((x) => x.id === 'tasks')).toBe(false);

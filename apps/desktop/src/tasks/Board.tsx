@@ -16,7 +16,7 @@ import { barRows, cardCrew, cardSaid, cutAtWord, goalsOf, SAID_MAX, soloOn, STAT
 import { Question } from './Question';
 import { ago } from '@/agents/model';
 import { useAllWorks, useNewestArts } from './hooks';
-import { NewDot, openTask, pausedWords, StatusMark } from './Marks';
+import { NewDot, openTask, pausedWords, TaskMark } from './Marks';
 import { isNew } from './news';
 import { markActed, markLooked, markSeen, useSeenTasks, useSettleActed } from './seen';
 import { UndoToast, useUndo } from './UndoToast';
@@ -124,7 +124,7 @@ function Card({ x, now, fresh, onDid, withProject }: { x: ProjWork; now: number;
       if (e.key === 'Enter' && e.target === e.currentTarget) openTask(x.project, x.w.id);
     }}>
       <span className="tk-card-name">
-        <StatusMark status={x.w.status} />
+        <TaskMark status={x.w.status} />
         {/* two lines at most, the whole name in its tip (designer m_65805) */}
         <span className="tk-card-title" {...tipAttrs(x.w.name)}>{x.w.name}</span>
         {/* new since he looked: the ink dot (designer: never blue, never pink) */}
@@ -279,14 +279,14 @@ export function BoardTab({ project }: { project: string }) {
               return (
                 <div key={s} className="tk-col empty" data-testid={`tasks.board.col.${s}`} {...tipAttrs(tasks.col_empty({ col: label }))}>
                   <span className="tk-col-strip">
-                    <StatusMark status={s} /> {label} <span className="tk-dim">0</span>
+                    <TaskMark status={s} /> {label} <span className="tk-dim">0</span>
                   </span>
                 </div>
               );
             return (
               <div key={s} className="tk-col" data-testid={`tasks.board.col.${s}`}>
                 <h3 className="tk-col-head">
-                  <StatusMark status={s} />
+                  <TaskMark status={s} />
                   {label}
                   <span className={s === 'needs_you' ? 'tk-pink' : 'tk-dim'}>{list.length}</span>
                 </h3>

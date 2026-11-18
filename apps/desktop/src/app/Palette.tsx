@@ -18,7 +18,7 @@ import type { Ev } from '@/store/store';
 import { flatHits, marks, nextScope, SCOPES, searchList, type Hit, type Scope, type SearchList } from '@/search/rank';
 import { searchDataOf } from '@/search/data';
 import { useGoArtifact } from '@/artifacts/leave';
-import { lineAt, openBoard, openTask } from '@/tasks';
+import { lineAt, openBoard, openTask, TaskMark } from '@/tasks';
 import { PAGES } from '@/settings';
 import { useNow } from './clock';
 import { inboxFromMenu } from './inboxAsk';
@@ -380,7 +380,7 @@ export function Palette({ onClose }: { onClose: () => void }) {
                     data-testid={`app.palette.item.${String(n)}`}
                   >
                     <span className={`g ${h.tone}`} aria-hidden>
-                      {h.tone === 'pearl' ? <i className="app-k-pearl" /> : h.tone === 'bise' ? <i className="app-k-pearl bise" data-testid={`app.palette.item.${String(n)}.pink`} /> : h.glyph}
+                      {h.mark !== undefined ? <TaskMark status={h.mark} testId={`app.palette.item.${String(n)}.mark`} /> : h.tone === 'pearl' ? <i className="app-k-pearl" /> : h.tone === 'bise' ? <i className="app-k-pearl bise" data-testid={`app.palette.item.${String(n)}.pink`} /> : h.glyph}
                     </span>
                     <span className="nm">
                       {h.parent !== undefined && <span className="up">{h.parent} › </span>}

@@ -1,7 +1,8 @@
-// The tasks' shared pieces (brief "Shared pieces", designer's look rules): the status mark (a 6 px
-// dot or ring, or its glyph, each with its tip: the task's line), the neutral task chip (the mark,
+// The tasks' shared pieces (brief "Shared pieces", designer's look rules): the status mark (TaskMark:
+// one drawn SVG set in a 12 px box, each with its tip: the task's line), the neutral task chip (the mark,
 // then the name cut at a word, never pink), the chips (the main one in clear, '+N' whose tip lists
 // the others), and the openers of the Task tab and the Board. Tokens only (tasks.css). Owner: tasks.
+import type { ReactNode } from 'react';
 import { Press, tipAttrs, WordCut } from '@/ds';
 import { openTab } from '@/app/panel/tabs';
 import type { WorkRow, WorkStatus } from '@/proto';
@@ -46,14 +47,42 @@ export function statusWord(s: WorkStatus): string {
   }
 }
 
-/** the glyph statuses: Stalled ✗ (err), Paused ‖, Done ✓, Ongoing ↻; the others are a dot or a ring */
-const GLYPH: Partial<Record<WorkStatus, string>> = { stalled: '✗', paused: '‖', done: '✓', ongoing: '↻' };
+/** Each status's drawing in a 12 px box (tasks-shine batch 2, designer m_66582, the shapes signed in
+ *  6b): a dot (needs you, working), a solid ring (waiting, unknown), a ring with its center dot (to
+ *  review), ✗ (stalled), ‖ (paused), ✓ (done), ↻ (ongoing). Its color is its css (data-st). */
+const DOT = <circle cx="6" cy="6" r="3.25" fill="currentColor" stroke="none" />;
+const RING = <circle cx="6" cy="6" r="3.5" fill="none" />;
+const SHAPE: Record<WorkStatus, ReactNode> = {
+  needs_you: DOT,
+  working: DOT,
+  waiting: RING,
+  to_review: (
+    <>
+      {RING}
+      <circle cx="6" cy="6" r="1.25" fill="currentColor" stroke="none" />
+    </>
+  ),
+  stalled: <path d="M3.75 3.75l4.5 4.5M8.25 3.75l-4.5 4.5" />,
+  paused: <path d="M4.5 3.25v5.5M7.5 3.25v5.5" />,
+  done: <path d="M3.25 6.25l1.9 1.9 3.6-4.1" />,
+  ongoing: (
+    <>
+      <path d="M8.6 4.4A3.4 3.4 0 1 0 9.4 6.6" />
+      <path d="M8.9 2.6v2h-2" />
+    </>
+  ),
+  unknown: RING,
+};
 
-/** The status mark: `tip` its tip (the task's line), none for a mark inside a control that has its own. */
-export function StatusMark({ status, tip, testId }: { status: WorkStatus; tip?: string; testId?: string }) {
+/** The task's status mark, one drawn set everywhere (the Board, the right bar, the Task tab, the
+ *  chips, ⌘K, the pickers): `tip` its tip (the task's line), none for a mark inside a control that
+ *  has its own. */
+export function TaskMark({ status, tip, testId }: { status: WorkStatus; tip?: string; testId?: string }) {
   return (
     <span className="tk-mark" data-st={status} role="img" aria-label={statusWord(status)} data-testid={testId} {...(tip === undefined ? {} : tipAttrs(tip))}>
-      {GLYPH[status] ?? null}
+      <svg viewBox="0 0 12 12" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round">
+        {SHAPE[status]}
+      </svg>
     </span>
   );
 }
@@ -77,7 +106,7 @@ export function TaskChip({ project, w, line, testId }: { project: string; w: Pic
       e.stopPropagation();
       openTask(project, w.id);
     }} {...tipAttrs(tasks.chip_tip({ name: w.name, what: line }))}>
-      <span className="tk-chip-mark"><StatusMark status={w.status} /></span>
+      <span className="tk-chip-mark"><TaskMark status={w.status} /></span>
       <WordCut className="tk-chip-name" text={w.name} />
     </Press>
   );

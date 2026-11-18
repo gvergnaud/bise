@@ -4,7 +4,7 @@
 export { FloatTasks, OuterTasks, lineAt } from './Side';
 export { BoardTab, useTaskAct } from './Board';
 export { TaskTab } from './TaskTab';
-export { openBoard, openTask, StatusMark, statusWord, TaskChip, TaskChips } from './Marks';
+export { openBoard, openTask, statusWord, TaskChip, TaskChips, TaskMark } from './Marks';
 export { useAllWorks } from './hooks';
 export { chipOrder, TaskChipsOf, tasksOf, type ChipsOf } from './chips';
 export { barRows, cutAtWord, goalsOf, isOpen, needsHim, STATUS_ORDER, type ProjWork } from './model';

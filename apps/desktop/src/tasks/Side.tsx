@@ -12,7 +12,7 @@ import { groupParts } from '@/app/side3d/lists';
 import { tasks } from '@/proto/words_tasks.gen';
 import { dayWords, timeOf } from '@/artifacts/model';
 import { barRows, goalsOf, needsHim, type ProjWork } from './model';
-import { NewDot, openBoard, openTask, StatusMark } from './Marks';
+import { NewDot, openBoard, openTask, TaskMark } from './Marks';
 import { useNewestArts } from './hooks';
 import { isNew } from './news';
 import { useSeenTasks, useSettleActed } from './seen';
@@ -42,7 +42,7 @@ function TaskRow({ x, now, group, fresh }: { x: ProjWork; now: number; group: st
         openTask(x.project, x.w.id);
       }} data-row="">
         <span className="s3-orow-mark">
-          <StatusMark status={x.w.status} testId={`${id}.mark`} />
+          <TaskMark status={x.w.status} testId={`${id}.mark`} />
         </span>
         <span className="s3-orow-name tk-oname" data-testid={`${id}.name`}>{g.project !== '' && <span className="s3-group">{g.project}</span>}<WordCut className="tk-ocut" text={g.name} /></span>
         <NewDot on={fresh} testId={`${id}.new`} />
@@ -72,7 +72,7 @@ export function OuterTasks({ all, scope, now, groupOf }: { all: readonly ProjWor
         <Press look="tk-fold" data-testid="app.outer.tasks.rest" onClick={() => {
           openBoard(scope);
         }}>
-          <StatusMark status="ongoing" /> {tasks.fold_rest({ ongoing: ongoing.length, done: done.length })}
+          <TaskMark status="ongoing" /> {tasks.fold_rest({ ongoing: ongoing.length, done: done.length })}
         </Press>
       )} />
   );
