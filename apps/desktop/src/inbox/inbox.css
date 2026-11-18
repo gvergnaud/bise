@@ -37,7 +37,6 @@
 .inbox-line .line-cut { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; }
 .inbox-line .strip-keys { font-size: var(--t-12); }
 .strip-what { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--c-text-2); }
-.strip-more { color: var(--c-text-3); font-size: var(--t-12); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; min-width: 0; }
 .strip-cmd { color: var(--c-accent); font-family: var(--font-mono); }
 .strip-note { color: var(--c-text-3); }
 /* inbox card v2 (InboxCard.tsx; ambient m_11273, its mock's values): opaque, docked in the flow; pink is the glyph and the numbers only */
@@ -148,12 +147,18 @@
 /* one inbox (designer m_19631, page desktop-right-bar): the row is the same everywhere: n, the
    sign, the agent in 500, the question dim cut with …, then '<project> · <age>' mono t-12 faint */
 /* the same 28 px row in the block and the capsule (designer m_20053) */
+/* the box of rows (Block.tsx, his pick A, designer m_66505): every item, it scrolls in place; its
+   height (up to 4.5 rows, the cut row the cue that more scroll) is Block.tsx's inline max-height. The
+   offset parent of its rows (Block.tsx reads their offsetTop); its own scroll anchoring off, Block.tsx
+   keeps the row under his pointer (never twice). The scrollbar is macOS's overlay one, shown while
+   it scrolls: none drawn here (ds/css/base.css) */
+.inbox-block .strip-rows { position: relative; overflow-y: auto; overflow-anchor: none; overscroll-behavior: contain; }
 /* a card row sits in its .strip-line beside its ⋯ (Move to task…, tasks-ux m_65591) */
-.inbox-block > .b-row, .inbox-block > .strip-line > .b-row { height: var(--h-row-tight); padding: 0 var(--pad-row-x); gap: var(--gap-inline); }
-.inbox-block > .b-row .nm, .inbox-block > .strip-line > .b-row .nm { display: flex; gap: var(--gap-inline); flex: 1; min-width: 0; }
+.inbox-block > .b-row, .inbox-block .strip-rows > .strip-line > .b-row { height: var(--h-row-tight); padding: 0 var(--pad-row-x); gap: var(--gap-inline); }
+.inbox-block > .b-row .nm, .inbox-block .strip-rows > .strip-line > .b-row .nm { display: flex; gap: var(--gap-inline); flex: 1; min-width: 0; }
 .inbox-block .strip-who { font-weight: 500; }
 /* the project tag ('bise', 'shop · 5 min'): words, not machine text, so sans (designer m_20986) */
-.inbox-block > .b-row .end, .inbox-block > .strip-line > .b-row .end { flex: none; font: var(--t-13) var(--font-ui); color: var(--c-text-3); }
+.inbox-block > .b-row .end, .inbox-block .strip-rows > .strip-line > .b-row .end { flex: none; font: var(--t-13) var(--font-ui); color: var(--c-text-3); }
 
 /* inbox zero (designer's desktop-delight TOUCH 3, Zero.tsx): in the folded block's place for 2 s, then
    fades; reduced motion: shown, no fade */

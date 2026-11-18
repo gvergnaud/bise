@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Card } from '@/proto';
-import { cardKeyOf, fitRows, openOnKey, rowWords, stripKey } from './stripRows';
+import { cardKeyOf, fitRows, openOnKey, rowWords, scrollToShow, stripKey } from './stripRows';
 
 const card = (id: number, rank: number, project = 'acme', question = `q${String(id)}`): Card => ({
   id,
@@ -43,15 +43,34 @@ describe("the inbox block's rows (W7/K24)", () => {
     expect(rowWords({ ...c, kind: 'feature_merge', question: 'merge sb/perf into main?' }).who).toBe('t7');
   });
 
-  it('a short window gives rows back, 3 → 2 → 1, so the thread keeps 40% of it; never 0', () => {
-    // 820 high, 200 px of head and composer, 28 px rows: 3 rows + more is 312, the thread keeps 508
-    expect(fitRows({ win: 820, fixed: 200, row: 28, items: 5 })).toBe(3);
-    // 500 high (the thread wants 200): 3 + more leaves 188, 2 + more 216
-    expect(fitRows({ win: 500, fixed: 200, row: 28, items: 5 })).toBe(2);
-    expect(fitRows({ win: 450, fixed: 200, row: 28, items: 5 })).toBe(1);
-    expect(fitRows({ win: 300, fixed: 280, row: 28, items: 5 })).toBe(1);
-    // 3 items: no '+ n more' row, 3 rows fit where 3 + more did not
-    expect(fitRows({ win: 500, fixed: 200, row: 28, items: 3 })).toBe(3);
+  it('the box is up to 5 rows tall, the 5th cut in half when more scroll under it (option A, designer m_66505)', () => {
+    // 820 high, 200 px of head and composer, 28 px rows: the thread keeps far more than 40%
+    expect(fitRows({ win: 820, fixed: 200, row: 28, items: 2 })).toBe(2);
+    expect(fitRows({ win: 820, fixed: 200, row: 28, items: 5 })).toBe(5);
+    expect(fitRows({ win: 820, fixed: 200, row: 28, items: 6 })).toBe(4.5);
+    expect(fitRows({ win: 820, fixed: 200, row: 28, items: 12 })).toBe(4.5);
+  });
+
+  it('a short window gives rows back, 5 → 1, so the thread keeps 40% of it; one whole row at least, never a lone half', () => {
+    // 500 high (the thread wants 200): 100 px for the box, 3.5 rows (98) fit, 4.5 (126) do not
+    expect(fitRows({ win: 500, fixed: 200, row: 28, items: 12 })).toBe(3.5);
+    // 4 items, no cut: 3.5 rows fit where 4 did not
+    expect(fitRows({ win: 500, fixed: 200, row: 28, items: 4 })).toBe(3.5);
+    expect(fitRows({ win: 450, fixed: 200, row: 28, items: 12 })).toBe(2.5);
+    expect(fitRows({ win: 400, fixed: 200, row: 28, items: 12 })).toBe(1);
+    expect(fitRows({ win: 300, fixed: 280, row: 28, items: 12 })).toBe(1);
+    // nothing waits: no row
+    expect(fitRows({ win: 820, fixed: 200, row: 28, items: 0 })).toBe(0);
+  });
+});
+
+describe('the box scrolls the open item into view (scrollToShow)', () => {
+  it('as little as it can: in view it stays, above its top, under its bottom; taller than the box its top', () => {
+    // a 126 px box (4.5 rows of 28) scrolled to 56
+    expect(scrollToShow({ scrollTop: 56, view: 126, top: 84, height: 28 })).toBe(56);
+    expect(scrollToShow({ scrollTop: 56, view: 126, top: 28, height: 28 })).toBe(28);
+    expect(scrollToShow({ scrollTop: 56, view: 126, top: 196, height: 28 })).toBe(98);
+    expect(scrollToShow({ scrollTop: 0, view: 126, top: 84, height: 200 })).toBe(84);
   });
 });
 

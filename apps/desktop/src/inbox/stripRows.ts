@@ -3,16 +3,17 @@
 // an open card. Owner: nm-composer.
 //
 // The TUI's (rust/tui/src/sb/card_draw.rs): a row per item numbered in the inbox's order (row N is
-// what ctrl+N opens), at most STRIP_ROWS rows then '+ n more'. Not ported: approvals that came
-// together sharing a row (order.ts says why).
+// what ctrl+N opens), at most 3 rows then '+ n more'. The desktop moved ahead of it (his pick A on
+// page inbox-scroll, designer m_66505): its block holds every item in a box that scrolls in place,
+// up to BLOCK_ROWS rows tall. Not ported: approvals that came together sharing a row (order.ts says why).
 import type { Card } from '@/proto';
 import { inbox } from '@/proto/words_inbox.gen';
 import { aboutOf } from './about';
 
-/** At most this many item rows in the box, then '+ n more' (card_draw.rs STRIP_ROWS). */
-export const STRIP_ROWS = 3;
+/** The block's box is at most this many rows tall; more items scroll in it (designer m_66505). */
+export const BLOCK_ROWS = 5;
 
-/** ctrl+1 to ctrl+9 open rows 1 to 9. */
+/** ctrl+1 to ctrl+9 open rows 1 to 9; rows 10+ have no number, a click opens them. */
 export const STRIP_KEYS = 9;
 
 /** The block + the composer leave the thread at least this share of the window (designer m_26234). */
@@ -21,25 +22,47 @@ export const THREAD_MIN = 0.4;
 export interface Fit {
   /** the window's height */
   readonly win: number;
-  /** the folded block's height and what is under it, its rows left out (its head, the composer…) */
+  /** the folded block's height and what is under it, its box of rows left out (its head, the composer…) */
   readonly fixed: number;
-  /** one row's height ('+ n more' as much) */
+  /** one row's height */
   readonly row: number;
   /** the items waiting */
   readonly items: number;
 }
 
 /**
- * How many item rows the folded block shows: STRIP_ROWS, fewer (3 → 2 → 1) while it and the
- * composer, with the '+ n more' row when one is left out, would leave the thread less than THREAD_MIN
- * of the window; never 0, never a scroll inside the block (designer m_26234). Pure.
+ * How many rows tall the folded block's box is, the tallest that leaves the thread THREAD_MIN of the
+ * window: every item when they fit in BLOCK_ROWS, else 4.5, 3.5, 2.5, 1.5 (the last row cut in half,
+ * the cue that more scroll under it), then one whole row, never a lone half (designer m_26234,
+ * m_66505). Pure.
  */
 export function fitRows(f: Fit): number {
-  for (let r = STRIP_ROWS; r > 1; r--) {
-    const lines = Math.min(r, f.items) + (f.items > r ? 1 : 0);
-    if (f.win - (f.fixed + lines * f.row) >= THREAD_MIN * f.win) return r;
-  }
-  return 1;
+  if (f.items <= 1) return f.items;
+  const whole = f.items <= BLOCK_ROWS ? [f.items] : [];
+  const cut = Array.from({ length: BLOCK_ROWS - 1 }, (_, i) => BLOCK_ROWS - i - 0.5).filter((l) => l < f.items);
+  const fits = (lines: number) => f.win - (f.fixed + lines * f.row) >= THREAD_MIN * f.win;
+  return [...whole, ...cut].find(fits) ?? 1;
+}
+
+export interface InBox {
+  /** the box's scrollTop and its visible height */
+  readonly scrollTop: number;
+  readonly view: number;
+  /** the item's top in the box's content and its height */
+  readonly top: number;
+  readonly height: number;
+}
+
+/**
+ * The box's scrollTop that shows the item, moved as little as it can (nearest): the same when it is
+ * in view, its top at the box's top when it is above, its bottom at the box's bottom when it is under
+ * (a card taller than the box: its top). Never the page's scroll (scrollIntoView moves every scrolling
+ * ancestor, the thread's too). Pure.
+ */
+export function scrollToShow(b: InBox): number {
+  if (b.top < b.scrollTop || b.height > b.view) return b.top;
+  if (b.top + b.height > b.scrollTop + b.view) return b.top + b.height - b.view;
+  return b.scrollTop;
 }
 
 export interface CtrlDigit {

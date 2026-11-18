@@ -65,6 +65,30 @@ const mount = (here: Here = { project: P, agent: 'perf' }, events: typeof core_e
   return { sent, hub, told };
 };
 
+/** happy-dom lays nothing out: each item of the block's box is a ROW-px row at its place, the box VIEW px tall (4.5 rows). */
+const ROW = 28;
+const VIEW = 4.5 * ROW;
+const fakeLayout = (): (() => void) => {
+  const inBox = (el: HTMLElement): { at: number } | null => {
+    const box = el.parentElement;
+    return box?.classList.contains('strip-rows') === true ? { at: Array.from(box.children).indexOf(el) } : null;
+  };
+  const spies = [
+    vi.spyOn(HTMLElement.prototype, 'offsetTop', 'get').mockImplementation(function (this: HTMLElement) {
+      return (inBox(this)?.at ?? 0) * ROW;
+    }),
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      return inBox(this) === null ? 0 : ROW;
+    }),
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains('strip-rows') ? VIEW : 0;
+    }),
+  ];
+  return () => {
+    for (const s of spies) s.mockRestore();
+  };
+};
+
 describe('the inbox block (b2)', () => {
   it("folded: 'inbox · 2 waiting', a line per item in the inbox's order, ⌃1–2 open; nothing is told", () => {
     const { told } = mount();
@@ -77,10 +101,12 @@ describe('the inbox block (b2)', () => {
     expect(told.filter((a) => a !== null)).toEqual([]);
   });
 
-  it("inbox-stack: 3 items stacked as the TUI's rows (n, sign, who · first line, its note, age: acme's own view leaves the project out), then '+ N more · ? who · words'", () => {
+  it("inbox-stack: 3 items stacked as the TUI's rows (n, sign, who · first line, its note, age: acme's own view leaves the project out), in one scroll box, no '+ N more'", () => {
     mount({ project: P, agent: 'perf' }, withCards(5, { 9: { note: 'perf heard from main since' }, 12: { kind: 'approval', approval: true, question: 'npm publish\n--tag next\n\nto ship 2.5.0' }, 13: { note: 'not in the more line' } }));
-    expect(screen.getByTestId('inbox.block.row.3')).toBeTruthy();
-    expect(screen.queryByTestId('inbox.block.row.4')).toBeNull();
+    // option A (designer m_66505): the box holds the whole list, it scrolls in place
+    const box = screen.getByTestId('inbox.block.rows');
+    expect(Array.from(box.querySelectorAll('.strip-line > [data-testid^="inbox.block.row."]')).map((r) => r.getAttribute('data-testid'))).toEqual([1, 2, 3, 4, 5].map((n) => `inbox.block.row.${String(n)}`));
+    expect(screen.queryByTestId('inbox.block.more')).toBeNull();
     const text = (n: number) => screen.getByTestId(`inbox.block.row.${String(n)}`).textContent;
     // the age alone at the row's end: no '#n' id in the UI (designer m_43892)
     // the sign is its line icon, never a text glyph (ui-review m_43949): '?' ask for anything that
@@ -92,14 +118,11 @@ describe('the inbox block (b2)', () => {
     expect(document.querySelector('.b-rowmark[data-icon="alert"]')).toBeNull();
     // an approval's command: '$ ', its first line, how many lines it has (card_draw.rs box_row)
     expect(text(3)).toBe('3perf$ npm publish · 2 lines1 min');
-    // '+ 2 more · ? perf · which port 13?' (more_row): the first of the hidden ones, its note left to its row
-    // its '?' is the ask line icon, in the catalog's words (ui-review m_43978)
-    expect(screen.getByTestId('inbox.block.more').textContent).toBe('+ 2 more · perf · which port 13?');
-    expect(screen.getByTestId('inbox.block.more').querySelector('.b-rowmark')?.getAttribute('data-icon')).toBe('ask');
-    fireEvent.click(screen.getByTestId('inbox.block.more'));
-    expect(screen.getByTestId('inbox.block.open.4')).toBeTruthy();
-    // open further down: rows 1-3 stay, the open item where its number puts it, the last one folds
-    expect(screen.getByTestId('inbox.block.more').textContent).toBe('+ 1 more · perf · which port 14?');
+    expect(text(5)).toBe('5perfwhich port 14?1 min');
+    // an item opens in place in the box, the rows around it stay
+    fireEvent.click(screen.getByTestId('inbox.block.row.4'));
+    expect(box.querySelector('[data-testid="inbox.block.open.4"]')).toBeTruthy();
+    expect(screen.getByTestId('inbox.block.row.5')).toBeTruthy();
   });
 
   it("esc on the heard line undoes the heard answer, nothing sent, and the card stays open (it never closes it first)", () => {
@@ -151,18 +174,67 @@ describe('the inbox block (b2)', () => {
     expect(told.at(-1)).toBeNull();
   });
 
-  it("'+ N more' walks on past the open item to the last, then wraps (never back and forth between two)", () => {
-    mount({ project: P, agent: 'perf' }, withCards(6));
-    expect(screen.getByTestId('inbox.block.more').textContent).toContain('+ 3 more');
-    const openN = () => screen.getByTestId('inbox.block').querySelector('[data-testid^="inbox.block.open."]')?.getAttribute('data-testid');
-    fireEvent.click(screen.getByTestId('inbox.block.more'));
-    expect(openN()).toBe('inbox.block.open.4');
-    fireEvent.click(screen.getByTestId('inbox.block.more'));
-    expect(openN()).toBe('inbox.block.open.5');
-    fireEvent.click(screen.getByTestId('inbox.block.more'));
-    expect(openN()).toBe('inbox.block.open.6');
-    fireEvent.click(screen.getByTestId('inbox.block.more'));
-    expect(openN()).toBe('inbox.block.open.4');
+  it('12 items: rows 1-9 keep their number and ⌃n, rows 10+ have none and open by a click; the open item is scrolled into view', () => {
+    const undo = fakeLayout();
+    try {
+      mount({ project: P, agent: 'perf' }, withCards(12));
+      const box = screen.getByTestId('inbox.block.rows');
+      const num = (n: number) => screen.getByTestId(`inbox.block.row.${String(n)}`).querySelector('.strip-n')?.textContent;
+      expect([num(1), num(9), num(10), num(12)]).toEqual(['1', '9', '', '']);
+      expect(screen.getByTestId('inbox.block.keys').textContent).toContain('⌃1–9');
+      const openN = () => screen.getByTestId('inbox.block').querySelector('[data-testid^="inbox.block.open."]')?.getAttribute('data-testid');
+      // ⌃8: row 8 opens, the box scrolls as little as it can to show it (its bottom at the box's bottom)
+      fireEvent.keyDown(window, { key: '8', code: 'Digit8', ctrlKey: true });
+      expect(openN()).toBe('inbox.block.open.8');
+      expect(box.scrollTop).toBe(7 * ROW + ROW - VIEW);
+      // ↓ walks to row 9, then 10, each scrolled into view
+      fireEvent.keyDown(window, { key: 'ArrowDown' });
+      fireEvent.keyDown(window, { key: 'ArrowDown' });
+      expect(openN()).toBe('inbox.block.open.10');
+      expect(box.scrollTop).toBe(9 * ROW + ROW - VIEW);
+      // ⌃1: back up to the top
+      fireEvent.keyDown(window, { key: '1', code: 'Digit1', ctrlKey: true });
+      expect(box.scrollTop).toBe(0);
+      // row 11 opens by a click
+      fireEvent.keyDown(window, { key: 'Escape' });
+      fireEvent.click(screen.getByTestId('inbox.block.row.11'));
+      expect(openN()).toBe('inbox.block.open.11');
+    } finally {
+      undo();
+    }
+  });
+
+  it('a new item never moves the row under the pointer: the box scrolls by what came above it', () => {
+    const undo = fakeLayout();
+    try {
+      const sent: CoreCmd[] = [];
+      const port: CorePort = { send: (c) => sent.push(c), onEvent: () => () => undefined, onState: () => () => undefined, state: () => Promise.resolve('up') };
+      const store = new Store(port);
+      replay(store, withCards(8));
+      render(
+        <StoreProvider store={store}>
+          <RouterContext value={createRouter({ screen: 'thread', project: P, agent: 'perf' })}>
+            <InboxBlock here={{ project: P, agent: 'perf' }} onAnswer={() => undefined} now={NOW} />
+          </RouterContext>
+        </StoreProvider>,
+      );
+      const box = screen.getByTestId('inbox.block.rows');
+      box.scrollTop = 56;
+      // the pointer on row 4 (which port 13?)
+      fireEvent.pointerMove(screen.getByTestId('inbox.block.row.4'));
+      const ids = (evs: typeof core_ev) => evs.flatMap((e) => (e.ev === 'projects' ? e.projects.flatMap((r) => (r.cards ?? []).map((c) => c.id)) : []));
+      const before = new Set(ids(withCards(8)));
+      const projects = withCards(10).filter((e) => e.ev === 'projects').at(-1);
+      if (projects?.ev !== 'projects') throw new Error('no projects event');
+      // two new items that rank first (what blocks an agent most): above every row
+      act(() => {
+        store.apply({ ...projects, projects: projects.projects.map((r) => ({ ...r, cards: r.cards?.map((c) => (before.has(c.id) ? c : { ...c, rank: -1 })) })) });
+      });
+      expect(screen.getByTestId('inbox.block.row.6').textContent).toContain('which port 13?');
+      expect(box.scrollTop).toBe(56 + 2 * ROW);
+    } finally {
+      undo();
+    }
   });
 
   it('an approval: its options decide, or his free text refuses it; the composer says what it waits for', () => {

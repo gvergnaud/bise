@@ -174,7 +174,8 @@ batch	line	test	file:fn broken	the break	red?	after revert
 5	inbox/keys	apps/desktop src/inbox/model.test.ts + Block.test.tsx › ↑↓ walk the items	src/inbox/model.ts:step	↑↓ move items with words in the field	red	green again
 5	inbox/approvals	apps/desktop src/inbox/model.test.ts + Block.test.tsx › an approval is never answered by his words	src/inbox/model.ts:takesWords	words answer an approval	red	green again
 5	inbox/approvals-cmd-i	apps/desktop src/inbox/model.test.ts › the approval first, then the rank-1 items	src/inbox/order.ts:sortCards	ignores the hub's rank	red	green again
-5	inbox/block-views	apps/desktop src/inbox/Block.test.tsx › inbox-stack: 3 items stacked, then '+ N more'	src/inbox/stripRows.ts:STRIP_ROWS	3 -> 2	red	green again
+5	inbox/block-views	apps/desktop src/inbox/stripRows.test.ts › the box is up to 5 rows tall, the 5th cut in half when more scroll under it	src/inbox/stripRows.ts:BLOCK_ROWS	5 -> 4	red	green again
+5	inbox/block-views	apps/desktop src/inbox/Block.test.tsx › a new item never moves the row under the pointer	src/inbox/Block.tsx:InboxBlock	the hovered row's scrollTop shift times 0	red	green again
 5	inbox/cmd-i	apps/desktop src/inbox/Block.test.tsx › ⌘I (openInbox) opens the first item	src/inbox/Block.tsx:openInbox	says nothing opened	red	green again
 5	inbox/new-card-mid-answer	apps/desktop src/inbox/Block.test.tsx › a new card never moves it	src/inbox/model.ts:current	always the top item	red	green again
 5	inbox/inbox-open	apps/desktop src/inbox/List.test.tsx › inbox-open: his pick by number wins over his words (new)	src/inbox/List.tsx:pickedOf	drop the pick_n line (green on the old tests)	red	green again

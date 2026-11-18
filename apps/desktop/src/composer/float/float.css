@@ -331,15 +331,30 @@
 }
 /* and past the question's text, the inbox's other lines (its head, the other items) fold away: the
    open question and its options stay (useFit.ts data-inbox-fold) */
-.cmp-float[data-inbox-fold] .inbox-block > :not(.inbox-block-open) {
+.cmp-float[data-inbox-fold] .inbox-block > :not(.inbox-block-open, .strip-rows),
+.cmp-float[data-inbox-fold] .inbox-block > .strip-rows > :not(.inbox-block-open) {
   display: none;
+}
+/* the box of rows (Block.tsx, his pick A) with an item open: the float's height is its bound, not
+   the box's (its card gives way first, then the other lines fold), so the card is never capped at a
+   height it had cut */
+.cmp-float .inbox-block[data-open] > .strip-rows {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: none !important;
+  display: flex;
+  flex-direction: column;
+}
+.cmp-float .inbox-block > .strip-rows > * {
+  flex: none;
 }
 /* its open item lies flat too (ui-review m_42926): no card's fill, radius or frame in the glass; a
    question that takes his words keeps the 2 px accent rail on its left */
 .cmp-float .inbox-block-open {
   margin: 0;
 }
-.cmp-float .inbox-block > .inbox-block-open {
+.cmp-float .inbox-block > .inbox-block-open,
+.cmp-float .inbox-block > .strip-rows > .inbox-block-open {
   flex: 0 1 auto;
   min-height: 0;
   display: flex;

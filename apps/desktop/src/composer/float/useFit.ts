@@ -25,12 +25,16 @@ function columnItems(el: Element): HTMLElement[] {
  *  lines folded now: the block, the open question's text, the other lines (a folded line counts
  *  the height it had shown, kept on it). */
 function inboxNatural(block: HTMLElement): { block: number; question: number; others: number } {
-  const open = block.querySelector<HTMLElement>(':scope > .inbox-block-open');
+  // the open item sits in the block's box of rows (Block.tsx), or on top of it (a closed card)
+  const box = block.querySelector<HTMLElement>(':scope > .strip-rows');
+  const open = block.querySelector<HTMLElement>(':scope > .inbox-block-open, :scope > .strip-rows > .inbox-block-open');
   const card = open?.querySelector<HTMLElement>('.ic') ?? null;
   const q = card?.querySelector<HTMLElement>('.ic-q') ?? null;
+  // the other lines: the head, and the box's rows when it holds the open item (each folds alone)
+  const parts = [...block.children].flatMap((c) => (c === box && open !== null && box.contains(open) ? [...box.children] : [c]));
   let others = 0;
   let shown = 0;
-  for (const c of block.children) {
+  for (const c of parts) {
     if (!(c instanceof HTMLElement) || c === open) continue;
     if (c.offsetHeight > 0) c.dataset.fitH = String(c.offsetHeight);
     others += px(c.dataset.fitH ?? '0');

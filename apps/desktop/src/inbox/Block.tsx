@@ -3,8 +3,10 @@
 // right above the composer under every screen (amb-win's b1: ThreadScreen; off a thread, the floating composer); in a
 // project's view only that project's items, on bise's view and the inbox screen every project's
 // (scope.ts, his inbox-scope ask; an explicit open of another project's item widens it). Folded it is
-// 'inbox · 3 waiting  ⌃1–3 open', a line per item up to 3 (fewer in a short window), then '+ N more ·
-// ? who · words' (the TUI's box, card_draw.rs); ⌃n, a click, ⌘I (openInbox) or a notification
+// 'inbox · 12 waiting  ⌃1–9 open', then a line per item in a box that scrolls in place (his pick A
+// on page inbox-scroll, designer m_66505): up to 5 rows tall, the 5th cut in half when more scroll
+// under it, fewer in a short window; rows 10+ have no number, a click opens them (the TUI keeps its
+// 3 rows and '+ N more', card_draw.rs); ⌃n, a click, ⌘I (openInbox) or a notification
 // click (openInbox({project, card})) opens that item IN PLACE (the block grows, nothing floats over
 // what he reads): its options, 1-9 pick, ←→ walk them, ⌘⏎ the one the keys are on, ⌘⌫ close, ↑↓ the
 // next item, esc folds. It tells the composer under it what his words do (onAnswer): a question takes
@@ -13,7 +15,7 @@
 // his text as the reason, any other item ('to perf · the merge waits for 1 or 2') steers its agent.
 // A holder may fold it (`fold`, the float over a full-width artifact): its line, or nothing while an
 // item is open (its words still answer it, no key picks), until the holder shows it. Owner: amb-home.
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react';
 import type { Card, ProjectRow } from '@/proto';
 import type { NotifyAuth } from '@/shared/api';
 import { Act, Dot, Kbd, Row, RowMark, tipAttrs, WordCut } from '@/ds';
@@ -33,7 +35,7 @@ import { isUpdate } from '@/shared/update';
 import { askedBiseUpdate } from '@/app/UpdateLine';
 import { freeWords, markOf, pickWaits, takesWords } from './model';
 import { withRefused, type InboxItem } from './listed';
-import { cardKeyOf, fitRows, openOnKey, rowWords, STRIP_KEYS, STRIP_ROWS, stripKey } from './stripRows';
+import { BLOCK_ROWS, cardKeyOf, fitRows, openOnKey, rowWords, scrollToShow, STRIP_KEYS, stripKey } from './stripRows';
 import { ArtWords } from './artWords';
 import { InboxZero, useInboxZero } from './Zero';
 import { pruneCardDrafts } from './drafts';
@@ -250,13 +252,6 @@ export function answerAt(here: Here, home: string): AnswerAt | null {
   return null;
 }
 
-/**
- * Folded, the block is its head and this many item lines, then a '+ N more' line: the TUI's box
- * (card_draw.rs STRIP_ROWS; his inbox-stack ask, back from H10's one line); fewer in a short window
- * (fitRows, designer m_26234).
- */
-export const BLOCK_ROWS = STRIP_ROWS;
-
 const cut = (s: string, max: number): string => {
   const one = s.replace(/\s+/gu, ' ').trim();
   return Array.from(one).length > max ? `${Array.from(one).slice(0, max - 1).join('').trimEnd()}…` : one;
@@ -362,23 +357,6 @@ function SignMark({ c }: { c: Card }): ReactNode {
   if (m === 'ask') return <RowMark icon="ask" tone="accent" label="question" />;
   if (m === 'fail') return <RowMark icon="close" tone="err" label="failed" />;
   return <Dot state={dotOf(c)} />;
-}
-
-/** The last line, the TUI's more_row: '+ 2 more · ? perf · which bench?' (`next`: the first of them),
- *  its sign drawn as the row's line icon, never a text glyph (ui-review m_43978; the TUI keeps its '?'). Pure. */
-export function moreWords(more: number, next: Card): ReactNode {
-  const w = rowWords(next);
-  const what = w.what === '' ? '' : ` · ${w.cmd ? '$ ' : ''}${w.what}`;
-  // the catalog's words with a slot where the sign goes: the words stay the catalog's, the icon sits in them
-  const slot = '\u{E000}';
-  const [before = '', after = ''] = inbox.more_row({ n: more, first: `${slot}${shownName(w.who)}${what}` }).split(slot);
-  return (
-    <>
-      {before}
-      {markOf(next) !== null && <SignMark c={next} />}
-      {after}
-    </>
-  );
 }
 
 /** A field he is typing in: its keys are his, not the block's. */
@@ -766,26 +744,32 @@ export function InboxBlock({ here, onAnswer, now: pinned, only, rest, fold }: In
     };
   }, []);
 
-  // a short window (designer m_26234): folded, the rows give way 3 → 2 → 1 so the thread keeps
-  // THREAD_MIN of the window; measured on the folded block (the thread list's top, and the block's top
-  // to the window's bottom, its rows left out), again when the window or what holds the block (the
-  // composer growing) changes size.
-  // An item opened keeps the count it had folded. Never a scroll inside the block.
+  // the box of rows (his pick A, designer m_66505): every item, up to BLOCK_ROWS rows tall, the last
+  // one cut in half when more scroll under it; in a short window fewer (designer m_26234) so the
+  // thread keeps THREAD_MIN of the window, measured on the folded block (the thread list's top, and
+  // the block's top to the window's bottom, its box left out), again when the window or what holds
+  // the block (the composer growing) changes size. An item opened keeps the rows it had folded, the
+  // box grows by its card.
   const section = useRef<HTMLElement | null>(null);
+  const box = useRef<HTMLDivElement | null>(null);
+  // the box's folded height in px (none: not measured yet, a test without layout)
+  const [boxH, setBoxH] = useState<number | null>(null);
   const [rowsFit, setRowsFit] = useState(BLOCK_ROWS);
   const folded = openCard === undefined;
   const items = list.length;
   useLayoutEffect(() => {
     const el = section.current;
-    if (el === null || !folded) return;
+    const rowsBox = box.current;
+    if (el === null || rowsBox === null || !folded) return;
     const measure = () => {
-      const rows = el.querySelectorAll(':scope > .b-row');
-      const row = rows[0]?.getBoundingClientRect().height ?? 0;
+      const row = rowsBox.querySelector(':scope > .strip-line')?.getBoundingClientRect().height ?? 0;
       if (row <= 0) return;
       const win = window.innerHeight;
       // above the thread: the top bar, the job line (none outside a thread)
       const above = document.querySelector('[data-testid="thread.list"]')?.getBoundingClientRect().top ?? 0;
-      setRowsFit(fitRows({ win, fixed: above + win - el.getBoundingClientRect().top - rows.length * row, row, items }));
+      const lines = fitRows({ win, fixed: above + win - el.getBoundingClientRect().top - rowsBox.getBoundingClientRect().height, row, items });
+      setRowsFit(lines);
+      setBoxH(lines * row);
     };
     measure();
     const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
@@ -796,6 +780,51 @@ export function InboxBlock({ here, onAnswer, now: pinned, only, rest, fold }: In
       window.removeEventListener('resize', measure);
     };
   }, [folded, items]);
+  // the open card's height, its margins in: the box grows by it
+  const [openH, setOpenH] = useState(0);
+  useLayoutEffect(() => {
+    const el = box.current?.querySelector<HTMLElement>(':scope > .inbox-block-open') ?? null;
+    if (el === null) {
+      setOpenH(0);
+      return;
+    }
+    const measure = () => {
+      const cs = getComputedStyle(el);
+      setOpenH(el.offsetHeight + (parseFloat(cs.marginTop) || 0) + (parseFloat(cs.marginBottom) || 0));
+    };
+    measure();
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    ro?.observe(el);
+    return () => {
+      ro?.disconnect();
+    };
+  }, [open]);
+  // a new item never moves the row under his pointer (designer m_66505): when the list changes, the
+  // box scrolls by what moved above that row; the box's own anchoring is off (inbox.css), never twice
+  const hover = useRef<{ key: string; top: number } | null>(null);
+  const order = list.map(cardKey).join(' ');
+  useLayoutEffect(() => {
+    const at = hover.current;
+    const b = box.current;
+    if (at === null || b === null) return;
+    const el = b.querySelector<HTMLElement>(`:scope > [data-key="${CSS.escape(at.key)}"]`);
+    if (el === null) return;
+    b.scrollTop += el.offsetTop - at.top;
+    hover.current = { key: at.key, top: el.offsetTop };
+  }, [order]);
+  const onHover = (e: PointerEvent) => {
+    const el = e.target instanceof Element ? e.target.closest<HTMLElement>('.strip-rows > [data-key]') : null;
+    const key = el?.dataset.key;
+    hover.current = el === null || key === undefined ? null : { key, top: el.offsetTop };
+  };
+  // the open item in view, the box scrolled as little as it can (⌃n, ↑↓, a click, ⌘I, a notification);
+  // only the box: scrollIntoView would move every scrolling ancestor too
+  useLayoutEffect(() => {
+    const b = box.current;
+    const el = b?.querySelector<HTMLElement>(':scope > .inbox-block-open') ?? null;
+    if (b === null || el === null) return;
+    b.scrollTop = scrollToShow({ scrollTop: b.scrollTop, view: b.clientHeight, top: el.offsetTop, height: el.offsetHeight });
+  }, [open, openH]);
 
   if (list.length === 0 && !isClosed) return zero ? <InboxZero /> : null;
   // folded by its holder with an item open: its head says it ('↳ answering …'), nothing here
@@ -831,12 +860,101 @@ export function InboxBlock({ here, onAnswer, now: pinned, only, rest, fold }: In
       </section>
     );
   }
-  const openAt = openCard === undefined ? -1 : list.indexOf(openCard);
-  // the closed card on top, open; the rows under it keep their ⌃N numbers
-  const shown = [...(isClosed ? [openCard] : []), ...list.filter((_, i) => i < rowsFit || i === openAt)];
-  const more = list.length - shown.length + (isClosed ? 1 : 0);
-  // '+ N more' walks on past the open item, then wraps: never back and forth between two
-  const next = list.find((_, i) => i >= rowsFit && i > openAt) ?? list.find((_, i) => i >= rowsFit && i !== openAt);
+  // a line per item, the open one its card, in place
+  const item = (c: Card): ReactNode => {
+        const n = list.indexOf(c) + 1;
+        const row = names.get(c.project);
+        if (c === openCard) {
+          return (
+            // the card his words answer wears the composer's pink as a 2 px rail (composer-target A)
+            <div key={cardKey(c)} data-key={cardKey(c)} className="inbox-block-open" data-testid={`inbox.block.open.${String(n)}`} data-answering={(told?.answer != null && told.closed !== true) || undefined}>
+              <InboxCard
+                card={c}
+                // the update card is bise's own (update-dot), wherever it came from: no project
+                {...(isUpdate(c) ? { home: true } : { project: projectWord(row, c.project) })}
+                now={now}
+                on={on}
+                full={whole === cardKey(c)}
+                {...(heard !== null && heard.project === c.project && heard.card === c.id
+                  ? {
+                      note: (
+                        <span className="inbox-heard" data-testid="inbox.heard">
+                          {inbox.heard_undo({ line: heard.line })}
+                        </span>
+                      ),
+                    }
+                  : {})}
+                acts={{
+                  pick: (o) => {
+                    pick(c, o);
+                  },
+                  close: () => {
+                    close(c);
+                  },
+                  later: () => {
+                    openTo(null);
+                  },
+                  ...(aboutOf(c) != null ? { openPage: () => { openPage(c); } } : {}),
+                }}
+                testId={isNotify(c) ? 'inbox.block.notify' : `inbox.block.card.${cardKey(c)}`}
+                {...(c === closed
+                  ? {
+                      closed: true,
+                      keys: (
+                        <span data-testid="inbox.block.closed.keys">
+                          <Kbd>⏎</Kbd> {inbox.key_send_message} <Kbd>esc</Kbd> {inbox.key_back}
+                        </span>
+                      ),
+                    }
+                  : {})}
+              />
+            </div>
+          );
+        }
+        const w = rowWords(c);
+        return (
+          // raw-controls (designer m_18343): the ds's Row as a button, never a bare button; its ⋯ (Move
+          // to task…, F9 tasks-ux m_65591) sits beside the row, never in it (a button in a button)
+          <div className="strip-line" key={cardKey(c)} data-key={cardKey(c)}>
+          <Row
+            lead={
+              <>
+                {/* rows 10+ have no ⌃n: the slot stays, empty, the signs aligned */}
+                <span className="strip-n">{n <= STRIP_KEYS ? n : ''}</span>
+                <SignMark c={c} />
+              </>
+            }
+            name={
+              <>
+                <span className="strip-who">{shownName(w.who)}</span>
+                {w.what !== '' && (
+                  <span className="strip-what">
+                    {w.cmd && <span className="strip-cmd">$ </span>}
+                    <ArtWords text={w.what} project={c.project} testId={`inbox.block.row.${String(n)}`} />
+                    {w.note !== '' && <span className="strip-note">{` ${w.note}`}</span>}
+                  </span>
+                )}
+                {!isNotify(c) && <RefusedMark card={c} />}
+                {/* the task it serves (WorkRow.cards) */}
+                <TaskChipsOf project={c.project} of={{ card: c.id }} testId={`inbox.card.${c.project}.${String(c.id)}.task`} />
+              </>
+            }
+            end={
+              <>
+                {/* the age alone: no ids in the UI (designer m_43892) */}
+                {scoped || isUpdate(c) ? age(now - c.since_ms) : `${projectWord(row, c.project)} · ${age(now - c.since_ms)}`}
+              </>
+            }
+            onClick={() => {
+              openTo(cardKey(c));
+            }}
+            testId={`inbox.block.row.${String(n)}`}
+          />
+          {/* after the age, its space kept (an update has no task to move: an empty slot) */}
+          {isUpdate(c) ? <span className="tk-more-slot" /> : <CardMoveMore project={c.project} card={c.id} title={c.question} testId={`inbox.block.row.${String(n)}.more`} />}
+          </div>
+        );
+  };
   const keys = list.length > 1 ? `⌃1–${String(Math.min(list.length, STRIP_KEYS))}` : '⌃1';
   return (
     <section ref={section} className="inbox-strip inbox-block" aria-label={inbox.head} data-testid="inbox.block" data-rows={rowsFit} data-open={openCard !== undefined || undefined} data-count={list.length} data-ctrl={ctrl || undefined}>
@@ -891,112 +1009,20 @@ export function InboxBlock({ here, onAnswer, now: pinned, only, rest, fold }: In
           )}
         </span>
       </div>
-      {shown.map((c) => {
-        const n = list.indexOf(c) + 1;
-        const row = names.get(c.project);
-        if (c === openCard) {
-          return (
-            // the card his words answer wears the composer's pink as a 2 px rail (composer-target A)
-            <div key={cardKey(c)} className="inbox-block-open" data-testid={`inbox.block.open.${String(n)}`} data-answering={(told?.answer != null && told.closed !== true) || undefined}>
-              <InboxCard
-                card={c}
-                // the update card is bise's own (update-dot), wherever it came from: no project
-                {...(isUpdate(c) ? { home: true } : { project: projectWord(row, c.project) })}
-                now={now}
-                on={on}
-                full={whole === cardKey(c)}
-                {...(heard !== null && heard.project === c.project && heard.card === c.id
-                  ? {
-                      note: (
-                        <span className="inbox-heard" data-testid="inbox.heard">
-                          {inbox.heard_undo({ line: heard.line })}
-                        </span>
-                      ),
-                    }
-                  : {})}
-                acts={{
-                  pick: (o) => {
-                    pick(c, o);
-                  },
-                  close: () => {
-                    close(c);
-                  },
-                  later: () => {
-                    openTo(null);
-                  },
-                  ...(aboutOf(c) != null ? { openPage: () => { openPage(c); } } : {}),
-                }}
-                testId={isNotify(c) ? 'inbox.block.notify' : `inbox.block.card.${cardKey(c)}`}
-                {...(c === closed
-                  ? {
-                      closed: true,
-                      keys: (
-                        <span data-testid="inbox.block.closed.keys">
-                          <Kbd>⏎</Kbd> {inbox.key_send_message} <Kbd>esc</Kbd> {inbox.key_back}
-                        </span>
-                      ),
-                    }
-                  : {})}
-              />
-            </div>
-          );
-        }
-        const w = rowWords(c);
-        return (
-          // raw-controls (designer m_18343): the ds's Row as a button, never a bare button; its ⋯ (Move
-          // to task…, F9 tasks-ux m_65591) sits beside the row, never in it (a button in a button)
-          <div className="strip-line" key={cardKey(c)}>
-          <Row
-            lead={
-              <>
-                <span className="strip-n">{n}</span>
-                <SignMark c={c} />
-              </>
-            }
-            name={
-              <>
-                <span className="strip-who">{shownName(w.who)}</span>
-                {w.what !== '' && (
-                  <span className="strip-what">
-                    {w.cmd && <span className="strip-cmd">$ </span>}
-                    <ArtWords text={w.what} project={c.project} testId={`inbox.block.row.${String(n)}`} />
-                    {w.note !== '' && <span className="strip-note">{` ${w.note}`}</span>}
-                  </span>
-                )}
-                {!isNotify(c) && <RefusedMark card={c} />}
-                {/* the task it serves (WorkRow.cards) */}
-                <TaskChipsOf project={c.project} of={{ card: c.id }} testId={`inbox.card.${c.project}.${String(c.id)}.task`} />
-              </>
-            }
-            end={
-              <>
-                {/* the age alone: no ids in the UI (designer m_43892) */}
-                {scoped || isUpdate(c) ? age(now - c.since_ms) : `${projectWord(row, c.project)} · ${age(now - c.since_ms)}`}
-              </>
-            }
-            onClick={() => {
-              openTo(cardKey(c));
-            }}
-            testId={`inbox.block.row.${String(n)}`}
-          />
-          {/* after the age, its space kept (an update has no task to move: an empty slot) */}
-          {isUpdate(c) ? <span className="tk-more-slot" /> : <CardMoveMore project={c.project} card={c.id} title={c.question} testId={`inbox.block.row.${String(n)}.more`} />}
-          </div>
-        );
-      })}
-      {more > 0 && next !== undefined && (
-        // the TUI's more_row: '+ 2 more · ? perf · which bench?', faint; a click opens the first of
-        // them, past the open item (never back and forth between two)
-        <Row
-          name={<span className="strip-more">{moreWords(more, next)}</span>}
-          onClick={() => {
-            // the walk's keys (↑↓) are the block's: the row never keeps a focus ring after the click
-            if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
-            openTo(cardKey(next));
-          }}
-          testId="inbox.block.more"
-        />
-      )}
+      {/* the closed card on top, open, above the box; the rows under it keep their ⌃N numbers */}
+      {isClosed && item(openCard)}
+      <div
+        ref={box}
+        className="strip-rows"
+        data-testid="inbox.block.rows"
+        {...(boxH === null ? {} : { style: { maxHeight: boxH + openH } })}
+        onPointerMove={onHover}
+        onPointerLeave={() => {
+          hover.current = null;
+        }}
+      >
+        {list.map(item)}
+      </div>
     </section>
   );
 }
