@@ -209,7 +209,7 @@ describe('the inbox block (b2)', () => {
     const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
       const h = this.classList.contains('strip-line') ? ROW : 0;
       const top = this.classList.contains('inbox-block') ? 500 : 0;
-      return { x: 0, y: top, top, left: 0, right: 0, bottom: top + h, width: 0, height: h, toJSON: () => ({}) } as DOMRect;
+      return { x: 0, y: top, top, left: 0, right: 0, bottom: top + h, width: 0, height: h, toJSON: () => ({}) };
     });
     try {
       const store = new Store({ send: () => undefined });
