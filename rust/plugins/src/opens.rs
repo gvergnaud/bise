@@ -218,6 +218,10 @@ fn file_entry(i: usize, v: &Value) -> Result<(Entry, Option<String>), String> {
         let raw = g.as_str().ok_or(format!("{at}.match holds a non-string"))?;
         let key = type_key(raw).ok_or(format!("{at}: {raw:?} is not a glob an app may claim"))?;
         let docs = key.starts_with(DOCUMENTS);
+        // '@' names bise's reserved keys (TEXT_KEY): no glob claims one (architect m_67161)
+        if key.starts_with('@') && !docs {
+            return Err(format!("{at}: {raw:?} is a reserved key, not a glob"));
+        }
         let nested = key.contains('/') && !docs;
         if folder && (docs || !nested) {
             return Err(format!("{at}: a folder rule's {raw:?} must be <folder>/<what it holds>"));

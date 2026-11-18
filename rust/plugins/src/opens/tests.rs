@@ -541,12 +541,14 @@ fn a_text_entry_opens_text_files_after_every_glob() {
             {"match": ["*.ts"], "title": "TypeScript"},
             {"text": true, "title": "Plain text"},
             {"text": true, "match": ["*.x"], "title": "Both"},
-            {"text": "yes", "title": "Not a bool"}]}
+            {"text": "yes", "title": "Not a bool"},
+            {"match": ["@text"], "title": "Claims the reserved key"},
+            {"match": ["@other"], "title": "Any @ key"}]}
     }));
     let (o, d) = parse("code", "srv", &t);
     let o = o.unwrap();
     assert_eq!(o.entries.iter().map(|e| (e.keys[0].as_str(), e.text)).collect::<Vec<_>>(), [("*.ts", false), (TEXT_KEY, true)]);
-    assert_eq!(d.len(), 2, "{d:#?}");
+    assert_eq!(d.len(), 4, "{d:#?}");
     let code = OpenerDecl { entries: o.entries.clone(), ..op("open", "Code", &[]) };
     let list = openers(vec![("code", code), ("docs", op("writer", "Writer", &[("*.md", W, false)]))]);
     let p = |name: &str, text: bool| names(&pick(&Target::file(name).with_text(text), &list, &Picks::new()));
