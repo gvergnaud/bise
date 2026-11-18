@@ -63,6 +63,9 @@ pub struct Resolved {
     /// an artifact's version older than its newest: read only
     /// ([`Binding::older`])
     pub older: bool,
+    /// its version's copy is text (artifacts::Version::text): what an
+    /// opener's text entry matches; a root file: false
+    pub text: bool,
 }
 
 /// The view a handle was minted for: its plugin (the `write` grant is

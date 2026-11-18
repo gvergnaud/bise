@@ -294,6 +294,7 @@ impl Shell {
             Msg::Update(v) => self.update_event(v),
             Msg::Changes { name, v } => self.on_changes(name, v),
             Msg::Serve { id, v, serve, root } => self.on_serve(&id, v, serve, root),
+            Msg::TextFacts(facts) => self.on_text_facts(&facts),
             Msg::RoleLine { dir, key, line } => self.step(Input::RoleLine { dir, key, line }),
             Msg::GuideSeen(s) => self.guide_seen(*s),
             Msg::GuideDone { hash, target, got } => self.guide_done(hash, target, got),

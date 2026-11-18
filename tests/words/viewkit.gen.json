@@ -15,6 +15,18 @@
     "one": null,
     "text": "type to ask about it"
   },
+  "viewkit.code_empty": {
+    "args": [],
+    "one": null,
+    "text": "empty file"
+  },
+  "viewkit.code_plain": {
+    "args": [
+      "size"
+    ],
+    "one": null,
+    "text": "over {size}: shown as plain text"
+  },
   "viewkit.didnt_open": {
     "args": [],
     "one": null,

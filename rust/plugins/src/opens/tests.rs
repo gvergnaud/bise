@@ -172,7 +172,7 @@ fn op(tool: &str, app: &str, entries: &[(&str, OpenRank, bool)]) -> OpenerDecl {
         uri: format!("ui://x/{tool}"),
         app: app.into(),
         app_id: format!("x-{tool}"),
-        entries: entries.iter().map(|(k, r, f)| Entry { keys: vec![k.to_string()], title: format!("{k} file"), rank: *r, folder: *f, icon: None }).collect(),
+        entries: entries.iter().map(|(k, r, f)| Entry { keys: vec![k.to_string()], title: format!("{k} file"), rank: *r, folder: *f, icon: None, text: false }).collect(),
         makes: vec![],
         write: false,
         isolate: Isolate::View,
@@ -209,8 +209,8 @@ use OpenRank::{Default as D, Option as O, Owner as W};
 /// picks) -> (the app, the others in order).
 #[test]
 fn which_app_opens_a_file() {
-    let docs = |p: &str, rel: &str, name: &str| Target { name: name.into(), kind: Kind::File, documents: Some((p.into(), rel.into())) };
-    let folder = |name: &str, holds: &[&str]| Target { name: name.into(), kind: Kind::Folder(holds.iter().map(|s| s.to_string()).collect()), documents: None };
+    let docs = |p: &str, rel: &str, name: &str| Target { name: name.into(), kind: Kind::File, documents: Some((p.into(), rel.into())), text: false };
+    let folder = |name: &str, holds: &[&str]| Target { name: name.into(), kind: Kind::Folder(holds.iter().map(|s| s.to_string()).collect()), documents: None, text: false };
     let tie = || openers(vec![("zeta", op("open", "Zeta", &[("*.fake", D, false)])), ("alpha", op("open", "Alpha", &[("*.fake", D, false)]))]);
     type Case = (&'static str, Target, Openers, Picks, (Option<&'static str>, Vec<&'static str>));
     let cases: Vec<Case> = vec![
@@ -382,20 +382,20 @@ fn the_on_plugins_openers_are_gathered_static_then_servers() {
     // his pick of it
     assert_eq!(n(&pick(&Target::file("a.fake2"), &o, &picked(&[("*.fake2", "fake-opener", "open_fake2")]))).0, Some("fake-opener#open_fake2".into()));
     // a note of fake-opener's documents, a folder holding fake.json
-    let note = Target { name: "n.note".into(), kind: Kind::File, documents: Some(("fake-opener".into(), "n.note".into())) };
+    let note = Target { name: "n.note".into(), kind: Kind::File, documents: Some(("fake-opener".into(), "n.note".into())), text: false };
     assert_eq!(n(&pick(&note, &o, &Picks::new())).0, Some("fake-opener#fake".into()));
-    let folder = Target { name: "box".into(), kind: Kind::Folder(vec!["fake.json".into()]), documents: None };
+    let folder = Target { name: "box".into(), kind: Kind::Folder(vec!["fake.json".into()]), documents: None, text: false };
     assert_eq!(n(&pick(&folder, &o, &Picks::new())).0, Some("fake-opener#fake".into()));
     // a cut list (architect m_62393): a literal name sorting past its last is unknown, never
     // absent (the rule matches, the open finds out); one sorting before it would be listed
-    let cut = |names: &[&str]| Target { name: "box".into(), kind: Kind::FolderCut(names.iter().map(|s| s.to_string()).collect()), documents: None };
+    let cut = |names: &[&str]| Target { name: "box".into(), kind: Kind::FolderCut(names.iter().map(|s| s.to_string()).collect()), documents: None, text: false };
     let unknown = n(&pick(&cut(&["a.css", "b.js"]), &o, &Picks::new()));
     assert!(unknown.0.iter().chain(&unknown.1).any(|x| x == "fake-opener#fake"), "fake.json past b.js: unknown, a candidate: {unknown:?}");
     // a rule matching a listed name goes before one whose name is unknown (index.html past fake.json)
     assert_eq!(n(&pick(&cut(&["a.css", "fake.json"]), &o, &Picks::new())).0, Some("fake-opener#fake".into()), "a listed name before an unknown one");
     assert_eq!(n(&pick(&cut(&["a.css", "zz.js"]), &o, &Picks::new())).0, None, "fake.json before zz.js and not listed: absent");
     assert_eq!(n(&pick(&cut(&["a.css", "fake.json", "zz.js"]), &o, &Picks::new())).0, Some("fake-opener#fake".into()), "listed");
-    assert_eq!(n(&pick(&Target { name: "box".into(), kind: Kind::Folder(vec!["a.css".into()]), documents: None }, &o, &Picks::new())).0, None, "a whole list: absent");
+    assert_eq!(n(&pick(&Target { name: "box".into(), kind: Kind::Folder(vec!["a.css".into()]), documents: None, text: false }, &o, &Picks::new())).0, None, "a whole list: absent");
     // fake-claim off: its types fall to the next candidate
     let (o, _) = Openers::gather(&fixtures(&["fake-claim"]), &servers);
     assert_eq!(n(&pick(&Target::file("a.fake"), &o, &Picks::new())), (Some("fake-opener#fake".into()), vec![]));
@@ -528,4 +528,35 @@ fn a_rows_icon_is_its_types_own_else_its_apps() {
     assert_eq!(icon(&list, "a.raw").as_deref(), Some("/icon/media"));
     list.plugins[0].icon = None;
     assert_eq!(icon(&list, "a.raw"), None, "no icon of its own, none for its app: the window's");
+}
+
+/// A text entry (`{"text": true}`, code-view m_66499): parsed with its one
+/// key and no globs; it matches a file only on its text fact, never a
+/// folder, and after every glob, so an owner of `*.md` keeps its files.
+#[test]
+fn a_text_entry_opens_text_files_after_every_glob() {
+    let t = tool("open", json!({
+        "ui": {"resourceUri": "ui://code/code"},
+        "dev.bise/ui": {"files": [
+            {"match": ["*.ts"], "title": "TypeScript"},
+            {"text": true, "title": "Plain text"},
+            {"text": true, "match": ["*.x"], "title": "Both"},
+            {"text": "yes", "title": "Not a bool"}]}
+    }));
+    let (o, d) = parse("code", "srv", &t);
+    let o = o.unwrap();
+    assert_eq!(o.entries.iter().map(|e| (e.keys[0].as_str(), e.text)).collect::<Vec<_>>(), [("*.ts", false), (TEXT_KEY, true)]);
+    assert_eq!(d.len(), 2, "{d:#?}");
+    let code = OpenerDecl { entries: o.entries.clone(), ..op("open", "Code", &[]) };
+    let list = openers(vec![("code", code), ("docs", op("writer", "Writer", &[("*.md", W, false)]))]);
+    let p = |name: &str, text: bool| names(&pick(&Target::file(name).with_text(text), &list, &Picks::new()));
+    assert_eq!(p("notes.txt", true).0.as_deref(), Some("code#open"), "a text file: Code");
+    assert_eq!(p("blob.bin", false).0, None, "not text: no app, the Finder");
+    assert_eq!(p("a.ts", false).0.as_deref(), Some("code#open"), "its glob, fact or not");
+    assert_eq!(p("plan.md", true), (Some("docs#writer".into()), vec!["code#open".into()]), "Writer keeps markdown; Code is listed");
+    let folder = Target { name: "site".into(), kind: Kind::Folder(vec!["a.txt".into()]), documents: None, text: true };
+    assert_eq!(names(&pick(&folder, &list, &Picks::new())).0, None, "never a folder");
+    // his pick of Code for any text file is kept under its one key
+    let picks = picked(&[(TEXT_KEY, "code", "open")]);
+    assert_eq!(pick(&Target::file("notes.txt").with_text(true), &list, &picks).opener.map(|o| o.type_key).as_deref(), Some(TEXT_KEY));
 }

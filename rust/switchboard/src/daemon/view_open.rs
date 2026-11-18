@@ -59,7 +59,7 @@ fn target_of(r: &Resolved) -> Target {
         FileKind::Folder { names } if names.more => Kind::FolderCut(names.names.clone()),
         FileKind::Folder { names } => Kind::Folder(names.names.clone()),
     };
-    Target { name: r.name.clone(), kind, documents: r.documents_of.clone().map(|p| (p, r.name.clone())) }
+    Target { name: r.name.clone(), kind, documents: r.documents_of.clone().map(|p| (p, r.name.clone())), text: r.text }
 }
 
 /// The frame of version `version` (None: the newest) of the artifact

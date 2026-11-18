@@ -627,7 +627,8 @@ impl Table {
         };
         let size = if kind == FileKind::File { e.size } else { 0 };
         let row = FolderRow { id: id.to_string(), name: name.clone(), kind, size, mtime: e.mtime_ms, artifact, names, ..Default::default() };
-        (row, Target { name, kind: matched, documents })
+        // a ~/bise file has no text fact (only an artifact's version records one)
+        (row, Target { name, kind: matched, documents, text: false })
     }
 
     /// After an apply or a mint: the table saved and the next event, or

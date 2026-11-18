@@ -36,7 +36,7 @@ pub fn resolve_artifact(store: &Store, id: &str, version: Option<u64>) -> Result
     // a folder: its first-level names, the one rule a version keeps them by (artifacts::folder_names)
     let kind = if at.path.is_dir() { Kind::Folder { names: crate::artifacts::names_of(&at.path) } } else { Kind::File };
     let older = m.current().is_some_and(|c| c.v != v.v);
-    Ok(Resolved { target, name, kind, size: at.size, documents_of: None, older })
+    Ok(Resolved { target, name, kind, size: at.size, documents_of: None, older, text: v.text == Some(true) })
 }
 
 /// What `view/open` opens, resolved (off the loop): an artifact
@@ -75,7 +75,7 @@ pub fn resolve_entry(store: &Store, root: &Path, path: &Path, links: &std::colle
         _ => None,
     };
     let size = if meta.is_file() { meta.len() } else { 0 };
-    Ok(Resolved { target: FileTarget::RootFile { path: real }, name, kind, size, documents_of, older: false })
+    Ok(Resolved { target: FileTarget::RootFile { path: real }, name, kind, size, documents_of, older: false, text: false })
 }
 
 /// Whether the view of `b` may write its file now: its `write` grant

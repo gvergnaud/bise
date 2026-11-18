@@ -109,6 +109,39 @@ pub struct Version {
     /// Meta's works instead).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub works: Option<Vec<String>>,
+    /// Its copy is text ([`is_text`] of its first [`TEXT_HEAD`] bytes),
+    /// recorded once where the copy is made (code-view, architect
+    /// m_66499): what an opener's text entry matches
+    /// (bend_plugins::opens::TEXT_KEY). None: unknown (a folder, a link,
+    /// no copy, or a version from before it, found once by
+    /// [`Store::text_unknown`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<bool>,
+}
+
+/// How many first bytes of a copy [`is_text`] reads.
+pub const TEXT_HEAD: usize = 8 * 1024;
+
+/// Whether a file's first bytes are text: no NUL, and UTF-8 (a character
+/// cut by the end of the head counts as whole). Empty: text. Pure.
+pub fn is_text(head: &[u8]) -> bool {
+    if head.contains(&0) {
+        return false;
+    }
+    match std::str::from_utf8(head) {
+        Ok(_) => true,
+        // the head's end cut a character: valid up to it, and at most 3 bytes left
+        Err(e) => e.error_len().is_none() && head.len() - e.valid_up_to() < 4,
+    }
+}
+
+/// [`is_text`] of a file's head; None: not a file, or unreadable.
+pub fn text_of(path: &Path) -> Option<bool> {
+    use std::io::Read;
+    let f = std::fs::File::open(path).ok().filter(|f| f.metadata().is_ok_and(|m| m.is_file()))?;
+    let mut head = Vec::with_capacity(TEXT_HEAD);
+    f.take(TEXT_HEAD as u64).read_to_end(&mut head).ok()?;
+    Some(is_text(&head))
 }
 
 impl Version {
@@ -887,6 +920,8 @@ impl Store {
             }
             _ => (None, None),
         };
+        // its copy's text fact, once, here at the door (a folder: none)
+        let text = copy.as_ref().and_then(|rel| text_of(&self.dir().join(&meta.id).join(rel)));
         let rev = |revs: &[Rev]| Rev { rev: artifacts_turns::next_rev(revs), at_ms: now, changed: a.changed.clone() };
         match meta.versions.last_mut() {
             Some(last) if same => {
@@ -897,12 +932,12 @@ impl Store {
                 let r = rev(&last.revs);
                 last.revs.push(r);
                 // the same version: its works stay the ones it was made under
-                *last = Version { at_ms: now, target, copy, no_copy, sig, sitting: a.sitting.clone().or(last.sitting.clone()), names, ..last.clone() };
+                *last = Version { at_ms: now, target, copy, no_copy, sig, sitting: a.sitting.clone().or(last.sitting.clone()), names, text, ..last.clone() };
             }
             _ => {
                 let revs = vec![rev(&[])];
                 let works = Some(a.works.clone());
-                meta.versions.push(Version { v, at_ms: now, target, copy, no_copy, sig, turn: a.turn.clone(), sitting: a.sitting.clone(), revs, serve: None, names, works });
+                meta.versions.push(Version { v, at_ms: now, target, copy, no_copy, sig, turn: a.turn.clone(), sitting: a.sitting.clone(), revs, serve: None, names, works, text });
             }
         }
         // tasks: each new version adds its turn's works (none once he moved it)
@@ -1110,6 +1145,8 @@ impl Store {
             // a folder's first-level names, what A2 matches (app_openers::target_of)
             "names": names_or_read(&cur).names,
             "names_more": cur.names.more,
+            // its copy is text (Version::text): what a text opener matches (app_openers::target_of)
+            "text": cur.text,
             // an expired one's copy is deleted: none to frame (artifacts_retention)
             "copy": cur.copy.as_ref().filter(|_| m.expired_ms.is_none()).map(|c| dir.join(c).to_string_lossy().to_string()),
             "no_copy": if m.expired_ms.is_some() { Some("expired".to_string()) } else { cur.no_copy.clone() },
@@ -1172,6 +1209,43 @@ impl Store {
         }
         self.save(&meta)?;
         Ok(true)
+    }
+
+    /// The text facts of the stored versions that have a copy and none
+    /// yet (a store from before [`Version::text`]): `(id, v, text)`, each
+    /// copy's head read once. Disk work: off the loop; the loop writes
+    /// them with [`Store::set_text`]. A folder's copy has none.
+    pub fn text_unknown(&self) -> Vec<(String, u64, bool)> {
+        self.stored()
+            .iter()
+            .flat_map(|m| {
+                m.versions.iter().filter(|v| v.text.is_none()).filter_map(|v| {
+                    let copy = v.copy.as_ref()?;
+                    text_of(&self.dir().join(&m.id).join(copy)).map(|t| (m.id.clone(), v.v, t))
+                })
+            })
+            .collect()
+    }
+
+    /// The text facts [`Store::text_unknown`] found, each on its version
+    /// when it has none yet (an add since may have set it). Ok(true):
+    /// something written.
+    pub fn set_text(&self, facts: &[(String, u64, bool)]) -> Result<bool, String> {
+        let mut wrote = false;
+        for mut meta in self.stored() {
+            let mut changed = false;
+            for ver in meta.versions.iter_mut().filter(|v| v.text.is_none()) {
+                if let Some((_, _, t)) = facts.iter().find(|(id, n, _)| *id == meta.id && *n == ver.v) {
+                    ver.text = Some(*t);
+                    changed = true;
+                }
+            }
+            if changed {
+                self.save(&meta)?;
+                wrote = true;
+            }
+        }
+        Ok(wrote)
     }
 
     /// How many came after the user last looked (the archived ones never).

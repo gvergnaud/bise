@@ -938,3 +938,39 @@ fn a_move_on_a_page_touches_only_the_page_even_with_an_artifact_of_its_id() {
     let row = s.all().into_iter().find(|m| m.id == "only-page" && m.by == "page").unwrap();
     assert!(row.works.works().is_empty());
 }
+
+/// code-view (architect m_66499): a copy's text fact, read once at the
+/// door; a binary or a folder has none that says text; an older store's
+/// versions get theirs once, and an add's own is never overwritten.
+#[test]
+fn a_copy_says_once_whether_it_is_text() {
+    assert!(is_text(b""), "empty: text");
+    assert!(is_text("const a = 'é';\n".as_bytes()));
+    assert!(!is_text(b"PK\x03\x04\x00\x00"), "a NUL: binary");
+    assert!(!is_text(b"\xff\xfe\xfd"), "not UTF-8");
+    let e = "é".as_bytes();
+    assert!(is_text(&[b'a', e[0]]), "a character cut by the head's end counts whole");
+    let work = tmp("text-fact");
+    let s = Store::new(&work.join("state"));
+    std::fs::write(work.join("prompts.ts"), "export const a = 1;\n").unwrap();
+    std::fs::write(work.join("blob.bin"), [0u8, 1, 2, 3]).unwrap();
+    std::fs::create_dir_all(work.join("site")).unwrap();
+    std::fs::write(work.join("site/index.html"), "<p>hi</p>").unwrap();
+    let ts = add(&s, &work, "prompts.ts", None, 10).unwrap().meta;
+    let bin = add(&s, &work, "blob.bin", None, 11).unwrap().meta;
+    let site = add(&s, &work, "site", None, 12).unwrap().meta;
+    assert_eq!(ts.current().unwrap().text, Some(true));
+    assert_eq!(bin.current().unwrap().text, Some(false));
+    assert_eq!(site.current().unwrap().text, None, "a folder: no fact");
+    assert_eq!(s.text_unknown(), vec![], "every copied file has its fact");
+    // a store from before the fact: found once, written on its version
+    let mut old = s.get(&ts.id).unwrap();
+    old.versions[0].text = None;
+    s.save(&old).unwrap();
+    let facts = s.text_unknown();
+    assert_eq!(facts, vec![(ts.id.clone(), 1, true)]);
+    assert!(s.set_text(&facts).unwrap());
+    assert_eq!(s.get(&ts.id).unwrap().versions[0].text, Some(true));
+    assert!(!s.set_text(&[(bin.id.clone(), 1, true)]).unwrap(), "a fact the add wrote stays");
+    assert_eq!(s.get(&bin.id).unwrap().versions[0].text, Some(false));
+}

@@ -8,6 +8,7 @@
 import { memo, type CSSProperties } from 'react';
 import { normalizeTokens, Prism, type PrismTheme } from 'prism-react-renderer';
 import { staggerOf } from './fade';
+import { ROLES, roleOf, type Hue, type Role } from '../../../../kit/view/code';
 
 // prism-react-renderer bundles no shell grammar: a small one, so a bash call's box has the TUI's
 // colours too (code.rs highlight_bash: comments, strings, variables, keywords, flags, operators)
@@ -23,44 +24,36 @@ if (!('bash' in Prism.languages)) {
   };
 }
 
-// The TUI's syntax.rs style(): its token kinds on the ds's markdown roles (src/ds/md-tokens.css,
-// theme.rs syntax_*): keywords bold, comments italic, punctuation dim (amb-kit, lead m_11457).
+// A syntax role's color on the ds's tokens (src/ds/md-tokens.css, theme.rs syntax_*)
+const HUES: Record<Hue, string> = {
+  comment: 'var(--md-syn-comment)', keyword: 'var(--md-syn-keyword)', string: 'var(--md-syn-string)', number: 'var(--md-syn-number)',
+  call: 'var(--md-syn-call)', type: 'var(--md-syn-type)', 'text-2': 'var(--c-text-2)', ok: 'var(--c-ok)', err: 'var(--c-err)',
+};
+
+/** A role's look as a style (kit/view/code.ts's ROLES, the one table the Code app's view reads too). Pure. */
+function lookOf(r: Role): CSSProperties {
+  return {
+    ...(r.hue === undefined ? {} : { color: HUES[r.hue] }),
+    ...(r.bold === true ? { fontWeight: '700' } : r.normal === true ? { fontWeight: 'normal' } : {}),
+    ...(r.italic === true ? { fontStyle: 'italic' } : {}),
+    ...(r.strike === true ? { textDecorationLine: 'line-through' } : {}),
+  };
+}
+
+// The TUI's syntax.rs style(): prism's token kinds on bise's syntax roles (kit/view/code.ts ROLES):
+// keywords bold, comments italic, punctuation dim (amb-kit, lead m_11457; code-view m_66499).
 export const THEME: PrismTheme = {
   plain: { color: 'var(--md-syn-plain)', backgroundColor: 'transparent' },
-  styles: [
-    { types: ['comment', 'prolog', 'doctype', 'cdata'], style: { color: 'var(--md-syn-comment)', fontStyle: 'italic' } },
-    { types: ['keyword', 'builtin', 'important', 'atrule'], style: { color: 'var(--md-syn-keyword)', fontWeight: '700' } },
-    { types: ['string', 'char', 'attr-value', 'regex', 'url'], style: { color: 'var(--md-syn-string)' } },
-    { types: ['number', 'boolean', 'constant', 'symbol'], style: { color: 'var(--md-syn-number)' } },
-    { types: ['function', 'function-variable', 'method'], style: { color: 'var(--md-syn-call)' } },
-    { types: ['class-name', 'tag', 'selector', 'namespace', 'type'], style: { color: 'var(--md-syn-type)' } },
-    { types: ['punctuation', 'operator'], style: { color: 'var(--c-text-2)' } },
-    { types: ['inserted'], style: { color: 'var(--c-ok)' } },
-    { types: ['deleted'], style: { color: 'var(--c-err)', textDecorationLine: 'line-through' } },
-    // ```md / ```markdown: a heading as a keyword (prism's alias), **bold** bold, *italic* italic,
-    // ~~strike~~ struck, `code` and links as strings, the marks (- > ---) dim as punctuation
-    { types: ['bold'], style: { fontWeight: '700' } },
-    { types: ['italic'], style: { fontStyle: 'italic' } },
-    { types: ['strike'], style: { textDecorationLine: 'line-through' } },
-    { types: ['code-snippet', 'code-block'], style: { color: 'var(--md-syn-string)', fontWeight: 'normal' } },
-  ],
+  // a role's look sets color, weight, style and line only: plain strings, as prism's entry wants
+  styles: ROLES.map((r) => ({ types: [...r.types], style: lookOf(r) as PrismTheme['styles'][number]['style'] })),
 };
 
 /** A bare fence's words (``` with no language): gray, the text at ~90 % (his ask, code-fences). */
 export const BARE: CSSProperties = { color: 'var(--md-syn-bare)' };
 
-/** THEME by token type, each type's entries merged in order. */
-const DICT: Record<string, CSSProperties> = {};
-for (const e of THEME.styles) for (const t of e.types) DICT[t] = { ...DICT[t], ...(e.style as CSSProperties) };
-
-/** prism aliases md's `code` as a keyword (purple, bold): its own type wins, the TUI's code is green. */
-const WINS = ['code-snippet', 'code-block'];
-
-/** A token's style: its types' THEME entries, inner over outer (prism-react-renderer's rule). Pure. */
+/** A token's style: its types' roles, inner over outer, a type word as a type (roleOf). Pure. */
 function styleOf(types: readonly string[], content: string): CSSProperties {
-  const s = [...types, ...types.filter((t) => WINS.includes(t))].reduce<CSSProperties>((acc, t) => ({ ...acc, ...DICT[t] }), {});
-  // prism calls the built-in types keywords; the TUI draws them as types (gold, not bold)
-  return typeWord(types, content) ? { ...s, color: 'var(--md-syn-type)', fontWeight: 'normal' } : s;
+  return lookOf(roleOf(types, content));
 }
 
 /** A run of a code line: its text, its token types ('plain' for none) and its look. */
@@ -86,17 +79,6 @@ export function codeLines(text: string, lang: string): CodeRun[][] {
   return normalizeTokens(Prism.tokenize(code, grammar)).map((line) =>
     line.filter((t) => t.content !== '' && !(t.empty === true)).map((t) => ({ text: t.content, types: t.types, style: styleOf(t.types, t.content) })),
   );
-}
-
-// the TUI's built-in type words (rust/tui/src/syntax.rs RUST_TYPES, PY_TYPES)
-const TYPE_WORDS = new Set([
-  'bool', 'char', 'str', 'u8', 'u16', 'u32', 'u64', 'u128', 'usize', 'i8', 'i16', 'i32', 'i64', 'i128', 'isize', 'f32', 'f64',
-  'int', 'float', 'list', 'dict', 'set', 'tuple', 'bytes', 'object',
-]);
-
-/** A token prism calls a keyword or a builtin that the TUI draws as a type. Pure. */
-export function typeWord(types: readonly string[], content: string): boolean {
-  return (types.includes('keyword') || types.includes('builtin')) && TYPE_WORDS.has(content.trim());
 }
 
 /** Prism knows this language (its bundled grammars). Pure. */

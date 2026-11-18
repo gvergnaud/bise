@@ -147,6 +147,14 @@ rows; the desktop and the TUI never match themselves.
   picked opener is still a candidate; otherwise A2's order decides and
   the pick stays saved (the plugin may come back on). One writer,
   `bend_plugins::state` (the same lock).
+- Any text file (code-view, architect m_66499): a `files[]` entry
+  `{"text": true, "title": …}` (no `match`, never a folder) has the one
+  type key `@text` and matches a file whose artifact version bise found
+  to be text, a typed fact recorded once where its copy is made
+  (`artifacts::Version::text`: UTF-8, no NUL in its first 8 KB; an
+  older version's found once by the retention sweep's thread), never a
+  name. It goes after every glob's match. A ~/bise file has no fact.
+  The Code app (plugins/code) is its one user.
 - No candidate: `opener` absent; the clients fall back to his Mac's app
   (and say so on the card before the click), else Show in Finder and
   Save a copy. Never a dead click.

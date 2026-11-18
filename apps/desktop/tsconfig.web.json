@@ -6,6 +6,7 @@
     "types": [],
     "tsBuildInfoFile": "node_modules/.tmp/tsconfig.web.tsbuildinfo"
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "src/ds/purity.mts", "tests/feature/**/*.ts", "tests/nightly/*.ts"],
+  "//": "kit/view/code.ts: the one code table the Code app's view reads too (code-view, architect m_66499); rootDir reaches it (nothing is emitted: noEmit)",
+  "include": ["src/**/*.ts", "src/**/*.tsx", "src/ds/purity.mts", "tests/feature/**/*.ts", "tests/nightly/*.ts", "../../kit/view/code.ts"],
   "exclude": ["src/main/**"]
 }

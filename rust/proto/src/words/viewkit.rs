@@ -18,6 +18,11 @@ crate::words! { viewkit:
     opening = "opening…";
     /// a view whose document failed to load (its reason follows on its own line)
     didnt_open = "this didn't open";
+    // ---- Code (plugins/code): a code or text file's own states (designer m_66504)
+    /// a code or text file with nothing in it
+    code_empty = "empty file";
+    /// a file too big to color, drawn as plain text (the size past which it is, `1 MB`)
+    code_plain(size) = "over {size}: shown as plain text";
     // ---- places a view names (a note's label: the chip reads `page 2 · "net revenue…"`): each
     // view adds its own here in the land that reads them (architect m_61995 (3)). Designer
     // signed these (m_61894): `an area` (never 'a box': he drew a region), `page {n}`,

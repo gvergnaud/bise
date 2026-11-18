@@ -10,7 +10,8 @@
 //!   extension `.XLSX` and the glob `*.xlsx` are both `*.xlsx`;
 //! - [`fold`]: the one case rule, applied to a pattern ([`type_key`]) and
 //!   to a file's name and path ([`pick`]): APFS is case-insensitive;
-//! - [`pick`]: which app opens a target, and the others (Open with);
+//! - [`pick`]: which app opens a target, and the others (Open with); a
+//!   [`TEXT_KEY`] entry matches a target's text fact, after every glob;
 //! - [`BUILTIN`]: bise's own types not migrated yet, candidates like any
 //!   opener (`builtin: true` on the row), each row deleted by its
 //!   migration step (the viewer shell and its `viewer_kind` went with
@@ -38,6 +39,11 @@ pub const VIBE_UI: &str = "ai.mistral.vibe/ui";
 pub const BISE_UI: &str = "dev.bise/ui";
 /// A pattern's scope: relative to its plugin's documents.
 pub const DOCUMENTS: &str = "@documents/";
+/// The type key of an entry that opens any text file (A2, architect
+/// m_66499): `files[]` `{"text": true}`, matched on the version's typed
+/// text fact (artifacts::Version::text), never on a name; it goes after
+/// every glob, so an owner of `*.md` or `*.html` keeps its files.
+pub const TEXT_KEY: &str = "@text";
 
 /// One type an opener opens (A1's `dev.bise/ui.files[]`, or one of
 /// Vibe's extensions no `files` entry names).
@@ -53,6 +59,8 @@ pub struct Entry {
     /// the type's own icon (A1's `files[].icon`): a design-system name,
     /// one of [`TYPE_ICONS`]; none: the app's
     pub icon: Option<String>,
+    /// it opens any file bise knows is text ([`TEXT_KEY`], its one key)
+    pub text: bool,
 }
 
 /// One kind of file an opener makes (A1's `makes[]`).
@@ -191,6 +199,16 @@ fn file_entry(i: usize, v: &Value) -> Result<(Entry, Option<String>), String> {
         None => OpenRank::Default,
         Some(r) => serde_json::from_value(r.clone()).map_err(|_| format!("{at}.rank must be owner, default or option"))?,
     };
+    // any text file (TEXT_KEY): no globs, never a folder
+    match o.get("text") {
+        None | Some(Value::Bool(false)) => {}
+        Some(Value::Bool(true)) if folder || o.contains_key("match") => return Err(format!("{at}: a text entry has no match and no folder")),
+        Some(Value::Bool(true)) => {
+            let title = title_of(o.get("title"), &at)?;
+            return Ok((Entry { keys: vec![TEXT_KEY.to_string()], title, rank, folder: false, icon: None, text: true }, None));
+        }
+        Some(_) => return Err(format!("{at}.text must be true or false")),
+    }
     let globs = o.get("match").and_then(Value::as_array).ok_or(format!("{at}.match must be a list of globs"))?;
     if globs.is_empty() || globs.len() > MAX_GLOBS {
         return Err(format!("{at}.match must hold 1 to {MAX_GLOBS} globs"));
@@ -216,7 +234,7 @@ fn file_entry(i: usize, v: &Value) -> Result<(Entry, Option<String>), String> {
         Some(Value::String(n)) if TYPE_ICONS.contains(&n.as_str()) => (Some(n.clone()), None),
         Some(v) => (None, Some(format!("{at}.icon {v} must be one of {}; dropped", TYPE_ICONS.join(", ")))),
     };
-    Ok((Entry { keys, title: title_of(o.get("title"), &at)?, rank, folder, icon }, warn))
+    Ok((Entry { keys, title: title_of(o.get("title"), &at)?, rank, folder, icon, text: false }, warn))
 }
 
 fn make_of(i: usize, v: &Value) -> Result<Make, String> {
@@ -297,7 +315,7 @@ pub fn parse(plugin: &str, server: &str, tool: &Value) -> (Option<OpenerDecl>, V
             };
             if !entries.iter().any(|en| en.keys.contains(&key)) {
                 let title = format!("{} file", key.trim_start_matches("*.").to_uppercase());
-                entries.push(Entry { keys: vec![key], title, rank: OpenRank::Default, folder: false, icon: None });
+                entries.push(Entry { keys: vec![key], title, rank: OpenRank::Default, folder: false, icon: None, text: false });
             }
         }
     }
@@ -480,11 +498,19 @@ pub struct Target {
     /// it lies under a plugin's documents: (that plugin, its path
     /// relative to them, `boards/q3.board.json`)
     pub documents: Option<(String, String)>,
+    /// bise knows its bytes are text (a version's typed fact,
+    /// artifacts::Version::text): a [`TEXT_KEY`] entry matches it
+    pub text: bool,
 }
 
 impl Target {
     pub fn file(name: &str) -> Target {
-        Target { name: name.to_string(), kind: Kind::File, documents: None }
+        Target { name: name.to_string(), kind: Kind::File, documents: None, text: false }
+    }
+
+    /// The same target, with its text fact.
+    pub fn with_text(self, text: bool) -> Target {
+        Target { text, ..self }
     }
 }
 
@@ -612,6 +638,10 @@ fn specificity(key: &str) -> (bool, usize) {
 /// name ([`past_the_cut`]) matches least specifically of all: any rule
 /// that matched a listed name goes before it.
 fn entry_match(plugin: &str, entry: &Entry, target: &Target) -> Option<(String, (bool, usize))> {
+    if entry.text {
+        // any text file: on the typed fact alone, the least specific of all
+        return (target.kind == Kind::File && target.text).then(|| (TEXT_KEY.to_string(), (false, 0)));
+    }
     let listed = |names: &[String], k: &str| names.iter().any(|n| matches(k, &format!("{}/{}", target.name, n)));
     let hit = |k: &String| match (&target.kind, entry.folder, k.strip_prefix(DOCUMENTS)) {
         (Kind::File, false, Some(body)) => target.documents.as_ref().is_some_and(|(p, rel)| p == plugin && matches(body, rel)).then(|| specificity(k)),
@@ -639,6 +669,8 @@ struct Candidate {
     rank: OpenRank,
     spec: (bool, usize),
     first_party: bool,
+    /// matched by a [`TEXT_KEY`] entry: after every glob's
+    text: bool,
 }
 
 /// One built-in type (A3): bise draws it on today's path until its
@@ -699,12 +731,12 @@ pub fn pick(target: &Target, openers: &Openers, picks: &Picks) -> Opened {
                 // the type's own icon (a design-system name), else its app's
                 let icon = e.icon.clone().or_else(|| po.icon.as_ref().map(|_| format!("{ICON_ROUTE}{}", po.plugin)));
                 let opener = Opener { plugin: po.plugin.clone(), tool: o.tool.clone(), app: o.app.clone(), app_id: o.app_id.clone(), type_key: key, type_title: e.title.clone(), icon, builtin: false };
-                cands.push(Candidate { opener, rank, spec, first_party: po.first_party });
+                cands.push(Candidate { opener, rank, spec, first_party: po.first_party, text: e.text });
             }
         }
     }
     for bi in BUILTIN {
-        let entry = Entry { keys: vec![bi.key.to_string()], title: bi.type_title.to_string(), rank: OpenRank::Owner, folder: bi.folder, icon: None };
+        let entry = Entry { keys: vec![bi.key.to_string()], title: bi.type_title.to_string(), rank: OpenRank::Owner, folder: bi.folder, icon: None, text: false };
         if let Some((key, spec)) = entry_match(bi.plugin, &entry, target) {
             // its plugin opens this itself now (migrated, or both on a
             // branch): the plugin's own opener stands, listed once
@@ -713,12 +745,13 @@ pub fn pick(target: &Target, openers: &Openers, picks: &Picks) -> Opened {
             }
             // a built-in app's id is its plugin's (sites, pages): first-party, declared here
             let opener = Opener { plugin: bi.plugin.into(), tool: bi.kind.into(), app: bi.app.into(), app_id: bi.plugin.into(), type_key: key.clone(), type_title: bi.type_title.into(), icon: Some(bi.icon.into()), builtin: true };
-            cands.push(Candidate { opener, rank: OpenRank::Owner, spec, first_party: true });
+            cands.push(Candidate { opener, rank: OpenRank::Owner, spec, first_party: true, text: false });
         }
     }
     cands.sort_by(|a, b| {
-        b.spec
-            .cmp(&a.spec)
+        a.text
+            .cmp(&b.text)
+            .then(b.spec.cmp(&a.spec))
             .then(a.rank.cmp(&b.rank))
             .then(b.first_party.cmp(&a.first_party))
             .then_with(|| a.opener.plugin.cmp(&b.opener.plugin))

@@ -6,22 +6,14 @@
 // way, whole files there, hunks here (the diff is all we have). Pure.
 import type { DiffLine, DiffRun } from '@/ds';
 import { codeLines, known } from '@/thread/Code';
+import { langOf } from '../../../../kit/view/code';
 
-// a file's extension → prism's language (prism-react-renderer's bundled grammars, Code.tsx's bash)
-const LANGS: Record<string, string> = {
-  ts: 'typescript', mts: 'typescript', cts: 'typescript', tsx: 'tsx',
-  js: 'javascript', mjs: 'javascript', cjs: 'javascript', jsx: 'jsx',
-  rs: 'rust', py: 'python', bend: 'python', go: 'go', swift: 'swift', kt: 'kotlin', kts: 'kotlin',
-  c: 'c', h: 'c', cc: 'cpp', cpp: 'cpp', hpp: 'cpp', m: 'objectivec', mm: 'objectivec',
-  css: 'css', json: 'json', jsonl: 'json', yaml: 'yaml', yml: 'yaml', md: 'markdown', sql: 'sql', graphql: 'graphql',
-  html: 'markup', xml: 'markup', svg: 'markup', plist: 'markup', sh: 'bash', bash: 'bash', zsh: 'bash',
-};
-
-/** The prism language of a file by its path ('src/a.ts' → 'typescript'); undefined: drawn plain. Pure. */
+/**
+ * The prism language of a file by its path ('src/a.ts' → 'typescript'; kit/view/code.ts's table,
+ * the Code app's too), when the window's prism has its grammar; undefined: drawn plain. Pure.
+ */
 export function langOfPath(path: string): string | undefined {
-  const base = path.slice(path.lastIndexOf('/') + 1);
-  const dot = base.lastIndexOf('.');
-  const lang = dot <= 0 ? undefined : LANGS[base.slice(dot + 1).toLowerCase()];
+  const lang = langOf(path);
   return known(lang) ? lang : undefined;
 }
 

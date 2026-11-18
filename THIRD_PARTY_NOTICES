@@ -676,6 +676,11 @@ Other components (section 3), by license:
   pdfjs-dist 6.4.299 (pdf.js: pdf to canvas and text)  Apache-2.0
       https://github.com/mozilla/pdf.js
 
+   plugins/code/ai.mistral.vibe/views/code/prism/: Code's grammars, prismjs' core and language files as they ship, loaded on demand (code-view; its LICENSE beside them)
+
+  prismjs 1.30.0 (syntax highlighting)  MIT
+      https://github.com/PrismJS/prism
+
    plugins/docs/ai.mistral.vibe/views/writer/office-md.js: Writer's markdown renderer, micromark and GFM (plugins/docs/src/markdown.ts, md-artifact)
 
   character-entities 2.0.2  MIT

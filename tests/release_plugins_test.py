@@ -5,7 +5,7 @@ scripts/versions.sh copies the whole repo `plugins/` into a version's app root, 
 (rust/plugins/src/resolve.rs builtin_root) loads that folder as built-in, on for every user. So
 whatever sits in `plugins/` ships. Only `computer`, the office plugins (`sheets`, `slides`,
 `docs`: docs/office.md, plan §3), the viewer apps (`media`'s Preview, 6a1668b59; `sites`,
-9d2806845), and the gallery's optional plugins (maps, draw, mermaid, dataviz: page
+9d2806845; `code`'s Code, code-view, architect m_66499), and the gallery's optional plugins (maps, draw, mermaid, dataviz: page
 plugin-gallery) may be there (architect m_63842); each gallery plugin is off until he turns it on
 (`"dev.bise": {"default": "off"}`), and their shared view kit `plugins/.view-kit/` ships with them
 (its servers inline it at resources/read) as the only dot folder. The repo's own QA plugin lives in
@@ -22,7 +22,7 @@ import sys
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 GALLERY = ["dataviz", "draw", "maps", "mermaid"]
-SHIPPED = sorted(["computer", "docs", "sheets", "slides", "media", "sites"] + GALLERY)
+SHIPPED = sorted(["computer", "docs", "sheets", "slides", "media", "sites", "code"] + GALLERY)
 KIT = ["kit.css", "kit.js", "inline.mjs"]
 # The types bise's built-in viewers drew and no longer draw: steps 1-5 of docs/plugin-apps.md
 # (Preview 6a1668b59, Writer, Slides, Sheets, Sites 9d2806845) deleted them and the matching

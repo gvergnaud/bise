@@ -300,6 +300,10 @@ enum Msg {
         serve: crate::artifacts_serve::Serve,
         root: Option<PathBuf>,
     },
+    /// The text facts of stored versions from before them
+    /// (artifacts::Store::text_unknown), read off the loop by the
+    /// retention sweep's thread: `(id, v, text)`.
+    TextFacts(Vec<(String, u64, bool)>),
     /// a thread's typed event: an answer or a hub-wide notification
     Typed {
         to: rpc::Typed,

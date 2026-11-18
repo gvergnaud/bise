@@ -589,9 +589,15 @@ impl Shell {
             .flat_map(|a| std::iter::once(a.name.clone()).chain(std::iter::once(a.dir.clone())).chain(a.aliases.iter().cloned()))
             .collect();
         let (state, paths, flag) = (self.opts.paths.state.clone(), self.opts.paths.clone(), self.art.sweeping.clone());
+        let tx = self.tx.clone();
         std::thread::spawn(move || {
             let store = artifacts::Store::new(&state);
             let now = now_ms();
+            // the versions from before the text fact: each copy's head read once, written on the loop
+            let facts = store.text_unknown();
+            if !facts.is_empty() {
+                let _ = tx.send(Msg::TextFacts(facts));
+            }
             let staged = crate::artifacts_retention::sweep_staged(&store, now);
             if staged > 0 {
                 log_line(&paths, &format!("artifacts: {staged} staged copies left by a crash deleted"));
@@ -718,6 +724,17 @@ impl Shell {
             Ok(true) => self.artifacts_refresh(false),
             Ok(false) => {}
             Err(e) => log_line(&self.opts.paths, &format!("artifact {id}: its recipe not kept: {e}")),
+        }
+    }
+
+    /// The text facts of older versions, read off the loop (the
+    /// retention sweep's thread): on their versions, then the list again
+    /// (a text copy's row now names its opener).
+    pub(super) fn on_text_facts(&mut self, facts: &[(String, u64, bool)]) {
+        match self.art_store().set_text(facts) {
+            Ok(true) => self.artifacts_refresh(false),
+            Ok(false) => {}
+            Err(e) => log_line(&self.opts.paths, &format!("artifacts: text facts not kept: {e}")),
         }
     }
 

@@ -12,6 +12,10 @@ export const viewkit = {
     opening: "opening…",
     /** a view whose document failed to load (its reason follows on its own line) */
     didnt_open: "this didn't open",
+    /** a code or text file with nothing in it */
+    code_empty: "empty file",
+    /** a file too big to color, drawn as plain text (the size past which it is, `1 MB`) */
+    code_plain: (a) => "over " + String(a.size) + ": shown as plain text",
     /** a place: the slide a selection is on (plugins/slides' view, a clicked shape's label) */
     slide: (a) => "slide " + String(a.n),
     /** a box he drew on an image */

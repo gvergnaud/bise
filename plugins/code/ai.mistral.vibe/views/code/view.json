@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "name": "code",
+  "description": "Open a code or text file in Code: its lines colored as its language (by its ending, its name or its shebang), line numbers, read only. Any other text file shows as plain text. Opened by a click on the file; not for the agent to call.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "file": {
+        "type": "object",
+        "properties": { "name": { "type": "string" }, "resourceUri": { "type": "string" } },
+        "required": ["name", "resourceUri"]
+      }
+    },
+    "required": ["file"]
+  },
+  "ui": {
+    "csp": { "connectDomains": [], "resourceDomains": [], "frameDomains": [], "baseUriDomains": [] },
+    "permissions": {}
+  },
+  "_meta": {
+    "dev.bise/ui": {
+      "app_id": "code",
+      "files": [
+        { "match": ["*.ts", "*.mts", "*.cts", "*.tsx"], "title": "TypeScript", "icon": "doc" },
+        { "match": ["*.js", "*.mjs", "*.cjs", "*.jsx"], "title": "JavaScript", "icon": "doc" },
+        { "match": ["*.py", "*.pyi"], "title": "Python", "icon": "doc" },
+        { "match": ["*.bend"], "title": "Bend", "icon": "doc" },
+        { "match": ["*.rs"], "title": "Rust", "icon": "doc" },
+        { "match": ["*.go"], "title": "Go", "icon": "doc" },
+        { "match": ["*.swift"], "title": "Swift", "icon": "doc" },
+        { "match": ["*.kt", "*.kts"], "title": "Kotlin", "icon": "doc" },
+        { "match": ["*.java"], "title": "Java", "icon": "doc" },
+        { "match": ["*.c", "*.h"], "title": "C", "icon": "doc" },
+        { "match": ["*.cc", "*.cpp", "*.cxx", "*.hh", "*.hpp", "*.hxx"], "title": "C++", "icon": "doc" },
+        { "match": ["*.m", "*.mm"], "title": "Objective-C", "icon": "doc" },
+        { "match": ["*.cs"], "title": "C#", "icon": "doc" },
+        { "match": ["*.rb"], "title": "Ruby", "icon": "doc" },
+        { "match": ["*.php"], "title": "PHP", "icon": "doc" },
+        { "match": ["*.sh", "*.bash", "*.zsh"], "title": "Shell script", "icon": "doc" },
+        { "match": ["*.sql"], "title": "SQL", "icon": "doc" },
+        { "match": ["*.json", "*.jsonl"], "title": "JSON", "icon": "doc" },
+        { "match": ["*.yaml", "*.yml"], "title": "YAML", "icon": "doc" },
+        { "match": ["*.toml"], "title": "TOML", "icon": "doc" },
+        { "match": ["*.ini"], "title": "INI", "icon": "doc" },
+        { "match": ["*.xml", "*.svg", "*.plist"], "title": "XML", "icon": "doc" },
+        { "match": ["*.css"], "title": "CSS", "icon": "doc" },
+        { "match": ["*.scss"], "title": "SCSS", "icon": "doc" },
+        { "match": ["*.graphql", "*.gql"], "title": "GraphQL", "icon": "doc" },
+        { "match": ["*.lua"], "title": "Lua", "icon": "doc" },
+        { "match": ["*.mk", "makefile", "gnumakefile"], "title": "Makefile", "icon": "doc" },
+        { "match": ["dockerfile", "containerfile", "dockerfile.*"], "title": "Dockerfile", "icon": "doc" },
+        { "match": ["*.html", "*.htm"], "title": "HTML", "rank": "option", "icon": "doc" },
+        { "match": ["*.md", "*.markdown"], "title": "Markdown", "rank": "option", "icon": "doc" },
+        { "text": true, "title": "Plain text", "icon": "doc" }
+      ]
+    }
+  }
+}

@@ -51,6 +51,17 @@ export const STYLE_MAP: Readonly<Record<string, string>> = {
   '--shadow-sm': '--e-1',
   '--shadow-md': '--e-2',
   '--shadow-lg': '--e-3',
+  // bise's syntax roles (no spec name): the Code app colors a file as a code block in a message
+  // (kit/view/code.ts ROLES, code-view m_66499)
+  '--bise-syn-plain': '--md-syn-plain',
+  '--bise-syn-comment': '--md-syn-comment',
+  '--bise-syn-keyword': '--md-syn-keyword',
+  '--bise-syn-string': '--md-syn-string',
+  '--bise-syn-number': '--md-syn-number',
+  '--bise-syn-call': '--md-syn-call',
+  '--bise-syn-type': '--md-syn-type',
+  '--bise-syn-ok': '--c-ok',
+  '--bise-syn-err': '--c-err',
 };
 
 /**

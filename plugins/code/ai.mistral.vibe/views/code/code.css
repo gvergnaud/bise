@@ -1,0 +1,50 @@
+/* Code (plugins/code): a code or text file, its lines on a 20 px grid (designer m_66504): the ds
+   mono at 13, a gutter of line numbers in text-3 that stays put while the code scrolls sideways,
+   wrap off, tab size 4. Colors: bise's syntax roles, the host's --bise-syn-* (the window's
+   --md-syn-*: a file looks like the same code in a message), kit/view/code.ts ROLES. */
+:root {
+  --cd-line: 20px;
+  --cd-ground: var(--color-background-primary, #fff);
+  --cd-text: var(--bise-syn-plain, var(--color-text-primary, #1f1f1f));
+  --cd-dim: var(--color-text-secondary, #6b6b6b);
+  --cd-faint: var(--color-text-tertiary, #9a9a9a);
+}
+html, body { height: 100%; margin: 0; background: var(--cd-ground); }
+#code { height: 100%; display: flex; flex-direction: column; }
+
+.cd-state { margin: auto; color: var(--cd-faint); font: var(--font-text-md-size, 13px) var(--font-sans, -apple-system, system-ui, sans-serif); }
+.cd-state .why { color: var(--cd-faint); }
+.cd-note { flex: none; padding: 6px 16px; color: var(--cd-faint); font: var(--font-text-sm-size, 12px) var(--font-sans, -apple-system, system-ui, sans-serif); border-bottom: 1px solid var(--color-border-secondary, #e6e6e6); }
+
+.cd-scroll { flex: 1; overflow: auto; position: relative; outline: none; }
+.cd-sizer { position: relative; min-width: 100%; }
+.cd-rows {
+  position: absolute; left: 0; right: 0;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--font-text-md-size, 13px);
+  line-height: var(--cd-line);
+  color: var(--cd-text);
+  tab-size: 4;
+}
+.cd-row { display: flex; height: var(--cd-line); white-space: pre; }
+.cd-n {
+  position: sticky; left: 0; flex: none; box-sizing: content-box; padding: 0 12px 0 16px;
+  text-align: right; color: var(--cd-faint); background: var(--cd-ground);
+  font-variant-numeric: tabular-nums; user-select: none; -webkit-user-select: none;
+}
+.cd-t { flex: none; padding-right: 16px; }
+
+/* the roles (kit/view/code.ts Hue, and its bold, italic, strike) */
+.syn-comment { color: var(--bise-syn-comment, #8a8a8a); }
+.syn-keyword { color: var(--bise-syn-keyword, #8a3ffc); }
+.syn-string { color: var(--bise-syn-string, #2e7d32); }
+.syn-number { color: var(--bise-syn-number, #b45309); }
+.syn-call { color: var(--bise-syn-call, #1d4ed8); }
+.syn-type { color: var(--bise-syn-type, #a16207); }
+.syn-text-2 { color: var(--cd-dim); }
+.syn-ok { color: var(--bise-syn-ok, #2e7d32); }
+.syn-err { color: var(--bise-syn-err, #c62828); }
+.syn-b { font-weight: 700; }
+.syn-n { font-weight: normal; }
+.syn-i { font-style: italic; }
+.syn-s { text-decoration-line: line-through; }

@@ -163,10 +163,12 @@ pub fn target_of(row: &Value) -> Option<Target> {
     // (artifacts::Version::names, architect m_62393); a cut list says so
     let names: Vec<String> = row.get("names").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str).map(String::from).collect();
     let more = row.get("names_more").and_then(Value::as_bool).unwrap_or(false);
+    // its copy is text (artifacts::Version::text): a text opener matches it
+    let text = row.get("text").and_then(Value::as_bool).unwrap_or(false);
     match (names.is_empty(), more) {
-        (true, false) => Some(Target::file(&name)),
-        (_, false) => Some(Target { name, kind: Kind::Folder(names), documents: None }),
-        (_, true) => Some(Target { name, kind: Kind::FolderCut(names), documents: None }),
+        (true, false) => Some(Target::file(&name).with_text(text)),
+        (_, false) => Some(Target { name, kind: Kind::Folder(names), documents: None, text: false }),
+        (_, true) => Some(Target { name, kind: Kind::FolderCut(names), documents: None, text: false }),
     }
 }
 
@@ -181,13 +183,17 @@ mod tests {
         assert_eq!(target_of(&json!({"id": "perf-notes", "by": "page", "target": "/st/pages/perf-notes/v2.html"})), Some(Target::file("perf-notes.page")));
         assert_eq!(
             target_of(&json!({"target": "/w/site/", "kind": "site", "names": ["app.js", "index.html"]})),
-            Some(Target { name: "site".into(), kind: Kind::Folder(vec!["app.js".into(), "index.html".into()]), documents: None })
+            Some(Target { name: "site".into(), kind: Kind::Folder(vec!["app.js".into(), "index.html".into()]), documents: None, text: false })
         );
+        // a text copy (artifacts::Version::text): a file target with its fact; a folder never
+        assert_eq!(target_of(&json!({"target": "/w/prompts.ts", "text": true})), Some(Target::file("prompts.ts").with_text(true)));
+        assert_eq!(target_of(&json!({"target": "/w/a.bin", "text": false})), Some(Target::file("a.bin")));
+        assert_eq!(target_of(&json!({"target": "/w/site/", "names": ["index.html"], "text": true})).map(|t| t.text), Some(false));
         // the kind is never read: a plain folder holding an index.html is the same target
         assert_eq!(target_of(&json!({"target": "/w/site/", "kind": "folder", "names": ["index.html"]})), target_of(&json!({"target": "/w/site/", "kind": "site", "names": ["index.html"]})));
         assert_eq!(
             target_of(&json!({"target": "/w/big/", "kind": "site", "names": ["a.css"], "names_more": true})),
-            Some(Target { name: "big".into(), kind: Kind::FolderCut(vec!["a.css".into()]), documents: None })
+            Some(Target { name: "big".into(), kind: Kind::FolderCut(vec!["a.css".into()]), documents: None, text: false })
         );
         assert_eq!(target_of(&json!({"target": "https://github.com/a/b/pull/1", "kind": "pr"})), None);
         assert_eq!(target_of(&json!({"target": ""})), None);

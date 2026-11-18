@@ -1,0 +1,14 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "code",
+  "version": "0.1.0",
+  "description": "Code: open code and text files in bise, colored in the main languages (TypeScript, Python, Rust, Go, Swift, Kotlin, Java, C, C++, C#, Ruby, PHP, shell, SQL, JSON, YAML, TOML, CSS, Dockerfile...), any other text file as plain text; read only.",
+  "homepage": "https://bise.dev",
+  "license": "Apache-2.0",
+  "extensions": {
+    "ai.mistral.vibe": { "schemaVersion": 1 },
+    "dev.bise": {
+      "tagline": "code and text files, colored like code in a message"
+    }
+  }
+}
