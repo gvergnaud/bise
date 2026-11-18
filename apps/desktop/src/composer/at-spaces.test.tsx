@@ -53,7 +53,7 @@ function field() {
       await settle();
     });
   };
-  const rows = () => [...(r.queryByTestId('composer.pick')?.querySelectorAll('[data-row]') ?? [])].map((e) => e.textContent ?? '');
+  const rows = () => [...(r.queryByTestId('composer.pick')?.querySelectorAll('[data-row]') ?? [])].map((e) => e.textContent);
   return { got, r, type, key, rows, text: () => r.getByTestId('composer.field').textContent };
 }
 
