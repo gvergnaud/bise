@@ -174,7 +174,7 @@
 .tk-tab-name{display:-webkit-box;margin:0;overflow:hidden;color:var(--c-text);font:600 var(--f-lead);-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow-wrap:anywhere}
 .tk-meta{margin:0;color:var(--c-text-3);font-size:var(--t-13)}
 /* the Activity's Try again: a text-2 link in its line, the pane stays where it is (designer m_66618) */
-.tk-retry{padding:0;border:0;background:none;color:var(--c-text-2);font:inherit;text-decoration:underline;text-underline-offset:2px;cursor:pointer}
+.tk-retry{padding:0;border:0;background:none;color:var(--c-text-2);font:inherit;text-decoration:underline;text-underline-offset:2px}
 .tk-retry:hover{color:var(--c-text)}
 /* his words: his images' chips, then his first line, italic text-2, a thin rule on the left */
 .tk-origin{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-2);min-width:0;padding-left:var(--s-3);border-left:2px solid var(--c-line)}

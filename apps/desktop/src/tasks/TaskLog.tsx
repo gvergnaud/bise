@@ -7,7 +7,7 @@ import { sentenceCase } from '@/ds/case';
 import { useStore, useTaskLog } from '@/store';
 import { tasks } from '@/proto/words_tasks.gen';
 import { dayWords, timeOf } from '@/artifacts/model';
-import { ArtChip, Fold } from '@/ds';
+import { ArtChip, Fold, Press } from '@/ds';
 import type { LogLine } from '@/proto';
 import { shownName } from '@/agents/model';
 import { firstSentence } from './model';
@@ -25,23 +25,25 @@ export function TaskLog({ project, id, last, now, testId }: { project: string; i
   const log = useTaskLog(project, id);
   // his Try again asks once more
   const [tries, setTries] = useState(0);
-  const [late, setLate] = useState(false);
+  // the ask that went LATE_MS without an answer (a newer ask is not late yet)
+  const ask = `${project}/${id}/${String(last)}/${String(tries)}`;
+  const [lateAsk, setLateAsk] = useState<string | null>(null);
   // asked when shown and when the task's newest fact moves (a report, a gesture, a delivery);
   // no answer in LATE_MS: said, never a pane that spins forever (designer m_66618)
   useEffect(() => {
     store.askTaskLog(project, id);
-    setLate(false);
     const t = setTimeout(() => {
-      setLate(true);
+      setLateAsk(ask);
     }, LATE_MS);
     return () => {
       clearTimeout(t);
     };
-  }, [store, project, id, last, tries]);
+  }, [store, project, id, ask]);
+  const late = lateAsk === ask;
   const retry = (
-    <button type="button" className="tk-retry" data-testid={`${testId}.retry`} onClick={() => {
+    <Press look="tk-retry" data-testid={`${testId}.retry`} onClick={() => {
       setTries((n) => n + 1);
-    }}>{tasks.log_retry}</button>
+    }}>{tasks.log_retry}</Press>
   );
   const shown = activityShown(log, late);
   if (shown === 'loading') return <p className="tk-meta" data-testid={`${testId}.loading`}>{tasks.log_loading}</p>;
