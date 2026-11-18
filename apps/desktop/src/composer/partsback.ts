@@ -60,7 +60,7 @@ export function segmentsOfParts(parts: readonly Part[]): Segment[] {
   return out;
 }
 
-/** How many images and other attachments his parts carry (the drawer's ' · 1 image'). Pure. */
+/** How many images and other attachments his parts carry (the drawer's '1 image'). Pure. */
 export function attachedCounts(parts: readonly Part[] | undefined): { readonly images: number; readonly others: number } {
   let images = 0;
   let others = 0;

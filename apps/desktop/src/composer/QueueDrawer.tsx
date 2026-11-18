@@ -1,13 +1,14 @@
-// The queued messages' drawer, glued above the composer's tab (designer m_25146, his « une petite
-// boîte avec les queued messages … qui se déplierait comme un tiroir »): a head that says when they
-// go ('2 queued · sent when perf's turn ends', ▾ folds it), then one row per message, oldest first,
-// each with three icon buttons: send now (steer), edit (back into the field), delete. Every icon
-// says what it does in the ds tip, on hover and on focus. A focused row takes ⏎ / e / ⌫.
+// The queued messages' drawer, the composer box's first part (designer m_25146, his « une petite
+// boîte avec les queued messages … qui se déplierait comme un tiroir »; one piece with the box, his
+// m_66509, designer m_66517): a head that says when they go ('2 queued · sent when perf's turn
+// ends', ▾ folds it), then one row per message, oldest first, each with three icon buttons: send
+// now (steer), edit (back into the field), delete. Every icon says what it does in the ds tip, on
+// hover and on focus. A focused row takes ⏎ / e / ⌫. The last row gone, it closes back into the box.
 //
 // Drawing only: the rows and what each button does come from the screen (thread/ThreadQueue.ts:
 // the hub's Agent.queued and its queued_steer / queued_take). Pure parts: queueHead, rowExtra.
 import { useEffect, useLayoutEffect, useRef, useState, type JSX, type KeyboardEvent } from "react";
-import { Act, cx, IconButton, tipAttrs } from "@/ds";
+import { Act, cx, IconButton, reducedMotion, tipAttrs } from "@/ds";
 import "./queue-drawer.css";
 import { composer } from "../proto/words.gen";
 
@@ -16,7 +17,7 @@ export interface QueueRow {
   readonly id: number;
   /** his words on one line (the tip shows them whole) */
   readonly text: string;
-  /** what goes with them, in text-3 after the words (' · 1 image'); '' none */
+  /** what goes with them, in text-3 after the words and a ' · ' ('1 image'); '' none */
   readonly extra: string;
   /** on its way: the hub doesn't list it yet, so nothing to act on (its buttons off; `id` is the
    *  send's cid, never a hub id) */
@@ -43,12 +44,13 @@ export function queueHead(n: number, who: string): string {
   return composer.queue_when({ count: n > 1 ? composer.queue_count({ n }) : composer.queue_queued, who });
 }
 
-/** What goes with his words: ' · 1 image', ' · 2 images, 1 file'; '' for none. Pure. */
+/** What goes with his words: '1 image', '2 images, 1 attachment'; '' for none (the row draws the
+ *  ' · ' before it, its own span). Pure. */
 export function rowExtra(images: number, others: number): string {
   const bits: string[] = [];
   if (images > 0) bits.push(composer.queue_images({ n: images }));
   if (others > 0) bits.push(composer.queue_attachments({ n: others }));
-  return bits.length === 0 ? "" : ` · ${bits.join(", ")}`;
+  return bits.join(", ");
 }
 
 /** `text` cut to `room` px after a whole word, with one '…' (never mid-word); whole when it fits. Pure. */
@@ -124,7 +126,13 @@ function Row({ row, who, fieldEmpty, onSteer, onEdit, onDelete, testId }: { row:
         <span ref={words} className="t" data-testid={`${testId}.text`}>
           {cut ?? row.text}
         </span>
-        {row.extra !== "" && <span className="x">{row.extra}</span>}
+        {/* the line's ' · ' is a span of its own: a flex item drops a leading space ('crois· 1 attachment', his m_66509) */}
+        {row.extra !== "" && (
+          <span className="x">
+            <span className="sep">{" · "}</span>
+            {row.extra}
+          </span>
+        )}
       </span>
       <span className="acts">
         <IconButton size="bar" label={composer.queue_send_now({ who })} keys="⏎" disabled={off} onClick={onSteer} testId={`${testId}.steer`}>
@@ -174,11 +182,35 @@ export function QueueDrawer({ rows, who, fieldEmpty, deleted, onSteer, onEdit, o
       window.removeEventListener("keydown", key, true);
     };
   }, [deleted, fieldEmpty, onUndo]);
-  if (rows.length === 0 && !deleted) return null;
+  // the last row gone: it closes back into the box (d-fast), drawn as it last was and inert, then
+  // leaves at its animation's end; under reduced motion it leaves at once (designer m_66517)
+  const open = rows.length > 0 || deleted;
+  const [closing, setClosing] = useState(false);
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    setClosing(!open && !reducedMotion());
+  }
+  const last = useRef({ rows, deleted });
+  useLayoutEffect(() => {
+    if (open) last.current = { rows, deleted };
+  });
+  if (!open && !closing) return null;
+  // eslint-disable-next-line react-hooks/refs -- the look it closes with: the last one it was open with, read once it no longer is
+  const shown = open ? { rows, deleted } : last.current;
   return (
-    <div className={cx("b-qdrawer", folded && "folded")} data-testid={testId} data-count={rows.length}>
+    <div
+      className={cx("b-qdrawer", folded && "folded")}
+      data-testid={testId}
+      data-count={shown.rows.length}
+      data-state={open ? undefined : "closing"}
+      inert={!open}
+      onAnimationEnd={(e) => {
+        if (!open && e.target === e.currentTarget) setClosing(false);
+      }}
+    >
       <div className="h" data-testid={`${testId}.head`}>
-        {deleted ? (
+        {shown.deleted ? (
           <span className="hw" role="status">
             {composer.queue_deleted} ·{" "}
             <Act onClick={onUndo} testId={`${testId}.undo`}>
@@ -186,9 +218,9 @@ export function QueueDrawer({ rows, who, fieldEmpty, deleted, onSteer, onEdit, o
             </Act>
           </span>
         ) : (
-          <span className="hw">{queueHead(rows.length, who)}</span>
+          <span className="hw">{queueHead(shown.rows.length, who)}</span>
         )}
-        {rows.length > 0 && (
+        {shown.rows.length > 0 && (
           <IconButton size="bar" label={folded ? composer.queue_show : composer.queue_fold} pressed={!folded} onClick={() => {
               setFolded((f) => !f);
             }} testId={`${testId}.fold`}>
@@ -199,9 +231,9 @@ export function QueueDrawer({ rows, who, fieldEmpty, deleted, onSteer, onEdit, o
           </IconButton>
         )}
       </div>
-      {!folded && rows.length > 0 && (
+      {!folded && shown.rows.length > 0 && (
         <div ref={list} className="rows" role="list" onScroll={look} data-above={hidden.above || undefined} data-below={hidden.below || undefined} data-testid={`${testId}.rows`}>
-          {rows.map((r, i) => (
+          {shown.rows.map((r, i) => (
             <Row
               key={r.sending === true ? `c${String(r.id)}` : r.id}
               row={r}

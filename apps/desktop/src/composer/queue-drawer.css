@@ -1,24 +1,28 @@
-/* The queued messages' drawer (QueueDrawer.tsx, designer m_25146): thread → drawer → tab → box,
-   one stacked object. The tab's width (16 px in from the box), its fill and 1 px line; the top r-3
-   corners while open, the tab's own top corners go square. A 28 px head, 32 px rows, 3 rows then
-   it scrolls inside with 16 px fades. Open/close: height + fade 160 ms; a row in: 120 ms; none
-   under reduced motion. */
-.b-composer:has(> .b-qdrawer) > .tab {
-  border-radius: 0;
-  box-shadow: inset 1px 0 0 var(--c-line), inset -1px 0 0 var(--c-line), inset 0 1px 0 var(--c-line);
-}
+/* The queued messages' drawer (QueueDrawer.tsx; his m_66509, designer m_66517 B): the box's first
+   part, one piece with it: the box's width, its one r-4 outline and e-1, its focus ring and answering
+   accent around both; the box's top corners are the drawer's. Its head row tinted like the box's
+   head, a c-line hairline at the join. A 28 px head, 32 px rows, 3 rows then it scrolls inside with
+   16 px fades. Open: it slides up out of the join (its bottom shows first), d-base ease-out; close:
+   back into it, d-fast; a row in: 120 ms; none under reduced motion. Folded: its head row alone. */
 .b-qdrawer {
   display: flex;
+  flex: none;
   flex-direction: column;
-  margin: var(--s-6) var(--s-4) 0;
-  border-radius: var(--r-3) var(--r-3) 0 0;
-  box-shadow: inset 1px 1px 0 var(--c-line), inset -1px 0 0 var(--c-line);
-  background: linear-gradient(color-mix(in srgb, var(--c-text) 2%, transparent), color-mix(in srgb, var(--c-text) 2%, transparent)), var(--c-raised);
+  /* clipped while it opens or closes: its bottom shows first, as if it came out of the join */
+  justify-content: flex-end;
+  box-shadow: inset 0 -1px 0 var(--c-line);
   overflow: hidden;
-  animation: b-qdrawer-open 160ms var(--ease-out);
+  animation: b-qdrawer-open var(--d-base) var(--ease-out);
+}
+/* closing: from the height it had (the open's top) back to the join */
+.b-qdrawer[data-state="closing"] {
+  max-height: 0;
+  animation: b-qdrawer-close var(--d-fast) var(--ease-out);
 }
 .b-qdrawer .h {
   display: flex;
+  flex: none;
+  background: color-mix(in srgb, var(--p-chip) 70%, transparent);
   align-items: center;
   gap: var(--s-2);
   height: var(--h-row-tight);
@@ -95,6 +99,10 @@
   flex: none;
   color: var(--c-text-3);
 }
+/* the line's ' · ': its spaces kept at the start of a flex item (his m_66509: 'crois· 1 attachment') */
+.b-qdrawer .r .x .sep {
+  white-space: pre;
+}
 /* on its way: the hub doesn't list it yet (queue-drawer-fix): its words in text-3, like a sending
    bubble, its buttons off */
 .b-qdrawer .r[data-state="sending"] {
@@ -128,11 +136,17 @@
 @keyframes b-qdrawer-open {
   from {
     max-height: 0;
-    opacity: 0;
   }
   to {
     max-height: calc(var(--h-row-tight) + 3 * var(--h-row));
-    opacity: 1;
+  }
+}
+@keyframes b-qdrawer-close {
+  from {
+    max-height: calc(var(--h-row-tight) + 3 * var(--h-row));
+  }
+  to {
+    max-height: 0;
   }
 }
 @keyframes b-qdrawer-row {

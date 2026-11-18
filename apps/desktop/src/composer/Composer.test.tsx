@@ -242,6 +242,24 @@ describe('the composer', () => {
     expect(onSend).toHaveBeenLastCalledWith(buildMessage([{ kind: 'text', text: 'now' }]));
   });
 
+  // his m_66509, designer m_66517 (B): the queued messages are a drawer of the box, one piece with
+  // it (one outline, one focus ring), its head row first; never a card of its own over the box
+  it('queued messages: the drawer is the box\'s first part, above its head; send now, edit and delete still act', async () => {
+    const onSteer = vi.fn();
+    const onEdit = vi.fn();
+    const onDelete = vi.fn();
+    const queue = { rows: [{ id: 7, text: 'after this one', extra: '' }], who: 'bise', deleted: false, onSteer, onEdit, onDelete, onUndo: vi.fn() };
+    const { getByTestId } = await mount({ busy: true, head: 'to bise', queue });
+    const box = getByTestId('composer.box');
+    const drawer = getByTestId('composer.queue');
+    expect(drawer.parentElement).toBe(box);
+    expect(box.firstElementChild).toBe(drawer);
+    fireEvent.click(getByTestId('composer.queue.1.steer'));
+    fireEvent.click(getByTestId('composer.queue.1.edit'));
+    fireEvent.click(getByTestId('composer.queue.1.delete'));
+    expect([onSteer.mock.calls, onEdit.mock.calls, onDelete.mock.calls]).toEqual([[[7]], [[7]], [[7]]]);
+  });
+
   // min-tests: composer/approvals-toggle (TP-R6) and composer/no-undo (bar T K23)
   it('⇧⇥ in the field is the approvals switch (onShiftTab), never an outdent; ⌘Z with nothing to undo says so', async () => {
     const onShiftTab = vi.fn();

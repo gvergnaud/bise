@@ -27,7 +27,7 @@ export * from "./picker";
 export * from "./dropdown";
 export * from "./gust";
 export * from "./slide";
-export { textWidth } from "./hooks";
+export { reducedMotion, textWidth } from "./hooks";
 export * from "./ring";
 export * from "./icons";
 export * from "./icons-app";

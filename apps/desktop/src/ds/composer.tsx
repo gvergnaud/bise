@@ -137,6 +137,9 @@ export interface ComposerFrameProps {
   head?: ReactNode;
   /** the lines he quoted, the dock, the inbox tabs: above the box */
   quote?: ReactNode;
+  /** the box's drawer (the queued messages, his m_66509, designer m_66517): its first part, over
+   *  its head, one piece with it (one outline, one focus ring); none: the box alone */
+  drawer?: ReactNode;
   dock?: ReactNode;
   tabs?: ReactNode;
   /** shown focused without focus (the gallery); live, :focus-within does it */
@@ -158,9 +161,9 @@ export function boxPress(target: EventTarget | null): boolean {
   // a disabled control (send while the draft is empty) does nothing of its own: the press focuses the field
   return el.closest('[contenteditable="true"], button:not(:disabled), a, input, textarea, [role=button], [role=menu], .b-chip, .b-dock, .b-tabs, .b-quote') === null;
 }
-/** the composer's frame: tabs, dock, quote, the tab glued to the box, the box (its head, the editor,
- *  then its row: tools left, tools and send right) */
-export function ComposerFrame({ children, tab, answering, answerTip, quiet, tools, toolsEnd, sent = 0, send, onSend, disabled, head, quote, dock, tabs, focus, onBoxDown, lead, onKeyDownCapture, testId }: ComposerFrameProps) {
+/** the composer's frame: tabs, dock, quote, the tab glued to the box, the box (its drawer, its head,
+ *  the editor, then its row: tools left, tools and send right) */
+export function ComposerFrame({ children, tab, answering, answerTip, quiet, tools, toolsEnd, sent = 0, send, onSend, disabled, head, quote, drawer, dock, tabs, focus, onBoxDown, lead, onKeyDownCapture, testId }: ComposerFrameProps) {
   return (
     <div className={cx("b-composer", disabled && "is-disabled")} data-testid={testId} onKeyDownCapture={onKeyDownCapture}
       onMouseDown={onBoxDown && ((e) => {
@@ -175,6 +178,7 @@ export function ComposerFrame({ children, tab, answering, answerTip, quiet, tool
       {/* answering, the tab is the pink border's label: its tip says where his words go (designer m_26683) */}
       {tab != null && <div className={cx("tab", answering && "acc", answering && quiet && "quiet")} data-testid={sub(testId, "tab")} {...(answering ? tipAttrs(answerTip) : {})}>{tab}</div>}
       <div className={cx("box", focus && "is-focus", answering && "ans", answering && quiet && "quiet")} data-testid={sub(testId, "box")} data-answering={answering || undefined}>
+        {drawer}
         {head != null && <div className="head" data-testid={sub(testId, "head")}>{head}</div>}
         <div className="line">
           {lead}

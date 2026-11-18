@@ -203,12 +203,8 @@ export const Composer = memo(function Composer(
               if (endsLine(e.key)) cb.current.onLineDone?.();
             }
       }
-      quote={
-        <>
-          {strip}
-          {props.queue !== undefined && <QueueDrawer {...props.queue} fieldEmpty={!canSend} testId={`${testId}.queue`} />}
-        </>
-      }
+      quote={strip}
+      drawer={props.queue !== undefined && <QueueDrawer {...props.queue} fieldEmpty={!canSend} testId={`${testId}.queue`} />}
       send={busy && !canSend ? "stop" : canSend ? "on" : "off"}
       onSend={() => {
         if (busy && !canSend) cb.current.onStop?.();
