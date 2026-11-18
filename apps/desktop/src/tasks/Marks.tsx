@@ -87,6 +87,26 @@ export function TaskMark({ status, tip, testId }: { status: WorkStatus; tip?: st
   );
 }
 
+/** The todo list's box (his m_66588, designer m_66969): in a row's mark slot, a 12 px box in a 24 px
+ *  hit area, its stroke the status's color; checked: ✓ inside, text-3; `ready`: open with every
+ *  done-when item ticked, an ink box ready to check. Its click is his Mark done (open) or Reopen
+ *  (checked); the rest of the row still opens the Task tab. */
+export function TaskCheck({ status, checked, ready, onToggle, testId }: { status: WorkStatus; checked: boolean; ready: boolean; onToggle: () => void; testId?: string }) {
+  const word = checked ? tasks.act_reopen : tasks.act_done;
+  return (
+    <Press look="tk-box" role="checkbox" aria-checked={checked} aria-label={word} data-st={status} data-checked={checked || undefined} data-ready={ready || undefined}
+      {...tipAttrs(word)} onClick={(e) => {
+        e.stopPropagation();
+        onToggle();
+      }} data-testid={testId}>
+      <svg viewBox="0 0 12 12" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="1.5" y="1.5" width="9" height="9" rx="2.5" />
+        {checked && <path d="M3.6 6.2l1.6 1.6 3.2-3.5" />}
+      </svg>
+    </Press>
+  );
+}
+
 /** Opens a task's tab in the panel (over the Board when it is in front: the Board stays one click back). */
 export function openTask(project: string, id: string): void {
   openTab({ kind: 'task', project, id });

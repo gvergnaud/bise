@@ -50,6 +50,27 @@ export function barRows(all: readonly ProjWork[], now: number): { readonly open:
   return { open, ongoing, done };
 }
 
+/** A row he checked or unchecked in the todo list, kept where it was while the list is in view
+ *  (designer m_66969): `at` its place then, `checked` what his box says until the hub's row agrees. */
+export interface Kept {
+  readonly x: ProjWork;
+  readonly at: number;
+  readonly checked: boolean;
+}
+
+/** The todo list's rows: the open ones, and the ones he checked stay at their place, checked, so
+ *  nothing moves under his pointer (they reach the 'done lately' fold at the next draw); one he
+ *  reopened shows unchecked at its place until the hub's row is open again. Done by someone
+ *  else: gone at once (barRows). Pure. */
+export function listRows(open: readonly ProjWork[], kept: ReadonlyMap<string, Kept>): { readonly x: ProjWork; readonly checked: boolean }[] {
+  const key = (x: ProjWork) => `${x.project}/${x.w.id}`;
+  const openKeys = new Set(open.map(key));
+  const rows = open.filter((x) => kept.get(key(x))?.checked !== true).map((x) => ({ x, checked: false }));
+  const extra = [...kept.entries()].filter(([k, v]) => v.checked || !openKeys.has(k)).map(([, v]) => v).sort((a, b) => a.at - b.at);
+  for (const k of extra) rows.splice(Math.min(k.at, rows.length), 0, { x: k.x, checked: k.checked });
+  return rows;
+}
+
 /** A row's done-when count: ticked of all; null when it has none. Pure. */
 export function goalsOf(w: Pick<WorkRow, 'goals'>): { readonly done: number; readonly all: number } | null {
   const g = w.goals ?? [];

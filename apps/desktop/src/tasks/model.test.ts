@@ -1,7 +1,7 @@
 // The right bar's rows and the since line, on plain rows (model.ts, since.ts). Owner: tasks.
 import { describe, expect, it } from 'vitest';
 import type { WorkRow, WorkStatus } from '@/proto';
-import { barRows, cutAtWord, goalsOf, type ProjWork } from './model';
+import { barRows, cutAtWord, goalsOf, listRows, type ProjWork } from './model';
 import { sinceLooked } from './since';
 import { tasksOf } from './chips';
 import { artsOf, resolveMerged } from './model';
@@ -184,5 +184,23 @@ describe('the Board edge fades', () => {
     expect(edgesOf({ scrollLeft: 0, clientWidth: 600, scrollWidth: 600 })).toEqual({ l: false, r: false });
     expect(edgesOf({ scrollLeft: 0, clientWidth: 600, scrollWidth: 1400 })).toEqual({ l: false, r: true });
     expect(edgesOf({ scrollLeft: 800, clientWidth: 600, scrollWidth: 1400 })).toEqual({ l: true, r: false });
+  });
+});
+
+describe('the todo list: a row he checks stays at its place (listRows, designer m_66969)', () => {
+  const open = [w('a', 'needs_you', NOW), w('b', 'working', NOW), w('c', 'working', NOW)];
+  const ids = (rows: ReturnType<typeof listRows>) => rows.map((r) => `${r.x.w.id}${r.checked ? '✓' : ''}`);
+  it('nothing kept: the open rows, unchecked', () => {
+    expect(ids(listRows(open, new Map()))).toEqual(['a', 'b', 'c']);
+  });
+  it('checked: shown checked at its place, before the hub agrees and after it moved the row out of open', () => {
+    const kept = new Map([['p/b', { x: open[1] as ProjWork, at: 1, checked: true }]]);
+    expect(ids(listRows(open, kept))).toEqual(['a', 'b✓', 'c']);
+    expect(ids(listRows([open[0] as ProjWork, open[2] as ProjWork], kept))).toEqual(['a', 'b✓', 'c']);
+  });
+  it('reopened: unchecked at its place until the hub has it open again, then its own open row', () => {
+    const kept = new Map([['p/b', { x: open[1] as ProjWork, at: 1, checked: false }]]);
+    expect(ids(listRows([open[0] as ProjWork, open[2] as ProjWork], kept))).toEqual(['a', 'b', 'c']);
+    expect(ids(listRows(open, kept))).toEqual(['a', 'b', 'c']);
   });
 });

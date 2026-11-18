@@ -35,6 +35,19 @@
 
 /* the right bar's Tasks section: the agents' row shape (s3-orow), a mark in the mark's column */
 .tk-orow .s3-orow-mark{display:inline-flex;align-items:center;justify-content:center}
+/* the todo list's box (his m_66588, designer m_66969): over the row's mark slot, a 24 px hit area
+   around a 12 px box; its stroke the status's color, checked ✓ text-3, ready an ink box */
+.tk-box{position:absolute;top:0;bottom:0;left:var(--s-2);z-index:1;display:inline-flex;align-items:center;justify-content:center;width:var(--s-6);height:var(--s-6);margin:auto 0;padding:0;border:0;border-radius:var(--r-1);background:none;color:var(--c-text-3)}
+.tk-box>svg{width:var(--s-3);height:var(--s-3)}
+.tk-box:hover{background:var(--c-hover)}
+.tk-box:active{background:var(--c-active)}
+.tk-box:focus-visible{outline:2px solid var(--c-focus);outline-offset:0}
+.tk-box[data-st="needs_you"]{color:var(--c-accent)}
+.tk-box:is([data-st="working"],[data-st="to_review"]),.tk-box[data-ready]{color:var(--c-text)}
+.tk-box[data-st="stalled"]{color:var(--c-err)}
+.tk-box[data-ready]>svg{stroke-width:1.5}
+.tk-box[data-checked]{color:var(--c-text-3)}
+.tk-orow[data-checked] .tk-oname{color:var(--c-text-3)}
 /* the name takes the row up to its n/m (designer m_66328); its words, a box as wide as that room
    whatever they say (basis 0), so the ds WordCut cuts them at a word to it and again when it changes */
 .tk-orow .tk-oname{display:flex;flex:1 1 0;min-width:0}
