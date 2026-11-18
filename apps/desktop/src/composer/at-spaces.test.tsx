@@ -7,7 +7,7 @@ import { act, cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { ComposerActions } from './actions';
 import type { Store } from './drafts';
-import type { Message } from './message';
+import type { Outgoing } from './message';
 import { NO_SOURCES, type ComposerSources } from './sources';
 import { PmField } from './pm/PmField';
 
@@ -28,7 +28,7 @@ const SOURCES: ComposerSources = {
 };
 
 function field() {
-  const got: { a: ComposerActions | null; sent: Message[] } = { a: null, sent: [] };
+  const got: { a: ComposerActions | null; sent: Outgoing[] } = { a: null, sent: [] };
   const r = render(
     <div className="box">
       <PmField target="p/main" busy={false} sources={SOURCES} store={memStore()} testId="composer" placeholder="write to bise"
