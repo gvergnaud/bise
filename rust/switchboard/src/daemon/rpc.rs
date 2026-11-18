@@ -11,9 +11,11 @@
 //!   the event the arm sends that connection (a read's), the arm's error,
 //!   or `{}` once the arm is done (an action); a method that answers the
 //!   hub's words (`rpc::says`: command/run, artifacts/add, version/info...)
-//!   gets the arm's `notice` as its `CommandRunResult`. The thread answers
-//!   (git, lsof, the release plan: [`LATER`]) stay pending until their
-//!   event comes. Lines for that
+//!   gets the arm's `notice` as its `CommandRunResult`. A method whose
+//!   row says `Answer::Later` (git, lsof, the forge, a journal read on a
+//!   thread) stays pending until its event comes, never `{}`; an answer
+//!   that finds no request and has no notification row is logged, never
+//!   dropped quietly (architect m_66698). Lines for that
 //!   connection made while its request runs are held, then sent after its
 //!   response (Vibe's order: the response first);
 //! - hub-wide notifications are numbered: [`Shell::proto_note`] moves the
@@ -45,9 +47,6 @@ fn one_ev(project: &str, body: &Value) -> Option<HubEv> {
         _ => None,
     }
 }
-
-/// The methods answered from a thread (git, lsof), after the arm returns.
-const LATER: &[&str] = &["diff/read", "worktrees/list", "processes/list", "process/output", "merged/list", "branches/list", "release/plan", "tool/output", "log/read", "log/completion", "log/body", "pr/act", "pr/detail", "pr/checkLog"];
 
 /// The hub-wide kinds sent from a thread: `hub/read` gives their last.
 const SCANNED: &[&str] = &["worktrees", "processes", "merged"];
@@ -245,7 +244,7 @@ impl Shell {
         // (a read answered already, a thread's answer comes later), then
         // what was held
         let result = self.rpc.result.take().unwrap_or_else(|| Value::Object(Default::default()));
-        if !LATER.contains(&row.method) {
+        if row.answer == rpc::Answer::Step {
             if let Some(p) = self.rpc_pending(id, |p| p.id == rid) {
                 self.rpc_respond(id, Response::ok(p.id, result));
             }
@@ -435,8 +434,12 @@ impl Shell {
         };
         let hub = rpc::note_of_ev(ev.tag()).is_some_and(|r| r.scope == Scope::Hub);
         let w = hub.then(|| self.rpc.now());
-        if let Some(n) = rpc::note(&ev, w) {
-            self.rpc_write(id, &Message::Notification(n).encode(), false);
+        match rpc::note(&ev, w) {
+            Some(n) => self.rpc_write(id, &Message::Notification(n).encode(), false),
+            // an answer no request waits for and no notification carries:
+            // said in the log, never a tab left waiting quietly (m_66698)
+            None if answer => log_line(&self.opts.paths, &format!("{tag}: an answer with no request waiting")),
+            None => {}
         }
         true
     }

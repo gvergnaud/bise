@@ -41,25 +41,52 @@ pub struct MethodRow {
     pub method: &'static str,
     pub cmd: &'static str,
     pub result: Option<&'static str>,
+    /// when its request is answered (the hub's rpc_request reads it)
+    pub answer: Answer,
 }
 
+/// When a method's request is answered (architect m_66698): a fact of each
+/// row, chosen where the row is written, never by a default.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Answer {
+    /// in the step that ran it: its result event if the step sent one,
+    /// else `{}` (every action)
+    Step,
+    /// later, by its result event (a read made on a thread, the forge's
+    /// answer): never `{}` at the step's end, so the event finds its request
+    Later,
+}
+
+/// An action: `{}` once its step ran, its change in the notifications.
 const fn m(method: &'static str, cmd: &'static str, result: Option<&'static str>) -> MethodRow {
-    MethodRow { method, cmd, result }
+    assert!(result.is_none(), "a method with a result says when it answers: m_step or m_later");
+    MethodRow { method, cmd, result, answer: Answer::Step }
+}
+
+/// A read answered in its step, by its result event.
+const fn m_step(method: &'static str, cmd: &'static str, result: &'static str) -> MethodRow {
+    MethodRow { method, cmd, result: Some(result), answer: Answer::Step }
+}
+
+/// A read answered after its step (a thread, the forge), by its result event.
+const fn m_later(method: &'static str, cmd: &'static str, result: &'static str) -> MethodRow {
+    MethodRow { method, cmd, result: Some(result), answer: Answer::Later }
 }
 
 /// Every method that is a [`HubCmd`].
 pub const METHODS: &[MethodRow] = &[
-    m("thread/subscribe", "subscribe", Some("thread")),
+    m_step("thread/subscribe", "subscribe", "thread"),
     m("thread/unsubscribe", "unsubscribe", None),
-    m("thread/page", "page", Some("thread")),
-    m("thread/find", "find", Some("thread_hits")),
-    m("thread/marks", "marks", Some("thread_marks")),
+    m_step("thread/page", "page", "thread"),
+    // searched and marked on a thread (daemon/proto/walk.rs)
+    m_later("thread/find", "find", "thread_hits"),
+    m_later("thread/marks", "marks", "thread_marks"),
     m("turn/send", "send", None),
     m("turn/interrupt", "stop", None),
     m("card/answer", "answer", None),
     m("card/close", "close", None),
     // no mode: a read (the current mode and rules); a mode: an action
-    m("approvals/set", "approvals", Some("approvals")),
+    m_step("approvals/set", "approvals", "approvals"),
     m("approvals/removeRule", "remove_rule", None),
     m("agent/new", "new", None),
     m("agent/archive", "archive", None),
@@ -69,51 +96,51 @@ pub const METHODS: &[MethodRow] = &[
     m("agent/effort", "effort", None),
     m("agent/follow", "follow", None),
     m("artifacts/seen", "artifacts_seen", None),
-    m("diff/read", "diff", Some("diff")),
+    m_later("diff/read", "diff", "diff"),
     // a diff's guide (page review-guided): kept, small, being written, or
     // its call; a written or failed one comes to every connection too
-    m("guide/get", "guide", Some("guide")),
+    m_step("guide/get", "guide", "guide"),
     // a tool row opened: its whole output from the session log (main's
     // 5a9cc5f2), answered later from a thread
-    m("tool/output", "tool_out", Some("tool_out")),
+    m_later("tool/output", "tool_out", "tool_out"),
     // the window's /log: a page of an agent's raw session (TP-N2)
-    m("log/read", "log", Some("log")),
+    m_later("log/read", "log", "log"),
     // /debug completion: a request of the agent's ring, as rows
-    m("log/completion", "completion", Some("completion")),
+    m_later("log/completion", "completion", "completion"),
     // /debug's 'show more': one cut body whole (debug-more)
-    m("log/body", "log_body", Some("log_body")),
+    m_later("log/body", "log_body", "log_body"),
     // his queued message taken back (the window's "edit · drop")
-    m("turn/unqueue", "queued_take", Some("queued_taken")),
+    m_step("turn/unqueue", "queued_take", "queued_taken"),
     // his queued message said now (the window's "send now"): sb-core
     // steers it in, its id kept; the agents event drops it from the queue
     m("turn/steerQueued", "queued_steer", None),
-    m("worktrees/list", "worktrees", Some("worktrees")),
+    m_later("worktrees/list", "worktrees", "worktrees"),
     // running processes (docs/processes.md): the list, an output range,
     // following it, stop (the user's authority)
-    m("processes/list", "processes", Some("processes")),
-    m("process/output", "proc_out", Some("proc_out")),
+    m_later("processes/list", "processes", "processes"),
+    m_later("process/output", "proc_out", "proc_out"),
     m("process/follow", "proc_follow", None),
     m("process/stop", "proc_stop", None),
-    m("merged/list", "merged", Some("merged")),
-    m("features/list", "features", Some("features")),
-    m("prs/list", "prs", Some("prs")),
+    m_later("merged/list", "merged", "merged"),
+    m_step("features/list", "features", "features"),
+    m_step("prs/list", "prs", "prs"),
     // his Merge or Close on a PR's tab: answered once the forge said
-    m("pr/act", "pr_act", Some("pr_acted")),
+    m_later("pr/act", "pr_act", "pr_acted"),
     // his gestures on a task (docs/tasks.md): the view's rows show the
     // change; a refusal is the command's error
     m("task/act", "task_act", None),
     m("task/move", "task_move", None),
-    // a task's Log (roma idea 3): read off the hub's loop, answered once
-    m("task/log", "task_log", Some("task_log")),
+    // a task's Activity (roma idea 3): read off the hub's loop, answered once
+    m_later("task/log", "task_log", "task_log"),
     // a PR's tab: its detail and a check's log, from the forge on a thread
-    m("pr/detail", "pr_detail", Some("pr_detail")),
-    m("pr/checkLog", "pr_check_log", Some("pr_check_log")),
+    m_later("pr/detail", "pr_detail", "pr_detail"),
+    m_later("pr/checkLog", "pr_check_log", "pr_check_log"),
     // inbox-record: his answered and withdrawn cards, one page
-    m("inbox/history", "inbox_history", Some("inbox_history")),
-    m("scheduled/list", "scheduled", Some("scheduled")),
+    m_step("inbox/history", "inbox_history", "inbox_history"),
+    m_step("scheduled/list", "scheduled", "scheduled"),
     m("scheduled/stop", "scheduled_stop", None),
     m("wake/stop", "wake_stop", None),
-    m("models/list", "models", Some("models")),
+    m_step("models/list", "models", "models"),
     m("route/correct", "route_correct", None),
     m("route/cancel", "route_cancel", None),
     // the line he typed (say, @route, a hub command): the hub's one
@@ -124,15 +151,18 @@ pub const METHODS: &[MethodRow] = &[
     m("scheduled/run", "scheduled_run", None),
     m("artifacts/add", "artifacts_add", None),
     // artifacts in folders (docs/artifacts.md, "Folders")
-    m("artifacts/move", "artifacts_move", Some("artifacts_moved")),
-    m("artifacts/folders", "artifacts_folders", Some("folders")),
+    // a move into another project's library answers from a thread (its
+    // hub's), one here from the step: both by the result event
+    m_later("artifacts/move", "artifacts_move", "artifacts_moved"),
+    m_step("artifacts/folders", "artifacts_folders", "folders"),
     // his keep and his opens (artifacts_marks; page artifacts-signal)
     m("artifacts/keep", "artifacts_keep", None),
     m("artifacts/opened", "artifacts_opened", None),
-    m("artifacts/library", "artifacts_library", Some("library")),
-    m("branches/list", "branches", Some("branches")),
+    // the other projects' stores, read on a thread
+    m_later("artifacts/library", "artifacts_library", "library"),
+    m_later("branches/list", "branches", "branches"),
     m("client/focus", "focus", None),
-    m("versions/list", "versions", Some("versions")),
+    m_step("versions/list", "versions", "versions"),
     m("version/info", "version_info", None),
     m("version/switch", "version_switch", None),
     m("version/rollback", "version_rollback", None),
@@ -142,7 +172,7 @@ pub const METHODS: &[MethodRow] = &[
     // update now (update-flow): his click on the status pill or line;
     // client sockets only (issue 16), never an agent's op
     m("bise/update", "bise_update", None),
-    m("release/plan", "release_plan", Some("release")),
+    m_later("release/plan", "release_plan", "release"),
     // its steps go to every client as `release/progress`
     m("release/run", "release_run", None),
     // `bise stop` (client::stop): its answer may never come, the hub ends
@@ -150,7 +180,7 @@ pub const METHODS: &[MethodRow] = &[
     // a note talk's words to its page (the desktop core's voice)
     m("page/voice", "page_voice", None),
     // cost-pause: the project's cost, its pause and resume (his only)
-    m("usage/read", "usage", Some("usage")),
+    m_step("usage/read", "usage", "usage"),
     m("project/pause", "pause", None),
     // MCP Apps C9: open this in the desktop app (the TUI's `app ↗`)
     m("app/open", "app_open", None),

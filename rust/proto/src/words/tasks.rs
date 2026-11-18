@@ -202,17 +202,24 @@ crate::words! { tasks:
     /// the ink dot's label and tip (roma idea 2): its status, artifacts or questions changed
     new_since_looked = "new since you looked";
 
-    // ---- the task's Log (roma idea 3): who did what and why, newest first
+    // ---- the task's Activity (roma idea 3; his word m_66595): who did what
+    // and why, newest first
     /// the Task tab's first pane: what the task is now
     tab_overview = "Overview";
-    /// the Task tab's second pane: its Log
-    tab_log = "Log";
-    /// the Log with no line yet
+    /// the Task tab's second pane: its Activity
+    tab_log = "Activity";
+    /// the Activity with no line yet
     log_none = "Nothing yet. Its agents' reports, your answers and what lands show up here.";
-    /// the Log while the hub reads it
-    log_loading = "reading its Log…";
-    /// the Log the hub couldn't read
-    log_failed(why) = "its Log can't be read: {why}";
+    /// the Activity while the hub reads it
+    log_loading = "reading its activity…";
+    /// the Activity the hub couldn't read
+    log_failed(why) = "its activity can't be read: {why}";
+    /// no answer in `s` seconds: said, never a tab that spins (designer m_66618)
+    log_late(s) = "its activity didn't come: bise didn't answer in {s} s";
+    /// the late or failed Activity asked again
+    log_retry = "Try again";
+    /// `sb task show <id> --activity`'s head
+    log_head(id) = "{id} · Activity, newest first";
     /// an agent's `sb report` (kind: progress, done, blocked, failed)
     log_report(who, kind, text) = "{who} reported {kind}: {text}";
     /// a Log report row's fold: the rest of the report and its decisions (designer m_65808)

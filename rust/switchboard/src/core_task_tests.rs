@@ -755,9 +755,9 @@ fn a_joining_agents_context_quotes_him_says_what_waits_and_ends_on_its_log() {
         "Its agents' newest reports:",
     ];
     assert!(order.windows(2).all(|p| at(p[0]) < at(p[1])), "{ctx}");
-    let more = format!("More: sb task show {a} --log");
+    let more = format!("More: sb task show {a} --activity");
     let block = &ctx[..at("</task_context>")];
-    assert!(block.trim_end().ends_with(&more), "the Log's pointer is its last line: {ctx}");
+    assert!(block.trim_end().ends_with(&more), "the Activity's pointer is its last line: {ctx}");
     // a task over the cap: cut from the end, the pointer stays last
     let long = "word ".repeat(600);
     let r = task(&mut t, MAIN, Task::New { name: "Rewrite the docs".into(), why: long, goals: vec![] });
@@ -765,5 +765,5 @@ fn a_joining_agents_context_quotes_him_says_what_waits_and_ends_on_its_log() {
     let ctx = first_delivery(&mut t, "auth", "and the docs", &b);
     let inner = ctx.split("<task_context>").nth(1).and_then(|s| s.split("</task_context>").next()).unwrap_or_default().trim();
     assert!(inner.chars().count() <= 2000, "capped: {}", inner.chars().count());
-    assert!(inner.starts_with(&format!("## Task `{b}`")) && inner.ends_with(&format!("More: sb task show {b} --log")), "{inner}");
+    assert!(inner.starts_with(&format!("## Task `{b}`")) && inner.ends_with(&format!("More: sb task show {b} --activity")), "{inner}");
 }
