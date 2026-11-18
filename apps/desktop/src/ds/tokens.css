@@ -30,6 +30,7 @@
   --c-line: color-mix(in srgb, var(--p-text) 10%, transparent);
   --c-line-strong: var(--p-rule);
   --c-hover: color-mix(in srgb, var(--p-text) 6%, transparent);
+  --c-chip: var(--c-hover); /* a task chip's neutral fill (designer m_66523) */
   --c-active: color-mix(in srgb, var(--p-text) 10%, transparent);
   --c-selection: var(--p-sel);
   --c-press: color-mix(in srgb, var(--p-text) 15%, transparent);
@@ -105,6 +106,7 @@
   --h-control-lg: 40px;  /* the onboarding's main button */
   --h-row-tight: 28px;   /* a sidebar row */
   --h-row: 32px;         /* a list row */
+  --h-chip: var(--s-5);  /* a task chip, 20 px everywhere (tasks-shine batch 1, designer m_66523) */
   --h-bar: 52px;         /* the window's bar, full width: the lights, the title, the panel's tabs (native-mac §6) */
   --h-head: 44px;        /* a panel's or a screen's head */
   --h-composer: 48px;    /* the composer on one line */
@@ -188,6 +190,7 @@
   --c-line: color-mix(in srgb, var(--p-text) 10%, transparent);
   --c-line-strong: var(--p-rule);
   --c-hover: color-mix(in srgb, var(--p-text) 6%, transparent);
+  --c-chip: var(--c-hover); /* a task chip's neutral fill (designer m_66523) */
   --c-active: color-mix(in srgb, var(--p-text) 10%, transparent);
   --c-selection: var(--p-sel);
   --c-press: color-mix(in srgb, var(--p-text) 15%, transparent);

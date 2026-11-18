@@ -16,7 +16,8 @@ export function chipOrder(list: readonly WorkRow[]): WorkRow[] {
   return [...list].sort((a, b) => Number(isOpen(b)) - Number(isOpen(a)) || b.last_ms - a.last_ms);
 }
 
-/** What a thing points at: an agent by name, a card by id, his message by its pos in main's thread, or task ids. */
+/** What a thing points at: an agent by name, a card by id, his message by its msg_id (WorkRow.origin
+ *  is the id sb-core gave it, bend/hub/work.bend `origin`, matched on Entry.msg_id; never its pos), or task ids. */
 export type ChipsOf =
   | { readonly agent: string }
   | { readonly card: number }
@@ -33,7 +34,7 @@ export function tasksOf(works: readonly WorkRow[], of: ChipsOf): WorkRow[] {
 }
 
 /** The chips of a thing of `project`; nothing when it serves no task. */
-export function TaskChipsOf({ project, of, testId, keep = false }: { project: string; of: ChipsOf; testId?: string; keep?: boolean }) {
+export function TaskChipsOf({ project, of, testId }: { project: string; of: ChipsOf; testId?: string }) {
   const works = useWorks(project);
   const now = useNowFor(() => false);
   const key = JSON.stringify(of);
@@ -45,5 +46,5 @@ export function TaskChipsOf({ project, of, testId, keep = false }: { project: st
     const w = byId.get(id);
     return w === undefined ? '' : lineAt({ project, projectName: project, w }, now);
   };
-  return <TaskChips project={project} list={list} lineOf={lineOf} keep={keep} {...(testId === undefined ? {} : { testId })} />;
+  return <TaskChips project={project} list={list} lineOf={lineOf} {...(testId === undefined ? {} : { testId })} />;
 }

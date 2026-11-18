@@ -157,6 +157,16 @@
 .inbox-block > .b-row, .inbox-block .strip-rows > .strip-line > .b-row { height: var(--h-row-tight); padding: 0 var(--pad-row-x); gap: var(--gap-inline); }
 .inbox-block > .b-row .nm, .inbox-block .strip-rows > .strip-line > .b-row .nm { display: flex; gap: var(--gap-inline); flex: 1; min-width: 0; }
 .inbox-block .strip-who { font-weight: 500; }
+/* the question before the task (tasks-shine batch 1, designer m_66523): the question takes the room
+   (basis auto), the task chip shrinks first (its shrink 1000x) down to its mark alone, then the
+   question cuts last; a block under 560 px shows the chip's mark alone (its name in its tip) */
+.inbox-block { container: strip / inline-size; }
+.inbox-block .strip-line .strip-what { flex: 1 1 auto; }
+.inbox-block .strip-line .tk-chips { flex: 0 1000 auto; min-width: var(--s-6); }
+.inbox-block .strip-line .tk-chip { min-width: var(--s-6); }
+@container strip (width < 560px) {
+  .inbox-block .strip-line .tk-chip-name { display: none; }
+}
 /* the project tag ('bise', 'shop · 5 min'): words, not machine text, so sans (designer m_20986) */
 .inbox-block > .b-row .end, .inbox-block .strip-rows > .strip-line > .b-row .end { flex: none; font: var(--t-13) var(--font-ui); color: var(--c-text-3); }
 

@@ -16,12 +16,14 @@
 .tk-mark:is([data-st="done"],[data-st="ongoing"]){color:var(--c-text-3)}
 
 /* the task chip: neutral, the artifact chip's height and radius, ink text */
-.tk-chip{display:inline-flex;align-items:center;gap:var(--s-2);min-width:0;max-width:100%;height:var(--s-6);margin:0;padding:0 var(--s-2);border:0;border-radius:var(--r-1);background:var(--c-hover);color:var(--c-text);font:var(--t-13) var(--font-ui);white-space:nowrap}
-.tk-chip:hover{background:color-mix(in srgb,var(--c-text) 6%,var(--c-hover))}
+/* the task chip, one look everywhere (tasks-shine batch 1, designer m_66523): 20 high, t-12, the
+   neutral fill, its mark in an 8 px box, its name cut at a word to 14ch at most (the ds WordCut) */
+.tk-chip{display:inline-flex;align-items:center;gap:var(--s-1);min-width:0;max-width:100%;height:var(--h-chip);margin:0;padding:0 var(--s-2);border:0;border-radius:var(--r-1);background:var(--c-chip);color:var(--c-text);font:var(--t-12) var(--font-ui);white-space:nowrap}
+.tk-chip:hover{background:color-mix(in srgb,var(--c-text) 6%,var(--c-chip))}
 .tk-chip:focus-visible{outline:2px solid var(--c-focus);outline-offset:2px}
-.tk-chip-name{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.tk-chip-mark{display:inline-flex;flex:none;align-items:center;justify-content:center;width:var(--s-2);height:var(--s-2)}
+.tk-chip-name{flex:0 1 auto;min-width:0;max-width:14ch;overflow:hidden}
 .tk-chips{display:inline-flex;align-items:center;gap:var(--s-2);min-width:0}
-.tk-chips.keep .tk-chip-name{min-width:16ch}
 .tk-more{height:var(--s-6);padding:0 var(--s-1);border:0;border-radius:var(--r-1);background:none;color:var(--c-text-3);font:inherit;font-size:var(--t-12)}
 .tk-more:hover{background:var(--c-hover);color:var(--c-text-2)}
 

@@ -2,11 +2,10 @@
 // dot or ring, or its glyph, each with its tip: the task's line), the neutral task chip (the mark,
 // then the name cut at a word, never pink), the chips (the main one in clear, '+N' whose tip lists
 // the others), and the openers of the Task tab and the Board. Tokens only (tasks.css). Owner: tasks.
-import { Press, tipAttrs } from '@/ds';
+import { Press, tipAttrs, WordCut } from '@/ds';
 import { openTab } from '@/app/panel/tabs';
 import type { WorkRow, WorkStatus } from '@/proto';
 import { tasks } from '@/proto/words_tasks.gen';
-import { cutAtWord } from './model';
 import { age } from '@/inbox/InboxCard';
 import './tasks.css';
 
@@ -69,27 +68,27 @@ export function openBoard(project: string): void {
   openTab({ kind: 'tasks', project });
 }
 
-/** The task chip: neutral, its mark then its name cut at a word; its tip the whole name and its line. */
-export function TaskChip({ project, w, line, max = 28, testId }: { project: string; w: Pick<WorkRow, 'id' | 'name' | 'status'>; line: string; max?: number; testId?: string }) {
-  const name = cutAtWord(w.name, max);
+/** The task chip, one look everywhere (tasks-shine batch 1, designer m_66523): neutral, 20 high,
+ *  its mark in an 8 px box, then its name cut at a word to its room (14ch at most, the ds WordCut);
+ *  its tip the whole name and its line. A narrow place shrinks it to its mark alone (its css). */
+export function TaskChip({ project, w, line, testId }: { project: string; w: Pick<WorkRow, 'id' | 'name' | 'status'>; line: string; testId?: string }) {
   return (
     <Press look="tk-chip" data-testid={testId} onClick={(e) => {
       e.stopPropagation();
       openTask(project, w.id);
     }} {...tipAttrs(tasks.chip_tip({ name: w.name, what: line }))}>
-      <StatusMark status={w.status} />
-      <span className="tk-chip-name">{name}</span>
+      <span className="tk-chip-mark"><StatusMark status={w.status} /></span>
+      <WordCut className="tk-chip-name" text={w.name} />
     </Press>
   );
 }
 
 /** Many tasks: the first in clear, then '+N' in text-3 whose tip lists the others (its click opens the next). */
-export function TaskChips({ project, list, lineOf, testId, keep = false }: { project: string; list: readonly Pick<WorkRow, 'id' | 'name' | 'status'>[]; lineOf: (id: string) => string; testId?: string; keep?: boolean }) {
+export function TaskChips({ project, list, lineOf, testId }: { project: string; list: readonly Pick<WorkRow, 'id' | 'name' | 'status'>[]; lineOf: (id: string) => string; testId?: string }) {
   const [first, ...rest] = list;
   if (first === undefined) return null;
   return (
-    // `keep`: a narrow place (a thread's head) keeps ~16 letters before its cut (tasks-ux m_64959)
-    <span className={keep ? 'tk-chips keep' : 'tk-chips'}>
+    <span className="tk-chips">
       <TaskChip project={project} w={first} line={lineOf(first.id)} {...(testId === undefined ? {} : { testId })} />
       {rest.length > 0 && (
         <Press look="tk-more" data-testid={testId === undefined ? undefined : `${testId}.more`} onClick={(e) => {

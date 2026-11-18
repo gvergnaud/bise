@@ -466,7 +466,7 @@ export function Bar({ frame: state }: { frame: FrameState }) {
         {/* the thread's agent's links right after its name: its PR, its branch, its page (designer m_57254) */}
         {route.screen === "thread" && route.agent !== MAIN && <BarLinks project={route.project} agent={route.agent} />}
         {/* the tasks the agent serves (WorkRow.agents); main serves them all: none on its header */}
-        {route.screen === "thread" && route.agent !== MAIN && <TaskChipsOf project={route.project} of={{ agent: route.agent }} testId="app.bar.title.task" keep />}
+        {route.screen === "thread" && route.agent !== MAIN && <TaskChipsOf project={route.project} of={{ agent: route.agent }} testId="app.bar.title.task" />}
         {t.sub.length > 0 && (
           <span className="s" data-testid="app.bar.title.sub">
             {t.sub.map((p, i) => (

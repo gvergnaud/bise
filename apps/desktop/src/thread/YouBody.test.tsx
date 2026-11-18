@@ -11,6 +11,7 @@ import { bubbleWords } from './YouBody';
 import { Markdown, slotMark, slotNodes } from './Markdown';
 import { EntryRow, PendingRow, rowLayout, type RowCtx } from './rows';
 import { pendingEntry } from './rows-messages';
+import { ev, projects, row } from '../../tests/feature/inputs';
 
 afterEach(cleanup);
 
@@ -224,5 +225,27 @@ describe('his bubble while sending and once sent (bubble-parts)', () => {
     for (const prev of [undefined, { pos: 8, at_ms: now - 60_000, kind: 'agent' as const, text: 'ok' }, { pos: 8, at_ms: now - 600_000, kind: 'you' as const, text: 'a' }, { pos: 8, at_ms: now - 86_400_000, kind: 'agent' as const, text: 'b' }]) {
       expect(rowLayout({ prev, e: pendingEntry(p), next: undefined, ctx, today: now })).toEqual(rowLayout({ prev, e: landed, next: undefined, ctx, today: now }));
     }
+  });
+});
+
+describe('the task his message started, under his bubble (designer m_66533)', () => {
+  it("a work whose origin is the bubble's msg_id shows its chip under it; another bubble shows none", () => {
+    const { store } = setup();
+    const now = Date.now();
+    act(() => {
+      store.apply(projects(row({ project: P, name: 'acme' })));
+      // a work's origin is his message's id (bend/hub/work.bend origin: S.Msg.id), never its pos
+      store.apply(ev('works', { project: P, tombs: [], works: [{ id: 'docs', name: 'Write the API docs for the release', status: 'working', by: 'main', created_ms: now, last_ms: now, origin: 70 }] }));
+      store.apply({ ev: 'entry', project: P, agent: 'perf', entry: { pos: 3, at_ms: now, kind: 'you', text: 'write the docs', msg_id: 70 } });
+      store.apply({ ev: 'entry', project: P, agent: 'perf', entry: { pos: 70, at_ms: now, kind: 'you', text: 'and the rest', msg_id: 71 } });
+    });
+    const v = render(
+      <StoreProvider store={store}>
+        <EntryRow ctx={ctx} pos={3} />
+        <EntryRow ctx={ctx} pos={70} />
+      </StoreProvider>,
+    );
+    expect(v.getByTestId('thread.you.3.task').getAttribute('data-tip')).toContain('Write the API docs for the release');
+    expect(v.queryByTestId('thread.you.70.task')).toBeNull();
   });
 });
