@@ -34,6 +34,7 @@ export function nativeItems(items: readonly PopupItem[], pick: (id: string) => v
     return {
       id,
       label: i.label,
+      ...(i.sublabel !== undefined ? { sublabel: i.sublabel } : {}),
       ...(i.accelerator !== undefined ? { accelerator: i.accelerator, registerAccelerator: register } : {}),
       ...(i.checked !== undefined ? { type: 'checkbox' as const, checked: i.checked } : {}),
       ...(img !== undefined ? { icon: img } : {}),

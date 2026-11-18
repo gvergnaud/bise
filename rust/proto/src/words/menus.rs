@@ -89,6 +89,17 @@ crate::words! { menus:
     always_open(ending) = "Always open {ending} with";
     /// a process's page in his browser
     open_browser = "Open in Browser";
+    // ---- a link's right click in a thread (links-os, designer m_66370/m_66372: sentence case)
+    /// the link in his default browser, by its name ('Open in Arc')
+    link_out(browser) = "Open in {browser}";
+    /// the same when his default browser's name can't be read
+    link_out_any = "Open in your browser";
+    /// the link in bise: a web tab, or the panel for a bise page
+    link_in = "Open in bise";
+    /// link_in's grey line under it: the click that does the same
+    link_in_hint = "⌥-click";
+    /// the link's URL to the clipboard
+    link_copy = "Copy link";
     /// a process: stop it
     stop_process = "Stop Process";
     /// a scheduled task: stop it

@@ -96,6 +96,10 @@ const api: BiseApi = {
     restartLog: () => ipcRenderer.invoke(IPC.appRestartLog) as Promise<CrashReport | null>,
   },
   openExternal: async (url, opts) => (await ipcRenderer.invoke(IPC.openExternal, url, opts)) === true,
+  browserName: async () => {
+    const name: unknown = await ipcRenderer.invoke(IPC.browserName);
+    return typeof name === 'string' ? name : null;
+  },
   webHistory: {
     list: () => ipcRenderer.invoke(IPC.webHistoryList) as Promise<WebHistory>,
     onChange: (cb) => {

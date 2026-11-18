@@ -128,6 +128,8 @@ export function installIpc(testMode: boolean): void {
     done(viewPermissionIn(wc, permission, d) ?? base(permission));
   });
   ipcMain.handle(IPC.openExternal, (_e, raw: unknown, opts: unknown): Promise<boolean> => openLink(raw, testMode, openOpts(opts)));
+  // a link's right-click menu names his default browser (links-os): the app macOS opens https with
+  ipcMain.handle(IPC.browserName, (): string | null => appName(app.getApplicationNameForProtocol('https://')));
   // a Privacy & Security pane (voice mode's Microphone, the projects scan's Files & Folders): the only settings URLs a window may open
   ipcMain.on(IPC.privacySettings, (_e, pane: unknown) => {
     const url = typeof pane === 'string' && Object.hasOwn(PRIVACY_URLS, pane) ? PRIVACY_URLS[pane as PrivacyPane] : null;
@@ -220,6 +222,12 @@ export async function openLink(raw: unknown, testMode: boolean, opts: OpenOpts =
   }
   await shell.openExternal(url, { activate: opts.background !== true });
   return true;
+}
+
+/** An app's name as macOS gives it ('Arc', 'Google Chrome.app'): without '.app', null when empty. Pure. */
+export function appName(raw: string): string | null {
+  const name = raw.trim().replace(/\.app$/u, '');
+  return name === '' ? null : name;
 }
 
 /** The window's openExternal options, checked: booleans only, anything else dropped. Pure. */

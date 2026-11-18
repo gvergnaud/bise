@@ -6,12 +6,15 @@
 // the panel owns, pressed in the page, played as the window's own from that page's tab (⌘L there
 // selects its address: selectFocusedAddress, over the bars the tabs put); a saved download's line; find's
 // count; a tab that never showed a page closed when his go went out or was refused), the views of
-// tabs gone closed, and where a link he clicks goes (openWebLink: a page of one of his hubs in the
-// panel as its artifact, else a web tab, his browser with ⌘ or for a site he always opens there).
+// tabs gone closed, and where a thread's link goes (linkPlan, openWebLink: a page of one of his hubs
+// in the panel as its artifact, else his default browser, a web tab with ⌥; links-os) and its
+// right-click menu (linkMenu, openLinkMenu).
 // Owner: newtab-omnibox.
 import { useSyncExternalStore } from 'react';
-import type { WebEvent, WebTabState } from '@/shared/api';
+import type { PopupItem, WebEvent, WebTabState } from '@/shared/api';
+import type { LinkHow } from '@/shared/linkhow';
 import { pageLinkOf, type PagesOf } from '@/shared/pagelink';
+import { menus } from '@/proto/words_menus.gen';
 import { getAppStore } from '@/store';
 import { openAtVersion } from '@/artifacts/links';
 import { activateTab, closeTabId, onPanelChange, openWebPage, panelAt, setWebPage, webTabKeys } from './state';
@@ -209,24 +212,62 @@ export function linkGoes(url: string, mod: boolean, out: readonly string[]): 'ta
 }
 
 /**
- * Where a link goes: one of his hubs' pages (pageLinkOf: its origin is a project's pages_url) opens
- * in the panel as that artifact (panel-page-blank: the web tab refuses bise's own ports and stayed
- * blank, architect m_65009), else a web tab, else his browser (linkGoes). ⌘ always goes to his
- * browser. Pure.
+ * Where a thread's link goes, the one rule (links-os, his m_66366, designer m_66370): one of his
+ * hubs' pages (pageLinkOf: its origin is a project's pages_url) opens in the panel as that artifact
+ * (panel-page-blank: the web tab refuses bise's own ports, architect m_65009); ⌥ opens an http(s)
+ * link in a web tab of bise; anything else goes to his default browser (he isn't signed in to
+ * bise's), ⌘ a bise page too. Pure.
  */
-export function linkPlan(url: string, mod: boolean, out: readonly string[], projects: readonly PagesOf[]): { readonly go: 'artifact'; readonly project: string; readonly id: string; readonly v?: number } | { readonly go: 'tab' | 'browser' } {
-  const page = mod ? null : pageLinkOf(url, projects);
+export function linkPlan(url: string, how: LinkHow, projects: readonly PagesOf[]): { readonly go: 'artifact'; readonly project: string; readonly id: string; readonly v?: number } | { readonly go: 'tab' | 'browser' } {
+  const page = how === 'cmd' ? null : pageLinkOf(url, projects);
   if (page !== null) return { go: 'artifact', ...page };
-  return { go: linkGoes(url, mod, out) };
+  return { go: how === 'alt' && siteOfUrl(url) !== null ? 'tab' : 'browser' };
 }
 
-/** A link he clicked in a thread or a card (designer m_64680): a page of his in the panel, a web tab, or his browser. */
-export function openWebLink(url: string, mod: boolean, out: readonly string[]): void {
-  const plan = linkPlan(url, mod, out, getAppStore().projects());
+/** A link's right-click menu's picks: his browser, bise, the clipboard. */
+export type LinkPick = 'out' | 'in' | 'copy';
+
+/**
+ * A link's right-click menu (designer m_66370/m_66372): 'Open in <his default browser>' ('your
+ * browser' when its name can't be read), 'Open in bise' with '⌥-click' under it when bise can
+ * show it (an http(s) link, a bise page), then Copy link. Pure.
+ */
+export function linkMenu(url: string, browser: string | null, projects: readonly PagesOf[]): PopupItem[] {
+  const inBise = linkPlan(url, 'alt', projects).go !== 'browser';
+  return [
+    { id: 'out' satisfies LinkPick, label: browser === null ? menus.link_out_any : menus.link_out({ browser }) },
+    ...(inBise ? [{ id: 'in' satisfies LinkPick, label: menus.link_in, sublabel: menus.link_in_hint }] : []),
+    { type: 'separator' },
+    { id: 'copy' satisfies LinkPick, label: menus.link_copy },
+  ];
+}
+
+/** The click a menu pick stands for: out is ⌘ (his browser, a bise page too), in is ⌥; null for the rest. Pure. */
+export function linkMenuHow(id: string | null): LinkHow | null {
+  return id === 'out' ? 'cmd' : id === 'in' ? 'alt' : null;
+}
+
+/** A link he clicked in a thread or a card: a page of his in the panel, a web tab, or his browser (linkPlan). */
+export function openWebLink(url: string, how: LinkHow): void {
+  const plan = linkPlan(url, how, getAppStore().projects());
   if (plan.go === 'artifact') {
     if (plan.v !== undefined) openAtVersion(`${plan.project}/${plan.id}`, plan.v);
     openTab({ kind: 'artifact', project: plan.project, id: plan.id });
   } else if (plan.go === 'tab' && api() !== undefined) openWebPage(url, {});
   else void (window as Partial<Window>).bise?.openExternal(url);
+}
+
+/** His default browser's name, read once (window.bise.browserName); null when it can't be. */
+let browser: Promise<string | null> | null = null;
+
+/** A link's right click (linkMenu) at the pointer; his pick opens it (openWebLink) or copies it. */
+export async function openLinkMenu(url: string): Promise<void> {
+  const bise = (window as Partial<Window>).bise;
+  if (bise === undefined) return;
+  browser ??= bise.browserName?.().catch(() => null) ?? Promise.resolve(null);
+  const id = await bise.popupMenu(linkMenu(url, await browser, getAppStore().projects()));
+  const how = linkMenuHow(id);
+  if (how !== null) openWebLink(url, how);
+  else if (id === 'copy') await bise.copy(url);
 }
 

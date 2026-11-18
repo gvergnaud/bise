@@ -10,6 +10,7 @@
 import { memo, type ReactNode } from 'react';
 import { Marker, Msg, RowMark } from '@/ds';
 import type { Entry } from '@/proto';
+import type { LinkHow } from '@/shared/linkhow';
 import { thread } from '@/proto/words.gen';
 import { useEntry } from '@/store';
 import { Answer } from './Markdown';
@@ -31,8 +32,8 @@ export interface RowCtx {
   readonly agent: string;
   /** bise's own main (the pearl, 'bise') */
   readonly bise: boolean;
-  /** a link's click; `mod`: ⌘ held (WebTab: his browser, page newtab-browser) */
-  readonly onLink: (url: string, mod?: boolean) => void;
+  /** a link's click; `how`: plain, ⌘ or ⌥ held (app/panel/web.ts linkPlan, links-os) */
+  readonly onLink: (url: string, how?: LinkHow) => void;
   /** an artifact named in a row (its chip, an `artifact:` link, a note's page): its view */
   readonly onArtifact: (id: string) => void;
   /** a file path named in an answer, relative to the agent's folder (M4, B14) */

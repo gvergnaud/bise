@@ -66,6 +66,12 @@ export interface BiseApi {
    */
   readonly openExternal: (url: string, opts?: OpenOpts) => Promise<boolean>;
   /**
+   * His default browser's name ('Arc'), the app macOS opens https links with; null when it can't
+   * be read. A link's right-click menu says it (app/panel/web.ts linkMenu, links-os). Absent: a
+   * test's fake bise, an older preload.
+   */
+  readonly browserName?: () => Promise<string | null>;
+  /**
    * The web pages he opened from bise, for ⌘T's omnibox (main/webhistoryipc.ts, the one
    * writer; kept in this app's userData, never in a hub). list(): the whole of it; onChange():
    * each change, whole; remove() one page, clear() all, keep() his switch 'Keep the links I
@@ -497,6 +503,8 @@ export type PopupItem =
       readonly destructive?: boolean;
       /** its icon, an SF Symbol's name (nativeImage.createMenuSymbol): macOS draws it at 16 */
       readonly icon?: string;
+      /** a grey line under its label (macOS 14.4+): 'Open in bise' says '⌥-click' (links-os) */
+      readonly sublabel?: string;
     }
   | { readonly type: 'submenu'; readonly label: string; readonly icon?: string; readonly items: readonly PopupItem[] }
   | { readonly type: 'separator' };
@@ -694,6 +702,8 @@ export interface OpenOpts {
 /** The IPC channels between the preload and main (owner: amb-mac). */
 export const IPC = {
   openExternal: 'bise:open-external',
+  /** window -> main: his default browser's name (BiseApi.browserName) */
+  browserName: 'bise:browser-name',
   /** window -> main: the web history (webhistoryipc.ts) */
   webHistoryList: 'bise:web-history-list',
   webHistoryRemove: 'bise:web-history-remove',

@@ -11,7 +11,7 @@
 // are links at all. An `artifact:<id>[@vN]` link is the artifact's name,
 // pink inline (ArtName, desktop-agents-bar §5): a click goes to `onArtifact`; resting on it
 // shows its preview where the thread provides one (peek/ArtPeek).
-import { memo, useEffect, useState, type MouseEvent, type ReactNode } from 'react';
+import { memo, useContext, useEffect, useState, type MouseEvent, type ReactNode } from 'react';
 import ReactMarkdown, { defaultUrlTransform, type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { pathOf } from './paths';
@@ -21,6 +21,8 @@ import { streamView } from './stream';
 import { AppIcon, ArtName, Kbd, Press } from '@/ds';
 import { useModHeld } from '@/app/held';
 import { ArtPeek } from './peek/ArtPeek';
+import { LinkMenuContext } from './linkmenu';
+import { linkHowOf, type LinkHow } from '@/shared/linkhow';
 
 /** A link he may open from an answer: http, https or mailto. */
 export function openable(href: string | undefined): href is string {
@@ -126,8 +128,8 @@ export const Markdown = memo(function Markdown({
   slotLabel,
 }: {
   text: string;
-  /** a link's click; `mod`: ⌘ (⌃) held, his browser (page newtab-browser) */
-  onLink?: (url: string, mod?: boolean) => void;
+  /** a link's click; `how`: plain, ⌘ (⌃) or ⌥ held (shared/linkhow.ts, app/panel/web.ts linkPlan) */
+  onLink?: (url: string, how?: LinkHow) => void;
   /** an `artifact:` link's click: the artifact's view */
   onArtifact?: (id: string) => void;
   onPath?: (path: string, line?: number) => void;
@@ -140,6 +142,7 @@ export const Markdown = memo(function Markdown({
   slotLabel?: (i: number) => string;
 }) {
   const label = slotLabel ?? (() => '');
+  const linkMenu = useContext(LinkMenuContext);
   const remark = slot === undefined ? (breaks ? withBreaks : plugins) : [...(breaks ? withBreaks : plugins), () => (tree: MdNode) => { slotNodes(tree, label); }];
   const components: Components = {
     span({ node, children, ...rest }) {
@@ -197,10 +200,18 @@ export const Markdown = memo(function Markdown({
       if (!openable(href)) return <span className="th-link-off">{children}</span>;
       const open = (e: MouseEvent) => {
         e.preventDefault();
-        onLink?.(href, e.metaKey || e.ctrlKey);
+        onLink?.(href, linkHowOf(e));
       };
+      // its right click: the thread's link menu when it has one (linkmenu.ts), else the system's
+      const menu =
+        linkMenu === null
+          ? undefined
+          : (e: MouseEvent) => {
+              e.preventDefault();
+              linkMenu(href);
+            };
       return (
-        <a href={href} onClick={open} title={href} rel="noreferrer" data-testid="thread.link">
+        <a href={href} onClick={open} onContextMenu={menu} title={href} rel="noreferrer" data-testid="thread.link">
           {children}
         </a>
       );
@@ -297,8 +308,8 @@ export function Answer({
   text: string;
   live?: boolean;
   still?: boolean;
-  /** a link's click; `mod`: ⌘ (⌃) held, his browser (page newtab-browser) */
-  onLink?: (url: string, mod?: boolean) => void;
+  /** a link's click; `how`: plain, ⌘ (⌃) or ⌥ held (shared/linkhow.ts, app/panel/web.ts linkPlan) */
+  onLink?: (url: string, how?: LinkHow) => void;
   onArtifact?: (id: string) => void;
   onPath?: (path: string, line?: number) => void;
 }) {

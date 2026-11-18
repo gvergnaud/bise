@@ -1,8 +1,9 @@
 // The thread's list: its rows (entries, his sends not landed yet, the live reply), the folded
 // runs of messages between agents, and the first-run block over an empty main thread. Split out
 // of ThreadScreen.tsx (the file cap); ThreadScreen mounts it. Owner: amb-win.
-import { openWebLink } from '@/app/panel/web';
-import { webHistoryNow } from '@/app/panel/webpages';
+import { openLinkMenu, openWebLink } from '@/app/panel/web';
+import type { LinkHow } from '@/shared/linkhow';
+import { LinkMenuContext } from './linkmenu';
 import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
 import { Press } from '@/ds';
 import type { ComposerActions } from '@/composer';
@@ -41,9 +42,14 @@ function useBase(project: string, agent: string): string | undefined {
   return a?.worktree ?? row?.path;
 }
 
-/** A link from an answer: a web tab of bise, his browser with ⌘ or for a site he always opens there (designer m_64680). */
-function openLink(url: string, mod = false) {
-  openWebLink(url, mod, webHistoryNow().out);
+/** A link from an answer: his default browser, a web tab of bise with ⌥, a bise page in the panel (web.ts linkPlan, links-os). */
+function openLink(url: string, how: LinkHow = 'plain') {
+  openWebLink(url, how);
+}
+
+/** A link's right click in the thread: its menu (web.ts linkMenu). */
+function showLinkMenu(url: string) {
+  void openLinkMenu(url);
 }
 
 /**
@@ -334,7 +340,9 @@ export const Rows = memo(function Rows({ tkey, project, agent, bise, listRef, on
   // its artifact pills show their preview on hover (peek/ArtPeek)
   return (
     <ArtPeekContext.Provider value={peek}>
+      <LinkMenuContext.Provider value={showLinkMenu}>
       <ThreadList key={tkey} ref={listRef} keys={keys} row={row} more={view.more} before={view.before} onOlder={onOlder} head={<OlderLine />} tail={tail} cue={cue} testId="thread.list" keepKey={tkey} holdPart=".th-row" reactKey={reactKey} onRead={onRead} {...(onReading === undefined ? {} : { onReading })} />
+      </LinkMenuContext.Provider>
     </ArtPeekContext.Provider>
   );
 });

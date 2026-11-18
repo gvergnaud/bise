@@ -80,6 +80,16 @@ export const menus = {
   always_open: (a: { ending: string | number }): string => "Always open " + String(a.ending) + " with",
   /** a process's page in his browser */
   open_browser: "Open in Browser",
+  /** the link in his default browser, by its name ('Open in Arc') */
+  link_out: (a: { browser: string | number }): string => "Open in " + String(a.browser),
+  /** the same when his default browser's name can't be read */
+  link_out_any: "Open in your browser",
+  /** the link in bise: a web tab, or the panel for a bise page */
+  link_in: "Open in bise",
+  /** link_in's grey line under it: the click that does the same */
+  link_in_hint: "⌥-click",
+  /** the link's URL to the clipboard */
+  link_copy: "Copy link",
   /** a process: stop it */
   stop_process: "Stop Process",
   /** a scheduled task: stop it */

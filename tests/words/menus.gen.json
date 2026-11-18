@@ -134,6 +134,33 @@
     "one": null,
     "text": "Scheduled"
   },
+  "menus.link_copy": {
+    "args": [],
+    "one": null,
+    "text": "Copy link"
+  },
+  "menus.link_in": {
+    "args": [],
+    "one": null,
+    "text": "Open in bise"
+  },
+  "menus.link_in_hint": {
+    "args": [],
+    "one": null,
+    "text": "⌥-click"
+  },
+  "menus.link_out": {
+    "args": [
+      "browser"
+    ],
+    "one": null,
+    "text": "Open in {browser}"
+  },
+  "menus.link_out_any": {
+    "args": [],
+    "one": null,
+    "text": "Open in your browser"
+  },
   "menus.move_bottom": {
     "args": [],
     "one": null,

@@ -2,13 +2,18 @@
 // space on a panel selection, sb.rs draw_sb preview). Its last entries,
 // read only, drawn by the thread's own rows; the thread is followed while
 // the preview is open. Owner: amb-win.
-import { openWebLink } from '@/app/panel/web';
-import { webHistoryNow } from '@/app/panel/webpages';
+import { openLinkMenu, openWebLink } from '@/app/panel/web';
 import { useEffect, useMemo } from 'react';
 import { threadKey, useStore, useThreadOrder } from '@/store';
 import { EntryRow, type RowCtx } from '@/thread/rows';
+import { LinkMenuContext } from '@/thread/linkmenu';
 import { useGoArtifact } from '@/artifacts/leave';
 import '@/thread/thread.css';
+
+/** A link's right click in the peek: its menu, as in the thread (web.ts linkMenu, links-os). */
+function showLinkMenu(url: string): void {
+  void openLinkMenu(url);
+}
 
 /** How many of its last entries the preview shows. */
 export const PEEK_ROWS = 8;
@@ -35,8 +40,8 @@ export function Peek({ project, agent }: { project: string; agent: string }) {
       project,
       agent,
       bise: false,
-      onLink: (url, mod) => {
-        openWebLink(url, mod === true, webHistoryNow().out);
+      onLink: (url, how) => {
+        openWebLink(url, how ?? 'plain');
       },
       onArtifact: (id) => {
         goArtifact(project, id);
@@ -50,7 +55,11 @@ export function Peek({ project, agent }: { project: string; agent: string }) {
       {rows.length === 0 ? (
         <p className="ag-peek-none">nothing in its feed yet</p>
       ) : (
-        rows.map((pos) => <EntryRow key={pos} ctx={ctx} pos={pos} />)
+        <LinkMenuContext.Provider value={showLinkMenu}>
+          {rows.map((pos) => (
+            <EntryRow key={pos} ctx={ctx} pos={pos} />
+          ))}
+        </LinkMenuContext.Provider>
       )}
       <p className="ag-peek-keys">space closes · ⏎ opens its thread</p>
     </div>
