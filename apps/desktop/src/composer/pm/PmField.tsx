@@ -75,6 +75,7 @@ import { composer } from "../../proto/words.gen";
 import { fieldNodes, fitFailedIn } from "./schema";
 import { Colors } from "./colors";
 import { LeadMark, setLead } from "./leadmark";
+import { AtRun, setAtRun } from "./atrun";
 import {
   applyOp,
   beforeCaret,
@@ -83,6 +84,7 @@ import {
   chipsOf,
   dictationAt,
   plainText,
+  posOf,
   type CaretPlace,
   docOf,
   draftOf,
@@ -297,6 +299,7 @@ export function PmField(p: PmFieldProps): JSX.Element {
         ...fieldNodes(() => props.current.sources.dictate?.level),
         Colors,
         LeadMark,
+        AtRun,
         UndoRedo.configure({ depth: 100, newGroupDelay: 500 }),
       ],
       injectCSS: false,
@@ -523,9 +526,29 @@ export function PmField(p: PmFieldProps): JSX.Element {
   }, [bare, waiting, tkey]);
   const none = bare && (!waiting || slow === tkey) ? trigger.kind : null;
   const live = useRef({ open, rows, index, trigger, tkey, none: none !== null });
+  // at-menu (his m_66958, designer m_67057): the `@` whose menu is open runs past spaces
+  // (tokens.ts triggerAt's `open`) until esc, a pick or no match closes it; a picked `@main `
+  // stays closed (picked: its start, until a new @word opens there)
+  const picked = useRef(-1);
+  const spacedFrom = (): number | undefined => {
+    const l = live.current;
+    return l.open && l.trigger?.kind === "at" && !l.trigger.quoted && l.trigger.start !== picked.current ? l.trigger.start : undefined;
+  };
   const fileList = open && trigger.kind === "at";
   useEffect(() => {
     live.current = { open, rows, index, trigger, tkey, none: none !== null };
+  });
+  // the open @ menu's run, from the `@` to the caret, on a faint ground (pm/atrun.ts)
+  useEffect(() => {
+    const st = ed.current?.state;
+    if (st === undefined) return;
+    const at = caretOf(st);
+    const before = beforeCaret(st);
+    const run: readonly [number, number] | null =
+      fileList && at !== null && before !== null && before.text.length >= trigger.start
+        ? [posOf(at - (before.text.length - trigger.start)), posOf(at)]
+        : null;
+    dispatch(setAtRun(st, run));
   });
   const setIndex = (i: number): void => {
     setSel({ key: live.current.tkey, i });
@@ -637,6 +660,7 @@ export function PmField(p: PmFieldProps): JSX.Element {
         );
       return;
     }
+    if (t.kind === "at" && !pick.browse) picked.current = t.start; // a pick ends this @'s menu
     if (pick.path !== undefined && !pick.browse)
       props.current.sources.filePicked?.(pick.path); // B8/R14: the core's memory
     // at-chips: a picked file is its chip where the @word was, the caret right after it, as in
@@ -930,8 +954,10 @@ export function PmField(p: PmFieldProps): JSX.Element {
       before === null
         ? null
         : (slotOf(before.text, before.messageStart, props.current.sources) ??
-          triggerAt(before.text, before.messageStart) ??
+          triggerAt(before.text, before.messageStart, spacedFrom()) ??
           emojiTrigger(before.text));
+    // a new @word typed where a picked one was: its menu may run past spaces again
+    if (t?.kind === "at" && !/\s/u.test(t.query)) picked.current = -1;
     const k = triggerKey(t);
     if (k !== lastTrigger.current) {
       lastTrigger.current = k;

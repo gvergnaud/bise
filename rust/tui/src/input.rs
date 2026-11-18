@@ -732,6 +732,9 @@ pub(crate) fn on_key(app: &mut App, k: &crossterm::event::KeyEvent) -> bool {
     }
     let matches = popup_items(app);
     let popup_open = !matches.is_empty();
+    // at-menu: the `@` whose popup is open now keeps its query past the
+    // spaces this key may type; a closed one (Esc, no match) ends it
+    app.at_open = popup_open.then(|| commands::at_token(app).map(|(s, _)| s)).flatten();
     let sel = matches.get(app.popup_sel.min(matches.len().saturating_sub(1)));
     // the queue drawer (designer m_25146): ↑ in an empty composer moves
     // into it; there it has the keys (sb/queued.rs)
@@ -970,6 +973,8 @@ fn at_nav(app: &mut App, k: &crossterm::event::KeyEvent, sel: Option<&PopItem>) 
 /// Take the popup entry `c` into the composer (a picked path ranks first
 /// in the next `@` searches; a folder is browsed, not picked).
 fn pick(app: &mut App, c: &PopItem) {
+    // a pick ends its `@`'s popup: `@main ` never reopens on the next words
+    app.at_open = None;
     // a plugin (at-plugins): the `@token` goes, its chip comes
     if let Some(name) = &c.plugin {
         app.ed.set(&c.fill, c.fill_cursor);

@@ -730,6 +730,14 @@ pub(crate) fn voice_look(app: &App, now: std::time::Instant) -> voice::chip::Loo
     }
 }
 
+/// The open `@` popup's run, from the `@` to the cursor (char indices),
+/// underlined (at-menu, designer m_67057: its query runs past spaces, so
+/// he sees which words it filters on); None when no `@` popup is open.
+pub(crate) fn at_run(app: &App) -> Option<(usize, usize)> {
+    let (start, _) = crate::commands::popup_open(app).then(|| crate::commands::at_token(app)).flatten()?;
+    (!crate::commands::at_items(app).is_empty()).then_some((start, app.ed.cursor))
+}
+
 fn typed_lines(app: &mut App, inner: usize, text_rows: usize) -> Vec<Line<'static>> {
     let mut out: Vec<Line<'static>> = Vec::new();
     // rows by display width (emojis are 2 columns); the cursor is
@@ -758,8 +766,10 @@ fn typed_lines(app: &mut App, inner: usize, text_rows: usize) -> Vec<Line<'stati
     let lo = shown().map(|c| c.ci).min().unwrap_or(0);
     let hi = shown().map(|c| c.ci + c.text.chars().count().max(1)).max().unwrap_or(lo);
     let md = crate::mdlive::styles(&app.ed.text, lo, hi, &mut app.md_cache);
+    let at_run = at_run(app);
     let style_at = |ci: usize, sel: bool| {
         let st = ci.checked_sub(lo).and_then(|j| md.get(j)).copied().unwrap_or(text_style);
+        let st = if at_run.is_some_and(|(a, b)| a <= ci && ci < b) { st.add_modifier(Modifier::UNDERLINED) } else { st };
         if sel { st.bg(theme::selection_bg()) } else { st }
     };
     for row in rows.iter().take(drawn).skip(top) {

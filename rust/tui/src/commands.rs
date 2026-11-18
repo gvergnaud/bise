@@ -529,6 +529,12 @@ pub(crate) fn popup_open(app: &App) -> bool {
     !app.ed.browsing() && app.popup_dismissed.as_deref() != Some(app.ed.text.as_str())
 }
 
+/// The `@word` at the cursor; the open popup's `@` runs past spaces
+/// (files::token_open, at-menu).
+pub(crate) fn at_token(app: &App) -> Option<(usize, String)> {
+    files::token_open(&app.ed.text, app.ed.cursor, app.at_open)
+}
+
 /// Artifacts listed after the agents in the `@` popup.
 const ARTIFACT_ROWS: usize = 8;
 /// Files listed after the agents in the `@` popup.
@@ -581,7 +587,7 @@ fn plugin_items(app: &App, start: usize, q: &str) -> Vec<PopItem> {
 /// plugins on, then the files and folders of the workspace (files.rs).
 /// A file inserts its relative path, an agent `@name`, a plugin its chip.
 pub(crate) fn at_items(app: &App) -> Vec<PopItem> {
-    let token = popup_open(app).then(|| files::token(&app.ed.text, app.ed.cursor)).flatten();
+    let token = popup_open(app).then(|| at_token(app)).flatten();
     let Some((start, q)) = token else {
         files::forget_dirs(); // the popup closed: its folder listings go
         return Vec::new();
@@ -696,7 +702,7 @@ pub(crate) fn at_up(app: &App) -> Option<(String, usize)> {
     if !popup_open(app) || app.ed.anchor.is_some() {
         return None;
     }
-    let (start, q) = files::token(&app.ed.text, app.ed.cursor)?;
+    let (start, q) = at_token(app)?;
     let up = files::parent_query(&q)?;
     Some(files::replace_token(&app.ed.text, start, app.ed.cursor, &files::browse(up)))
 }

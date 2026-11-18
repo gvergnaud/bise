@@ -34,6 +34,17 @@ describe('triggers (the TUI rules)', () => {
     expect(triggerAt('see /usr/bin', true)).toBeNull();
     expect(triggerAt('/usr/bin', true)).toBeNull();
   });
+  // his m_66958: names with spaces ('my file name'); designer m_67057's rule
+  it('an open @ menu (its start given) runs past spaces up to the caret; a closed one never does', () => {
+    expect(triggerAt('look @my fi', false, 5)).toMatchObject({ kind: 'at', query: 'my fi', start: 5, quoted: false });
+    expect(triggerAt('look @my file na', false, 5)).toMatchObject({ query: 'my file na', start: 5 });
+    expect(triggerAt('look @my ', false, 5)).toMatchObject({ query: 'my ', start: 5 });
+    expect(triggerAt('look @my fi', false)).toBeNull();
+    expect(triggerAt('look @my fi', false, 4)).toBeNull();
+    expect(triggerAt('meet @ noon', false, 5), "a space right after a bare '@' ends it").toBeNull();
+    expect(triggerAt('@my fi $sk', false, 0), 'a new trigger word wins').toMatchObject({ kind: 'skill', query: 'sk' });
+    expect(triggerAt('@my fi @ot', false, 0)).toMatchObject({ kind: 'at', query: 'ot', start: 7 });
+  });
   it('@" opens a quoted path that may hold spaces', () => {
     expect(triggerAt('read @"docs/my no', false)).toMatchObject({ kind: 'at', query: 'docs/my no', quoted: true, start: 5 });
   });

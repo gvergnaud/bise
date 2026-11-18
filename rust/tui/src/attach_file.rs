@@ -105,7 +105,7 @@ fn attach_one(app: &mut App, path: &Path, shown: &str) -> String {
 /// refuses it), any other file, code too, a file chip. Its chip, or None
 /// when there is no `@token` or no such file (the pick stays its text).
 pub(crate) fn pick(app: &mut App, rel: &str) -> Option<String> {
-    let (start, _) = crate::files::token(&app.ed.text, app.ed.cursor)?;
+    let (start, _) = crate::commands::at_token(app)?;
     let cursor = app.ed.cursor;
     // the root the `@` popup searched (commands::at_items)
     let root = crate::sb::workspace(app)

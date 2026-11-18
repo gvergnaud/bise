@@ -3,7 +3,9 @@
 // the text of the caret's paragraph up to the caret. The rules are the terminal's
 // (rust/tui/src/files.rs `token`, skills.rs `token`, commands.rs `popup_items`), so his habits
 // carry over: a trigger opens a word (paragraph start or after a space) and the word has no
-// space yet, except `@"` which opens a quoted path (a folder with a space) until a closing `"`.
+// space yet, except `@"` which opens a quoted path (a folder with a space) until a closing `"`,
+// and an `@` whose menu is open, which runs past spaces until esc, a pick or no match
+// (files.rs `token_open`, at-menu).
 
 export type TriggerKind = 'at' | 'skill' | 'slash' | 'arg' | 'emoji';
 
@@ -44,8 +46,25 @@ const isSpace = (c: string): boolean => /\s/u.test(c);
  * The trigger that ends at the caret, or null.
  * `before`: the caret's paragraph up to the caret. `messageStart`: that paragraph is the
  * message's first and nothing (no chip) precedes it, so `/` may open the command list.
+ * `open`: the start of the `@` whose menu is open now (at-menu, his m_66958, designer m_67057):
+ * that `@` runs past spaces up to the caret, so '@my file na' filters on 'my file na'; a closed
+ * menu (esc, a pick, no match) never does, and a space right after the bare `@` ends it. A new
+ * trigger word at the caret wins.
  */
-export function triggerAt(before: string, messageStart: boolean): Trigger | null {
+export function triggerAt(before: string, messageStart: boolean, open?: number): Trigger | null {
+  return wordTrigger(before, messageStart) ?? spacedAt(before, open);
+}
+
+/** The open `@` at `open`, its query spaces included; null when it is no `@` that opens a word. */
+function spacedAt(before: string, open: number | undefined): Trigger | null {
+  if (open === undefined || before.charAt(open) !== '@') return null;
+  if (open > 0 && !isSpace(before.charAt(open - 1))) return null;
+  const query = before.slice(open + 1);
+  if (query === '' || isSpace(query.charAt(0)) || query.includes('\n')) return null;
+  return { kind: 'at', query, start: open, quoted: false };
+}
+
+function wordTrigger(before: string, messageStart: boolean): Trigger | null {
   // `@"docs/my notes/` : an open quote right after an `@` that opens a word
   const q = before.lastIndexOf('"');
   if (q >= 1 && before[q - 1] === '@' && (q === 1 || isSpace(before.charAt(q - 2)))) {

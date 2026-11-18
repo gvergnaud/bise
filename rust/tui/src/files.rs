@@ -248,8 +248,33 @@ fn children(
 /// `@`) and the query typed so far. The `@` opens a word (line start or
 /// after a space) and the word has no space yet, or it is an open quote
 /// (`@"docs/my notes/`, a folder with a space) not closed yet. None when
-/// the cursor is on or before the `@`.
+/// the cursor is on or before the `@`. The tests' form of [`token_open`]
+/// with no popup open.
+#[cfg(test)]
 pub(crate) fn token(input: &str, cursor: usize) -> Option<(usize, String)> {
+    token_open(input, cursor, None)
+}
+
+/// [`token`], and the `@` at `open` (char index) whose popup is open now
+/// runs past spaces up to the cursor (at-menu, his m_66958, designer
+/// m_67057): `@my file na` queries `my file na`. A closed popup (Esc, a
+/// pick, no match) never does, a space right after the bare `@` ends it,
+/// and a new `@word` at the cursor wins. The desktop's rule too
+/// (apps/desktop/src/composer/tokens.ts `triggerAt`).
+pub(crate) fn token_open(input: &str, cursor: usize, open: Option<usize>) -> Option<(usize, String)> {
+    word_token(input, cursor).or_else(|| spaced_token(input, cursor, open?))
+}
+
+fn spaced_token(input: &str, cursor: usize, open: usize) -> Option<(usize, String)> {
+    let chars: Vec<char> = input.chars().collect();
+    let before = chars.get(..cursor.min(chars.len()))?;
+    let opens = open == 0 || before.get(open - 1).is_some_and(|c| c.is_whitespace());
+    let rest = before.get(open + 1..)?;
+    let starts = rest.first().is_some_and(|c| !c.is_whitespace());
+    (before.get(open) == Some(&'@') && opens && starts && !rest.contains(&'\n')).then(|| (open, rest.iter().collect()))
+}
+
+fn word_token(input: &str, cursor: usize) -> Option<(usize, String)> {
     let chars: Vec<char> = input.chars().collect();
     let before = &chars[..cursor.min(chars.len())];
     if let Some(q) = before.iter().rposition(|&c| c == '"') {

@@ -151,6 +151,10 @@ pub(crate) struct App {
     /// The composer text the user closed the `@` popup on (Esc): the
     /// popup stays closed until the text changes.
     pub(crate) popup_dismissed: Option<String>,
+    /// The `@` (char index) whose popup was open at the last key: its
+    /// query runs past spaces (files::token_open, at-menu); None after
+    /// Esc, a pick or no match.
+    pub(crate) at_open: Option<usize>,
     pub(crate) history: Vec<String>,
     /// the tick pulses' tick (BISE-204): set by the draw loop from `anim`
     pub(crate) tick: u32,
@@ -368,6 +372,7 @@ impl App {
             text: Default::default(),
             popup_sel: 0,
             popup_dismissed: None,
+            at_open: None,
             history: Vec::new(),
             tick: 0,
             pulse_ms: 0,

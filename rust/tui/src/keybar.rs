@@ -8,7 +8,7 @@
 //! [`render`] is the pure part. The tip changes every 5 minutes, in the
 //! order of [`help::TIPS`] (BISE-104, [`TipClock`]).
 
-use crate::{attach, commands, files, help, theme, voice, App};
+use crate::{attach, commands, help, theme, voice, App};
 use bise_proto::words::composer;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -147,7 +147,7 @@ pub(crate) fn mode(app: &App) -> Mode {
         Mode::Find
     } else if app.sb.queue_focus().is_some() {
         Mode::Queued
-    } else if commands::popup_open(app) && files::token(&app.ed.text, app.ed.cursor).is_some() {
+    } else if commands::popup_open(app) && commands::at_token(app).is_some() {
         Mode::FilePopup
     } else if (app.feed_sel.is_some() && app.mouse.drag.is_none()) || crate::diffquote::selected(app) {
         Mode::Quote

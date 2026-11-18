@@ -428,3 +428,66 @@ fn a_scrolled_window_names_its_first_group() {
     // another list (commands, skills): no head
     assert_eq!(pop_lines(&[None, None], 0, 8), [Row(0), Row(1)]);
 }
+
+// at-menu (his m_66958, designer m_67057): once open, the `@` popup runs
+// past spaces and keeps filtering; Esc, a pick or no match closes it
+
+#[test]
+fn an_open_at_popup_filters_across_spaces() {
+    let mut app = app();
+    typed(&mut app, "see @my");
+    assert!(rows(&app).contains(&"docs/my notes/".to_string()), "{:?}", rows(&app));
+    typed(&mut app, " no");
+    assert!(rows(&app).contains(&"docs/my notes/".to_string()), "the space kept it open: {:?}", rows(&app));
+    // designer m_67057: the run it filters on is underlined
+    assert_eq!(ui::at_run(&app), Some((4, 10)));
+}
+
+#[test]
+fn esc_closes_it_and_the_next_space_never_reopens_it() {
+    let mut app = app();
+    typed(&mut app, "@my");
+    assert!(!rows(&app).is_empty());
+    key(&mut app, KeyCode::Esc);
+    assert!(rows(&app).is_empty());
+    typed(&mut app, " no");
+    assert!(rows(&app).is_empty(), "{:?}", rows(&app));
+    assert_eq!(app.ed.text, "@my no");
+    assert_eq!(ui::at_run(&app), None);
+}
+
+#[test]
+fn a_pick_across_spaces_is_one_reference() {
+    let mut app = app();
+    typed(&mut app, "@my no");
+    select(&mut app, "docs/my notes/");
+    key(&mut app, KeyCode::Right);
+    assert_eq!(app.ed.text, "@\"docs/my notes/");
+    key(&mut app, KeyCode::Enter);
+    assert_eq!(app.ed.text, "[File #1] ");
+}
+
+#[test]
+fn a_sentence_after_an_unmatched_at_stays_plain() {
+    let mut app = app();
+    typed(&mut app, "@xyzq is great");
+    assert!(rows(&app).is_empty(), "{:?}", rows(&app));
+    assert_eq!(app.ed.text, "@xyzq is great");
+    // a space right after a bare `@` ends it too
+    app.ed.clear();
+    typed(&mut app, "meet @ noon");
+    assert!(rows(&app).is_empty(), "{:?}", rows(&app));
+}
+
+#[test]
+fn an_agent_pick_ends_it() {
+    let mut app = app();
+    typed(&mut app, "@notes-");
+    select(&mut app, "@notes-👍-agent");
+    key(&mut app, KeyCode::Enter);
+    assert_eq!(app.ed.text, "@notes-👍-agent ");
+    // the next key never continues that `@` past its space
+    assert_eq!(app.at_open, None);
+    typed(&mut app, "my notes");
+    assert!(rows(&app).is_empty(), "{:?}", rows(&app));
+}

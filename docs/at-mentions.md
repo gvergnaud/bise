@@ -127,6 +127,15 @@ subsequence of the path is the last tier (`tu/sr` finds `rust/tui/src/`).
 - `@` opens the popup at the start of a word: line start or after a
   space, cursor inside the word, no space yet (`a@b` does not open it).
   The same rule as `$skill` (`skills::token`).
+- Once open, the popup runs past spaces (task `at-menu`, his m_66958,
+  designer m_67057): `@my file na` filters on `my file na`, the run from
+  the `@` to the cursor underlined (the desktop: a faint `--c-hover`
+  ground). It closes on Esc, on a pick (the whole run becomes the chip or
+  `@name `), or when nothing matches any more; then the words stay plain
+  and the next keys never reopen it (`@xyz is great`). A space right after
+  a bare `@` closes it (`meet @ noon`). `files::token_open` (the `@` whose
+  popup was open at the last key, `App::at_open`) and the desktop's
+  `triggerAt(…, open)` are the one rule.
 - Picking an agent inserts `@name ` (as today); at line start in
   Switchboard it still routes. Picking a file replaces the `@query` token
   with the path and a space.
