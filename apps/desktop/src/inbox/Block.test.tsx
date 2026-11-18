@@ -204,6 +204,32 @@ describe('the inbox block (b2)', () => {
     }
   });
 
+  it('folded by its holder, then shown (the float over a full-width page): the box is measured then, capped at 4.5 rows (ui-review m_66656)', () => {
+    // the block's top 500 px down a 768 px window, 28 px rows: 4.5 rows leave the thread its 40%
+    const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      const h = this.classList.contains('strip-line') ? ROW : 0;
+      const top = this.classList.contains('inbox-block') ? 500 : 0;
+      return { x: 0, y: top, top, left: 0, right: 0, bottom: top + h, width: 0, height: h, toJSON: () => ({}) } as DOMRect;
+    });
+    try {
+      const store = new Store({ send: () => undefined, onEvent: () => () => undefined, onState: () => () => undefined, state: () => Promise.resolve('up') });
+      replay(store, withCards(12));
+      const block = (shown: boolean) => (
+        <StoreProvider store={store}>
+          <RouterContext value={createRouter({ screen: 'thread', project: P, agent: 'perf' })}>
+            <InboxBlock here={{ project: P, agent: 'perf' }} onAnswer={() => undefined} now={NOW} fold={{ shown, onShow: () => undefined, onCount: () => undefined, ends: { start: null, end: null } }} />
+          </RouterContext>
+        </StoreProvider>
+      );
+      const v = render(block(false));
+      expect(screen.getByTestId('inbox.block.line')).toBeTruthy();
+      v.rerender(block(true));
+      expect(screen.getByTestId('inbox.block.rows').style.maxHeight).toBe(`${String(VIEW)}px`);
+    } finally {
+      rect.mockRestore();
+    }
+  });
+
   it('a new item never moves the row under the pointer: the box scrolls by what came above it', () => {
     const undo = fakeLayout();
     try {

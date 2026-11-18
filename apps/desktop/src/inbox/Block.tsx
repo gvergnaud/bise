@@ -748,8 +748,9 @@ export function InboxBlock({ here, onAnswer, now: pinned, only, rest, fold }: In
   // one cut in half when more scroll under it; in a short window fewer (designer m_26234) so the
   // thread keeps THREAD_MIN of the window, measured on the folded block (the thread list's top, and
   // the block's top to the window's bottom, its box left out), again when the window or what holds
-  // the block (the composer growing) changes size. An item opened keeps the rows it had folded, the
-  // box grows by its card.
+  // the block (the composer growing) changes size, and when the box comes into view (a holder's fold
+  // shown: the float over a full-width page, ui-review m_66656). An item opened keeps the rows it had
+  // folded, the box grows by its card.
   const section = useRef<HTMLElement | null>(null);
   const box = useRef<HTMLDivElement | null>(null);
   // the box's folded height in px (none: not measured yet, a test without layout)
@@ -779,7 +780,7 @@ export function InboxBlock({ here, onAnswer, now: pinned, only, rest, fold }: In
       ro?.disconnect();
       window.removeEventListener('resize', measure);
     };
-  }, [folded, items]);
+  }, [folded, items, hidden]);
   // the open card's height, its margins in: the box grows by it
   const [openH, setOpenH] = useState(0);
   useLayoutEffect(() => {
