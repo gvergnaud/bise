@@ -741,6 +741,23 @@ def work_turn(-o: S.St, ch: Maybe<&2, List<&2, String>>, +cx: X.Cx<o>, +name: St
     case Some{+ws}:
       emit(o, cx, M.EWorkTurn{WO.wturn(name, ws, busy, now(o, cx))}, Unit{}, Unit{}, Unit{})
 
+# a steered delivery: its turn's works stay (law steered_keeps_turn_works),
+# but the agent is on each work it got, as before (an add_agent line for
+# each it is not on yet; its context comes once, wctx)
+def steer_join.go(-o: S.St, ids: List<&2, String>, +cx: X.Cx<o>, +name: String) -> X.Cx<o>:
+  match ids:
+    case Nil{}:
+      cx
+    case Con{+id, +t}:
+      steer_join.go(o, t, emit(o, cx, M.EWorkChanged{id, S.WAddAgent{name}, name, now(o, cx), None{}, None{}}, Unit{}, Unit{}, Unit{}), name)
+
+def steer_join(-o: S.St, busy: Bool, +cx: X.Cx<o>, +name: String, +ws: List<&2, String>) -> X.Cx<o>:
+  match busy:
+    case False{}:
+      cx
+    case True{}:
+      steer_join.go(o, WO.not_joined(ws, S.St.works(st(o, cx)), name), cx, name)
+
 def pump.batch(-o: S.St, batch: List<&2, S.Msg>, +cx: X.Cx<o>, +name: String, +busy: Bool, +is_main: Bool) -> X.Cx<o>:
   match batch:
     case Nil{}:
@@ -755,7 +772,7 @@ def pump.batch(-o: S.St, batch: List<&2, S.Msg>, +cx: X.Cx<o>, +name: String, +b
       # step's work_turn makes it their agent (law work_context_only_for_new_works);
       # main routes, it joins none
       +ctx = Bool.pick(String, is_main, "", WC.ctx(WC.fresh(ws, S.St.works(st(o, cx2)), name), st(o, cx2), X.R.pw(rr(o, cx2))))
-      +cx3 = work_turn(o, WO.turn_change(works_of_agent(M.get_agent(st(o, cx2), name)), ws, busy), cx2, name, busy)
+      +cx3 = steer_join(o, busy, work_turn(o, WO.turn_change(works_of_agent(M.get_agent(st(o, cx2), name)), ws, busy), cx2, name, busy), name, ws)
       pump.send(o, busy, deliver_each(o, b, cx3, name, Nil{}), name, ids_of(b), notes, status, ctx)
 
 def pump.run(-o: S.St, run: S.Run, +cx: X.Cx<o>, +name: String, +queued: List<&2, S.Msg>, +is_main: Bool) -> X.Cx<o>:
@@ -879,6 +896,11 @@ def Snd.recipient(x: Snd) -> String:
     case Snd{_, +to, _, _, _, _, _, _, _, _, _, _}:
       to
 
+def Snd.reply_to(x: Snd) -> Maybe<&2, Nat>:
+  match x:
+    case Snd{_, _, _, _, +reply_to, _, _, _, _, _, _, _}:
+      reply_to
+
 def Snd.with_works(x: Snd, +v: Maybe<&2, List<&2, String>>) -> Snd:
   match x:
     case Snd{+from, +to, +text, +expect, +reply_to, +plain, +auto, +queued, +via, +parts, +fwd, _}:
@@ -900,13 +922,55 @@ def task_of.go(xs: List<&2, String>) -> Maybe<&2, List<&2, String>>:
 def task_of(+q: J.Json) -> Maybe<&2, List<&2, String>>:
   task_of.go(task_ids(q))
 
+# a reply carries its target's works (thread lineage first; architect
+# m_66621, m_66646): `got` the target's, `turn` the sender's turn's; a
+# target with none (a notice, his plain words) keeps the turn's
+def works_of_reply.got(+got: List<&2, String>, +turn: List<&2, String>) -> List<&2, String>:
+  match got:
+    case Nil{}:
+      turn
+    case Con{+h, +t}:
+      h <> t
+
+def works_of_reply.target(m: Maybe<&2, S.Msg>, +turn: List<&2, String>) -> List<&2, String>:
+  match m:
+    case None{}:
+      turn
+    case Some{+t}:
+      works_of_reply.got(S.Msg.works(t), turn)
+
+# the sender not an agent (the hub, a notice) carries none, as
+# works_of_send (law notice_carries_no_works)
+def works_of_reply.agent(a: Maybe<&2, S.Agent>, +s: S.St, +id: Nat) -> List<&2, String>:
+  match a:
+    case None{}:
+      Nil{}
+    case Some{+ag}:
+      works_of_reply.target(M.msg_of(s, id), S.Agent.turn_works(ag))
+
+def works_of_reply(r: Maybe<&2, Nat>, +s: S.St, +from: String) -> List<&2, String>:
+  match r:
+    case None{}:
+      works_of_agent(M.get_agent(s, from))
+    case Some{+id}:
+      works_of_reply.agent(M.get_agent(s, from), s, id)
+
+# an agent's message: its `--task`, else its reply target's, else its
+# turn's (law reply_carries_its_targets_works)
+def works_of_agent_send(w: Maybe<&2, List<&2, String>>, +s: S.St, +from: String, r: Maybe<&2, Nat>) -> List<&2, String>:
+  match w:
+    case Some{+ws}:
+      ws
+    case None{}:
+      works_of_reply(r, s, from)
+
 # the send with its works resolved (Some: what its message carries)
 def Snd.resolved.works(his: Bool, +s: S.St, +x: Snd) -> List<&2, String>:
   match his:
     case True{}:
       works_his(Snd.works(x), s, Snd.recipient(x))
     case False{}:
-      works_of_send(Snd.works(x), s, Snd.sender(x))
+      works_of_agent_send(Snd.works(x), s, Snd.sender(x), Snd.reply_to(x))
 
 def Snd.resolved(+s: S.St, +x: Snd) -> Snd:
   Snd.with_works(x, Some{Snd.resolved.works(String.eq(Snd.sender(x), M.USER()), s, x)})
@@ -947,11 +1011,6 @@ def Snd.to(x: Snd) -> String:
   match x:
     case Snd{_, +to, _, _, _, _, _, _, _, _, _, _}:
       to
-
-def Snd.reply_to(x: Snd) -> Maybe<&2, Nat>:
-  match x:
-    case Snd{_, _, _, _, +reply_to, _, _, _, _, _, _, _}:
-      reply_to
 
 def send.revive(-o: S.St, ok: Bool, +cx: X.Cx<o>, +s: Snd, +why: String) -> X.Cx<o> & SendR:
   match ok:

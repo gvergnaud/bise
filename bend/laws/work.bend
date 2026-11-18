@@ -94,12 +94,64 @@ law delivered_sets_turn_works:
   for +now: List<&2, String>
   {HWO.turn_works(was, now, False{}) == now : List<&2, String>}
 
-# LAW: a delivery steered into a running turn adds its works to the
-# turn's.
-law steered_adds_turn_works:
+# LAW: a steered line of an old journal (add) still unions on replay:
+# the fold's meaning never changes (architect m_66646); only sb-core
+# stopped writing such lines for a steer (steered_keeps_turn_works).
+law old_steered_line_still_unions:
   for +was: List<&2, String>
   for +now: List<&2, String>
   {HWO.turn_works(was, now, True{}) == HWO.union(was, now) : List<&2, String>}
+
+# LAW: a delivery steered into a running turn keeps the turn's works: no
+# work_turn line (architect m_66621: a coordinator's turn never collects
+# every task steered into it).
+law steered_keeps_turn_works:
+  for +cur: List<&2, String>
+  for +got: List<&2, String>
+  {HWO.turn_change(cur, got, True{}) == None{} : Maybe<&2, List<&2, String>>}
+
+# ---- what an agent's message carries (architect m_66621, m_66646) ----
+# Together these are the guard: a fact's works are its --task, else its
+# reply target's, else the turn's, and the turn's never grow by a steer
+# (steered_keeps_turn_works); so a fact never carries more tasks than the
+# delivery that started its turn, its reply target and its --task.
+
+# LAW: `--task` replaces any other rule.
+law agent_task_flag_replaces_all:
+  for +ws: List<&2, String>
+  for +s: HS.St
+  for +from: String
+  for +r: Maybe<&2, Nat>
+  {HC.works_of_agent_send(Some{ws}, s, from, r) == ws : List<&2, String>}
+
+# LAW: a reply carries its target's works (thread lineage first).
+law reply_carries_its_targets_works:
+  for +h: String
+  for +t: List<&2, String>
+  for +turn: List<&2, String>
+  {HC.works_of_reply.got(h <> t, turn) == h <> t : List<&2, String>}
+
+# LAW: a reply to a target with none (a notice, his plain words) or to a
+# message gone from the state carries the turn's.
+law reply_to_no_works_carries_the_turns:
+  for +turn: List<&2, String>
+  {HC.works_of_reply.got(Nil{}, turn) == turn : List<&2, String>}
+
+law reply_to_a_gone_message_carries_the_turns:
+  for +turn: List<&2, String>
+  {HC.works_of_reply.target(None{}, turn) == turn : List<&2, String>}
+
+# LAW: a message that answers nothing carries the sender's turn's.
+law a_plain_send_carries_the_turns:
+  for +s: HS.St
+  for +from: String
+  {HC.works_of_reply(None{}, s, from) == HC.works_of_agent(HM.get_agent(s, from)) : List<&2, String>}
+
+# LAW: a sender that is not an agent (the hub) carries none, reply or not.
+law a_non_agents_reply_carries_none:
+  for +s: HS.St
+  for +id: Nat
+  {HC.works_of_reply.agent(None{}, s, id) == Nil{} : List<&2, String>}
 
 # LAW: a name he gave stays his: a rename by him marks it, a rename by an
 # agent never clears the mark.

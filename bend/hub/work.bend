@@ -198,8 +198,12 @@ def batch_works(ms: List<&2, S.Msg>) -> List<&2, String>:
       union(S.Msg.works(m), batch_works(t))
 
 # a delivery to an agent whose turn carries `cur`, of a batch carrying
-# `got`, `busy` its turn running (steered: added) or not (a new turn: set):
-# the work_turn line to write, none when its turn's works stay the same
+# `got`, `busy` its turn running (steered) or not (a new turn: set): the
+# work_turn line to write, none when its turn's works stay the same. A
+# steer keeps the turn's works (architect m_66621): a coordinator's turn
+# never collects every task steered into it; the answer to a steer
+# carries its own task by its reply_to. Old journals' steered lines
+# (add) still union on replay: turn_works is unchanged.
 def turn_change.go(kept: Bool, +got: List<&2, String>) -> Maybe<&2, List<&2, String>>:
   match kept:
     case True{}:
@@ -207,8 +211,31 @@ def turn_change.go(kept: Bool, +got: List<&2, String>) -> Maybe<&2, List<&2, Str
     case False{}:
       Some{got}
 
+# `agent` is on work `m` already (no such work: nothing to join)
+def joined(m: Maybe<&2, S.Work>, +agent: String) -> Bool:
+  match m:
+    case None{}:
+      True{}
+    case Some{+w}:
+      has(S.Work.agents(w), agent)
+
+# the works of `ids` that `agent` is not on yet: a steered delivery still
+# makes it their agent (an explicit add_agent line each), its turn's
+# works unchanged (until joining by act, architect m_66646 point 3)
+def not_joined(ids: List<&2, String>, +xs: List<&2, S.Work>, +agent: String) -> List<&2, String>:
+  match ids:
+    case Nil{}:
+      Nil{}
+    case Con{+h, +t}:
+      +rest = not_joined(t, xs, agent)
+      Bool.pick(List<&2, String>, joined(find(xs, h), agent), rest, h <> rest)
+
 def turn_change(+cur: List<&2, String>, +got: List<&2, String>, busy: Bool) -> Maybe<&2, List<&2, String>>:
-  turn_change.go(same(turn_works(cur, got, busy), cur), got)
+  match busy:
+    case True{}:
+      None{}
+    case False{}:
+      turn_change.go(same(got, cur), got)
 
 # ---- a birth (`sb task new`) ----
 

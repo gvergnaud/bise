@@ -44,7 +44,28 @@ def Laws.task_tab_keeps_its_work(ws, s, to):
 def Laws.delivered_sets_turn_works(was, now):
   {==}
 
-def Laws.steered_adds_turn_works(was, now):
+def Laws.old_steered_line_still_unions(was, now):
+  {==}
+
+def Laws.steered_keeps_turn_works(cur, got):
+  {==}
+
+def Laws.agent_task_flag_replaces_all(ws, s, from, r):
+  {==}
+
+def Laws.reply_carries_its_targets_works(h, t, turn):
+  {==}
+
+def Laws.reply_to_no_works_carries_the_turns(turn):
+  {==}
+
+def Laws.reply_to_a_gone_message_carries_the_turns(turn):
+  {==}
+
+def Laws.a_plain_send_carries_the_turns(s, from):
+  {==}
+
+def Laws.a_non_agents_reply_carries_none(s, id):
   {==}
 
 def Laws.named_by_you_sticks(w, name, by, at):

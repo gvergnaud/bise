@@ -407,10 +407,11 @@ fn a_merged_paused_task_sends_what_it_held_to_its_target() {
     let held = sent_to(&t, "docs").last().unwrap()["id"].as_u64().unwrap();
     assert_eq!(task(&mut t, MAIN, Task::Merge { id: a.clone(), into: b.clone() })["ok"], true);
     assert_eq!(t.hub.st.msg_state()[&held], MsgState::Delivered, "law a_merged_work_holds_nothing");
-    // delivered, it serves the target (merge_redirects at the delivery)
-    let turn = lines(&t, "work_turn").last().unwrap()["turn"].clone();
-    assert_eq!(turn["agent"], "docs");
-    assert!(turn["works"].as_array().unwrap().contains(&json!(b)), "{turn}");
+    // delivered, it serves the target (merge_redirects at the delivery):
+    // a steer into docs's turn, so docs is on b, its turn's works kept
+    // (law steered_keeps_turn_works)
+    let agents = &t.hub.st.works[&b].work.agents;
+    assert!(agents.iter().any(|x| x == "docs"), "{agents:?}");
 }
 
 #[test]

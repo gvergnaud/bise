@@ -159,6 +159,10 @@ mod core_ask_tests;
 #[path = "core_task_tests.rs"]
 mod core_task_tests;
 
+/// what a turn's messages carry (tasks-fresh), out of core_tests.rs too.
+#[path = "core_turn_works_tests.rs"]
+mod core_turn_works_tests;
+
 /// withdrawn-answer's tests, out of core_tests.rs too.
 #[path = "core_late_tests.rs"]
 mod core_late_tests;
