@@ -167,6 +167,25 @@ crate::words! { tasks:
     change_pr(n, state) = "⑂ #{n} {state}";
     /// a change row with no PR on its branch
     change_no_pr = "no PR yet";
+    /// his pick on page tasks-fresh (designer m_66712): a PR row's state words at its right, text-3;
+    /// the icon beside them carries GitHub's colour
+    pr_open = "open";
+    /// a draft PR
+    pr_draft = "draft";
+    /// merged, its time unknown
+    pr_merged = "merged";
+    /// merged, with the time the hub saw it
+    pr_merged_at(when) = "merged {when}";
+    /// closed without a merge (the row fades)
+    pr_closed = "closed";
+    /// a PR's review after its state: changes asked
+    pr_changes = "changes requested";
+    /// a PR's review after its state: approved
+    pr_approved = "approved";
+    /// the forge answers late or not at all: its last known state, and when (his pick: offline)
+    pr_as_of(when) = "as of {when}";
+    /// the right bar's tip on a task with PRs: the whole set (designer m_66721)
+    prs_tip(n, open, merged) = one "{n} PR · {open} open · {merged} merged" | "{n} PRs · {open} open · {merged} merged";
     /// an agent of it in a turn
     agent_live = "working";
     /// an agent of it, idle

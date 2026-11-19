@@ -5,3 +5,18 @@
   flex: none;
   vertical-align: middle;
 }
+
+/* a PR's marks (prmark.tsx, designer m_66712): GitHub's colour on the icon only, the words beside
+   them stay text-2 / text-3 */
+.b-pr-icon {
+  display: inline-block;
+  flex: none;
+  vertical-align: middle;
+  fill: currentColor;
+  color: var(--c-text-3);
+}
+.b-pr-icon[data-st="open"],
+.b-pr-icon[data-review="approved"] { color: var(--c-ok); }
+.b-pr-icon[data-st="merged"] { color: var(--c-merged); }
+.b-pr-icon[data-st="closed"],
+.b-pr-icon[data-review="changes"] { color: var(--c-err); }

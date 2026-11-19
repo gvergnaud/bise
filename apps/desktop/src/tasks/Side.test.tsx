@@ -101,3 +101,17 @@ describe('the right bar Tasks, a todo list', () => {
     expect(acts()).toEqual([{ step: 'done', id: 'b' }, { step: 'reopen', id: 'b' }]);
   });
 });
+
+describe('a task whose PRs are all merged (his pick on page tasks-fresh, designer m_66721)', () => {
+  it('keeps its n/m while one is open, then one merged mark in its place, the set in its tip', () => {
+    const { v, apply } = world([work('a', { status: 'to_review', goals: [{ text: 'it builds', done: false }] })]);
+    const pr = (n: number, state: 'open' | 'merged') => ({ id: `pr-${String(n)}`, kind: 'pr', title: `PR ${String(n)}`, agent: 'main', version: 1, at_ms: NOW, url: `https://github.com/o/r/pull/${String(n)}`, new: false, works: ['a'], pr: { repo: 'o/r', number: n, tag: `#${String(n)}`, last: { state, review: 'none' as const, at_ms: NOW } } });
+    apply({ ev: 'artifacts', project: P, items: [pr(1, 'merged'), pr(2, 'open')] });
+    expect(v.getByTestId(`${rowId('a')}.goals`).textContent).toBe('0/1');
+    expect(v.getByTestId(`${rowId('a')}.goals`).getAttribute('data-tip')).toContain('2 PRs · 1 open · 1 merged');
+    expect(v.queryByTestId(`${rowId('a')}.merged`)).toBeNull();
+    apply({ ev: 'artifacts', project: P, items: [pr(1, 'merged'), pr(2, 'merged')] });
+    expect(v.queryByTestId(`${rowId('a')}.goals`)).toBeNull();
+    expect(v.getByTestId(`${rowId('a')}.merged`).getAttribute('data-tip')).toContain('2 PRs · 0 open · 2 merged');
+  });
+});

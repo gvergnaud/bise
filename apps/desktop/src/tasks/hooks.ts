@@ -4,7 +4,7 @@
 import { useSyncExternalStore } from 'react';
 import { useProjects, useStore, type Works } from '@/store';
 import type { Artifact } from '@/proto';
-import { resolveMerged, type ProjWork } from './model';
+import { prSet, prsOf, resolveMerged, type ProjWork } from './model';
 
 const last = new Map<string, { from: readonly Works[]; items: readonly ProjWork[] }>();
 
@@ -75,6 +75,44 @@ export function useNewestArts(only?: string): ReadonlyMap<string, number> {
         }
       });
       lastArts.set(ids, { from, tombs, at });
+      return at;
+    },
+  );
+}
+
+const lastPrs = new Map<string, { from: readonly (readonly Artifact[])[]; tombs: readonly Works[]; at: ReadonlyMap<string, ReturnType<typeof prSet>> }>();
+
+/** Each task's PR set per `<project>/<task id>` (prsOf, archived PRs in: a merged one is archived),
+ *  across his projects (`only`: one project's): the right bar's merged mark and its tip (his pick on
+ *  page tasks-fresh, designer m_66721). A task with no PR has no entry. */
+export function useTaskPrs(only?: string): ReadonlyMap<string, ReturnType<typeof prSet>> {
+  const store = useStore();
+  const projects = useProjects();
+  const ids = (only === undefined || only === '' ? projects : projects.filter((p) => p.project === only)).map((p) => p.project).join(SEP);
+  return useSyncExternalStore(
+    (cb) => {
+      const offs = ids === '' ? [] : ids.split(SEP).flatMap((p) => [store.subscribe(`artifacts:${p}`, cb), store.subscribe(`works:${p}`, cb)]);
+      return () => {
+        for (const off of offs) off();
+      };
+    },
+    () => {
+      const list = ids === '' ? [] : ids.split(SEP);
+      const from = list.map((p) => store.artifacts(p));
+      const tombs = list.map((p) => store.works(p));
+      const was = lastPrs.get(ids);
+      if (was !== undefined && was.from.length === from.length && was.from.every((x, i) => x === from[i]) && was.tombs.every((x, i) => x === tombs[i])) return was.at;
+      const at = new Map<string, ReturnType<typeof prSet>>();
+      list.forEach((p, i) => {
+        const arts = (from[i] ?? []).filter((a) => a.pr != null);
+        if (arts.length === 0) return;
+        const ts = tombs[i]?.tombs ?? [];
+        for (const w of tombs[i]?.works ?? []) {
+          const prs = prsOf(arts, w.id, ts);
+          if (prs.length > 0) at.set(`${p}/${w.id}`, prSet(prs));
+        }
+      });
+      lastPrs.set(ids, { from, tombs, at });
       return at;
     },
   );

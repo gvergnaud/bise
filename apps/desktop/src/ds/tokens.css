@@ -3,6 +3,8 @@
   --p-bg: #141211; --p-text: #ece6da; --p-dim: #a39c90; --p-faint: #857d72; --p-rule: #4a4540;
   --p-accent: #f4a6b0; --p-err: #ff5a52; --p-ok: #b9d99a; --p-raised: #1f1c1a; --p-chip: #231f1d;
   --p-frame: #2a2623; --p-shadow: #000000;
+  /* a merged PR, GitHub's own purple (his pick on page tasks-fresh, designer m_66712): its icon only */
+  --p-merged: #a371f7;
   /* the selection's tint, the TUI's theme::selection_bg (no system blue: designer m_21425) */
   --p-sel: #33292c;
   --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
@@ -41,6 +43,7 @@
   --c-ok: var(--p-ok);
   --c-ok-soft: color-mix(in srgb, var(--p-ok) 13%, transparent);
   --c-err: var(--p-err);
+  --c-merged: var(--p-merged);
   --c-err-soft: color-mix(in srgb, var(--p-err) 12%, transparent);
   --c-shadow: color-mix(in srgb, var(--p-shadow) 55%, transparent);
   --c-seg-on: color-mix(in srgb, var(--p-text) 14%, var(--p-chip)); /* the chosen segment: lighter than its --c-sunken track (macOS; designer m_42136) */
@@ -162,12 +165,12 @@
 @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
   --p-bg: #fdfbf7; --p-text: #1b1917; --p-dim: #6b645a; --p-faint: #7d766c; --p-rule: #cfc8bd;
   --p-accent: #b8416b; --p-err: #b3261e; --p-ok: #3f7a2a; --p-raised: #f4f0e8; --p-chip: #efe9df;
-  --p-frame: #e2dcd2; --p-shadow: #5a4a3a; --p-sel: #fdeef2;
+  --p-frame: #e2dcd2; --p-shadow: #5a4a3a; --p-sel: #fdeef2; --p-merged: #8250df;
 } }
 [data-theme="light"] {
   --p-bg: #fdfbf7; --p-text: #1b1917; --p-dim: #6b645a; --p-faint: #7d766c; --p-rule: #cfc8bd;
   --p-accent: #b8416b; --p-err: #b3261e; --p-ok: #3f7a2a; --p-raised: #f4f0e8; --p-chip: #efe9df;
-  --p-frame: #e2dcd2; --p-shadow: #5a4a3a; --p-sel: #fdeef2;
+  --p-frame: #e2dcd2; --p-shadow: #5a4a3a; --p-sel: #fdeef2; --p-merged: #8250df;
 }
 /* roles are computed where the palette changes, so a light subtree recomputes them */
 [data-theme="light"], [data-theme="dark"] {
@@ -201,6 +204,7 @@
   --c-ok: var(--p-ok);
   --c-ok-soft: color-mix(in srgb, var(--p-ok) 13%, transparent);
   --c-err: var(--p-err);
+  --c-merged: var(--p-merged);
   --c-err-soft: color-mix(in srgb, var(--p-err) 12%, transparent);
   --c-shadow: color-mix(in srgb, var(--p-shadow) 55%, transparent);
   --c-seg-on: color-mix(in srgb, var(--p-text) 14%, var(--p-chip)); /* the chosen segment: lighter than its --c-sunken track (macOS; designer m_42136) */

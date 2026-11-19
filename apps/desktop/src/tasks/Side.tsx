@@ -5,18 +5,18 @@
 // opens its Task tab; its name takes the row up to its n/m, cut at a word to its measured room (ds
 // WordCut). None open or folded: no section (OuterList); only ongoing or done: 'Nothing in progress'
 // and the fold. Owner: tasks.
-import { Press, tipAttrs, WordCut } from '@/ds';
+import { PrStateIcon, Press, tipAttrs, WordCut } from '@/ds';
 import { OuterHead, OuterList } from '@/app/side3d/OuterCard';
 import { Empty } from '@/app/side3d/Flyout';
 import { groupParts } from '@/app/side3d/lists';
 import { tasks } from '@/proto/words_tasks.gen';
 import { dayWords, timeOf } from '@/artifacts/model';
 import { useState } from 'react';
-import { barRows, goalsOf, listRows, needsHim, type Kept, type ProjWork } from './model';
+import { barRows, goalsOf, listRows, needsHim, type Kept, type ProjWork, type prSet } from './model';
 import { NewDot, openBoard, openTask, TaskCheck, TaskMark } from './Marks';
 import { useTaskAct, useTaskReq } from './Board';
 import { UndoToast, useUndo } from './UndoToast';
-import { useNewestArts } from './hooks';
+import { useNewestArts, useTaskPrs } from './hooks';
 import { isNew } from './news';
 import { useSeenTasks, useSettleActed } from './seen';
 import { whatOf } from './what';
@@ -36,7 +36,7 @@ export function lineAt(x: ProjWork, now: number): string {
 /** A row of the todo list. `check`: the right bar's rows have his box in the mark slot (his m_66588,
  *  designer m_66969), its own button beside the row's (never a button in a button); without it
  *  (the coin card's few rows) the status mark. */
-function TaskRow({ x, now, group, fresh, check }: { x: ProjWork; now: number; group: string | undefined; fresh: boolean; check?: { checked: boolean; onToggle: () => void } }) {
+function TaskRow({ x, now, group, fresh, check, prs }: { x: ProjWork; now: number; group: string | undefined; fresh: boolean; check?: { checked: boolean; onToggle: () => void }; prs?: ReturnType<typeof prSet> | undefined }) {
   const id = `app.outer.tasks.${x.project}.${x.w.id}`;
   // the name takes the row up to its n/m, cut at a word to its measured room (designer m_66328)
   const g = groupParts(group, x.w.name);
@@ -55,10 +55,20 @@ function TaskRow({ x, now, group, fresh, check }: { x: ProjWork; now: number; gr
         </span>
         <span className="s3-orow-name tk-oname" data-testid={`${id}.name`}>{g.project !== '' && <span className="s3-group">{g.project}</span>}<WordCut className="tk-ocut" text={g.name} /></span>
         <NewDot on={fresh} testId={`${id}.new`} />
-        {goals !== null && <span className="tk-goals" {...tipAttrs(tasks.goals_tip(goals))} data-testid={`${id}.goals`}>{tasks.goals_of(goals)}</span>}
+        {/* every PR merged: one 12 px merged mark in place of its n/m, the set in its tip; before that
+            the n/m stays, the set in its tip too (designer m_66721) */}
+        {prs?.allMerged === true ? (
+          <span className="tk-goals tk-merged" {...tipAttrs(prsTip(prs, goals))} data-testid={`${id}.merged`}><PrStateIcon state="merged" size={12} /></span>
+        ) : goals !== null && <span className="tk-goals" {...tipAttrs(prs === undefined ? tasks.goals_tip(goals) : prsTip(prs, goals))} data-testid={`${id}.goals`}>{tasks.goals_of(goals)}</span>}
       </Press>
     </div>
   );
+}
+
+/** the right bar's tip on a task with PRs: '2 PRs · 1 open · 1 merged', then its done-when count */
+function prsTip(p: ReturnType<typeof prSet>, goals: { readonly done: number; readonly all: number } | null): string {
+  const set = tasks.prs_tip({ n: p.n, open: p.open, merged: p.merged });
+  return goals === null ? set : `${set} · ${tasks.goals_tip(goals)}`;
 }
 
 /** `k` kept unchecked at its place (an Undo of his box). Pure. */
@@ -71,6 +81,7 @@ function uncheck(m: ReadonlyMap<string, Kept>, k: string): ReadonlyMap<string, K
 export function OuterTasks({ all, scope, now, groupOf }: { all: readonly ProjWork[]; scope: string; now: number; groupOf: (project: string) => string | undefined }) {
   const { seen, looked } = useSeenTasks();
   const arts = useNewestArts(scope);
+  const prs = useTaskPrs(scope);
   useSettleActed(all);
   const { open, ongoing, done } = barRows(all, now);
   // his box: Mark done or Reopen, the row kept at its place while the list is in view (designer m_66969)
@@ -102,7 +113,7 @@ export function OuterTasks({ all, scope, now, groupOf }: { all: readonly ProjWor
       // no open task and nothing in the fold: no section (OuterList; his m_66323, designer m_66328)
       total={rows.length} empty={<Empty>{tasks.none_open}</Empty>}
       rows={(n) => rows.slice(0, n).map((r, i) => (
-        <TaskRow key={`${r.x.project}/${r.x.w.id}`} x={r.x} now={now} group={groupOf(r.x.project)} fresh={!r.checked && isNew(r.x.w, seen(r.x.project, r.x.w.id), arts.get(`${r.x.project}/${r.x.w.id}`) ?? 0, looked)}
+        <TaskRow key={`${r.x.project}/${r.x.w.id}`} x={r.x} now={now} group={groupOf(r.x.project)} prs={prs.get(`${r.x.project}/${r.x.w.id}`)} fresh={!r.checked && isNew(r.x.w, seen(r.x.project, r.x.w.id), arts.get(`${r.x.project}/${r.x.w.id}`) ?? 0, looked)}
           check={{ checked: r.checked, onToggle: () => {
             toggle(r.x, i, r.checked);
           } }} />

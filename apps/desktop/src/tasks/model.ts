@@ -1,7 +1,7 @@
 // The tasks' pure model for the desktop: the order of the statuses (the Board's columns, signed by
 // designer and tasks-ux), the right bar's rows (open first, then a fold for the ongoing ones and the
 // ones done this week), its counts, a row's done-when count, a name cut at a word. Pure. Owner: tasks.
-import type { Agent, Artifact, LogLine, Part, WorkRow, WorkStatus, WorkTomb } from '@/proto';
+import type { Agent, Artifact, LogLine, Part, PrReview, PrState, WorkRow, WorkStatus, WorkTomb } from '@/proto';
 
 /** A task with its project (the bar lists every project's on bise's own). */
 export interface ProjWork {
@@ -116,10 +116,63 @@ export function cutAtWord(name: string, max: number, minWord = 8): string {
 
 /** The artifacts that serve task `id` (a merged task's read as the one it went into), archived ones out,
  *  newest first; `mine` the ones for him (an older hub's, none said: his), else all of them. Pure. */
-export function artsOf<A extends Pick<Artifact, 'works' | 'at_ms' | 'archived' | 'audience'>>(arts: readonly A[], id: string, tombs: readonly Pick<WorkTomb, 'id' | 'merged_into'>[]): { readonly all: readonly A[]; readonly mine: readonly A[] } {
-  const all = arts.filter((a) => a.archived !== true && (a.works ?? []).some((w) => resolveMerged(tombs, w) === id)).sort((a, b) => b.at_ms - a.at_ms);
+export function artsOf<A extends Pick<Artifact, 'works' | 'at_ms' | 'archived' | 'audience'> & { readonly pr?: Artifact['pr'] }>(arts: readonly A[], id: string, tombs: readonly Pick<WorkTomb, 'id' | 'merged_into'>[]): { readonly all: readonly A[]; readonly mine: readonly A[] } {
+  // its PRs are its Changes' rows, never chips too (designer m_66722: nothing twice)
+  const all = arts.filter((a) => a.archived !== true && a.pr == null && serves(a, id, tombs)).sort((a, b) => b.at_ms - a.at_ms);
   const his = all.filter((a) => a.audience !== 'agents');
   return { all, mine: his.length > 0 ? his : all };
+}
+
+/** An artifact serves task `id`: its works hold it (a merged task's read as the one it went into). Pure. */
+function serves(a: Pick<Artifact, 'works'>, id: string, tombs: readonly Pick<WorkTomb, 'id' | 'merged_into'>[]): boolean {
+  return (a.works ?? []).some((w) => resolveMerged(tombs, w) === id);
+}
+
+/** A PR of a task as its Changes list draws it (his pick on page tasks-fresh, designer m_66712). */
+export interface TaskPr {
+  readonly id: string;
+  /** '#924' (a merge request '!924') */
+  readonly tag: string;
+  readonly title: string;
+  /** the forge's state now, else the last one the hub kept (ArtifactPr.last); unknown: never said */
+  readonly state: PrState;
+  readonly review: PrReview;
+  /** when the state was seen (ms), the last one kept's; null with the live status */
+  readonly at_ms: number | null;
+  /** the hub follows it and the forge answers late or not at all: its last known state, 'as of' */
+  readonly stale: boolean;
+}
+
+const PR_RANK: Readonly<Record<PrState, number>> = { open: 0, draft: 0, unknown: 0, merged: 1, closed: 2 };
+
+/** Task `id`'s PRs: the PR artifacts whose works hold it, archived ones too (a merged PR is
+ *  archived by the hub), open and draft first, then merged, then closed, newest first in each. Pure. */
+export function prsOf(arts: readonly Pick<Artifact, 'id' | 'title' | 'works' | 'at_ms' | 'pr'>[], id: string, tombs: readonly Pick<WorkTomb, 'id' | 'merged_into'>[]): TaskPr[] {
+  return arts.flatMap((a) => {
+    const pr = a.pr;
+    if (pr == null || !serves(a, id, tombs)) return [];
+    const live = pr.status ?? null;
+    const last = pr.last ?? null;
+    const p: TaskPr = {
+      id: a.id,
+      tag: pr.tag ?? `#${String(pr.number)}`,
+      title: live?.title != null && live.title !== '' ? live.title : a.title,
+      state: live?.state ?? last?.state ?? 'unknown',
+      review: live?.review ?? last?.review ?? 'none',
+      at_ms: live === null ? (last?.at_ms ?? null) : null,
+      stale: live?.stale_ms != null,
+    };
+    return [{ p, at: a.at_ms }];
+  }).sort((x, y) => PR_RANK[x.p.state] - PR_RANK[y.p.state] || y.at - x.at).map((x) => x.p);
+}
+
+/** The set's words for a tip ('2 PRs · 1 open · 1 merged') and whether every one is merged (one at
+ *  least, none open: the bar's merged mark in place of its n/m; sb-core's own rule, wstatus merged). Pure. */
+export function prSet(prs: readonly Pick<TaskPr, 'state'>[]): { readonly n: number; readonly open: number; readonly merged: number; readonly closed: number; readonly allMerged: boolean } {
+  const open = prs.filter((p) => p.state === 'open' || p.state === 'draft').length;
+  const merged = prs.filter((p) => p.state === 'merged').length;
+  const closed = prs.filter((p) => p.state === 'closed').length;
+  return { n: prs.length, open, merged, closed, allMerged: merged > 0 && open === 0 };
 }
 
 /** A message's first line (his origin is quoted by it). Pure. */

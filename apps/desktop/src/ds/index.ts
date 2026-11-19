@@ -30,6 +30,7 @@ export * from "./slide";
 export { reducedMotion, textWidth } from "./hooks";
 export * from "./ring";
 export * from "./icons";
+export * from "./prmark";
 export * from "./icons-app";
 export * from "./banner";
 export * from "./case";

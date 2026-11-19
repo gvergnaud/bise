@@ -245,6 +245,16 @@
 /* Changes: the branch in mono · its PR · its land in text-3 */
 .tk-mono{font:var(--f-mono)}
 .tk-change-pr,.tk-change-sha{flex:none;color:var(--c-text-3);white-space:nowrap}
+/* a PR row (his pick on page tasks-fresh, designer m_66712): GitHub's icon · '#924' text-3 tabular ·
+   the title cut at a word · its state words text-3 + the review icon at the right; a closed one faded */
+.tk-pr-tag{flex:none;color:var(--c-text-3);font-variant-numeric:tabular-nums}
+.tk-pr-title{flex:1}
+.tk-pr-state{flex:none;margin-left:auto;color:var(--c-text-3);white-space:nowrap}
+.tk-rows li[data-st="closed"] .tk-pr{opacity:.6}
+/* a land of an agent with no branch: its sha, mono, text-3 */
+.tk-landed{height:var(--s-7);padding:0 var(--s-2);color:var(--c-text-3)}
+/* the bar's merged mark in place of the n/m (designer m_66721) */
+.tk-merged{display:inline-flex;align-items:center}
 /* 'All n in Library →': a quiet act, text-2, ink and underlined on hover (designer m_64958) */
 .tk-more{align-self:flex-start;padding:0;border:0;background:none;color:var(--c-text-2);font:inherit}
 .tk-more:hover{color:var(--c-text);text-decoration:underline}

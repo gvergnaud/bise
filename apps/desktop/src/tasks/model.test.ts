@@ -4,7 +4,7 @@ import type { WorkRow, WorkStatus } from '@/proto';
 import { barRows, cutAtWord, goalsOf, listRows, movedKeys, statusSig, type ProjWork } from './model';
 import { sinceLooked } from './since';
 import { tasksOf } from './chips';
-import { artsOf, resolveMerged } from './model';
+import { artsOf, prSet, prsOf, resolveMerged } from './model';
 import { originIn } from './TaskTab';
 import { edgesOf } from './Board';
 import { agentLineOf, agentStateOf, cardCrew, cardSaid, firstSentence, nowOfTask, originOf, reportsOf, soloOn } from './model';
@@ -213,5 +213,34 @@ describe('the Board: a card that changed column (movedKeys, tasks-shine batch 5)
     const two = statusSig([w('a', 'to_review', NOW), w('b', 'needs_you', NOW), w('c', 'working', NOW)]);
     expect([...movedKeys(one, two)]).toEqual(['p/a']);
     expect([...movedKeys(two, statusSig([w('b', 'needs_you', NOW)]))]).toEqual([]);
+  });
+});
+
+describe('a task\'s PRs (his pick on page tasks-fresh, designer m_66722)', () => {
+  const pr = (id: string, works: string[], at: number, over: Record<string, unknown>) => ({ id, title: `PR ${id}`, works, at_ms: at, pr: { repo: 'o/r', number: Number(id), tag: `#${id}`, ...over } });
+  const arts = [
+    pr('1', ['kb'], 1, { last: { state: 'merged', review: 'approved', at_ms: 100 } }),
+    pr('2', ['kb'], 2, { status: { state: 'open', review: 'changes', title: 'Faster signup' } }),
+    pr('3', ['kb'], 3, { last: { state: 'closed', review: 'none', at_ms: 50 } }),
+    pr('4', ['other'], 4, { last: { state: 'open', review: 'none', at_ms: 50 } }),
+    { id: 'doc', title: 'a doc', works: ['kb'], at_ms: 9 },
+  ] as unknown as Parameters<typeof prsOf>[0];
+
+  it('lists the PR artifacts that serve it, open first, then merged, then closed; the live state wins over the last kept', () => {
+    const got = prsOf(arts, 'kb', []);
+    expect(got.map((p) => [p.tag, p.state, p.review])).toEqual([['#2', 'open', 'changes'], ['#1', 'merged', 'approved'], ['#3', 'closed', 'none']]);
+    expect(got[0]?.title).toBe('Faster signup');
+    expect(got[1]?.at_ms).toBe(100);
+  });
+
+  it('reads merged only when every PR is merged and none open; a closed one counts for nothing', () => {
+    expect(prSet(prsOf(arts, 'kb', []))).toMatchObject({ n: 3, open: 1, merged: 1, allMerged: false });
+    expect(prSet([{ state: 'merged' }, { state: 'closed' }]).allMerged).toBe(true);
+    expect(prSet([{ state: 'merged' }, { state: 'draft' }]).allMerged).toBe(false);
+    expect(prSet([{ state: 'closed' }]).allMerged).toBe(false);
+  });
+
+  it('keeps its PRs out of the Artifacts chips: nothing twice', () => {
+    expect(artsOf(arts as unknown as { id: string; works: string[]; at_ms: number }[], 'kb', []).all.map((a) => a.id)).toEqual(['doc']);
   });
 });

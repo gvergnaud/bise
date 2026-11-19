@@ -117,3 +117,22 @@ describe('Not on this task (tasks-ux m_66626)', () => {
     expect(acts().map((c) => c.req)).toEqual([{ step: 'unlink', id: 'kb', agent: 'vb-architect' }, { step: 'link', id: 'kb', agent: 'vb-architect' }]);
   });
 });
+
+describe('Changes is the PR list (his pick on page tasks-fresh, designer m_66722)', () => {
+  it('its PRs with GitHub\'s marks, open first; a merged one says when; none of them in the Artifacts chips', () => {
+    const v = tab();
+    const at = Date.now();
+    act(() => {
+      v.store.apply({ ev: 'artifacts', project: P, items: [
+        { id: 'pr-924', kind: 'pr', title: 'Auto-approve safe by default', agent: 'auto-approve-lead', version: 1, at_ms: at - 10, url: 'https://github.com/o/r/pull/924', new: false, works: ['kb'], pr: { repo: 'o/r', number: 924, tag: '#924', last: { state: 'merged', review: 'approved', at_ms: at } } },
+        { id: 'pr-925', kind: 'pr', title: 'Its follow-up', agent: 'auto-approve-lead', version: 1, at_ms: at - 5, url: 'https://github.com/o/r/pull/925', new: false, works: ['kb'], pr: { repo: 'o/r', number: 925, tag: '#925', last: { state: 'draft', review: 'changes', at_ms: at } } },
+      ] });
+    });
+    const rows = [...v.getByTestId('tasks.tab.kb.changes').querySelectorAll('li')];
+    expect(rows.map((r) => r.getAttribute('data-st'))).toEqual(['draft', 'merged']);
+    expect(v.getByTestId('tasks.tab.kb.pr.pr-925.state').textContent).toBe('draft · changes requested');
+    expect(v.getByTestId('tasks.tab.kb.pr.pr-924.state').textContent).toMatch(/^merged \d\d:\d\d$/);
+    expect(v.getByTestId('tasks.tab.kb.pr.pr-924.icon').getAttribute('data-st')).toBe('merged');
+    expect(v.queryByTestId('tasks.tab.kb.art.pr-924')).toBeNull();
+  });
+});

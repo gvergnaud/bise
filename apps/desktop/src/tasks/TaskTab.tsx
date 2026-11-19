@@ -1,11 +1,12 @@
 // The Task tab (brief "Task tab", content approved by him as drawn; designer's look rules: 384 wide):
 // its status pill, name, project · agents · started; his origin (a link to his message); why;
 // done-when; Needs you answered in place (its cards' options); Now (its line); Agents (live dot,
-// archived greyed); Artifacts (3 newest for him, 'All n in Library →' on task:<id>); Changes (its agents' branches); a paused task's line 'this task is paused · Resume' (tasks-ux); footer Mark done
+// archived greyed); Artifacts (3 newest for him, 'All n in Library →' on task:<id>, its PRs never); Changes (its PRs
+// with GitHub's marks, then its agents' branches with no PR, then their lands: his pick on page tasks-fresh); a paused task's line 'this task is paused · Resume' (tasks-ux); footer Mark done
 // · Pause/Resume (Reopen when done, Restart when stalled). A merged or folded one says where it went.
 // Gestures go through the hub's task_act. Owner: tasks.
 import { useEffect, useRef, useState } from 'react';
-import { AppIcon, ArtChip, Dropdown, Field, IconButton, Input, PickerPop, Press, Seg, tipAttrs } from '@/ds';
+import { AppIcon, ArtChip, Dropdown, Field, IconButton, Input, PickerPop, PrReviewIcon, PrStateIcon, Press, Seg, tipAttrs, WordCut } from '@/ds';
 import { atOf, MenuAnchor, type MenuAt } from '@/artifacts/Menus';
 import { TaskLog } from './TaskLog';
 import { dayWords, glyphOf, timeOf } from '@/artifacts/model';
@@ -26,7 +27,7 @@ import { signOf } from '@/app/side';
 import { barSign } from '@/app/barrows';
 import { tasks } from '@/proto/words_tasks.gen';
 import { useWorks } from '@/store';
-import { aboutOf, agentLineOf, agentStateOf, artsOf, crewOf, goalsOf, isOpen, nowOfTask, originOf, reportsOf, soloOn, type Origin } from './model';
+import { aboutOf, agentLineOf, agentStateOf, artsOf, crewOf, goalsOf, isOpen, nowOfTask, originOf, prsOf, reportsOf, soloOn, type Origin, type TaskPr } from './model';
 import { openTask, pausedWords, TaskMark, statusWord } from './Marks';
 import { useTaskAct, useTaskReq } from './Board';
 import { clock, lineAt } from './Side';
@@ -45,6 +46,16 @@ export function originIn(entries: readonly (Pick<Entry, 'kind' | 'msg_id' | 'tex
 
 /** an agent's state on this task in words (agentStateOf) */
 const STATE_WORD = { archived: tasks.agent_archived, working: tasks.agent_live, waits: tasks.agent_waits, idle: tasks.agent_idle } as const;
+
+/** a PR row's state words: 'open · changes requested', 'merged 13:17', and 'as of 14:20' when the
+ *  forge answers late (its last known state); the review rides with an open one (designer m_66712) */
+export function prWords(p: TaskPr, now: number): string {
+  const when = p.at_ms === null ? '' : started(p.at_ms, now);
+  const state = p.state === 'merged' ? (when === '' ? tasks.pr_merged : tasks.pr_merged_at({ when })) : p.state === 'closed' ? tasks.pr_closed : p.state === 'draft' ? tasks.pr_draft : tasks.pr_open;
+  const review = p.state === 'open' || p.state === 'draft' ? (p.review === 'changes' ? tasks.pr_changes : p.review === 'approved' ? tasks.pr_approved : '') : '';
+  const late = p.stale && when !== '' && p.state !== 'merged' ? tasks.pr_as_of({ when }) : '';
+  return [state, review, late].filter((x) => x !== '').join(' · ');
+}
 
 /** a start's words: today's hour, else the date */
 function started(ms: number, now: number): string {
@@ -192,12 +203,24 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
   // its agents that work on a branch of their own (a worktree): the branch, its PR, its newest land
   const places = store.places(project);
   const lands = (log?.lines ?? []).filter((l) => l.kind === 'land' && (l.sha ?? '') !== '');
+  // his pick on page tasks-fresh (designer m_66722): Changes is the PR list. Its PRs first (the PR
+  // artifacts that serve it, open, merged, then closed), then its agents' branches with no PR of
+  // its own here, then the lands of its agents with no branch: nothing twice
+  const prs = prsOf(allArts, w.id, works.tombs);
+  const prArts = new Map(allArts.filter((a) => a.pr != null).map((a) => [a.id, a]));
+  const listed = new Set(prs.map((p) => p.tag));
   const changes = names.flatMap((n) => {
     const a = live(n);
     if (a?.branch == null || a.branch === '') return [];
     const pr = openPrOf(n, agents, places);
+    if (pr !== null && listed.has(`#${String(pr.number)}`)) return [];
     const sha = lands.find((l) => l.who === n)?.sha ?? '';
     return [{ name: n, branch: a.branch, pr: pr === null ? tasks.change_no_pr : tasks.change_pr({ n: pr.number, state: pr.state }), sha: sha.slice(0, 9) }];
+  });
+  const branched = new Set(names.filter((n) => (live(n)?.branch ?? '') !== ''));
+  const landed = names.flatMap((n) => {
+    const sha = branched.has(n) ? '' : (lands.find((l) => l.who === n)?.sha ?? '');
+    return sha === '' ? [] : [{ name: n, sha: sha.slice(0, 9) }];
   });
   return (
     <div className="tk-tab" data-testid={t}>
@@ -379,11 +402,31 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
         </section>
       )}
 
-      {changes.length > 0 && (
-        // its agents' branches; a PR opens instead when one is open (review/openChange changeDoor)
+      {prs.length + changes.length + landed.length > 0 && (
+        // its PRs, then its agents' branches (a PR opens instead when one is open: review/openChange
+        // changeDoor), then its lands (designer m_66722)
         <section className="tk-sec" data-testid={`${t}.changes`}>
           <h3 className="tk-h">{tasks.sec_changes}</h3>
           <ul className="tk-rows">
+            {prs.map((p) => {
+              const a = prArts.get(p.id);
+              return (
+                <li key={p.id} data-st={p.state} data-testid={`${t}.pr.${p.id}`}>
+                  <Press look="tk-row tk-pr" {...tipAttrs(p.title)} onClick={() => {
+                    openTab({ kind: 'artifact', project, id: p.id });
+                  }} data-testid={`${t}.pr.${p.id}.open`}>
+                    {/* GitHub's icon in its colour · '#924' text-3 · the title cut at a word · its state words + review (designer m_66712) */}
+                    <PrStateIcon state={p.state} testId={`${t}.pr.${p.id}.icon`} />
+                    <span className="tk-pr-tag">{p.tag}</span>
+                    <WordCut className="tk-row-name tk-pr-title" text={p.title} />
+                    <span className="tk-pr-state" data-testid={`${t}.pr.${p.id}.state`}>{prWords(p, now)}</span>
+                    <PrReviewIcon review={p.review} testId={`${t}.pr.${p.id}.review`} />
+                  </Press>
+                  {/* Move to task… (tasks-ux m_65591): its ⋯ on the row's hover */}
+                  {a !== undefined && <ArtMoveMore project={project} a={a} testId={`${t}.pr.${p.id}.more`} />}
+                </li>
+              );
+            })}
             {changes.map((a) => (
               <li key={a.name}>
                 <Press look="tk-row" {...tipAttrs(tasks.change_tip)} onClick={() => {
@@ -396,6 +439,10 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
                   {a.sha !== '' && <span className="tk-change-sha tk-mono">· {a.sha}</span>}
                 </Press>
               </li>
+            ))}
+            {landed.map((l) => (
+              // a land of an agent with no branch: its sha, mono, text-3
+              <li key={`land.${l.name}`} className="tk-landed tk-mono" data-testid={`${t}.landed.${l.name}`}>{l.sha} · {l.name}</li>
             ))}
           </ul>
         </section>

@@ -782,6 +782,59 @@
     "one": null,
     "text": "paused · until {at}"
   },
+  "tasks.pr_approved": {
+    "args": [],
+    "one": null,
+    "text": "approved"
+  },
+  "tasks.pr_as_of": {
+    "args": [
+      "when"
+    ],
+    "one": null,
+    "text": "as of {when}"
+  },
+  "tasks.pr_changes": {
+    "args": [],
+    "one": null,
+    "text": "changes requested"
+  },
+  "tasks.pr_closed": {
+    "args": [],
+    "one": null,
+    "text": "closed"
+  },
+  "tasks.pr_draft": {
+    "args": [],
+    "one": null,
+    "text": "draft"
+  },
+  "tasks.pr_merged": {
+    "args": [],
+    "one": null,
+    "text": "merged"
+  },
+  "tasks.pr_merged_at": {
+    "args": [
+      "when"
+    ],
+    "one": null,
+    "text": "merged {when}"
+  },
+  "tasks.pr_open": {
+    "args": [],
+    "one": null,
+    "text": "open"
+  },
+  "tasks.prs_tip": {
+    "args": [
+      "n",
+      "open",
+      "merged"
+    ],
+    "one": "{n} PR · {open} open · {merged} merged",
+    "text": "{n} PRs · {open} open · {merged} merged"
+  },
   "tasks.q_type": {
     "args": [],
     "one": null,
