@@ -9,6 +9,19 @@
 const MOST = 4;
 const LEAST = 2;
 
+/**
+ * A test's timeout: `ms` written for an idle Mac, stretched by the load factor (load over cpus,
+ * 1 to 4: tests/harness/load.ts, tests/wait.py). On an idle Mac exactly `ms`, never looser; at
+ * most 4x. The gate reads the factor once and passes it (VITEST_LOAD_FACTOR, `given`), so every
+ * vitest of a gate takes the factor its desktop line prints; else (by hand) `measured` now.
+ * Not a retry: a test over its stretched time is red (architect m_67563; 12 of the 27 desktop_check
+ * reds of 11-18/19 were 5 s timeouts of 0.2-0.8 s tests at load 32-82, others' load).
+ */
+export function vitestTimeout(ms: number, given: string | undefined, measured: number): number {
+  const f = given !== undefined && /^\d+(\.\d+)?$/.test(given) ? Number(given) : measured;
+  return Math.round(ms * Math.max(1, Math.min(4, f)));
+}
+
 // heavyCpus: HEAVY_CPUS as heavy-run set it, or undefined outside heavy-run
 export function vitestWorkers(cpus: number, heavyCpus: string | undefined): number {
   const share = heavyCpus !== undefined && /^\d+$/.test(heavyCpus) ? Number(heavyCpus) : null;

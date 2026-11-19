@@ -825,6 +825,13 @@ desktop_check() {
     echo "skipped desktop_check: $miss"; return 0
   fi
   local s=$SECONDS log="$run/desktop_check.log" rel=""
+  # the load factor, read once (tests/wait.py's rule: load over cpus, 1 to 4): every vitest of
+  # this gate stretches a test's 5 s by it (apps/desktop/vitest.config.ts testTimeout, architect
+  # m_67563), and the desktop line says it. 12 of 27 desktop_check reds of 11-18/19 were 5 s
+  # timeouts of 0.2-0.8 s tests at load 32-82
+  VITEST_LOAD_FACTOR="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import wait; print("%.2f" % wait.load_factor())' "$root/tests" 2>/dev/null || echo 1.00)"
+  export VITEST_LOAD_FACTOR
+  local lf="load x$VITEST_LOAD_FACTOR: a test's 5 s is $(python3 -c 'import sys; print("%.1f" % (5 * float(sys.argv[1])))' "$VITEST_LOAD_FACTOR") s"
   # shellcheck disable=SC2086
   [ "${1:-}" = strict ] || rel="${drel:+ $drel}"
   if [ -n "$rel" ]; then
@@ -860,15 +867,15 @@ desktop_check() {
     [ $drc = 0 ] && [ -z "$related" ] && [ -n "$bare" ] && echo "WARN 0 tests ran for ${bare% }: no test imports it (a test next to it, or the full gate's run)"
     python3 -c 'import json, sys, time; print(json.dumps({"t": int(time.time()), "agent": sys.argv[1], "sha": sys.argv[2], "changed": sys.argv[3].split(), "ran": sys.argv[4].split(), "rc": int(sys.argv[5])}))' \
       "${SB_AGENT:-?}" "$(git -C "$root" rev-parse HEAD 2>/dev/null)" "$rel" "$ran" "$drc" >>"$gdir/vitest-related.jsonl" 2>/dev/null
-    if [ $drc = 0 ]; then echo "ok   desktop_check ($((SECONDS - s))s, vitest: related + by path; full runs all)"; return 0; fi
+    if [ $drc = 0 ]; then echo "ok   desktop_check ($((SECONDS - s))s, vitest: related + by path; full runs all; $lf)"; return 0; fi
   # the whole app: a quick runs check:quick, check with no build and the unit project only;
   # then the bims' world simulations: all of them when a bims file changed (the plan's
   # dbims), else the ones whose imports hold a changed app file (dfiles: vitest related,
   # usually none). Every other gate (full, land, the tip gate, a release) runs `check`
   elif (cd "$root/apps/desktop" && pnpm -s "$([ "$mode" = quick ] && [ "${1:-}" != strict ] && echo check:quick || echo check)" \
       && { [ "$mode" != quick ] || [ "${1:-}" = strict ] || quick_bims_laws; }) >"$log" 2>&1
-  then echo "ok   desktop_check ($((SECONDS - s))s)"; return 0; fi
-  echo "FAIL desktop_check"
+  then echo "ok   desktop_check ($((SECONDS - s))s; $lf)"; return 0; fi
+  echo "FAIL desktop_check ($lf)"
   grep -E "error|Error|FAIL|✗|×" "$log" | head -30
   # one name a tree's gate (the agent's), never shared: side-resize's red overwrote
   # fast-loop's under the one name (2026-10-27 22:31)

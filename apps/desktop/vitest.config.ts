@@ -8,7 +8,8 @@ import { availableParallelism } from 'node:os';
 import { resolve } from 'node:path';
 import { configDefaults, defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
-import { vitestWorkers } from './src/test-workers';
+import { vitestTimeout, vitestWorkers } from './src/test-workers';
+import { loadFactor } from './tests/harness/load';
 
 // every test: src/**/*.test.ts(x) next to its code, the feature tests, the checks' pure helpers
 // (tests/checks/**/*.test.ts: composer/still.ts; the checks themselves are *.spec.ts)
@@ -49,6 +50,10 @@ export default defineConfig({
     // time. Under heavy-run, the job's share it gives (HEAVY_CPUS), at least 2: 4 each at load 45
     // timed out again on 11-11 (src/test-workers.ts, architect m_60240, m_60250).
     maxWorkers: vitestWorkers(availableParallelism(), process.env.HEAVY_CPUS),
+    // a test's 5 s, written for an idle Mac, stretched by the load (1 to 4x; the gate passes the
+    // factor it read once, VITEST_LOAD_FACTOR): a 0.5 s test at load 60 is no red, a test that
+    // went slow on an idle Mac still is. A test's own timeout (words.test's 30 s) stays its own.
+    testTimeout: vitestTimeout(5000, process.env.VITEST_LOAD_FACTOR, loadFactor()),
     // two projects (c3-quick-90s): bims-laws, the bims' world simulations (each file 20-210 s
     // at load 22, ~1000 s of the bims' 1090), and unit, the rest. `pnpm test` runs both (the
     // full gate, the tip, a release); the quick gate runs unit, and bims-laws only when a
