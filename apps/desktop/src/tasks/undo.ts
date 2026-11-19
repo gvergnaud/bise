@@ -11,8 +11,10 @@ export const UNDO_MS = 6_000;
 /** His gesture, as the toast keeps it: the step and the row he acted on (its state before). */
 export interface Did {
   readonly project: string;
-  readonly step: 'pause' | 'resume' | 'done';
+  readonly step: 'pause' | 'resume' | 'done' | 'unlink';
   readonly row: Pick<WorkRow, 'id' | 'name' | 'status' | 'until_ms'>;
+  /** 'unlink': the agent he took off the task (its Undo puts it back) */
+  readonly agent?: string;
 }
 
 /** His Pause, Resume or Mark done shown at once (tasks-ux m_65598): the pill and the footer flip
@@ -52,6 +54,8 @@ export function inverse(d: Did, now: number): TaskReq | null {
     }
     case 'done':
       return { step: 'reopen', id };
+    case 'unlink':
+      return d.agent === undefined ? null : { step: 'link', id, agent: d.agent };
   }
 }
 
@@ -64,6 +68,8 @@ export function didWords(d: Did, name: string): string {
       return tasks.undo_resumed({ name });
     case 'done':
       return tasks.undo_done({ name });
+    case 'unlink':
+      return tasks.undo_unlinked({ agent: d.agent ?? '', name });
   }
 }
 

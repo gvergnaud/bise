@@ -233,6 +233,9 @@
 .tk-live[data-on]{border:0;background:var(--c-text)}
 .tk-agent{font-weight:500;white-space:nowrap}
 .tk-agent-end{display:inline-flex;align-items:center;gap:var(--s-2)}
+/* an agent row's ⋯ (Not on this task): on hover or focus only, as the artifact rows' (tasks-ux m_66626) */
+.tk-agents li .b-ibtn{opacity:0}
+.tk-agents li:hover .b-ibtn,.tk-agents li:focus-within .b-ibtn{opacity:1}
 .tk-agent-state{color:var(--c-text-3);font-size:var(--t-12);white-space:nowrap}
 .tk-agent-doing{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--c-text-3);font-size:var(--t-12)}
 /* a narrow panel: its line goes first, the name and the state stay */

@@ -184,6 +184,12 @@ export const tasks = {
   undo_resumed: (a: { name: string | number }): string => String(a.name) + " resumed",
   /** the Undo's line after Mark done */
   undo_done: (a: { name: string | number }): string => String(a.name) + " marked done",
+  /** the Undo's line after 'Not on this task' (tasks-ux m_66626): the name first, like the other toasts (the toast cuts the name, never the rest) */
+  undo_unlinked: (a: { name: string | number; agent: string | number }): string => String(a.name) + ": " + String(a.agent) + " removed",
+  /** an agent row's ⋯ in the Task tab, its tip (tasks-ux m_66626) */
+  agent_more: "More",
+  /** the ⋯'s item: the agent leaves this task's agents until it acts for it again */
+  agent_unlink: "Not on this task",
   /** the ink dot's label and tip (roma idea 2): its status, artifacts or questions changed */
   new_since_looked: "new since you looked",
   /** the Task tab's first pane: what the task is now */

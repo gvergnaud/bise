@@ -83,10 +83,20 @@
     "one": null,
     "text": "working"
   },
+  "tasks.agent_more": {
+    "args": [],
+    "one": null,
+    "text": "More"
+  },
   "tasks.agent_tip": {
     "args": [],
     "one": null,
     "text": "ask bise for one more agent on this task"
+  },
+  "tasks.agent_unlink": {
+    "args": [],
+    "one": null,
+    "text": "Not on this task"
   },
   "tasks.agent_waits": {
     "args": [],
@@ -975,6 +985,14 @@
     ],
     "one": null,
     "text": "{name} resumed"
+  },
+  "tasks.undo_unlinked": {
+    "args": [
+      "name",
+      "agent"
+    ],
+    "one": null,
+    "text": "{name}: {agent} removed"
   },
   "tasks.waiting_no_agent": {
     "args": [],

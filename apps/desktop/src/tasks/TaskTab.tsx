@@ -5,7 +5,8 @@
 // · Pause/Resume (Reopen when done, Restart when stalled). A merged or folded one says where it went.
 // Gestures go through the hub's task_act. Owner: tasks.
 import { useEffect, useRef, useState } from 'react';
-import { ArtChip, Dropdown, Field, Input, Press, Seg, tipAttrs } from '@/ds';
+import { AppIcon, ArtChip, Dropdown, Field, IconButton, Input, PickerPop, Press, Seg, tipAttrs } from '@/ds';
+import { atOf, MenuAnchor, type MenuAt } from '@/artifacts/Menus';
 import { TaskLog } from './TaskLog';
 import { dayWords, glyphOf, timeOf } from '@/artifacts/model';
 import { sentenceCase } from '@/ds/case';
@@ -94,6 +95,14 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
     doAct(p, step, tid);
     // Reopen and Restart have nothing to put back: no Undo
     offer(row !== undefined && step !== 'reopen' && step !== 'restart' ? ({ project: p, step, row } satisfies Did) : null);
+  };
+  // an agent row's ⋯ › Not on this task (tasks-ux m_66626): his gesture, the agent leaves the
+  // list until it acts for the task again; its Undo puts it back (WRemoveAgent / WAddAgent)
+  const [agentMenu, setAgentMenu] = useState<{ agent: string; at: MenuAt } | null>(null);
+  const unlink = (agent: string): void => {
+    const row = works.works.find((x) => x.id === id);
+    req(project, { step: 'unlink', id, agent });
+    offer(row === undefined ? null : ({ project, step: 'unlink', row, agent } satisfies Did));
   };
   // he sees this task while its tab is open: seen when it opens, as it changes, and when it goes
   // (the dot, news.ts)
@@ -320,7 +329,8 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
                 <li key={n} role="link" tabIndex={0} data-archived={a === undefined || undefined} onClick={() => {
                   router.go({ screen: 'thread', project, agent: n });
                 }} onKeyDown={(e) => {
-                  if (e.key === 'Enter') router.go({ screen: 'thread', project, agent: n });
+                  // the row's own Enter, never its ⋯'s
+                  if (e.key === 'Enter' && e.target === e.currentTarget) router.go({ screen: 'thread', project, agent: n });
                 }} data-testid={`${t}.agent.${n}`}>
                   {/* one line (tasks-shine batch 4, designer m_66679): its face, the right bar's own sign
                       (app/barrows barSign) · name · its line (cut, whole in its tip) · live dot + state */}
@@ -331,6 +341,11 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
                     <span className="tk-live" data-on={on || undefined} />
                     <span className="tk-agent-state">{state}</span>
                   </span>
+                  {/* its ⋯ on hover or focus, as the artifact rows' (tasks-ux m_66626) */}
+                  <IconButton size="row" label={tasks.agent_more} onClick={(e) => {
+                    e.stopPropagation();
+                    setAgentMenu({ agent: n, at: atOf(e.currentTarget) });
+                  }} testId={`${t}.agent.${n}.more`}><AppIcon name="more" size={16} /></IconButton>
                 </li>
               );
             })}
@@ -420,6 +435,13 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
         </footer>
       ) : (
       <>
+      {agentMenu !== null && (
+        <AgentMenu at={agentMenu.at} onUnlink={() => {
+          unlink(agentMenu.agent);
+        }} onClose={() => {
+          setAgentMenu(null);
+        }} testId={`${t}.agent.menu`} />
+      )}
       <UndoToast did={did} works={works.works} name={did?.row.name ?? w.name} send={req} done={() => {
         offer(null);
       }} testId={`${t}.toast`} />
@@ -479,5 +501,20 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
       </>
       )}
     </div>
+  );
+}
+
+/** An agent row's menu: Not on this task (the ds PickerPop, from its ⋯). */
+function AgentMenu({ at, onUnlink, onClose, testId }: { at: MenuAt; onUnlink: () => void; onClose: () => void; testId: string }) {
+  const anchor = useRef<HTMLSpanElement>(null);
+  return (
+    <>
+      <MenuAnchor at={at} anchor={anchor} />
+      <PickerPop anchor={anchor} align="start" groups={[{ id: 'agent', rows: [{ id: 'unlink', name: tasks.agent_unlink, testId: `${testId}.unlink` }] }]}
+        onClose={onClose} onPick={() => {
+          onClose();
+          onUnlink();
+        }} testId={testId} />
+    </>
   );
 }

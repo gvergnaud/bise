@@ -199,6 +199,13 @@ crate::words! { tasks:
     undo_resumed(name) = "{name} resumed";
     /// the Undo's line after Mark done
     undo_done(name) = "{name} marked done";
+    /// the Undo's line after 'Not on this task' (tasks-ux m_66626): the name
+    /// first, like the other toasts (the toast cuts the name, never the rest)
+    undo_unlinked(name, agent) = "{name}: {agent} removed";
+    /// an agent row's ⋯ in the Task tab, its tip (tasks-ux m_66626)
+    agent_more = "More";
+    /// the ⋯'s item: the agent leaves this task's agents until it acts for it again
+    agent_unlink = "Not on this task";
     /// the ink dot's label and tip (roma idea 2): its status, artifacts or questions changed
     new_since_looked = "new since you looked";
 

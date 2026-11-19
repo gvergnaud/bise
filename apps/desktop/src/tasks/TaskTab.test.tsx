@@ -83,3 +83,36 @@ describe('a Done when item turning ✓ draws once (tasks-shine batch 5)', () => 
     expect(check(1).hasAttribute('data-drew')).toBe(true);
   });
 });
+
+describe('Not on this task (tasks-ux m_66626)', () => {
+  it("an agent row's ⋯ takes the agent off the task, his gesture, and the toast's Undo puts it back", () => {
+    const sent: unknown[] = [];
+    const port: CorePort = { send: (c) => sent.push(c), onEvent: () => () => undefined, onState: () => () => undefined, state: () => Promise.resolve('up') };
+    const store = new Store(port);
+    store.setCore('up');
+    store.apply(projects(row({ project: P, name: 'acme' })));
+    const at = Date.now();
+    store.apply(ev('works', { project: P, works: [{ id: 'kb', name: 'Pool', by: 'main', created_ms: at, last_ms: at, status: 'working', agents: ['vb-architect'] }], tombs: [] }));
+    const v = render(
+      <StoreProvider store={store}>
+        <RouterContext value={createRouter({ screen: 'bise' })}>
+          <TaskTab project={P} id="kb" />
+        </RouterContext>
+      </StoreProvider>,
+    );
+    const acts = () => sent.filter((c): c is { cmd: string; project: string; req: Record<string, unknown> } => typeof c === 'object' && c !== null && (c as { cmd?: string }).cmd === 'task_act');
+    act(() => {
+      v.getByTestId('tasks.tab.kb.agent.vb-architect.more').click();
+    });
+    act(() => {
+      v.getByTestId('tasks.tab.kb.agent.menu.unlink').click();
+    });
+    expect(acts().map((c) => c.req)).toEqual([{ step: 'unlink', id: 'kb', agent: 'vb-architect' }]);
+    expect(v.getByTestId('tasks.tab.kb.toast.what').textContent).toBe('Pool: vb-architect removed');
+    expect(v.getByTestId('tasks.tab.kb.toast.verb').textContent).toBe(': vb-architect removed');
+    act(() => {
+      v.getByTestId('tasks.tab.kb.toast.undo').click();
+    });
+    expect(acts().map((c) => c.req)).toEqual([{ step: 'unlink', id: 'kb', agent: 'vb-architect' }, { step: 'link', id: 'kb', agent: 'vb-architect' }]);
+  });
+});
