@@ -17,7 +17,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import e2e  # noqa: E402
-from e2e import EXE, check  # noqa: E402
+from e2e import EXE, check, line_has  # noqa: E402
 from proto_parts import render  # noqa: E402
 from proto_rpc import (agent_row, check_keys, entries, hub_all, hub_now, idle, ok, raw_client, refused, req,  # noqa: E402
                        run, subscribe, transcript, unsubscribe)
@@ -197,9 +197,31 @@ def queued_round(c, E):
     before the turn ends never reaches the agent; its result gives his
     words. A take after delivery is an error saying so, and nothing
     changes."""
+    def turn_over(needle):
+        """The turn his message holding `needle` started has ended: a
+        '--- idle' line after its 'you' line in main's transcript (the
+        hub's own order). Never the client's last status alone: it can
+        still be the idle from before that turn (the 11-19 tip red: the
+        next send, made 'now', went into that turn as a steer)."""
+        def done():
+            ls = c.lines("main")
+            at = [i for i, l in enumerate(ls) if (e2e.feed_rec(l) or ("", {}))[0] == "you" and line_has(l, needle)]
+            return bool(at) and any(l.split("	", 1)[-1].startswith("--- idle") for l in ls[at[-1]:])
+        c.wait(done, 30, "the turn of %r over" % needle)
+        idle(c, "main")
+
+    def busy_turn(name):
+        """A turn that runs until the test lets it end (its bash waits for
+        a file): never 6 s of the wall clock that load eats."""
+        go = os.path.join(E.tmp, "go-" + name)
+        ok(req(c, "turn/send", agent="main", text="[[bash: until test -f %s; do sleep 0.1; done]] busy for the %s" % (go, name), mode="now"), "a long turn")
+        c.wait_line("main", "until test -f " + go, 30)
+        c.wait_status("main", "working", 30)
+        return lambda: open(go, "w").close()
+
     ok(req(c, "turn/send", agent="main", text="queued from the window", mode="queued"), "a queued send")
     c.wait_line("main", "queued from the window", 30)
-    idle(c, "main")
+    turn_over("queued from the window")
 
     def queued_row(text):
         for ev in reversed(hub_all(c, "hub/agents")):
@@ -208,9 +230,7 @@ def queued_round(c, E):
                     return next((q for q in a.get("queued") or [] if q["text"] == text), None)
         return None
 
-    ok(req(c, "turn/send", agent="main", text="[[bash: sleep 6]] busy for the take", mode="now"), "a long turn")
-    c.wait_line("main", "sleep 6", 30)
-    c.wait_status("main", "working", 30)
+    end_take = busy_turn("take")
     ok(req(c, "turn/send", agent="main", text="take me back", mode="queued"), "a queued send")
     # the terminal's tab (command/run, mode queued, issue 23) and the
     # window's send queued (turn/send) make the same queued message:
@@ -229,7 +249,9 @@ def queued_round(c, E):
     got = ok(req(c, "turn/unqueue", agent="main", id=row["id"]), "turn/unqueue")
     check(got["id"] == row["id"] and got["agent"] == "main" and got["text"] == "take me back", "queued_taken: %r" % got)
     c.wait(lambda: queued_row("take me back") is None, 20, "the row gone")
-    idle(c, "main")
+    end_take()
+    # the turn ends, then the two queued messages go to main as one turn
+    turn_over("both doors")
     check(not any(r.get("text") == "take me back" for r in c.feed("main", "you")), "a message taken back never reaches main")
     check("take me back" not in json.dumps([r for r in E.fake_requests() if r.get("agent") == "main"]), "the model never got it")
     # a take of a delivered one (his earlier queued send, by the
@@ -244,9 +266,7 @@ def queued_round(c, E):
     # m_25139): his queued message goes into the running turn with its
     # own id (his 'you' line then its 'you-id'), the row leaves the queue;
     # a second steer of it is refused, nothing changes
-    ok(req(c, "turn/send", agent="main", text="[[bash: sleep 6]] busy for the steer", mode="now"), "a long turn")
-    c.wait_line("main", "busy for the steer", 30)
-    c.wait_status("main", "working", 30)
+    end_steer = busy_turn("steer")
     ok(req(c, "turn/send", agent="main", text="steer me now", mode="queued"), "a queued send")
     row = c.wait(lambda: queued_row("steer me now"), 20, "the row to steer")
     ok(req(c, "turn/steerQueued", agent="main", id=row["id"]), "turn/steerQueued")
@@ -257,7 +277,8 @@ def queued_round(c, E):
     check(ls[i + 1] == ("you-id", {"id": row["id"]}), "steered with its own id: %r" % ls[i : i + 2])
     r = req(c, "turn/steerQueued", agent="main", id=row["id"])
     check("isn't waiting any more" in refused(r, "a second steer")["message"], "the refusal says why: %r" % r)
-    idle(c, "main")
+    end_steer()
+    turn_over("busy for the steer")
     check(sum(1 for r in c.feed("main", "you") if r.get("text") == "steer me now") == 1, "said once")
 
 
