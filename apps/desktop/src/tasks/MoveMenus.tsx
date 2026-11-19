@@ -8,6 +8,7 @@ import type { Artifact } from '@/proto';
 import { tasks } from '@/proto/words_tasks.gen';
 import { useWorks } from '@/store';
 import { cutAtWord } from './model';
+import { copyText } from '@/quote/QuotePop';
 import { askMove, lastAt, movedWords, NAME_MAX, tellMoved, worksWithout, type Thing } from './moveTo';
 import { useSendMove } from './MoveHost';
 import type { MouseEvent } from 'react';
@@ -44,7 +45,7 @@ export function CardMoveMore({ project, card, title, testId }: { project: string
 
 /** An artifact row's ⋯: Move to task…, Also add to task…, and Remove from <task> with 2+ tasks
  *  (the native menu's items, its words). */
-export function ArtMoveMore({ project, a, testId }: { project: string; a: Pick<Artifact, 'id' | 'kind' | 'title' | 'works'>; testId: string }) {
+export function ArtMoveMore({ project, a, testId, out }: { project: string; a: Pick<Artifact, 'id' | 'kind' | 'title' | 'works'>; testId: string; out?: { readonly url: string; readonly forge: string } }) {
   const works = useWorks(project).works;
   const send = useSendMove();
   const now = a.works ?? [];
@@ -58,8 +59,20 @@ export function ArtMoveMore({ project, a, testId }: { project: string; a: Pick<A
   return (
     <span className="tk-more-slot">
       <Dropdown look="more" label="⋯" name={tasks.act_more_move} tip={tasks.act_more_move} testId={testId}
-        groups={[{ id: 'move', rows }]}
+        // a PR's row: 'Open on GitHub ↗' and 'Copy link' above the Move items (tasks-ux m_67602, taste 36)
+        groups={[...(out === undefined ? [] : [{ id: 'out', rows: [
+          { id: 'out:open', name: tasks.pr_more_open({ forge: out.forge }), testId: `${testId}.open` },
+          { id: 'out:copy', name: tasks.pr_more_copy, testId: `${testId}.copy` },
+        ] }]), { id: 'move', rows }]}
         onPick={(id) => {
+          if (out !== undefined && id === 'out:open') {
+            void (window as Partial<Window>).bise?.openExternal(out.url);
+            return;
+          }
+          if (out !== undefined && id === 'out:copy') {
+            copyText(out.url);
+            return;
+          }
           if (id === 'move' || id === 'also') {
             askMove({ thing, mode: id, x: lastAt.x, y: lastAt.y });
             return;

@@ -168,6 +168,10 @@ export const tasks = {
   pr_approved: "approved",
   /** the forge answers late or not at all: its last known state, and when (his pick: offline) */
   pr_as_of: (a: { when: string | number }): string => "as of " + String(a.when),
+  /** a PR row's ⋯, first item: its page on the forge (tasks-ux m_67602, taste 36) */
+  pr_more_open: (a: { forge: string | number }): string => "Open on " + String(a.forge) + " ↗",
+  /** a PR row's ⋯, second item: its link to the clipboard */
+  pr_more_copy: "Copy link",
   /** the right bar's tip on a task with PRs: the whole set (designer m_66721) */
   prs_tip: (a: { n: number; open: string | number; merged: string | number }): string => a.n === 1 ? String(a.n) + " PR · " + String(a.open) + " open · " + String(a.merged) + " merged" : String(a.n) + " PRs · " + String(a.open) + " open · " + String(a.merged) + " merged",
   /** an agent of it in a turn */

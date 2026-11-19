@@ -17,6 +17,7 @@ import { openTab } from '@/app/panel/tabs';
 import { presetLibraryQuery } from '@/artifacts/preset';
 import { changeDoor } from '@/review/openChange';
 import { openPrOf } from '@/review/model';
+import { forgeWord } from '@/review/prwords';
 import { PartImageChip } from '@/thread/ImageGone';
 import { partImageWords } from '@/thread/YouBody';
 import { chipName, storeImage } from '@/thread/parts';
@@ -423,7 +424,7 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
                     <PrReviewIcon review={p.review} testId={`${t}.pr.${p.id}.review`} />
                   </Press>
                   {/* Move to task… (tasks-ux m_65591): its ⋯ on the row's hover */}
-                  {a !== undefined && <ArtMoveMore project={project} a={a} testId={`${t}.pr.${p.id}.more`} />}
+                  {a !== undefined && <ArtMoveMore project={project} a={a} out={{ url: a.url, forge: forgeWord(a.pr?.status?.provider) }} testId={`${t}.pr.${p.id}.more`} />}
                 </li>
               );
             })}

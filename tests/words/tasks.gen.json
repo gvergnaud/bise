@@ -821,6 +821,18 @@
     "one": null,
     "text": "merged {when}"
   },
+  "tasks.pr_more_copy": {
+    "args": [],
+    "one": null,
+    "text": "Copy link"
+  },
+  "tasks.pr_more_open": {
+    "args": [
+      "forge"
+    ],
+    "one": null,
+    "text": "Open on {forge} ↗"
+  },
   "tasks.pr_open": {
     "args": [],
     "one": null,

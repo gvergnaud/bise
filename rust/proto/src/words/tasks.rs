@@ -184,6 +184,10 @@ crate::words! { tasks:
     pr_approved = "approved";
     /// the forge answers late or not at all: its last known state, and when (his pick: offline)
     pr_as_of(when) = "as of {when}";
+    /// a PR row's ⋯, first item: its page on the forge (tasks-ux m_67602, taste 36)
+    pr_more_open(forge) = "Open on {forge} ↗";
+    /// a PR row's ⋯, second item: its link to the clipboard
+    pr_more_copy = "Copy link";
     /// the right bar's tip on a task with PRs: the whole set (designer m_66721)
     prs_tip(n, open, merged) = one "{n} PR · {open} open · {merged} merged" | "{n} PRs · {open} open · {merged} merged";
     /// an agent of it in a turn

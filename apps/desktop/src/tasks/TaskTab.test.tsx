@@ -134,5 +134,12 @@ describe('Changes is the PR list (his pick on page tasks-fresh, designer m_66722
     expect(v.getByTestId('tasks.tab.kb.pr.pr-924.state').textContent).toMatch(/^merged \d\d:\d\d$/);
     expect(v.getByTestId('tasks.tab.kb.pr.pr-924.icon').getAttribute('data-st')).toBe('merged');
     expect(v.queryByTestId('tasks.tab.kb.art.pr-924')).toBeNull();
+    // its ⋯: Open on GitHub and Copy link above the Move items (tasks-ux m_67602)
+    act(() => {
+      v.getByTestId('tasks.tab.kb.pr.pr-924.more').click();
+    });
+    const items = [...document.querySelectorAll('[data-testid^="tasks.tab.kb.pr.pr-924.more."]')].map((e) => e.getAttribute('data-testid')).filter((x) => x !== 'tasks.tab.kb.pr.pr-924.more.menu');
+    expect(items.slice(0, 3)).toEqual(['tasks.tab.kb.pr.pr-924.more.open', 'tasks.tab.kb.pr.pr-924.more.copy', 'tasks.tab.kb.pr.pr-924.more.move']);
+    expect(document.querySelector('[data-testid="tasks.tab.kb.pr.pr-924.more.open"]')?.textContent).toContain('Open on GitHub');
   });
 });
