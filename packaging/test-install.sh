@@ -99,7 +99,7 @@ session() {
   done
   if grep -q '^READY' "$d/out"; then
     ok "$label: $(grep '^READY' "$d/out" | cut -c1-90)…"
-    [ -n "${NOMODEL_TURN:-}" ] && nomodel_turn "$label" "$(sed -n 's/^READY port=\([0-9]*\).*/\1/p' "$d/out")"
+    [ -n "${NOMODEL_TURN:-}" ] && nomodel_turn "$label" "$(sed -n 's/^READY port=\([0-9]*\).*/\1/p' "$d/out")" "$(sed -n 's/^READY .*token=\([^ ]*\).*/\1/p' "$d/out")"
   else
     ko "$label: no READY"; sed 's/^/     /' "$d/err" | tail -n 5
   fi
@@ -109,10 +109,12 @@ session() {
   rm -rf "$d"
 }
 # a fresh install has no model (BISE-266): the session starts, and a
-# turn answers with how to pick one, no provider call (BISE-280)
+# turn answers with how to pick one, no provider call (BISE-280). A say port takes
+# lines only after `hello <token>`, the token READY prints (33a7f7dbd, tests/say_port.py)
 nomodel_turn() {
-  local label="$1" port="$2" line got=""
+  local label="$1" port="$2" token="$3" line got=""
   if [ -n "$port" ] && exec 4<>"/dev/tcp/127.0.0.1/$port"; then
+    printf 'hello %s\n' "$token" >&4
     printf '%s\n' "hello" >&4
     while IFS= read -r -t 30 line <&4; do
       case "$line" in *"no model yet"*) got=1 ;; "--- idle"*) break ;; esac
@@ -164,7 +166,9 @@ turn() {
   i=0; while [ $i -lt 300 ] && ! grep -q '^READY' "$d/out" 2>/dev/null; do
     kill -0 $pid 2>/dev/null || break; sleep 0.1; i=$((i + 1)); done
   port="$(sed -n 's/^READY port=\([0-9]*\).*/\1/p' "$d/out")"
+  local token; token="$(sed -n 's/^READY .*token=\([^ ]*\).*/\1/p' "$d/out")"
   if [ -n "$port" ] && exec 4<>"/dev/tcp/127.0.0.1/$port"; then
+    printf 'hello %s\n' "$token" >&4
     printf '%s\n' "$msg" >&4
     while IFS= read -r -t 60 line <&4; do
       echo "$line" >> "$d/turn"
