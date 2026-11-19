@@ -11,6 +11,7 @@
 //! snapshot again, or a hub restart, asks for nothing.
 
 use crate::place::{PrSnapshot, PrState};
+use bise_proto::rows::{PrReview, PrState as PrStateRow};
 
 /// What the store holds for a PR (its artifact, found by its source).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -21,14 +22,20 @@ pub struct Have {
     pub archived: bool,
     /// the hub archived it at the PR's end ([`crate::artifacts::Meta::pr_ended`])
     pub pr_ended: bool,
+    /// its last state and review as kept ([`crate::artifacts::Meta::pr_last`])
+    pub last: Option<(PrStateRow, PrReview)>,
 }
 
 /// One write for the daemon to do.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum StoreOp {
     /// A new artifact for the PR (`url`: its key, `agent` its maker);
-    /// `ended`: the PR is already merged or closed, archive it at once.
-    Add { url: String, title: Option<String>, agent: String, ended: bool },
+    /// `ended`: the PR is already merged or closed, archive it at once;
+    /// `last`: its state and review now (Meta::pr_last).
+    Add { url: String, title: Option<String>, agent: String, ended: bool, last: (PrStateRow, PrReview) },
+    /// The forge says another state or review than the one kept (his
+    /// pick on page tasks-fresh: a task reads its PRs from here).
+    Last { id: String, state: PrStateRow, review: PrReview },
     /// The forge's title (the add's `PR #6` until the forge said it, or
     /// a title edited on the forge).
     Retitle { id: String, title: String },
@@ -36,6 +43,11 @@ pub enum StoreOp {
     Archive { id: String },
     /// Reopened: back in the list (the hub's archive only).
     Unarchive { id: String },
+}
+
+/// The PR's state and review as its artifact keeps them.
+fn last_of(pr: &PrSnapshot) -> (PrStateRow, PrReview) {
+    (super::news::row_state(pr.state), super::news::row_review(pr.review))
 }
 
 fn ended(s: PrState) -> bool {
@@ -54,9 +66,14 @@ pub fn sync(pr: &PrSnapshot, agent: Option<&str>, have: Option<&Have>) -> Vec<St
             title: (!title.is_empty()).then(|| title.to_string()),
             agent: agent.to_string(),
             ended: ended(pr.state),
+            last: last_of(pr),
         }];
     };
     let mut out = Vec::new();
+    let (state, review) = last_of(pr);
+    if h.last != Some((state, review)) {
+        out.push(StoreOp::Last { id: h.id.clone(), state, review });
+    }
     if !title.is_empty() && h.title != title {
         out.push(StoreOp::Retitle { id: h.id.clone(), title: title.to_string() });
     }
@@ -79,7 +96,12 @@ mod tests {
     use crate::forge::tests::pr;
 
     fn have(archived: bool, pr_ended: bool) -> Have {
-        Have { id: "pr-7".into(), title: "faster signup".into(), archived, pr_ended }
+        Have { id: "pr-7".into(), title: "faster signup".into(), archived, pr_ended, last: None }
+    }
+
+    /// the ops but the last-state ones (a_pr_s_last_state_is_kept tests them)
+    fn sync(pr: &PrSnapshot, agent: Option<&str>, have: Option<&Have>) -> Vec<StoreOp> {
+        super::sync(pr, agent, have).into_iter().filter(|o| !matches!(o, StoreOp::Last { .. })).collect()
     }
 
     fn titled(n: u64, s: PrState) -> PrSnapshot {
@@ -93,7 +115,7 @@ mod tests {
         let p = titled(7, PrState::Open);
         assert_eq!(
             sync(&p, Some("perf"), None),
-            [StoreOp::Add { url: "https://github.com/o/r/pull/7".into(), title: Some("faster signup".into()), agent: "perf".into(), ended: false }]
+            [StoreOp::Add { url: "https://github.com/o/r/pull/7".into(), title: Some("faster signup".into()), agent: "perf".into(), ended: false, last: (PrStateRow::Open, PrReview::None) }]
         );
         // no live agent: not added
         assert!(sync(&p, None, None).is_empty());
@@ -137,5 +159,20 @@ mod tests {
         for (s, h) in [(PrState::Open, have(false, false)), (PrState::Draft, have(false, false)), (PrState::Merged, have(true, true)), (PrState::Closed, have(true, false))] {
             assert!(sync(&titled(7, s), Some("perf"), Some(&h)).is_empty(), "{s:?}");
         }
+    }
+
+    /// his pick on page tasks-fresh: the artifact keeps the PR's last
+    /// state and review; the same again asks nothing, a change asks once.
+    #[test]
+    fn a_pr_s_last_state_is_kept() {
+        let lasts = |p: &PrSnapshot, h: &Have| super::sync(p, Some("perf"), Some(h)).into_iter().filter(|o| matches!(o, StoreOp::Last { .. })).collect::<Vec<_>>();
+        let mut h = have(false, false);
+        assert_eq!(lasts(&titled(7, PrState::Open), &h), [StoreOp::Last { id: "pr-7".into(), state: PrStateRow::Open, review: PrReview::None }]);
+        h.last = Some((PrStateRow::Open, PrReview::None));
+        assert!(lasts(&titled(7, PrState::Open), &h).is_empty());
+        let mut p = titled(7, PrState::Open);
+        p.review = crate::place::Review::ChangesRequested;
+        assert_eq!(lasts(&p, &h), [StoreOp::Last { id: "pr-7".into(), state: PrStateRow::Open, review: PrReview::Changes }]);
+        assert_eq!(lasts(&titled(7, PrState::Merged), &h), [StoreOp::Last { id: "pr-7".into(), state: PrStateRow::Merged, review: PrReview::None }]);
     }
 }

@@ -304,6 +304,22 @@ pub struct ArtifactPr {
     /// shows the PR as it is, never a made-up state
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<super::Pr>,
+    /// his pick on page tasks-fresh (architect m_66713 point 4): the last
+    /// state the hub saw for it, kept on its artifact, so a merged or
+    /// closed PR the hub no longer follows still reads as it ended; none:
+    /// the forge never said (an older hub, no gh)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub last: Option<ArtifactPrLast>,
+}
+
+/// A PR artifact's last state as the hub saw it on the forge, and when.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct ArtifactPrLast {
+    pub state: super::PrState,
+    pub review: super::PrReview,
+    pub at_ms: u64,
 }
 
 /// One version of an artifact: its number, when it was made, and the

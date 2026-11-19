@@ -489,6 +489,8 @@ pub fn artifacts(ev: &Value, page_url: impl Fn(&str) -> Option<String>, frame_ba
                 tag: crate::forge::pr_link(&s(r, "target")).map(|l| l.tag()).unwrap_or_default(),
                 // the hub's PR row (artifacts::join_pr_status), typed as sent
                 status: p.get("status").and_then(|x| serde_json::from_value(x.clone()).ok()),
+                // its last state on the forge, kept on its artifact (Meta::pr_last)
+                last: p.get("last").and_then(|x| serde_json::from_value(x.clone()).ok()),
             });
             Artifact {
                 path,

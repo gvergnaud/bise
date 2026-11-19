@@ -6,11 +6,15 @@
 use super::*;
 use crate::artifacts::{Add, Pick, Store};
 use crate::forge::artifact::{self, Have, StoreOp};
+use bise_proto::rows::ArtifactPrLast;
 
 impl Shell {
     /// Keep `pr`'s artifact in step (`agent`: its place's first agent).
     pub(super) fn pr_artifact(&mut self, pr: &crate::place::PrSnapshot, agent: Option<&str>) {
-        if let Err(e) = sync_store(&self.art_store(), pr, agent, now_ms()) {
+        // a place's PR seen first: stamped once with its owner's turn works
+        // (architect m_66713 point 1), his Move fixes it after
+        let works = agent.map(|a| self.art_turn_works(a)).unwrap_or_default();
+        if let Err(e) = sync_store(&self.art_store(), pr, agent, &works, now_ms()) {
             log_line(&self.opts.paths, &format!("PR artifact {}: {}", pr.url, e));
         }
     }
@@ -48,11 +52,11 @@ fn open_prs(store: &Store) -> Vec<String> {
 }
 
 /// Read what the store holds for `pr`, apply what `sync` says.
-fn sync_store(store: &Store, pr: &crate::place::PrSnapshot, agent: Option<&str>, now: u64) -> Result<(), String> {
+fn sync_store(store: &Store, pr: &crate::place::PrSnapshot, agent: Option<&str>, works: &[String], now: u64) -> Result<(), String> {
     let Some(link) = crate::forge::pr_link(&pr.url) else { return Ok(()) };
     let have = have_of(store, &link.url);
     for op in artifact::sync(pr, agent, have.as_ref()) {
-        apply(store, op, now)?;
+        apply(store, op, works, now)?;
     }
     Ok(())
 }
@@ -61,21 +65,23 @@ fn sync_store(store: &Store, pr: &crate::place::PrSnapshot, agent: Option<&str>,
 fn have_of(store: &Store, url: &str) -> Option<Have> {
     let m = store.stored().into_iter().find(|m| m.source == url)?;
     let archived = store.archived().contains_key(&m.id);
-    Some(Have { id: m.id, title: m.title, archived, pr_ended: m.pr_ended })
+    Some(Have { id: m.id, title: m.title, archived, pr_ended: m.pr_ended, last: m.pr_last.map(|l| (l.state, l.review)) })
 }
 
 /// One op on the store; the hub's archive is marked as its own
 /// (`Meta::pr_ended`), so only it is undone at a reopen.
-fn apply(store: &Store, op: StoreOp, now: u64) -> Result<(), String> {
+fn apply(store: &Store, op: StoreOp, works: &[String], now: u64) -> Result<(), String> {
     match op {
-        StoreOp::Add { url, title, agent, ended } => {
-            let add = Add { target: url, title, kind: Some("pr".into()), by: agent.clone(), agent, ..Add::default() };
+        StoreOp::Add { url, title, agent, ended, last } => {
+            let add = Add { target: url, title, kind: Some("pr".into()), by: agent.clone(), agent, works: works.to_vec(), ..Add::default() };
             let added = store.add(&add, now)?;
+            store.set_pr_last(&added.meta.id, ArtifactPrLast { state: last.0, review: last.1, at_ms: now })?;
             if ended {
                 end(store, &added.meta.id, now)?;
             }
         }
         StoreOp::Retitle { id, title } => store.retitle(&id, &title)?,
+        StoreOp::Last { id, state, review } => store.set_pr_last(&id, ArtifactPrLast { state, review, at_ms: now })?,
         StoreOp::Archive { id } => end(store, &id, now)?,
         StoreOp::Unarchive { id } => {
             store.unarchive(&Pick { ids: vec![id.clone()], ..Pick::default() })?;
@@ -125,7 +131,7 @@ mod tests {
     #[test]
     fn a_pr_s_artifact_follows_the_forge() {
         let (s, d) = store("life");
-        sync_store(&s, &snap(PrState::Open, ""), Some("perf"), 10).unwrap();
+        sync_store(&s, &snap(PrState::Open, ""), Some("perf"), &[], 10).unwrap();
         let all = s.stored();
         assert_eq!(all.len(), 1);
         let m = &all[0];
@@ -133,7 +139,7 @@ mod tests {
         assert_eq!(m.source, "https://github.com/acme/web/pull/412");
         let id = m.id.clone();
         // the forge's title
-        sync_store(&s, &snap(PrState::Open, "Faster signup"), Some("perf"), 11).unwrap();
+        sync_store(&s, &snap(PrState::Open, "Faster signup"), Some("perf"), &[], 11).unwrap();
         assert_eq!(s.get(&id).unwrap().title, "Faster signup");
         // an agent adds the PR's files tab: the same artifact
         let add = Add { target: "https://github.com/acme/web/pull/412/files".into(), agent: "review".into(), by: "review".into(), ..Add::default() };
@@ -144,32 +150,32 @@ mod tests {
         let at = || std::fs::metadata(&meta).and_then(|m| m.modified()).unwrap();
         let before = at();
         std::thread::sleep(std::time::Duration::from_millis(20));
-        sync_store(&s, &snap(PrState::Open, "Faster signup"), Some("perf"), 13).unwrap();
+        sync_store(&s, &snap(PrState::Open, "Faster signup"), Some("perf"), &[], 13).unwrap();
         assert_eq!(at(), before, "the same snapshot writes nothing");
         // merged: archived, by the hub
-        sync_store(&s, &snap(PrState::Merged, "Faster signup"), Some("perf"), 14).unwrap();
+        sync_store(&s, &snap(PrState::Merged, "Faster signup"), Some("perf"), &[], 14).unwrap();
         assert!(s.archived().contains_key(&id) && s.get(&id).unwrap().pr_ended);
         // a restart's first answer: nothing more
-        sync_store(&s, &snap(PrState::Merged, "Faster signup"), None, 15).unwrap();
+        sync_store(&s, &snap(PrState::Merged, "Faster signup"), None, &[], 15).unwrap();
         assert!(s.archived().contains_key(&id));
         // he unarchives the merged PR: a restart's answer and a changed
         // snapshot leave it out of the archive (architect m_54244)
         s.unarchive(&Pick { ids: vec![id.clone()], ..Pick::default() }).unwrap();
-        sync_store(&s, &snap(PrState::Merged, "Faster signup"), None, 15).unwrap();
-        sync_store(&s, &snap(PrState::Merged, "Faster signup (v2)"), Some("perf"), 15).unwrap();
+        sync_store(&s, &snap(PrState::Merged, "Faster signup"), None, &[], 15).unwrap();
+        sync_store(&s, &snap(PrState::Merged, "Faster signup (v2)"), Some("perf"), &[], 15).unwrap();
         assert!(!s.archived().contains_key(&id));
         // reopened: open again, the end forgotten; closed a second time:
         // archived again
-        sync_store(&s, &snap(PrState::Open, "Faster signup"), Some("perf"), 16).unwrap();
+        sync_store(&s, &snap(PrState::Open, "Faster signup"), Some("perf"), &[], 16).unwrap();
         assert!(!s.archived().contains_key(&id) && !s.get(&id).unwrap().pr_ended);
-        sync_store(&s, &snap(PrState::Closed, "Faster signup"), Some("perf"), 16).unwrap();
+        sync_store(&s, &snap(PrState::Closed, "Faster signup"), Some("perf"), &[], 16).unwrap();
         assert!(s.archived().contains_key(&id) && s.get(&id).unwrap().pr_ended);
         // reopened: back
-        sync_store(&s, &snap(PrState::Open, "Faster signup"), Some("perf"), 16).unwrap();
+        sync_store(&s, &snap(PrState::Open, "Faster signup"), Some("perf"), &[], 16).unwrap();
         assert!(!s.archived().contains_key(&id) && !s.get(&id).unwrap().pr_ended);
         // he archives it himself: a later answer keeps it archived
         s.archive(&Pick { ids: vec![id.clone()], ..Pick::default() }, 17).unwrap();
-        sync_store(&s, &snap(PrState::Open, "Faster signup"), Some("perf"), 18).unwrap();
+        sync_store(&s, &snap(PrState::Open, "Faster signup"), Some("perf"), &[], 18).unwrap();
         assert!(s.archived().contains_key(&id));
         let _ = std::fs::remove_dir_all(d);
     }
@@ -177,10 +183,32 @@ mod tests {
     #[test]
     fn a_pr_first_seen_merged_comes_in_archived() {
         let (s, d) = store("merged");
-        sync_store(&s, &snap(PrState::Closed, "Old idea"), Some("perf"), 10).unwrap();
+        sync_store(&s, &snap(PrState::Closed, "Old idea"), Some("perf"), &[], 10).unwrap();
         let m = s.stored().pop().unwrap();
         assert_eq!(m.title, "Old idea");
         assert!(s.archived().contains_key(&m.id) && m.pr_ended);
+        let _ = std::fs::remove_dir_all(d);
+    }
+
+    /// architect m_66713 point 1 and 4: a place's PR seen first is stamped
+    /// once with its owner's turn works; its last state is kept on it, and
+    /// stays once merged (the hub no longer follows it).
+    #[test]
+    fn a_place_pr_is_stamped_with_its_owners_works_and_keeps_its_last_state() {
+        use bise_proto::rows::{PrReview, PrState as S};
+        let (s, d) = store("works");
+        let ws = vec!["w1".to_string(), "w2".to_string()];
+        sync_store(&s, &snap(PrState::Open, "Faster signup"), Some("perf"), &ws, 10).unwrap();
+        let m = s.stored().pop().unwrap();
+        assert_eq!(m.works.works(), ws);
+        assert_eq!(m.pr_last.map(|l| (l.state, l.review, l.at_ms)), Some((S::Open, PrReview::None, 10)));
+        // a later answer with other works stamps nothing (one stamp; his Move fixes it)
+        let mut p = snap(PrState::Merged, "Faster signup");
+        p.review = Review::Approved;
+        sync_store(&s, &p, Some("perf"), &["w3".to_string()], 20).unwrap();
+        let m = s.get(&m.id).unwrap();
+        assert_eq!(m.works.works(), ws);
+        assert_eq!(m.pr_last.map(|l| (l.state, l.review, l.at_ms)), Some((S::Merged, PrReview::Approved, 20)));
         let _ = std::fs::remove_dir_all(d);
     }
 }

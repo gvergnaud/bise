@@ -520,12 +520,35 @@ pub fn pr_rows(places: &[crate::place::Place]) -> Vec<bise_proto::rows::Pr> {
     prs.into_iter().map(|(pr, agents)| pr_row(&PrView::of(pr, None), agents)).collect()
 }
 
+/// A PR's state as the rows type it (the one mapping: `pr_row`, the PR
+/// artifact's last state).
+pub fn row_state(s: PrState) -> bise_proto::rows::PrState {
+    use bise_proto::rows::PrState as S;
+    match s {
+        PrState::Draft => S::Draft,
+        PrState::Open => S::Open,
+        PrState::Merged => S::Merged,
+        PrState::Closed => S::Closed,
+    }
+}
+
+/// A PR's review as the rows type it: a pending one reads `none` (the
+/// row's `in_review` says it).
+pub fn row_review(r: Review) -> bise_proto::rows::PrReview {
+    use bise_proto::rows::PrReview;
+    match r {
+        Review::Approved => PrReview::Approved,
+        Review::ChangesRequested => PrReview::Changes,
+        Review::None | Review::Pending => PrReview::None,
+    }
+}
+
 /// A PR as a typed row (P4c-4a: the one builder, `/prs`'s rows and a
 /// place's PR in `HubEv::Agents.places`): what it means, the hub's words
 /// for it, `agents` its place's. A pending review stays `review: none`
 /// (what `/prs` always said) and sets `in_review`.
 pub fn pr_row(pr: &PrView, agents: &[String]) -> bise_proto::rows::Pr {
-    use bise_proto::rows::{Pr, PrChecks, PrReview, PrState as S};
+    use bise_proto::rows::{Pr, PrChecks};
     let who = if agents.is_empty() { "no agent".to_string() } else { agents.join(", ") };
     let (checks, failing) = match &pr.checks {
         Checks::Pass => (PrChecks::Pass, Vec::new()),
@@ -533,11 +556,7 @@ pub fn pr_row(pr: &PrView, agents: &[String]) -> bise_proto::rows::Pr {
         Checks::Running => (PrChecks::Running, Vec::new()),
         Checks::None => (PrChecks::None, Vec::new()),
     };
-    let review = match pr.review {
-        Review::Approved => PrReview::Approved,
-        Review::ChangesRequested => PrReview::Changes,
-        Review::None | Review::Pending => PrReview::None,
-    };
+    let review = row_review(pr.review);
     let words = pr_words(pr);
     let link = super::pr_link(&pr.url);
     Pr {
@@ -545,12 +564,7 @@ pub fn pr_row(pr: &PrView, agents: &[String]) -> bise_proto::rows::Pr {
         url: pr.url.clone(),
         branch: pr.branch.clone(),
         agents: agents.to_vec(),
-        state: match pr.state {
-            PrState::Draft => S::Draft,
-            PrState::Open => S::Open,
-            PrState::Merged => S::Merged,
-            PrState::Closed => S::Closed,
-        },
+        state: row_state(pr.state),
         checks,
         failing,
         review,

@@ -1098,7 +1098,19 @@ tag?: string,
  * while the forge has not said (not polled yet, no gh): the row
  * shows the PR as it is, never a made-up state
  */
-status?: Pr | null, };
+status?: Pr | null, 
+/**
+ * his pick on page tasks-fresh (architect m_66713 point 4): the last
+ * state the hub saw for it, kept on its artifact, so a merged or
+ * closed PR the hub no longer follows still reads as it ended; none:
+ * the forge never said (an older hub, no gh)
+ */
+last?: ArtifactPrLast, };
+
+/**
+ * A PR artifact's last state as the hub saw it on the forge, and when.
+ */
+export type ArtifactPrLast = { state: PrState, review: PrReview, at_ms: number, };
 
 /**
  * One version of an artifact: its number, when it was made, and the

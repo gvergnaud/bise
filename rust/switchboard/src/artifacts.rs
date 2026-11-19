@@ -198,6 +198,12 @@ pub struct Meta {
     /// is undone when the PR is reopened; his own archive never is.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub pr_ended: bool,
+    /// his pick on page tasks-fresh (architect m_66713 point 4): a PR
+    /// artifact's last state on the forge as the hub saw it, written only
+    /// by forge::artifact's sync ([`Store::set_pr_last`]): a merged PR the
+    /// hub no longer follows still reads merged
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pr_last: Option<bise_proto::rows::ArtifactPrLast>,
     /// Who it is for (crate::artifacts_marks): set at its add, raised by
     /// `--for-you`; none on a meta.json from before it (the backfill
     /// writes it, `artifacts_keep.rs`). A page is always for him.
@@ -683,6 +689,17 @@ impl Store {
         self.save(&Meta { pr_ended: ended, ..m })
     }
 
+    /// A PR artifact's last state on the forge ([`Meta::pr_last`]); the
+    /// same state and review again writes nothing (its time is when it
+    /// changed).
+    pub fn set_pr_last(&self, id: &str, last: bise_proto::rows::ArtifactPrLast) -> Result<(), String> {
+        let m = self.stored().into_iter().find(|m| m.id == id).ok_or_else(|| format!("no artifact {id}"))?;
+        if m.pr_last.is_some_and(|l| (l.state, l.review) == (last.state, last.review)) {
+            return Ok(());
+        }
+        self.save(&Meta { pr_last: Some(last), ..m })
+    }
+
     /// name-free (sb-core's `retarget` fx): another agent takes the old
     /// name `from`, so the artifacts that still say `from` say `to`, the
     /// agent that had it. The number moved.
@@ -831,6 +848,7 @@ impl Store {
                         None => None,
                     },
                     pr_ended: false,
+                    pr_last: None,
                     audience: None,
                     expired_ms: None,
                     works: Default::default(),
@@ -1154,7 +1172,14 @@ impl Store {
             // the retention sweep deleted its copies (artifacts_retention)
             "expired": m.expired_ms.is_some(),
             "detail": detail,
-            "pr": crate::forge::pr_link(&cur.target).map(|l| json!({"repo": l.repo, "number": l.number, "tag": l.tag()})),
+            "pr": crate::forge::pr_link(&cur.target).map(|l| {
+                let mut pr = json!({"repo": l.repo, "number": l.number, "tag": l.tag()});
+                // its last state on the forge (Meta::pr_last), left out when none
+                if let Some(last) = m.pr_last {
+                    pr["last"] = json!(last);
+                }
+                pr
+            }),
             "keys": keys_with(m, workspace, canon),
             "versions": m.versions.iter().map(version).collect::<Vec<_>>(),
             // raw: the hub resolves it against the library (artifacts_ev)
@@ -1359,6 +1384,7 @@ fn page_meta(p: &PageMeta, base: Option<&str>) -> Meta {
         cwd: String::new(),
         folder: None,
         pr_ended: false,
+        pr_last: None,
         audience: Some(Audience::You),
         expired_ms: None,
         // the page's own (its store's Meta owns them): a copy for the row
