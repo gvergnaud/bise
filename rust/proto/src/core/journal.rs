@@ -59,6 +59,7 @@ pub const WOP: Codec = Codec {
         "S.WReopen{}",
         "S.WMerge{$a}",
         "S.WAddAgent{$a}",
+        "S.WRemoveAgent{$a}",
         "S.WUntilTimer{$a}",
         "S.WRestart{}",
         "S.WNoop{}",

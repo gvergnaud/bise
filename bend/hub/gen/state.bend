@@ -83,6 +83,7 @@ type WOp is Data:
   WReopen{}
   WMerge{into: String}
   WAddAgent{agent: String}
+  WRemoveAgent{agent: String}
   WUntilTimer{timer: Nat}
   WRestart{}
   WNoop{}

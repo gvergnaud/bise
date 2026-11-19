@@ -587,6 +587,22 @@ pub enum Task {
         #[serde(default)]
         into: String,
     },
+    /// his "Not on this task" on an agent row, or main's `sb task unlink
+    /// <id> <agent>` on his word (WRemoveAgent; architect m_67152): the
+    /// agent leaves the task's agents until it acts for it again
+    Unlink {
+        #[serde(default)]
+        id: String,
+        #[serde(default)]
+        agent: String,
+    },
+    /// its Undo (WAddAgent, his gesture or main's): the agent is back on it
+    Link {
+        #[serde(default)]
+        id: String,
+        #[serde(default)]
+        agent: String,
+    },
 }
 
 /// `sb wake`'s forms, tagged `step` (only the caller's watches).

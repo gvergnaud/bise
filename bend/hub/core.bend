@@ -135,6 +135,8 @@ type TaskV is Data:
   TVMerge{}
   TVRestart{}
   TVMove{}
+  TVUnlink{}
+  TVLink{}
   TVOther{}
 
 # tasks: who asks for a change of a work. An agent's `sb task` (its
@@ -3902,7 +3904,9 @@ def task_verb(+s: String) -> TaskV:
   Bool.pick(TaskV, String.eq(s, "reopen"), TVReopen{},
   Bool.pick(TaskV, String.eq(s, "merge"), TVMerge{},
   Bool.pick(TaskV, String.eq(s, "restart"), TVRestart{},
-  Bool.pick(TaskV, String.eq(s, "move"), TVMove{}, TVOther{}))))))))))))))
+  Bool.pick(TaskV, String.eq(s, "move"), TVMove{},
+  Bool.pick(TaskV, String.eq(s, "unlink"), TVUnlink{},
+  Bool.pick(TaskV, String.eq(s, "link"), TVLink{}, TVOther{}))))))))))))))))
 
 # the change a verb makes (new and an unknown verb: none)
 def task_op(v: TaskV, +q: J.Json) -> S.WOp:
@@ -3931,6 +3935,13 @@ def task_op(v: TaskV, +q: J.Json) -> S.WOp:
       S.WMerge{K.get_s(q, "into")}
     case TVRestart{}:
       S.WRestart{}
+    # his "Not on this task" and its Undo, or main's on his word (an
+    # agent's request is refused: task_op.agent; law
+    # only_he_or_main_unlinks_an_agent)
+    case TVUnlink{}:
+      S.WRemoveAgent{String.trim(K.get_s(q, "agent"))}
+    case TVLink{}:
+      S.WAddAgent{String.trim(K.get_s(q, "agent"))}
     case _:
       S.WNoop{}
 

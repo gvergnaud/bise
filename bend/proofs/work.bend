@@ -338,3 +338,15 @@ def Laws.mains_card_keeps_its_task(ws, s):
 
 def Laws.an_archived_askers_card_closes():
   {==}
+
+# ---- "Not on this task" ----
+
+def Laws.only_he_or_main_unlinks_an_agent(w, a, by, xs):
+  {==}
+
+def Laws.only_he_or_main_links_an_agent(w, a, by, xs):
+  {==}
+
+def Laws.unlink_drops_the_agent(a):
+  %Equal.sym(Bool, String.eq(a, a), True{}, PL2.hub_str_eq_refl(a)) : {Bool.pick(List<&2, String>, _, Nil{}, [a]) == Nil{} : List<&2, String>}
+  {==}

@@ -687,3 +687,27 @@ law mains_card_keeps_its_task:
 # question went unanswered.
 law an_archived_askers_card_closes:
   {HC.stop_card_res(HS.LArchived{}) == "agent archived" : String}
+
+# ---- "Not on this task" (architect m_67152) ----
+
+# LAW: an agent other than main never takes an agent off a task, nor puts
+# one back: only his gesture or main on his word (refused before any
+# check, as an agent's done).
+law only_he_or_main_unlinks_an_agent:
+  for +w: HS.Work
+  for +a: String
+  for +by: String
+  for +xs: List<&2, HS.Work>
+  {HC.task_refused(w, HS.WRemoveAgent{a}, by, False{}, xs) == Some{"only main changes a task: tick your done-when with sb report --done-when <n>"} : Maybe<&2, String>}
+
+law only_he_or_main_links_an_agent:
+  for +w: HS.Work
+  for +a: String
+  for +by: String
+  for +xs: List<&2, HS.Work>
+  {HC.task_refused(w, HS.WAddAgent{a}, by, False{}, xs) == Some{"only main changes a task: tick your done-when with sb report --done-when <n>"} : Maybe<&2, String>}
+
+# LAW: "Not on this task" takes the agent off the work's agents.
+law unlink_drops_the_agent:
+  for +a: String
+  {HWO.drop([a], a) == Nil{} : List<&2, String>}

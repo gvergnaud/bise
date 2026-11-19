@@ -924,6 +924,8 @@ def WOp.journal_kvs(e: S.WOp) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
       [J.kv("op", J.JStr{"merge"}), J.kv("into", J.JStr{into})]
     case S.WAddAgent{+agent}:
       [J.kv("op", J.JStr{"add_agent"}), J.kv("agent", J.JStr{agent})]
+    case S.WRemoveAgent{+agent}:
+      [J.kv("op", J.JStr{"remove_agent"}), J.kv("agent", J.JStr{agent})]
     case S.WUntilTimer{+timer}:
       [J.kv("op", J.JStr{"until_timer"}), J.kv("timer", J.JNum{timer})]
     case S.WRestart{}:
@@ -935,7 +937,7 @@ def WOp.journal_json(e: S.WOp) -> J.Json:
   J.obj(WOp.journal_kvs(e))
 
 def WOp.of_word(+w: String, +j: J.Json) -> S.WOp:
-  Bool.pick(S.WOp, String.eq(w, "rename"), S.WRename{rd.s(J.get(j, "name"))}, Bool.pick(S.WOp, String.eq(w, "why"), S.WWhy{rd.s(J.get(j, "why"))}, Bool.pick(S.WOp, String.eq(w, "goal"), S.WGoal{rd.s(J.get(j, "text"))}, Bool.pick(S.WOp, String.eq(w, "tick"), S.WTick{rd.n(J.get(j, "n"))}, Bool.pick(S.WOp, String.eq(w, "untick"), S.WUntick{rd.n(J.get(j, "n"))}, Bool.pick(S.WOp, String.eq(w, "ongoing"), S.WMakeOngoing{}, Bool.pick(S.WOp, String.eq(w, "pause"), S.WPause{rd.n(J.get(j, "until"))}, Bool.pick(S.WOp, String.eq(w, "resume"), S.WResume{}, Bool.pick(S.WOp, String.eq(w, "done"), S.WDone{}, Bool.pick(S.WOp, String.eq(w, "reopen"), S.WReopen{}, Bool.pick(S.WOp, String.eq(w, "merge"), S.WMerge{rd.s(J.get(j, "into"))}, Bool.pick(S.WOp, String.eq(w, "add_agent"), S.WAddAgent{rd.s(J.get(j, "agent"))}, Bool.pick(S.WOp, String.eq(w, "until_timer"), S.WUntilTimer{rd.n(J.get(j, "timer"))}, Bool.pick(S.WOp, String.eq(w, "restart"), S.WRestart{}, S.WNoop{}))))))))))))))
+  Bool.pick(S.WOp, String.eq(w, "rename"), S.WRename{rd.s(J.get(j, "name"))}, Bool.pick(S.WOp, String.eq(w, "why"), S.WWhy{rd.s(J.get(j, "why"))}, Bool.pick(S.WOp, String.eq(w, "goal"), S.WGoal{rd.s(J.get(j, "text"))}, Bool.pick(S.WOp, String.eq(w, "tick"), S.WTick{rd.n(J.get(j, "n"))}, Bool.pick(S.WOp, String.eq(w, "untick"), S.WUntick{rd.n(J.get(j, "n"))}, Bool.pick(S.WOp, String.eq(w, "ongoing"), S.WMakeOngoing{}, Bool.pick(S.WOp, String.eq(w, "pause"), S.WPause{rd.n(J.get(j, "until"))}, Bool.pick(S.WOp, String.eq(w, "resume"), S.WResume{}, Bool.pick(S.WOp, String.eq(w, "done"), S.WDone{}, Bool.pick(S.WOp, String.eq(w, "reopen"), S.WReopen{}, Bool.pick(S.WOp, String.eq(w, "merge"), S.WMerge{rd.s(J.get(j, "into"))}, Bool.pick(S.WOp, String.eq(w, "add_agent"), S.WAddAgent{rd.s(J.get(j, "agent"))}, Bool.pick(S.WOp, String.eq(w, "remove_agent"), S.WRemoveAgent{rd.s(J.get(j, "agent"))}, Bool.pick(S.WOp, String.eq(w, "until_timer"), S.WUntilTimer{rd.n(J.get(j, "timer"))}, Bool.pick(S.WOp, String.eq(w, "restart"), S.WRestart{}, S.WNoop{})))))))))))))))
 
 # any other word, or none: noop (an inline row reads the line's own object)
 def WOp.journal_of(+j: J.Json) -> S.WOp:
@@ -970,6 +972,8 @@ def WOp.journal_round(e):
     case S.WMerge{x_0}:
       {==}
     case S.WAddAgent{x_0}:
+      {==}
+    case S.WRemoveAgent{x_0}:
       {==}
     case S.WUntilTimer{x_0}:
       {==}

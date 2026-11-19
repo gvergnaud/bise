@@ -4,7 +4,7 @@
 use super::*;
 use bise_proto::sb::Task;
 
-pub(super) const TASK_USAGE: &str = "usage: sb task new \"<name>\" [--why \"<why>\"] [--done-when \"<item>\"]... | sb task list [--all] | sb task show <id> [--activity] | sb task done|reopen|resume|restart|ongoing <id> | sb task pause <id> [--until <18:00|tomorrow 09:00|2h>] | sb task rename <id> \"<name>\" | sb task why <id> \"<why>\" | sb task goal <id> \"<item>\" | sb task tick|untick <id> <n> | sb task merge <id> --into <id>";
+pub(super) const TASK_USAGE: &str = "usage: sb task new \"<name>\" [--why \"<why>\"] [--done-when \"<item>\"]... | sb task list [--all] | sb task show <id> [--activity] | sb task done|reopen|resume|restart|ongoing <id> | sb task pause <id> [--until <18:00|tomorrow 09:00|2h>] | sb task rename <id> \"<name>\" | sb task why <id> \"<why>\" | sb task goal <id> \"<item>\" | sb task tick|untick <id> <n> | sb task merge <id> --into <id> | sb task unlink|link <id> <agent>";
 
 /// `sb task move`'s usage (main only, on his word).
 const MOVE_USAGE: &str = "usage: sb task move <task-id>... (--art <id> | --page <id> | --card <n>) | sb task move --none (--art <id> | --page <id> | --card <n>)";
@@ -47,6 +47,15 @@ pub(super) fn task_req(rest: &[String]) -> Result<Task, String> {
                 return Err(TASK_USAGE.into());
             }
             Task::Merge { id: id()?, into }
+        }
+        // main on his word: the agent is off the task (unlink) or back (link)
+        "unlink" | "link" => {
+            let agent = pos.get(2).map(|s| s.trim().trim_start_matches('@').to_string()).filter(|s| !s.is_empty()).ok_or(TASK_USAGE)?;
+            if verb == "unlink" {
+                Task::Unlink { id: id()?, agent }
+            } else {
+                Task::Link { id: id()?, agent }
+            }
         }
         // main on his word: exactly these tasks (none with --none)
         "move" => {

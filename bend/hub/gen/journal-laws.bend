@@ -1005,6 +1005,14 @@ def journal_work_changed_round(id, op, by, at, restored, noted):
       {==}
     case S.WAddAgent{op_a} Some{x_restored} Some{x_noted}:
       {==}
+    case S.WRemoveAgent{op_a} None{} None{}:
+      {==}
+    case S.WRemoveAgent{op_a} None{} Some{x_noted}:
+      {==}
+    case S.WRemoveAgent{op_a} Some{x_restored} None{}:
+      {==}
+    case S.WRemoveAgent{op_a} Some{x_restored} Some{x_noted}:
+      {==}
     case S.WUntilTimer{op_a} None{} None{}:
       {==}
     case S.WUntilTimer{op_a} None{} Some{x_noted}:

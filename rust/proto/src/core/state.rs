@@ -375,6 +375,9 @@ pub const STATE: State = State {
                 v("WReopen", "reopen"),
                 vf("WMerge", "merge", &[f("into", Str)]),
                 vf("WAddAgent", "add_agent", &[f("agent", Str)]),
+                // his "Not on this task" (or main's on his word): the agent
+                // leaves the work's agents; a later act joins it again
+                vf("WRemoveAgent", "remove_agent", &[f("agent", Str)]),
                 // the timer of a pause until a time (0: none any more)
                 vf("WUntilTimer", "until_timer", &[f("timer", Nat)]),
                 // his (or main's) Restart: the work unchanged, its failed

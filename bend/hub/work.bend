@@ -27,6 +27,15 @@ def add(xs: List<&2, String>, +s: String) -> List<&2, String>:
     case Con{+h, +t}:
       LZ.pick(List<&2, String>, String.eq(h, s), u => Con{h, t}, u => h <> add(t, s))
 
+# `xs` without `s` (his "Not on this task", WRemoveAgent)
+def drop(xs: List<&2, String>, +s: String) -> List<&2, String>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case Con{+h, +t}:
+      +rest = drop(t, s)
+      Bool.pick(List<&2, String>, String.eq(h, s), rest, h <> rest)
+
 # every name of `ys` added to `xs`, in their order, once each
 def union.go(ys: List<&2, String>, xs: List<&2, String>) -> List<&2, String>:
   match ys:
@@ -139,6 +148,8 @@ def change.op(op: S.WOp, +w2: S.Work, +by: String, +at: Nat) -> S.Work:
       unpaused(S.Work.with_done(S.Work.with_merged_into(w2, Some{into}), Some{fin(at, by)}))
     case S.WAddAgent{+agent}:
       S.Work.over_agents(w2, xs => add(xs, agent))
+    case S.WRemoveAgent{+agent}:
+      S.Work.over_agents(w2, xs => drop(xs, agent))
     case S.WUntilTimer{+timer}:
       S.Work.with_until_timer(w2, opt(timer))
     # a Restart changes no field: its effects are its agents' (core.bend

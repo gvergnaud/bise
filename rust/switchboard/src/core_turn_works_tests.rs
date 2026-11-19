@@ -116,3 +116,34 @@ fn mains_card_carries_only_its_task() {
     t.req(MAIN, card(&[a.as_str()]));
     assert_eq!(opened(&t), json!([a]), "law mains_card_keeps_its_task");
 }
+
+/// His "Not on this task" (architect m_67152): he or main (on his word)
+/// takes an agent off a task; another agent is refused; its next act
+/// for the task joins it again.
+#[test]
+fn not_on_this_task_is_his_or_mains_and_an_act_rejoins() {
+    let mut t = T::new();
+    t.spawn_task("coord");
+    t.go(Input::ReplIdle { agent: "coord".into(), leftover: false });
+    t.spawn_task("other");
+    t.go(Input::ReplIdle { agent: "other".into(), leftover: false });
+    let a = new(&mut t, "Pool");
+    t.req(MAIN, send("coord", "start", None, &[a.as_str()]));
+    let on_a = |t: &T| t.hub.st.works[&a].work.agents.iter().any(|x| x == "coord");
+    assert!(on_a(&t), "a turn start joins");
+    // another agent is refused
+    let (tok, fx) = t.req("other", AgentReq::Task(Task::Unlink { id: a.clone(), agent: "coord".into() }));
+    assert_ne!(reply(&fx, tok).unwrap()["ok"], true, "law only_he_or_main_unlinks_an_agent");
+    assert!(on_a(&t));
+    // his gesture takes it off, his Undo puts it back
+    t.go(Input::ClientWorkAct { client: 7, req: Task::Unlink { id: a.clone(), agent: "coord".into() } });
+    assert!(!on_a(&t), "law unlink_drops_the_agent");
+    t.go(Input::ClientWorkAct { client: 7, req: Task::Link { id: a.clone(), agent: "coord".into() } });
+    assert!(on_a(&t), "his Undo");
+    // main on his word; then coord acts for it and is back
+    let (tok, fx) = t.req(MAIN, AgentReq::Task(Task::Unlink { id: a.clone(), agent: "coord".into() }));
+    assert_eq!(reply(&fx, tok).unwrap()["ok"], true);
+    assert!(!on_a(&t));
+    t.req("coord", send(MAIN, "done with the pool", None, &[a.as_str()]));
+    assert!(on_a(&t), "law acting_joins_its_works");
+}
