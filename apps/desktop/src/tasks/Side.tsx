@@ -65,10 +65,11 @@ function TaskRow({ x, now, group, fresh, check, prs }: { x: ProjWork; now: numbe
   );
 }
 
-/** the right bar's tip on a task with PRs: '2 PRs · 1 open · 1 merged', then its done-when count */
+/** the right bar's tip on a task with PRs: '5 PRs · 2 open · 1 draft · 1 merged · 0/1 done when' */
 function prsTip(p: ReturnType<typeof prSet>, goals: { readonly done: number; readonly all: number } | null): string {
-  const set = tasks.prs_tip({ n: p.n, open: p.open, merged: p.merged });
-  return goals === null ? set : `${set} · ${tasks.goals_tip(goals)}`;
+  // a zero part left out, never '0 open'; the done-when count last (designer m_67612)
+  const parts = [tasks.prs_n({ n: p.n }), p.open > 0 ? tasks.prs_open({ n: p.open }) : '', p.draft > 0 ? tasks.prs_draft({ n: p.draft }) : '', p.merged > 0 ? tasks.prs_merged({ n: p.merged }) : '', goals === null ? '' : tasks.prs_goals(goals)];
+  return parts.filter((x) => x !== '').join(' · ');
 }
 
 /** `k` kept unchecked at its place (an Undo of his box). Pure. */

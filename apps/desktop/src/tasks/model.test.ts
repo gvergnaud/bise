@@ -235,6 +235,8 @@ describe('a task\'s PRs (his pick on page tasks-fresh, designer m_66722)', () =>
 
   it('reads merged only when every PR is merged and none open; a closed one counts for nothing', () => {
     expect(prSet(prsOf(arts, 'kb', []))).toMatchObject({ n: 3, open: 1, merged: 1, allMerged: false });
+    // a draft counts apart in the words, as open for the mark (designer m_67612)
+    expect(prSet([{ state: 'open' }, { state: 'draft' }, { state: 'merged' }])).toMatchObject({ open: 1, draft: 1, merged: 1, allMerged: false });
     expect(prSet([{ state: 'merged' }, { state: 'closed' }]).allMerged).toBe(true);
     expect(prSet([{ state: 'merged' }, { state: 'draft' }]).allMerged).toBe(false);
     expect(prSet([{ state: 'closed' }]).allMerged).toBe(false);

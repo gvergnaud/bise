@@ -51,10 +51,12 @@ const STATE_WORD = { archived: tasks.agent_archived, working: tasks.agent_live, 
 /** a PR row's state words: 'open · changes requested', 'merged 13:17', and 'as of 14:20' when the
  *  forge answers late (its last known state); the review rides with an open one (designer m_66712) */
 export function prWords(p: TaskPr, now: number): string {
-  const when = p.at_ms === null ? '' : started(p.at_ms, now);
+  // 24 h, 'yesterday 14:20' past midnight (designer m_67612)
+  const when = p.at_ms === null ? '' : clock(p.at_ms, now);
   const state = p.state === 'merged' ? (when === '' ? tasks.pr_merged : tasks.pr_merged_at({ when })) : p.state === 'closed' ? tasks.pr_closed : p.state === 'draft' ? tasks.pr_draft : tasks.pr_open;
   const review = p.state === 'open' || p.state === 'draft' ? (p.review === 'changes' ? tasks.pr_changes : p.review === 'approved' ? tasks.pr_approved : '') : '';
-  const late = p.stale && when !== '' && p.state !== 'merged' ? tasks.pr_as_of({ when }) : '';
+  // a state the hub can't refresh says so, never shown as live (designer, tasks-ux m_67613)
+  const late = p.stale_ms === null ? '' : tasks.pr_as_of({ when: clock(now - p.stale_ms, now) });
   return [state, review, late].filter((x) => x !== '').join(' · ');
 }
 
@@ -420,7 +422,7 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
                     <PrStateIcon state={p.state} testId={`${t}.pr.${p.id}.icon`} />
                     <span className="tk-pr-tag">{p.tag}</span>
                     <WordCut className="tk-row-name tk-pr-title" text={p.title} />
-                    <span className="tk-pr-state" data-testid={`${t}.pr.${p.id}.state`}>{prWords(p, now)}</span>
+                    <span className="tk-pr-state" {...(p.stale_ms === null ? {} : tipAttrs(tasks.pr_read_at({ forge: forgeWord(a?.pr?.status?.provider), when: clock(now - p.stale_ms, now) })))} data-testid={`${t}.pr.${p.id}.state`}>{prWords(p, now)}</span>
                     <PrReviewIcon review={p.review} testId={`${t}.pr.${p.id}.review`} />
                   </Press>
                   {/* Move to task… (tasks-ux m_65591): its ⋯ on the row's hover */}

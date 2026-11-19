@@ -108,10 +108,10 @@ describe('a task whose PRs are all merged (his pick on page tasks-fresh, designe
     const pr = (n: number, state: 'open' | 'merged') => ({ id: `pr-${String(n)}`, kind: 'pr', title: `PR ${String(n)}`, agent: 'main', version: 1, at_ms: NOW, url: `https://github.com/o/r/pull/${String(n)}`, new: false, works: ['a'], pr: { repo: 'o/r', number: n, tag: `#${String(n)}`, last: { state, review: 'none' as const, at_ms: NOW } } });
     apply({ ev: 'artifacts', project: P, items: [pr(1, 'merged'), pr(2, 'open')] });
     expect(v.getByTestId(`${rowId('a')}.goals`).textContent).toBe('0/1');
-    expect(v.getByTestId(`${rowId('a')}.goals`).getAttribute('data-tip')).toContain('2 PRs · 1 open · 1 merged');
+    expect(v.getByTestId(`${rowId('a')}.goals`).getAttribute('data-tip')).toBe('2 PRs · 1 open · 1 merged · 0/1 done when');
     expect(v.queryByTestId(`${rowId('a')}.merged`)).toBeNull();
     apply({ ev: 'artifacts', project: P, items: [pr(1, 'merged'), pr(2, 'merged')] });
     expect(v.queryByTestId(`${rowId('a')}.goals`)).toBeNull();
-    expect(v.getByTestId(`${rowId('a')}.merged`).getAttribute('data-tip')).toContain('2 PRs · 0 open · 2 merged');
+    expect(v.getByTestId(`${rowId('a')}.merged`).getAttribute('data-tip')).toBe('2 PRs · 2 merged · 0/1 done when');
   });
 });

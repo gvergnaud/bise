@@ -139,8 +139,9 @@ export interface TaskPr {
   readonly review: PrReview;
   /** when the state was seen (ms), the last one kept's; null with the live status */
   readonly at_ms: number | null;
-  /** the hub follows it and the forge answers late or not at all: its last known state, 'as of' */
-  readonly stale: boolean;
+  /** the forge answers late or not at all: how old its last read is (ms), its state the last known
+   *  one ('as of 14:20'); null when fresh or not followed */
+  readonly stale_ms: number | null;
 }
 
 const PR_RANK: Readonly<Record<PrState, number>> = { open: 0, draft: 0, unknown: 0, merged: 1, closed: 2 };
@@ -160,19 +161,21 @@ export function prsOf(arts: readonly Pick<Artifact, 'id' | 'title' | 'works' | '
       state: live?.state ?? last?.state ?? 'unknown',
       review: live?.review ?? last?.review ?? 'none',
       at_ms: live === null ? (last?.at_ms ?? null) : null,
-      stale: live?.stale_ms != null,
+      stale_ms: live?.stale_ms ?? null,
     };
     return [{ p, at: a.at_ms }];
   }).sort((x, y) => PR_RANK[x.p.state] - PR_RANK[y.p.state] || y.at - x.at).map((x) => x.p);
 }
 
-/** The set's words for a tip ('2 PRs · 1 open · 1 merged') and whether every one is merged (one at
+/** The set's counts for a tip ('5 PRs · 2 open · 1 draft · 1 merged') and whether every one is merged (one at
  *  least, none open: the bar's merged mark in place of its n/m; sb-core's own rule, wstatus merged). Pure. */
-export function prSet(prs: readonly Pick<TaskPr, 'state'>[]): { readonly n: number; readonly open: number; readonly merged: number; readonly closed: number; readonly allMerged: boolean } {
-  const open = prs.filter((p) => p.state === 'open' || p.state === 'draft').length;
+export function prSet(prs: readonly Pick<TaskPr, 'state'>[]): { readonly n: number; readonly open: number; readonly draft: number; readonly merged: number; readonly closed: number; readonly allMerged: boolean } {
+  // a draft counts apart in the words (designer m_67612) and as open for the merged mark
+  const open = prs.filter((p) => p.state === 'open' || p.state === 'unknown').length;
+  const draft = prs.filter((p) => p.state === 'draft').length;
   const merged = prs.filter((p) => p.state === 'merged').length;
   const closed = prs.filter((p) => p.state === 'closed').length;
-  return { n: prs.length, open, merged, closed, allMerged: merged > 0 && open === 0 };
+  return { n: prs.length, open, draft, merged, closed, allMerged: merged > 0 && open + draft === 0 };
 }
 
 /** A message's first line (his origin is quoted by it). Pure. */

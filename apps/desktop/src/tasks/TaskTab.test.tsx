@@ -125,13 +125,17 @@ describe('Changes is the PR list (his pick on page tasks-fresh, designer m_66722
     act(() => {
       v.store.apply({ ev: 'artifacts', project: P, items: [
         { id: 'pr-924', kind: 'pr', title: 'Auto-approve safe by default', agent: 'auto-approve-lead', version: 1, at_ms: at - 10, url: 'https://github.com/o/r/pull/924', new: false, works: ['kb'], pr: { repo: 'o/r', number: 924, tag: '#924', last: { state: 'merged', review: 'approved', at_ms: at } } },
+        { id: 'pr-926', kind: 'pr', title: 'A stale one', agent: 'auto-approve-lead', version: 1, at_ms: at - 1, url: 'https://github.com/o/r/pull/926', new: false, works: ['kb'], pr: { repo: 'o/r', number: 926, tag: '#926', status: { number: 926, url: 'https://github.com/o/r/pull/926', branch: 'sb/x', agents: [], state: 'open', checks: 'none', review: 'approved', words: '', text: '', title: 'A stale one', stale_ms: 60_000 } } },
         { id: 'pr-925', kind: 'pr', title: 'Its follow-up', agent: 'auto-approve-lead', version: 1, at_ms: at - 5, url: 'https://github.com/o/r/pull/925', new: false, works: ['kb'], pr: { repo: 'o/r', number: 925, tag: '#925', last: { state: 'draft', review: 'changes', at_ms: at } } },
       ] });
     });
     const rows = [...v.getByTestId('tasks.tab.kb.changes').querySelectorAll('li')];
-    expect(rows.map((r) => r.getAttribute('data-st'))).toEqual(['draft', 'merged']);
+    expect(rows.map((r) => r.getAttribute('data-st'))).toEqual(['open', 'draft', 'merged']);
+    // a state the hub can't refresh says so, its tip when the forge was last read (designer m_67612)
+    expect(v.getByTestId('tasks.tab.kb.pr.pr-926.state').textContent).toMatch(/^open · approved · as of \d\d:\d\d$/);
+    expect(v.getByTestId('tasks.tab.kb.pr.pr-926.state').getAttribute('data-tip')).toMatch(/^read from GitHub at \d\d:\d\d$/);
     expect(v.getByTestId('tasks.tab.kb.pr.pr-925.state').textContent).toBe('draft · changes requested');
-    expect(v.getByTestId('tasks.tab.kb.pr.pr-924.state').textContent).toMatch(/^merged \d\d:\d\d$/);
+    expect(v.getByTestId('tasks.tab.kb.pr.pr-924.state').textContent).toMatch(/^merged (today )?\d\d:\d\d$/);
     expect(v.getByTestId('tasks.tab.kb.pr.pr-924.icon').getAttribute('data-st')).toBe('merged');
     expect(v.queryByTestId('tasks.tab.kb.art.pr-924')).toBeNull();
     // its ⋯: Open on GitHub and Copy link above the Move items (tasks-ux m_67602)

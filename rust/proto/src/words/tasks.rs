@@ -188,8 +188,19 @@ crate::words! { tasks:
     pr_more_open(forge) = "Open on {forge} ↗";
     /// a PR row's ⋯, second item: its link to the clipboard
     pr_more_copy = "Copy link";
-    /// the right bar's tip on a task with PRs: the whole set (designer m_66721)
-    prs_tip(n, open, merged) = one "{n} PR · {open} open · {merged} merged" | "{n} PRs · {open} open · {merged} merged";
+    /// the right bar's tip on a task with PRs, its parts joined by ' · ', a zero part left out
+    /// (designer m_67612: '5 PRs · 2 open · 1 draft · 1 merged · 0/1 done when'): how many
+    prs_n(n) = one "{n} PR" | "{n} PRs";
+    /// how many open (a draft apart)
+    prs_open(n) = "{n} open";
+    /// how many drafts
+    prs_draft(n) = "{n} draft";
+    /// how many merged
+    prs_merged(n) = "{n} merged";
+    /// its done-when count, last (the merged mark took the n/m's place)
+    prs_goals(done, all) = "{done}/{all} done when";
+    /// a stale PR's state tip: when the forge was last read (designer m_67612)
+    pr_read_at(forge, when) = "read from {forge} at {when}";
     /// an agent of it in a turn
     agent_live = "working";
     /// an agent of it, idle

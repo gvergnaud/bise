@@ -838,14 +838,49 @@
     "one": null,
     "text": "open"
   },
-  "tasks.prs_tip": {
+  "tasks.pr_read_at": {
     "args": [
-      "n",
-      "open",
-      "merged"
+      "forge",
+      "when"
     ],
-    "one": "{n} PR · {open} open · {merged} merged",
-    "text": "{n} PRs · {open} open · {merged} merged"
+    "one": null,
+    "text": "read from {forge} at {when}"
+  },
+  "tasks.prs_draft": {
+    "args": [
+      "n"
+    ],
+    "one": null,
+    "text": "{n} draft"
+  },
+  "tasks.prs_goals": {
+    "args": [
+      "done",
+      "all"
+    ],
+    "one": null,
+    "text": "{done}/{all} done when"
+  },
+  "tasks.prs_merged": {
+    "args": [
+      "n"
+    ],
+    "one": null,
+    "text": "{n} merged"
+  },
+  "tasks.prs_n": {
+    "args": [
+      "n"
+    ],
+    "one": "{n} PR",
+    "text": "{n} PRs"
+  },
+  "tasks.prs_open": {
+    "args": [
+      "n"
+    ],
+    "one": null,
+    "text": "{n} open"
   },
   "tasks.q_type": {
     "args": [],
