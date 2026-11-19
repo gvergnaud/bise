@@ -199,9 +199,12 @@ crate::words! { tasks:
     undo_resumed(name) = "{name} resumed";
     /// the Undo's line after Mark done
     undo_done(name) = "{name} marked done";
-    /// the Undo's line after 'Not on this task' (tasks-ux m_66626): the name
-    /// first, like the other toasts (the toast cuts the name, never the rest)
-    undo_unlinked(name, agent) = "{name}: {agent} removed";
+    /// the Undo's line after 'Not on this task' (tasks-ux m_66626, designer
+    /// m_67465): the task's name last, it gives way first, the rest whole
+    undo_unlinked(agent, name) = "{agent} removed from {name}";
+    /// `sb send`/`ask`/`report`'s line when the fact carries 2+ tasks
+    /// (architect m_66621 point 3): the agent narrows it next time
+    carries_several(n, ids) = "it carries {n} tasks ({ids}): if it serves one, give it with --task <id> next time";
     /// an agent row's ⋯ in the Task tab, its tip (tasks-ux m_66626)
     agent_more = "More";
     /// the ⋯'s item: the agent leaves this task's agents until it acts for it again

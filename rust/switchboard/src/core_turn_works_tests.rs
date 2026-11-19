@@ -147,3 +147,22 @@ fn not_on_this_task_is_his_or_mains_and_an_act_rejoins() {
     t.req("coord", send(MAIN, "done with the pool", None, &[a.as_str()]));
     assert!(on_a(&t), "law acting_joins_its_works");
 }
+
+/// architect m_66621 point 5: `sb task list --check` names an open task
+/// with 8 agents or more (for agents and the gates, never his UI), and
+/// only those.
+#[test]
+fn task_list_check_names_an_over_linked_task() {
+    let mut t = T::new();
+    let a = new(&mut t, "Pool");
+    let _b = new(&mut t, "Triggers");
+    for i in 0..8 {
+        let (tok, fx) = t.req(MAIN, AgentReq::Task(Task::Link { id: a.clone(), agent: format!("vb-{i}") }));
+        assert_eq!(reply(&fx, tok).unwrap()["ok"], true);
+    }
+    let (tok, fx) = t.req(MAIN, AgentReq::Task(Task::List { all: false, check: true }));
+    let text = reply(&fx, tok).unwrap()["text"].as_str().unwrap().to_string();
+    let lines: Vec<&str> = text.lines().filter(|l| l.contains(" · ")).collect();
+    assert_eq!(lines.len(), 1, "{text}");
+    assert!(lines[0].starts_with(&format!("{a} · Pool · ")) && lines[0].contains("agents"), "{text}");
+}

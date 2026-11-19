@@ -169,6 +169,14 @@
     "one": "{n} question",
     "text": "{n} questions"
   },
+  "tasks.carries_several": {
+    "args": [
+      "n",
+      "ids"
+    ],
+    "one": null,
+    "text": "it carries {n} tasks ({ids}): if it serves one, give it with --task <id> next time"
+  },
   "tasks.change_no_pr": {
     "args": [],
     "one": null,
@@ -988,11 +996,11 @@
   },
   "tasks.undo_unlinked": {
     "args": [
-      "name",
-      "agent"
+      "agent",
+      "name"
     ],
     "one": null,
-    "text": "{name}: {agent} removed"
+    "text": "{agent} removed from {name}"
   },
   "tasks.waiting_no_agent": {
     "args": [],

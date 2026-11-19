@@ -123,7 +123,7 @@ fn list_and_show_read_the_status_sb_core_computed() {
     let w = &t.hub.st.works[&a];
     assert_eq!(w.work.agents, ["main", "docs"], "{w:?}");
     assert_eq!((w.status.as_str(), w.who.as_str()), ("working", "docs"), "{w:?}");
-    let r = task(&mut t, MAIN, Task::List { all: false });
+    let r = task(&mut t, MAIN, Task::List { all: false, check: false });
     let text = r["text"].as_str().unwrap();
     assert!(text.starts_with("native-mac · Native mac · working · docs"), "{text}");
     let r = task(&mut t, MAIN, Task::Show { id: a.clone(), log: false });
@@ -136,9 +136,9 @@ fn list_and_show_read_the_status_sb_core_computed() {
     let ctx = crate::board::main_context(&t.hub.st, t.env.now, &[], &[]);
     assert!(!ctx.contains("<open_tasks>"), "a done task is not open: {ctx}");
     assert_eq!(t.hub.st.works[&a].status, "done");
-    let open = task(&mut t, MAIN, Task::List { all: false })["text"].as_str().unwrap().to_string();
+    let open = task(&mut t, MAIN, Task::List { all: false, check: false })["text"].as_str().unwrap().to_string();
     assert!(!open.contains("native-mac"), "{open}");
-    let all = task(&mut t, MAIN, Task::List { all: true })["text"].as_str().unwrap().to_string();
+    let all = task(&mut t, MAIN, Task::List { all: true, check: false })["text"].as_str().unwrap().to_string();
     assert!(all.contains("native-mac · Native mac · done · today"), "{all}");
     let r = task(&mut t, MAIN, Task::Show { id: "nope".into(), log: false });
     assert_eq!(r["ok"], false, "{r}");
@@ -151,7 +151,7 @@ fn his_page_waits_make_needs_you_and_a_ragged_input_is_refused() {
     let b = new(&mut t, MAIN, "Digest", &[]);
     t.go(Input::PageWaits { works: vec![a.clone()], ns: vec![2] });
     assert_eq!((t.hub.st.works[&a].status.as_str(), t.hub.st.works[&a].needs), ("needs_you", 2));
-    let r = task(&mut t, MAIN, Task::List { all: false });
+    let r = task(&mut t, MAIN, Task::List { all: false, check: false });
     assert!(r["text"].as_str().unwrap().starts_with("native-mac · Native mac · needs you · 2 questions"), "{r}");
     // the other work's row is untouched: still its last one
     assert_eq!(t.hub.st.works[&b].status, "waiting");
@@ -190,7 +190,7 @@ fn his_gesture_on_a_task_is_made_as_him_and_a_refusal_is_his_notice() {
     let fx = t.go(Input::ClientWorkAct { client: 7, req: Task::Done { id: "nope".into() } });
     assert!(notice_to(&fx, 7).is_some_and(|n| n.contains("no task nope")), "{fx:?}");
     // the reads are the hub's: a gesture never asks for them
-    let fx = t.go(Input::ClientWorkAct { client: 7, req: Task::List { all: false } });
+    let fx = t.go(Input::ClientWorkAct { client: 7, req: Task::List { all: false, check: false } });
     assert!(notice_to(&fx, 7).is_some(), "{fx:?}");
 }
 

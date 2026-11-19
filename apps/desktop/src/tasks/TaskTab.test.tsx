@@ -108,8 +108,9 @@ describe('Not on this task (tasks-ux m_66626)', () => {
       v.getByTestId('tasks.tab.kb.agent.menu.unlink').click();
     });
     expect(acts().map((c) => c.req)).toEqual([{ step: 'unlink', id: 'kb', agent: 'vb-architect' }]);
-    expect(v.getByTestId('tasks.tab.kb.toast.what').textContent).toBe('Pool: vb-architect removed');
-    expect(v.getByTestId('tasks.tab.kb.toast.verb').textContent).toBe(': vb-architect removed');
+    // the task's name last, it gives way first (designer m_67465, m_67404)
+    expect(v.getByTestId('tasks.tab.kb.toast.pre').textContent).toBe('vb-architect removed from');
+    expect(v.getByTestId('tasks.tab.kb.toast.what').textContent).toBe('vb-architect removed fromPool');
     act(() => {
       v.getByTestId('tasks.tab.kb.toast.undo').click();
     });

@@ -495,6 +495,10 @@ pub enum Task {
         /// with the done and ongoing ones
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         all: bool,
+        /// `--check` (architect m_66621 point 5): only the open tasks that
+        /// look over-linked, for agents and the gates, never his UI
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        check: bool,
     },
     Show {
         #[serde(default)]

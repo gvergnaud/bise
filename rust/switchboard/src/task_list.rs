@@ -142,6 +142,40 @@ pub fn list(st: &State, all: bool, now: u64) -> String {
     out.join("\n")
 }
 
+/// `sb task list --check`'s bars (architect m_66621 point 5): an open task
+/// with this many agents or more looks over-linked
+pub const CHECK_AGENTS: usize = 8;
+/// ...or working this long with nothing new on it
+pub const CHECK_QUIET_MS: u64 = 24 * 3_600_000;
+
+/// Why an open work looks over-linked, none when it doesn't. Pure.
+pub fn over_linked(w: &VWork, now: u64) -> Option<String> {
+    if w.work.merged_into.is_some() || matches!(w.status.as_str(), "done" | "ongoing") {
+        return None;
+    }
+    let n = w.work.agents.len();
+    if n >= CHECK_AGENTS {
+        return Some(format!("{n} agents"));
+    }
+    if w.status == "working" && now.saturating_sub(w.work.last) >= CHECK_QUIET_MS {
+        return Some(format!("working, nothing new since {}", past_label(w.work.last, now)));
+    }
+    None
+}
+
+/// `sb task list --check`: the open tasks that look over-linked, one line
+/// each with why and the cleanup (`sb task unlink`); for agents and the
+/// gates, never a label in his UI.
+pub fn check(st: &State, now: u64) -> String {
+    let mut ws: Vec<&VWork> = st.works.values().collect();
+    ws.sort_by_key(|w| w.work.created_ms);
+    let out: Vec<String> = ws.iter().filter_map(|w| over_linked(w, now).map(|why| format!("{} · {} · {} · {}", w.work.id, w.work.name, why, w.work.agents.join(", ")))).collect();
+    if out.is_empty() {
+        return "no open task looks over-linked".into();
+    }
+    format!("{}\n(on his word: sb task unlink <id> <agent> for an agent that never worked on it)", out.join("\n"))
+}
+
 /// `sb task show <id>`: the work whole (a merged one: the one it went
 /// into), a folded one's tomb, or why not.
 pub fn show(st: &State, id: &str, now: u64) -> Result<String, String> {

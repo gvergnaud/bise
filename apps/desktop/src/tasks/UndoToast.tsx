@@ -53,7 +53,8 @@ export function UndoToast({ did, works, name, send, done, testId, bar = false }:
   // gives way first (cut at a word to its room) and drops whole when not even one word fits; the
   // whole name always in the line's tip
   const cut = cutAtWord(name, TOAST_NAME_MAX);
-  const verb = (didWords(did, MARK).split(MARK)[1] ?? '').trim();
+  // the words around the name: before it ('vb-architect removed from'), after it ('marked done')
+  const [pre = '', post = ''] = didWords(did, MARK).split(MARK).map((x) => x.trim());
   return (
     <div className={bar ? 'tk-undo bar' : 'tk-undo'}>
       {/* no lead mark: nothing passed or failed (designer m_65397) */}
@@ -65,8 +66,9 @@ export function UndoToast({ did, works, name, send, done, testId, bar = false }:
       } }} testId={testId}>
         {/* one line: the name cut at a word with one '…' (or gone), the verb whole, the whole name in its tip (designer m_65519, m_67404) */}
         <span className="tk-undo-what" {...tipAttrs(name)} data-testid={`${testId}.what`}>
+          {pre !== '' && <span className="tk-undo-verb" data-testid={`${testId}.pre`}>{pre}</span>}
           <WordCut className="tk-undo-name" text={cut} drop />
-          <span className="tk-undo-verb" data-testid={`${testId}.verb`}>{verb}</span>
+          {post !== '' && <span className="tk-undo-verb" data-testid={`${testId}.verb`}>{post}</span>}
         </span>
       </Toast>
     </div>

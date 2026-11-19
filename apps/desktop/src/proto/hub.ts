@@ -245,7 +245,12 @@ goals?: Array<string>, } | { "step": "list",
 /**
  * with the done and ongoing ones
  */
-all?: boolean, } | { "step": "show", id: string, 
+all?: boolean, 
+/**
+ * `--check` (architect m_66621 point 5): only the open tasks that
+ * look over-linked, for agents and the gates, never his UI
+ */
+check?: boolean, } | { "step": "show", id: string, 
 /**
  * `--activity` (or `--log`): its Activity instead (roma idea 3),
  * read by the hub off its loop

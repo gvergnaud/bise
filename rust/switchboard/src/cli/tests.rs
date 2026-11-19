@@ -248,3 +248,13 @@ fn rendering() {
     );
     assert!(!ok && t.contains("timeout") && t.contains("end your turn"));
 }
+
+/// architect m_66621 point 3: a send that carries 2+ tasks says so in one
+/// line, from sb-core's typed `several`; one task or none, nothing.
+#[test]
+fn a_send_carrying_several_tasks_says_so() {
+    let (_, t) = render("send", &json!({"ok": true, "message_id": "m_5", "to": "docs", "delivery": "queued", "thread": "t_5", "works": ["pool", "triggers"], "several": true}));
+    assert_eq!(t, format!("sent m_5 to docs (queued, thread t_5)\n{}", bise_proto::words::tasks::carries_several(2, "pool, triggers")));
+    let (_, t) = render("send", &json!({"ok": true, "message_id": "m_6", "to": "docs", "delivery": "queued", "thread": "t_6"}));
+    assert_eq!(t, "sent m_6 to docs (queued, thread t_6)");
+}

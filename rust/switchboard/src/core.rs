@@ -1972,8 +1972,9 @@ impl Hub {
         }
         let q = match req {
             // tasks: the hub's reads of sb-core's works (task_list.rs)
-            AgentReq::Task(bise_proto::sb::Task::List { all }) => {
-                reply(fx, json!({"ok": true, "text": crate::task_list::list(&self.st, all, env.now())}));
+            AgentReq::Task(bise_proto::sb::Task::List { all, check }) => {
+                let text = if check { crate::task_list::check(&self.st, env.now()) } else { crate::task_list::list(&self.st, all, env.now()) };
+                reply(fx, json!({"ok": true, "text": text}));
                 return;
             }
             // `--log` is the shell's, off the loop (daemon/task_log.rs)

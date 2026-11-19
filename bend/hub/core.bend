@@ -3354,15 +3354,28 @@ def req_send.delivered(m: Maybe<&2, S.MSt>) -> Bool:
     case _:
       False{}
 
+# the tasks a fact carries, in its answer when they are 2 or more
+# (architect m_66621 point 3): `works` and the typed `several`, so the CLI
+# says so in its own words and the agent narrows it with --task at once
+def several(ws: List<&2, String>) -> Bool:
+  match ws:
+    case Con{_, Con{_, _}}:
+      True{}
+    case _:
+      False{}
+
+def several_kvs(+ws: List<&2, String>) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
+  Bool.pick(List<&2, Sigma<&2, &2, String, _ => J.Json>>, several(ws), [J.kv("works", J.JArr{jstrs(ws)}), J.kv("several", J.JBool{True{}})], Nil{})
+
 def req_send.res(-o: S.St, p: X.Cx<o> & SendR, +token: Nat) -> X.Cx<o>:
   match p:
     case (+cx, SErr{+e}):
       reply_err(o, cx, token, e)
     case (+cx, SOk{+m}):
       +delivered = req_send.delivered(M.state_of(st(o, cx), S.Msg.id(m)))
-      reply(o, cx, token, ok_body([J.kv("message_id", J.JStr{mid(S.Msg.id(m))}),
+      reply(o, cx, token, ok_body(List.append(&2, Sigma<&2, &2, String, _ => J.Json>, [J.kv("message_id", J.JStr{mid(S.Msg.id(m))}),
         J.kv("thread", J.JStr{String.append("t_", ns(S.Msg.thread(m)))}), J.kv("to", J.JStr{S.Msg.to(m)}),
-        J.kv("delivery", J.JStr{Bool.pick(String, delivered, "delivered", "queued")})]))
+        J.kv("delivery", J.JStr{Bool.pick(String, delivered, "delivered", "queued")})], several_kvs(S.Msg.works(m)))))
 
 # the oldest delivered message from `asker` to `me` that still expects
 # `me`'s reply
@@ -3639,7 +3652,7 @@ def req_report.sent(-o: S.St, p: X.Cx<o> & SendR, +token: Nat) -> X.Cx<o>:
     case (+cx, SErr{+e}):
       reply_err(o, cx, token, e)
     case (+cx, SOk{+m}):
-      reply(o, cx, token, ok_body([J.kv("message_id", J.JStr{mid(S.Msg.id(m))})]))
+      reply(o, cx, token, ok_body(Con{J.kv("message_id", J.JStr{mid(S.Msg.id(m))}), several_kvs(S.Msg.works(m))}))
 
 # tasks: a blocked report opens its card for him (blocked_card); a
 # progress or a done one closes it (report_cards_end), in the same step

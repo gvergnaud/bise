@@ -4,20 +4,20 @@
 use super::*;
 use bise_proto::sb::Task;
 
-pub(super) const TASK_USAGE: &str = "usage: sb task new \"<name>\" [--why \"<why>\"] [--done-when \"<item>\"]... | sb task list [--all] | sb task show <id> [--activity] | sb task done|reopen|resume|restart|ongoing <id> | sb task pause <id> [--until <18:00|tomorrow 09:00|2h>] | sb task rename <id> \"<name>\" | sb task why <id> \"<why>\" | sb task goal <id> \"<item>\" | sb task tick|untick <id> <n> | sb task merge <id> --into <id> | sb task unlink|link <id> <agent>";
+pub(super) const TASK_USAGE: &str = "usage: sb task new \"<name>\" [--why \"<why>\"] [--done-when \"<item>\"]... | sb task list [--all] [--check] | sb task show <id> [--activity] | sb task done|reopen|resume|restart|ongoing <id> | sb task pause <id> [--until <18:00|tomorrow 09:00|2h>] | sb task rename <id> \"<name>\" | sb task why <id> \"<why>\" | sb task goal <id> \"<item>\" | sb task tick|untick <id> <n> | sb task merge <id> --into <id> | sb task unlink|link <id> <agent>";
 
 /// `sb task move`'s usage (main only, on his word).
 const MOVE_USAGE: &str = "usage: sb task move <task-id>... (--art <id> | --page <id> | --card <n>) | sb task move --none (--art <id> | --page <id> | --card <n>)";
 
 /// `sb task <verb> ...` as its request.
 pub(super) fn task_req(rest: &[String]) -> Result<Task, String> {
-    let (pos, o) = parse_args(rest, &["why", "done-when", "until", "into", "art", "page", "card"], &["all", "activity", "log", "none"])?;
+    let (pos, o) = parse_args(rest, &["why", "done-when", "until", "into", "art", "page", "card"], &["all", "activity", "log", "none", "check"])?;
     let verb = pos.first().ok_or(TASK_USAGE)?.as_str();
     let id = || pos.get(1).map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).ok_or_else(|| TASK_USAGE.to_string());
     let words = |from: usize| text_of(pos.get(from..).unwrap_or(&[]));
     Ok(match verb {
         "new" => Task::New { name: words(1)?, why: str_of(&o, "why"), goals: list_of(o.get("done-when")) },
-        "list" => Task::List { all: o.contains_key("all") },
+        "list" => Task::List { all: o.contains_key("all"), check: o.contains_key("check") },
         // `--log`: the Activity's name before his m_66595, kept as its alias
         "show" => Task::Show { id: id()?, log: o.contains_key("activity") || o.contains_key("log") },
         "done" => Task::Done { id: id()? },

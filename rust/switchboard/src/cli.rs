@@ -254,6 +254,17 @@ pub fn help_for(cmd: &str) -> String {
 /// `sb worktree <path>`: an absolute path must be a git worktree (a
 /// `.git` in it) on this machine; the hub checks the rest (absolute,
 /// not main). This process runs where the agent works, the hub may not.
+/// The answer's tasks when it carries 2+ (sb-core's `several`, architect
+/// m_66621 point 3): one line after the result, in the catalog's words,
+/// so the agent narrows the next one with --task; "" otherwise.
+fn several_line(v: &Value) -> String {
+    if v.get("several") != Some(&json!(true)) {
+        return String::new();
+    }
+    let ids: Vec<&str> = v.get("works").and_then(|w| w.as_array()).map(|a| a.iter().filter_map(|x| x.as_str()).collect()).unwrap_or_default();
+    format!("\n{}", bise_proto::words::tasks::carries_several(ids.len(), ids.join(", ")))
+}
+
 fn worktree_exists(p: &str) -> Result<(), String> {
     let p = p.trim();
     if p.starts_with('/') && !std::path::Path::new(p).join(".git").exists() {
@@ -381,7 +392,7 @@ pub fn render(cmd: &str, v: &Value) -> (bool, String) {
         },
         // issue #4: `sb send <task> --model <id>` alone: the hub's line
         "send" if s("cmd") == "switch" => s("text"),
-        "send" => format!("sent {} to {} ({}, thread {})", s("message_id"), s("to"), s("delivery"), s("thread")),
+        "send" => format!("sent {} to {} ({}, thread {}){}", s("message_id"), s("to"), s("delivery"), s("thread"), several_line(v)),
         "ask" | "wait" => match s("type").as_str() {
             // `answers m_8`: the question's id (BISE-110: the TUI hides
             // an `sb ask` box whose question and reply both show)
