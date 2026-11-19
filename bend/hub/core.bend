@@ -489,11 +489,24 @@ def works_his(w: Maybe<&2, List<&2, String>>, +s: S.St, +to: String) -> List<&2,
 def card_new(+id: Nat, +kind: String, +agent: String, +text: String, +for_msg: Maybe<&2, Nat>, +created: Nat, +place: Maybe<&2, String>, +pr: Maybe<&2, Nat>, +about: Maybe<&2, J.Json>) -> S.Card:
   S.Card.with_about(S.Card.with_pr(S.Card.with_place(S.Card.with_created(S.Card.with_for_msg(S.Card.with_text(S.Card.with_agent(S.Card.with_kind(S.Card.with_id(S.Card.empty(), id), kind), agent), text), for_msg), created), place), pr), about)
 
+# a card main opens carries only its `--task` (none without one: main
+# routes, its turn serves many tasks; law mains_card_carries_only_its_task,
+# architect m_67167); another agent's, its `--task` else its turn's
+def works_of_card.main(is_main: Bool, w: Maybe<&2, List<&2, String>>, +s: S.St, +agent: String) -> List<&2, String>:
+  match is_main:
+    case True{}:
+      Maybe.default(&2, List<&2, String>, w, Nil{})
+    case False{}:
+      works_of_send(w, s, agent)
+
+def works_of_card(w: Maybe<&2, List<&2, String>>, +s: S.St, +agent: String) -> List<&2, String>:
+  works_of_card.main(String.eq(agent, M.MAIN()), w, s, agent)
+
 # tasks: the card carries `works` (`sb notify --task`), else the works of
-# its agent's turn (law card_carries_turn_works)
+# its agent's turn (law card_carries_turn_works), main's only its --task
 def open_card_works(-o: S.St, +cx: X.Cx<o>, +kind: String, +agent: String, +text: String, +for_msg: Maybe<&2, Nat>, +place: Maybe<&2, String>, +pr: Maybe<&2, Nat>, +about: Maybe<&2, J.Json>, +works: Maybe<&2, List<&2, String>>) -> X.Cx<o>:
   +id = S.St.next_card(st(o, cx))
-  +c = S.Card.with_works(card_new(id, kind, agent, text, for_msg, now(o, cx), place, pr, about), works_of_send(works, st(o, cx), agent))
+  +c = S.Card.with_works(card_new(id, kind, agent, text, for_msg, now(o, cx), place, pr, about), works_of_card(works, st(o, cx), agent))
   +cx2 = emit(o, cx, M.ECardOpened{c}, {==}, Unit{}, Unit{})
   feed(o, cx2, M.MAIN(), FD.card(id, kind, agent, text))
 
@@ -1912,6 +1925,16 @@ def view_nos(-o: S.St, cs: List<&2, S.Card>, +cx: X.Cx<o>, +agent: String) -> X.
     case Con{+c, +rest}:
       view_nos(o, rest, view_no.one(o, String.eq(S.Card.agent(c), agent) && is_view(S.Card.view(c)), cx, c), agent)
 
+# why a stopped agent's open cards close: an archived agent's questions
+# close as such, so his inbox says so (law an_archived_askers_card_closes,
+# architect m_67167; tasks-ux m_67172's words: inbox reason_agent_archived)
+def stop_card_res(l: S.Life) -> String:
+  match l:
+    case S.LArchived{}:
+      "agent archived"
+    case _:
+      "agent stopped"
+
 def stop_task.go(-o: S.St, +cx: X.Cx<o>, +name: String, +life: S.Life, +reason: String) -> X.Cx<o>:
   +cx1 = out(o, cx, F.kill(name))
   +cx2 = fail_waiters(o, cx1, name, "stopped")
@@ -1920,7 +1943,7 @@ def stop_task.go(-o: S.St, +cx: X.Cx<o>, +name: String, +life: S.Life, +reason: 
   +cx4 = upd_rt(o, cx3, X.Rt.with_turn(X.Rt.with_run(rt(o, cx3, name), S.RDown{}), None{}))
   +cx5 = emit(o, cx4, M.ELifecycle{name, life, Bool.pick(Maybe<&2, String>, String.is_empty(reason), None{}, Some{reason}), life_works(st(o, cx4), name)}, Unit{}, Unit{}, Unit{})
   +cx6 = reject_ids(o, ids_of(M.queued_for(st(o, cx5), name)), cx5)
-  view_nos(o, S.St.cards(st(o, cx6)), close_cards(o, cx6, name, Nil{}, "agent stopped"), name)
+  view_nos(o, S.St.cards(st(o, cx6)), close_cards(o, cx6, name, Nil{}, stop_card_res(life)), name)
 
 # `agent`'s contexts leave (his message took them, or it stopped: an MCP App view's
 # context, review d5)

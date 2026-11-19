@@ -22,6 +22,8 @@ export const inbox = {
   withdrawn: (a: { why: string | number }): string => "withdrawn: " + String(a.why),
   /** why a row was withdrawn: its agent stopped */
   reason_agent_stopped: "its agent stopped",
+  /** why a row was withdrawn: its agent was archived before he answered (tasks-ux m_67172) */
+  reason_agent_archived: "its agent was archived before you answered",
   /** why a row was withdrawn: he closed it */
   reason_closed: "you closed it",
   /** why a row was withdrawn: its call was interrupted */

@@ -99,3 +99,20 @@ fn an_old_journals_steered_line_replays_as_before() {
         assert!(agents.iter().any(|x| x == "coord"), "{id}: {agents:?}");
     }
 }
+
+/// His live hub: main's question about a PR carried the 7 tasks of
+/// main's turn, and every one read 'needs you · 1 question' (architect
+/// m_67167). Main's card carries only its --task.
+#[test]
+fn mains_card_carries_only_its_task() {
+    let mut t = T::new();
+    let a = new(&mut t, "Pool");
+    let _b = new(&mut t, "Triggers");
+    let card = |task: &[&str]| AgentReq::Card { text: "merge?\n1. merge\n2. not yet".into(), for_msg: None, page: None, artifact: None, open: Vec::new(), about: None, task: task.iter().map(|s| s.to_string()).collect() };
+    let opened = |t: &T| t.journal.borrow().iter().rev().find(|j| j["type"] == "card_opened").expect("a card")["card"]["works"].clone();
+    t.req(MAIN, card(&[]));
+    let none = opened(&t);
+    assert!(none.is_null() || none == json!([]), "law mains_card_carries_only_its_task: {none}");
+    t.req(MAIN, card(&[a.as_str()]));
+    assert_eq!(opened(&t), json!([a]), "law mains_card_keeps_its_task");
+}

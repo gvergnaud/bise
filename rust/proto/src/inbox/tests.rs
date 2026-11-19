@@ -175,6 +175,7 @@ fn the_row_words() {
     assert_eq!(second_line(x.get(3).unwrap()), "you: yes · in old's thread");
     assert_eq!(where_words(&Where::Page { page: "p".into(), block: "q1".into() }), "on a page");
     assert_eq!(reason("agent stopped"), "its agent stopped");
+    assert_eq!(reason("agent archived"), "its agent was archived before you answered");
     assert_eq!(reason("closed"), "you closed it");
 }
 

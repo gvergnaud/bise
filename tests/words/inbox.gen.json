@@ -624,6 +624,11 @@
     "one": null,
     "text": "the question is closed: ⏎ sends your words as a message"
   },
+  "inbox.reason_agent_archived": {
+    "args": [],
+    "one": null,
+    "text": "its agent was archived before you answered"
+  },
   "inbox.reason_agent_stopped": {
     "args": [],
     "one": null,

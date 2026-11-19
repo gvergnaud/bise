@@ -327,3 +327,14 @@ def Laws.work_context_once_per_agent_without_membership(id):
   %Equal.sym(Bool, String.eq(id, id), True{}, PL2.hub_str_eq_refl(id))
     : {HWC.unseen.pick(HLZ.or(_, u => HWO.has(Nil{}, id)), id, Nil{}) == Nil{} : List<&2, String>}
   {==}
+
+# ---- cards ----
+
+def Laws.mains_card_carries_only_its_task(s):
+  {==}
+
+def Laws.mains_card_keeps_its_task(ws, s):
+  {==}
+
+def Laws.an_archived_askers_card_closes():
+  {==}

@@ -667,3 +667,23 @@ law acting_on_its_work_joins_nothing:
 law work_context_once_per_agent_without_membership:
   for +id: String
   {HWC.unseen([id], [id]) == Nil{} : List<&2, String>}
+
+# ---- cards (architect m_67167) ----
+
+# LAW: a card main opens carries only its --task, none without one: main
+# routes, its turn serves many tasks (his live hub: card #1040 carried 7,
+# each read 'needs you · 1 question').
+law mains_card_carries_only_its_task:
+  for +s: HS.St
+  {HC.works_of_card(None{}, s, HM.MAIN()) == Nil{} : List<&2, String>}
+
+law mains_card_keeps_its_task:
+  for +ws: List<&2, String>
+  for +s: HS.St
+  {HC.works_of_card(Some{ws}, s, HM.MAIN()) == ws : List<&2, String>}
+
+# LAW: archiving an agent closes its open cards as 'agent archived' (the
+# stop closes them all, stop_leaves_no_card), so his inbox says its
+# question went unanswered.
+law an_archived_askers_card_closes:
+  {HC.stop_card_res(HS.LArchived{}) == "agent archived" : String}

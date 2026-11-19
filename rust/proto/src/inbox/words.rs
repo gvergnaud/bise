@@ -42,6 +42,7 @@ pub fn reason(res: &str) -> String {
     }
     match res {
         "agent stopped" => inbox::reason_agent_stopped.into(),
+        "agent archived" => inbox::reason_agent_archived.into(),
         "closed" => inbox::reason_closed.into(),
         "interrupted" => inbox::reason_interrupted.into(),
         "" | "closed by main" => inbox::reason_closed_by_main.into(),
