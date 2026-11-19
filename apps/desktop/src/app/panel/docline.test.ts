@@ -6,7 +6,7 @@ import { DOC_ERR, VIEW_ERR } from '@/views/port';
 import type { ViewState } from '@/views/store';
 import { views } from '@/proto/words_views.gen';
 import { copyTip, copyWords, factsWords, newerAct, whoWord } from './Document';
-import { asksHub, docLine } from './docline';
+import { asksHub, docLine, type DocLine } from './docline';
 
 function live(version: number | undefined, save: Save = { kind: 'idle' }, writable = true, savedHere = false): ViewState {
   return {
