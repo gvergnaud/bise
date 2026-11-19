@@ -87,7 +87,9 @@ export function docLine(state: ViewState, row: RowFacts | undefined, rowApp: str
   }
   const d = state.doc;
   if (d === undefined) return { kind: 'loading' };
-  const app = d.opener.app;
+  // the file's kind, when its app names one in its manifest, after the app: 'Code · TypeScript'
+  // (Opener.kind, code-view: architect m_67161, designer m_67265); Sheets names none
+  const app = d.opener.kind == null ? d.opener.app : `${d.opener.app} · ${d.opener.kind}`;
   // his own save made the row's newest (by 'you'): the tab shows it, no 'newer' line over his own work
   // (the write's answer has no version, A4)
   const mine = d.savedHere && row?.by?.kind === 'you' && d.document.version !== undefined && d.document.version < row.newest;

@@ -61,6 +61,9 @@ pub struct Entry {
     pub icon: Option<String>,
     /// it opens any file bise knows is text ([`TEXT_KEY`], its one key)
     pub text: bool,
+    /// the kind a document's head shows after the app (A1's
+    /// `files[].kind`, `TypeScript`); none: the app alone
+    pub kind: Option<String>,
 }
 
 /// One kind of file an opener makes (A1's `makes[]`).
@@ -205,7 +208,8 @@ fn file_entry(i: usize, v: &Value) -> Result<(Entry, Option<String>), String> {
         Some(Value::Bool(true)) if folder || o.contains_key("match") => return Err(format!("{at}: a text entry has no match and no folder")),
         Some(Value::Bool(true)) => {
             let title = title_of(o.get("title"), &at)?;
-            return Ok((Entry { keys: vec![TEXT_KEY.to_string()], title, rank, folder: false, icon: None, text: true }, None));
+            // any text file: no kind to name (designer m_67265: 'Code · v2')
+            return Ok((Entry { keys: vec![TEXT_KEY.to_string()], title, rank, folder: false, icon: None, text: true, kind: None }, None));
         }
         Some(_) => return Err(format!("{at}.text must be true or false")),
     }
@@ -238,7 +242,12 @@ fn file_entry(i: usize, v: &Value) -> Result<(Entry, Option<String>), String> {
         Some(Value::String(n)) if TYPE_ICONS.contains(&n.as_str()) => (Some(n.clone()), None),
         Some(v) => (None, Some(format!("{at}.icon {v} must be one of {}; dropped", TYPE_ICONS.join(", ")))),
     };
-    Ok((Entry { keys, title: title_of(o.get("title"), &at)?, rank, folder, icon, text: false }, warn))
+    // the kind a document's head names after the app (static, the manifest's: architect m_67161)
+    let kind = match o.get("kind") {
+        None => None,
+        k => Some(title_of(k, &format!("{at}.kind"))?),
+    };
+    Ok((Entry { keys, title: title_of(o.get("title"), &at)?, rank, folder, icon, text: false, kind }, warn))
 }
 
 fn make_of(i: usize, v: &Value) -> Result<Make, String> {
@@ -319,7 +328,7 @@ pub fn parse(plugin: &str, server: &str, tool: &Value) -> (Option<OpenerDecl>, V
             };
             if !entries.iter().any(|en| en.keys.contains(&key)) {
                 let title = format!("{} file", key.trim_start_matches("*.").to_uppercase());
-                entries.push(Entry { keys: vec![key], title, rank: OpenRank::Default, folder: false, icon: None, text: false });
+                entries.push(Entry { keys: vec![key], title, rank: OpenRank::Default, folder: false, icon: None, text: false, kind: None });
             }
         }
     }
@@ -734,13 +743,13 @@ pub fn pick(target: &Target, openers: &Openers, picks: &Picks) -> Opened {
             if let Some((spec, rank, key, e)) = best {
                 // the type's own icon (a design-system name), else its app's
                 let icon = e.icon.clone().or_else(|| po.icon.as_ref().map(|_| format!("{ICON_ROUTE}{}", po.plugin)));
-                let opener = Opener { plugin: po.plugin.clone(), tool: o.tool.clone(), app: o.app.clone(), app_id: o.app_id.clone(), type_key: key, type_title: e.title.clone(), icon, builtin: false };
+                let opener = Opener { plugin: po.plugin.clone(), tool: o.tool.clone(), app: o.app.clone(), app_id: o.app_id.clone(), type_key: key, type_title: e.title.clone(), kind: e.kind.clone(), icon, builtin: false };
                 cands.push(Candidate { opener, rank, spec, first_party: po.first_party, text: e.text });
             }
         }
     }
     for bi in BUILTIN {
-        let entry = Entry { keys: vec![bi.key.to_string()], title: bi.type_title.to_string(), rank: OpenRank::Owner, folder: bi.folder, icon: None, text: false };
+        let entry = Entry { keys: vec![bi.key.to_string()], title: bi.type_title.to_string(), rank: OpenRank::Owner, folder: bi.folder, icon: None, text: false, kind: None };
         if let Some((key, spec)) = entry_match(bi.plugin, &entry, target) {
             // its plugin opens this itself now (migrated, or both on a
             // branch): the plugin's own opener stands, listed once
@@ -748,7 +757,7 @@ pub fn pick(target: &Target, openers: &Openers, picks: &Picks) -> Opened {
                 continue;
             }
             // a built-in app's id is its plugin's (sites, pages): first-party, declared here
-            let opener = Opener { plugin: bi.plugin.into(), tool: bi.kind.into(), app: bi.app.into(), app_id: bi.plugin.into(), type_key: key.clone(), type_title: bi.type_title.into(), icon: Some(bi.icon.into()), builtin: true };
+            let opener = Opener { plugin: bi.plugin.into(), tool: bi.kind.into(), app: bi.app.into(), app_id: bi.plugin.into(), type_key: key.clone(), type_title: bi.type_title.into(), kind: None, icon: Some(bi.icon.into()), builtin: true };
             cands.push(Candidate { opener, rank: OpenRank::Owner, spec, first_party: true, text: false });
         }
     }

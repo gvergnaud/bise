@@ -33,6 +33,15 @@ describe('docLine', () => {
     expect(docLine(live(undefined), undefined, ''), 'a ~/bise file: no version').toEqual({ kind: 'facts', app: 'Fake', save: { kind: 'idle' }, readOnly: false });
   });
 
+  it('the kind its app names for the file goes after the app (Opener.kind): Code · TypeScript · v10', () => {
+    const base = live(10);
+    if (base.kind !== 'live' || base.doc === undefined) throw new Error('a live doc');
+    const ts = { ...base, doc: { ...base.doc, opener: { ...base.doc.opener, app: 'Code', kind: 'TypeScript' } } };
+    expect(factsWords(docLine(ts, ROW, 'Code') as Extract<DocLine, { kind: 'facts' }>)).toBe('Code · TypeScript · v10');
+    // none named (Sheets, a plain text file): the app alone
+    expect(docLine(live(3), ROW, 'Fake')).toMatchObject({ app: 'Fake' });
+  });
+
   it("his m_66157: a file gone with bise's copy opens the copy, read only, saying so; none kept: removed", () => {
     const kept = { newest: 3, gone: true, kept: { was: '/w/tmp/guide.md' } };
     expect(asksHub(kept), 'the hub serves the copy').toBe(true);

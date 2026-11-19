@@ -1677,6 +1677,13 @@ type: string,
  */
 type_title: string, 
 /**
+ * the file's kind as its app names it, from its matched entry's
+ * `kind` in the manifest (`TypeScript`, code-view, architect
+ * m_67161): a document's head shows it after the app ('Code ·
+ * TypeScript · v10'); none (Sheets, Writer, a text entry): the app alone
+ */
+kind?: string | null, 
+/**
  * its icon's name or address (none: the window's own)
  */
 icon?: string | null, 

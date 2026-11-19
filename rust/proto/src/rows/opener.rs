@@ -26,6 +26,12 @@ pub struct Opener {
     pub type_key: String,
     /// the type's name (`Excel workbook`)
     pub type_title: String,
+    /// the file's kind as its app names it, from its matched entry's
+    /// `kind` in the manifest (`TypeScript`, code-view, architect
+    /// m_67161): a document's head shows it after the app ('Code ·
+    /// TypeScript · v10'); none (Sheets, Writer, a text entry): the app alone
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
     /// its icon's name or address (none: the window's own)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,

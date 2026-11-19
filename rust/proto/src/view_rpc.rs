@@ -141,6 +141,10 @@ pub struct OpenedWith {
     pub tool: String,
     /// the app's title (`Sheets`)
     pub app: String,
+    /// the file's kind its app names in its manifest (rows::Opener::kind,
+    /// `TypeScript`): the head shows it after the app; none: the app alone
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
 }
 
 /// A document opened in a plugin's view: the view's resource as

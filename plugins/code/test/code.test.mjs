@@ -39,8 +39,13 @@ test("the manifest claims exactly the table's endings and names, each titled as 
   const globs = ui.files.flatMap((e) => e.match ?? []);
   const want = [...Object.keys(code.LANGS).map((x) => `*.${x}`), ...Object.keys(code.NAMES), "dockerfile.*"];
   assert.deepEqual([...globs].sort(), [...want].sort());
+  // its title and the kind the head shows ('Code · TypeScript · v10'): the table's name for it
   for (const e of ui.files.filter((x) => x.match)) {
-    for (const g of e.match) assert.equal(code.fileTitle(g.replace("*", "file").replace(/\.\*$/, ".dev")), e.title, g);
+    for (const g of e.match) {
+      const name = code.fileTitle(g.replace("*", "file").replace(/\.\*$/, ".dev"));
+      assert.equal(e.title, name, g);
+      assert.equal(e.kind, name, `${g}'s kind`);
+    }
   }
   // others own html and markdown: Code is only listed for them (Open with)
   assert.deepEqual(ui.files.filter((e) => e.rank === "option").map((e) => e.title), ["HTML", "Markdown"]);

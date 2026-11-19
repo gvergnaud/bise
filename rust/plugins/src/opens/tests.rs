@@ -172,7 +172,7 @@ fn op(tool: &str, app: &str, entries: &[(&str, OpenRank, bool)]) -> OpenerDecl {
         uri: format!("ui://x/{tool}"),
         app: app.into(),
         app_id: format!("x-{tool}"),
-        entries: entries.iter().map(|(k, r, f)| Entry { keys: vec![k.to_string()], title: format!("{k} file"), rank: *r, folder: *f, icon: None, text: false }).collect(),
+        entries: entries.iter().map(|(k, r, f)| Entry { keys: vec![k.to_string()], title: format!("{k} file"), rank: *r, folder: *f, icon: None, text: false, kind: None }).collect(),
         makes: vec![],
         write: false,
         isolate: Isolate::View,
@@ -298,7 +298,7 @@ fn which_app_opens_a_file() {
 fn the_row_says_the_matched_type() {
     let o = openers(vec![("sheets", op("open_sheet", "Sheets", &[("*.csv", D, false), ("*.xlsx", W, false)]))]);
     let got = pick(&Target::file("q.CSV"), &o, &Picks::new()).opener.unwrap();
-    assert_eq!(got, Opener { plugin: "sheets".into(), tool: "open_sheet".into(), app: "Sheets".into(), app_id: "x-open_sheet".into(), type_key: "*.csv".into(), type_title: "*.csv file".into(), icon: None, builtin: false });
+    assert_eq!(got, Opener { plugin: "sheets".into(), tool: "open_sheet".into(), app: "Sheets".into(), app_id: "x-open_sheet".into(), type_key: "*.csv".into(), type_title: "*.csv file".into(), kind: None, icon: None, builtin: false });
     let b = pick(&Target::file("a.page"), &Openers::default(), &Picks::new()).opener.unwrap();
     assert!(b.builtin && b.app == "Pages" && b.type_title == "bise page");
     assert_eq!(b.app_id, "pages", "a built-in app's id is its plugin's");
@@ -538,7 +538,7 @@ fn a_text_entry_opens_text_files_after_every_glob() {
     let t = tool("open", json!({
         "ui": {"resourceUri": "ui://code/code"},
         "dev.bise/ui": {"files": [
-            {"match": ["*.ts"], "title": "TypeScript"},
+            {"match": ["*.ts"], "title": "TypeScript", "kind": "TypeScript"},
             {"text": true, "title": "Plain text"},
             {"text": true, "match": ["*.x"], "title": "Both"},
             {"text": "yes", "title": "Not a bool"},
@@ -555,6 +555,10 @@ fn a_text_entry_opens_text_files_after_every_glob() {
     assert_eq!(p("notes.txt", true).0.as_deref(), Some("code#open"), "a text file: Code");
     assert_eq!(p("blob.bin", false).0, None, "not text: no app, the Finder");
     assert_eq!(p("a.ts", false).0.as_deref(), Some("code#open"), "its glob, fact or not");
+    // the kind its manifest names goes on the opener (the head's 'Code · TypeScript'); a text file: none
+    let kind = |name: &str| pick(&Target::file(name).with_text(true), &list, &Picks::new()).opener.and_then(|o| o.kind);
+    assert_eq!(kind("a.ts").as_deref(), Some("TypeScript"));
+    assert_eq!(kind("notes.txt"), None);
     assert_eq!(p("plan.md", true), (Some("docs#writer".into()), vec!["code#open".into()]), "Writer keeps markdown; Code is listed");
     let folder = Target { name: "site".into(), kind: Kind::Folder(vec!["a.txt".into()]), documents: None, text: true };
     assert_eq!(names(&pick(&folder, &list, &Picks::new())).0, None, "never a folder");

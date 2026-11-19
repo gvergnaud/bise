@@ -224,7 +224,7 @@ impl Shell {
                         tool_result: result,
                         tool,
                     };
-                    let opener = OpenedWith { plugin: c.opener.plugin, tool: c.opener.tool, app: c.opener.app };
+                    let opener = OpenedWith { plugin: c.opener.plugin, tool: c.opener.tool, app: c.opener.app, kind: c.opener.kind };
                     let v = ViewOpened::View(Box::new(DocView { doc, handle, document, opener, resource }));
                     done(Ok(serde_json::to_value(v).unwrap_or_default()))
                 }

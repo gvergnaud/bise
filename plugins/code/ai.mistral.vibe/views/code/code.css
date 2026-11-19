@@ -28,8 +28,11 @@ html, body { height: 100%; margin: 0; background: var(--cd-ground); }
 }
 .cd-row { display: flex; height: var(--cd-line); white-space: pre; }
 .cd-n {
-  position: sticky; left: 0; flex: none; box-sizing: content-box; padding: 0 12px 0 16px;
+  position: sticky; left: 0; z-index: 1; flex: none; box-sizing: content-box; padding: 0 12px 0 16px;
   text-align: right; color: var(--cd-faint); background: var(--cd-ground);
+  /* scrolled sideways, the code is clipped at the gap's right edge: the opaque ground reaches 2 px
+     past it, so no sliver of a cut glyph shows between the numbers and the code (designer m_67265) */
+  box-shadow: 2px 0 0 var(--cd-ground);
   font-variant-numeric: tabular-nums; user-select: none; -webkit-user-select: none;
 }
 .cd-t { flex: none; padding-right: 16px; }

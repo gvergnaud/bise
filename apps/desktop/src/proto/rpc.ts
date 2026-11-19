@@ -303,7 +303,12 @@ export type OpenedWith = { plugin: string, tool: string,
 /**
  * the app's title (`Sheets`)
  */
-app: string, };
+app: string, 
+/**
+ * the file's kind its app names in its manifest (rows::Opener::kind,
+ * `TypeScript`): the head shows it after the app; none: the app alone
+ */
+kind?: string | null, };
 
 /**
  * A document opened in a plugin's view: the view's resource as

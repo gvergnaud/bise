@@ -51,6 +51,8 @@ export interface OpenerInfo {
   readonly plugin: string;
   readonly tool: string;
   readonly app: string;
+  /** the file's kind its app names ('TypeScript'): the head's 'Code · TypeScript · v10'; none: the app alone */
+  readonly kind?: string;
 }
 
 /** What changed since he last looked (view/open's `changed`, A5): from a version to this one, the view's anchors that changed. */
@@ -130,7 +132,9 @@ export function docOpenOf(r: Json): DocOpen | null {
   const app = str(op, 'app');
   if (plugin === null || tool === null || app === null) return null;
   const changed = changedOf(r['changed']);
-  return { kind: 'view', res, doc, handle, document, opener: { plugin, tool, app }, ungranted: ungranted(r), ...(changed === undefined ? {} : { changed }) };
+  // the file's kind its app names (OpenedWith.kind, 'TypeScript'): the head shows it after the app
+  const kind = str(op, 'kind');
+  return { kind: 'view', res, doc, handle, document, opener: { plugin, tool, app, ...(kind === null ? {} : { kind }) }, ungranted: ungranted(r), ...(changed === undefined ? {} : { changed }) };
 }
 
 /** The host context's document part (A5). Pure. */
