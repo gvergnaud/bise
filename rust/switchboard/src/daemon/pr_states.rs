@@ -3,22 +3,21 @@
 //! at boot before any client and when the artifact store changes (an add,
 //! a Move, a PR's state kept by the forge sync). The count is
 //! `forge::task_prs` (pure); this file reads the store, merged and
-//! archived PRs included, and sends only when the store moved.
+//! archived PRs included, once per store generation.
 
 use super::*;
 
 impl Shell {
     pub(super) fn pr_states_send(&mut self) {
         let gen = crate::store_gen::disk_now();
-        if self.art.pr_states.as_ref().is_some_and(|(g, _)| *g == gen) {
+        // the whole set on each store generation, never a copy of what was
+        // sent: sb-core narrows to the works whose merged flipped (architect m_67577)
+        if self.art.pr_states_gen == Some(gen) {
             return;
         }
+        self.art.pr_states_gen = Some(gen);
         let metas: Vec<_> = self.art_store().stored().into_iter().filter(|m| m.kind == "pr").collect();
         let c = crate::forge::task_prs::counts(metas.iter().filter_map(|m| Some((m.works.works(), m.pr_last?.state))));
-        let same = self.art.pr_states.as_ref().is_some_and(|(_, sent)| *sent == c);
-        self.art.pr_states = Some((gen, c.clone()));
-        if !same {
-            self.step(Input::PrStates { works: c.works, open: c.open, merged: c.merged });
-        }
+        self.step(Input::PrStates { works: c.works, open: c.open, merged: c.merged });
     }
 }

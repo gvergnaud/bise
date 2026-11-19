@@ -56,9 +56,9 @@ pub(super) struct Art {
     /// The open PR artifacts' links, newest first, by the store's
     /// generation (daemon/pr_arts.rs: the PRs the poller follows).
     pub(super) prs: std::cell::RefCell<Option<(u64, Vec<String>)>>,
-    /// The last `pr_states` sent to sb-core, by the store's generation
+    /// The store generation `pr_states` was last sent for
     /// (daemon/pr_states.rs): the same store sends nothing again.
-    pub(super) pr_states: Option<(u64, crate::forge::task_prs::Counts)>,
+    pub(super) pr_states_gen: Option<u64>,
     /// His opens not written yet (id, at, version seen): marks.json is
     /// written at most once a second ([`Daemon::art_opens_flush`]).
     opens: Vec<(String, u64, Option<u64>)>,
