@@ -18,6 +18,11 @@
     "permissions": {}
   },
   "_meta": {
+    "ai.mistral.vibe/ui": {
+      "entrypoints": [
+        { "type": "file", "extensions": [".ts", ".tsx", ".js", ".jsx", ".py", ".rs", ".go", ".swift", ".kt", ".java", ".c", ".cpp", ".cs", ".rb", ".php", ".sh", ".sql", ".json", ".yaml", ".yml", ".toml", ".css"], "title": "Code" }
+      ]
+    },
     "dev.bise/ui": {
       "app_id": "code",
       "files": [

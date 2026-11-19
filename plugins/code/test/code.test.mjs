@@ -35,8 +35,14 @@ function colored(text, lang) {
 }
 
 test("the manifest claims exactly the table's endings and names, each titled as the table says", () => {
-  const ui = JSON.parse(readFileSync(join(view, "view.json"), "utf8"))._meta["dev.bise/ui"];
+  const meta = JSON.parse(readFileSync(join(view, "view.json"), "utf8"))._meta;
+  const ui = meta["dev.bise/ui"];
   const globs = ui.files.flatMap((e) => e.match ?? []);
+  // the app's title, what the head reads first ('Code · TypeScript · v10'): its file entrypoint's,
+  // whose every extension a files entry names (none becomes an entry of its own)
+  const [ep] = meta["ai.mistral.vibe/ui"].entrypoints;
+  assert.equal(ep.title, "Code");
+  for (const x of ep.extensions) assert.ok(globs.includes(`*${x}`), `${x} named in files`);
   const want = [...Object.keys(code.LANGS).map((x) => `*.${x}`), ...Object.keys(code.NAMES), "dockerfile.*"];
   assert.deepEqual([...globs].sort(), [...want].sort());
   // its title and the kind the head shows ('Code · TypeScript · v10'): the table's name for it
