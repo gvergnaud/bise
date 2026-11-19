@@ -99,8 +99,14 @@ pub fn agent_threads(st: &State, limit: usize) -> Vec<String> {
             let ms: Vec<Peek> = ids.iter().filter_map(|id| st.peek(*id)).collect();
             let parties = parties_of(&ms);
             let open = ms.iter().any(|m| m.expect_reply && !st.settled().contains(&m.id));
+            // a note held by its task's pause (main m_67068): said so, never its words as if
+            // delivered ('task x resumed' right under 'task x is paused' read as a flap)
+            let held = ids.last().and_then(|id| held_until(st, *id));
             // the first message's words, read in the journal
-            let first = format!("  \"{}\"", clip(&one_line(&st.text(ms[0].id)), 60));
+            let first = match &held {
+                Some(_) => String::new(),
+                None => format!("  \"{}\"", clip(&one_line(&st.text(ms[0].id)), 60)),
+            };
             format!(
                 "t_{} {}  {} message{}  {}{}",
                 t,
@@ -108,11 +114,29 @@ pub fn agent_threads(st: &State, limit: usize) -> Vec<String> {
                 parties.iter().map(|p| crate::prompts::shown_sender(p)).collect::<Vec<_>>().join(" ↔ "),
                 ms.len(),
                 if ms.len() > 1 { "s" } else { "" },
-                if open { "open" } else { "answered" },
+                match &held {
+                    Some(task) => format!("held until {task} resumes"),
+                    None => if open { "open" } else { "answered" }.to_string(),
+                },
                 first
             )
         })
         .collect()
+}
+
+/// The task message `id` waits for: still queued, not his, and every task
+/// it carries paused (sb-core holds it: law paused_work_holds_its_deliveries),
+/// the first of them; none otherwise. Pure.
+pub fn held_until(st: &State, id: u64) -> Option<String> {
+    if !matches!(st.msg_state().get(&id), Some(bise_proto::core::state::MsgState::Queued { .. })) {
+        return None;
+    }
+    let m = st.msg(id)?;
+    if m.from == USER || m.works.is_empty() {
+        return None;
+    }
+    let paused = |w: &String| st.works.get(w).is_some_and(|x| x.work.paused.is_some());
+    if m.works.iter().all(paused) { m.works.first().cloned() } else { None }
 }
 
 /// The threads of main's `<agent_threads>`, kept as the messages arrive

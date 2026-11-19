@@ -166,3 +166,20 @@ fn task_list_check_names_an_over_linked_task() {
     assert_eq!(lines.len(), 1, "{text}");
     assert!(lines[0].starts_with(&format!("{a} · Pool · ")) && lines[0].contains("agents"), "{text}");
 }
+
+/// main m_67068: a resume note held by its task's pause reads 'held until
+/// <task> resumes' in main's <agent_threads>, never its words as if
+/// delivered; once the task resumes and it goes, its words come back.
+#[test]
+fn a_held_resume_note_says_it_is_held_in_mains_agent_threads() {
+    let mut t = T::new();
+    let a = new(&mut t, "Native mac");
+    t.spawn_task("docs");
+    t.go(Input::ClientWorkAct { client: 7, req: Task::Pause { id: a.clone(), until_ms: None } });
+    let threads = crate::board::agent_threads(&t.hub.st, 20).join("\n");
+    assert!(threads.contains(&format!("held until {a} resumes")), "{threads}");
+    assert!(!threads.contains("resumed: pick it up"), "{threads}");
+    t.go(Input::ClientWorkAct { client: 7, req: Task::Resume { id: a.clone() } });
+    let threads = crate::board::agent_threads(&t.hub.st, 20).join("\n");
+    assert!(!threads.contains("held until"), "{threads}");
+}
