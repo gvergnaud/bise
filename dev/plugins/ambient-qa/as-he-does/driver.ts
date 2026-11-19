@@ -601,14 +601,22 @@ if (mode === 'rows2') {
   await say(`[[bash: sb spawn ${MAKER} --objective "Release ts-pattern on npm: the changelog, the tag, the GitHub release notes and the docs site {{bash: printf '%s' '${makerHtml}' > rel-ts.html && sb artifact add rel-ts.html --title rel-ts-notes}}"]]`);
   // the right side (native-mac d1, app/side3d; the right bar is gone), in either of its forms
   // (Host.tsx coinsAt): the outer card (app.outer.<id> sections, what a 1280 window shows) or its
-  // coins (app.bubble.<id> / app.mini.<id>), each a float by ⌥⌘1-4; the same four, in order
+  // coins (app.bubble.<id> / app.mini.<id>), each a float by ⌥⌘1-4; the same four, in order. The
+  // outer card draws no empty section (1d8b67f77, his m_66323): agents always, then the others that
+  // hold something, still in that order (here the maker's artifact, no timer, no process)
   const SIDE_IDS = ['agents', 'artifacts', 'scheduled', 'processes'];
   const sideOrder = () => page.evaluate(() => [...document.querySelectorAll('[data-testid^="app.outer."], [data-testid^="app.bubble."], [data-testid^="app.mini."]')]
     .map((e) => /^app\.(?:outer|bubble|mini)\.(agents|artifacts|scheduled|processes)$/.exec(e.getAttribute('data-testid') ?? '')?.[1] ?? null).filter(Boolean)).catch((): (string | null)[] => []);
-  const order = await until(async () => { const o = await sideOrder(); return o.length >= SIDE_IDS.length ? o : null; }, 10000, 500) ?? await sideOrder();
-  const sideCard = (await page.locator('[data-testid="app.outer"]').count()) > 0;
+  const sideCardNow = async () => (await page.locator('[data-testid="app.outer"]').count()) > 0;
+  const sideDone = (o: (string | null)[], card: boolean) => o.length >= SIDE_IDS.length || (card && o.includes('agents') && o.includes('artifacts'));
+  const order = await until(async () => { const o = await sideOrder(); return sideDone(o, await sideCardNow()) ? o : null; }, 10000, 500) ?? await sideOrder();
+  const sideCard = await sideCardNow();
+  const inOrder = (o: (string | null)[]) => o.every((id, i) => i === 0 || SIDE_IDS.indexOf(id ?? '') > SIDE_IDS.indexOf(o[i - 1] ?? ''));
+  const sideOk = sideCard
+    ? order[0] === 'agents' && order.includes('artifacts') && inOrder(order)
+    : order.join(',') === SIDE_IDS.join(',');
   await shot('right-side');
-  step('the right side: agents, artifacts, scheduled, processes, in order', order.join(',') === SIDE_IDS.join(','), { order, form: sideCard ? 'outer card' : 'coins' });
+  step('the right side: agents, artifacts, scheduled, processes, in order', sideOk, { order, form: sideCard ? 'outer card' : 'coins' });
   const float = (id: string) => page.locator(`[data-testid="app.flyout.${id}"]`).first();
   // a float by its key (⌥⌘1-4), from the thread, so the key never lands in a field; the outer
   // card has no float (its sections are the lists): true when that section is there
