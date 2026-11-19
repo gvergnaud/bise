@@ -116,7 +116,13 @@
 .tk-log-day{margin-top:var(--s-1);color:var(--c-text-3);font-size:var(--t-12);font-weight:500}
 .tk-log-day:first-child{margin-top:0}
 .tk-log-dec{color:var(--c-text-2);font-size:var(--t-12)}
-.tk-undo-what{white-space:nowrap}
+.tk-undo-what{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+/* Undo is never cut; in the right bar's card the toast keeps the card's inner padding and its width
+   (designer m_67367) */
+.tk-undo .b-toast{min-width:0;box-sizing:border-box}
+.tk-undo .b-toast .end{flex:none}
+.tk-undo.bar{padding:0 var(--s-4) var(--s-2)}
+.tk-undo.bar .b-toast{width:100%}
 /* Move to task… (designer m_65406): 320 wide, the head's 'now in' text-3 with neutral chips, the
    filter under it, done tasks text-3, the foot hint text-3; the toast at the window's foot */
 .tk-move-at{position:fixed;width:1px;height:1px;pointer-events:none}

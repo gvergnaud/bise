@@ -10,6 +10,9 @@ import { didWords, inverse, undoable, UNDO_MS, type Did } from './undo';
 
 /** The most letters of a task's name the toast keeps on its one line ('Speed up the signup flow…'). */
 const TOAST_NAME_MAX = 25;
+/** In the right bar's card at its narrowest (260): the chip's 14 letters, so 'name… marked done'
+ *  and a whole Undo fit (designer m_67367). */
+export const BAR_NAME_MAX = 14;
 
 /** The gesture the Undo is offered for, null none; `offer` starts a new one (the old one goes). */
 export function useUndo(): [Did | null, (d: Did | null) => void] {
@@ -33,7 +36,10 @@ export function useUndo(): [Did | null, (d: Did | null) => void] {
 
 /** The toast: what he did and its Undo; nothing when the gesture has no inverse (yet) or its
  *  task is gone from the works (folded: Undo is not a way back from a tomb). */
-export function UndoToast({ did, works, name, send, done, testId }: {
+export function UndoToast({ did, works, name, send, done, testId, bar = false }: {
+  /** in the right bar's card (designer m_67367): the card's inner padding, a name cut so the
+   *  line fits the card at its narrowest (260), Undo always whole */
+  bar?: boolean;
   did: Did | null;
   works: readonly Pick<WorkRow, 'id'>[];
   name: string;
@@ -44,9 +50,9 @@ export function UndoToast({ did, works, name, send, done, testId }: {
   if (did === null || !undoable(did, works)) return null;
   // whether it has an inverse doesn't depend on the time, only its end does (taken at his click)
   if (inverse(did, 0) === null) return null;
-  const cut = cutAtWord(name, TOAST_NAME_MAX);
+  const cut = cutAtWord(name, bar ? BAR_NAME_MAX : TOAST_NAME_MAX);
   return (
-    <div className="tk-undo">
+    <div className={bar ? 'tk-undo bar' : 'tk-undo'}>
       {/* no lead mark: nothing passed or failed (designer m_65397) */}
       <Toast action={{ text: tasks.undo, testId: `${testId}.undo`, onClick: () => {
         // the inverse at his click (a Resume undone keeps its end only if it is still to come)

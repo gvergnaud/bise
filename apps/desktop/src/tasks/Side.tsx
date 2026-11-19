@@ -113,7 +113,7 @@ export function OuterTasks({ all, scope, now, groupOf }: { all: readonly ProjWor
             // his Undo sent the Reopen: the row stays at its place, unchecked
             if (did !== null) setKept((m) => uncheck(m, `${did.project}/${did.row.id}`));
             offer(null);
-          }} testId="app.outer.tasks.toast" />
+          }} testId="app.outer.tasks.toast" bar />
           {rest > 0 && (
             <Press look="tk-fold" data-testid="app.outer.tasks.rest" onClick={() => {
               openBoard(scope);

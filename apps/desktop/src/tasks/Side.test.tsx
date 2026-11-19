@@ -73,7 +73,7 @@ describe('the right bar Tasks, a todo list', () => {
   it('a box per row; ticked goals make it ready; its click marks done, the row stays checked at its place, then Reopen', () => {
     const { v, acts, apply } = world([
       work('a', { status: 'needs_you', last_ms: NOW }),
-      work('b', { goals: [{ text: 'it builds', done: true }] }),
+      work('b', { name: 'Ship the new onboarding flow for every project', goals: [{ text: 'it builds', done: true }] }),
       work('c', { last_ms: NOW - 5000 }),
     ]);
     const box = (id: string) => v.getByTestId(`${rowId(id)}.box`);
@@ -83,7 +83,10 @@ describe('the right bar Tasks, a todo list', () => {
 
     fireEvent.click(box('b'));
     expect(acts()).toEqual([{ step: 'done', id: 'b' }]);
-    expect(v.getByTestId('app.outer.tasks.toast')).toBeTruthy();
+    // in the card: its inner padding (bar), the name cut at a word to fit its narrowest, Undo whole (designer m_67367)
+    expect(v.getByTestId('app.outer.tasks.toast').closest('.tk-undo')?.classList.contains('bar')).toBe(true);
+    expect(v.getByTestId('app.outer.tasks.toast.what').textContent).toMatch(/^Ship the new…/u);
+    expect(v.getByTestId('app.outer.tasks.toast.undo')).toBeTruthy();
     // the hub agrees: b is done, and it stays where it was, checked
     apply(ev('works', { project: P, works: [work('a', { status: 'needs_you', last_ms: NOW }), work('b', { status: 'done', goals: [{ text: 'it builds', done: true }] }), work('c', { last_ms: NOW - 5000 })], tombs: [] }));
     const order = [...v.container.querySelectorAll(`[data-testid^="app.outer.tasks.${P}."][data-testid$=".box"]`)].map((e) => e.getAttribute('data-testid'));
