@@ -6,7 +6,7 @@
 // close role) is main/menu.test.ts's; here its pick reaches the window's real routing (app/menu.ts
 // useMenuRouting) as main/ipc.ts sendMenu sends it, and the panel's real tabs answer.
 import { act, cleanup, render } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CorePort, MenuAction } from '@/shared/api';
 import { Store, StoreProvider } from '@/store';
 import { artifact, artifacts, projects, row } from '../../../tests/feature/inputs';
@@ -27,6 +27,8 @@ afterEach(cleanup);
 beforeEach(() => {
   panelState.reset();
   onMenu = null;
+  // no key of the window's before this test: an earlier test's ⌘W never makes this one's an echo
+  noteWindowKey(Number.NEGATIVE_INFINITY);
   Object.defineProperty(window, 'innerWidth', { value: 1920, configurable: true });
 });
 
@@ -107,15 +109,22 @@ describe('⌘W with an artifact open (cmd-w-artifact)', () => {
     expect(panelState.get().open).toBe(false);
   });
 
+  // The echo comes within MENU_ECHO_MS of the window's key: the clock is the test's (main m_67272:
+  // under load the two calls stood over 300 ms apart on the wall clock, and the echo closed a tab).
   it('the focus in the window: its own ⌘W closes one tab, the menu\'s echo of the same press none more', () => {
-    const { router } = shell();
-    act(() => {
-      openTab({ kind: 'artifact', project: ACME, id: 'notes' });
-      openTab({ kind: 'artifact', project: ACME, id: 'mocks' });
-    });
-    windowCmdW(router);
-    menuCmdW();
-    expect(tabs()).toHaveLength(1);
+    vi.useFakeTimers({ now: 1_000_000, toFake: ['Date'] });
+    try {
+      const { router } = shell();
+      act(() => {
+        openTab({ kind: 'artifact', project: ACME, id: 'notes' });
+        openTab({ kind: 'artifact', project: ACME, id: 'mocks' });
+      });
+      windowCmdW(router);
+      menuCmdW();
+      expect(tabs()).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('nothing open: ⌘W does nothing, the window stays', () => {
