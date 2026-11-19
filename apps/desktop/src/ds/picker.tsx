@@ -167,13 +167,21 @@ export function PickerCut({ text }: { text: string }) {
   );
 }
 
+/** cutWords, or nothing when not even one word and its '…' fit: words that give way whole (the
+ *  Undo toast's name, designer m_67404). Pure. */
+export function dropWords(text: string, fits: (t: string) => boolean): string {
+  const c = cutWords(text, fits);
+  return fits(c) ? c : "";
+}
+
 /** Words cut after a whole word with one '…' to the room their box has, again when it changes
  *  (a line in a box that grows: the float's inbox line, designer m_65784); never a mid-word cut.
- *  Its whole words in data-text: a row that gives way measures it whole (app/titlefit.ts). */
-export function WordCut({ text, className }: { text: string; className?: string }) {
+ *  Its whole words in data-text: a row that gives way measures it whole (app/titlefit.ts).
+ *  `drop`: gone whole when not even one word fits (dropWords). */
+export function WordCut({ text, className, drop = false }: { text: string; className?: string; drop?: boolean }) {
   const ref = useRef<HTMLSpanElement>(null);
   const room = useRoom(ref);
-  useFitText(ref, text, cutWords, false, room.avail === Infinity ? 0 : room.avail);
+  useFitText(ref, text, drop ? dropWords : cutWords, false, room.avail === Infinity ? 0 : room.avail);
   return (
     <span ref={ref} className={className} data-text={text}>
       {text}

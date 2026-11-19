@@ -85,7 +85,11 @@ describe('the right bar Tasks, a todo list', () => {
     expect(acts()).toEqual([{ step: 'done', id: 'b' }]);
     // in the card: its inner padding (bar), the name cut at a word to fit its narrowest, Undo whole (designer m_67367)
     expect(v.getByTestId('app.outer.tasks.toast').closest('.tk-undo')?.classList.contains('bar')).toBe(true);
-    expect(v.getByTestId('app.outer.tasks.toast.what').textContent).toMatch(/^Ship the new…/u);
+    // the one rule (designer m_67404): the verb in its own box, never cut; the name in a word cut
+    // that gives way first (whole drop when not even a word fits); the whole name in the tip
+    expect(v.getByTestId('app.outer.tasks.toast.verb').textContent).toBe('marked done');
+    expect(v.getByTestId('app.outer.tasks.toast.what').querySelector('.tk-undo-name')?.contains(v.getByTestId('app.outer.tasks.toast.verb'))).toBe(false);
+    expect(v.getByTestId('app.outer.tasks.toast.what').getAttribute('data-tip')).toContain('Ship the new onboarding flow for every project');
     expect(v.getByTestId('app.outer.tasks.toast.undo')).toBeTruthy();
     // the hub agrees: b is done, and it stays where it was, checked
     apply(ev('works', { project: P, works: [work('a', { status: 'needs_you', last_ms: NOW }), work('b', { status: 'done', goals: [{ text: 'it builds', done: true }] }), work('c', { last_ms: NOW - 5000 })], tombs: [] }));

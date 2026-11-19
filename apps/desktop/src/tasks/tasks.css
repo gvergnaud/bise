@@ -116,7 +116,13 @@
 .tk-log-day{margin-top:var(--s-1);color:var(--c-text-3);font-size:var(--t-12);font-weight:500}
 .tk-log-day:first-child{margin-top:0}
 .tk-log-dec{color:var(--c-text-2);font-size:var(--t-12)}
-.tk-undo-what{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+/* Undo whole, then the verb whole, then the name, which gives way first and drops whole when not
+   even one word fits: the line then reads 'Marked done' (designer m_67404) */
+.tk-undo-what{display:flex;flex:1 1 auto;gap:var(--s-1);min-width:0;white-space:nowrap}
+.tk-undo-name{flex:0 1 auto;min-width:0;overflow:hidden}
+.tk-undo-name:empty{display:none}
+.tk-undo-verb{display:inline-block;flex:none}
+.tk-undo-name:empty+.tk-undo-verb::first-letter{text-transform:uppercase}
 /* Undo is never cut; in the right bar's card the toast keeps the card's inner padding and its width
    (designer m_67367) */
 .tk-undo .b-toast{min-width:0;box-sizing:border-box}

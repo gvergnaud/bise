@@ -2,7 +2,7 @@
 // for UNDO_MS after Pause, Resume and Mark done; its click sends the inverse gesture (undo.ts),
 // through the hub's task_act like any of his. Owner: tasks.
 import { useEffect, useRef, useState } from 'react';
-import { Toast, tipAttrs } from '@/ds';
+import { Toast, tipAttrs, WordCut } from '@/ds';
 import type { Task as TaskReq, WorkRow } from '@/proto';
 import { tasks } from '@/proto/words_tasks.gen';
 import { cutAtWord } from './model';
@@ -10,9 +10,8 @@ import { didWords, inverse, undoable, UNDO_MS, type Did } from './undo';
 
 /** The most letters of a task's name the toast keeps on its one line ('Speed up the signup flow…'). */
 const TOAST_NAME_MAX = 25;
-/** In the right bar's card at its narrowest (260): the chip's 14 letters, so 'name… marked done'
- *  and a whole Undo fit (designer m_67367). */
-export const BAR_NAME_MAX = 14;
+/** Where the name sits in the toast's words ('<name> marked done'): what follows it is the verb. */
+const MARK = '\u0001';
 
 /** The gesture the Undo is offered for, null none; `offer` starts a new one (the old one goes). */
 export function useUndo(): [Did | null, (d: Did | null) => void] {
@@ -50,7 +49,11 @@ export function UndoToast({ did, works, name, send, done, testId, bar = false }:
   if (did === null || !undoable(did, works)) return null;
   // whether it has an inverse doesn't depend on the time, only its end does (taken at his click)
   if (inverse(did, 0) === null) return null;
-  const cut = cutAtWord(name, bar ? BAR_NAME_MAX : TOAST_NAME_MAX);
+  // one rule everywhere (designer m_67404): Undo whole, then the verb whole, then the name, which
+  // gives way first (cut at a word to its room) and drops whole when not even one word fits; the
+  // whole name always in the line's tip
+  const cut = cutAtWord(name, TOAST_NAME_MAX);
+  const verb = (didWords(did, MARK).split(MARK)[1] ?? '').trim();
   return (
     <div className={bar ? 'tk-undo bar' : 'tk-undo'}>
       {/* no lead mark: nothing passed or failed (designer m_65397) */}
@@ -60,8 +63,11 @@ export function UndoToast({ did, works, name, send, done, testId, bar = false }:
         if (now !== null) send(did.project, now);
         done();
       } }} testId={testId}>
-        {/* one line: the name cut at a word with one '…', the whole name in its tip (designer m_65519) */}
-        <span className="tk-undo-what" {...tipAttrs(cut === name ? undefined : name)} data-testid={`${testId}.what`}>{didWords(did, cut)}</span>
+        {/* one line: the name cut at a word with one '…' (or gone), the verb whole, the whole name in its tip (designer m_65519, m_67404) */}
+        <span className="tk-undo-what" {...tipAttrs(name)} data-testid={`${testId}.what`}>
+          <WordCut className="tk-undo-name" text={cut} drop />
+          <span className="tk-undo-verb" data-testid={`${testId}.verb`}>{verb}</span>
+        </span>
       </Toast>
     </div>
   );
