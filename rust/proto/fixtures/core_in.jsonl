@@ -35,6 +35,7 @@
 {"agent": "architect", "ans": [], "card": 3, "git": true, "now": 1000000, "page": "architecture", "t": "page_answered", "text": "D10"}
 {"agent": "perf", "ans": [], "card": 3, "git": true, "now": 1000000, "pos": 42, "t": "answer_pos"}
 {"ans": [], "git": true, "now": 1000000, "ns": [2, 1], "t": "page_waits", "works": ["native-mac", "digest"]}
+{"ans": [], "git": true, "merged": [2, 1], "now": 1000000, "open": [0, 1], "t": "pr_states", "works": ["native-mac", "digest"]}
 {"ans": [], "git": true, "now": 1000000, "req": {"id": "native-mac", "step": "pause", "until_ms": 0}, "t": "work_act"}
 {"ans": [], "art": "a_12", "card": null, "git": true, "now": 1000000, "page": true, "t": "work_move", "works": ["digest"]}
 {"agent": "a", "ans": [], "git": true, "held": false, "leftover": false, "now": 1000000, "t": "idle"}

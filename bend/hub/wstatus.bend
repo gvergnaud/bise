@@ -36,9 +36,22 @@ type WSt is Data:
   WSTimer{at: Nat}
   WSWatch{agent: String}
   WSReview{}
+  WSMerged{}
   WSQuiet{since: Nat, stalled: Bool}
 
 # ---- the facts, per work ----
+
+# his pick on page tasks-fresh (architect m_66713, m_67541): every PR
+# linked to work `id` is merged, at least one, and none open (a draft or
+# changes requested count as open; closed-unmerged ones are not counted)
+def merged(xs: List<&2, S.Kpr>, +id: String) -> Bool:
+  match xs:
+    case Nil{}:
+      False{}
+    case Con{+h, +t}:
+      LZ.pick(Bool, String.eq(S.Kpr.key(h), id),
+        u => Nat.is_eq(S.Kpr.open_n(h), 0n) && Bool.not(Nat.is_eq(S.Kpr.merged_n(h), 0n)),
+        u => merged(t, id))
 
 # his open cards on work `id`
 def cards_of(cs: List<&2, S.Card>, +id: String) -> List<&2, Nat>:
@@ -216,45 +229,56 @@ def st.crash(m: Maybe<&2, String>, +w: S.Work, +s: S.St, +ws: List<&2, X.Waiter>
     case None{}:
       st.reply(reply_wait(ws, S.Work.agents(w), s), w, s, ws, now)
 
-def st.kind(k: S.WKind, +w: S.Work, +s: S.St, +ws: List<&2, X.Waiter>, +now: Nat) -> WSt:
+# every linked PR merged: To review, 'merged' (law
+# all_merged_reads_merged_never_done: never done, done is his word),
+# after his cards and a live turn (architect m_67541)
+def st.merged(m: Bool, +w: S.Work, +s: S.St, +ws: List<&2, X.Waiter>, +now: Nat) -> WSt:
+  match m:
+    case True{}:
+      WSMerged{}
+    case False{}:
+      st.crash(crashed(S.Work.agents(w), s), w, s, ws, now)
+
+def st.kind(k: S.WKind, +w: S.Work, +s: S.St, +ws: List<&2, X.Waiter>, +prs: List<&2, S.Kpr>, +now: Nat) -> WSt:
   match k:
     case S.WOngoing{}:
       WSOngoing{}
     case _:
-      st.crash(crashed(S.Work.agents(w), s), w, s, ws, now)
+      st.merged(merged(prs, S.Work.id(w)), w, s, ws, now)
 
-def st.working(m: Maybe<&2, String>, +w: S.Work, +s: S.St, +ws: List<&2, X.Waiter>, +now: Nat) -> WSt:
+def st.working(m: Maybe<&2, String>, +w: S.Work, +s: S.St, +ws: List<&2, X.Waiter>, +prs: List<&2, S.Kpr>, +now: Nat) -> WSt:
   match m:
     case Some{+a}:
       WSWorking{a}
     case None{}:
-      st.kind(S.Work.kind(w), w, s, ws, now)
+      st.kind(S.Work.kind(w), w, s, ws, prs, now)
 
-def st.needs(n: Nat, +w: S.Work, +s: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>, +now: Nat) -> WSt:
+def st.needs(n: Nat, +w: S.Work, +s: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>, +prs: List<&2, S.Kpr>, +now: Nat) -> WSt:
   match n:
     case 1n+p:
       WSNeeds{1n+p}
     case 0n:
-      st.working(working(S.Work.agents(w), s, rts, S.Work.id(w)), w, s, ws, now)
+      st.working(working(S.Work.agents(w), s, rts, S.Work.id(w)), w, s, ws, prs, now)
 
-def st.paused(m: Maybe<&2, Nat>, +w: S.Work, +s: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>, +n: Nat, +now: Nat) -> WSt:
+def st.paused(m: Maybe<&2, Nat>, +w: S.Work, +s: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>, +n: Nat, +prs: List<&2, S.Kpr>, +now: Nat) -> WSt:
   match m:
     case Some{_}:
       WSPaused{S.Work.until(w)}
     case None{}:
-      st.needs(n, w, s, rts, ws, now)
+      st.needs(n, w, s, rts, ws, prs, now)
 
-# the status of work `w`, `n` his open cards and page waits on it (law
-# status_is_a_function_of_facts: these arguments and nothing else)
-def st.done(m: Maybe<&2, S.Fin>, +w: S.Work, +s: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>, +n: Nat, +now: Nat) -> WSt:
+# the status of work `w`, `n` his open cards and page waits on it, `prs`
+# the linked PRs' counts (law status_is_a_function_of_facts: these
+# arguments and nothing else)
+def st.done(m: Maybe<&2, S.Fin>, +w: S.Work, +s: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>, +n: Nat, +prs: List<&2, S.Kpr>, +now: Nat) -> WSt:
   match m:
     case Some{_}:
       WSDone{}
     case None{}:
-      st.paused(S.Work.paused(w), w, s, rts, ws, n, now)
+      st.paused(S.Work.paused(w), w, s, rts, ws, n, prs, now)
 
-def status(+w: S.Work, +s: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>, +n: Nat, +now: Nat) -> WSt:
-  st.done(S.Work.done(w), w, s, rts, ws, n, now)
+def status(+w: S.Work, +s: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>, +n: Nat, +prs: List<&2, S.Kpr>, +now: Nat) -> WSt:
+  st.done(S.Work.done(w), w, s, rts, ws, n, prs, now)
 
 # ---- the row ----
 
@@ -279,6 +303,8 @@ def word(x: WSt) -> String:
     case WSWatch{_}:
       "waiting"
     case WSReview{}:
+      "to_review"
+    case WSMerged{}:
       "to_review"
     case WSQuiet{_, +stalled}:
       Bool.pick(String, stalled, "stalled", "waiting")
@@ -306,11 +332,13 @@ def row.go(x: WSt, +w: J.Json, +n: Nat, +cs: List<&2, Nat>) -> J.Json:
       V.work(w, "waiting", "watch", a, None{}, n, cs)
     case WSQuiet{+since, +stalled}:
       V.work(w, Bool.pick(String, stalled, "stalled", "waiting"), "quiet", "", Some{since}, n, cs)
+    case WSMerged{}:
+      V.work(w, "to_review", "merged", "", None{}, n, cs)
     case other:
       V.work(w, word(other), "", "", None{}, n, cs)
 
 # work `w`'s view row
-def row(+w: S.Work, +s: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>, +pw: List<&2, X.Kn>, +now: Nat) -> J.Json:
+def row(+w: S.Work, +s: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>, +pw: List<&2, X.Kn>, +prs: List<&2, S.Kpr>, +now: Nat) -> J.Json:
   +cs = cards_of(S.St.cards(s), S.Work.id(w))
   +n = Nat.add(List.length(&2, Nat, cs), KY.kn_get(pw, S.Work.id(w)))
-  row.go(status(w, s, rts, ws, n, now), SC.Work.journal_json(w), n, cs)
+  row.go(status(w, s, rts, ws, n, prs, now), SC.Work.journal_json(w), n, cs)

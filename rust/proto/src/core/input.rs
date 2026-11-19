@@ -160,6 +160,13 @@ core_kinds! {
         /// any client, then when they change; it replaces the ones before
         /// (runtime only, R.pw)
         PageWaits = "page_waits" => IPageWaits { works: Strs, ns: Nats },
+        /// his pick on page tasks-fresh (architect m_66713): each work's
+        /// linked PRs, from the PR artifacts whose works hold it: `open`
+        /// (open, draft, changes requested) and `merged`, closed-unmerged
+        /// not counted. The whole set, sent at the shell's boot before any
+        /// client and when the store or the forge changes them; it
+        /// replaces the ones before (runtime only, R.prs)
+        PrStates = "pr_states" => IPrStates { works: Strs, open: Nats, merged: Nats },
         /// tasks: his gesture on a work in the app (Board, Task tab:
         /// done, pause, rename…), `req` in `sb task`'s shape (`step`,
         /// `id`, …). Only the client socket sends it, so it is the one

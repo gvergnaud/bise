@@ -507,6 +507,13 @@ pub const STATE: State = State {
             shapes: &[],
         },
         Record {
+            // runtime only (cx.bend's R.prs, never journaled): no shape
+            name: "Kpr",
+            doc: "a work's linked PRs as the shell counts them (input pr_states, his pick on page tasks-fresh): `open_n` (open, draft, changes requested) and `merged_n`; closed-unmerged ones are not counted",
+            fields: &[f("key", Str), f("open_n", Nat), f("merged_n", Nat)],
+            shapes: &[],
+        },
+        Record {
             name: "ViewAsk",
             doc: "what a view's card asks (mcp-apps, C5): the view's agent and call, and its ask (the tool and its arguments as canonical JSON, the shell's): sb-core reads a view's cards by it, never by their place",
             fields: &[f("agent", Str), f("call", Str), f("ask", Str)],

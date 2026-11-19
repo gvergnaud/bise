@@ -10,7 +10,9 @@
 //!   on its own thread (a query takes ~0.5 s: never on the hub's loop);
 //! - [`artifact`]: a PR as an artifact of kind `pr` (pr-integration), the
 //!   store's ops for a snapshot; [`pr_link`], the one key of a PR's link;
-//!   [`yours`], what a PR waits on him for.
+//!   [`yours`], what a PR waits on him for;
+//! - [`task_prs`]: each task's linked PRs counted, open and merged, for
+//!   sb-core's `pr_states` (his pick on page tasks-fresh).
 //!
 //! The hub's side (`core.rs`, `Input::Prs`): the snapshots by place id
 //! (`Hub::prs`), the journal lines that keep each place's PR number, the
@@ -22,6 +24,7 @@ pub mod artifact;
 pub mod github;
 pub mod news;
 pub mod poll;
+pub mod task_prs;
 
 use crate::place::{MergeMethod, PrSnapshot, PrState};
 

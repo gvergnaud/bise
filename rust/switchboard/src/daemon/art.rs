@@ -56,6 +56,9 @@ pub(super) struct Art {
     /// The open PR artifacts' links, newest first, by the store's
     /// generation (daemon/pr_arts.rs: the PRs the poller follows).
     pub(super) prs: std::cell::RefCell<Option<(u64, Vec<String>)>>,
+    /// The last `pr_states` sent to sb-core, by the store's generation
+    /// (daemon/pr_states.rs): the same store sends nothing again.
+    pub(super) pr_states: Option<(u64, crate::forge::task_prs::Counts)>,
     /// His opens not written yet (id, at, version seen): marks.json is
     /// written at most once a second ([`Daemon::art_opens_flush`]).
     opens: Vec<(String, u64, Option<u64>)>,
@@ -339,6 +342,8 @@ impl Shell {
     /// Send the list when it changed since the last one sent (`force`:
     /// always).
     pub(super) fn artifacts_refresh(&mut self, force: bool) {
+        // a store change can move a task's linked PRs (a Move, an add)
+        self.pr_states_send();
         let Some(ev) = self.artifacts_ev() else { return };
         let s = ev.to_string();
         if force || s != self.art.last {

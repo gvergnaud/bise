@@ -17,6 +17,8 @@ impl Shell {
         if let Err(e) = sync_store(&self.art_store(), pr, agent, &works, now_ms()) {
             log_line(&self.opts.paths, &format!("PR artifact {}: {}", pr.url, e));
         }
+        // its state may have moved a task's merged (his pick on page tasks-fresh)
+        self.pr_states_send();
     }
 }
 

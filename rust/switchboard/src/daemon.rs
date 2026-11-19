@@ -72,6 +72,7 @@ mod merged;
 mod outbox;
 mod photo_take;
 mod pr_arts;
+mod pr_states;
 mod processes;
 mod revive;
 mod state_gate;
@@ -1770,6 +1771,8 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
     // tasks: his page waits per work, before the sockets serve any client
     // (architect m_64425: no status computed without the page facts)
     sh.page_waits_send();
+    // and each task's linked PRs (architect m_66713: the whole set, before any client)
+    sh.pr_states_send();
     match sh.idle.grace() {
         Some(g) => log_line(&paths, &sh.idle.boot_line(g)),
         None => log_line(&paths, "idle exit: off (the hub runs until stopped)"),

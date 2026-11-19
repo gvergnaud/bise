@@ -174,14 +174,26 @@ def Laws.a_done_work_folds_after_seven_days(f, now):
 def Laws.an_open_work_never_folds(now):
   {==}
 
-def Laws.status_is_a_function_of_facts(w, f, s, rts, ws, n, now):
-  %Equal.sym(Maybe<&2, HS.Fin>, HS.Work.done(HS.Work.with_done(w, Some{f})), Some{f}, HSL.Work.done.get_with(w, Some{f})) : {HWS.st.done(_, HS.Work.with_done(w, Some{f}), s, rts, ws, n, now) == HWS.WSDone{} : HWS.WSt}
+def Laws.status_is_a_function_of_facts(w, f, s, rts, ws, n, prs, now):
+  %Equal.sym(Maybe<&2, HS.Fin>, HS.Work.done(HS.Work.with_done(w, Some{f})), Some{f}, HSL.Work.done.get_with(w, Some{f})) : {HWS.st.done(_, HS.Work.with_done(w, Some{f}), s, rts, ws, n, prs, now) == HWS.WSDone{} : HWS.WSt}
   {==}
 
-def Laws.paused_wins_over_the_rest(p, w, s, rts, ws, n, now):
+def Laws.all_merged_reads_merged_never_done(w, s, ws, now):
   {==}
 
-def Laws.his_waits_make_needs_you(k, w, s, rts, ws, now):
+def Laws.an_open_pr_never_reads_merged(id, k, m, t):
+  %Equal.sym(Bool, String.eq(id, id), True{}, PL2.hub_str_eq_refl(id)) : {HLZ.pick(Bool, _, u => Nat.is_eq(1n+k, 0n) && Bool.not(Nat.is_eq(m, 0n)), u => HWS.merged(t, id)) == False{} : Bool}
+  {==}
+
+def Laws.pr_states_is_the_whole_set(r, ws, os, ms):
+  match r:
+    case HX.R{a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17}:
+      {==}
+
+def Laws.paused_wins_over_the_rest(p, w, s, rts, ws, n, prs, now):
+  {==}
+
+def Laws.his_waits_make_needs_you(k, w, s, rts, ws, prs, now):
   {==}
 
 def Laws.a_card_event_touches_only_its_works(c, cs0):
@@ -208,7 +220,7 @@ def cx_r_with_r(-o: HS.St, cx: HX.Cx<o>, +r: HX.R) -> {HX.Cx.r(o, HX.with_r(o, c
 # the page waits of R.with_pw(x, v) are v
 def r_pw_with(x: HX.R, +v: List<&2, HX.Kn>) -> {HX.R.pw(HX.R.with_pw(x, v)) == v : List<&2, HX.Kn>}:
   match x:
-    case HX.R{a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16}:
+    case HX.R{a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, prs}:
       {==}
 
 def Laws.page_waits_is_the_whole_set(o, cx, ws, ns):

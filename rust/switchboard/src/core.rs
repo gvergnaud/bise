@@ -208,6 +208,10 @@ pub enum Input {
     /// (sb-core's page_waits; sent at boot before any client, then when
     /// the waiting set changes). `works` and `ns` go in pairs
     PageWaits { works: Vec<String>, ns: Vec<u64> },
+    /// his pick on page tasks-fresh (architect m_66713): each work's
+    /// linked PRs, open and merged, from the PR artifacts whose works hold
+    /// it (daemon/pr_states.rs); the whole set, sb-core's `pr_states`
+    PrStates { works: Vec<String>, open: Vec<u64>, merged: Vec<u64> },
     /// issue 32 3b: the shell removed task `name`'s worktree (`snapshot`:
     /// its saved work's ref), or could not (`err`); daemon/place_work.rs
     Unplaced { name: String, snapshot: Option<String>, err: String },
@@ -1775,6 +1779,7 @@ impl Hub {
             Input::WakeHit { id, text, rc, tail, after_ms } => self.wake_hit(&mut fx, env, id, &text, crate::wake::Hit { rc, tail, after_ms }),
             Input::Placed { name, ws, err } => self.core(&mut fx, env, None, In::Placed(ci::Placed { name, ws, err })),
             Input::PageWaits { works, ns } => self.core(&mut fx, env, None, In::PageWaits(ci::PageWaits { works, ns })),
+            Input::PrStates { works, open, merged } => self.core(&mut fx, env, None, In::PrStates(ci::PrStates { works, open, merged })),
             Input::Unplaced { name, snapshot, err } => self.core(&mut fx, env, None, In::Unplaced(ci::Unplaced { name, snapshot, err })),
             Input::ConfirmOpen { agent, text } => self.core(&mut fx, env, None, In::ConfirmOpen(ci::ConfirmOpen { agent, text })),
             Input::ConfirmClose { card, res } => self.core(&mut fx, env, None, In::ConfirmClose(ci::ConfirmClose { card, res })),

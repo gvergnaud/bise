@@ -291,6 +291,12 @@ law in_page_waits_bare:
 def in_page_waits_bare():
   {==}
 
+law in_pr_states_bare:
+  {IN.of(J.obj([J.kv("t", J.JStr{"pr_states"})])) == IN.IPrStates{Nil{}, Nil{}, Nil{}} : IN.In}
+
+def in_pr_states_bare():
+  {==}
+
 law in_work_act_bare:
   {IN.of(J.obj([J.kv("t", J.JStr{"work_act"})])) == IN.IWorkAct{J.JNull{}} : IN.In}
 
@@ -879,6 +885,18 @@ law in_IPageWaits_round:
 def in_IPageWaits_round(works, ns):
   %K.strs_round(works) : {IN.of(IN.json(IN.IPageWaits{works, ns})) == IN.IPageWaits{_, ns} : IN.In}
   %K.nats_round(ns) : {IN.of(IN.json(IN.IPageWaits{works, ns})) == IN.IPageWaits{K.strs(K.jstrs(works)), _} : IN.In}
+  {==}
+
+law in_IPrStates_round:
+  for works: List<&2, String>
+  for open: List<&2, Nat>
+  for merged: List<&2, Nat>
+  {IN.of(IN.json(IN.IPrStates{works, open, merged})) == IN.IPrStates{works, open, merged} : IN.In}
+
+def in_IPrStates_round(works, open, merged):
+  %K.strs_round(works) : {IN.of(IN.json(IN.IPrStates{works, open, merged})) == IN.IPrStates{_, open, merged} : IN.In}
+  %K.nats_round(open) : {IN.of(IN.json(IN.IPrStates{works, open, merged})) == IN.IPrStates{K.strs(K.jstrs(works)), _, merged} : IN.In}
+  %K.nats_round(merged) : {IN.of(IN.json(IN.IPrStates{works, open, merged})) == IN.IPrStates{K.strs(K.jstrs(works)), K.nats(K.jnats(open)), _} : IN.In}
   {==}
 
 law in_IWorkAct_round:

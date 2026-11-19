@@ -2062,6 +2062,167 @@ def Vctx.open_eq(r):
     case S.Vctx{f0, f1, f2, f3}:
       {==}
 
+# ---- Kpr ----
+
+law Kpr.key.get_with:
+  for r: S.Kpr
+  for v: String
+  {S.Kpr.key(S.Kpr.with_key(r, v)) == v : String}
+
+def Kpr.key.get_with(r, v):
+  match r:
+    case S.Kpr{f0, f1, f2}:
+      {==}
+
+law Kpr.key.eta:
+  for r: S.Kpr
+  for v: String
+  {S.Kpr{v, S.Kpr.open_n(r), S.Kpr.merged_n(r)} == S.Kpr.with_key(r, v) : S.Kpr}
+
+def Kpr.key.eta(r, v):
+  match r:
+    case S.Kpr{f0, f1, f2}:
+      {==}
+
+law Kpr.key.set_get:
+  for r: S.Kpr
+  {S.Kpr.with_key(r, S.Kpr.key(r)) == r : S.Kpr}
+
+def Kpr.key.set_get(r):
+  match r:
+    case S.Kpr{f0, f1, f2}:
+      {==}
+
+law Kpr.key.set_set:
+  for r: S.Kpr
+  for a: String
+  for b: String
+  {S.Kpr.with_key(S.Kpr.with_key(r, a), b) == S.Kpr.with_key(r, b) : S.Kpr}
+
+def Kpr.key.set_set(r, a, b):
+  match r:
+    case S.Kpr{f0, f1, f2}:
+      {==}
+
+law Kpr.key.over:
+  for r: S.Kpr
+  for g: String -> String
+  {S.Kpr.over_key(r, g) == S.Kpr.with_key(r, g(S.Kpr.key(r))) : S.Kpr}
+
+def Kpr.key.over(r, g):
+  match r:
+    case S.Kpr{f0, f1, f2}:
+      {==}
+
+law Kpr.open_n.get_with:
+  for r: S.Kpr
+  for v: Nat
+  {S.Kpr.open_n(S.Kpr.with_open_n(r, v)) == v : Nat}
+
+def Kpr.open_n.get_with(r, v):
+  match r:
+    case S.Kpr{f0, f1, f2}:
+      {==}
+
+law Kpr.open_n.eta:
+  for r: S.Kpr
+  for v: Nat
+  {S.Kpr{S.Kpr.key(r), v, S.Kpr.merged_n(r)} == S.Kpr.with_open_n(r, v) : S.Kpr}
+
+def Kpr.open_n.eta(r, v):
+  match r:
+    case S.Kpr{f0, f1, f2}:
+      {==}
+
+law Kpr.open_n.set_get:
+  for r: S.Kpr
+  {S.Kpr.with_open_n(r, S.Kpr.open_n(r)) == r : S.Kpr}
+
+def Kpr.open_n.set_get(r):
+  match r:
+    case S.Kpr{f0, f1, f2}:
+      {==}
+
+law Kpr.open_n.set_set:
+  for r: S.Kpr
+  for a: Nat
+  for b: Nat
+  {S.Kpr.with_open_n(S.Kpr.with_open_n(r, a), b) == S.Kpr.with_open_n(r, b) : S.Kpr}
+
+def Kpr.open_n.set_set(r, a, b):
+  match r:
+    case S.Kpr{f0, f1, f2}:
+      {==}
+
+law Kpr.open_n.over:
+  for r: S.Kpr
+  for g: Nat -> Nat
+  {S.Kpr.over_open_n(r, g) == S.Kpr.with_open_n(r, g(S.Kpr.open_n(r))) : S.Kpr}
+
+def Kpr.open_n.over(r, g):
+  match r:
+    case S.Kpr{f0, f1, f2}:
+      {==}
+
+law Kpr.merged_n.get_with:
+  for r: S.Kpr
+  for v: Nat
+  {S.Kpr.merged_n(S.Kpr.with_merged_n(r, v)) == v : Nat}
+
+def Kpr.merged_n.get_with(r, v):
+  match r:
+    case S.Kpr{f0, f1, f2}:
+      {==}
+
+law Kpr.merged_n.eta:
+  for r: S.Kpr
+  for v: Nat
+  {S.Kpr{S.Kpr.key(r), S.Kpr.open_n(r), v} == S.Kpr.with_merged_n(r, v) : S.Kpr}
+
+def Kpr.merged_n.eta(r, v):
+  match r:
+    case S.Kpr{f0, f1, f2}:
+      {==}
+
+law Kpr.merged_n.set_get:
+  for r: S.Kpr
+  {S.Kpr.with_merged_n(r, S.Kpr.merged_n(r)) == r : S.Kpr}
+
+def Kpr.merged_n.set_get(r):
+  match r:
+    case S.Kpr{f0, f1, f2}:
+      {==}
+
+law Kpr.merged_n.set_set:
+  for r: S.Kpr
+  for a: Nat
+  for b: Nat
+  {S.Kpr.with_merged_n(S.Kpr.with_merged_n(r, a), b) == S.Kpr.with_merged_n(r, b) : S.Kpr}
+
+def Kpr.merged_n.set_set(r, a, b):
+  match r:
+    case S.Kpr{f0, f1, f2}:
+      {==}
+
+law Kpr.merged_n.over:
+  for r: S.Kpr
+  for g: Nat -> Nat
+  {S.Kpr.over_merged_n(r, g) == S.Kpr.with_merged_n(r, g(S.Kpr.merged_n(r))) : S.Kpr}
+
+def Kpr.merged_n.over(r, g):
+  match r:
+    case S.Kpr{f0, f1, f2}:
+      {==}
+
+law Kpr.open_eq:
+  for r: S.Kpr
+  {S.Kpr.open(r) == r : S.Kpr}
+
+def Kpr.open_eq(r):
+  match r:
+    case S.Kpr{f0, f1, f2}:
+      {==}
+
 # ---- ViewAsk ----
 
 law ViewAsk.agent.get_with:

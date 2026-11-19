@@ -4520,7 +4520,7 @@ def Hub.r(x: Hub) -> X.R:
       r
 
 def hub_new(+workspace: String) -> Hub:
-  Hub{M.init(workspace), X.R{Nil{}, Nil{}, Nil{}, Nil{}, Nil{}, Nil{}, workspace, False{}, 0n, False{}, Nil{}, None{}, None{}, Nil{}, Nil{}, Nil{}}, Fresh{}}
+  Hub{M.init(workspace), X.R{Nil{}, Nil{}, Nil{}, Nil{}, Nil{}, Nil{}, workspace, False{}, 0n, False{}, Nil{}, None{}, None{}, Nil{}, Nil{}, Nil{}, Nil{}}, Fresh{}}
 
 # the context of one input over the hub
 def start(+h: Hub, +i: J.Json) -> X.Cx<Hub.d(h)>:
@@ -5172,6 +5172,26 @@ def page_waits.in(-o: S.St, same: Bool, +cx: X.Cx<o>, +ws: List<&2, String>, +ns
     case False{}:
       cx
 
+# his pick on page tasks-fresh (architect m_66713): the pr states
+# input's lists as R.prs, the whole set (law pr_states_is_the_whole_set);
+# a work with no PR counted keeps none
+def pr_states(ws: List<&2, String>, os: List<&2, Nat>, ms: List<&2, Nat>) -> List<&2, S.Kpr>:
+  match ws os ms:
+    case Con{+w, +wt} Con{+o, +ot} Con{+m, +mt}:
+      +rest = pr_states(wt, ot, mt)
+      Bool.pick(List<&2, S.Kpr>, Nat.is_eq(Nat.add(o, m), 0n), rest, S.Kpr.with_merged_n(S.Kpr.with_open_n(S.Kpr.with_key(S.Kpr.empty(), w), o), m) <> rest)
+    case _ _ _:
+      Nil{}
+
+# the pr states input: refused (R.prs kept) when its lists differ in
+# length, like page_waits (architect m_64541)
+def pr_states.in(-o: S.St, same: Bool, +cx: X.Cx<o>, +ws: List<&2, String>, +os: List<&2, Nat>, +ms: List<&2, Nat>) -> X.Cx<o>:
+  match same:
+    case True{}:
+      set_r(o, cx, X.R.with_prs(rr(o, cx), pr_states(ws, os, ms)))
+    case False{}:
+      cx
+
 # one input, decoded by the generated codec (gen/in.bend, from
 # bise_proto::core::In): an unknown tag is INone, a missing field its
 # default
@@ -5236,6 +5256,8 @@ def dispatch(-o: S.St, +cx: X.Cx<o>, +i: GI.In) -> X.Cx<o>:
       work_move(o, task_flag(works, S.St.works(st(o, cx))), cx, card, art, page)
     case GI.IPageWaits{+works, +ns}:
       page_waits.in(o, Nat.is_eq(List.length(&2, String, works), List.length(&2, Nat, ns)), cx, works, ns)
+    case GI.IPrStates{+works, +open, +merged}:
+      pr_states.in(o, Nat.is_eq(List.length(&2, String, works), List.length(&2, Nat, open)) && Nat.is_eq(List.length(&2, String, works), List.length(&2, Nat, merged)), cx, works, open, merged)
     case GI.IInterrupt{+agent}:
       interrupt.go(o, M.resolve(st(o, cx), agent), cx)
     case GI.IUnqueue{+id}:

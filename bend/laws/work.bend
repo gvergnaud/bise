@@ -415,8 +415,9 @@ law status_is_a_function_of_facts:
   for +rts: List<&2, HX.Rt>
   for +ws: List<&2, HX.Waiter>
   for +n: Nat
+  for +prs: List<&2, HS.Kpr>
   for +now: Nat
-  {HWS.status(HS.Work.with_done(w, Some{f}), s, rts, ws, n, now) == HWS.WSDone{} : HWS.WSt}
+  {HWS.status(HS.Work.with_done(w, Some{f}), s, rts, ws, n, prs, now) == HWS.WSDone{} : HWS.WSt}
 
 # LAW: a paused work reads Paused (with its until) before anything waits
 # on him or runs.
@@ -427,8 +428,9 @@ law paused_wins_over_the_rest:
   for +rts: List<&2, HX.Rt>
   for +ws: List<&2, HX.Waiter>
   for +n: Nat
+  for +prs: List<&2, HS.Kpr>
   for +now: Nat
-  {HWS.st.paused(Some{p}, w, s, rts, ws, n, now) == HWS.WSPaused{HS.Work.until(w)} : HWS.WSt}
+  {HWS.st.paused(Some{p}, w, s, rts, ws, n, prs, now) == HWS.WSPaused{HS.Work.until(w)} : HWS.WSt}
 
 # LAW: a reply watch (an `sb ask` past its timeout) reads as waiting on
 # that reply, naming who it waits on; any other watch names its agent
@@ -446,15 +448,44 @@ law main_never_holds_a_work_out_of_review:
   {HWS.all_done(HM.MAIN() <> ns, s) == HWS.all_done(ns, s) : Bool}
 
 # LAW: an open card or page wait of his on a work makes it Needs you,
-# whatever its agents do.
+# whatever its agents do, its PRs all merged too (architect m_67541).
 law his_waits_make_needs_you:
   for +k: Nat
   for +w: HS.Work
   for +s: HS.St
   for +rts: List<&2, HX.Rt>
   for +ws: List<&2, HX.Waiter>
+  for +prs: List<&2, HS.Kpr>
   for +now: Nat
-  {HWS.st.needs(1n+k, w, s, rts, ws, now) == HWS.WSNeeds{1n+k} : HWS.WSt}
+  {HWS.st.needs(1n+k, w, s, rts, ws, prs, now) == HWS.WSNeeds{1n+k} : HWS.WSt}
+
+# LAW: a work whose linked PRs are all merged reads To review, about
+# 'merged', never Done: done is his word (his pick on page tasks-fresh,
+# architect m_66713).
+law all_merged_reads_merged_never_done:
+  for +w: HS.Work
+  for +s: HS.St
+  for +ws: List<&2, HX.Waiter>
+  for +now: Nat
+  {HWS.word(HWS.st.merged(True{}, w, s, ws, now)) == "to_review" : String}
+
+# LAW: a work with one linked PR open (a draft or changes requested
+# count as open) never reads merged, whatever its other PRs.
+law an_open_pr_never_reads_merged:
+  for +id: String
+  for +k: Nat
+  for +m: Nat
+  for +t: List<&2, HS.Kpr>
+  {HWS.merged(HS.Kpr.with_merged_n(HS.Kpr.with_open_n(HS.Kpr.with_key(HS.Kpr.empty(), id), 1n+k), m) <> t, id) == False{} : Bool}
+
+# LAW: the pr states input is the whole set: what it sends replaces the
+# counts before it, never merged with them (architect m_66713).
+law pr_states_is_the_whole_set:
+  for +r: HX.R
+  for +ws: List<&2, String>
+  for +os: List<&2, Nat>
+  for +ms: List<&2, Nat>
+  {HX.R.prs(HX.R.with_prs(r, HC.pr_states(ws, os, ms))) == HC.pr_states(ws, os, ms) : List<&2, HS.Kpr>}
 
 # LAW: a card event touches only its card's works: the rows of the other
 # works stay as they are (architect m_64541; cards are frequent).

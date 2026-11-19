@@ -163,6 +163,34 @@ fn his_page_waits_make_needs_you_and_a_ragged_input_is_refused() {
     assert_eq!(t.hub.st.works[&a].status, "waiting");
 }
 
+/// his pick on page tasks-fresh (architect m_66713, m_67541): a task
+/// whose linked PRs are all merged reads To review about 'merged', never
+/// done; one open PR (a draft counts as open) keeps it out; his page wait
+/// reads first; the input is the whole set, a ragged one refused.
+#[test]
+fn a_task_whose_prs_all_merged_reads_merged_never_done() {
+    let mut t = T::new();
+    let a = new(&mut t, MAIN, "Native mac", &[]);
+    let b = new(&mut t, MAIN, "Digest", &[]);
+    let row = |t: &T, id: &str| (t.hub.st.works[id].status.clone(), t.hub.st.works[id].why.clone());
+    t.go(Input::PrStates { works: vec![a.clone(), b.clone()], open: vec![0, 1], merged: vec![2, 1] });
+    assert_eq!(row(&t, &a), ("to_review".to_string(), "merged".to_string()));
+    assert_ne!(row(&t, &b).1, "merged", "an open PR never reads merged");
+    assert!(t.hub.st.works[&a].work.done.is_none(), "merged is never done: done is his word");
+    // his page wait on it reads first
+    t.go(Input::PageWaits { works: vec![a.clone()], ns: vec![1] });
+    assert_eq!(row(&t, &a).0, "needs_you");
+    t.go(Input::PageWaits { works: vec![], ns: vec![] });
+    assert_eq!(row(&t, &a).1, "merged");
+    // a ragged input: refused, the counts kept
+    t.go(Input::PrStates { works: vec![a.clone(), b.clone()], open: vec![0], merged: vec![1, 1] });
+    assert_eq!(row(&t, &a).1, "merged");
+    // the whole set: a task no longer in it has no PRs counted
+    t.go(Input::PrStates { works: vec![b.clone()], open: vec![0], merged: vec![1] });
+    assert_ne!(row(&t, &a).1, "merged");
+    assert_eq!(row(&t, &b), ("to_review".to_string(), "merged".to_string()));
+}
+
 fn notice_to(fx: &[Effect], client: ClientId) -> Option<String> {
     fx.iter().find_map(|e| match e {
         Effect::ToClient { client: c, body } if *c == client && body["ev"] == "notice" => body["text"].as_str().map(String::from),

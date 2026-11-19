@@ -110,6 +110,10 @@ type MRec is Data:
 type Vctx is Data:
   Vctx{agent: String, call: String, text: String, part: J.Json}
 
+# a work's linked PRs as the shell counts them (input pr_states, his pick on page tasks-fresh): `open_n` (open, draft, changes requested) and `merged_n`; closed-unmerged ones are not counted
+type Kpr is Data:
+  Kpr{key: String, open_n: Nat, merged_n: Nat}
+
 # what a view's card asks (mcp-apps, C5): the view's agent and call, and its ask (the tool and its arguments as canonical JSON, the shell's): sb-core reads a view's cards by it, never by their place
 type ViewAsk is Data:
   ViewAsk{agent: String, call: String, ask: String}
@@ -845,6 +849,59 @@ def Vctx.over_part(r: Vctx, g: J.Json -> J.Json) -> Vctx:
 
 def Vctx.open(+r: Vctx) -> Vctx:
   Vctx.with_part(Vctx.with_text(Vctx.with_call(Vctx.with_agent(Vctx.empty(), Vctx.agent(r)), Vctx.call(r)), Vctx.text(r)), Vctx.part(r))
+
+# ---- Kpr ----
+
+def Kpr.empty() -> Kpr:
+  Kpr{"", 0n, 0n}
+
+def Kpr.key(r: Kpr) -> String:
+  match r:
+    case Kpr{f0, _, _}:
+      f0
+
+def Kpr.with_key(r: Kpr, v: String) -> Kpr:
+  match r:
+    case Kpr{_, f1, f2}:
+      Kpr{v, f1, f2}
+
+def Kpr.over_key(r: Kpr, g: String -> String) -> Kpr:
+  match r:
+    case Kpr{f0, f1, f2}:
+      Kpr{g(f0), f1, f2}
+
+def Kpr.open_n(r: Kpr) -> Nat:
+  match r:
+    case Kpr{_, f1, _}:
+      f1
+
+def Kpr.with_open_n(r: Kpr, v: Nat) -> Kpr:
+  match r:
+    case Kpr{f0, _, f2}:
+      Kpr{f0, v, f2}
+
+def Kpr.over_open_n(r: Kpr, g: Nat -> Nat) -> Kpr:
+  match r:
+    case Kpr{f0, f1, f2}:
+      Kpr{f0, g(f1), f2}
+
+def Kpr.merged_n(r: Kpr) -> Nat:
+  match r:
+    case Kpr{_, _, f2}:
+      f2
+
+def Kpr.with_merged_n(r: Kpr, v: Nat) -> Kpr:
+  match r:
+    case Kpr{f0, f1, _}:
+      Kpr{f0, f1, v}
+
+def Kpr.over_merged_n(r: Kpr, g: Nat -> Nat) -> Kpr:
+  match r:
+    case Kpr{f0, f1, f2}:
+      Kpr{f0, f1, g(f2)}
+
+def Kpr.open(+r: Kpr) -> Kpr:
+  Kpr.with_merged_n(Kpr.with_open_n(Kpr.with_key(Kpr.empty(), Kpr.key(r)), Kpr.open_n(r)), Kpr.merged_n(r))
 
 # ---- ViewAsk ----
 
