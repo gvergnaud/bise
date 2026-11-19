@@ -91,11 +91,13 @@ export function TaskMark({ status, tip, testId }: { status: WorkStatus; tip?: st
  *  hit area, its stroke the status's color; checked: ✓ inside, text-3; `ready`: open with every
  *  done-when item ticked, an ink box ready to check. Its click is his Mark done (open) or Reopen
  *  (checked); the rest of the row still opens the Task tab. */
-export function TaskCheck({ status, checked, ready, onToggle, testId }: { status: WorkStatus; checked: boolean; ready: boolean; onToggle: () => void; testId?: string }) {
+export function TaskCheck({ status, checked, ready, onToggle, testId, goals }: { status: WorkStatus; checked: boolean; ready: boolean; onToggle: () => void; testId?: string; goals?: { readonly done: number; readonly all: number } | null }) {
   const word = checked ? tasks.act_reopen : tasks.act_done;
+  // some done-when items unticked: the box he clicks says it (tasks-ux m_67617)
+  const tip = !checked && goals != null && goals.done < goals.all ? tasks.act_done_goals(goals) : word;
   return (
     <Press look="tk-box" role="checkbox" aria-checked={checked} aria-label={word} data-st={status} data-checked={checked || undefined} data-ready={ready || undefined}
-      {...tipAttrs(word)} onClick={(e) => {
+      {...tipAttrs(tip)} onClick={(e) => {
         e.stopPropagation();
         onToggle();
       }} data-testid={testId}>

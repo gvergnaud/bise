@@ -46,7 +46,7 @@ function TaskRow({ x, now, group, fresh, check, prs }: { x: ProjWork; now: numbe
   const ready = check !== undefined && !check.checked && goals !== null && goals.done === goals.all;
   return (
     <div className="s3-orow tk-orow" data-testid={id} data-checked={check?.checked === true || undefined}>
-      {check !== undefined && <TaskCheck status={x.w.status} checked={check.checked} ready={ready} onToggle={check.onToggle} testId={`${id}.box`} />}
+      {check !== undefined && <TaskCheck status={x.w.status} checked={check.checked} ready={ready} goals={goals} onToggle={check.onToggle} testId={`${id}.box`} />}
       <Press look="s3-orow-open" aria-label={x.w.name} {...tipAttrs(`${x.w.name} · ${line}`, undefined, 'left')} onClick={() => {
         openTask(x.project, x.w.id);
       }} data-row="">

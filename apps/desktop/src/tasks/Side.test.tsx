@@ -113,5 +113,7 @@ describe('a task whose PRs are all merged (his pick on page tasks-fresh, designe
     apply({ ev: 'artifacts', project: P, items: [pr(1, 'merged'), pr(2, 'merged')] });
     expect(v.queryByTestId(`${rowId('a')}.goals`)).toBeNull();
     expect(v.getByTestId(`${rowId('a')}.merged`).getAttribute('data-tip')).toBe('2 PRs · 2 merged · 0/1 done when');
+    // the box he clicks says it too (tasks-ux m_67617)
+    expect(v.getByTestId(`${rowId('a')}.box`).getAttribute('data-tip')).toBe('Mark done · 0/1 done when unticked');
   });
 });

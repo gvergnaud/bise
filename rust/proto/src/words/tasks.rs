@@ -217,6 +217,9 @@ crate::words! { tasks:
     goal_by(by) = "ticked by {by}";
     /// the footer's buttons
     act_done = "Mark done";
+    /// the right bar's box when some done-when items are unticked: its tip says so, so the box he
+    /// clicks says it (tasks-ux m_67617)
+    act_done_goals(done, all) = "Mark done · {done}/{all} done when unticked";
     /// the footer's buttons
     act_pause = "Pause";
     /// the footer's buttons

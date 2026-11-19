@@ -200,6 +200,8 @@ export const tasks = {
   goal_by: (a: { by: string | number }): string => "ticked by " + String(a.by),
   /** the footer's buttons */
   act_done: "Mark done",
+  /** the right bar's box when some done-when items are unticked: its tip says so, so the box he clicks says it (tasks-ux m_67617) */
+  act_done_goals: (a: { done: string | number; all: string | number }): string => "Mark done · " + String(a.done) + "/" + String(a.all) + " done when unticked",
   /** the footer's buttons */
   act_pause: "Pause",
   /** the footer's buttons */

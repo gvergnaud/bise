@@ -10,6 +10,14 @@
     "one": null,
     "text": "Mark done"
   },
+  "tasks.act_done_goals": {
+    "args": [
+      "done",
+      "all"
+    ],
+    "one": null,
+    "text": "Mark done · {done}/{all} done when unticked"
+  },
   "tasks.act_more": {
     "args": [],
     "one": null,
