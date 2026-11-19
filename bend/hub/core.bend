@@ -3713,11 +3713,14 @@ def req_spawn.ws(m: Maybe<&2, S.Agent>) -> J.Json:
     case Some{+a}:
       S.Agent.ws(a)
 
-def req_spawn.res(-o: S.St, p: X.Cx<o> & TaskR, +token: Nat) -> X.Cx<o>:
+def req_spawn.res(-o: S.St, p: X.Cx<o> & TaskR, +token: Nat, +q: J.Json) -> X.Cx<o>:
   match p:
     case (+cx, TOk{+n}):
       +ws = req_spawn.ws(M.get_agent(st(o, cx), n))
-      reply(o, cx, token, ok_body([J.kv("name", J.JStr{n}), J.kv("path", J.JStr{M.ws_path(ws)}), J.kv("branch", M.ws_branch(ws)), J.kv("placing", J.JBool{M.ws_placing(ws)})]))
+      # its brief's works (--task, else main's turn's: Snd.with_works), the
+      # same several line as a send (architect m_67498)
+      +bw = works_of_send(task_of(q), st(o, cx), M.MAIN())
+      reply(o, cx, token, ok_body(List.append(&2, Sigma<&2, &2, String, _ => J.Json>, [J.kv("name", J.JStr{n}), J.kv("path", J.JStr{M.ws_path(ws)}), J.kv("branch", M.ws_branch(ws)), J.kv("placing", J.JBool{M.ws_placing(ws)})], several_kvs(bw))))
     case (+cx, TErr{+e}):
       reply_err(o, cx, token, e)
     case (+cx, THalt{}):
@@ -3740,12 +3743,12 @@ def req_spawn.door(-o: S.St, d: FW.Door, +cx: X.Cx<o>, +token: Nat, +q: J.Json) 
     case FW.FErr{+e}:
       reply_err(o, cx, token, e)
     case FW.FOk{+m}:
-      req_spawn.res(o, create_req(o, cx, new_task.fwd(new_task(M.MAIN(), q), m, FW.orig_of(q), K.get_s(q, "fwd_at")), q), token)
+      req_spawn.res(o, create_req(o, cx, new_task.fwd(new_task(M.MAIN(), q), m, FW.orig_of(q), K.get_s(q, "fwd_at")), q), token, q)
 
 def req_spawn.fwd(-o: S.St, f: Maybe<&2, Nat>, bare: Bool, +cx: X.Cx<o>, +token: Nat, +q: J.Json) -> X.Cx<o>:
   match f bare:
     case None{} _:
-      req_spawn.res(o, create_req(o, cx, new_task(M.MAIN(), q), q), token)
+      req_spawn.res(o, create_req(o, cx, new_task(M.MAIN(), q), q), token, q)
     case Some{_} False{}:
       reply_err(o, cx, token, "--forward and --attach go in two messages")
     case Some{+id} True{}:

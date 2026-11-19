@@ -457,7 +457,7 @@ impl Shell {
                         if a.meta.source.ends_with(".diff") {
                             self.feature_diffs_refresh();
                         }
-                        json!({"ok": true, "text": artifacts::added_text(&a), "id": a.meta.id})
+                        json!({"ok": true, "text": format!("{}{}", artifacts::added_text(&a), several_line(&add.works)), "id": a.meta.id})
                     }
                     Err(e) => json!({"ok": false, "error": e}),
                 }
@@ -1157,6 +1157,15 @@ pub(super) fn landed_rec(shared: &Path, agent: &str, target: &str, sha: &str, co
     }))
 }
 
+/// `sb artifact add`'s answer when the door stamped 2+ works (architect
+/// m_67498): the same catalog line as a send's, "" for one or none.
+pub(super) fn several_line(works: &[String]) -> String {
+    if works.len() < 2 {
+        return String::new();
+    }
+    format!("\n{}", bise_proto::words::tasks::carries_several(works.len(), works.join(", ")))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1330,4 +1339,14 @@ mod tests {
         assert!(e.starts_with("git couldn't read this diff: ") && !e.contains('\n') && !e.contains("fatal"), "{e}");
         let _ = std::fs::remove_dir_all(shared.parent().unwrap());
     }
+
+    /// architect m_67498 (2): the door's answer names the works it
+    /// stamped when 2+, in the catalog's words; one or none, nothing.
+    #[test]
+    fn artifact_add_names_several_stamped_works() {
+        assert_eq!(super::several_line(&["pool".into(), "triggers".into()]), format!("\n{}", bise_proto::words::tasks::carries_several(2, "pool, triggers")));
+        assert_eq!(super::several_line(&["pool".into()]), "");
+        assert_eq!(super::several_line(&[]), "");
+    }
+
 }

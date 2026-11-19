@@ -183,3 +183,36 @@ fn a_held_resume_note_says_it_is_held_in_mains_agent_threads() {
     let threads = crate::board::agent_threads(&t.hub.st, 20).join("\n");
     assert!(!threads.contains("held until"), "{threads}");
 }
+
+/// architect m_67498 (1): spawn's answer carries its brief's works and
+/// the typed several, from the same several_kvs as a send; one task, none.
+#[test]
+fn a_spawn_whose_brief_carries_several_tasks_says_so() {
+    let mut t = T::new();
+    let a = new(&mut t, "Pool");
+    let b = new(&mut t, "Triggers");
+    let spawn = |name: &str, task: Vec<String>| AgentReq::Spawn {
+        name: name.into(),
+        brief: Brief { objective: format!("objective of {name}"), ..Brief::default() },
+        worktree: false,
+        with_changes: false,
+        place: String::new(),
+        feature: String::new(),
+        ask: Default::default(),
+        parts: String::new(),
+        attach: Vec::new(),
+        fwd: None,
+        task,
+    };
+    let (tok, fx) = t.req(MAIN, spawn("both", vec![a.clone(), b.clone()]));
+    let r = reply(&fx, tok).expect("spawn answers at once");
+    assert_eq!(r["several"], true, "{r}");
+    let mut ws: Vec<String> = r["works"].as_array().unwrap().iter().map(|w| w.as_str().unwrap().to_string()).collect();
+    ws.sort();
+    let mut want = vec![a.clone(), b.clone()];
+    want.sort();
+    assert_eq!(ws, want, "{r}");
+    let (tok, fx) = t.req(MAIN, spawn("one", vec![a.clone()]));
+    let r = reply(&fx, tok).expect("spawn answers at once");
+    assert!(r.get("several").is_none() && r.get("works").is_none(), "{r}");
+}

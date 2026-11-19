@@ -258,3 +258,12 @@ fn a_send_carrying_several_tasks_says_so() {
     let (_, t) = render("send", &json!({"ok": true, "message_id": "m_6", "to": "docs", "delivery": "queued", "thread": "t_6"}));
     assert_eq!(t, "sent m_6 to docs (queued, thread t_6)");
 }
+
+/// architect m_67498 (1): spawn's answer prints the same several line.
+#[test]
+fn a_spawn_carrying_several_tasks_says_so() {
+    let (_, t) = render("spawn", &json!({"ok": true, "name": "docs", "placing": false, "works": ["pool", "triggers"], "several": true}));
+    assert!(t.ends_with(&format!("\n{}", bise_proto::words::tasks::carries_several(2, "pool, triggers"))), "{t}");
+    let (_, t) = render("spawn", &json!({"ok": true, "name": "docs", "placing": false}));
+    assert!(!t.contains("tasks ("), "{t}");
+}

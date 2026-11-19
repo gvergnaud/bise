@@ -419,7 +419,7 @@ pub fn render(cmd: &str, v: &Value) -> (bool, String) {
             if s("model").is_empty() { String::new() } else { format!(" {}", s("model")) },
             v.get("branch").and_then(|b| b.as_str()).map(|b| format!(" in worktree {} (branch {})", s("path"), b)).unwrap_or_default(),
             if v.get("placing") == Some(&json!(true)) { "its worktree is being made: it starts once it is ready (hub-loop)" } else { "it starts now" }
-        ),
+        ) + &several_line(v),
         "switch" => s("text"),
         "drop" => {
             if v.get("dropped") == Some(&json!(true)) {
