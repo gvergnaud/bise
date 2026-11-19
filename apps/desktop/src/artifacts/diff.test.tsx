@@ -2,7 +2,7 @@
 // A .diff artifact in the panel (try-diff-open, his m_52956: « je m'attendais à avoir un diff
 // panel »): it asks the hub for that artifact's diff at the version shown, then draws its files and
 // hunks with the review's own DiffFiles, + and − lines marked; never a blank frame.
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, act } from '@testing-library/react';
 import type { Artifact, HubCmd } from '@/proto';
 import { Store, StoreProvider } from '@/store';
@@ -11,7 +11,7 @@ import { ArtifactOpen } from './index';
 import { isDiff } from './model';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { NO_LAYOUT_ROWS } from '@/review/lineWindow';
+import { ROW_STEP } from '@/review/lineWindow';
 
 afterEach(() => {
   cleanup();
@@ -109,28 +109,39 @@ describe('a .diff artifact', () => {
     }
   });
 
+  // A view of 600 px at 20 px a row, as the panel has (happy-dom has no layout): the window is its
+  // first ROW_STEP lines, not NO_LAYOUT_ROWS (lineWindow.test.ts has that case). 64 rows drawn, not
+  // 400, keep this test far under its 5 s under load (it timed out at 400, main m_67267).
   it('draws only a window of a 5,000-line file, the rest a gap of its height, its lines keeping their ids', () => {
-    const { store } = mount(cuDiff(1));
-    const n = 5_000;
-    act(() => {
-      store.apply({
-        ev: 'diff', project: P, agent: '', base: '', artifact: 'cu-upload-diff', version: 1, title: 'cu-upload at dd86c8a',
-        files: [{
-          path: 'security.ts', status: 'added', add: n, del: 0,
-          hunks: [{ header: `@@ -0,0 +1,${String(n)} @@`, lines: Array.from({ length: n }, (_, i) => ({ kind: 'add' as const, new: i + 1, text: `const line${String(i)} = ${String(i)};` })) }],
-        }],
+    const style = document.createElement('style');
+    style.textContent = '.b-diff { line-height: 20px; }';
+    document.head.append(style);
+    const view = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600);
+    try {
+      const { store } = mount(cuDiff(1));
+      const n = 5_000;
+      act(() => {
+        store.apply({
+          ev: 'diff', project: P, agent: '', base: '', artifact: 'cu-upload-diff', version: 1, title: 'cu-upload at dd86c8a',
+          files: [{
+            path: 'security.ts', status: 'added', add: n, del: 0,
+            hunks: [{ header: `@@ -0,0 +1,${String(n)} @@`, lines: Array.from({ length: n }, (_, i) => ({ kind: 'add' as const, new: i + 1, text: `const line${String(i)} = ${String(i)};` })) }],
+          }],
+        });
       });
-    });
-    const file = screen.getByTestId('artifact.diff.file.0');
-    const rows = file.querySelectorAll('.b-dl');
-    expect(rows.length).toBeGreaterThan(0);
-    expect(rows.length).toBeLessThanOrEqual(NO_LAYOUT_ROWS);
-    expect(screen.getByTestId('artifact.diff.file.0.1').textContent).toContain('const line0 = 0;');
-    // the rows not drawn: one gap after them, as many line-heights (the scroller keeps its length)
-    const gap = file.querySelector<HTMLElement>('.b-dgap');
-    expect(gap?.style.getPropertyValue('--rows')).toBe(String(n + 1 - rows.length));
-    // the number columns as wide as the file's largest number, not the drawn rows' (designer m_57796)
-    expect(file.style.getPropertyValue('--nd')).toBe(String(n).length.toString());
+      const file = screen.getByTestId('artifact.diff.file.0');
+      const rows = file.querySelectorAll('.b-dl');
+      expect(rows.length).toBe(ROW_STEP);
+      expect(screen.getByTestId('artifact.diff.file.0.1').textContent).toContain('const line0 = 0;');
+      // the rows not drawn: one gap after them, as many line-heights (the scroller keeps its length)
+      const gap = file.querySelector<HTMLElement>('.b-dgap');
+      expect(gap?.style.getPropertyValue('--rows')).toBe(String(n + 1 - rows.length));
+      // the number columns as wide as the file's largest number, not the drawn rows' (designer m_57796)
+      expect(file.style.getPropertyValue('--nd')).toBe(String(n).length.toString());
+    } finally {
+      view.mockRestore();
+      style.remove();
+    }
   });
 
   // designer m_57777: a long line is never cut; it wraps at any character, its next rows at its own
