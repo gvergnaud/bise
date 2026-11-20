@@ -1813,6 +1813,12 @@ wide?: boolean, };
 export type WorkStatus = "needs_you" | "working" | "waiting" | "stalled" | "to_review" | "paused" | "done" | "ongoing" | "unknown";
 
 /**
+ * What a task's status is about (sb-core's wstatus.bend), typed so the
+ * window and the TUI match on it, never on a string (architect m_67736).
+ */
+export type WorkAbout = "agent" | "reply" | "timer" | "watch" | "until" | "crash" | "quiet" | "merged" | "finished" | "unknown";
+
+/**
  * One done-when item: its words, ticked, by whom (an agent's report, or
  * `user`).
  */
@@ -1860,12 +1866,9 @@ agents?: Array<string>,
  */
 last_ms: number, status: WorkStatus, 
 /**
- * what the status is about: `agent` (working), `reply` (waits for
- * `who`'s reply), `timer`, `watch` (wakes at `at_ms`), `until`
- * (paused until `at_ms`), `crash` (`who` stopped at `at_ms`), `quiet`
- * (nothing moves since `at_ms`); "" none
+ * what the status is about ([`WorkAbout`]); none: nothing to say
  */
-about?: string, who?: string, at_ms?: number | null, 
+about?: WorkAbout | null, who?: string, at_ms?: number | null, 
 /**
  * his open cards and page waits on it
  */

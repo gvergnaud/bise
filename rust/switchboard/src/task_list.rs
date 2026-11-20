@@ -8,7 +8,7 @@ use crate::every::{hh_mm, past_label, when_label};
 use crate::model::State;
 use bise_proto::core::state::WorkKind;
 use bise_proto::core::view::ViewWork as VWork;
-use bise_proto::rows::{WorkDone, WorkGoal, WorkRow, WorkStatus, WorkTomb};
+use bise_proto::rows::{WorkAbout, WorkDone, WorkGoal, WorkRow, WorkStatus, WorkTomb};
 
 /// A work's status and what it is about, one pattern for all: `<status>
 /// · <what>` (tasks-ux m_64508: never blank; m_64563: the status word
@@ -40,7 +40,7 @@ pub fn row(w: &VWork) -> WorkRow {
         agents: x.agents.clone(),
         last_ms: x.last,
         status: WorkStatus::of_word(&w.status),
-        about: w.why.clone(),
+        about: WorkAbout::of_word(&w.why),
         who: w.who.clone(),
         at_ms: w.at,
         needs: w.needs,

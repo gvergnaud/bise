@@ -41,6 +41,42 @@ impl WorkStatus {
     }
 }
 
+/// What a task's status is about (sb-core's wstatus.bend), typed so the
+/// window and the TUI match on it, never on a string (architect m_67736).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum WorkAbout {
+    /// working: `who` is in a turn of it
+    Agent,
+    /// waiting for `who`'s reply
+    Reply,
+    /// waiting for a timer set for it (wakes at `at_ms`)
+    Timer,
+    /// waiting for a watch set for it (`who`'s)
+    Watch,
+    /// paused until `at_ms`
+    Until,
+    /// stalled: `who` stopped at `at_ms`
+    Crash,
+    /// nothing moves since `at_ms`
+    Quiet,
+    /// to review: every PR linked to it is merged
+    Merged,
+    /// to review: its current agents all said done (page tasks-true)
+    Finished,
+    /// a reason this version doesn't know (a newer hub)
+    #[serde(other)]
+    Unknown,
+}
+
+impl WorkAbout {
+    /// sb-core's word, typed; "" none.
+    pub fn of_word(w: &str) -> Option<WorkAbout> {
+        (!w.is_empty()).then(|| serde_json::from_value(serde_json::Value::String(w.to_string())).unwrap_or(WorkAbout::Unknown))
+    }
+}
+
 /// One done-when item: its words, ticked, by whom (an agent's report, or
 /// `user`).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -213,12 +249,9 @@ pub struct WorkRow {
     /// its newest fact
     pub last_ms: u64,
     pub status: WorkStatus,
-    /// what the status is about: `agent` (working), `reply` (waits for
-    /// `who`'s reply), `timer`, `watch` (wakes at `at_ms`), `until`
-    /// (paused until `at_ms`), `crash` (`who` stopped at `at_ms`), `quiet`
-    /// (nothing moves since `at_ms`); "" none
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub about: String,
+    /// what the status is about ([`WorkAbout`]); none: nothing to say
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub about: Option<WorkAbout>,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub who: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -250,24 +283,24 @@ impl WorkRow {
         let past = || self.at_ms.map(&past).unwrap_or_default();
         let next = || self.at_ms.map(&next).unwrap_or_default();
         let who = self.who.as_str();
-        match (self.status, self.about.as_str()) {
+        match (self.status, self.about) {
             (WorkStatus::NeedsYou, _) if self.page.is_some() => tasks::needs_page(self.page.as_deref().unwrap_or_default()),
             (WorkStatus::NeedsYou, _) if self.needs > 0 => tasks::needs_questions(self.needs),
             (WorkStatus::NeedsYou, _) => tasks::status_needs_you.into(),
             (WorkStatus::Working, _) if !who.is_empty() => tasks::working_who(who),
             (WorkStatus::Working, _) => tasks::status_working.into(),
-            (WorkStatus::Waiting, "reply") => tasks::waiting_reply(who),
-            (WorkStatus::Waiting, "timer") => tasks::waiting_timer(next()),
-            (WorkStatus::Waiting, "watch") => tasks::waiting_watch(who),
+            (WorkStatus::Waiting, Some(WorkAbout::Reply)) => tasks::waiting_reply(who),
+            (WorkStatus::Waiting, Some(WorkAbout::Timer)) => tasks::waiting_timer(next()),
+            (WorkStatus::Waiting, Some(WorkAbout::Watch)) => tasks::waiting_watch(who),
             (WorkStatus::Waiting, _) if self.agents.is_empty() => tasks::waiting_no_agent.into(),
             (WorkStatus::Waiting, _) if self.at_ms.is_some() => tasks::waiting_quiet(past()),
             (WorkStatus::Waiting, _) => tasks::status_waiting.into(),
-            (WorkStatus::Stalled, "crash") => tasks::stalled_crash(who, past()),
+            (WorkStatus::Stalled, Some(WorkAbout::Crash)) => tasks::stalled_crash(who, past()),
             (WorkStatus::Stalled, _) if self.at_ms.is_some() => tasks::stalled_quiet(past()),
             (WorkStatus::Stalled, _) => tasks::status_stalled.into(),
             (WorkStatus::ToReview, _) if self.pr.is_some() => tasks::review_pr(self.pr.unwrap_or_default()),
             (WorkStatus::ToReview, _) => tasks::status_to_review.into(),
-            (WorkStatus::Paused, "until") if self.at_ms.is_some() => tasks::paused_until(next()),
+            (WorkStatus::Paused, Some(WorkAbout::Until)) if self.at_ms.is_some() => tasks::paused_until(next()),
             (WorkStatus::Paused, _) => tasks::paused_by_you.into(),
             (WorkStatus::Done, _) => match &self.done {
                 Some(d) => tasks::done_when(days_ago(d.at_ms, now)),
