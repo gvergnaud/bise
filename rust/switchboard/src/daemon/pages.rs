@@ -334,7 +334,7 @@ impl Shell {
     /// recomputes only the works whose count moved (architect m_64740).
     pub(super) fn page_waits_send(&mut self) {
         let Some(pages) = self.pg.pages.clone() else { return };
-        let works_of = |id: &str| pages.store.meta(id).map(|m| m.works.works().to_vec()).unwrap_or_default();
+        let works_of = |id: &str| pages.store.meta(id).map(|m| m.waits_works()).unwrap_or_default();
         let (works, ns) = crate::pages::waiting::by_work(&pages.waiting(), &works_of);
         self.step(Input::PageWaits { works, ns });
     }

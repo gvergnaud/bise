@@ -796,3 +796,43 @@ fn a_joining_agents_context_quotes_him_says_what_waits_and_ends_on_its_log() {
     assert!(inner.chars().count() <= 2000, "capped: {}", inner.chars().count());
     assert!(inner.starts_with(&format!("## Task `{b}`")) && inner.ends_with(&format!("More: sb task show {b} --activity")), "{inner}");
 }
+
+/// page tasks-true (his dashboard, architect m_67725): a task whose own
+/// agent said done reads To review about 'finished', whatever main's own
+/// watch (law mains_waits_never_count), a long-running agent's timer set
+/// for another task (law a_wait_counts_for_its_own_works) and an agent
+/// once steered in that moved on (law an_agent_that_moved_on_never_holds_review).
+#[test]
+fn a_finished_task_reads_to_review_whatever_mains_watch_and_agents_that_moved_on() {
+    use crate::every::MIN_MS;
+    let mut t = T::new();
+    let a = new(&mut t, MAIN, "Rename the bots", &[]);
+    let b = new(&mut t, MAIN, "Monitor the runtime", &[]);
+    let row = |t: &T, id: &str| (t.hub.st.works[id].status.clone(), t.hub.st.works[id].why.clone());
+    // its own agent works on a, then says done
+    t.spawn_task("own");
+    t.go(Input::ReplIdle { agent: "own".into(), leftover: false });
+    t.req(MAIN, send("own", "rename them", &[&a]));
+    // a long-running agent once on a, now on b, still working, with a timer for b
+    t.spawn_task("rev");
+    t.go(Input::ReplIdle { agent: "rev".into(), leftover: false });
+    t.req(MAIN, send("rev", "review the rename", &[&a]));
+    t.go(Input::ReplIdle { agent: "rev".into(), leftover: false });
+    t.req(MAIN, send("rev", "watch the runtime", &[&b]));
+    t.req("rev", AgentReq::Status { status: Declared::Working, note: String::new() });
+    let (tok, fx) = t.req("rev", AgentReq::Every(EveryReq::Add { to: "rev".into(), text: "poll".into(), every_ms: Some(MIN_MS), daily_min: None, until_ms: None, times: None, page: None, name: None }));
+    assert_eq!(reply(&fx, tok).unwrap()["ok"], true);
+    // main's own watch (its RAM alarm), its turn on every task
+    let spec = crate::wake::Spec { what: crate::wake::What::Pid { pid: 4242, start: String::new() }, tail: None, note: "RAM".into() };
+    t.req(MAIN, AgentReq::Wake(WakeReq::Add { spec: spec.json(), max_ms: Some(crate::wake::MAX_DEFAULT_MS), then: None }));
+    assert!(t.hub.st.works[&a].work.agents.contains(&"rev".to_string()), "rev was steered in");
+    t.go(Input::ReplIdle { agent: "own".into(), leftover: false });
+    t.go(Input::ReplIdle { agent: MAIN.into(), leftover: false });
+    t.req("own", AgentReq::Status { status: Declared::Done, note: String::new() });
+    assert_eq!(row(&t, &a), ("to_review".to_string(), "finished".to_string()), "{:?}", t.hub.st.works[&a]);
+    assert!(t.hub.st.works[&a].work.done.is_none(), "finished is never done: done is his word");
+    // b: rev works on it; idle, its timer set for b makes b wait
+    assert_eq!(row(&t, &b), ("working".to_string(), "agent".to_string()));
+    t.go(Input::ReplIdle { agent: "rev".into(), leftover: false });
+    assert_eq!(row(&t, &b), ("waiting".to_string(), "timer".to_string()));
+}

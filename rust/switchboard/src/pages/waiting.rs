@@ -137,8 +137,9 @@ pub fn of_page(id: &str, html: &str, notes: &[Note], questions: &[Question], wen
 
 /// tasks (docs/tasks.md; architect m_64423, m_64740): what waits on him,
 /// counted per work, as sb-core's `page_waits` reads it. Each item counts
-/// once for each work of its page (`works_of`: the page store's Meta, its
-/// one owner); a page with no work counts for none. The works in the
+/// once for each work of its page (`works_of`: the page store's Meta,
+/// [`super::store::Meta::waits_works`], its latest version's); a page with
+/// no work counts for none. The works in the
 /// order they first come; the whole set each time (a work missing from
 /// it has none: law page_waits_is_the_whole_set).
 pub fn by_work(items: &[Waiting], works_of: &dyn Fn(&str) -> Vec<String>) -> (Vec<String>, Vec<u64>) {

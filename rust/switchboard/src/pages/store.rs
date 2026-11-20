@@ -121,6 +121,18 @@ impl Meta {
     pub fn at_ms(&self) -> u64 {
         self.versions.last().map_or(self.created_ms, |v| v.at_ms)
     }
+
+    /// tasks (cause 4 of page tasks-true, architect m_67725): the works its
+    /// waiting items count for: his move's when he moved it, else its latest
+    /// version's (stamped at its publish), never the union of every
+    /// version's; a latest version from before the stamp: the union.
+    pub fn waits_works(&self) -> Vec<String> {
+        let latest = self.versions.last().and_then(|v| v.works.clone());
+        match latest {
+            Some(ws) if !self.works.moved() => ws,
+            _ => self.works.works().to_vec(),
+        }
+    }
 }
 
 /// One note of the page (§2.1); the fields the store does not read are

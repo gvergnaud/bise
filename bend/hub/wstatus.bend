@@ -113,31 +113,46 @@ def to_of(m: Maybe<&2, S.Msg>) -> Maybe<&2, String>:
     case Some{+x}:
       Some{S.Msg.to(x)}
 
-# who an agent of `names` waits on (its `sb wait`, `sb ask` or open
-# --expect-reply send)
-def reply_wait(ws: List<&2, X.Waiter>, +ns: List<&2, String>, +s: S.St) -> Maybe<&2, String>:
+# a wait counts for work `id` when its own works hold it (stamped from
+# its setter's turn), never main's (architect m_67725: main routes; its
+# own watch made 22 of his dashboard tasks read waiting on main, and a
+# long-running agent's `sb every` every task it was once on)
+def counts(+agent: String, ws: List<&2, String>, +id: String) -> Bool:
+  LZ.and(Bool.not(String.eq(agent, M.MAIN())), u => WO.has(ws, id))
+
+def msg_works(m: Maybe<&2, S.Msg>) -> List<&2, String>:
+  match m:
+    case None{}:
+      Nil{}
+    case Some{+x}:
+      S.Msg.works(x)
+
+# who a wait for work `id` waits on (an `sb wait`, `sb ask` or open
+# --expect-reply send whose message carries `id`)
+def reply_wait(ws: List<&2, X.Waiter>, +s: S.St, +id: String) -> Maybe<&2, String>:
   match ws:
     case Nil{}:
       None{}
     case Con{+w, +t}:
-      LZ.pick(Maybe<&2, String>, WO.has(ns, X.Waiter.agent(w)), u => to_of(M.msg_of(s, X.Waiter.msg(w))), u => reply_wait(t, ns, s))
+      +m = M.msg_of(s, X.Waiter.msg(w))
+      LZ.pick(Maybe<&2, String>, counts(X.Waiter.agent(w), msg_works(m), id), u => to_of(m), u => reply_wait(t, s, id))
 
-# when an agent of `names` is woken next by its timer
-def timer_wait(ts: List<&2, S.Timer>, +ns: List<&2, String>) -> Maybe<&2, Nat>:
+# when a timer set for work `id` fires next
+def timer_wait(ts: List<&2, S.Timer>, +id: String) -> Maybe<&2, Nat>:
   match ts:
     case Nil{}:
       None{}
     case Con{+x, +t}:
-      LZ.pick(Maybe<&2, Nat>, WO.has(ns, S.Timer.agent(x)), u => Some{S.Timer.next(x)}, u => timer_wait(t, ns))
+      LZ.pick(Maybe<&2, Nat>, counts(S.Timer.agent(x), S.Timer.works(x), id), u => Some{S.Timer.next(x)}, u => timer_wait(t, id))
 
-# an agent of `names` waits on a watch (`sb wake`, or the reply an `sb
-# ask` past its timeout still waits for)
-def watch_wait(ws: List<&2, S.Watch>, +ns: List<&2, String>) -> Maybe<&2, S.Watch>:
+# a watch set for work `id` (`sb wake`, or the reply an `sb ask` past its
+# timeout still waits for)
+def watch_wait(ws: List<&2, S.Watch>, +id: String) -> Maybe<&2, S.Watch>:
   match ws:
     case Nil{}:
       None{}
     case Con{+x, +t}:
-      LZ.pick(Maybe<&2, S.Watch>, WO.has(ns, S.Watch.agent(x)), u => Some{x}, u => watch_wait(t, ns))
+      LZ.pick(Maybe<&2, S.Watch>, counts(S.Watch.agent(x), S.Watch.works(x), id), u => Some{x}, u => watch_wait(t, id))
 
 def decl_done(m: Maybe<&2, S.Decl>) -> Bool:
   match m:
@@ -146,11 +161,18 @@ def decl_done(m: Maybe<&2, S.Decl>) -> Bool:
     case _:
       False{}
 
-# an agent gone from the hub counts as done
+def life_archived(l: S.Life) -> Bool:
+  match l:
+    case S.LArchived{}:
+      True{}
+    case _:
+      False{}
+
+# an agent gone from the hub or archived counts as done
 def said_done(m: Maybe<&2, S.Agent>) -> Bool:
   match m:
     case Some{+a}:
-      decl_done(S.Agent.declared(a))
+      LZ.or(life_archived(S.Agent.life(a)), u => decl_done(S.Agent.declared(a)))
     case None{}:
       True{}
 
@@ -169,20 +191,32 @@ def all_done.of(ns: List<&2, String>, +s: S.St) -> Bool:
     case Con{+n, +t}:
       all_done.go(n <> t, s)
 
-# its doers: main routes and never says done (a work main made or was
-# told of has main among its agents), so main never holds it out of To
-# review (tasks-qa: a live hub never read To review once main was in)
-def doers(ns: List<&2, String>) -> List<&2, String>:
+# an agent still on work `id`: gone or archived (it counts as done), or
+# its latest turn serves `id`; one that moved on (its latest turn serves
+# other works) no longer holds it open (architect m_67725: vb-review,
+# steered into 14 of his tasks, held them all)
+def current(m: Maybe<&2, S.Agent>, +id: String) -> Bool:
+  match m:
+    case None{}:
+      True{}
+    case Some{+a}:
+      LZ.or(life_archived(S.Agent.life(a)), u => WO.has(S.Agent.turn_works(a), id))
+
+# its current doers: main routes and never says done (a work main made
+# or was told of has main among its agents), so main never holds it out
+# of To review (tasks-qa: a live hub never read To review once main was
+# in); an agent that moved on is not one
+def doers(ns: List<&2, String>, +s: S.St, +id: String) -> List<&2, String>:
   match ns:
     case Nil{}:
       Nil{}
     case Con{+n, +t}:
-      +rest = doers(t)
-      Bool.pick(List<&2, String>, String.eq(n, M.MAIN()), rest, n <> rest)
+      +rest = doers(t, s, id)
+      LZ.pick(List<&2, String>, LZ.and(Bool.not(String.eq(n, M.MAIN())), u => current(M.get_agent(s, n), id)), u => n <> rest, u => rest)
 
-# every doer of `names` said done (none: none did)
-def all_done(ns: List<&2, String>, +s: S.St) -> Bool:
-  all_done.of(doers(ns), s)
+# every current doer of work `id` said done (none: none did)
+def all_done(ns: List<&2, String>, +s: S.St, +id: String) -> Bool:
+  all_done.of(doers(ns, s, id), s)
 
 # ---- the status, first fact that holds ----
 
@@ -206,28 +240,28 @@ def st.watch(m: Maybe<&2, S.Watch>, +w: S.Work, +s: S.St, +now: Nat) -> WSt:
     case Some{+x}:
       st.watch.of(x)
     case None{}:
-      st.review(all_done(S.Work.agents(w), s), w, now)
+      st.review(all_done(S.Work.agents(w), s, S.Work.id(w)), w, now)
 
 def st.timer(m: Maybe<&2, Nat>, +w: S.Work, +s: S.St, +now: Nat) -> WSt:
   match m:
     case Some{+at}:
       WSTimer{at}
     case None{}:
-      st.watch(watch_wait(S.Wakes.live(S.Tms.wk(S.St.tm(s))), S.Work.agents(w)), w, s, now)
+      st.watch(watch_wait(S.Wakes.live(S.Tms.wk(S.St.tm(s))), S.Work.id(w)), w, s, now)
 
 def st.reply(m: Maybe<&2, String>, +w: S.Work, +s: S.St, +ws: List<&2, X.Waiter>, +now: Nat) -> WSt:
   match m:
     case Some{+a}:
       WSReply{a}
     case None{}:
-      st.timer(timer_wait(S.Tms.live(S.St.tm(s)), S.Work.agents(w)), w, s, now)
+      st.timer(timer_wait(S.Tms.live(S.St.tm(s)), S.Work.id(w)), w, s, now)
 
 def st.crash(m: Maybe<&2, String>, +w: S.Work, +s: S.St, +ws: List<&2, X.Waiter>, +now: Nat) -> WSt:
   match m:
     case Some{+a}:
       WSCrash{a, S.Work.last(w)}
     case None{}:
-      st.reply(reply_wait(ws, S.Work.agents(w), s), w, s, ws, now)
+      st.reply(reply_wait(ws, s, S.Work.id(w)), w, s, ws, now)
 
 # every linked PR merged: To review, 'merged' (law
 # all_merged_reads_merged_never_done: never done, done is his word),
@@ -334,6 +368,8 @@ def row.go(x: WSt, +w: J.Json, +n: Nat, +cs: List<&2, Nat>) -> J.Json:
       V.work(w, Bool.pick(String, stalled, "stalled", "waiting"), "quiet", "", Some{since}, n, cs)
     case WSMerged{}:
       V.work(w, "to_review", "merged", "", None{}, n, cs)
+    case WSReview{}:
+      V.work(w, "to_review", "finished", "", None{}, n, cs)
     case other:
       V.work(w, word(other), "", "", None{}, n, cs)
 

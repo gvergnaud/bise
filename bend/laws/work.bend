@@ -14,6 +14,7 @@ import ../hub/cx.bend as HX
 import ../hub/wstatus.bend as HWS
 import ../hub/wakes.bend as HWK
 import ../hub/view.bend as HV
+import ../hub/gen/view.bend as HGV
 import ../hub/keyed.bend as HKY
 import ../hub/wctx.bend as HWC
 import ../hub/text.bend as HT
@@ -445,7 +446,42 @@ law a_reply_watch_names_who_it_waits_on:
 law main_never_holds_a_work_out_of_review:
   for +ns: List<&2, String>
   for +s: HS.St
-  {HWS.all_done(HM.MAIN() <> ns, s) == HWS.all_done(ns, s) : Bool}
+  for +id: String
+  {HWS.all_done(HM.MAIN() <> ns, s, id) == HWS.all_done(ns, s, id) : Bool}
+
+# LAW: main's waits (a timer, a watch, a reply it waits for) never count
+# for a work, whatever their works: main routes (his dashboard: main's
+# RAM watch made 22 tasks read waiting on main; architect m_67725).
+law mains_waits_never_count:
+  for +ws: List<&2, String>
+  for +id: String
+  {HWS.counts(HM.MAIN(), ws, id) == False{} : Bool}
+
+# LAW: a wait counts for a work only when its own works hold it: a
+# long-running agent's `sb every` set for one task never makes the other
+# tasks it was once on wait (architect m_67725).
+law a_wait_counts_for_its_own_works:
+  for +agent: String
+  for +ws: List<&2, String>
+  for +id: String
+  for e: {HWO.has(ws, id) == False{} : Bool}
+  {HWS.counts(agent, ws, id) == False{} : Bool}
+
+# LAW: an agent that moved on (not archived, its latest turn serves other
+# works) never holds a work out of To review (his dashboard: vb-review,
+# steered into 14 tasks, held them all; architect m_67725).
+law an_agent_that_moved_on_never_holds_review:
+  for +a: HS.Agent
+  for +id: String
+  for e1: {HWS.life_archived(HS.Agent.life(a)) == False{} : Bool}
+  for e2: {HWO.has(HS.Agent.turn_works(a), id) == False{} : Bool}
+  {HWS.current(Some{a}, id) == False{} : Bool}
+
+# LAW: To review reached by its current doers' done reads 'finished',
+# beside 'merged' for its PRs (architect m_67725; done stays his word).
+law review_by_its_doers_reads_finished:
+  for +w: J.Json
+  {HWS.row.go(HWS.WSReview{}, w, 0n, Nil{}) == HGV.work(w, "to_review", "finished", "", None{}, 0n, Nil{}) : J.Json}
 
 # LAW: an open card or page wait of his on a work makes it Needs you,
 # whatever its agents do, its PRs all merged too (architect m_67541).

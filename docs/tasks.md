@@ -27,7 +27,11 @@ side.
 - The status is computed in sb-core's view from the facts (cards, his page waits, its agents'
   runs and waits, `now`), never stored and never from an agent's word (`bend/hub/wstatus.bend`,
   first that holds: done, paused, needs you, working, ongoing, stalled by a crash, waiting on a
-  reply, a timer or a watch, to review, then quiet: waiting, stalled after 2 h). A step's view
+  reply, a timer or a watch, to review, then quiet: waiting, stalled after 2 h). A wait counts
+  for a task only when its own works hold it, never main's; To review reads its current doers
+  (not main, archived ones done, the others only while their latest turn serves it), about
+  `finished`, or `merged` for its PRs; a page's waits count for its latest version's works
+  (page tasks-true, architect m_67725). A step's view
   carries rows (`works`) only for the works it touched: named by its events, one of their agents
   changed, his cards or page waits changed, or the 2 h crossed between the step's two clocks;
   `works_gone` and `tombs` for the folded ones. view_all's head carries them all.

@@ -286,7 +286,28 @@ def Laws.work_birth_takes_turn(o, cx, token, by, id):
 def Laws.his_work_birth_takes_no_turn(o, cx, by, id):
   {==}
 
-def Laws.main_never_holds_a_work_out_of_review(ns, s):
+def Laws.main_never_holds_a_work_out_of_review(ns, s, id):
+  {==}
+
+def Laws.mains_waits_never_count(ws, id):
+  {==}
+
+# anything and a list without `id` is false
+def and_has_false(c: Bool, +ws: List<&2, String>, +id: String, e: {HWO.has(ws, id) == False{} : Bool}) -> {HLZ.and(c, u => HWO.has(ws, id)) == False{} : Bool}:
+  match c:
+    case True{}:
+      e
+    case False{}:
+      {==}
+
+def Laws.a_wait_counts_for_its_own_works(agent, ws, id, e):
+  and_has_false(Bool.not(String.eq(agent, HM.MAIN())), ws, id, e)
+
+def Laws.an_agent_that_moved_on_never_holds_review(a, id, e1, e2):
+  %Equal.sym(Bool, HWS.life_archived(HS.Agent.life(a)), False{}, e1) : {HLZ.or(_, u => HWO.has(HS.Agent.turn_works(a), id)) == False{} : Bool}
+  e2
+
+def Laws.review_by_its_doers_reads_finished(w):
   {==}
 
 def Laws.a_reply_watch_names_who_it_waits_on(to, msg):

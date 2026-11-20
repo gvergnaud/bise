@@ -278,3 +278,22 @@ fn taste_is_counted_and_only_on_the_publish_that_said_it() {
     assert_eq!(m.taste, None, "a publish without --taste: gone");
     let _ = std::fs::remove_dir_all(d);
 }
+
+/// Law (cause 4 of page tasks-true, architect m_67725): a page's waits
+/// count for its latest version's works, never for every task one of its
+/// versions served; his move wins; a version from before the stamp reads
+/// the union.
+#[test]
+fn page_waits_count_for_its_latest_versions_works() {
+    let w = |xs: &[&str]| xs.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+    let v = |works: Option<&[&str]>| Version { works: works.map(w), ..Default::default() };
+    let mut m = Meta::default();
+    m.works.stamp(&w(&["old", "new"]));
+    m.versions = vec![v(Some(&["old"])), v(Some(&["new"]))];
+    assert_eq!(m.waits_works(), w(&["new"]), "the latest version's works, not the union");
+    m.versions.push(v(None));
+    assert_eq!(m.waits_works(), w(&["old", "new"]), "a version from before the stamp: the union");
+    m.versions.push(v(Some(&["new"])));
+    m.works.moved_to(w(&["his"]));
+    assert_eq!(m.waits_works(), w(&["his"]), "his move wins");
+}
