@@ -107,6 +107,7 @@ impl Shell {
             ),
             holds: crate::idle::Holds::default(),
             art: art::Art::default(),
+            polls: worktrees::Polls::default(),
             guides: guide::Guides::default(),
             revive: revive::Revive::default(),
             wake_look: wake_look::WakeLook::start(tx.clone()),

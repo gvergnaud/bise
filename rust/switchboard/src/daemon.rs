@@ -287,10 +287,12 @@ enum Msg {
     /// The page server (docs/ambient-pages.md §2.4): notes sent from a
     /// page, or its drafts changed.
     Page(crate::pages::PageMsg),
-    /// An agent's changes, computed off the loop (`daemon/art.rs`).
+    /// An agent's changes, computed off the loop (`daemon/art.rs`);
+    /// `skipped`: another poll's git ran in its worktree, `v` is no news.
     Changes {
         name: String,
         v: Option<bise_proto::rows::Changes>,
+        skipped: bool,
     },
     /// A local site's recipe, found off the loop after its add
     /// (`daemon/art.rs`, artifacts_probe): `root` the folder a static
@@ -309,6 +311,13 @@ enum Msg {
     Typed {
         to: rpc::Typed,
         v: Value,
+    },
+    /// a worktrees scan ended (`daemon/worktrees.rs`): its event for
+    /// each target, each listed worktree's facts
+    Worktrees {
+        to: Vec<rpc::Typed>,
+        v: Value,
+        facts: std::collections::HashMap<String, crate::git_poll::Facts>,
     },
     /// the processes worker's counts changed (daemon/processes.rs)
     ProcCounts(processes::Counts),
@@ -516,6 +525,8 @@ struct Shell {
     holds: crate::idle::Holds,
     /// artifacts and diffs (`daemon/art.rs`, docs/artifacts.md)
     art: art::Art,
+    /// the worktrees scans and the git polls' slots (`daemon/worktrees.rs`, crate::git_poll)
+    polls: worktrees::Polls,
     /// the diffs' guides being written or failed (`daemon/guide.rs`)
     guides: guide::Guides,
     /// the local sites' servers it started again (`daemon/revive.rs`)

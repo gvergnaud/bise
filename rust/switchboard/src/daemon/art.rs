@@ -10,9 +10,6 @@ use super::*;
 use crate::artifacts::{self, Add, Added, Store};
 use crate::diff;
 
-/// How often an agent's `changes` may be computed while it edits.
-const CHANGES_EVERY: Duration = Duration::from_secs(5);
-
 /// The tool calls that change files (the `changes` follow them).
 fn edits(line: &str) -> bool {
     match crate::wire::parse(line) {
@@ -682,13 +679,17 @@ impl Shell {
     }
 
     /// Compute an agent's `changes` off the loop: at its idle (`now`), or
-    /// after an edit at most every 5 s (else at its next idle).
-    fn changes_ask(&mut self, name: &str, now: bool) {
-        let Some(a) = self.hub.st.agents.get(name) else { return };
-        if a.is_main {
+    /// after an edit at most every `git_poll::changes_gap` (5 s, longer
+    /// on a loaded machine; else at its next idle). Its worktree held by
+    /// another poll (the worktrees scan): skipped, asked again when that
+    /// scan ends.
+    pub(super) fn changes_ask(&mut self, name: &str, now: bool) {
+        if self.hub.st.agents.get(name).is_none_or(|a| a.is_main) {
             return;
         }
-        let soon = self.art.asked.get(name).is_some_and(|t| t.elapsed() < CHANGES_EVERY);
+        let every = crate::git_poll::changes_gap(self.polls_pace());
+        let Some(a) = self.hub.st.agents.get(name) else { return };
+        let soon = self.art.asked.get(name).is_some_and(|t| t.elapsed() < every);
         if self.art.busy.contains(name) || (!now && soon) {
             self.art.stale.insert(name.to_string());
             return;
@@ -698,10 +699,18 @@ impl Shell {
         self.art.asked.insert(name.to_string(), std::time::Instant::now());
         let place = self.art_where(a);
         let (tx, name, how) = (self.tx.clone(), name.to_string(), self.base_how());
-        let shared = PathBuf::from(&self.hub.workspace);
+        let (shared, slots) = (PathBuf::from(&self.hub.workspace), self.polls.slots.clone());
         std::thread::spawn(move || {
+            let held = match &place {
+                Where::Checkout { dir, .. } => slots.claim(dir).map(Some),
+                Where::Shared { .. } => Some(None),
+            };
+            let Some(_held) = held else {
+                let _ = tx.send(Msg::Changes { name, v: None, skipped: true });
+                return;
+            };
             let v = changes_of(&place, &how.base(&shared));
-            let _ = tx.send(Msg::Changes { name, v });
+            let _ = tx.send(Msg::Changes { name, v, skipped: false });
         });
     }
 
@@ -744,8 +753,23 @@ impl Shell {
     }
 
     /// An agent's changes are computed: the state again when they moved.
-    pub(super) fn on_changes(&mut self, name: String, v: Option<bise_proto::rows::Changes>) {
+    /// A poll freed worktrees (a worktrees scan ended): the agents whose
+    /// changes wait are asked again (each still on its gap).
+    pub(super) fn changes_retry(&mut self) {
+        let stale: Vec<String> = self.art.stale.iter().cloned().collect();
+        for name in stale {
+            self.changes_ask(&name, false);
+        }
+    }
+
+    pub(super) fn on_changes(&mut self, name: String, v: Option<bise_proto::rows::Changes>, skipped: bool) {
         self.art.busy.remove(&name);
+        if skipped {
+            // asked again when the scan holding its worktree ends (on_worktrees)
+            self.art.asked.remove(&name);
+            self.art.stale.insert(name);
+            return;
+        }
         let moved = self.art.changes.get(&name) != Some(&v);
         self.art.changes.insert(name.clone(), v);
         if moved {

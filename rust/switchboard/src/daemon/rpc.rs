@@ -103,6 +103,7 @@ struct Pending {
 /// the thread started: a connection that said `initialize` while the
 /// scan ran would miss a number the watermark moved past (rpc_e2e's
 /// 'no gap' red: 15, 18 after 13, the worktrees and processes scans).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Typed {
     Answer(ClientId),
     All,

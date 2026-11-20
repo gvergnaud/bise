@@ -30,6 +30,16 @@ pub fn agent_tmp(state: &Path, dir: &str) -> PathBuf {
     agent_dir(state, dir).join("tmp")
 }
 
+/// `path` is inside an agent's temp folder of any hub of `home`
+/// (`<hubs>/<hub>/agents/<a>/tmp/...`, [`agent_tmp`]'s shape): a
+/// worktree an agent made there for itself is no place of the hub's, so
+/// its polls skip it (switchboard daemon/worktrees.rs, git-calm).
+pub fn is_agent_tmp(home: &crate::Home, path: &Path) -> bool {
+    let Ok(rel) = path.strip_prefix(home.hubs_dir()) else { return false };
+    let c: Vec<_> = rel.components().map(|c| c.as_os_str()).collect();
+    c.len() >= 4 && c[1] == "agents" && c[3] == "tmp"
+}
+
 /// Where an agent's background commands keep their files
 /// (`BEND_BG_DIR`): `<n>.{slot,pid,cmd,out,in,rc}`, from its temp folder.
 pub fn bg_dir_of_tmp(tmp: &Path) -> PathBuf {
@@ -64,5 +74,19 @@ mod tests {
         assert_eq!(agent_bg(s, "perf.2"), Path::new("/h/hubs/x-0a1b2c3d/agents/perf.2/tmp/bg"));
         assert_eq!(agent_bg(s, "my agent"), Path::new("/h/hubs/x-0a1b2c3d/agents/my agent/tmp/bg"));
         assert_eq!(agent_views(s, "perf"), Path::new("/h/hubs/x-0a1b2c3d/agents/perf/views"));
+    }
+
+    #[test]
+    fn an_agents_temp_worktree_is_known_in_any_hub_of_the_home() {
+        let home = crate::Home::from_lookup(&|k: &str| (k == "HOME").then(|| "/u".to_string()));
+        let tmp = |p: &str| is_agent_tmp(&home, Path::new(p));
+        assert!(tmp("/u/.bise/hubs/dash-0a1b/agents/vb-workflow/tmp/upgrade-wt"));
+        assert!(tmp("/u/.bise/hubs/other-9f9f/agents/vb-agent/tmp/nonjson-wt"), "another hub of this home");
+        assert!(tmp("/u/.bise/hubs/dash-0a1b/agents/a/tmp"));
+        assert!(!tmp("/u/.bise/worktrees/dash-0a1b/perf/dashboard"), "an agent's worktree is the hub's place");
+        assert!(!tmp("/u/.bise/hubs/dash-0a1b/agents/a/views/x"));
+        assert!(!tmp("/u/.bise/hubs/dash-0a1b/tmp/x"));
+        assert!(!tmp("/u/mistral/dashboard"));
+        assert!(!tmp("/elsewhere/hubs/dash/agents/a/tmp/wt"), "not this home's hubs");
     }
 }

@@ -78,6 +78,7 @@ pub mod flow;
 pub mod fn_context;
 pub mod forge;
 pub mod forward;
+pub mod git_poll;
 pub mod guide;
 pub mod idle;
 pub mod image_care;

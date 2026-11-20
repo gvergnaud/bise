@@ -96,6 +96,9 @@ pub(super) const JOBS: &[Job] = &[
         run: |s, _| s.release_check(None),
     },
     Job { name: "prs", every: Every::Tick, first: First::Now, run: |s, _| s.plan_prs() },
+    // the worktrees scan the asks wait for, once the one in flight and
+    // its gap ended (daemon/worktrees.rs, crate::git_poll)
+    Job { name: "worktrees", every: Every::Tick, first: First::Now, run: |s, _| s.worktrees_tick() },
     // at most one pulse check (and send) a minute (daemon/pulse.rs)
     Job { name: PULSE, every: Every::Env { var: "SB_PULSE_MS", unit_ms: 1, default_ms: 60_000 }, first: First::Now, run: |s, _| s.pulse_check() },
     // the day's tally: a crash loses at most 5 min (daemon/usage_spool.rs)

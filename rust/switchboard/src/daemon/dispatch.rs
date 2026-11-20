@@ -248,6 +248,7 @@ impl Shell {
             Msg::OlderHello { stream, peer } => self.older_hello(stream, &peer),
             Msg::RpcNew { id, stream, v, peer } => self.rpc_new(id, stream, v, peer),
             Msg::Typed { to, v } => self.typed_msg(to, v),
+            Msg::Worktrees { to, v, facts } => self.on_worktrees(to, v, facts),
             Msg::ProcCounts(c) => self.procs_counts(c),
             Msg::ClientLine { id, v } => self.client_line(id, v),
             Msg::ClientGone { id } => {
@@ -292,7 +293,7 @@ impl Shell {
             }
             Msg::Release { client, v } => self.release_event(client, v),
             Msg::Update(v) => self.update_event(v),
-            Msg::Changes { name, v } => self.on_changes(name, v),
+            Msg::Changes { name, v, skipped } => self.on_changes(name, v, skipped),
             Msg::Serve { id, v, serve, root } => self.on_serve(&id, v, serve, root),
             Msg::TextFacts(facts) => self.on_text_facts(&facts),
             Msg::RoleLine { dir, key, line } => self.step(Input::RoleLine { dir, key, line }),
