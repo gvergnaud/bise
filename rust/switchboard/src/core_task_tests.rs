@@ -836,3 +836,64 @@ fn a_finished_task_reads_to_review_whatever_mains_watch_and_agents_that_moved_on
     t.go(Input::ReplIdle { agent: "rev".into(), leftover: false });
     assert_eq!(row(&t, &b), ("waiting".to_string(), "timer".to_string()));
 }
+
+/// tasks-ux m_67726's guard: his dashboard's shapes (fake names), every
+/// cause of page tasks-true's audit at once: main's own watch on every
+/// task, a long-running reviewer steered into all of them then moved on
+/// with its own timer, a page wait. The list counts what is true: the
+/// finished ones To review, the live one Working, his page's Needs you,
+/// the one whose own agent waits on its watch Waiting, his done Done.
+#[test]
+fn his_dashboards_shapes_read_true_counts() {
+    use crate::every::MIN_MS;
+    let mut t = T::new();
+    let ids: Vec<String> = ["fin-1", "fin-2", "fin-3", "live", "his", "watching", "closed"].iter().map(|n| new(&mut t, MAIN, n, &[])).collect();
+    let spec = |note: &str| crate::wake::Spec { what: crate::wake::What::Pid { pid: 4242, start: String::new() }, tail: None, note: note.into() };
+    // main's RAM alarm, its turn on every task
+    t.req(MAIN, AgentReq::Wake(WakeReq::Add { spec: spec("RAM").json(), max_ms: Some(crate::wake::MAX_DEFAULT_MS), then: None }));
+    // each task's own agent
+    for (i, id) in ids.iter().enumerate() {
+        let a = format!("own-{i}");
+        t.spawn_task(&a);
+        t.go(Input::ReplIdle { agent: a.clone(), leftover: false });
+        t.req(MAIN, send(&a, "do it", &[id]));
+    }
+    // a reviewer steered into every task, then on to its own one, with a timer
+    t.spawn_task("rev");
+    for id in &ids {
+        t.req(MAIN, send("rev", "review it", &[id]));
+    }
+    t.go(Input::ReplIdle { agent: "rev".into(), leftover: false });
+    t.req(MAIN, send("rev", "keep watching", &[&ids[3]]));
+    t.req("rev", AgentReq::Every(EveryReq::Add { to: "rev".into(), text: "poll".into(), every_ms: Some(MIN_MS), daily_min: None, until_ms: None, times: None, page: None, name: None }));
+    t.go(Input::ReplIdle { agent: "rev".into(), leftover: false });
+    t.go(Input::ReplIdle { agent: MAIN.into(), leftover: false });
+    // the finished ones' agents said done; 'his' agent too; 'closed' he marked done
+    for i in [0, 1, 2, 4, 6] {
+        let a = format!("own-{i}");
+        t.go(Input::ReplIdle { agent: a.clone(), leftover: false });
+        t.req(&a, AgentReq::Status { status: Declared::Done, note: String::new() });
+    }
+    assert_eq!(task(&mut t, MAIN, Task::Done { id: ids[6].clone() })["ok"], true);
+    // 'watching': its own agent waits on its build, idle
+    t.req("own-5", AgentReq::Wake(WakeReq::Add { spec: spec("the build").json(), max_ms: Some(crate::wake::MAX_DEFAULT_MS), then: None }));
+    t.go(Input::ReplIdle { agent: "own-5".into(), leftover: false });
+    // 'live': its own agent is in a turn (own-3 stays busy); 'his': a step of his on its page
+    t.go(Input::PageWaits { works: vec![ids[4].clone()], ns: vec![1] });
+    let st = |id: &str| (t.hub.st.works[id].status.clone(), t.hub.st.works[id].why.clone());
+    let got: Vec<(String, String)> = ids.iter().map(|id| st(id)).collect();
+    let want = |s: &str, w: &str| (s.to_string(), w.to_string());
+    assert_eq!(
+        got,
+        vec![
+            want("to_review", "finished"),
+            want("to_review", "finished"),
+            want("to_review", "finished"),
+            want("working", "agent"),
+            want("needs_you", ""),
+            want("waiting", "watch"),
+            want("done", ""),
+        ],
+        "the audit's shapes, counted true"
+    );
+}
