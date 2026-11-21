@@ -42,8 +42,9 @@ function byLast(a: ProjWork, b: ProjWork): number {
   return b.w.last_ms - a.w.last_ms || a.w.name.localeCompare(b.w.name);
 }
 
-/** How many done tasks the bar shows struck through after the open ones, newest first; the rest fold. */
-export const DONE_SHOWN = 3;
+/** How many done tasks the bar shows struck through at its end, always in sight, newest first; the
+ *  rest fold (designer m_67797). */
+export const DONE_SHOWN = 2;
 
 /** The bar's rows: the open ones in the status order; then the fold, ongoing ones then the done this week. Pure. */
 export function barRows(all: readonly ProjWork[], now: number): { readonly open: readonly ProjWork[]; readonly ongoing: readonly ProjWork[]; readonly done: readonly ProjWork[] } {

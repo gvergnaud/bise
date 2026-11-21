@@ -51,7 +51,8 @@ function TaskRow({ x, now, group, fresh, check, prs }: { x: ProjWork; now: numbe
         openTask(x.project, x.w.id);
       }} data-row="">
         <span className="s3-orow-mark">
-          {check === undefined && <TaskMark status={x.w.status} testId={`${id}.mark`} />}
+          {/* a live row's mark says its status line on hover (his rule: a compact mark explains itself; ui-review m_67794) */}
+          {check === undefined && <TaskMark status={x.w.status} tip={line} testId={`${id}.mark`} />}
         </span>
         <span className="s3-orow-name tk-oname" data-testid={`${id}.name`}>{g.project !== '' && <span className="s3-group">{g.project}</span>}<WordCut className="tk-ocut" text={g.name} /></span>
         <NewDot on={fresh} testId={`${id}.new`} />
@@ -98,9 +99,10 @@ export function OuterTasks({ all, scope, now, groupOf }: { all: readonly ProjWor
   const listed = listRows(open, kept);
   const inList = new Set(listed.map((r) => key(r.x)));
   // the last done ones, struck through, after the open ones; the rest fold
-  const struck = done.filter((x) => !inList.has(key(x))).slice(0, DONE_SHOWN).map((x) => ({ x, checked: true }));
-  const rows = [...listed, ...struck];
-  const shown = new Set(rows.map((r) => key(r.x)));
+  // (always in sight under the open ones and their '+N more', never behind it: ui-review m_67794)
+  const struck = done.filter((x) => !inList.has(key(x))).slice(0, DONE_SHOWN);
+  const rows = listed;
+  const shown = new Set([...rows.map((r) => key(r.x)), ...struck.map(key)]);
   const needs = open.filter((x) => needsHim(x.w)).length;
   const toCheck = listed.filter((r) => !r.checked && r.x.w.status === 'to_review').map((r) => r.x);
   const rest = ongoing.length + done.filter((x) => !shown.has(key(x))).length;
@@ -141,7 +143,8 @@ export function OuterTasks({ all, scope, now, groupOf }: { all: readonly ProjWor
       rows={(n) => rows.slice(0, n).flatMap((r, i) => {
         // the box only where his click is safe: a finished task (To check) or a done one; a live
         // task shows its mark, closed from its Task tab (tasks-ux m_67726)
-        const boxed = r.checked || r.x.w.status === 'to_review';
+        // one he just acted on keeps its box until the hub answers (a Reopen too; ui-review m_67794)
+        const boxed = r.checked || r.x.w.status === 'to_review' || kept.has(key(r.x));
         const row = (
           <TaskRow key={key(r.x)} x={r.x} now={now} group={groupOf(r.x.project)} prs={prs.get(key(r.x))} fresh={!r.checked && isNew(r.x.w, seen(r.x.project, r.x.w.id), arts.get(key(r.x)) ?? 0, looked)}
             {...(boxed ? { check: { checked: r.checked, onToggle: () => {
@@ -150,8 +153,13 @@ export function OuterTasks({ all, scope, now, groupOf }: { all: readonly ProjWor
         );
         return i === firstCheck ? [<BatchRow key="batch" n={toCheck.length} unticked={unticked} onClick={doneAll} />, row] : [row];
       })}
-      after={(rest > 0 || did !== null || batch !== null) && (
+      after={(struck.length > 0 || rest > 0 || did !== null || batch !== null) && (
         <>
+          {struck.map((x, j) => (
+            <TaskRow key={key(x)} x={x} now={now} group={groupOf(x.project)} prs={prs.get(key(x))} fresh={false} check={{ checked: true, onToggle: () => {
+              toggle(x, rows.length + j, true);
+            } }} />
+          ))}
           <UndoToast did={did} works={all.filter((x) => x.project === did?.project).map((x) => x.w)} name={did?.row.name ?? ''} send={req} done={() => {
             // his Undo sent the Reopen: the row stays at its place, unchecked
             if (did !== null) setKept((m) => uncheck(m, `${did.project}/${did.row.id}`));

@@ -123,12 +123,23 @@ describe('the right bar Tasks, a todo list', () => {
     expect(acts().slice(2)).toEqual([{ step: 'reopen', id: 'f1' }, { step: 'reopen', id: 'f2' }]);
   });
 
-  it('shows the last 3 done ones struck through after the open ones, the rest in the fold', () => {
+  it('shows the last 2 done ones struck through at the end, never behind +N more; the rest in the fold (designer m_67797)', () => {
     const done = (id: string, ago: number) => work(id, { status: 'done', done: { at_ms: NOW - ago, by: 'user' }, last_ms: NOW - ago });
-    const { v } = world([work('w', { status: 'working', last_ms: NOW }), done('d1', 1000), done('d2', 2000), done('d3', 3000), done('d4', 4000)]);
+    const open = Array.from({ length: 8 }, (_, i) => work(`o${i}`, { status: 'waiting', last_ms: NOW - i }));
+    const { v } = world([work('w', { status: 'working', last_ms: NOW }), ...open, done('d1', 1000), done('d2', 2000), done('d3', 3000)]);
     const checked = [...v.container.querySelectorAll('.tk-orow[data-checked]')].map((e) => e.getAttribute('data-testid'));
-    expect(checked).toEqual(['d1', 'd2', 'd3'].map(rowId));
+    expect(checked).toEqual(['d1', 'd2'].map(rowId));
     expect(v.getByTestId('app.outer.tasks.rest').textContent).toContain('1 done lately');
+    // a live row's mark says its status line (his rule: a compact mark explains itself)
+    expect(v.getByTestId(`${rowId('w')}.mark`).getAttribute('data-tip')).toBe('working');
+  });
+
+  it('Reopen shows its To check box at once, unstruck, before the hub answers (designer, tasks-ux m_67797/m_67800)', () => {
+    const { v, acts } = world([work('d', { status: 'done', done: { at_ms: NOW - 1000, by: 'user' } })]);
+    fireEvent.click(v.getByTestId(`${rowId('d')}.box`));
+    expect(acts()).toEqual([{ step: 'reopen', id: 'd' }]);
+    expect(v.getByTestId(`${rowId('d')}.box`).getAttribute('aria-checked')).toBe('false');
+    expect(v.getByTestId(rowId('d')).hasAttribute('data-checked')).toBe(false);
   });
 });
 
