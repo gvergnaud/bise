@@ -66,6 +66,13 @@
     "one": null,
     "text": "Resume"
   },
+  "tasks.acted_after_done": {
+    "args": [
+      "who"
+    ],
+    "one": null,
+    "text": "{who} acted after done"
+  },
   "tasks.agent_answered": {
     "args": [],
     "one": null,
@@ -998,6 +1005,13 @@
     ],
     "one": null,
     "text": "stalled · {who} stopped at {at}"
+  },
+  "tasks.stalled_crash_who": {
+    "args": [
+      "who"
+    ],
+    "one": null,
+    "text": "stalled · {who} stopped"
   },
   "tasks.stalled_quiet": {
     "args": [

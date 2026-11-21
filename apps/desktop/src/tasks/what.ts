@@ -33,13 +33,14 @@ export function whatOf(r: WorkRow, now: number, past: (ms: number) => string, ne
       return who !== '' ? tasks.working_who({ who }) : tasks.status_working;
     case 'waiting':
       if (about === 'reply') return tasks.waiting_reply({ who });
-      if (about === 'timer') return tasks.waiting_timer({ at: n() });
+      // no time sent: the part dropped whole, never 'wakes at ' (designer m_67819)
+      if (about === 'timer') return at !== undefined ? tasks.waiting_timer({ at: n() }) : tasks.status_waiting;
       if (about === 'watch') return tasks.waiting_watch({ who });
       // no agent yet: say so, never a bare Waiting (tasks-ux m_65131)
       if ((r.agents ?? []).length === 0) return tasks.waiting_no_agent;
       return at !== undefined ? tasks.waiting_quiet({ at: p() }) : tasks.status_waiting;
     case 'stalled':
-      if (about === 'crash') return tasks.stalled_crash({ who, at: p() });
+      if (about === 'crash') return at !== undefined ? tasks.stalled_crash({ who, at: p() }) : tasks.stalled_crash_who({ who });
       return at !== undefined ? tasks.stalled_quiet({ at: p() }) : tasks.status_stalled;
     case 'to_review':
       // its agents' open PR (the hub joins it from the places)

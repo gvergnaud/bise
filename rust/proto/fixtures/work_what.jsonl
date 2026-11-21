@@ -25,3 +25,5 @@
 {"now":1791100000000,"want":"waiting · no agent yet","row":{"id":"a","name":"A","by":"user","created_ms":1,"last_ms":1,"status":"waiting","about":"quiet","at_ms":1}}
 {"now":1791100000000,"want":"waiting · quiet since <past>","row":{"id":"a","name":"A","by":"main","created_ms":1,"last_ms":1,"status":"waiting","about":"quiet","at_ms":1,"agents":["docs"]}}
 {"now":1791100000000,"want":"finished · to check","row":{"id":"a","name":"A","by":"main","created_ms":1,"last_ms":1,"status":"to_review","about":"finished","agents":["docs"]}}
+{"now":1791100000000,"want":"waiting","row":{"id":"a","name":"A","by":"main","created_ms":1,"last_ms":1,"status":"waiting","about":"timer","agents":["docs"]}}
+{"now":1791100000000,"want":"stalled · perf stopped","row":{"id":"a","name":"A","by":"main","created_ms":1,"last_ms":1,"status":"stalled","about":"crash","who":"perf","agents":["perf"]}}

@@ -48,6 +48,8 @@ crate::words! { tasks:
     waiting_quiet(at) = "waiting · quiet since {at}";
     /// an agent of it crashed, and when
     stalled_crash(who, at) = "stalled · {who} stopped at {at}";
+    /// an agent of it crashed, no time sent: the part dropped whole, never a dangling 'at' (designer m_67819)
+    stalled_crash_who(who) = "stalled · {who} stopped";
     /// nothing moves for 2 h, since when
     stalled_quiet(at) = "stalled · quiet since {at}";
     /// paused until a time, when it resumes by itself
@@ -236,6 +238,8 @@ crate::words! { tasks:
     act_restart = "Restart";
     /// a done task's button
     act_reopen = "Reopen";
+    /// a done task an agent acted on after his done: it stays done (his word), the Task tab says who (tasks-ux m_67726)
+    acted_after_done(who) = "{who} acted after done";
     /// the short Undo after his gesture (roma idea 4): its button
     undo = "Undo";
     /// the Undo's line after Pause: the name first, like our other toasts (designer m_65397)

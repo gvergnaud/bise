@@ -319,3 +319,10 @@ export function aboutOf(line: string): string {
   const at = line.indexOf(' · ');
   return at < 0 ? '' : line.slice(at + 3);
 }
+
+/** The agent whose fact on a task came after his done at `doneAt` (its Log, newest first): the
+ *  newest one's, never his own or main's; null none (tasks-ux m_67726). Pure. */
+export function actedAfter(lines: readonly Pick<LogLine, 'at_ms' | 'who' | 'kind'>[], doneAt: number): string | null {
+  const l = lines.find((x) => x.at_ms > doneAt && x.who !== 'user' && x.who !== 'main' && x.kind !== 'gesture' && x.kind !== 'answer');
+  return l === undefined ? null : l.who;
+}

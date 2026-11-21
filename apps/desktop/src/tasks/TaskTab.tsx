@@ -28,7 +28,7 @@ import { signOf } from '@/app/side';
 import { barSign } from '@/app/barrows';
 import { tasks } from '@/proto/words_tasks.gen';
 import { useWorks } from '@/store';
-import { aboutOf, agentLineOf, agentStateOf, artsOf, crewOf, goalsOf, isOpen, nowOfTask, originOf, prsOf, reportsOf, soloOn, type Origin, type TaskPr } from './model';
+import { aboutOf, actedAfter, agentLineOf, agentStateOf, artsOf, crewOf, goalsOf, isOpen, nowOfTask, originOf, prsOf, reportsOf, soloOn, type Origin, type TaskPr } from './model';
 import { openTask, pausedWords, TaskMark, statusWord } from './Marks';
 import { useTaskAct, useTaskReq } from './Board';
 import { clock, lineAt } from './Side';
@@ -157,6 +157,9 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
     store.askTaskLog(project, id);
   }, [store, project, id, lastMs]);
   const reports = reportsOf(log?.lines ?? []);
+  // an agent's fact on it after his done: who (the newest; never his own or main's)
+  const doneAt = hubRow?.done?.at_ms ?? null;
+  const afterDone = doneAt === null ? null : actedAfter(log?.lines ?? [], doneAt);
   // after his '+ Agent' words: main's reply in its thread (an entry of main's after he asked)
   const replied = asked !== null && order.order.some((p) => {
     const e = store.entry(mainKey, p);
@@ -293,6 +296,16 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
         <p className="tk-paused" data-testid={`${t}.paused`}>
           {/* until a time when it resumes by itself, else since when (designer m_65808: text-3) */}
           <TaskMark status="paused" /> {w.until_ms != null && w.until_ms > now ? tasks.paused_line_until({ at: clock(w.until_ms, now) }) : pausedWords(now - (w.paused_ms ?? now))}
+        </p>
+      )}
+
+      {afterDone !== null && (
+        // done stays his word: an agent acting after it never reopens it, the tab says who (tasks-ux m_67726)
+        <p className="tk-paused" data-testid={`${t}.after-done`}>
+          <TaskMark status="done" /> {tasks.acted_after_done({ who: afterDone })} ·{' '}
+          <Press look="b-btn sm ghost" onClick={() => {
+            act(project, 'reopen', w.id);
+          }} data-testid={`${t}.after-done.reopen`}>{tasks.act_reopen}</Press>
         </p>
       )}
 

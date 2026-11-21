@@ -1,7 +1,7 @@
 // The right bar's rows and the since line, on plain rows (model.ts, since.ts). Owner: tasks.
 import { describe, expect, it } from 'vitest';
 import type { WorkRow, WorkStatus } from '@/proto';
-import { barRows, cutAtWord, goalsOf, listRows, movedKeys, statusSig, type ProjWork } from './model';
+import { actedAfter, barRows, cutAtWord, goalsOf, listRows, movedKeys, statusSig, type ProjWork } from './model';
 import { sinceLooked } from './since';
 import { tasksOf } from './chips';
 import { artsOf, prSet, prsOf, resolveMerged } from './model';
@@ -256,5 +256,13 @@ describe('a task\'s PRs (his pick on page tasks-fresh, designer m_66722)', () =>
 
   it('keeps its PRs out of the Artifacts chips: nothing twice', () => {
     expect(artsOf(arts as unknown as { id: string; works: string[]; at_ms: number }[], 'kb', []).all.map((a) => a.id)).toEqual(['doc']);
+  });
+});
+
+describe('an agent acting on a done task (tasks-ux m_67726)', () => {
+  it('names the newest agent whose fact came after his done, never his own gesture or main', () => {
+    const l = (at_ms: number, who: string, kind: 'report' | 'gesture' | 'land' = 'report') => ({ at_ms, who, kind });
+    expect(actedAfter([l(30, 'user', 'gesture'), l(25, 'main'), l(20, 'auth-fix', 'land'), l(5, 'docs')], 10)).toBe('auth-fix');
+    expect(actedAfter([l(5, 'docs'), l(3, 'auth-fix')], 10)).toBeNull();
   });
 });

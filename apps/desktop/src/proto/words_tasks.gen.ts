@@ -42,6 +42,8 @@ export const tasks = {
   waiting_quiet: (a: { at: string | number }): string => "waiting · quiet since " + String(a.at),
   /** an agent of it crashed, and when */
   stalled_crash: (a: { who: string | number; at: string | number }): string => "stalled · " + String(a.who) + " stopped at " + String(a.at),
+  /** an agent of it crashed, no time sent: the part dropped whole, never a dangling 'at' (designer m_67819) */
+  stalled_crash_who: (a: { who: string | number }): string => "stalled · " + String(a.who) + " stopped",
   /** nothing moves for 2 h, since when */
   stalled_quiet: (a: { at: string | number }): string => "stalled · quiet since " + String(a.at),
   /** paused until a time, when it resumes by itself */
@@ -218,6 +220,8 @@ export const tasks = {
   act_restart: "Restart",
   /** a done task's button */
   act_reopen: "Reopen",
+  /** a done task an agent acted on after his done: it stays done (his word), the Task tab says who (tasks-ux m_67726) */
+  acted_after_done: (a: { who: string | number }): string => String(a.who) + " acted after done",
   /** the short Undo after his gesture (roma idea 4): its button */
   undo: "Undo",
   /** the Undo's line after Pause: the name first, like our other toasts (designer m_65397) */
