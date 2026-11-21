@@ -134,8 +134,9 @@ describe('the right bar Tasks, a todo list', () => {
     expect(v.getByTestId(`${rowId('w')}.mark`).getAttribute('data-tip')).toBe('working');
   });
 
-  it('Reopen shows its To check box at once, unstruck, before the hub answers (designer, tasks-ux m_67797/m_67800)', () => {
-    const { v, acts } = world([work('d', { status: 'done', done: { at_ms: NOW - 1000, by: 'user' } })]);
+  it('Reopen shows its box at once, unstruck, in place and in sight before the hub answers (designer m_67797, ui-review m_67804)', () => {
+    const open = Array.from({ length: 8 }, (_, i) => work(`o${i}`, { status: 'waiting', last_ms: NOW - i }));
+    const { v, acts } = world([...open, work('d', { status: 'done', done: { at_ms: NOW - 1000, by: 'user' } })]);
     fireEvent.click(v.getByTestId(`${rowId('d')}.box`));
     expect(acts()).toEqual([{ step: 'reopen', id: 'd' }]);
     expect(v.getByTestId(`${rowId('d')}.box`).getAttribute('aria-checked')).toBe('false');

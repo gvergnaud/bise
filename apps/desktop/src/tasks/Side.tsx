@@ -91,6 +91,8 @@ export function OuterTasks({ all, scope, now, groupOf }: { all: readonly ProjWor
   const { open, ongoing, done } = barRows(all, now);
   // his box: Mark done or Reopen, the row kept at its place while the list is in view (designer m_66969)
   const [kept, setKept] = useState<ReadonlyMap<string, Kept>>(new Map());
+  // the struck rows he reopened: unchecked in place, in sight, until the hub's row is open again (ui-review m_67804)
+  const [reopened, setReopened] = useState<ReadonlySet<string>>(new Set());
   const [did, offer] = useUndo();
   const [batch, offerBatch] = useBatchUndo();
   const act = useTaskAct();
@@ -155,9 +157,18 @@ export function OuterTasks({ all, scope, now, groupOf }: { all: readonly ProjWor
       })}
       after={(struck.length > 0 || rest > 0 || did !== null || batch !== null) && (
         <>
-          {struck.map((x, j) => (
-            <TaskRow key={key(x)} x={x} now={now} group={groupOf(x.project)} prs={prs.get(key(x))} fresh={false} check={{ checked: true, onToggle: () => {
-              toggle(x, rows.length + j, true);
+          {struck.map((x) => (
+            <TaskRow key={key(x)} x={x} now={now} group={groupOf(x.project)} prs={prs.get(key(x))} fresh={false} check={{ checked: !reopened.has(key(x)), onToggle: () => {
+              const was = !reopened.has(key(x));
+              setReopened((m) => {
+                const n = new Set(m);
+                if (was) n.add(key(x));
+                else n.delete(key(x));
+                return n;
+              });
+              offerBatch(null);
+              act(x.project, was ? 'reopen' : 'done', x.w.id);
+              offer(was ? null : { project: x.project, step: 'done', row: x.w });
             } }} />
           ))}
           <UndoToast did={did} works={all.filter((x) => x.project === did?.project).map((x) => x.w)} name={did?.row.name ?? ''} send={req} done={() => {
