@@ -28,7 +28,7 @@ import { signOf } from '@/app/side';
 import { barSign } from '@/app/barrows';
 import { tasks } from '@/proto/words_tasks.gen';
 import { useWorks } from '@/store';
-import { aboutOf, actedAfter, agentLineOf, agentStateOf, artsOf, crewOf, goalsOf, isOpen, nowOfTask, originOf, prsOf, reportsOf, soloOn, type Origin, type TaskPr } from './model';
+import { aboutOf, actedAfter, afterDoneWords, agentLineOf, agentStateOf, artsOf, crewOf, goalsOf, isOpen, nowOfTask, originOf, prsOf, reportsOf, soloOn, type Origin, type TaskPr } from './model';
 import { openTask, pausedWords, TaskMark, statusWord } from './Marks';
 import { useTaskAct, useTaskReq } from './Board';
 import { clock, lineAt } from './Side';
@@ -302,7 +302,7 @@ export function TaskTab({ project, id }: { project: string; id: string }) {
       {afterDone !== null && (
         // done stays his word: an agent acting after it never reopens it, the tab says who (tasks-ux m_67726)
         <p className="tk-paused" data-testid={`${t}.after-done`}>
-          <TaskMark status="done" /> {tasks.acted_after_done({ who: afterDone })} ·{' '}
+          <TaskMark status="done" /> {afterDoneWords(afterDone)} ·{' '}
           <Press look="b-btn sm ghost" onClick={() => {
             act(project, 'reopen', w.id);
           }} data-testid={`${t}.after-done.reopen`}>{tasks.act_reopen}</Press>

@@ -66,13 +66,6 @@
     "one": null,
     "text": "Resume"
   },
-  "tasks.acted_after_done": {
-    "args": [
-      "who"
-    ],
-    "one": null,
-    "text": "{who} acted after done"
-  },
   "tasks.agent_answered": {
     "args": [],
     "one": null,
@@ -356,6 +349,13 @@
     "args": [],
     "one": null,
     "text": "show the questions of the tasks you paused"
+  },
+  "tasks.landed_after_done": {
+    "args": [
+      "who"
+    ],
+    "one": null,
+    "text": "{who} landed after you marked it done"
   },
   "tasks.log_a_card": {
     "args": [],
@@ -919,6 +919,13 @@
     "args": [],
     "one": null,
     "text": "your answer"
+  },
+  "tasks.reported_after_done": {
+    "args": [
+      "who"
+    ],
+    "one": null,
+    "text": "{who} reported after you marked it done"
   },
   "tasks.review_finished": {
     "args": [],

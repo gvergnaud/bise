@@ -1,8 +1,9 @@
 // The right bar's rows and the since line, on plain rows (model.ts, since.ts). Owner: tasks.
 import { describe, expect, it } from 'vitest';
 import type { WorkRow, WorkStatus } from '@/proto';
-import { actedAfter, barRows, cutAtWord, goalsOf, listRows, movedKeys, statusSig, type ProjWork } from './model';
+import { actedAfter, afterDoneWords, barRows, cutAtWord, goalsOf, listRows, movedKeys, statusSig, type ProjWork } from './model';
 import { sinceLooked } from './since';
+import { tasks } from '@/proto/words_tasks.gen';
 import { tasksOf } from './chips';
 import { artsOf, prSet, prsOf, resolveMerged } from './model';
 import { originIn } from './TaskTab';
@@ -262,7 +263,17 @@ describe('a task\'s PRs (his pick on page tasks-fresh, designer m_66722)', () =>
 describe('an agent acting on a done task (tasks-ux m_67726)', () => {
   it('names the newest agent whose fact came after his done, never his own gesture or main', () => {
     const l = (at_ms: number, who: string, kind: 'report' | 'gesture' | 'land' = 'report') => ({ at_ms, who, kind });
-    expect(actedAfter([l(30, 'user', 'gesture'), l(25, 'main'), l(20, 'auth-fix', 'land'), l(5, 'docs')], 10)).toBe('auth-fix');
+    expect(actedAfter([l(30, 'user', 'gesture'), l(25, 'main'), l(20, 'auth-fix', 'land'), l(5, 'docs')], 10)).toEqual({ who: 'auth-fix', landed: true });
     expect(actedAfter([l(5, 'docs'), l(3, 'auth-fix')], 10)).toBeNull();
+  });
+  it("says a land as 'landed after you marked it done', any other fact as 'reported' (designer m_67835)", () => {
+    const l = (at_ms: number, who: string, kind: 'report' | 'land' | 'artifact') => ({ at_ms, who, kind });
+    const said = (lines: ReturnType<typeof l>[]) => {
+      const a = actedAfter(lines, 10);
+      return a === null ? null : afterDoneWords(a);
+    };
+    expect(said([l(20, 'auth-fix', 'land')])).toBe(tasks.landed_after_done({ who: 'auth-fix' }));
+    expect(said([l(20, 'docs', 'report')])).toBe(tasks.reported_after_done({ who: 'docs' }));
+    expect(said([l(20, 'docs', 'artifact'), l(15, 'auth-fix', 'land')])).toBe(tasks.reported_after_done({ who: 'docs' }));
   });
 });

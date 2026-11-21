@@ -220,8 +220,10 @@ export const tasks = {
   act_restart: "Restart",
   /** a done task's button */
   act_reopen: "Reopen",
-  /** a done task an agent acted on after his done: it stays done (his word), the Task tab says who (tasks-ux m_67726) */
-  acted_after_done: (a: { who: string | number }): string => String(a.who) + " acted after done",
+  /** a done task an agent landed on after his done: it stays done (his word), the Task tab says who (tasks-ux m_67726, designer m_67835) */
+  landed_after_done: (a: { who: string | number }): string => String(a.who) + " landed after you marked it done",
+  /** a done task an agent reported on (or any other fact but a land) after his done (designer m_67835) */
+  reported_after_done: (a: { who: string | number }): string => String(a.who) + " reported after you marked it done",
   /** the short Undo after his gesture (roma idea 4): its button */
   undo: "Undo",
   /** the Undo's line after Pause: the name first, like our other toasts (designer m_65397) */

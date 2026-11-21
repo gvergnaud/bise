@@ -2,6 +2,7 @@
 // designer and tasks-ux), the right bar's rows (open first, then a fold for the ongoing ones and the
 // ones done this week), its counts, a row's done-when count, a name cut at a word. Pure. Owner: tasks.
 import type { Agent, Artifact, LogLine, Part, PrReview, PrState, WorkRow, WorkStatus, WorkTomb } from '@/proto';
+import { tasks } from '@/proto/words_tasks.gen';
 
 /** A task with its project (the bar lists every project's on bise's own). */
 export interface ProjWork {
@@ -320,9 +321,20 @@ export function aboutOf(line: string): string {
   return at < 0 ? '' : line.slice(at + 3);
 }
 
+/** An agent's fact on a task after his done: who, and whether it was a land. */
+export interface AfterDone {
+  readonly who: string;
+  readonly landed: boolean;
+}
+
 /** The agent whose fact on a task came after his done at `doneAt` (its Log, newest first): the
  *  newest one's, never his own or main's; null none (tasks-ux m_67726). Pure. */
-export function actedAfter(lines: readonly Pick<LogLine, 'at_ms' | 'who' | 'kind'>[], doneAt: number): string | null {
+export function actedAfter(lines: readonly Pick<LogLine, 'at_ms' | 'who' | 'kind'>[], doneAt: number): AfterDone | null {
   const l = lines.find((x) => x.at_ms > doneAt && x.who !== 'user' && x.who !== 'main' && x.kind !== 'gesture' && x.kind !== 'answer');
-  return l === undefined ? null : l.who;
+  return l === undefined ? null : { who: l.who, landed: l.kind === 'land' };
+}
+
+/** The Task tab's line for it: a land says landed, any other fact reported (designer m_67835). Pure. */
+export function afterDoneWords(a: AfterDone): string {
+  return a.landed ? tasks.landed_after_done({ who: a.who }) : tasks.reported_after_done({ who: a.who });
 }
