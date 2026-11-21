@@ -112,10 +112,10 @@ describe('the outer card hides a section with nothing (his m_66323)', () => {
     expect(v.getByTestId(`app.outer.tasks.${HARNESS}.a.name`).textContent).toBe(long);
   });
 
-  it('tasks only done this week: the section keeps its fold (it has something)', () => {
+  it('tasks only done this week: the section keeps them, struck through (it has something; his pick B on page tasks-true)', () => {
     const { v, shown, apply } = world();
     apply({ ev: 'works', project: HARNESS, works: [work('d', 'done')] });
     expect(shown()).toEqual(['tasks']);
-    expect(v.getByTestId('app.outer.tasks.rest')).toBeTruthy();
+    expect(v.getByTestId(`app.outer.tasks.${HARNESS}.d`).hasAttribute('data-checked')).toBe(true);
   });
 });

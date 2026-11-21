@@ -32,6 +32,8 @@ crate::words! { tasks:
     needs_page(page) = "needs you · a pick on page {page}";
     /// to review, its agents' place has an open PR: its number
     review_pr(n) = "to review · PR #{n}";
+    /// to review, its agents all said done and nothing of it moves: finished, his OK left (page tasks-true)
+    review_finished = "finished · to check";
     /// the agent in a turn of it
     working_who(who) = "working · {who}";
     /// it waits for an agent's reply
@@ -76,6 +78,12 @@ crate::words! { tasks:
     goals_tip(done, all) = "done when: {done} of {all} ticked";
     /// the fold at the section's end: never-done tasks and the ones done this week
     fold_rest(ongoing, done) = "{ongoing} ongoing · {done} done lately";
+    /// the batch row heading the bar's To check tasks (his pick B on page tasks-true): how many
+    to_check(n) = "{n} to check";
+    /// the batch row's button: one gesture marks every To check task done, one Undo
+    act_done_all = "Mark all done";
+    /// the batch button's tip: how many, and how many of them have done-when items unticked
+    act_done_all_tip(n, unticked) = one "Mark these {n} tasks done · {unticked} with done when unticked" | "Mark these {n} tasks done · {unticked} with done when unticked";
     /// a chip's tip: the task's name and its line, then what the click does
     chip_tip(name, what) = "{name} · {what} · open the task";
     /// the `+N` after a chip: its tip lists the other tasks
@@ -236,6 +244,8 @@ crate::words! { tasks:
     undo_resumed(name) = "{name} resumed";
     /// the Undo's line after Mark done
     undo_done(name) = "{name} marked done";
+    /// the Undo's line after Mark all done (one gesture, one Undo)
+    undo_done_all(n) = one "{n} task marked done" | "{n} tasks marked done";
     /// the Undo's line after 'Not on this task' (tasks-ux m_66626, designer
     /// m_67465): the task's name last, it gives way first, the rest whole
     undo_unlinked(agent, name) = "{agent} removed from {name}";

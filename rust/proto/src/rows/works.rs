@@ -299,6 +299,7 @@ impl WorkRow {
             (WorkStatus::Stalled, _) if self.at_ms.is_some() => tasks::stalled_quiet(past()),
             (WorkStatus::Stalled, _) => tasks::status_stalled.into(),
             (WorkStatus::ToReview, _) if self.pr.is_some() => tasks::review_pr(self.pr.unwrap_or_default()),
+            (WorkStatus::ToReview, Some(WorkAbout::Finished)) => tasks::review_finished.into(),
             (WorkStatus::ToReview, _) => tasks::status_to_review.into(),
             (WorkStatus::Paused, Some(WorkAbout::Until)) if self.at_ms.is_some() => tasks::paused_until(next()),
             (WorkStatus::Paused, _) => tasks::paused_by_you.into(),

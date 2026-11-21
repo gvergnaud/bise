@@ -47,7 +47,13 @@
 .tk-box[data-st="stalled"]{color:var(--c-err)}
 .tk-box[data-ready]>svg{stroke-width:1.5}
 .tk-box[data-checked]{color:var(--c-text-3)}
-.tk-orow[data-checked] .tk-oname{color:var(--c-text-3)}
+.tk-orow[data-checked] .tk-oname{color:var(--c-text-3);text-decoration:line-through}
+/* the row heading To check (his pick B on page tasks-true): how many, then Mark all done */
+.tk-batch{display:flex;align-items:center;gap:var(--s-2);height:var(--s-7);padding:0 var(--s-2) 0 var(--s-3);color:var(--c-text-3);font-size:var(--t-12)}
+.tk-batch-n{flex:1 1 auto;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.tk-batch-act{flex:none;height:var(--s-6);padding:0 var(--s-2);border:0;border-radius:var(--r-1);background:none;color:var(--c-text);font:inherit;font-weight:600}
+.tk-batch-act:hover{background:var(--c-hover)}
+.tk-batch-act:focus-visible{outline:2px solid var(--c-focus);outline-offset:0}
 /* the name takes the row up to its n/m (designer m_66328); its words, a box as wide as that room
    whatever they say (basis 0), so the ds WordCut cuts them at a word to it and again when it changes */
 .tk-orow .tk-oname{display:flex;flex:1 1 0;min-width:0}

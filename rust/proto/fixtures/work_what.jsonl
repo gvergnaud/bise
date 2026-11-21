@@ -24,3 +24,4 @@
 {"now":1791100000000,"want":"needs you · a pick on page launch plan","row":{"id":"a","name":"A","by":"main","created_ms":1,"last_ms":1,"status":"needs_you","needs":1,"cards":[4],"page":"launch plan"}}
 {"now":1791100000000,"want":"waiting · no agent yet","row":{"id":"a","name":"A","by":"user","created_ms":1,"last_ms":1,"status":"waiting","about":"quiet","at_ms":1}}
 {"now":1791100000000,"want":"waiting · quiet since <past>","row":{"id":"a","name":"A","by":"main","created_ms":1,"last_ms":1,"status":"waiting","about":"quiet","at_ms":1,"agents":["docs"]}}
+{"now":1791100000000,"want":"finished · to check","row":{"id":"a","name":"A","by":"main","created_ms":1,"last_ms":1,"status":"to_review","about":"finished","agents":["docs"]}}

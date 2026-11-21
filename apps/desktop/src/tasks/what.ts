@@ -43,7 +43,9 @@ export function whatOf(r: WorkRow, now: number, past: (ms: number) => string, ne
       return at !== undefined ? tasks.stalled_quiet({ at: p() }) : tasks.status_stalled;
     case 'to_review':
       // its agents' open PR (the hub joins it from the places)
-      return r.pr != null ? tasks.review_pr({ n: r.pr }) : tasks.status_to_review;
+      if (r.pr != null) return tasks.review_pr({ n: r.pr });
+      // its agents all said done, nothing of it moves: his OK is left (page tasks-true)
+      return about === 'finished' ? tasks.review_finished : tasks.status_to_review;
     case 'paused':
       return about === 'until' && at !== undefined ? tasks.paused_until({ at: n() }) : tasks.paused_by_you;
     case 'done':

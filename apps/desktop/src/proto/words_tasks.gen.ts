@@ -26,6 +26,8 @@ export const tasks = {
   needs_page: (a: { page: string | number }): string => "needs you · a pick on page " + String(a.page),
   /** to review, its agents' place has an open PR: its number */
   review_pr: (a: { n: string | number }): string => "to review · PR #" + String(a.n),
+  /** to review, its agents all said done and nothing of it moves: finished, his OK left (page tasks-true) */
+  review_finished: "finished · to check",
   /** the agent in a turn of it */
   working_who: (a: { who: string | number }): string => "working · " + String(a.who),
   /** it waits for an agent's reply */
@@ -66,6 +68,12 @@ export const tasks = {
   goals_tip: (a: { done: string | number; all: string | number }): string => "done when: " + String(a.done) + " of " + String(a.all) + " ticked",
   /** the fold at the section's end: never-done tasks and the ones done this week */
   fold_rest: (a: { ongoing: string | number; done: string | number }): string => String(a.ongoing) + " ongoing · " + String(a.done) + " done lately",
+  /** the batch row heading the bar's To check tasks (his pick B on page tasks-true): how many */
+  to_check: (a: { n: string | number }): string => String(a.n) + " to check",
+  /** the batch row's button: one gesture marks every To check task done, one Undo */
+  act_done_all: "Mark all done",
+  /** the batch button's tip: how many, and how many of them have done-when items unticked */
+  act_done_all_tip: (a: { n: number; unticked: string | number }): string => a.n === 1 ? "Mark these " + String(a.n) + " tasks done · " + String(a.unticked) + " with done when unticked" : "Mark these " + String(a.n) + " tasks done · " + String(a.unticked) + " with done when unticked",
   /** a chip's tip: the task's name and its line, then what the click does */
   chip_tip: (a: { name: string | number; what: string | number }): string => String(a.name) + " · " + String(a.what) + " · open the task",
   /** the `+N` after a chip: its tip lists the other tasks */
@@ -218,6 +226,8 @@ export const tasks = {
   undo_resumed: (a: { name: string | number }): string => String(a.name) + " resumed",
   /** the Undo's line after Mark done */
   undo_done: (a: { name: string | number }): string => String(a.name) + " marked done",
+  /** the Undo's line after Mark all done (one gesture, one Undo) */
+  undo_done_all: (a: { n: number }): string => a.n === 1 ? String(a.n) + " task marked done" : String(a.n) + " tasks marked done",
   /** the Undo's line after 'Not on this task' (tasks-ux m_66626, designer m_67465): the task's name last, it gives way first, the rest whole */
   undo_unlinked: (a: { agent: string | number; name: string | number }): string => String(a.agent) + " removed from " + String(a.name),
   /** `sb send`/`ask`/`report`'s line when the fact carries 2+ tasks (architect m_66621 point 3): the agent narrows it next time */

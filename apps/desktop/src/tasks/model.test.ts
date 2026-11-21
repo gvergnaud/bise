@@ -34,6 +34,18 @@ describe('the bar rows', () => {
     expect(r.done.map((x) => x.w.id)).toEqual(['g']);
   });
 
+  it('puts in progress first, then To check, then what waits (his pick B on page tasks-true)', () => {
+    const all = [
+      w('wait', 'waiting', NOW),
+      w('stall', 'stalled', NOW),
+      w('check', 'to_review', NOW - 3 * H),
+      w('work', 'working', NOW - 9 * H),
+      w('need', 'needs_you', NOW - 9 * H),
+      w('pause', 'paused', NOW),
+    ];
+    expect(barRows(all, NOW).open.map((x) => x.w.id)).toEqual(['need', 'work', 'check', 'wait', 'stall', 'pause']);
+  });
+
   it('counts the done-when items ticked of all, none without items', () => {
     expect(goalsOf({ goals: [{ text: 'x', done: true }, { text: 'y' }] })).toEqual({ done: 1, all: 2 });
     expect(goalsOf({})).toBeNull();

@@ -70,18 +70,23 @@ function world(works: WorkRow[]) {
 const rowId = (id: string) => `app.outer.tasks.${P}.${id}`;
 
 describe('the right bar Tasks, a todo list', () => {
-  it('a box per row; ticked goals make it ready; its click marks done, the row stays checked at its place, then Reopen', () => {
+  it('a box only on To check rows; ticked goals make it ready; its click marks done, the row stays checked, struck, then Reopen', () => {
     const { v, acts, apply } = world([
       work('a', { status: 'needs_you', last_ms: NOW }),
-      work('b', { name: 'Ship the new onboarding flow for every project', goals: [{ text: 'it builds', done: true }] }),
+      work('b', { status: 'to_review', about: 'finished', name: 'Ship the new onboarding flow for every project', goals: [{ text: 'it builds', done: true }] }),
       work('c', { last_ms: NOW - 5000 }),
     ]);
-    const box = (id: string) => v.getByTestId(`${rowId(id)}.box`);
-    expect(box('a').getAttribute('aria-checked')).toBe('false');
-    expect(box('b').hasAttribute('data-ready')).toBe(true);
-    expect(box('c').hasAttribute('data-ready')).toBe(false);
+    const box = (id: string) => v.queryByTestId(`${rowId(id)}.box`);
+    // a live task shows its mark, never a box a stray click would close (tasks-ux m_67726)
+    expect(box('a')).toBeNull();
+    expect(box('c')).toBeNull();
+    expect(v.getByTestId(`${rowId('a')}.mark`)).toBeTruthy();
+    expect(box('b')?.hasAttribute('data-ready')).toBe(true);
+    // in progress first, then To check
+    const names = () => [...v.container.querySelectorAll(`[data-testid^="app.outer.tasks.${P}."][data-testid$=".name"]`)].map((e) => e.getAttribute('data-testid'));
+    expect(names()).toEqual(['a', 'c', 'b'].map((id) => `${rowId(id)}.name`));
 
-    fireEvent.click(box('b'));
+    fireEvent.click(box('b') as HTMLElement);
     expect(acts()).toEqual([{ step: 'done', id: 'b' }]);
     // in the card: its inner padding (bar), the name cut at a word to fit its narrowest, Undo whole (designer m_67367)
     expect(v.getByTestId('app.outer.tasks.toast').closest('.tk-undo')?.classList.contains('bar')).toBe(true);
@@ -91,14 +96,39 @@ describe('the right bar Tasks, a todo list', () => {
     expect(v.getByTestId('app.outer.tasks.toast.what').querySelector('.tk-undo-name')?.contains(v.getByTestId('app.outer.tasks.toast.verb'))).toBe(false);
     expect(v.getByTestId('app.outer.tasks.toast.what').getAttribute('data-tip')).toContain('Ship the new onboarding flow for every project');
     expect(v.getByTestId('app.outer.tasks.toast.undo')).toBeTruthy();
-    // the hub agrees: b is done, and it stays where it was, checked
-    apply(ev('works', { project: P, works: [work('a', { status: 'needs_you', last_ms: NOW }), work('b', { status: 'done', goals: [{ text: 'it builds', done: true }] }), work('c', { last_ms: NOW - 5000 })], tombs: [] }));
-    const order = [...v.container.querySelectorAll(`[data-testid^="app.outer.tasks.${P}."][data-testid$=".box"]`)].map((e) => e.getAttribute('data-testid'));
-    expect(order).toEqual(['a', 'b', 'c'].map((id) => `${rowId(id)}.box`));
-    expect(box('b').getAttribute('aria-checked')).toBe('true');
+    // the hub agrees: b is done, and it stays where it was, checked and struck through
+    apply(ev('works', { project: P, works: [work('a', { status: 'needs_you', last_ms: NOW }), work('b', { status: 'done', done: { at_ms: NOW, by: 'user' }, goals: [{ text: 'it builds', done: true }] }), work('c', { last_ms: NOW - 5000 })], tombs: [] }));
+    expect(names()).toEqual(['a', 'c', 'b'].map((id) => `${rowId(id)}.name`));
+    expect(box('b')?.getAttribute('aria-checked')).toBe('true');
+    expect(v.getByTestId(rowId('b')).hasAttribute('data-checked')).toBe(true);
 
-    fireEvent.click(box('b'));
+    fireEvent.click(box('b') as HTMLElement);
     expect(acts()).toEqual([{ step: 'done', id: 'b' }, { step: 'reopen', id: 'b' }]);
+  });
+
+  it('Mark all done marks every To check task done in one gesture, one Undo reopens them all (his pick B)', () => {
+    const { v, acts } = world([
+      work('w', { status: 'working', last_ms: NOW }),
+      work('f1', { status: 'to_review', about: 'finished', goals: [{ text: 'x' }] }),
+      work('f2', { status: 'to_review', about: 'finished' }),
+      work('q', { status: 'waiting' }),
+    ]);
+    expect(v.getByTestId('app.outer.tasks.check-all').textContent).toContain('2 to check');
+    expect(v.getByTestId('app.outer.tasks.check-all.act').getAttribute('data-tip')).toContain('1 with done when unticked');
+    fireEvent.click(v.getByTestId('app.outer.tasks.check-all.act'));
+    expect(acts()).toEqual([{ step: 'done', id: 'f1' }, { step: 'done', id: 'f2' }]);
+    expect(v.getByTestId('app.outer.tasks.batch-toast.what').textContent).toBe('2 tasks marked done');
+    expect(v.queryByTestId('app.outer.tasks.check-all')).toBeNull();
+    fireEvent.click(v.getByTestId('app.outer.tasks.batch-toast.undo'));
+    expect(acts().slice(2)).toEqual([{ step: 'reopen', id: 'f1' }, { step: 'reopen', id: 'f2' }]);
+  });
+
+  it('shows the last 3 done ones struck through after the open ones, the rest in the fold', () => {
+    const done = (id: string, ago: number) => work(id, { status: 'done', done: { at_ms: NOW - ago, by: 'user' }, last_ms: NOW - ago });
+    const { v } = world([work('w', { status: 'working', last_ms: NOW }), done('d1', 1000), done('d2', 2000), done('d3', 3000), done('d4', 4000)]);
+    const checked = [...v.container.querySelectorAll('.tk-orow[data-checked]')].map((e) => e.getAttribute('data-testid'));
+    expect(checked).toEqual(['d1', 'd2', 'd3'].map(rowId));
+    expect(v.getByTestId('app.outer.tasks.rest').textContent).toContain('1 done lately');
   });
 });
 

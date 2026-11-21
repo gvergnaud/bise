@@ -74,14 +74,15 @@ fn days_ago(at: u64, now: u64) -> String {
     }
 }
 
-/// The order of `sb task list`: what needs him first, done last.
+/// The order of `sb task list`, the right bar's (his pick B on page tasks-true): in progress
+/// first (needs you, working), then to review (finished, his OK left), then what waits, done last.
 fn rank(status: &str) -> u8 {
     match status {
         "needs_you" => 0,
-        "stalled" => 1,
+        "working" => 1,
         "to_review" => 2,
-        "working" => 3,
-        "waiting" => 4,
+        "waiting" => 3,
+        "stalled" => 4,
         "paused" => 5,
         "ongoing" => 6,
         _ => 7,

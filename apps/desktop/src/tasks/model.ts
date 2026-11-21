@@ -13,13 +13,15 @@ export interface ProjWork {
 /** The Board's column order (signed): Needs you · Working · Waiting · Stalled · To review · Done this week · Paused · Ongoing. */
 export const STATUS_ORDER: readonly WorkStatus[] = ['needs_you', 'working', 'waiting', 'stalled', 'to_review', 'done', 'paused', 'ongoing', 'unknown'];
 
-/** a status's rank in the bar's open rows: the Board's order, Paused right after To review (Done and Ongoing fold) */
+/** a status's rank in the bar's open rows (his pick B on page tasks-true, tasks-ux m_67726): in
+ *  progress first (needs you, working), then To check (finished, his OK left), then what waits,
+ *  Paused last (Done and Ongoing fold) */
 const OPEN_RANK: Readonly<Record<WorkStatus, number>> = {
   needs_you: 0,
   working: 1,
-  waiting: 2,
-  stalled: 3,
-  to_review: 4,
+  to_review: 2,
+  waiting: 3,
+  stalled: 4,
   paused: 5,
   unknown: 6,
   done: 7,
@@ -39,6 +41,9 @@ export const needsHim = (w: Pick<WorkRow, 'status'>): boolean => w.status === 'n
 function byLast(a: ProjWork, b: ProjWork): number {
   return b.w.last_ms - a.w.last_ms || a.w.name.localeCompare(b.w.name);
 }
+
+/** How many done tasks the bar shows struck through after the open ones, newest first; the rest fold. */
+export const DONE_SHOWN = 3;
 
 /** The bar's rows: the open ones in the status order; then the fold, ongoing ones then the done this week. Pure. */
 export function barRows(all: readonly ProjWork[], now: number): { readonly open: readonly ProjWork[]; readonly ongoing: readonly ProjWork[]; readonly done: readonly ProjWork[] } {

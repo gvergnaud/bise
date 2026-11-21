@@ -12,10 +12,10 @@ import { groupParts } from '@/app/side3d/lists';
 import { tasks } from '@/proto/words_tasks.gen';
 import { dayWords, timeOf } from '@/artifacts/model';
 import { useState } from 'react';
-import { barRows, goalsOf, listRows, needsHim, type Kept, type ProjWork, type prSet } from './model';
+import { barRows, DONE_SHOWN, goalsOf, listRows, needsHim, type Kept, type ProjWork, type prSet } from './model';
 import { NewDot, openBoard, openTask, TaskCheck, TaskMark } from './Marks';
 import { useTaskAct, useTaskReq } from './Board';
-import { UndoToast, useUndo } from './UndoToast';
+import { BatchToast, UndoToast, useBatchUndo, useUndo } from './UndoToast';
 import { useNewestArts, useTaskPrs } from './hooks';
 import { isNew } from './news';
 import { useSeenTasks, useSettleActed } from './seen';
@@ -78,7 +78,10 @@ function uncheck(m: ReadonlyMap<string, Kept>, k: string): ReadonlyMap<string, K
   return v === undefined ? m : new Map(m).set(k, { ...v, checked: false });
 }
 
-/** The section: `scope` the bar's project ('' every project's: bise's own); `groupOf` a project's group words. */
+/** The section: `scope` the bar's project ('' every project's: bise's own); `groupOf` a project's group words.
+ *  His pick B on page tasks-true (tasks-ux m_67726, designer m_67727): in progress first (needs you,
+ *  working), then To check (finished, his OK left) under one 'Mark all done' row, then what waits;
+ *  the box only where his click is safe (To check, done); the last done ones struck through. */
 export function OuterTasks({ all, scope, now, groupOf }: { all: readonly ProjWork[]; scope: string; now: number; groupOf: (project: string) => string | undefined }) {
   const { seen, looked } = useSeenTasks();
   const arts = useNewestArts(scope);
@@ -88,16 +91,22 @@ export function OuterTasks({ all, scope, now, groupOf }: { all: readonly ProjWor
   // his box: Mark done or Reopen, the row kept at its place while the list is in view (designer m_66969)
   const [kept, setKept] = useState<ReadonlyMap<string, Kept>>(new Map());
   const [did, offer] = useUndo();
+  const [batch, offerBatch] = useBatchUndo();
   const act = useTaskAct();
   const req = useTaskReq();
-  const rows = listRows(open, kept);
+  const key = (x: ProjWork) => `${x.project}/${x.w.id}`;
+  const listed = listRows(open, kept);
+  const inList = new Set(listed.map((r) => key(r.x)));
+  // the last done ones, struck through, after the open ones; the rest fold
+  const struck = done.filter((x) => !inList.has(key(x))).slice(0, DONE_SHOWN).map((x) => ({ x, checked: true }));
+  const rows = [...listed, ...struck];
+  const shown = new Set(rows.map((r) => key(r.x)));
   const needs = open.filter((x) => needsHim(x.w)).length;
-  // the ones he checked here show checked in the list, not in the fold too
-  const keptDone = done.filter((x) => kept.get(`${x.project}/${x.w.id}`)?.checked === true).length;
-  const rest = ongoing.length + done.length - keptDone;
+  const toCheck = listed.filter((r) => !r.checked && r.x.w.status === 'to_review').map((r) => r.x);
+  const rest = ongoing.length + done.filter((x) => !shown.has(key(x))).length;
   const toggle = (x: ProjWork, at: number, checked: boolean) => {
-    const k = `${x.project}/${x.w.id}`;
-    setKept((m) => new Map(m).set(k, { x, at, checked: !checked }));
+    setKept((m) => new Map(m).set(key(x), { x, at, checked: !checked }));
+    offerBatch(null);
     if (checked) {
       act(x.project, 'reopen', x.w.id);
       offer(null);
@@ -106,6 +115,22 @@ export function OuterTasks({ all, scope, now, groupOf }: { all: readonly ProjWor
       offer({ project: x.project, step: 'done', row: x.w });
     }
   };
+  // one gesture, one Undo: every To check task done, each kept checked at its place
+  const doneAll = () => {
+    setKept((m) => {
+      const n = new Map(m);
+      for (const x of toCheck) n.set(key(x), { x, at: rows.findIndex((r) => key(r.x) === key(x)), checked: true });
+      return n;
+    });
+    for (const x of toCheck) act(x.project, 'done', x.w.id);
+    offer(null);
+    offerBatch(toCheck);
+  };
+  const unticked = toCheck.filter((x) => {
+    const g = goalsOf(x.w);
+    return g !== null && g.done < g.all;
+  }).length;
+  const firstCheck = toCheck.length > 1 ? rows.findIndex((r) => key(r.x) === key(toCheck[0] as ProjWork)) : -1;
   return (
     <OuterList id="tasks" name={tasks.section} count={String(open.length)} {...(needs > 0 ? { loud: tasks.head_needs({ n: needs }) } : {})}
       onAll={() => {
@@ -113,28 +138,49 @@ export function OuterTasks({ all, scope, now, groupOf }: { all: readonly ProjWor
       }}
       // no open task and nothing in the fold: no section (OuterList; his m_66323, designer m_66328)
       total={rows.length} empty={<Empty>{tasks.none_open}</Empty>}
-      rows={(n) => rows.slice(0, n).map((r, i) => (
-        <TaskRow key={`${r.x.project}/${r.x.w.id}`} x={r.x} now={now} group={groupOf(r.x.project)} prs={prs.get(`${r.x.project}/${r.x.w.id}`)} fresh={!r.checked && isNew(r.x.w, seen(r.x.project, r.x.w.id), arts.get(`${r.x.project}/${r.x.w.id}`) ?? 0, looked)}
-          check={{ checked: r.checked, onToggle: () => {
-            toggle(r.x, i, r.checked);
-          } }} />
-      ))}
-      after={(rest > 0 || did !== null) && (
+      rows={(n) => rows.slice(0, n).flatMap((r, i) => {
+        // the box only where his click is safe: a finished task (To check) or a done one; a live
+        // task shows its mark, closed from its Task tab (tasks-ux m_67726)
+        const boxed = r.checked || r.x.w.status === 'to_review';
+        const row = (
+          <TaskRow key={key(r.x)} x={r.x} now={now} group={groupOf(r.x.project)} prs={prs.get(key(r.x))} fresh={!r.checked && isNew(r.x.w, seen(r.x.project, r.x.w.id), arts.get(key(r.x)) ?? 0, looked)}
+            {...(boxed ? { check: { checked: r.checked, onToggle: () => {
+              toggle(r.x, i, r.checked);
+            } } } : {})} />
+        );
+        return i === firstCheck ? [<BatchRow key="batch" n={toCheck.length} unticked={unticked} onClick={doneAll} />, row] : [row];
+      })}
+      after={(rest > 0 || did !== null || batch !== null) && (
         <>
           <UndoToast did={did} works={all.filter((x) => x.project === did?.project).map((x) => x.w)} name={did?.row.name ?? ''} send={req} done={() => {
             // his Undo sent the Reopen: the row stays at its place, unchecked
             if (did !== null) setKept((m) => uncheck(m, `${did.project}/${did.row.id}`));
             offer(null);
           }} testId="app.outer.tasks.toast" bar />
+          <BatchToast rows={batch} send={req} done={() => {
+            // his Undo reopened them all: each stays at its place, unchecked
+            if (batch !== null) setKept((m) => batch.reduce((acc, x) => uncheck(acc, key(x)), m));
+            offerBatch(null);
+          }} testId="app.outer.tasks.batch-toast" />
           {rest > 0 && (
             <Press look="tk-fold" data-testid="app.outer.tasks.rest" onClick={() => {
               openBoard(scope);
             }}>
-              <TaskMark status="ongoing" /> {tasks.fold_rest({ ongoing: ongoing.length, done: done.length - keptDone })}
+              <TaskMark status="ongoing" /> {tasks.fold_rest({ ongoing: ongoing.length, done: rest - ongoing.length })}
             </Press>
           )}
         </>
       )} />
+  );
+}
+
+/** The row heading To check when 2+ wait for his OK: how many, and Mark all done (one Undo). */
+function BatchRow({ n, unticked, onClick }: { n: number; unticked: number; onClick: () => void }) {
+  return (
+    <div className="tk-batch" data-testid="app.outer.tasks.check-all">
+      <span className="tk-batch-n">{tasks.to_check({ n })}</span>
+      <Press look="tk-batch-act" {...tipAttrs(tasks.act_done_all_tip({ n, unticked }), undefined, 'left')} onClick={onClick} data-testid="app.outer.tasks.check-all.act">{tasks.act_done_all}</Press>
+    </div>
   );
 }
 

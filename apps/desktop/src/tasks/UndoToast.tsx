@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Toast, tipAttrs, WordCut } from '@/ds';
 import type { Task as TaskReq, WorkRow } from '@/proto';
 import { tasks } from '@/proto/words_tasks.gen';
-import { cutAtWord } from './model';
+import { cutAtWord, type ProjWork } from './model';
 import { didWords, inverse, undoable, UNDO_MS, type Did } from './undo';
 
 /** The most letters of a task's name the toast keeps on its one line ('Speed up the signup flow…'). */
@@ -70,6 +70,42 @@ export function UndoToast({ did, works, name, send, done, testId, bar = false }:
           <WordCut className="tk-undo-name" text={cut} drop />
           {post !== '' && <span className="tk-undo-verb" data-testid={`${testId}.verb`}>{post}</span>}
         </span>
+      </Toast>
+    </div>
+  );
+}
+
+/** Mark all done's Undo (his pick B on page tasks-true): the tasks he marked in one gesture, null
+ *  none; `offer` starts a new one for UNDO_MS (the old one goes). */
+export function useBatchUndo(): [readonly ProjWork[] | null, (rows: readonly ProjWork[] | null) => void] {
+  const [rows, setRows] = useState<readonly ProjWork[] | null>(null);
+  const t = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (t.current !== null) clearTimeout(t.current);
+  }, []);
+  return [
+    rows,
+    (r) => {
+      if (t.current !== null) clearTimeout(t.current);
+      setRows(r);
+      if (r !== null)
+        t.current = setTimeout(() => {
+          setRows(null);
+        }, UNDO_MS);
+    },
+  ];
+}
+
+/** One toast for one gesture: '12 tasks marked done · Undo'; its Undo reopens each of them. */
+export function BatchToast({ rows, send, done, testId }: { rows: readonly ProjWork[] | null; send: (project: string, req: TaskReq) => void; done: () => void; testId: string }) {
+  if (rows === null || rows.length === 0) return null;
+  return (
+    <div className="tk-undo bar">
+      <Toast action={{ text: tasks.undo, testId: `${testId}.undo`, onClick: () => {
+        for (const x of rows) send(x.project, { step: 'reopen', id: x.w.id });
+        done();
+      } }} testId={testId}>
+        <span className="tk-undo-what" data-testid={`${testId}.what`}>{tasks.undo_done_all({ n: rows.length })}</span>
       </Toast>
     </div>
   );

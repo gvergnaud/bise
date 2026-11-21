@@ -10,6 +10,19 @@
     "one": null,
     "text": "Mark done"
   },
+  "tasks.act_done_all": {
+    "args": [],
+    "one": null,
+    "text": "Mark all done"
+  },
+  "tasks.act_done_all_tip": {
+    "args": [
+      "n",
+      "unticked"
+    ],
+    "one": "Mark these {n} tasks done · {unticked} with done when unticked",
+    "text": "Mark these {n} tasks done · {unticked} with done when unticked"
+  },
   "tasks.act_done_goals": {
     "args": [
       "done",
@@ -900,6 +913,11 @@
     "one": null,
     "text": "your answer"
   },
+  "tasks.review_finished": {
+    "args": [],
+    "one": null,
+    "text": "finished · to check"
+  },
   "tasks.review_pr": {
     "args": [
       "n"
@@ -1071,6 +1089,13 @@
     "one": null,
     "text": "Overview"
   },
+  "tasks.to_check": {
+    "args": [
+      "n"
+    ],
+    "one": null,
+    "text": "{n} to check"
+  },
   "tasks.today": {
     "args": [],
     "one": null,
@@ -1087,6 +1112,13 @@
     ],
     "one": null,
     "text": "{name} marked done"
+  },
+  "tasks.undo_done_all": {
+    "args": [
+      "n"
+    ],
+    "one": "{n} task marked done",
+    "text": "{n} tasks marked done"
   },
   "tasks.undo_paused": {
     "args": [
