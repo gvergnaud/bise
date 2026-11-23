@@ -127,7 +127,7 @@ def Laws.held_makes_no_fx(ws, e):
   and_and_false(HPL.no_place(J.get_str(ws, "place")), HM.ws_placing(ws))
 
 def Laws.first_held_is_the_first(a, rest, e):
-  %Equal.sym(Bool, HPL.held(a), True{}, e) : {Bool.pick(Maybe<&2, String>, _, Some{HS.Agent.name(a)}, HPL.first_held(rest)) == Some{HS.Agent.name(a)} : Maybe<&2, String>}
+  %Equal.sym(Bool, HPL.held(a), True{}, e) : {HPL.first_held.go(a <> rest, _) == Some{HS.Agent.name(a)} : Maybe<&2, String>}
   {==}
 
 def Laws.boot_skips_held(o, cx, a):

@@ -125,12 +125,26 @@ def held(+a: S.Agent) -> Bool:
 
 # the first held task in creation order: the one a reading at DK.LOW() GB
 # or more starts (one per reading)
-def first_held(as: List<&2, S.Agent>) -> Maybe<&2, String>:
-  match as:
+def held_at(xs: List<&2, S.Agent>) -> Bool:
+  match xs:
     case Nil{}:
+      False{}
+    case Con{+h, _}:
+      held(h)
+
+# the walk: `hit` is held_at(xs); a match, not a Bool.pick, so it stops
+# at its hit (tests/pick_gate.py, model.bend map_agent.go)
+def first_held.go(xs: List<&2, S.Agent>, +hit: Bool) -> Maybe<&2, String>:
+  match xs hit:
+    case Nil{} _:
       None{}
-    case Con{+a, +rest}:
-      Bool.pick(Maybe<&2, String>, held(a), Some{S.Agent.name(a)}, first_held(rest))
+    case Con{+h, _} True{}:
+      Some{S.Agent.name(h)}
+    case Con{_, +t} False{}:
+      first_held.go(t, held_at(t))
+
+def first_held(+as: List<&2, S.Agent>) -> Maybe<&2, String>:
+  first_held.go(as, held_at(as))
 
 # every held task, in creation order: a reading under DK.REFUSE() refuses them
 def held_names(as: List<&2, S.Agent>) -> List<&2, String>:
@@ -138,7 +152,8 @@ def held_names(as: List<&2, S.Agent>) -> List<&2, String>:
     case Nil{}:
       Nil{}
     case Con{+a, +rest}:
-      Bool.pick(List<&2, String>, held(a), S.Agent.name(a) <> held_names(rest), held_names(rest))
+      +more = held_names(rest)
+      Bool.pick(List<&2, String>, held(a), S.Agent.name(a) <> more, more)
 
 # the shell makes this ws's worktree: placing, and its own (a ws with a
 # `place` is a join, `sb spawn --place A` while A is placing: A's comes),
