@@ -976,6 +976,107 @@ fn a_low_disk_tells_main_once_per_crossing() {
     assert_eq!(disk(&t), 2, "back over 45, then under 40: a new crossing");
 }
 
+/// wt-disk (hub/disk.bend's gate, architect m_67917): a new worktree's
+/// checkout waits under 40 GB free and is refused under 20 GB.
+mod disk_gate {
+    use super::*;
+
+    fn spawn(t: &mut T, name: &str) -> (Vec<Effect>, Value) {
+        let (tok, fx) = t.req(
+            MAIN,
+            AgentReq::Spawn {
+                name: name.into(),
+                brief: Brief { objective: format!("objective of {}", name), ..Brief::default() },
+                worktree: true,
+                with_changes: false,
+                place: String::new(),
+                feature: String::new(),
+                ask: Default::default(),
+                parts: String::new(),
+                attach: Vec::new(),
+                fwd: None,
+                task: Vec::new(),
+            },
+        );
+        let r = reply(&fx, tok).unwrap_or(Value::Null);
+        (fx, r)
+    }
+
+    fn creates(fx: &[Effect]) -> Vec<String> {
+        fx.iter()
+            .filter_map(|e| match e {
+                Effect::Place(crate::place_job::Job::Create { name, .. }) => Some(name.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn waits(t: &T) -> usize {
+        t.hub.st.main_notes.iter().filter(|n| n.contains("waits for disk")).count()
+    }
+
+    /// no reading yet (or the reading off, BISE_DISK_FREE_GB=off): it goes, as before
+    #[test]
+    fn unknown_disk_goes() {
+        let mut t = T::new();
+        let (fx, _) = spawn(&mut t, "a");
+        assert_eq!(creates(&fx), vec!["a".to_string()]);
+    }
+
+    #[test]
+    fn at_40_gb_it_goes() {
+        let mut t = T::new();
+        t.go(Input::DiskFree { gb: 40 });
+        let (fx, _) = spawn(&mut t, "a");
+        assert_eq!(creates(&fx), vec!["a".to_string()]);
+        assert_eq!(waits(&t), 0);
+    }
+
+    #[test]
+    fn under_20_gb_it_is_refused() {
+        let mut t = T::new();
+        t.go(Input::DiskFree { gb: 19 });
+        let (fx, reply) = spawn(&mut t, "a");
+        assert!(creates(&fx).is_empty(), "{:?}", fx);
+        assert!(reply.to_string().contains("refused: 19 GB free"), "{}", reply);
+        assert!(!t.hub.st.agents.contains_key("a"), "no task made");
+    }
+
+    /// under 40 GB: held (no checkout, main told once), then started one per
+    /// reading at 40 GB or more, in creation order
+    #[test]
+    fn under_40_gb_it_waits_then_starts_one_per_reading() {
+        let mut t = T::new();
+        t.go(Input::DiskFree { gb: 30 });
+        let (fx, _) = spawn(&mut t, "a");
+        assert!(creates(&fx).is_empty(), "held: {:?}", fx);
+        let (fx, _) = spawn(&mut t, "b");
+        assert!(creates(&fx).is_empty(), "held: {:?}", fx);
+        assert_eq!(waits(&t), 2, "one note per held task: {:?}", t.hub.st.main_notes);
+        assert!(t.hub.st.main_notes.iter().any(|n| n.starts_with("@a waits for disk: 30 GB free")));
+        assert_eq!(creates(&t.go(Input::DiskFree { gb: 35 })), Vec::<String>::new(), "still under 40");
+        assert_eq!(waits(&t), 2, "no second note while it waits");
+        assert_eq!(creates(&t.go(Input::DiskFree { gb: 41 })), vec!["a".to_string()], "the first, alone");
+        assert!(!t.hub.st.agents["a"].ws.placing(), "a made");
+        assert!(t.hub.st.agents["b"].ws.placing(), "b still held");
+        assert_eq!(creates(&t.go(Input::DiskFree { gb: 42 })), vec!["b".to_string()], "the next reading, the next one");
+        assert!(creates(&t.go(Input::DiskFree { gb: 43 })).is_empty(), "none left");
+    }
+
+    /// held, then a reading under 20 GB: refused, its spawner told
+    #[test]
+    fn a_held_one_is_refused_under_20_gb() {
+        let mut t = T::new();
+        t.go(Input::DiskFree { gb: 30 });
+        spawn(&mut t, "a");
+        let fx = t.go(Input::DiskFree { gb: 15 });
+        assert!(creates(&fx).is_empty());
+        let words = format!("{:?}", fx);
+        assert!(words.contains("could not start") && words.contains("refused: 15 GB free"), "{}", words);
+        assert!(creates(&t.go(Input::DiskFree { gb: 50 })).is_empty(), "refused stays refused");
+    }
+}
+
 #[test]
 fn shared_tasks_touching_one_file_tell_main() {
     let mut t = T::new();

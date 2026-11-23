@@ -424,12 +424,21 @@ def disk_tell(-o: S.St, tell: Bool, +cx: X.Cx<o>, +gb: Nat) -> X.Cx<o>:
 # the data volume's free GB (IDiskFree, hub/disk.bend): its band kept in
 # the runtime's last (never journaled: a sensor fact), and main told once
 # on the crossing under DK.LOW()
+#
+# The reading's whole GB is kept there too (DK.GB_KEY()): a new checkout's
+# gate reads it (disk_gate); the held ones are started or refused by the
+# input's dispatch (disk_held, below boot)
 def disk_free(-o: S.St, +cx: X.Cx<o>, +gb: Nat) -> X.Cx<o>:
   +r = rr(o, cx)
   +was = String.eq(KL.kv_get(X.R.last(r), DK.KEY()), "1")
-  +rest = KL.kv_del(X.R.last(r), DK.KEY())
-  +cx2 = set_r(o, cx, X.R.with_last(r, disk_band(DK.low(was, gb), rest)))
+  +rest = KL.kv_del(KL.kv_del(X.R.last(r), DK.KEY()), DK.GB_KEY())
+  +last = M.snoc(X.Kv, disk_band(DK.low(was, gb), rest), X.Kv{DK.GB_KEY(), Nat.show(gb)})
+  +cx2 = set_r(o, cx, X.R.with_last(r, last))
   disk_tell(o, DK.tells(was, gb), cx2, gb)
+
+# what a new checkout does at the last reading (none yet: it goes)
+def disk_gate(-o: S.St, +cx: X.Cx<o>) -> DK.Gate:
+  DK.gate(Nat.read(KL.kv_get(X.R.last(rr(o, cx)), DK.GB_KEY())))
 
 # opens card number next_card (the caller reads it first when it needs it)
 # in the user's inbox: `kind` is a user kind (CK.user_kind), never an
@@ -1429,6 +1438,25 @@ def NewTask.with_changes(x: NewTask) -> Bool:
     case NewTask{_, _, _, _, _, _, +with_changes, _, _, _}:
       with_changes
 
+# wt-disk: main's one note for a held create, once it is made
+def create.held(-o: S.St, p: X.Cx<o> & TaskR, +gb: Nat) -> X.Cx<o> & TaskR:
+  match p:
+    case (+cx, TOk{+n}):
+      (note_main(o, cx, DK.wait_text(n, gb)), TOk{n})
+    case (+cx, +r):
+      (cx, r)
+
+# wt-disk (hub/disk.bend's gate): under DK.REFUSE() GB refused, under
+# DK.LOW() GB made held (its ws placing, no fx; main told once)
+def create.gate(-o: S.St, g: DK.Gate, +cx: X.Cx<o>, +t: NewTask, +name: String, +ws: J.Json) -> X.Cx<o> & TaskR:
+  match g:
+    case DK.GGo{}:
+      create.go(o, cx, t, name, ws)
+    case DK.GWait{+gb}:
+      create.held(o, create.go(o, cx, t, name, PL.ws_hold(ws)), gb)
+    case DK.GRefuse{+gb}:
+      (cx, TErr{DK.refused_text(gb)})
+
 # hub-loop: `ws` placing, the shell makes its worktree off its loop
 # (place.bend)
 def create.git(-o: S.St, git: Bool, +cx: X.Cx<o>, +t: NewTask, +name: String, +ws: J.Json) -> X.Cx<o> & TaskR:
@@ -1436,7 +1464,7 @@ def create.git(-o: S.St, git: Bool, +cx: X.Cx<o>, +t: NewTask, +name: String, +w
     case False{}:
       (cx, TErr{"the workspace is not a git repository: no worktree possible"})
     case True{}:
-      create.go(o, cx, t, name, ws)
+      create.gate(o, disk_gate(o, cx), cx, t, name, ws)
 
 def create.wt(-o: S.St, wt: Bool, +cx: X.Cx<o>, +t: NewTask, +name: String) -> X.Cx<o> & TaskR:
   match wt:
@@ -2097,10 +2125,29 @@ def restore.go(-o: S.St, +cx: X.Cx<o>, +a: S.Agent) -> X.Cx<o> & TaskR:
 # issue 32 3b: its dropped worktree is made again off the loop: the task
 # is active now, its ws placing (no REPL, its messages wait) until the
 # shell's `placed` (placed: PRestored, PUnrestored)
-def restore.off(-o: S.St, +cx: X.Cx<o>, +a: S.Agent) -> X.Cx<o> & TaskR:
+def restore.go_off(-o: S.St, +cx: X.Cx<o>, +a: S.Agent) -> X.Cx<o> & TaskR:
   +n = S.Agent.name(a)
   +cx2 = emit(o, cx, M.EWorkspace{n, PL.restoring_ws(S.Agent.ws(a))}, Unit{}, Unit{}, Unit{})
   restore.go.as(o, out(o, cx2, F.worktree_restore(n, S.Agent.ws(a), S.Agent.snap(a))), a, PL.restoring_note())
+
+# wt-disk (hub/disk.bend's gate): held, its ws placing and held (no fx,
+# main told once; a reading at DK.LOW() GB or more asks for it, as a boot)
+def restore.held(-o: S.St, +cx: X.Cx<o>, +a: S.Agent, +gb: Nat) -> X.Cx<o> & TaskR:
+  +n = S.Agent.name(a)
+  +cx2 = emit(o, cx, M.EWorkspace{n, PL.ws_hold(PL.restoring_ws(S.Agent.ws(a)))}, Unit{}, Unit{}, Unit{})
+  restore.go.as(o, note_main(o, cx2, DK.wait_text(n, gb)), a, PL.restoring_note())
+
+def restore.gate(-o: S.St, g: DK.Gate, +cx: X.Cx<o>, +a: S.Agent) -> X.Cx<o> & TaskR:
+  match g:
+    case DK.GGo{}:
+      restore.go_off(o, cx, a)
+    case DK.GWait{+gb}:
+      restore.held(o, cx, a, gb)
+    case DK.GRefuse{+gb}:
+      (cx, TErr{DK.refused_text(gb)})
+
+def restore.off(-o: S.St, +cx: X.Cx<o>, +a: S.Agent) -> X.Cx<o> & TaskR:
+  restore.gate(o, disk_gate(o, cx), cx, a)
 
 def restore.wt(-o: S.St, dropped: Bool, +cx: X.Cx<o>, +a: S.Agent) -> X.Cx<o> & TaskR:
   match dropped:
@@ -2149,20 +2196,37 @@ def restore_task(-o: S.St, +cx: X.Cx<o>, +name: String) -> X.Cx<o> & TaskR:
 # takes its new BEND_WORKDIR at its next spawn), its ws placing (its
 # messages wait), then the shell's `placed` resumes it (placed.ok/err:
 # BIsolate)
-def isolate.off(-o: S.St, +cx: X.Cx<o>, +a: S.Agent) -> X.Cx<o> & TaskR:
+def isolate.down(-o: S.St, +cx: X.Cx<o>, +a: S.Agent, +ws: J.Json) -> X.Cx<o>:
   +n = S.Agent.name(a)
   +cx2 = out(o, cx, F.kill(n))
   +cx3 = upd_rt(o, cx2, X.Rt.with_run(rt(o, cx2, n), S.RDown{}))
-  +cx4 = emit(o, cx3, M.EWorkspace{n, PL.isolating_ws(S.Agent.ws(a))}, Unit{}, Unit{}, Unit{})
+  emit(o, cx3, M.EWorkspace{n, ws}, Unit{}, Unit{}, Unit{})
+
+def isolate.off(-o: S.St, +cx: X.Cx<o>, +a: S.Agent) -> X.Cx<o> & TaskR:
+  +n = S.Agent.name(a)
+  +cx4 = isolate.down(o, cx, a, PL.isolating_ws(S.Agent.ws(a)))
   +cx5 = out(o, cx4, F.worktree_create(n, False{}, ""))
   (feed(o, cx5, M.MAIN(), FD.info(PL.isolating_text(n))), TOk{n})
+
+# wt-disk (hub/disk.bend's gate): refused before its REPL stops; held: it
+# stops, its ws placing and held, main told once
+def isolate.gate(-o: S.St, g: DK.Gate, +cx: X.Cx<o>, +a: S.Agent) -> X.Cx<o> & TaskR:
+  match g:
+    case DK.GGo{}:
+      isolate.off(o, cx, a)
+    case DK.GWait{+gb}:
+      +n = S.Agent.name(a)
+      +cx2 = isolate.down(o, cx, a, PL.ws_hold(PL.isolating_ws(S.Agent.ws(a))))
+      (note_main(o, cx2, DK.wait_text(n, gb)), TOk{n})
+    case DK.GRefuse{+gb}:
+      (cx, TErr{DK.refused_text(gb)})
 
 def isolate.pre(-o: S.St, pre: Maybe<&2, String>, +cx: X.Cx<o>, +a: S.Agent) -> X.Cx<o> & TaskR:
   match pre:
     case Some{+e}:
       (cx, TErr{e})
     case None{}:
-      isolate.off(o, cx, a)
+      isolate.gate(o, disk_gate(o, cx), cx, a)
 
 def isolate.agent(-o: S.St, m: Maybe<&2, S.Agent>, +cx: X.Cx<o>, +name: String) -> X.Cx<o> & TaskR:
   match m:
@@ -4850,10 +4914,19 @@ def boot.place(-o: S.St, b: PL.Back, +cx: X.Cx<o>, +a: S.Agent) -> X.Cx<o>:
     case _:
       place.ask(o, PL.makes(S.Agent.ws(a)), cx, S.Agent.name(a), S.Agent.ws(a))
 
+# a held one (wt-disk, PL.ws_held) gets no fx: a reading at DK.LOW() GB
+# or more asks for it (disk_release)
+def boot.held(-o: S.St, held: Bool, +cx: X.Cx<o>, +a: S.Agent) -> X.Cx<o>:
+  match held:
+    case True{}:
+      cx
+    case False{}:
+      boot.place(o, PL.boot_back(S.Agent.ws(a)), cx, a)
+
 def boot.placing(-o: S.St, placing: Bool, +cx: X.Cx<o>, +a: S.Agent) -> X.Cx<o>:
   match placing:
     case True{}:
-      boot.place(o, PL.boot_back(S.Agent.ws(a)), cx, a)
+      boot.held(o, PL.ws_held(S.Agent.ws(a)), cx, a)
     case False{}:
       boot.live(o, is_active(S.Agent.life(a)), cx, S.Agent.name(a))
 
@@ -5152,6 +5225,49 @@ def placed.in(-o: S.St, +cx: X.Cx<o>, +name: String, +ws: J.Json, +err: String) 
   +d = PL.placed_of(st(o, cx), name, ws, err)
   placed.join(o, PL.joiners(st(o, cx), name), placed(o, d, cx), d, err)
 
+# ---- wt-disk: the held checkouts at a reading (hub/disk.bend's gate) ----
+
+# a reading at DK.LOW() GB or more: the first held one (creation order) is
+# no longer held (journaled), then asked for as a boot asks (a new one's or
+# an isolate's worktree_create, a restore's worktree_restore); one per reading
+def disk_release.agent(-o: S.St, m: Maybe<&2, S.Agent>, +cx: X.Cx<o>, +n: String) -> X.Cx<o>:
+  match m:
+    case None{}:
+      cx
+    case Some{+a}:
+      +cx2 = emit(o, cx, M.EWorkspace{n, PL.ws_unhold(S.Agent.ws(a))}, Unit{}, Unit{}, Unit{})
+      boot.one(o, M.get_agent(st(o, cx2), n), cx2, n)
+
+def disk_release(-o: S.St, m: Maybe<&2, String>, +cx: X.Cx<o>) -> X.Cx<o>:
+  match m:
+    case None{}:
+      cx
+    case Some{+n}:
+      disk_release.agent(o, M.get_agent(st(o, cx), n), cx, n)
+
+# a reading under DK.REFUSE() GB: every held one ends as a worktree not
+# made (place.bend's placed_of: a new one fails, its spawner told; a
+# restore's goes back archived; an isolate's back to the shared folder)
+def disk_refuse(-o: S.St, ns: List<&2, String>, +cx: X.Cx<o>, +gb: Nat) -> X.Cx<o>:
+  match ns:
+    case Nil{}:
+      cx
+    case Con{+n, +rest}:
+      disk_refuse(o, rest, placed.in(o, cx, n, J.JNull{}, DK.refused_text(gb)), gb)
+
+def disk_held(-o: S.St, g: DK.Gate, +cx: X.Cx<o>) -> X.Cx<o>:
+  match g:
+    case DK.GGo{}:
+      disk_release(o, PL.first_held(S.St.agents(st(o, cx))), cx)
+    case DK.GWait{_}:
+      cx
+    case DK.GRefuse{+gb}:
+      disk_refuse(o, PL.held_names(S.St.agents(st(o, cx))), cx, gb)
+
+# IDiskFree: the band and main's note (disk_free), then the held checkouts
+def disk_in(-o: S.St, +cx: X.Cx<o>, +gb: Nat) -> X.Cx<o>:
+  disk_held(o, DK.gate.of(gb), disk_free(o, cx, gb))
+
 # tasks: the page waits input's lists as R.pw (a work without its count,
 # or a count of 0, keeps none)
 def page_waits(ws: List<&2, String>, ns: List<&2, Nat>) -> List<&2, X.Kn>:
@@ -5271,7 +5387,7 @@ def dispatch(-o: S.St, +cx: X.Cx<o>, +i: GI.In) -> X.Cx<o>:
     case GI.IClose{+card}:
       close_by_user(o, M.card_of(S.St.cards(st(o, cx)), card), cx, card)
     case GI.IDiskFree{+gb}:
-      disk_free(o, cx, gb)
+      disk_in(o, cx, gb)
     case GI.IForceRun{+agent, +run}:
       # tests only: put an agent's REPL in a given state (then deliver, like
       # any change of run: law L4)

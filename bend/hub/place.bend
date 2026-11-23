@@ -99,10 +99,52 @@ def no_place(m: Maybe<&2, String>) -> Bool:
     case Some{_}:
       False{}
 
+# a placing ws held for disk (wt-disk, hub/disk.bend's gate): no fx yet,
+# its checkout starts at a reading at DK.LOW() GB or more; journaled with
+# the ws (EWorkspace, ETaskCreated), so a restarted hub keeps the wait
+def ws_held(+ws: J.Json) -> Bool:
+  J.get_bool_or(ws, "disk_wait", False{})
+
+def ws_hold(+ws: J.Json) -> J.Json:
+  J.set(ws, "disk_wait", J.JBool{True{}})
+
+def ws_unhold(+ws: J.Json) -> J.Json:
+  J.set(ws, "disk_wait", J.JBool{False{}})
+
+def is_failed(l: S.Life) -> Bool:
+  match l:
+    case S.LFailed{}:
+      True{}
+    case _:
+      False{}
+
+# a live task held for disk (the agents list: not archived; a refused one
+# failed, it waits no more)
+def held(+a: S.Agent) -> Bool:
+  M.ws_placing(S.Agent.ws(a)) && ws_held(S.Agent.ws(a)) && Bool.not(is_failed(S.Agent.life(a)))
+
+# the first held task in creation order: the one a reading at DK.LOW() GB
+# or more starts (one per reading)
+def first_held(as: List<&2, S.Agent>) -> Maybe<&2, String>:
+  match as:
+    case Nil{}:
+      None{}
+    case Con{+a, +rest}:
+      Bool.pick(Maybe<&2, String>, held(a), Some{S.Agent.name(a)}, first_held(rest))
+
+# every held task, in creation order: a reading under DK.REFUSE() refuses them
+def held_names(as: List<&2, S.Agent>) -> List<&2, String>:
+  match as:
+    case Nil{}:
+      Nil{}
+    case Con{+a, +rest}:
+      Bool.pick(List<&2, String>, held(a), S.Agent.name(a) <> held_names(rest), held_names(rest))
+
 # the shell makes this ws's worktree: placing, and its own (a ws with a
-# `place` is a join, `sb spawn --place A` while A is placing: A's comes)
+# `place` is a join, `sb spawn --place A` while A is placing: A's comes),
+# and not held for disk
 def makes(+ws: J.Json) -> Bool:
-  no_place(J.get_str(ws, "place")) && M.ws_placing(ws)
+  no_place(J.get_str(ws, "place")) && M.ws_placing(ws) && Bool.not(ws_held(ws))
 
 def shared_ws(+path: String) -> J.Json:
   J.obj([J.kv("mode", J.JStr{"shared"}), J.kv("path", J.JStr{path}), J.kv("branch", J.JNull{}),

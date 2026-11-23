@@ -8,6 +8,7 @@ import ../hub/cx.bend as HX
 import ../hub/core.bend as HC
 import ../hub/place.bend as HPL
 import ../hub/gen/fx.bend as HF
+import ../hub/disk.bend as DK
 import ../laws/place.bend as Laws
 
 def Laws.no_repl_before_placed(o, cx, n, r, e):
@@ -43,7 +44,7 @@ def Laws.placed_replays_as_ws(st, n, ws):
   {==}
 
 def Laws.place_join_no_create(o, cx, n, ws, p, e):
-  %Equal.sym(Maybe<&2, String>, J.get_str(ws, "place"), Some{p}, e) : {HC.place.ask(o, HPL.no_place(_) && HM.ws_placing(ws), cx, n, ws) == cx : HX.Cx<o>}
+  %Equal.sym(Maybe<&2, String>, J.get_str(ws, "place"), Some{p}, e) : {HC.place.ask(o, HPL.no_place(_) && HM.ws_placing(ws) && Bool.not(HPL.ws_held(ws)), cx, n, ws) == cx : HX.Cx<o>}
   {==}
 
 def Laws.place_join_waits(o, cx, b, r, e):
@@ -108,4 +109,29 @@ def Laws.isolate_err_back_shared(o, cx, n, e, p, from):
   {==}
 
 def Laws.feature_rides_the_fx(o, cx, n, ws):
+  {==}
+
+# ---- wt-disk: a checkout held for disk ----
+
+def and_and_false(x: Bool, y: Bool) -> {x && y && False{} == False{} : Bool}:
+  match x y:
+    case True{} True{}:
+      {==}
+    case True{} False{}:
+      {==}
+    case False{} _:
+      {==}
+
+def Laws.held_makes_no_fx(ws, e):
+  %Equal.sym(Bool, HPL.ws_held(ws), True{}, e) : {HPL.no_place(J.get_str(ws, "place")) && HM.ws_placing(ws) && Bool.not(_) == False{} : Bool}
+  and_and_false(HPL.no_place(J.get_str(ws, "place")), HM.ws_placing(ws))
+
+def Laws.first_held_is_the_first(a, rest, e):
+  %Equal.sym(Bool, HPL.held(a), True{}, e) : {Bool.pick(Maybe<&2, String>, _, Some{HS.Agent.name(a)}, HPL.first_held(rest)) == Some{HS.Agent.name(a)} : Maybe<&2, String>}
+  {==}
+
+def Laws.boot_skips_held(o, cx, a):
+  {==}
+
+def Laws.refused_under_20_makes_nothing(o, cx, t, n, ws, gb):
   {==}

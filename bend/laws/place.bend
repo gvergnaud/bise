@@ -17,6 +17,7 @@ import ../hub/core.bend as HC
 import ../hub/place.bend as HPL
 import ../hub/gen/fx.bend as HF
 import ../hub/gen/feed.bend as FD
+import ../hub/disk.bend as DK
 
 # LAW: no REPL starts for a task whose worktree is still being made:
 # spawn (every path: the create, a message to a down task, a restore)
@@ -206,12 +207,13 @@ law boot_skips_not_dropping:
 
 # LAW: a /restore of a task whose worktree is gone makes the task active
 # at once, its ws placing (no REPL: no_repl_before_placed), then asks the
-# shell to make the dropped ws again with its saved work.
+# shell to make the dropped ws again with its saved work (the disk's gate
+# open, hub/disk.bend: under 40 GB it waits, under 20 GB it is refused).
 law restore_off_asks_once:
   for -o: HS.St
   for +cx: HX.Cx<o>
   for +a: HS.Agent
-  {HC.restore.off(o, cx, a)
+  {HC.restore.gate(o, DK.GGo{}, cx, a)
     == HC.restore.go.as(o, HC.out(o, HC.emit(o, cx, HM.EWorkspace{HS.Agent.name(a), HPL.restoring_ws(HS.Agent.ws(a))}, Unit{}, Unit{}, Unit{}),
       HF.worktree_restore(HS.Agent.name(a), HS.Agent.ws(a), HS.Agent.snap(a))), a, HPL.restoring_note()) : HX.Cx<o> & HC.TaskR}
 
@@ -319,3 +321,37 @@ law feature_rides_the_fx:
   for +n: String
   for +ws: J.Json
   {HC.place.ask(o, True{}, cx, n, ws) == HC.out(o, cx, HF.worktree_create(n, J.get_bool_or(ws, "with_changes", False{}), HPL.ws_feature(ws))) : HX.Cx<o>}
+
+# ---- wt-disk: a checkout held for disk (hub/disk.bend's gate) ----
+
+# LAW: no worktree fx for a ws held for disk, whatever else it says.
+law held_makes_no_fx:
+  for +ws: J.Json
+  for e: {HPL.ws_held(ws) == True{} : Bool}
+  {HPL.makes(ws) == False{} : Bool}
+
+# LAW: a reading at 40 GB or more starts the first held task in creation
+# order, and only it (one per reading).
+law first_held_is_the_first:
+  for +a: HS.Agent
+  for +rest: List<&2, HS.Agent>
+  for e: {HPL.held(a) == True{} : Bool}
+  {HPL.first_held(a <> rest) == Some{HS.Agent.name(a)} : Maybe<&2, String>}
+
+# LAW: a restarted hub asks nothing for a held task (the next reading does).
+law boot_skips_held:
+  for -o: HS.St
+  for +cx: HX.Cx<o>
+  for +a: HS.Agent
+  {HC.boot.held(o, True{}, cx, a) == cx : HX.Cx<o>}
+
+# LAW: under 20 GB a new task is refused at once: no task, no fx, the
+# refusal's words to the spawner.
+law refused_under_20_makes_nothing:
+  for -o: HS.St
+  for +cx: HX.Cx<o>
+  for +t: HC.NewTask
+  for +n: String
+  for +ws: J.Json
+  for +gb: Nat
+  {HC.create.gate(o, DK.GRefuse{gb}, cx, t, n, ws) == (cx, HC.TErr{DK.refused_text(gb)}) : HX.Cx<o> & HC.TaskR}

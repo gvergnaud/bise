@@ -30,3 +30,28 @@ law under_low_tells:
 
 law at_low_is_silent:
   {DK.tells(False{}, 40n) == False{} : Bool}
+
+# ---- wt-disk: the gate of a new checkout (architect m_67917) ----
+
+# LAW: no reading yet (or the reading off): a new checkout goes, as before.
+law unknown_disk_goes:
+  {DK.gate(None{}) == DK.GGo{} : DK.Gate}
+
+# LAW: under REFUSE() GB a new checkout is refused.
+law refused_under_20:
+  {DK.gate.of(19n) == DK.GRefuse{19n} : DK.Gate}
+
+law refused_at_0:
+  {DK.gate.of(0n) == DK.GRefuse{0n} : DK.Gate}
+
+# LAW: from REFUSE() GB to under LOW() GB it waits.
+law waits_at_20:
+  {DK.gate.of(20n) == DK.GWait{20n} : DK.Gate}
+
+law waits_under_40:
+  {DK.gate.of(39n) == DK.GWait{39n} : DK.Gate}
+
+# LAW: at LOW() GB or more it goes, whatever more.
+law goes_at_40:
+  for +p: Nat
+  {DK.gate.of(Nat.add(DK.LOW(), p)) == DK.GGo{} : DK.Gate}
