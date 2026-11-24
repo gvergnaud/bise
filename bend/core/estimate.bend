@@ -21,7 +21,7 @@ def calls_tokens(cs: List<&2, T.Call>) -> Nat:
 
 def msg_tokens(m: T.Msg) -> Nat:
   match m:
-    case T.Msg{_, +text, calls, _}:
+    case T.Msg{_, +text, calls, _, _}:
       Nat.add(1n, Nat.add(text_tokens(text), calls_tokens(calls)))
 
 def msgs_tokens(ms: List<&2, T.Msg>) -> Nat:

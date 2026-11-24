@@ -20,7 +20,7 @@ import ./provider.bend as Pv
 
 def answer(r: Pv.Out & Rem.RemoteRes) -> IO(Unit):
   match r:
-    case (_, Rem.RROk{+text, _}):
+    case (_, Rem.RROk{+text, _, _}):
       IO.print(String.append("ONESHOT_OK ", W.escape_nl(text)))
     case (_, Rem.RRErr{+why}):
       IO.print(String.append("ONESHOT_ERR ", W.escape_nl(why)))

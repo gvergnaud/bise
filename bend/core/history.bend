@@ -13,7 +13,7 @@ import ./estimate.bend as E
 
 def is_user(m: T.Msg) -> Bool:
   match m:
-    case T.Msg{role, _, _, injected}:
+    case T.Msg{role, _, _, injected, _}:
       match role:
         case T.RUser{}:
           Bool.not(injected)
@@ -22,7 +22,7 @@ def is_user(m: T.Msg) -> Bool:
 
 def is_tool_res(m: T.Msg) -> Bool:
   match m:
-    case T.Msg{role, _, _, _}:
+    case T.Msg{role, _, _, _, _}:
       match role:
         case T.RTool{}:
           True{}
@@ -31,7 +31,7 @@ def is_tool_res(m: T.Msg) -> Bool:
 
 def is_asst_with_calls(m: T.Msg) -> Bool:
   match m:
-    case T.Msg{role, _, calls, _}:
+    case T.Msg{role, _, calls, _, _}:
       match role:
         case T.RAsst{}:
           match calls:
@@ -54,7 +54,7 @@ def SUMMARY_PREFIX() -> String:
 # with the prefix
 def is_summary(m: T.Msg) -> Bool:
   match m:
-    case T.Msg{role, +text, _, injected}:
+    case T.Msg{role, +text, _, injected, _}:
       match role:
         case T.RUser{}:
           Bool.and(injected, String.starts_with(text, SUMMARY_PREFIX()))
@@ -283,23 +283,23 @@ def pair_calls.go(ms: List<&2, T.Msg>, owed: List<&2, T.Call>) -> List<&2, T.Msg
       closes(owed)
     case Con{m, rest}:
       match m:
-        case T.Msg{role, +text, +calls, +inj}:
+        case T.Msg{role, +text, +calls, +inj, +ex}:
           match role:
             case T.RTool{}:
               match owed:
                 case Nil{}:
                   pair_calls.go(rest, Nil{})
                 case Con{_, ow}:
-                  Con{T.Msg{T.RTool{}, text, calls, inj}, pair_calls.go(rest, ow)}
+                  Con{T.Msg{T.RTool{}, text, calls, inj, ex}, pair_calls.go(rest, ow)}
             case T.RAsst{}:
               List.append(&2, T.Msg, closes(owed),
-                Con{T.Msg{T.RAsst{}, text, calls, inj}, pair_calls.go(rest, calls)})
+                Con{T.Msg{T.RAsst{}, text, calls, inj, ex}, pair_calls.go(rest, calls)})
             case T.RUser{}:
               List.append(&2, T.Msg, closes(owed),
-                Con{T.Msg{T.RUser{}, text, calls, inj}, pair_calls.go(rest, Nil{})})
+                Con{T.Msg{T.RUser{}, text, calls, inj, ex}, pair_calls.go(rest, Nil{})})
             case T.RSys{}:
               List.append(&2, T.Msg, closes(owed),
-                Con{T.Msg{T.RSys{}, text, calls, inj}, pair_calls.go(rest, Nil{})})
+                Con{T.Msg{T.RSys{}, text, calls, inj, ex}, pair_calls.go(rest, Nil{})})
 
 def pair_calls(ms: List<&2, T.Msg>) -> List<&2, T.Msg>:
   pair_calls.go(ms, Nil{})
@@ -318,7 +318,7 @@ def paired(ms: List<&2, T.Msg>, owed: List<&2, T.Call>) -> Bool:
       Bool.not(owes(owed))
     case Con{m, rest}:
       match m:
-        case T.Msg{role, _, +calls, _}:
+        case T.Msg{role, _, +calls, _, _}:
           match role:
             case T.RTool{}:
               match owed:

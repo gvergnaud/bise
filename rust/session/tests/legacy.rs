@@ -25,6 +25,25 @@ fn a_file_the_loader_refuses_gives_nothing() {
     assert_eq!(to_text(&s), "BEND-SESSION 2\nCFG 1 2 3 s\nCOUNT 0 0\nMSG False user : t\n");
 }
 
+/// gemini-sig: an assistant message's provider extra (Gemini's thought
+/// signatures) rides an EXTRA line under its calls and comes back whole.
+#[test]
+fn the_provider_extra_round_trips() {
+    let t = r#"BEND-SESSION 2
+CFG 10 20 3 s
+COUNT 4 5
+MSG False assistant : 
+  CALL 1 bash : ls
+  EXTRA {"calls":[{"id":"function-call-7","extra_content":{"google":{"thought_signature":"S\Nx"}}}]}
+MSG False tool : r1
+"#;
+    let s = parse(t).unwrap();
+    assert_eq!(s.dropped_lines, 0);
+    assert_eq!(s.msgs[0].extra, "{\"calls\":[{\"id\":\"function-call-7\",\"extra_content\":{\"google\":{\"thought_signature\":\"S\nx\"}}}]}");
+    assert_eq!(s.msgs[1].extra, "");
+    assert_eq!(to_text(&s), t);
+}
+
 #[test]
 fn every_short_text_round_trips() {
     let t = "BEND-SESSION 2\nTOOL a : b\nCFG 10 20 3 x\\ny\nCOUNT 4 5\nQUEUE a\\Nb\nNOTIF n\nMSG True user : u\\\\n\nMSG False assistant : <think>t</think>ok\n  CALL 1 bash : ls\n  CALL 2 bash : pwd\nMSG False tool : r1\nMSG False tool : r2\n";

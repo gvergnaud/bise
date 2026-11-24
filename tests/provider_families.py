@@ -350,6 +350,19 @@ def part_d():
             n += len(recs)
         finally:
             del os.environ["FAKE_REFUSE_MAX_TOKENS"]
+        # gemini-sig: Gemini on openai-chat signs its tool calls and refuses
+        # a replay without the signature (Gauthier's 400): the call's
+        # second request carries each call's signature back, so both answer
+        os.environ["FAKE_THOUGHT_SIGS"] = "gemini-4-neon"
+        try:
+            out = turn("fakegwoai/gemini-4-neon", "[[bash: echo s1]]")
+            recs = recs_of("gemini-4-neon", 2)
+            check([r["status"] for r in recs] == [200, 200] and "tool bash ok: s1" in open(session).read(),
+                  "gemini on openai-chat: the tool call's thought signature goes back, no 400: %r"
+                  % [(r["status"], r.get("unsigned")) for r in recs])
+            n += len(recs)
+        finally:
+            del os.environ["FAKE_THOUGHT_SIGS"]
         out = turn("fakegem/g", "hello")
         # a reply or an error: no line to wait for, its own model's only
         recs = [r for r in [json.loads(l) for l in open(F.LOG)][n:] if r.get("model") == "g"]

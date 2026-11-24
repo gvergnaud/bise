@@ -270,6 +270,11 @@ pub struct AssistantMessage {
     pub stop: Option<Stop>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub response_id: Option<String>,
+    /// What the provider sent with the message for it to come back
+    /// unchanged (Gemini's thought signatures): the Core's opaque JSON
+    /// text (T.Msg extra), projected back as its `  EXTRA` line.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub extra: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

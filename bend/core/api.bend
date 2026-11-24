@@ -263,13 +263,13 @@ def cache_seed(msgs: List<&2, W.WMsg>) -> String:
       ""
     case Con{+m, +rest}:
       match m:
-        case W.WMsg{_, +c1, _}:
+        case W.WMsg{_, +c1, _, _}:
           match rest:
             case Nil{}:
               c1
             case Con{+m2, _}:
               match m2:
-                case W.WMsg{_, +c2, _}:
+                case W.WMsg{_, +c2, _, _}:
                   String.append(c1, String.append("\n", c2))
 
 def session_key(+req: W.WReq) -> String:

@@ -233,7 +233,7 @@ def msg_items.pick(is_tool: Bool, is_asst: Bool, +role: String,
 
 def msg_items(m: W.WMsg, ids: List<&2, String>) -> RP:
   match m:
-    case W.WMsg{+role, +content, +calls}:
+    case W.WMsg{+role, +content, +calls, _}:
       msg_items.pick(String.eq(role, "tool"), String.eq(role, "assistant"),
         role, content, calls, ids)
 

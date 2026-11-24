@@ -11,6 +11,7 @@
 import Base
 import ../core/api.bend as Api
 import ../core/wire.bend as W
+import ../core/oai-chat.bend as Oai
 import ./persist.bend as P
 import ./remote.bend as Rem
 import ../core/config.bend as Cf
@@ -316,12 +317,15 @@ def model_call.next(x: Pvp.Next, +a: Pvp.Attempt, n: Out, +tries: Nat,
           U32.sub(Pvp.budget_waited(b), delay_ms), delay_ms, why, tries, req)
         model_call.pause(n1, delay_ms, why, b, tries, next)
 
+# prov, model: whose reply it is, stamped on its extra (Rem.stamp)
 def model_call.step(a: Pvp.Attempt, n: Out, +b: Pvp.Budget, +tries: Nat,
-    +req: U32, next: Pvp.Budget -> Out -> IO(Out & Rem.RemoteRes))
+    +req: U32, +prov: String, +model: String,
+    next: Pvp.Budget -> Out -> IO(Out & Rem.RemoteRes))
     -> IO(Out & Rem.RemoteRes):
   match a:
     case Pvp.AOk{+reply}:
-      IO.pure(Out & Rem.RemoteRes, (n, Rem.parse_reply(reply)))
+      IO.pure(Out & Rem.RemoteRes,
+        (n, Rem.stamp(Rem.parse_reply(reply), prov, model)))
     case Pvp.AFail{+why}:
       IO.pure(Out & Rem.RemoteRes, (n, Rem.RRErr{why}))
     case Pvp.ARetry{+after_ms, +why}:
@@ -779,7 +783,8 @@ def request_body(+request: String, +pv: Pvp.Prov, +limit: Nat) -> IO(Built):
         +json : String <- IO.pure(String,
           Osp.light_if(Bool.not(String.is_empty(P.env_or(osr, ""))),
             Api.wire_body(st, Api.with_cache_key(Pvp.cache_field(names), ckey,
-              Api.api_body_for(st, model, facts, W.pair_wire(wreq))))))
+              Api.api_body_for(st, model, facts,
+                Oai.own_extras(prov, model, W.pair_wire(wreq)))))))
         +fill : Im.IFill <- img_body(json, limit, Pvp.model_blind(reg, id), id)
         IO.pure(Built, Built{wreq, mfile, names, ckey, json, fill,
           Enc.utf8.encode(fill_body(fill))})
@@ -868,7 +873,7 @@ def model_call.sent(b: Built, +k: Nat, +tries: Nat, +bd: Pvp.Budget, n: Out,
                       Nat.div(fill_bytes(fill), 2n)),
                     +b4 => n3 => model_call.step(got_for(W.req_tools(wreq),
                         label, key, Api.facts_plan(facts), model, id, st, g),
-                      n3, b4, tries, req,
+                      n3, b4, tries, req, prov, model,
                       +b2 => n2 => model_call.try(k, Nat.add(tries, 1n), b2, n2,
                         request, ctx, call, limit, shrunk)),
                     +b3 => n4 => model_call.try(k, Nat.add(tries, 1n), b3, n4,

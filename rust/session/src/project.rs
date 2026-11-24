@@ -147,10 +147,19 @@ fn msg(p: &Payload, blobs: &Path) -> Result<String, String> {
         Payload::CompactionDone(m) => (true, "user", parts_text(&m.summary, blobs)?, &[]),
         _ => return Err("not a context event".into()),
     };
+    // the provider's extra (Gemini's thought signatures): its EXTRA line,
+    // as core/checkpoint.bend's msg_text writes it (W.extra_line)
+    let extra = match p {
+        Payload::AssistantMessage(AssistantMessage { extra: Some(x), .. }) if !x.is_empty() => {
+            format!("\n  EXTRA {}", wire_encode(x))
+        }
+        _ => String::new(),
+    };
     let mut o = format!("MSG {} {role} : {}", flag(inj), escape_nl(&text));
     for c in calls {
         o.push_str(&format!("\n  CALL {} {} : {}", call_num(&c.id), c.name, wire_encode(&c.args)));
     }
+    o.push_str(&extra);
     o.push('\n');
     Ok(o)
 }

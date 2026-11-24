@@ -75,7 +75,7 @@ def msg_json.pick(asst: Bool, +m: W.WMsg, ids: List<&2, String>)
   match asst:
     case True{}:
       match m:
-        case W.WMsg{_, +text, +calls}:
+        case W.WMsg{_, +text, +calls, _}:
           (J.obj(Con{J.kv("role", J.str("assistant")),
             List.append(&2, Sigma<&2, &2, String, _ => J.Json>,
               fields(text, Bool.not(List.is_empty(&2, W.WCall, calls))),
@@ -86,7 +86,7 @@ def msg_json.pick(asst: Bool, +m: W.WMsg, ids: List<&2, String>)
 
 def pair_of(+m: W.WMsg, ids: List<&2, String>) -> Oai.MsgPair:
   match m:
-    case W.WMsg{+role, _, _}:
+    case W.WMsg{+role, _, _, _}:
       Oai.pair_of.wrap(msg_json.pick(String.eq(role, "assistant"), m, ids))
 
 def msgs_go(fuel: Nat, w: Oai.MWalk) -> List<&2, J.Json>:
@@ -125,11 +125,11 @@ def sendable(msgs: List<&2, W.WMsg>) -> List<&2, W.WMsg>:
       Nil{}
     case Con{+m, rest}:
       match m:
-        case W.WMsg{+role, +content, +calls}:
+        case W.WMsg{+role, +content, +calls, +extra}:
           W.keep_msg(W.unsendable(role,
               sent_text(String.eq(role, "assistant"), content),
               W.has_calls(calls)),
-            W.WMsg{role, content, calls}, sendable(rest))
+            W.WMsg{role, content, calls, extra}, sendable(rest))
 
 def msgs_json(+msgs: List<&2, W.WMsg>) -> List<&2, J.Json>:
   msgs_go(Nat.add(Nat.mul(List.length(&2, W.WMsg, msgs), 2n), 16n),
@@ -199,9 +199,9 @@ def reply_of(+status: U32, +body: String) -> String:
 
 def stream_reply.acc(+a: Os.Acc) -> String:
   match a:
-    case Os.Acc{_, _, _, _, _, Some{+e}}:
+    case Os.Acc{_, _, _, _, _, Some{+e}, _}:
       W.reply_err(200, J.stringify(e))
-    case Os.Acc{_, _, _, _, _, None{}}:
+    case Os.Acc{_, _, _, _, _, None{}, _}:
       reply_ok(Os.message(a))
 
 def stream_reply.pick(is_json: Bool, +body: String) -> String:

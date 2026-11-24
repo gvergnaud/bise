@@ -17,8 +17,12 @@ type Call is Data:
 # one model-visible message. `injected` marks Core-injected context
 # (preamble, steering, notifications, summary); kept user messages
 # are never injected, so "most recent non-injected user message" is decidable.
+# `extra`: what the provider sent with an assistant message for it to
+# come back unchanged (Gemini's thought signatures), raw JSON, "" none;
+# opaque to the Core: only core/oai-chat.bend writes and reads it.
 type Msg is Data:
-  Msg{role: Role, text: String, calls: List<&2, Call>, injected: Bool}
+  Msg{role: Role, text: String, calls: List<&2, Call>, injected: Bool,
+      extra: String}
 
 # ---- step protocol: commands (Runtime -> Core) ----
 type Mode is Data:
@@ -29,7 +33,8 @@ type Cmd is Data:
   UserMsg{mode: Mode, text: String}
   Notify{text: String}
   Compact{extra: String}
-  CompletionOk{action: U32, text: String, calls: List<&2, Call>}
+  CompletionOk{action: U32, text: String, calls: List<&2, Call>,
+    extra: String}
   CompletionFail{action: U32, error: String}
   # compact: the tool asked to compact the conversation (self.compact,
   # filed from a program): the turn compacts before its next model call
@@ -110,19 +115,23 @@ type Res is Data:
 
 # ---- constructors ----
 def user(text: String) -> Msg:
-  Msg{RUser{}, text, Nil{}, False{}}
+  Msg{RUser{}, text, Nil{}, False{}, ""}
 
 def asst(text: String, calls: List<&2, Call>) -> Msg:
-  Msg{RAsst{}, text, calls, False{}}
+  Msg{RAsst{}, text, calls, False{}, ""}
+
+# an assistant message with what its provider sent to come back (`extra`)
+def asst_x(text: String, calls: List<&2, Call>, extra: String) -> Msg:
+  Msg{RAsst{}, text, calls, False{}, extra}
 
 def tool_res(text: String) -> Msg:
-  Msg{RTool{}, text, Nil{}, False{}}
+  Msg{RTool{}, text, Nil{}, False{}, ""}
 
 def sys(text: String) -> Msg:
-  Msg{RSys{}, text, Nil{}, False{}}
+  Msg{RSys{}, text, Nil{}, False{}, ""}
 
 def injected_user(text: String) -> Msg:
-  Msg{RUser{}, text, Nil{}, True{}}
+  Msg{RUser{}, text, Nil{}, True{}, ""}
 
 # a turn a failed call ends: an interrupt's error (the provider's
 # "interrupted by <who>", provider-pure interrupted_by) ends it as

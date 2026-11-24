@@ -51,7 +51,7 @@ def head_role(input: List<&2, T.Msg>) -> Maybe<&2, T.Role>:
       None{}
     case Con{m, _}:
       match m:
-        case T.Msg{role, _, _, _}:
+        case T.Msg{role, _, _, _, _}:
           Some{role}
 
 # a message no request carries (main's 400 of 2026-10-30): an assistant
@@ -79,7 +79,7 @@ def unsent.calls(calls: List<&2, T.Call>, +role: T.Role, +text: String)
 
 def unsent(+m: T.Msg) -> Bool:
   match m:
-    case T.Msg{+role, +text, +calls, _}:
+    case T.Msg{+role, +text, +calls, _, _}:
       unsent.calls(calls, role, text)
 
 def sendable.put(drop: Bool, +m: T.Msg, +rest: List<&2, T.Msg>)
@@ -297,7 +297,7 @@ def history_has_user(msgs: List<&2, T.Msg>, +text: String) -> Bool:
       False{}
     case Con{+m, +rest}:
       match m:
-        case T.Msg{T.RUser{}, +t, _, True{}}:
+        case T.Msg{T.RUser{}, +t, _, True{}, _}:
           Bool.or(String.eq(t, text), history_has_user(rest, text))
         case _:
           history_has_user(rest, text)
@@ -309,7 +309,7 @@ def injected_user_texts(msgs: List<&2, T.Msg>) -> List<&2, String>:
       Nil{}
     case Con{+m, +rest}:
       match m:
-        case T.Msg{T.RUser{}, +t, _, True{}}:
+        case T.Msg{T.RUser{}, +t, _, True{}, _}:
           Con{t, injected_user_texts(rest)}
         case _:
           injected_user_texts(rest)
@@ -607,7 +607,7 @@ def cfg_max_nulls(+cfg: T.Cfg) -> Nat:
       max_nulls
 
 def apply.completion.tools(+text: String, +calls: List<&2, T.Call>,
-    +s: T.Session) -> T.Res:
+    +pextra: String, +s: T.Session) -> T.Res:
   # commit the assistant message, emit one Action per tool call, and wait
   # for every call id before the next dispatch
   match s:
@@ -618,7 +618,8 @@ def apply.completion.tools(+text: String, +calls: List<&2, T.Call>,
           tool_start_obs(renumber(calls, U32.add(actions, 1)))},
         tool_acts(renumber(calls, U32.add(actions, 1)), U32.add(actions, 1)),
         T.Sess{cfg, List.append(&2, T.Msg, history,
-            Con{T.asst(text, renumber(calls, U32.add(actions, 1))), Nil{}}),
+            Con{T.asst_x(text, renumber(calls, U32.add(actions, 1)), pextra),
+              Nil{}}),
           Nat.add(inputs, 1n),
           U32.add(actions, U32.from_nat(Nat.add(calls_count(calls), 1n))),
           turn, Some{T.PTools{renumber(calls, U32.add(actions, 1))}}, queued, notifs}}
@@ -650,7 +651,8 @@ def apply.completion.empty(+s: T.Session) -> T.Res:
                 Bool.not(Nat.is_le(Nat.add(nulls, 1n), cfg_max_nulls(cfg))),
                 nulls, s)
 
-def apply.completion.plain2.finish(+s2: T.Session, +text: String) -> T.Res:
+def apply.completion.plain2.finish(+s2: T.Session, +text: String,
+    +pextra: String) -> T.Res:
   # finish_turn committed any steering that arrived while the call was
   # in flight (vibe_sdk finish_turn); the assistant message lands on top
   match s2:
@@ -659,20 +661,21 @@ def apply.completion.plain2.finish(+s2: T.Session, +text: String) -> T.Res:
           Con{T.TurnDone{"completed", ""}, Nil{}}},
         Nil{},
         T.Sess{cfg, List.append(&2, T.Msg, hist2,
-          Con{T.asst(text, Nil{}), Nil{}}),
+          Con{T.asst_x(text, Nil{}, pextra), Nil{}}),
           Nat.add(inputs, 1n), actions, None{}, None{}, queued, notifs}}
 
-def apply.completion.plain2(empty: Bool, +text: String, +s: T.Session) -> T.Res:
+def apply.completion.plain2(empty: Bool, +text: String, +pextra: String,
+    +s: T.Session) -> T.Res:
   match empty:
     case False{}:
       # a final completion: commit and end the turn
-      apply.completion.plain2.finish(finish_turn(s), text)
+      apply.completion.plain2.finish(finish_turn(s), text, pextra)
     case True{}:
       # ADR 0015: an empty candidate commits nothing and emits no action
       apply.completion.empty(s)
 
 def apply.completion.agent(matched: Bool, +text: String,
-    +calls: List<&2, T.Call>, +s: T.Session) -> T.Res:
+    +calls: List<&2, T.Call>, +pextra: String, +s: T.Session) -> T.Res:
   match matched:
     case False{}:
       T.Rejected{"stale completion action"}
@@ -682,17 +685,20 @@ def apply.completion.agent(matched: Bool, +text: String,
           # a hollow reply (blank, or only unsigned thinking: main's
           # reply of 2026-10-30 through a gateway) is no answer: a null
           # iteration, never a saved message with nothing to replay
-          apply.completion.plain2(W.is_hollow(text), text, s)
+          apply.completion.plain2(W.is_hollow(text), text, pextra, s)
         case Con{_, _}:
           # run_typescript is an ordinary tool: the runtime runs it in
           # V8 (bend-jsrt) and answers one tool result
-          apply.completion.tools(text, calls, s)
+          apply.completion.tools(text, calls, pextra, s)
 
+# pextra: what the provider sent with the message to come back
+# (T.Msg's extra), kept on the assistant message it commits
 def apply.completion.pending(action: U32, +text: String,
-    +calls: List<&2, T.Call>, +s: T.Session, +p: T.Pending) -> T.Res:
+    +calls: List<&2, T.Call>, +pextra: String, +s: T.Session,
+    +p: T.Pending) -> T.Res:
   match p:
     case T.PAgent{a}:
-      apply.completion.agent(U32.is_eq(a, action), text, calls, s)
+      apply.completion.agent(U32.is_eq(a, action), text, calls, pextra, s)
     case T.PTools{_}:
       T.Rejected{"completion while tools pending"}
     case T.PComp{+compaction, +attempt, a, +extra, +in_turn}:
@@ -700,14 +706,14 @@ def apply.completion.pending(action: U32, +text: String,
         attempt, extra, in_turn, s)
 
 def apply.completion(action: U32, +text: String, +calls: List<&2, T.Call>,
-    +s: T.Session) -> T.Res:
+    +pextra: String, +s: T.Session) -> T.Res:
   match s:
     case T.Sess{_, _, _, _, _, +pending, _, _}:
       match pending:
         case None{}:
           T.Rejected{"no pending completion"}
         case Some{p}:
-          apply.completion.pending(action, text, calls, s, p)
+          apply.completion.pending(action, text, calls, pextra, s, p)
 
 # ---- completion failure ----
 
@@ -720,7 +726,7 @@ def has_asst(hs: List<&2, T.Msg>) -> Bool:
       False{}
     case Con{+m, rest}:
       match m:
-        case T.Msg{+role, _, _, _}:
+        case T.Msg{+role, _, _, _, _}:
           match role:
             case T.RAsst{}:
               True{}
@@ -748,22 +754,24 @@ def turn_with_notifs(turn: Maybe<&2, T.Turn>, +notifs: List<&2, String>)
 # checks the most and what a gateway mangles, so the call goes again
 # once without any (heal); the user reads what was dropped. Healed, the
 # history holds no span: a second refusal fails the turn, as before.
+# The provider's extra (Gemini's signatures) stays: a Gemini call
+# without its signature is refused for sure.
 def heal_msg.role(role: T.Role, +text: String, +calls: List<&2, T.Call>,
-    +inj: Bool) -> T.Msg:
+    +inj: Bool, +extra: String) -> T.Msg:
   match role:
     case T.RAsst{}:
-      T.Msg{T.RAsst{}, W.no_think(text), calls, inj}
+      T.Msg{T.RAsst{}, W.no_think(text), calls, inj, extra}
     case T.RUser{}:
-      T.Msg{T.RUser{}, text, calls, inj}
+      T.Msg{T.RUser{}, text, calls, inj, extra}
     case T.RSys{}:
-      T.Msg{T.RSys{}, text, calls, inj}
+      T.Msg{T.RSys{}, text, calls, inj, extra}
     case T.RTool{}:
-      T.Msg{T.RTool{}, text, calls, inj}
+      T.Msg{T.RTool{}, text, calls, inj, extra}
 
 def heal_msg(+m: T.Msg) -> T.Msg:
   match m:
-    case T.Msg{+role, +text, +calls, +inj}:
-      heal_msg.role(role, text, calls, inj)
+    case T.Msg{+role, +text, +calls, +inj, +extra}:
+      heal_msg.role(role, text, calls, inj, extra)
 
 def heal(ms: List<&2, T.Msg>) -> List<&2, T.Msg>:
   match ms:
@@ -786,7 +794,7 @@ def thinking_n(ms: List<&2, T.Msg>) -> Nat:
       0n
     case Con{+m, rest}:
       match m:
-        case T.Msg{+role, +text, _, _}:
+        case T.Msg{+role, +text, _, _, _}:
           Nat.add(thinking_n.role(role, text), thinking_n(rest))
 
 def set_history(+s: T.Session, +h: List<&2, T.Msg>) -> T.Session:
@@ -1140,7 +1148,7 @@ def RESUME_NOTE() -> String:
 # whether the history holds the note since the user's last message
 def resumed.step(m: T.Msg, +note: String, +seen: Bool) -> Bool:
   match m:
-    case T.Msg{role, +t, _, +inj}:
+    case T.Msg{role, +t, _, +inj, _}:
       match role:
         case T.RUser{}:
           Bool.and(inj, Bool.or(seen, String.eq(t, note)))
@@ -1190,8 +1198,8 @@ def apply.cmd(cmd: T.Cmd, +s: T.Session) -> T.Res:
       apply.notify(text, s)
     case T.Compact{extra}:
       apply.compact(extra, s)
-    case T.CompletionOk{action, text, calls}:
-      apply.completion(action, text, calls, s)
+    case T.CompletionOk{action, text, calls, pextra}:
+      apply.completion(action, text, calls, pextra, s)
     case T.CompletionFail{action, error}:
       apply.completion_fail(action, error, s)
     case T.ToolOk{call, out, compact}:

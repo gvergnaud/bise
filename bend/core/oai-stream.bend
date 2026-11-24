@@ -49,18 +49,24 @@ type Blk is Data:
   BThink{parts: List<&2, String>, sig: List<&2, String>}
 
 # a tool call being rebuilt: its index, its id, its name and argument
-# pieces (newest first)
+# pieces (newest first); ec: its extra_content (Gemini's signature), the
+# first non-null one of its pieces
 type Tc is Data:
-  Tc{idx: Nat, id: String, name: String, args: List<&2, String>}
+  Tc{idx: Nat, id: String, name: String, args: List<&2, String>, ec: J.Json}
 
 # blocks and calls newest first; reason: the reasoning pieces; fin: the
-# finish_reason; usage: the last usage object; err: the error, if one came
+# finish_reason; usage: the last usage object; err: the error, if one
+# came; ec: the message's extra_content, the last non-null delta's
 type Acc is Data:
   Acc{blocks: List<&2, Blk>, reason: List<&2, String>, calls: List<&2, Tc>,
-    fin: String, usage: J.Json, err: Maybe<&2, J.Json>}
+    fin: String, usage: J.Json, err: Maybe<&2, J.Json>, ec: J.Json}
 
 def acc0() -> Acc:
-  Acc{Nil{}, Nil{}, Nil{}, "", J.JNull{}, None{}}
+  Acc{Nil{}, Nil{}, Nil{}, "", J.JNull{}, None{}, J.JNull{}}
+
+# a non-null extra_content wins over the null one
+def ec_or(+new: J.Json, +cur: J.Json) -> J.Json:
+  Bool.pick(J.Json, J.is_null(new), cur, new)
 
 def joined(+parts: List<&2, String>) -> String:
   String.join(List.reverse(&2, String, parts), "")
@@ -194,14 +200,16 @@ def keep_or.pick(empty: Bool, +cur: String, +new: String) -> String:
 def keep_or(+cur: String, +new: String) -> String:
   keep_or.pick(String.is_empty(cur), cur, new)
 
-def tc_add(+c: Tc, +id: String, +name: String, +arg: String) -> Tc:
+def tc_add(+c: Tc, +id: String, +name: String, +arg: String, +ec: J.Json)
+    -> Tc:
   match c:
-    case Tc{+idx, +cid, +cname, +args}:
-      Tc{idx, keep_or(cid, id), keep_or(cname, name), Con{arg, args}}
+    case Tc{+idx, +cid, +cname, +args, +cec}:
+      Tc{idx, keep_or(cid, id), keep_or(cname, name), Con{arg, args},
+        ec_or(cec, ec)}
 
 def tc_idx(c: Tc) -> Nat:
   match c:
-    case Tc{+idx, _, _, _}:
+    case Tc{+idx, _, _, _, _}:
       idx
 
 def tc_last(cs: List<&2, Tc>) -> Nat:
@@ -218,35 +226,35 @@ def has_idx(cs: List<&2, Tc>, +idx: Nat) -> Bool:
     case Con{+c, rest}:
       Bool.or(Nat.is_eq(tc_idx(c), idx), has_idx(rest, idx))
 
-def tc_upd.one(hit: Bool, +c: Tc, +id: String, +name: String, +arg: String)
-    -> Tc:
+def tc_upd.one(hit: Bool, +c: Tc, +id: String, +name: String, +arg: String,
+    +ec: J.Json) -> Tc:
   match hit:
     case True{}:
-      tc_add(c, id, name, arg)
+      tc_add(c, id, name, arg, ec)
     case False{}:
       c
 
 def tc_upd(cs: List<&2, Tc>, +idx: Nat, +id: String, +name: String,
-    +arg: String) -> List<&2, Tc>:
+    +arg: String, +ec: J.Json) -> List<&2, Tc>:
   match cs:
     case Nil{}:
       Nil{}
     case Con{+c, rest}:
-      Con{tc_upd.one(Nat.is_eq(tc_idx(c), idx), c, id, name, arg),
-        tc_upd(rest, idx, id, name, arg)}
+      Con{tc_upd.one(Nat.is_eq(tc_idx(c), idx), c, id, name, arg, ec),
+        tc_upd(rest, idx, id, name, arg, ec)}
 
 def tc_put.pick(hit: Bool, +cs: List<&2, Tc>, +idx: Nat, +id: String,
-    +name: String, +arg: String) -> List<&2, Tc>:
+    +name: String, +arg: String, +ec: J.Json) -> List<&2, Tc>:
   match hit:
     case True{}:
-      tc_upd(cs, idx, id, name, arg)
+      tc_upd(cs, idx, id, name, arg, ec)
     case False{}:
-      Con{Tc{idx, id, name, Con{arg, Nil{}}}, cs}
+      Con{Tc{idx, id, name, Con{arg, Nil{}}, ec}, cs}
 
 # the piece joins the call of its index; a new index is a new call
 def tc_put(+cs: List<&2, Tc>, +idx: Nat, +id: String, +name: String,
-    +arg: String) -> List<&2, Tc>:
-  tc_put.pick(has_idx(cs, idx), cs, idx, id, name, arg)
+    +arg: String, +ec: J.Json) -> List<&2, Tc>:
+  tc_put.pick(has_idx(cs, idx), cs, idx, id, name, arg, ec)
 
 # no index (a lax server): a piece with an id or a name opens a new
 # call, one without continues the newest
@@ -271,7 +279,8 @@ def tc_piece(+t: J.Json, +cs: List<&2, Tc>) -> List<&2, Tc>:
   tc_put(cs,
     tc_index(J.get(t, "index"),
       Bool.not(Bool.and(String.is_empty(id), String.is_empty(name))), cs),
-    id, name, args_piece(W.field_or(fn, "arguments", J.JNull{})))
+    id, name, args_piece(W.field_or(fn, "arguments", J.JNull{})),
+    W.field_or(t, "extra_content", J.JNull{}))
 
 def tc_pieces(ts: List<&2, J.Json>, +cs: List<&2, Tc>) -> List<&2, Tc>:
   match ts:
@@ -309,11 +318,12 @@ def err_of(m: Maybe<&2, J.Json>, +prev: Maybe<&2, J.Json>)
 
 def choice.delta(+d: J.Json, +ch: J.Json, +a: Acc) -> Acc:
   match a:
-    case Acc{+blocks, +reason, +calls, +fin, +usage, +err}:
+    case Acc{+blocks, +reason, +calls, +fin, +usage, +err, +ec}:
       Acc{content_piece(W.field_or(d, "content", J.JNull{}), blocks),
         add_reason(reason_piece(d), reason),
         tc_pieces(W.arr_field_or(d, "tool_calls"), calls),
-        fin_of(ch, fin), usage, err}
+        fin_of(ch, fin), usage, err,
+        ec_or(W.field_or(d, "extra_content", J.JNull{}), ec)}
 
 def choice(m: Maybe<&2, J.Json>, +a: Acc) -> Acc:
   match m:
@@ -324,9 +334,9 @@ def choice(m: Maybe<&2, J.Json>, +a: Acc) -> Acc:
 
 def step.meta(+e: J.Json, +a: Acc) -> Acc:
   match a:
-    case Acc{+blocks, +reason, +calls, +fin, +usage, +err}:
+    case Acc{+blocks, +reason, +calls, +fin, +usage, +err, +ec}:
       Acc{blocks, reason, calls, fin, chunk_usage(e, usage),
-        err_of(J.get(e, "error"), err)}
+        err_of(J.get(e, "error"), err), ec}
 
 def step(+e: J.Json, +a: Acc) -> Acc:
   choice(J.arr_get(W.field_or(e, "choices", J.JNull{}), 0n), step.meta(e, a))
@@ -421,11 +431,12 @@ def content_json(+bs: List<&2, Blk>) -> J.Json:
 
 def call_json(+c: Tc) -> J.Json:
   match c:
-    case Tc{_, +id, +name, +args}:
+    case Tc{_, +id, +name, +args, +ec}:
       J.obj(Con{J.kv("id", J.str(id)),
         Con{J.kv("type", J.str("function")),
         Con{J.kv("function", J.obj(Con{J.kv("name", J.str(name)),
-          Con{J.kv("arguments", J.str(joined(args))), Nil{}}})), Nil{}}}})
+          Con{J.kv("arguments", J.str(joined(args))), Nil{}}})),
+          Oai.opt_kv(J.is_null(ec), "extra_content", ec, Nil{})}}})
 
 def calls_json(cs: List<&2, Tc>) -> List<&2, J.Json>:
   match cs:
@@ -444,31 +455,33 @@ def opt_kv.pick(none: Bool, +k: String, +v: J.Json,
       Con{J.kv(k, v), rest}
 
 # choices[0].message: role, content, reasoning_content (when some came),
-# tool_calls (when some came), in first-piece order
-def message.of(+bs: List<&2, Blk>, +reason: String, +cs: List<&2, Tc>)
-    -> J.Json:
+# tool_calls (when some came), in first-piece order, extra_content (when
+# one came)
+def message.of(+bs: List<&2, Blk>, +reason: String, +cs: List<&2, Tc>,
+    +ec: J.Json) -> J.Json:
   J.obj(Con{J.kv("role", J.str("assistant")),
     Con{J.kv("content", content_json(bs)),
       opt_kv.pick(String.is_empty(reason), "reasoning_content", J.str(reason),
         opt_kv.pick(List.is_empty(&2, Tc, cs), "tool_calls",
-          J.arr(calls_json(List.reverse(&2, Tc, cs))), Nil{}))}})
+          J.arr(calls_json(List.reverse(&2, Tc, cs))),
+          opt_kv.pick(J.is_null(ec), "extra_content", ec, Nil{})))}})
 
 def message(+a: Acc) -> J.Json:
   match a:
-    case Acc{+blocks, +reason, +calls, _, _, _}:
-      message.of(blocks, joined(reason), calls)
+    case Acc{+blocks, +reason, +calls, _, _, _, +ec}:
+      message.of(blocks, joined(reason), calls, ec)
 
 # the whole reply body a non-streaming call would have answered
 def whole(+a: Acc) -> J.Json:
   match a:
-    case Acc{+blocks, +reason, +calls, +fin, +usage, +err}:
+    case Acc{+blocks, +reason, +calls, +fin, +usage, +err, +ec}:
       match err:
         case Some{+e}:
           e
         case None{}:
           J.obj(Con{J.kv("object", J.str("chat.completion")),
             Con{J.kv("choices", J.arr(Con{J.obj(Con{J.kv("index", J.JNum{0n}),
-              Con{J.kv("message", message.of(blocks, joined(reason), calls)),
+              Con{J.kv("message", message.of(blocks, joined(reason), calls, ec)),
               Con{J.kv("finish_reason", J.str(fin)), Nil{}}}}), Nil{}})),
             Con{J.kv("usage", usage), Nil{}}}})
 
@@ -483,8 +496,8 @@ def reply.of(err: Maybe<&2, J.Json>, +a: Acc) -> String:
 
 def reply.acc(+a: Acc) -> String:
   match a:
-    case Acc{+blocks, +reason, +calls, +fin, +usage, +err}:
-      reply.of(err, Acc{blocks, reason, calls, fin, usage, None{}})
+    case Acc{+blocks, +reason, +calls, +fin, +usage, +err, +ec}:
+      reply.of(err, Acc{blocks, reason, calls, fin, usage, None{}, ec})
 
 # the whole SSE body -> the OK/CALL/END reply (Oai.reply_ok, as for a
 # whole body); an error chunk IS the reply: "ERROR provider 200: ..."
@@ -508,7 +521,7 @@ def reply_any(+body: String) -> String:
 # the last usage object of the stream (null: none came)
 def usage.of(+a: Acc) -> J.Json:
   match a:
-    case Acc{_, _, _, _, +u, _}:
+    case Acc{_, _, _, _, +u, _, _}:
       u
 
 def usage(+sse: String) -> J.Json:

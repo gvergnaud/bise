@@ -652,7 +652,7 @@ law edit_calls_ride_structured:
 law api_wire_parses:
   {W.parse_wire("MODEL default\nTOOL echo : Returns text.\nMSG user : bonjour\nEND\n")
     == W.WReq{Con{W.WTool{"echo", "Returns text."}, Nil{}},
-      Con{W.WMsg{"user", "bonjour", Nil{}}, Nil{}}, None{}}
+      Con{W.WMsg{"user", "bonjour", Nil{}, ""}, Nil{}}, None{}}
     : W.WReq}
 
 # LAW: the API body carries the model, the messages, the tools with the

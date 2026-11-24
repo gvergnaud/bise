@@ -135,7 +135,7 @@ def pair_go(+ms: List<&2, T.Msg>, +owed: List<&2, T.Call>)
       pair_closes(owed)
     case Con{m, rest}:
       match m:
-        case T.Msg{role, text, calls, inj}:
+        case T.Msg{role, text, calls, inj, ex}:
           match role:
             case T.RTool{}:
               match owed:
@@ -146,26 +146,26 @@ def pair_go(+ms: List<&2, T.Msg>, +owed: List<&2, T.Call>)
             case T.RAsst{}:
               Equal.trans(Bool,
                 H.paired(List.append(&2, T.Msg, H.closes(owed),
-                  Con{T.Msg{T.RAsst{}, text, calls, inj}, H.pair_calls.go(rest, calls)}), owed),
-                H.paired(Con{T.Msg{T.RAsst{}, text, calls, inj}, H.pair_calls.go(rest, calls)}, Nil{}),
+                  Con{T.Msg{T.RAsst{}, text, calls, inj, ex}, H.pair_calls.go(rest, calls)}), owed),
+                H.paired(Con{T.Msg{T.RAsst{}, text, calls, inj, ex}, H.pair_calls.go(rest, calls)}, Nil{}),
                 True{},
-                pair_closes_then(owed, Con{T.Msg{T.RAsst{}, text, calls, inj}, H.pair_calls.go(rest, calls)}),
+                pair_closes_then(owed, Con{T.Msg{T.RAsst{}, text, calls, inj, ex}, H.pair_calls.go(rest, calls)}),
                 pair_go(rest, calls))
             case T.RUser{}:
               Equal.trans(Bool,
                 H.paired(List.append(&2, T.Msg, H.closes(owed),
-                  Con{T.Msg{T.RUser{}, text, calls, inj}, H.pair_calls.go(rest, Nil{})}), owed),
-                H.paired(Con{T.Msg{T.RUser{}, text, calls, inj}, H.pair_calls.go(rest, Nil{})}, Nil{}),
+                  Con{T.Msg{T.RUser{}, text, calls, inj, ex}, H.pair_calls.go(rest, Nil{})}), owed),
+                H.paired(Con{T.Msg{T.RUser{}, text, calls, inj, ex}, H.pair_calls.go(rest, Nil{})}, Nil{}),
                 True{},
-                pair_closes_then(owed, Con{T.Msg{T.RUser{}, text, calls, inj}, H.pair_calls.go(rest, Nil{})}),
+                pair_closes_then(owed, Con{T.Msg{T.RUser{}, text, calls, inj, ex}, H.pair_calls.go(rest, Nil{})}),
                 pair_go(rest, Nil{}))
             case T.RSys{}:
               Equal.trans(Bool,
                 H.paired(List.append(&2, T.Msg, H.closes(owed),
-                  Con{T.Msg{T.RSys{}, text, calls, inj}, H.pair_calls.go(rest, Nil{})}), owed),
-                H.paired(Con{T.Msg{T.RSys{}, text, calls, inj}, H.pair_calls.go(rest, Nil{})}, Nil{}),
+                  Con{T.Msg{T.RSys{}, text, calls, inj, ex}, H.pair_calls.go(rest, Nil{})}), owed),
+                H.paired(Con{T.Msg{T.RSys{}, text, calls, inj, ex}, H.pair_calls.go(rest, Nil{})}, Nil{}),
                 True{},
-                pair_closes_then(owed, Con{T.Msg{T.RSys{}, text, calls, inj}, H.pair_calls.go(rest, Nil{})}),
+                pair_closes_then(owed, Con{T.Msg{T.RSys{}, text, calls, inj, ex}, H.pair_calls.go(rest, Nil{})}),
                 pair_go(rest, Nil{}))
 
 def Laws.pair_calls_paired(ms):
@@ -188,48 +188,48 @@ def pair_keep(+ms: List<&2, T.Msg>, +owed: List<&2, T.Call>,
           AB.absurd_eq(AB.ft_absurd(p), List<&2, T.Msg>, H.pair_calls.go(Nil{}, Con{c, ow}), Nil{})
     case Con{m, rest}:
       match m:
-        case T.Msg{role, text, calls, inj}:
+        case T.Msg{role, text, calls, inj, ex}:
           match role:
             case T.RTool{}:
               match owed:
                 case Nil{}:
                   AB.absurd_eq(AB.ft_absurd(p), List<&2, T.Msg>,
-                    H.pair_calls.go(Con{T.Msg{T.RTool{}, text, calls, inj}, rest}, Nil{}),
-                    Con{T.Msg{T.RTool{}, text, calls, inj}, rest})
+                    H.pair_calls.go(Con{T.Msg{T.RTool{}, text, calls, inj, ex}, rest}, Nil{}),
+                    Con{T.Msg{T.RTool{}, text, calls, inj, ex}, rest})
                 case Con{c, ow}:
                   Equal.cong(List<&2, T.Msg>, List<&2, T.Msg>,
-                    x => Con{T.Msg{T.RTool{}, text, calls, inj}, x},
+                    x => Con{T.Msg{T.RTool{}, text, calls, inj, ex}, x},
                     H.pair_calls.go(rest, ow), rest, pair_keep(rest, ow, p))
             case T.RAsst{}:
               match owed:
                 case Nil{}:
                   Equal.cong(List<&2, T.Msg>, List<&2, T.Msg>,
-                    x => Con{T.Msg{T.RAsst{}, text, calls, inj}, x},
+                    x => Con{T.Msg{T.RAsst{}, text, calls, inj, ex}, x},
                     H.pair_calls.go(rest, calls), rest, pair_keep(rest, calls, p))
                 case Con{c, ow}:
                   AB.absurd_eq(AB.ft_absurd(p), List<&2, T.Msg>,
-                    H.pair_calls.go(Con{T.Msg{T.RAsst{}, text, calls, inj}, rest}, Con{c, ow}),
-                    Con{T.Msg{T.RAsst{}, text, calls, inj}, rest})
+                    H.pair_calls.go(Con{T.Msg{T.RAsst{}, text, calls, inj, ex}, rest}, Con{c, ow}),
+                    Con{T.Msg{T.RAsst{}, text, calls, inj, ex}, rest})
             case T.RUser{}:
               match owed:
                 case Nil{}:
                   Equal.cong(List<&2, T.Msg>, List<&2, T.Msg>,
-                    x => Con{T.Msg{T.RUser{}, text, calls, inj}, x},
+                    x => Con{T.Msg{T.RUser{}, text, calls, inj, ex}, x},
                     H.pair_calls.go(rest, Nil{}), rest, pair_keep(rest, Nil{}, p))
                 case Con{c, ow}:
                   AB.absurd_eq(AB.ft_absurd(p), List<&2, T.Msg>,
-                    H.pair_calls.go(Con{T.Msg{T.RUser{}, text, calls, inj}, rest}, Con{c, ow}),
-                    Con{T.Msg{T.RUser{}, text, calls, inj}, rest})
+                    H.pair_calls.go(Con{T.Msg{T.RUser{}, text, calls, inj, ex}, rest}, Con{c, ow}),
+                    Con{T.Msg{T.RUser{}, text, calls, inj, ex}, rest})
             case T.RSys{}:
               match owed:
                 case Nil{}:
                   Equal.cong(List<&2, T.Msg>, List<&2, T.Msg>,
-                    x => Con{T.Msg{T.RSys{}, text, calls, inj}, x},
+                    x => Con{T.Msg{T.RSys{}, text, calls, inj, ex}, x},
                     H.pair_calls.go(rest, Nil{}), rest, pair_keep(rest, Nil{}, p))
                 case Con{c, ow}:
                   AB.absurd_eq(AB.ft_absurd(p), List<&2, T.Msg>,
-                    H.pair_calls.go(Con{T.Msg{T.RSys{}, text, calls, inj}, rest}, Con{c, ow}),
-                    Con{T.Msg{T.RSys{}, text, calls, inj}, rest})
+                    H.pair_calls.go(Con{T.Msg{T.RSys{}, text, calls, inj, ex}, rest}, Con{c, ow}),
+                    Con{T.Msg{T.RSys{}, text, calls, inj, ex}, rest})
 
 def Laws.pair_calls_keeps_paired(ms, p):
   pair_keep(ms, Nil{}, p)
