@@ -65,11 +65,15 @@ release_branch.py` is the lines' one writer (architect m_65259):
   `candidates` lists main's `fix:` commits the line lacks. A fix that does not apply: its agent
   redoes it on a branch from the line with a `Backport-of: <main sha>` trailer, then `pick` that.
   Agents never land on a line; sb land and sb feature know nothing of lines.
-- A hold keeps a main commit (a big feature with no flag off by default yet) out of releases:
+- A big feature lands on main behind its flag (`~/.bise/config.toml` [flags], off by default,
+  docs/flags.md) and ships with the update that deletes the flag (his pick, feature-flags#q-shape):
+  no hold. A hold is the by-hand fallback, set by main on his word, for a feature that reached
+  main without its flag. It keeps that main commit out of releases:
   `hold <sha> "<his words>"`, `unhold <sha>` (his word, or main on it; never by itself), in
   `<BISE_HOME>/run/release/holds.json`. While main holds one, no line starts on main: releases
   come from the open line, fixes only (his pick). First use: `release/v2026.11.15` from 6579c4400,
-  hold 419422141 (tasks), lifted once tasks ships behind its flag, off by default.
+  hold 419422141 (tasks): v2026.11.15 went out without tasks; lifted on his word on 2026-11-18,
+  and v2026.11.19 carried tasks from main.
 - A line ends when the next starts, refused while it has a commit main lacks (patch-equal on main,
   or naming a main commit by -x or Backport-of): no fix made only on a release is lost.
 - Tip-green is by exact sha, main's or a line's (tip_green.py unchanged). A red on a line names
