@@ -27,6 +27,8 @@ pub struct Msg {
     /// the Core's text (newlines unescaped)
     pub text: String,
     pub calls: Vec<Call>,
+    /// the provider's extra (an `  EXTRA` line, T.Msg extra); "" none
+    pub extra: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -77,7 +79,7 @@ fn fcall(line: &str) -> Call {
     }
 }
 
-const KNOWN: &[&str] = &["  CALL ", "MSG ", "TOOL ", "CFG ", "COUNT ", "QUEUE ", "NOTIF ", "BEND-SESSION "];
+const KNOWN: &[&str] = &["  CALL ", "  EXTRA ", "MSG ", "TOOL ", "CFG ", "COUNT ", "QUEUE ", "NOTIF ", "BEND-SESSION "];
 
 /// None when the Core's loader gives nothing back (no CFG line, or a
 /// version other than 1 or 2): a REPL starts fresh from such a file.
@@ -105,6 +107,11 @@ pub fn parse(s: &str) -> Option<Session> {
                 Some(m) => m.calls.push(fcall(line)),
                 None => used = false,
             }
+        } else if let Some(rest) = line.strip_prefix("  EXTRA ") {
+            match cur.as_mut() {
+                Some(m) => m.extra = wire_decode(rest),
+                None => used = false,
+            }
         } else if let Some(rest) = line.strip_prefix("MSG ") {
             match rest.find(' ') {
                 Some(p) => {
@@ -123,7 +130,7 @@ pub fn parse(s: &str) -> Option<Session> {
                                 "system" => (Role::System, false),
                                 _ => (Role::User, false),
                             };
-                            cur = Some(Msg { role, injected, text, calls: Vec::new() });
+                            cur = Some(Msg { role, injected, text, calls: Vec::new(), extra: String::new() });
                         }
                         None => used = false,
                     }
@@ -203,6 +210,9 @@ pub fn to_text(s: &Session) -> String {
         o.push_str(&format!("MSG {} {role} : {}", if m.injected { "True" } else { "False" }, escape_nl(&m.text)));
         for c in &m.calls {
             o.push_str(&format!("\n  CALL {} {} : {}", c.id, c.name, wire_encode(&c.args)));
+        }
+        if !m.extra.is_empty() {
+            o.push_str(&format!("\n  EXTRA {}", wire_encode(&m.extra)));
         }
         o.push('\n');
     }

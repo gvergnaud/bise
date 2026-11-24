@@ -713,6 +713,26 @@ def think_block(text):
     return {"type": "thinking", "thinking": [{"type": "text", "text": text}]}
 
 
+def signs(model):
+    """gemini-sig: $FAKE_THOUGHT_SIGS (model ids, comma-separated) sign every tool call as
+    Gemini's OpenAI-compatible endpoint does (tool_calls[].extra_content.google.thought_signature)
+    and refuse a request that replays a call without its signature (Gauthier's 400)."""
+    return bool(model) and model in os.environ.get("FAKE_THOUGHT_SIGS", "").split(",")
+
+
+def sig_of(call_id):
+    return {"google": {"thought_signature": "fake-sig-" + call_id}}
+
+
+def unsigned_replay(body):
+    """the first replayed tool call whose signature is missing or not the one it got, None for none"""
+    for m in body.get("messages") or []:
+        for c in (m.get("tool_calls") or []) if m.get("role") == "assistant" else []:
+            if c.get("extra_content") != sig_of(c.get("id") or ""):
+                return c
+    return None
+
+
 def whole_openai_chat(turn, model):
     u = usage_of(turn)
     m = {"role": "assistant", "content": turn["text"]}
@@ -721,8 +741,9 @@ def whole_openai_chat(turn, model):
     elif turn["reasoning"]:
         m["reasoning_content"] = turn["reasoning"]
     if turn["calls"]:
-        m["tool_calls"] = [{"id": c["id"], "type": "function",
-                            "function": {"name": c["name"], "arguments": json.dumps(c["args"])}}
+        m["tool_calls"] = [dict({"id": c["id"], "type": "function",
+                                 "function": {"name": c["name"], "arguments": json.dumps(c["args"])}},
+                                **({"extra_content": sig_of(c["id"])} if signs(model) else {}))
                            for c in turn["calls"]]
     return {"id": "fake", "object": "chat.completion", "created": 0, "model": model,
             "choices": [{"index": 0, "message": m,
@@ -754,8 +775,9 @@ def sse_openai_chat(turn, model, include_usage=False, mid_error=False):
     for p in text_pieces(turn["text"], turn) if turn["text"] else []:
         ev.append(chunk({"content": p}))
     for i, c in enumerate(turn["calls"]):
-        ev.append(chunk({"tool_calls": [{"index": i, "id": c["id"], "type": "function",
-                                         "function": {"name": c["name"], "arguments": ""}}]}))
+        ev.append(chunk({"tool_calls": [dict({"index": i, "id": c["id"], "type": "function",
+                                              "function": {"name": c["name"], "arguments": ""}},
+                                             **({"extra_content": sig_of(c["id"])} if signs(model) else {}))]}))
         for p in pieces(json.dumps(c["args"])):
             ev.append(chunk({"tool_calls": [{"index": i, "function": {"arguments": p}}]}))
     ev.append(chunk({}, "tool_calls" if turn["calls"] else "stop"))
@@ -1287,6 +1309,16 @@ class H(http.server.BaseHTTPRequestHandler):
             self.send(400, json.dumps(oai_error(
                 "max_tokens", "Unsupported parameter: 'max_tokens' is not supported with this model. "
                 "Use 'max_completion_tokens' instead.", "unsupported_parameter")).encode())
+            return
+        # gemini-sig: a signing model ($FAKE_THOUGHT_SIGS) refuses a replayed
+        # call without its signature, with Gemini's words
+        if family == "openai-chat" and signs(body.get("model")) and unsigned_replay(body):
+            with open(LOG, "a") as f:
+                f.write(json.dumps({"agent": "", "family": family, "path": self.path, "status": 400,
+                                    "model": body.get("model"), "unsigned": unsigned_replay(body).get("id")}) + "\n")
+            self.send(400, json.dumps([{"error": {
+                "code": 400, "status": "INVALID_ARGUMENT",
+                "message": "Function call is missing a thought_signature in functionCall parts."}}]).encode())
             return
         # BISE-293: the real APIs refuse a tool name off their pattern
         # (OpenAI refused "self.compact" on the user's first message)

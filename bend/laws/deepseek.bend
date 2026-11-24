@@ -74,9 +74,9 @@ END
 def empty_body(+effort: String) -> J.Json:
   W.parse_json(Api.api_body_for(Api.DeepSeek{}, "deepseek-flash",
     Api.MFacts{True{}, 64n, "max_tokens", "", "", effort, False{}},
-    W.WReq{Nil{}, [W.WMsg{"assistant", "", Nil{}},
-      W.WMsg{"assistant", "<think> native\n </think>", Nil{}},
-      W.WMsg{"assistant", "<think>foreign\nBENDSIG::sig</think>", Nil{}}], None{}}))
+    W.WReq{Nil{}, [W.WMsg{"assistant", "", Nil{}, ""},
+      W.WMsg{"assistant", "<think> native\n </think>", Nil{}, ""},
+      W.WMsg{"assistant", "<think>foreign\nBENDSIG::sig</think>", Nil{}, ""}], None{}}))
 
 law deepseek_empty_and_reasoning_only_turns_are_left_out:
   {W.arr_field_or(empty_body("high"), "messages") == Nil{} : List<&2, J.Json>}
@@ -183,7 +183,7 @@ law deepseek_http_errors_stay_errors:
 # sent back as its MSG line in the next request.
 def asst_line(r: Rm.RemoteRes) -> String:
   match r:
-    case Rm.RROk{+text, _}:
+    case Rm.RROk{+text, _, _}:
       String.append("MSG assistant : ", text)
     case Rm.RRErr{+why}:
       String.append("MSG user : error ", why)

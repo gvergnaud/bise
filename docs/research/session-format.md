@@ -321,6 +321,8 @@ type AssistantMessage = Ev<"assistant_message", 1, {   // must: true
   calls: ToolCall[];
   stop?: "end" | "tool_use" | "max_tokens" | "other";
   response_id?: string;     // provider id, when given
+  extra?: string;           // what the provider sent to come back unchanged (Gemini's
+                            // thought signatures): the Core's opaque JSON text (T.Msg extra)
 }>;
 
 type ToolResult = Ev<"tool_result", 1, {        // must: true

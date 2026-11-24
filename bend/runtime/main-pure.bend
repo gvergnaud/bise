@@ -80,7 +80,7 @@ def trans.model.ok(+rt: Rt, +rest: List<&2, T.Act>, +action: U32,
   match rt:
     case Rt{+sess, _, +cmds, +live}:
       Tr{ENone{}, Rt{sess, script2, cmds, live},
-        JCmd{T.CompletionOk{action, text, calls},
+        JCmd{T.CompletionOk{action, text, calls, ""},
           rest}}
 
 def trans.model.fail(+rt: Rt, +rest: List<&2, T.Act>, +action: U32,
@@ -794,7 +794,7 @@ def replay.tool(pend: List<&2, T.Call>, +text: String,
 def replay.msg(+m: T.Msg, +rest: List<&2, T.Msg>, +pend: List<&2, T.Call>,
     +out: List<&2, String>) -> Rp:
   match m:
-    case T.Msg{+role, +text, +calls, +inj}:
+    case T.Msg{+role, +text, +calls, +inj, _}:
       match role:
         case T.RUser{}:
           replay.user(inj, text, rest, pend, out)

@@ -21,8 +21,8 @@ def fit.lone.trunc(ok_budget: Bool, +m: T.Msg, +budget: Nat) -> FitR:
   match ok_budget:
     case True{}:
       match m:
-        case T.Msg{role, +text, _, injected}:
-          FOk{Con{T.Msg{role, H.truncate(text, budget), Nil{}, injected},
+        case T.Msg{role, +text, _, injected, _}:
+          FOk{Con{T.Msg{role, H.truncate(text, budget), Nil{}, injected, ""},
             Nil{}}}
     case False{}:
       FBig{}

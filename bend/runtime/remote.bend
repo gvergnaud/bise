@@ -24,11 +24,14 @@ import Base
 import ../core/types.bend as T
 import ../core/text.bend as Tx
 import ../core/wire.bend as W
+import ../core/oai-chat.bend as Oai
 
 # ---- the parsed reply ----
 
+# extra: the provider's extra of the reply's message (T.Msg extra), ""
+# none: its EXTRA line, stamped by `stamp` with whose it is
 type RemoteRes is Data:
-  RROk{text: String, calls: List<&2, T.Call>}
+  RROk{text: String, calls: List<&2, T.Call>, extra: String}
   RRErr{why: String}
 
 
@@ -61,13 +64,14 @@ def ser_calls(calls: List<&2, T.Call>) -> String:
 
 def ser_msg(m: T.Msg) -> String:
   match m:
-    case T.Msg{+role, +text, +calls, _}:
+    case T.Msg{+role, +text, +calls, _, +extra}:
       # the text rides ONE wire line: real newlines escape (the model
       # sees them back after parse_wire's unescape - flattening turned
-      # a pasted multi-line block into one space-joined line)
+      # a pasted multi-line block into one space-joined line); the
+      # provider's extra rides an EXTRA sub-line (W.extra_line)
       String.append("MSG ", String.append(role_str(role),
         String.append(" : ", String.append(W.escape_nl(text),
-          ser_calls(calls)))))
+          String.append(ser_calls(calls), W.extra_line(extra))))))
 
 def ser_msgs(ms: List<&2, T.Msg>) -> String:
   match ms:
@@ -232,23 +236,35 @@ def comb.call(is_call: Bool, +h: String, +tail: RemoteRes) -> RemoteRes:
   match is_call:
     case True{}:
       match tail:
-        case RROk{+text, +calls}:
-          RROk{text, Con{parse_call(String.drop(h, 5n)), calls}}
+        case RROk{+text, +calls, +extra}:
+          RROk{text, Con{parse_call(String.drop(h, 5n)), calls}, extra}
         case RRErr{+why}:
           RRErr{why}
     case False{}:
       comb.err(String.starts_with(h, "ERROR "), h, tail)
 
-def comb.ok(is_ok: Bool, +h: String, +tail: RemoteRes) -> RemoteRes:
-  match is_ok:
+# "EXTRA <wire-encoded JSON>": the message's extra (Oai.reply_ok)
+def comb.extra(is_extra: Bool, +h: String, +tail: RemoteRes) -> RemoteRes:
+  match is_extra:
     case True{}:
       match tail:
-        case RROk{_, +calls}:
-          RROk{String.drop(h, 3n), calls}
+        case RROk{+text, +calls, _}:
+          RROk{text, calls, W.wire_decode(String.drop(h, 6n))}
         case RRErr{+why}:
           RRErr{why}
     case False{}:
       comb.call(String.starts_with(h, "CALL "), h, tail)
+
+def comb.ok(is_ok: Bool, +h: String, +tail: RemoteRes) -> RemoteRes:
+  match is_ok:
+    case True{}:
+      match tail:
+        case RROk{_, +calls, +extra}:
+          RROk{String.drop(h, 3n), calls, extra}
+        case RRErr{+why}:
+          RRErr{why}
+    case False{}:
+      comb.extra(String.starts_with(h, "EXTRA "), h, tail)
 
 def combine(+h: String, tail: RemoteRes) -> RemoteRes:
   comb.ok(String.starts_with(h, "OK "), h, tail)
@@ -257,7 +273,7 @@ def parse_go.step(is_end: Bool, +h: String, tail: RemoteRes) -> RemoteRes:
   match is_end:
     case True{}:
       # the END line: the empty success the lines above combine into
-      RROk{"", Nil{}}
+      RROk{"", Nil{}, ""}
     case False{}:
       combine(h, tail)
 
@@ -274,7 +290,16 @@ def parse_reply(reply: String) -> RemoteRes:
 # the reply becomes exactly the completion command the Core expects
 def remote_cmd(res: RemoteRes, +action: U32) -> T.Cmd:
   match res:
-    case RROk{+text, +calls}:
-      T.CompletionOk{action, text, calls}
+    case RROk{+text, +calls, +extra}:
+      T.CompletionOk{action, text, calls, extra}
     case RRErr{+why}:
       T.CompletionFail{action, why}
+
+# the reply's extra stamped with whose it is: the provider and model
+# the call went to (core/oai-chat.bend stamp; replayed only to them)
+def stamp(res: RemoteRes, +prov: String, +model: String) -> RemoteRes:
+  match res:
+    case RROk{+text, +calls, +extra}:
+      RROk{text, calls, Oai.stamp(extra, prov, model)}
+    case RRErr{+why}:
+      RRErr{why}

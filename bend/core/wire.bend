@@ -185,8 +185,10 @@ def wire_decode(+s: String) -> String:
 type WCall is Data:
   WCall{id: String, name: String, args: String}
 
+# extra: the provider's extra of an assistant message (T.Msg extra), raw
+# JSON, "" none; only core/oai-chat.bend reads it
 type WMsg is Data:
-  WMsg{role: String, content: String, calls: List<&2, WCall>}
+  WMsg{role: String, content: String, calls: List<&2, WCall>, extra: String}
 
 type WTool is Data:
   WTool{name: String, desc: String}
@@ -235,9 +237,9 @@ def sendable(msgs: List<&2, WMsg>) -> List<&2, WMsg>:
       Nil{}
     case Con{+m, rest}:
       match m:
-        case WMsg{+role, +content, +calls}:
+        case WMsg{+role, +content, +calls, +extra}:
           keep_msg(unsendable(role, content, has_calls(calls)),
-            WMsg{role, content, calls}, sendable(rest))
+            WMsg{role, content, calls, extra}, sendable(rest))
 
 def NO_OUTPUT() -> String:
   "(no output)"
@@ -296,12 +298,38 @@ def add_call(cur: Maybe<&2, WMsg>, +line: String) -> Maybe<&2, WMsg>:
   match cur:
     case Some{+m}:
       match m:
-        case WMsg{+role, +content, +calls}:
+        case WMsg{+role, +content, +calls, +extra}:
           # appended, not prepended: the calls keep the order of the
           # CALL lines, which is the order the tool results follow
           # (the results pair with the calls by position)
           Some{WMsg{role, content,
-            List.append(&2, WCall, calls, Con{parse_call(line), Nil{}})}}
+            List.append(&2, WCall, calls, Con{parse_call(line), Nil{}}),
+            extra}}
+    case None{}:
+      cur
+
+# ---- the provider's extra of a message: an EXTRA sub-line ----
+# "  EXTRA <wire-encoded JSON>" after the message's CALL lines, in the
+# wire request and in the checkpoint alike; none when the extra is "".
+def extra_line.pick(empty: Bool, +extra: String) -> String:
+  match empty:
+    case True{}:
+      ""
+    case False{}:
+      String.append("\n  EXTRA ", wire_encode(extra))
+
+def extra_line(+extra: String) -> String:
+  extra_line.pick(String.is_empty(extra), extra)
+
+def extra_of_line(+line: String) -> String:
+  wire_decode(String.drop(line, 8n))
+
+def set_extra(cur: Maybe<&2, WMsg>, +line: String) -> Maybe<&2, WMsg>:
+  match cur:
+    case Some{+m}:
+      match m:
+        case WMsg{+role, +content, +calls, _}:
+          Some{WMsg{role, content, calls, extra_of_line(line)}}
     case None{}:
       cur
 
@@ -321,7 +349,7 @@ def start_msg.cut(sp: Maybe<&2, Nat>, req: WReq, cur: Maybe<&2, WMsg>,
           WReq{tools, push_msg(cur, msgs),
             Some{WMsg{String.take(rest, p),
               unescape_nl(String.drop(rest, Nat.add(p, 3n))),
-              Nil{}}}}
+              Nil{}, ""}}}
     case None{}:
       req
 
@@ -358,8 +386,16 @@ def step_call(is_call: Bool, +req: WReq, +line: String) -> WReq:
           WReq{tools, msgs, add_call(cur, line)}
     case False{}:
       step_msg(String.starts_with(line, "MSG "), req, line)
+def step_extra(is_extra: Bool, +req: WReq, +line: String) -> WReq:
+  match is_extra:
+    case True{}:
+      match req:
+        case WReq{+tools, +msgs, +cur}:
+          WReq{tools, msgs, set_extra(cur, line)}
+    case False{}:
+      step_call(String.starts_with(line, "  CALL "), req, line)
 def step(+req: WReq, +line: String) -> WReq:
-  step_call(String.starts_with(line, "  CALL "), req, line)
+  step_extra(String.starts_with(line, "  EXTRA "), req, line)
 
 
 def parse_finish(req: WReq) -> WReq:
@@ -1253,8 +1289,8 @@ type WTag is Data:
 
 def wtag(+m: WMsg) -> WTag:
   match m:
-    case WMsg{+role, +content, +calls}:
-      WTag{String.eq(role, "tool"), WMsg{role, content, calls}}
+    case WMsg{+role, +content, +calls, +extra}:
+      WTag{String.eq(role, "tool"), WMsg{role, content, calls, extra}}
 
 def wtags(ms: List<&2, WMsg>) -> List<&2, WTag>:
   match ms:
@@ -1265,12 +1301,12 @@ def wtags(ms: List<&2, WMsg>) -> List<&2, WTag>:
 
 def wcalls(+m: WMsg) -> List<&2, WCall>:
   match m:
-    case WMsg{_, _, +calls}:
+    case WMsg{_, _, +calls, _}:
       calls
 
 def wno_result(+name: String) -> WMsg:
   WMsg{"tool", String.append("tool ", String.append(name,
-    " failed: no result: bise restarted while this ran")), Nil{}}
+    " failed: no result: bise restarted while this ran")), Nil{}, ""}
 
 def wcloses(owed: List<&2, WCall>) -> List<&2, WMsg>:
   match owed:

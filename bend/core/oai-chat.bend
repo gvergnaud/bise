@@ -7,8 +7,10 @@
 # mapping lives in pure Bend and is pinned by bend/laws/.
 #
 # Tool results pair with assistant calls FIFO on the ids ("call_<n>"),
-# exactly as the bridge did; GLM content arrives as an array of blocks
-# whose text fields are joined.
+# exactly as the bridge did, or the provider's own ids when its extra
+# came back (Gemini's thought signatures, gemini-sig: extra_of, stamp,
+# own_extras); GLM content arrives as an array of blocks whose text
+# fields are joined.
 
 import Base
 import ./image.bend as Im
@@ -170,7 +172,205 @@ def asst_content.pick(parts: Maybe<&2, W.ThinkSpan>, +content: String) -> J.Json
 def asst_content_json(+content: String) -> J.Json:
   asst_content.pick(W.asst_think.find(content), content)
 
-def msg_json.asst(+content: String, +calls: List<&2, W.WCall>,
+# ---- the provider's extra: Gemini's thought signatures (gemini-sig) ----
+# Gemini signs its tool calls (tool_calls[i].extra_content.google.
+# thought_signature) and may sign the message (extra_content); the next
+# request must carry each back unchanged where it came, or Gemini answers
+# 400 "Function call is missing a thought_signature". The reply's are
+# kept as one opaque blob, T.Msg's extra, which only this module writes
+# (extra_of, stamp) and reads (own_extras, msg_json.asst):
+#   {"extra_content": <the message's>, "calls": [<part>, ...],
+#    "by": {"provider": "<p>", "model": "<m>"}}
+# one part per call, by position: {"id": "<the provider's id>",
+# "extra_content": <the call's, when it had one>}. "by" is stamped when
+# the reply is read (runtime/remote.bend stamp: the call's provider and
+# model). A blob replays only to that same provider and model
+# (own_extras: a signature is valid for the model that wrote it, and a
+# strict server 400s an unknown key), and only when its parts align with
+# the message's calls (aligned: never a signature on another call);
+# else the message goes as it would without it: call_<n> ids, no
+# extra_content.
+
+def opt_kv(none: Bool, +k: String, +v: J.Json,
+    +rest: List<&2, Sigma<&2, &2, String, _ => J.Json>>)
+    -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
+  match none:
+    case True{}:
+      rest
+    case False{}:
+      Con{J.kv(k, v), rest}
+
+def ec_of(+j: J.Json) -> J.Json:
+  W.field_or(j, "extra_content", J.JNull{})
+
+# the extra_content of `j`, when it has one, before `rest`
+def ec_kv(+j: J.Json, +rest: List<&2, Sigma<&2, &2, String, _ => J.Json>>)
+    -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
+  opt_kv(J.is_null(ec_of(j)), "extra_content", ec_of(j), rest)
+
+# the reply side: a call's part, the blob of a reply's message ("" when
+# nothing in it is signed: the reply lines stay today's)
+def call_part(+tc: J.Json) -> J.Json:
+  J.obj(Con{J.kv("id", J.str(J.get_str_or(tc, "id", ""))), ec_kv(tc, Nil{})})
+
+def call_parts(tcs: List<&2, J.Json>) -> List<&2, J.Json>:
+  match tcs:
+    case Nil{}:
+      Nil{}
+    case Con{+tc, rest}:
+      Con{call_part(tc), call_parts(rest)}
+
+def any_ec(tcs: List<&2, J.Json>) -> Bool:
+  match tcs:
+    case Nil{}:
+      False{}
+    case Con{+tc, rest}:
+      Bool.or(Bool.not(J.is_null(ec_of(tc))), any_ec(rest))
+
+def extra_of.pick(none: Bool, +msg: J.Json) -> String:
+  match none:
+    case True{}:
+      ""
+    case False{}:
+      J.stringify(J.obj(ec_kv(msg,
+        Con{J.kv("calls", J.arr(call_parts(W.arr_field_or(msg, "tool_calls")))),
+          Nil{}})))
+
+def extra_of(+msg: J.Json) -> String:
+  extra_of.pick(Bool.and(J.is_null(ec_of(msg)),
+    Bool.not(any_ec(W.arr_field_or(msg, "tool_calls")))), msg)
+
+# whose it is: the provider and model the call went to
+def by_json(+prov: String, +model: String) -> J.Json:
+  J.obj(Con{J.kv("provider", J.str(prov)),
+    Con{J.kv("model", J.str(model)), Nil{}}})
+
+def stamp.parsed(r: Result<&2, &2, String, J.Json>, +prov: String,
+    +model: String) -> String:
+  match r:
+    case Done{+j}:
+      J.stringify(J.set(j, "by", by_json(prov, model)))
+    case Fail{_}:
+      ""
+
+def stamp.pick(empty: Bool, +extra: String, +prov: String, +model: String)
+    -> String:
+  match empty:
+    case True{}:
+      ""
+    case False{}:
+      stamp.parsed(J.parse(extra), prov, model)
+
+# the blob stamped with the provider and model that wrote it
+def stamp(+extra: String, +prov: String, +model: String) -> String:
+  stamp.pick(String.is_empty(extra), extra, prov, model)
+
+def by_of.parsed(r: Result<&2, &2, String, J.Json>) -> String:
+  match r:
+    case Done{+j}:
+      J.stringify(W.field_or(j, "by", J.JNull{}))
+    case Fail{_}:
+      ""
+
+# the blob, when that provider and model wrote it; else ""
+def own_extra(+extra: String, +prov: String, +model: String) -> String:
+  Bool.pick(String,
+    String.eq(by_of.parsed(J.parse(extra)), J.stringify(by_json(prov, model))),
+    extra, "")
+
+def own_msgs(ms: List<&2, W.WMsg>, +prov: String, +model: String)
+    -> List<&2, W.WMsg>:
+  match ms:
+    case Nil{}:
+      Nil{}
+    case Con{+m, rest}:
+      match m:
+        case W.WMsg{+role, +content, +calls, +extra}:
+          Con{W.WMsg{role, content, calls, own_extra(extra, prov, model)},
+            own_msgs(rest, prov, model)}
+
+# the request with only the extras that provider and model wrote
+def own_extras(+prov: String, +model: String, +req: W.WReq) -> W.WReq:
+  match req:
+    case W.WReq{+tools, +msgs, +cur}:
+      W.WReq{tools, own_msgs(msgs, prov, model), cur}
+
+# the replay side: the blob when its parts align with the `n` calls
+def aligned.pick(ok: Bool, +j: J.Json) -> Maybe<&2, J.Json>:
+  match ok:
+    case True{}:
+      Some{j}
+    case False{}:
+      None{}
+
+def aligned.parsed(r: Result<&2, &2, String, J.Json>, +n: Nat)
+    -> Maybe<&2, J.Json>:
+  match r:
+    case Done{+j}:
+      aligned.pick(Bool.and(J.is_obj(j),
+        Nat.is_eq(List.length(&2, J.Json, W.arr_field_or(j, "calls")), n)), j)
+    case Fail{_}:
+      None{}
+
+def aligned.empty(empty: Bool, +extra: String, +n: Nat) -> Maybe<&2, J.Json>:
+  match empty:
+    case True{}:
+      None{}
+    case False{}:
+      aligned.parsed(J.parse(extra), n)
+
+def aligned(+extra: String, +n: Nat) -> Maybe<&2, J.Json>:
+  aligned.empty(String.is_empty(extra), extra, n)
+
+# a call's id: the provider's, kept in its part; else call_<n>
+def part_id.pick(empty: Bool, +pid: String, +id: String) -> String:
+  match empty:
+    case True{}:
+      W.call_id_of(id)
+    case False{}:
+      pid
+
+def part_id(+p: J.Json, +id: String) -> String:
+  part_id.pick(String.is_empty(J.get_str_or(p, "id", "")),
+    J.get_str_or(p, "id", ""), id)
+
+def call_json_x(c: W.WCall, +p: J.Json) -> J.Json:
+  match c:
+    case W.WCall{+id, +name, +args}:
+      J.obj(Con{J.kv("id", J.str(part_id(p, id))),
+        Con{J.kv("type", J.str("function")),
+          Con{J.kv("function",
+            J.obj(Con{J.kv("name", J.str(W.wire_name(name))),
+              Con{J.kv("arguments", J.str(args_json(name, args))), Nil{}}})),
+            ec_kv(p, Nil{})}}})
+
+def calls_x(calls: List<&2, W.WCall>, ps: List<&2, J.Json>)
+    -> List<&2, J.Json>:
+  match calls:
+    case Nil{}:
+      Nil{}
+    case Con{+c, rest}:
+      match ps:
+        case Con{+p, prest}:
+          Con{call_json_x(c, p), calls_x(rest, prest)}
+        case Nil{}:
+          Con{call_json(c), calls_x(rest, Nil{})}
+
+def ids_x(calls: List<&2, W.WCall>, ps: List<&2, J.Json>) -> List<&2, String> :
+  match calls:
+    case Nil{}:
+      Nil{}
+    case Con{+c, rest}:
+      match c:
+        case W.WCall{+id, _, _}:
+          match ps:
+            case Con{+p, prest}:
+              Con{part_id(p, id), ids_x(rest, prest)}
+            case Nil{}:
+              Con{W.call_id_of(id), ids_x(rest, Nil{})}
+
+# an assistant message without its provider's extra (today's bytes)
+def msg_json.asst.plain(+content: String, +calls: List<&2, W.WCall>,
     ids: List<&2, String>) -> J.Json & List<&2, String>:
   match calls:
     case Nil{}:
@@ -182,25 +382,55 @@ def msg_json.asst(+content: String, +calls: List<&2, W.WCall>,
           Con{J.kv("tool_calls", calls_json(calls)), Nil{}}}}),
         List.append(&2, String, ids, W.ids_of(calls)))
 
-def msg_json.pick(is_tool: Bool, is_asst: Bool, +role: String,
-    +content: String, +calls: List<&2, W.WCall>, ids: List<&2, String>)
+def msg_json.asst.signed(+j: J.Json, +content: String,
+    +calls: List<&2, W.WCall>, ids: List<&2, String>)
     -> J.Json & List<&2, String>:
+  match calls:
+    case Nil{}:
+      (J.obj(Con{J.kv("role", J.str("assistant")),
+        Con{J.kv("content", asst_content_json(content)), ec_kv(j, Nil{})}}),
+        ids)
+    case Con{_, _}:
+      (J.obj(Con{J.kv("role", J.str("assistant")),
+        Con{J.kv("content", asst_content_json(content)),
+          Con{J.kv("tool_calls",
+            J.arr(calls_x(calls, W.arr_field_or(j, "calls")))),
+            ec_kv(j, Nil{})}}}),
+        List.append(&2, String, ids, ids_x(calls, W.arr_field_or(j, "calls"))))
+
+def msg_json.asst.x(m: Maybe<&2, J.Json>, +content: String,
+    +calls: List<&2, W.WCall>, ids: List<&2, String>)
+    -> J.Json & List<&2, String>:
+  match m:
+    case Some{+j}:
+      msg_json.asst.signed(j, content, calls, ids)
+    case None{}:
+      msg_json.asst.plain(content, calls, ids)
+
+def msg_json.asst(+content: String, +calls: List<&2, W.WCall>,
+    +extra: String, ids: List<&2, String>) -> J.Json & List<&2, String>:
+  msg_json.asst.x(aligned(extra, List.length(&2, W.WCall, calls)), content,
+    calls, ids)
+
+def msg_json.pick(is_tool: Bool, is_asst: Bool, +role: String,
+    +content: String, +calls: List<&2, W.WCall>, +extra: String,
+    ids: List<&2, String>) -> J.Json & List<&2, String>:
   match is_tool:
     case True{}:
       msg_json.tool(ids, content)
     case False{}:
       match is_asst:
         case True{}:
-          msg_json.asst(content, calls, ids)
+          msg_json.asst(content, calls, extra, ids)
         case False{}:
           (J.obj(Con{J.kv("role", J.str(W.role_out(role))),
             Con{J.kv("content", W.img_content_of(role, Im.IOai{}, content)), Nil{}}}), ids)
 
 def msg_json(m: W.WMsg, ids: List<&2, String>) -> J.Json & List<&2, String>:
   match m:
-    case W.WMsg{+role, +content, +calls}:
+    case W.WMsg{+role, +content, +calls, +extra}:
       msg_json.pick(String.eq(role, "tool"), String.eq(role, "assistant"),
-        role, content, calls, ids)
+        role, content, calls, extra, ids)
 
 # the message walk is one self-recursive def over a Data state (the
 # json package's parser pattern): computed values travel inside
@@ -413,11 +643,26 @@ def choice_msg.found(m: Maybe<&2, J.Json>) -> J.Json:
 def choice_msg(j: J.Json) -> J.Json:
   choice_msg.found(J.arr_get(W.field_or(j, "choices", J.JNull{}), 0n))
 
+# the reply's EXTRA line (runtime/remote.bend parse_reply): the message's
+# blob (extra_of), wire-encoded; none when nothing in it is signed
+def extra_reply_lines.pick(empty: Bool, +extra: String,
+    +rest: List<&2, String>) -> List<&2, String>:
+  match empty:
+    case True{}:
+      rest
+    case False{}:
+      Con{String.append("EXTRA ", W.wire_encode(extra)), rest}
+
+def extra_reply_lines(+extra: String, +rest: List<&2, String>)
+    -> List<&2, String>:
+  extra_reply_lines.pick(String.is_empty(extra), extra, rest)
+
 def reply_ok(+msg: J.Json) -> String:
   +content = content_of(W.field_or(msg, "content", J.JNull{}))
   +calls = tc_lines(W.arr_field_or(msg, "tool_calls"))
   W.join_lines(Con{String.append("OK ", W.escape_nl(content)),
-    List.append(&2, String, calls, Con{"END", Nil{}})})
+    List.append(&2, String, calls,
+      extra_reply_lines(extra_of(msg), Con{"END", Nil{}}))})
 
 def reply_of.check(ok: Bool, +status: U32, +body: String, +j: J.Json) -> String:
   match ok:

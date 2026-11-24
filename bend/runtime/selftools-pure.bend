@@ -137,7 +137,7 @@ def def_step.msg.user(is_user: Bool, +role: T.Role, +d: Def,
 
 def def_step.msg(+d: Def, +m: T.Msg) -> Def:
   match m:
-    case T.Msg{+role, +text, _, +injected}:
+    case T.Msg{+role, +text, _, +injected, _}:
       def_step.msg.user(def_step.role_is_user(role), role, d, text, injected)
 
 # a turn's final reply (an assistant message without tool calls) ends
@@ -159,7 +159,7 @@ def def_step.ends.role(role: T.Role, +calls: List<&2, T.Call>) -> Bool:
 
 def def_step.ends(+m: T.Msg) -> Bool:
   match m:
-    case T.Msg{+role, _, +calls, _}:
+    case T.Msg{+role, _, +calls, _, _}:
       def_step.ends.role(role, calls)
 
 # after a turn's end, the next message starts from no request

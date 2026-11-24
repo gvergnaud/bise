@@ -237,7 +237,7 @@ def req_of(+c: Ctx) -> U32:
   match c:
     case Ctx{_, +cmd, _, +pending, _}:
       match cmd:
-        case T.CompletionOk{+a, _, _}:
+        case T.CompletionOk{+a, _, _, _}:
           a
         case T.CompletionFail{+a, _}:
           a
@@ -395,20 +395,31 @@ def user_ev(inj: Bool, +c: Ctx, +t: String) -> String:
 
 # ---- one context message ----
 
+# an assistant message's provider extra (T.Msg extra): its "extra" field,
+# none when "" (the session log keeps it for a resumed session)
+def extra_kv(empty: Bool, +extra: String)
+    -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
+  match empty:
+    case True{}:
+      Nil{}
+    case False{}:
+      Con{J.kv("extra", J.str(extra)), Nil{}}
+
 def msg_ev(+c: Ctx, m: T.Msg, +id: U32) -> String:
   match m:
-    case T.Msg{role, +text, +calls, +inj}:
+    case T.Msg{role, +text, +calls, +inj, +extra}:
       match role:
         case T.RUser{}:
           user_ev(inj, c, text)
         case T.RAsst{}:
+          # extra: the provider's (T.Msg extra), as its text, when it sent one
           line("assistant_message", True{},
             J.obj(Con{J.kv("req", u32(req_of(c))),
               Con{J.kv("model", J.str("")),
                 Con{J.kv("parts", parts(text)),
                   Con{J.kv("calls", J.arr(calls_json(calls))),
                     Con{J.kv("stop", J.str(stop_of(List.is_empty(&2, T.Call, calls)))),
-                      Nil{}}}}}}))
+                      extra_kv(String.is_empty(extra), extra)}}}}}))
         case T.RTool{}:
           line("tool_result", True{},
             J.obj(Con{J.kv("call", J.str(call_id(id))),
@@ -423,7 +434,7 @@ def msg_ev(+c: Ctx, m: T.Msg, +id: U32) -> String:
 
 def is_tool(m: T.Msg) -> Bool:
   match m:
-    case T.Msg{T.RTool{}, _, _, _}:
+    case T.Msg{T.RTool{}, _, _, _, _}:
       True{}
     case _:
       False{}
@@ -476,7 +487,7 @@ def calls_key(cs: List<&2, T.Call>) -> String:
 
 def msg_key(m: T.Msg) -> String:
   match m:
-    case T.Msg{+role, +text, +calls, +inj}:
+    case T.Msg{+role, +text, +calls, +inj, _}:
       String.concat([role_key(role), Bool.pick(String, inj, "1", "0"),
         text, calls_key(calls)])
 
@@ -569,7 +580,7 @@ def compaction(+c: Ctx, +bh: List<&2, T.Msg>, nh: List<&2, T.Msg>)
       Nil{}
     case Con{m, +rest}:
       match m:
-        case T.Msg{_, +pre, _, _}:
+        case T.Msg{_, +pre, _, _, _}:
           compaction.kept(c, pre, List.length(&2, T.Msg, bh),
             kept_walk(rest, bh, 1n))
 

@@ -93,7 +93,7 @@ law wire_call_roundtrip:
 # OK text, CALL lines, END.
 law wire_reply_roundtrip:
   {Rm.parse_reply("OK hello\nCALL 1 echo : hi\nEND\n")
-    == Rm.RROk{"hello", Con{T.Call{1, "echo", "hi"}, Nil{}}}
+    == Rm.RROk{"hello", Con{T.Call{1, "echo", "hi"}, Nil{}}, ""}
     : Rm.RemoteRes}
 
 # ---- multi-line message text (paste) ----
@@ -115,7 +115,7 @@ b")}
 # LAW: the request wire carries message text on one line, escaped.
 law ser_msg_escapes_newlines:
   {Rm.ser_msg(T.Msg{T.RUser{}, "a
-b", Nil{}, False{}})
+b", Nil{}, False{}, ""})
     == "MSG user : a\\nb"
     : String}
 
@@ -126,7 +126,7 @@ b"}),
     T.new_session(cfg))
 
 def ml_flow.done(+cfg: T.Cfg) -> T.Session:
-  S.res_next(S.apply(ml_flow.started(cfg), T.CompletionOk{0, "done", Nil{}}),
+  S.res_next(S.apply(ml_flow.started(cfg), T.CompletionOk{0, "done", Nil{}, ""}),
     ml_flow.started(cfg))
 
 law checkpoint_multiline_roundtrip:
@@ -349,7 +349,7 @@ CALL 1 bash : one\\Ntwo
 END
 ")
     == Rm.RROk{"", Con{T.Call{1, "bash", "one
-two"}, Nil{}}}
+two"}, Nil{}}, ""}
     : Rm.RemoteRes}
 
 # LAW: the request wire encodes multi-line args the same way (the
@@ -369,7 +369,7 @@ END
 ")
     == W.WReq{Nil{}, Con{W.WMsg{"assistant", "",
       Con{W.WCall{"1", "bash", "one
-two"}, Nil{}}}, Nil{}}, None{}}
+two"}, Nil{}}, ""}, Nil{}}, None{}}
     : W.WReq}
 # ---- session-level rejections (the Core accepts nothing uninvited) ----
 
@@ -525,7 +525,7 @@ law compaction_prompt_carries_requests:
 # summary.
 def kc.text(m: T.Msg) -> String:
   match m:
-    case T.Msg{_, t, _, _}:
+    case T.Msg{_, t, _, _, _}:
       t
 
 law summary_message_parses_back:
@@ -637,7 +637,7 @@ def steer_flow.steered(+cfg: T.Cfg) -> T.Session:
 
 def steer_flow.called(+cfg: T.Cfg) -> T.Session:
   S.res_next(S.apply(steer_flow.steered(cfg),
-      T.CompletionOk{0, "thinking", Con{T.Call{1, "bash", "ls"}, Nil{}}}),
+      T.CompletionOk{0, "thinking", Con{T.Call{1, "bash", "ls"}, Nil{}}, ""}),
     steer_flow.steered(cfg))
 
 def steer_flow(+cfg: T.Cfg) -> T.Session:
@@ -715,7 +715,7 @@ def steer_order.two(+cfg: T.Cfg) -> T.Session:
 
 def steer_order.called(+cfg: T.Cfg) -> T.Session:
   S.res_next(S.apply(steer_order.two(cfg),
-      T.CompletionOk{0, "thinking", Con{T.Call{1, "bash", "ls"}, Nil{}}}),
+      T.CompletionOk{0, "thinking", Con{T.Call{1, "bash", "ls"}, Nil{}}, ""}),
     steer_order.two(cfg))
 
 def steer_order(+cfg: T.Cfg) -> T.Session:
@@ -793,7 +793,7 @@ law queue_holds_mid_turn:
 
 def queue_flow.done(+cfg: T.Cfg) -> T.Session:
   S.res_next(S.apply(queue_flow.held(cfg),
-      T.CompletionOk{0, "done", Nil{}}), queue_flow.held(cfg))
+      T.CompletionOk{0, "done", Nil{}, ""}), queue_flow.held(cfg))
 
 # LAW: the turn's end keeps the queue intact.
 law queue_survives_turn_end:
@@ -855,7 +855,7 @@ def queue_flow.has_user(msgs: List<&2, T.Msg>, +text: String) -> Bool:
       False{}
     case Con{+m, +rest}:
       match m:
-        case T.Msg{T.RUser{}, +t, _, False{}}:
+        case T.Msg{T.RUser{}, +t, _, False{}, _}:
           Bool.or(String.eq(t, text), queue_flow.has_user(rest, text))
         case _:
           queue_flow.has_user(rest, text)
@@ -878,7 +878,7 @@ law interrupt_closes_waiting_calls:
     == Con{T.user("hi"),
       Con{T.asst("thinking", Con{T.Call{2, "bash", "ls"}, Nil{}}),
       Con{T.tool_res("tool bash failed: interrupted"),
-      Con{T.Msg{T.RUser{}, "penguins", Nil{}, True{}}, Nil{}}}}}
+      Con{T.Msg{T.RUser{}, "penguins", Nil{}, True{}, ""}, Nil{}}}}}
     : List<&2, T.Msg>}
 
 # LAW: an agent pending (nothing in history yet) answers nothing on an
@@ -900,7 +900,7 @@ def ts_args() -> String:
 def ts_flow.called(+cfg: T.Cfg) -> T.Session:
   S.res_next(S.apply(steer_flow.started(cfg),
       T.CompletionOk{0, "", Con{T.Call{1, "run_typescript", ts_args()},
-        Nil{}}}),
+        Nil{}}, ""}),
     steer_flow.started(cfg))
 
 # LAW: the call goes out: one tool act, name and args as the model wrote
@@ -908,7 +908,7 @@ def ts_flow.called(+cfg: T.Cfg) -> T.Session:
 law run_typescript_goes_out_as_a_tool:
   {drain_flow.acts(S.apply(steer_flow.started(law_cfg()),
       T.CompletionOk{0, "", Con{T.Call{1, "run_typescript", ts_args()},
-        Nil{}}}))
+        Nil{}}, ""}))
     == Con{T.ToolAct{2, T.Call{2, "run_typescript", ts_args()}}, Nil{}}
     : List<&2, T.Act>}
 
@@ -918,7 +918,7 @@ law run_typescript_goes_out_as_a_tool:
 law run_typescript_batches_with_other_calls:
   {drain_flow.acts(S.apply(steer_flow.started(law_cfg()),
       T.CompletionOk{0, "", Con{T.Call{1, "run_typescript", ts_args()},
-        Con{T.Call{2, "bash", "ls"}, Nil{}}}}))
+        Con{T.Call{2, "bash", "ls"}, Nil{}}}, ""}))
     == Con{T.ToolAct{2, T.Call{2, "run_typescript", ts_args()}},
       Con{T.ToolAct{3, T.Call{3, "bash", "ls"}}, Nil{}}}
     : List<&2, T.Act>}
@@ -958,7 +958,7 @@ def ask_flow.compacting(+cfg: T.Cfg) -> T.Session:
 
 # the compaction call is action 3 (0: the first call, 1-2: the tool round)
 def ask_flow.summary() -> T.Cmd:
-  T.CompletionOk{3, "<summary>the work so far; next: finish it</summary>", Nil{}}
+  T.CompletionOk{3, "<summary>the work so far; next: finish it</summary>", Nil{}, ""}
 
 # what an apply's actions are, in short
 def act_kinds(acts: List<&2, T.Act>) -> List<&2, String>:
@@ -1027,7 +1027,7 @@ law unasked_result_does_not_compact:
 def ask_flow.two(+cfg: T.Cfg) -> T.Session:
   S.res_next(S.apply(steer_flow.started(cfg),
       T.CompletionOk{0, "", Con{T.Call{1, "run_typescript", ts_args()},
-        Con{T.Call{2, "bash", "ls"}, Nil{}}}}),
+        Con{T.Call{2, "bash", "ls"}, Nil{}}}, ""}),
     steer_flow.started(cfg))
 
 def ask_flow.two.asked(+cfg: T.Cfg) -> T.Session:
@@ -1106,7 +1106,7 @@ def chain.resumed(+cfg: T.Cfg) -> T.Session:
 
 def chain.called(+cfg: T.Cfg) -> T.Session:
   S.res_next(S.apply(chain.resumed(cfg),
-      T.CompletionOk{4, "", Con{T.Call{1, "bash", "ls"}, Nil{}}}),
+      T.CompletionOk{4, "", Con{T.Call{1, "bash", "ls"}, Nil{}}, ""}),
     chain.resumed(cfg))
 
 def chain.second(+cfg: T.Cfg) -> T.Res:
@@ -1118,7 +1118,7 @@ def msgs_have(ms: List<&2, T.Msg>, +needle: String) -> Bool:
       False{}
     case Con{+m, rest}:
       match m:
-        case T.Msg{_, +text, _, _}:
+        case T.Msg{_, +text, _, _, _}:
           Bool.or(String.contains(text, needle), msgs_have(rest, needle))
 
 def comp_input_has(acts: List<&2, T.Act>, +needle: String) -> Bool:
@@ -1232,7 +1232,7 @@ def res_obs(r: T.Res) -> List<&2, T.Obs>:
 
 def hollow_flow.res(+cfg: T.Cfg) -> T.Res:
   S.apply(hollow_flow.started(cfg), T.CompletionOk{0, "<think>t
-</think>", Nil{}})
+</think>", Nil{}, ""})
 
 # LAW: a reply of only an unsigned think span (no text, no call: main's
 # reply req 38870 through a gateway) is no answer: a null iteration, the
@@ -1249,7 +1249,7 @@ law hollow_reply_is_a_null_iteration:
 law signed_think_reply_is_committed:
   {S.sess_history(S.res_next(S.apply(hollow_flow.started(law_cfg()),
       T.CompletionOk{0, "<think>t
-BENDSIG::s1</think>", Nil{}}), hollow_flow.started(law_cfg())))
+BENDSIG::s1</think>", Nil{}, ""}), hollow_flow.started(law_cfg())))
     == [T.user("go"), T.asst("<think>t
 BENDSIG::s1</think>", Nil{})]
     : List<&2, T.Msg>}
@@ -1327,7 +1327,7 @@ def wedge_flow() -> T.Session:
       T.UserMsg{T.Queue{}, "go"}),
     T.CompletionOk{0, "<think>t
 BENDSIG::s1</think>
-hi", Nil{}}),
+hi", Nil{}, ""}),
     T.UserMsg{T.Queue{}, "again"})
 
 def res_acts(r: T.Res) -> List<&2, T.Act>:

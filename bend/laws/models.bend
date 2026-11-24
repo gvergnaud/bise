@@ -438,13 +438,13 @@ law pair_calls_keeps_paired:
 # LAW: the wire guard: a call cut before its result gets a failed one,
 # right after its assistant message.
 law pair_wire_answers_the_cut:
-  {W.pair_wire(W.WReq{Nil{}, [W.WMsg{"user", "q", Nil{}},
-      W.WMsg{"assistant", "", [W.WCall{"call_7", "bash", "{}"}]},
-      W.WMsg{"user", "next", Nil{}}], None{}})
-    == W.WReq{Nil{}, [W.WMsg{"user", "q", Nil{}},
-      W.WMsg{"assistant", "", [W.WCall{"call_7", "bash", "{}"}]},
-      W.WMsg{"tool", "tool bash failed: no result: bise restarted while this ran", Nil{}},
-      W.WMsg{"user", "next", Nil{}}], None{}} : W.WReq}
+  {W.pair_wire(W.WReq{Nil{}, [W.WMsg{"user", "q", Nil{}, ""},
+      W.WMsg{"assistant", "", [W.WCall{"call_7", "bash", "{}"}], ""},
+      W.WMsg{"user", "next", Nil{}, ""}], None{}})
+    == W.WReq{Nil{}, [W.WMsg{"user", "q", Nil{}, ""},
+      W.WMsg{"assistant", "", [W.WCall{"call_7", "bash", "{}"}], ""},
+      W.WMsg{"tool", "tool bash failed: no result: bise restarted while this ran", Nil{}, ""},
+      W.WMsg{"user", "next", Nil{}, ""}], None{}} : W.WReq}
 
 # ---- the prompt cache (BISE-268): the start of every request stays
 # byte-identical from one call of a session to the next ----

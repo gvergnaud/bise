@@ -151,3 +151,26 @@ fn a_resumed_hub_compaction_shape_rebuilds_the_core_history() {
     let p = project::project(&log, &st, Path::new("/nonexistent")).unwrap();
     assert!(p.ends_with("MSG True user : The earlier conversation was compacted.\nMSG False user : q2\nMSG True user : Summary of the earlier conversation:\\n<summary>s</summary>\n"), "{p}");
 }
+
+/// gemini-sig: an assistant message's provider extra (Gemini's thought
+/// signatures) in the log comes back to a resumed REPL as its EXTRA line,
+/// under its calls, as core/checkpoint.bend writes it.
+#[test]
+fn a_resumed_session_keeps_the_provider_extra() {
+    let l = |seq: u64, typ: &str, data: Value| {
+        let must = bise_session::types::must_of(typ);
+        format!("{}\n", json!({"seq": seq, "type": typ, "v": 1, "must": must, "data": data}))
+    };
+    let txt = |t: &str| json!([{"kind": "text", "text": t}]);
+    let x = r#"{"calls":[{"id":"function-call-7","extra_content":{"google":{"thought_signature":"S"}}}]}"#;
+    let mut raw = l(1, "session_start", json!({"session": "s", "format": 1, "created_by": "t", "cwd": "/"}));
+    raw += &l(2, "user_message", json!({"content": txt("q1"), "delivery": "prompt"}));
+    raw += &l(3, "assistant_message", json!({"req": 1, "model": "m", "parts": [],
+        "calls": [{"id": "call_1", "name": "bash", "args": "ls"}], "extra": x}));
+    raw += &l(4, "tool_result", json!({"call": "call_1", "ok": true, "content": txt("r1")}));
+    let log = bise_session::read_bytes(&[("events.jsonl".into(), raw.into_bytes())]);
+    let st = State::rebuild(&log);
+    let p = project::project(&log, &st, Path::new("/nonexistent")).unwrap();
+    let want = format!("MSG False assistant : \n  CALL 1 bash : ls\n  EXTRA {}\nMSG False tool : r1\n", project::wire_encode(x));
+    assert!(p.ends_with(&want), "{p}");
+}

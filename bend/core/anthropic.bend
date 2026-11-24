@@ -362,7 +362,7 @@ def awalk_go(fuel: Nat, w: AWalk) -> List<&2, J.Json>:
           amsgs_json(acc)
         case AN{Con{+m, +rest}, +ids, +acc}:
           match m:
-            case W.WMsg{+role, +content, +calls}:
+            case W.WMsg{+role, +content, +calls, _}:
               awalk_go(k, AR{String.eq(role, "system"),
                 Bool.or(String.eq(role, "user"), String.eq(role, "context")),
                 String.eq(role, "assistant"), m, rest, ids, acc})
@@ -374,7 +374,7 @@ def awalk_go(fuel: Nat, w: AWalk) -> List<&2, J.Json>:
               match is_user:
                 case True{}:
                   match m:
-                    case W.WMsg{+role, +content, _}:
+                    case W.WMsg{+role, +content, _, _}:
                       awalk_go(k, AN{todo, ids,
                         amsg_push(amsg_user(String.eq(role, "context"),
                           user_blocks(content)), acc)})
@@ -382,7 +382,7 @@ def awalk_go(fuel: Nat, w: AWalk) -> List<&2, J.Json>:
                   match is_asst:
                     case True{}:
                       match m:
-                        case W.WMsg{_, +content, +calls}:
+                        case W.WMsg{_, +content, +calls, _}:
                           awalk_go(k, AN{todo,
                             List.append(&2, String, ids, W.ids_of(calls)),
                             amsg_push(AA{asst_blocks_signed(
@@ -400,14 +400,14 @@ def awalk_go(fuel: Nat, w: AWalk) -> List<&2, J.Json>:
                       match ids:
                         case Con{+id, +irest}:
                           match m:
-                            case W.WMsg{_, +content, _}:
+                            case W.WMsg{_, +content, _, _}:
                               awalk_go(k, AN{todo, irest,
                                 Con{AU{List.append(&2, J.Json, blocks,
                                   Con{tool_result_json(id, content),
                                     Nil{}})}, arest}})
                         case Nil{}:
                           match m:
-                            case W.WMsg{_, +content2, _}:
+                            case W.WMsg{_, +content2, _, _}:
                               awalk_go(k, AN{todo, Nil{},
                                 Con{AU{List.append(&2, J.Json, blocks,
                                   Con{tool_result_json("call_0", content2),
@@ -423,13 +423,13 @@ def awalk_go(fuel: Nat, w: AWalk) -> List<&2, J.Json>:
               match ids:
                 case Con{+id2, +irest2}:
                   match m:
-                    case W.WMsg{_, +content3, _}:
+                    case W.WMsg{_, +content3, _, _}:
                       awalk_go(k, AN{todo, irest2,
                         Con{AU{Con{tool_result_json(id2, content3),
                           Nil{}}}, acc}})
                 case Nil{}:
                   match m:
-                    case W.WMsg{_, +content4, _}:
+                    case W.WMsg{_, +content4, _, _}:
                       awalk_go(k, AN{todo, Nil{},
                         Con{AU{Con{tool_result_json("call_0", content4),
                           Nil{}}}, acc}})
@@ -458,7 +458,7 @@ def wire_sys(msgs: List<&2, W.WMsg>) -> Maybe<&2, String>:
       None{}
     case Con{+m, _}:
       match m:
-        case W.WMsg{+role, +content, _}:
+        case W.WMsg{+role, +content, _, _}:
           # a blank system prompt sends no system field (no empty block)
           wire_sys.is_sys(Bool.and(String.eq(role, "system"),
             Bool.not(is_blank(content))), content)

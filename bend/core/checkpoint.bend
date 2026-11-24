@@ -100,13 +100,14 @@ def calls_text(calls: List<&2, T.Call>) -> String:
 
 def msg_text(m: T.Msg) -> String:
   match m:
-    case T.Msg{+role, +text, +calls, +injected}:
+    case T.Msg{+role, +text, +calls, +injected, +extra}:
       # the text stays on ONE line: a multi-line message (pasted code,
-      # a paragraph) is escaped exactly like the wire carries it
+      # a paragraph) is escaped exactly like the wire carries it; its
+      # provider extra rides an EXTRA sub-line after its calls (W.extra_line)
       String.append("MSG ", String.append(inj_text(injected),
         String.append(" ", String.append(role_text(role),
           String.append(" : ", String.append(W.escape_nl(text),
-            calls_text(calls)))))))
+            String.append(calls_text(calls), W.extra_line(extra))))))))
 
 def msgs_text(ms: List<&2, T.Msg>) -> String:
   match ms:
@@ -274,10 +275,26 @@ def add_call(st: FS, +line: String) -> FS:
       match cur:
         case Some{+m}:
           match m:
-            case T.Msg{+role, +text, +calls, +injected}:
+            case T.Msg{+role, +text, +calls, +injected, +extra}:
               FS{tools, Some{T.Msg{role, text,
                 List.append(&2, T.Call, calls, Con{fcall(line), Nil{}}),
-                injected}}, msgs, cfg, inputs, actions, queued, notifs, ok}
+                injected, extra}}, msgs, cfg, inputs, actions, queued, notifs, ok}
+        case None{}:
+          st
+
+# "  EXTRA <wire-encoded JSON>": the provider's extra of the message
+# above (T.Msg extra). A file written before it has none ("" extra); a
+# binary older than it skips the line (step.pick: an unknown line).
+def add_extra(st: FS, +line: String) -> FS:
+  match st:
+    case FS{+tools, +cur, +msgs, +cfg, +inputs, +actions, +queued, +notifs, +ok}:
+      match cur:
+        case Some{+m}:
+          match m:
+            case T.Msg{+role, +text, +calls, +injected, _}:
+              FS{tools, Some{T.Msg{role, text, calls, injected,
+                W.extra_of_line(line)}}, msgs, cfg, inputs, actions, queued,
+                notifs, ok}
         case None{}:
           st
 
@@ -410,12 +427,19 @@ def step_count.cut(sp: Maybe<&2, Nat>, st: FS, +line: String) -> FS:
 def step_count(st: FS, +line: String) -> FS:
   step_count.cut(Tx.find(String.drop(line, 6n), " ", 0n), st, line)
 
+def step.call_or_extra(is_call: Bool, st: FS, +line: String) -> FS:
+  match is_call:
+    case True{}:
+      add_call(st, line)
+    case False{}:
+      add_extra(st, line)
+
 def step.msg_or_call(is_msg: Bool, st: FS, +line: String) -> FS:
   match is_msg:
     case True{}:
       step_msg(st, line)
     case False{}:
-      add_call(st, line)
+      step.call_or_extra(String.starts_with(line, "  CALL "), st, line)
 
 def step.meta3(is_tool: Bool, st: FS, +line: String) -> FS:
   match is_tool:
@@ -465,17 +489,19 @@ def step.pick(known: Bool, st: FS, +line: String) -> FS:
       st
     case True{}:
       step.kind(Bool.or(String.starts_with(line, "  CALL "),
-        String.starts_with(line, "MSG ")), st, line)
+        Bool.or(String.starts_with(line, "  EXTRA "),
+          String.starts_with(line, "MSG "))), st, line)
 
 def step(st: FS, +line: String) -> FS:
   step.pick(Bool.or(String.starts_with(line, "  CALL "),
+    Bool.or(String.starts_with(line, "  EXTRA "),
     Bool.or(String.starts_with(line, "MSG "),
       Bool.or(String.starts_with(line, "TOOL "),
         Bool.or(String.starts_with(line, "CFG "),
           Bool.or(String.starts_with(line, "COUNT "),
             Bool.or(String.starts_with(line, "QUEUE "),
               Bool.or(String.starts_with(line, "NOTIF "),
-                String.starts_with(line, "BEND-SESSION ")))))))), st, line)
+                String.starts_with(line, "BEND-SESSION "))))))))), st, line)
 
 def from_go(lines: List<&2, String>, st: FS) -> FS:
   match lines:
