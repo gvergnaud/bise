@@ -56,6 +56,8 @@ pub struct AgentRow {
     /// wt-disk: its worktree waits for disk (`Workspace::disk_held`): the
     /// row's phase says `waiting_disk`
     pub disk_held: bool,
+    /// why it failed (sb-core's journaled failure), only when failed
+    pub failure: Option<String>,
     /// BISE-136: a private worktree (gate.sh new), else null
     pub place: Option<String>,
     /// dev-flow §3.1: the id of the place it is in (`places`) (BISE-136:
@@ -189,6 +191,7 @@ impl AgentRow {
             path: String::new(),
             branch: None,
             disk_held: false,
+            failure: None,
             place: None,
             place_id: String::new(),
             created_ms: 0,

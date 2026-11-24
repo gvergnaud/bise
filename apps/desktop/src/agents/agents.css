@@ -19,6 +19,9 @@
 .ag-name { margin-right: var(--s-2); font-weight: 600; }
 .ag-what { color: var(--c-text-2); }
 .ag-end.wait { color: var(--c-accent); }
+/* a failed agent: 'failed' in err, why it failed beside it in text-2, once (designer m_67975) */
+.ag-end.failed { color: var(--c-err); }
+.ag-fail-why { color: var(--c-text-2); }
 /* the state column: '?' in the accent when it asks him, a line icon, or the status dot */
 .ag-mark { display: inline-flex; color: var(--c-text-3); }
 /* wt-disk: waiting for disk, the waiting look: a hollow ring in text-2, no hue (designer m_67943) */

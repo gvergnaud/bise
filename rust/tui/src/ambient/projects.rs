@@ -158,6 +158,7 @@ mod tests {
             purpose: String::new(),
             since_ms: 0,
             waits: 0,
+            failure: None,
             parent: None,
             branch: None,
             checkout_branch: None,

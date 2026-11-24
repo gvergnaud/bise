@@ -51,7 +51,13 @@ since_ms: number,
 /**
  * his open cards from it
  */
-waits: number, parent?: string | null, 
+waits: number, 
+/**
+ * why it failed, as sb-core journaled it (only when `status` is
+ * failed): display text shown beside 'failed', never read to decide
+ * (wt-disk, designer m_67975, architect m_67978)
+ */
+failure?: string | null, parent?: string | null, 
 /**
  * its worktree's branch (none: it works in the shared checkout), as
  * released; the shared checkout's branch is `checkout_branch`

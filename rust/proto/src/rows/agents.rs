@@ -112,6 +112,11 @@ pub struct Agent {
     pub since_ms: u64,
     /// his open cards from it
     pub waits: u32,
+    /// why it failed, as sb-core journaled it (only when `status` is
+    /// failed): display text shown beside 'failed', never read to decide
+    /// (wt-disk, designer m_67975, architect m_67978)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent: Option<String>,
     /// its worktree's branch (none: it works in the shared checkout), as
@@ -335,6 +340,7 @@ impl Agent {
             purpose: String::new(),
             since_ms: a.since_ms,
             waits: 0,
+            failure: None,
             parent: None,
             branch: None,
             checkout_branch: None,

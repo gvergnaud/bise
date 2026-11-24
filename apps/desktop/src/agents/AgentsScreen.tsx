@@ -29,7 +29,7 @@ import { newAgent } from '@/app/newagent';
 import { WorkingMark } from '@/app/Marks';
 import { pinFirst, pinnedIn, usePins } from '@/app/pins';
 import { PinMark } from '@/app/pinbutton';
-import { archivedEnd, archivedOf, dotOf, endOf, lineOf, liveOf } from './model';
+import { archivedOf, dotOf, lineOf, liveOf, subOf } from './model';
 import { keepSheet, keptSheet, type SheetAsk } from './sheet';
 import { AgentSheet } from './Tune';
 import './agents.css';
@@ -189,19 +189,21 @@ export function StateMark({ a }: { a: Agent }) {
 
 const AgentItem = memo(function AgentItem({ project, a, sel, peek, now, pinned, onClick }: { project: string; a: Agent; sel: boolean; peek: boolean; now: number; pinned: boolean; onClick: () => void }) {
   const menu = useEntityMenu({ kind: 'agent', project, agent: a.name });
-  const end = a.archived ? archivedEnd(a, now) : endOf(a, now).text;
+  // its end, why it failed (once, beside 'failed': designer m_67975), its report
+  const { end, why, report } = subOf(a, now);
   const line = lineOf(a);
   const id = a.name;
   return (
     <div data-row={a.name} data-testid={`agents.row.${id}`} data-status={a.status}>
       <ListRow on={sel} onClick={onClick} onContextMenu={menu.onContextMenu} testId={`agents.open.${id}`}
         // the whole line and report in its tip: the row cuts them (his rule: every cut text has its tip)
-        tip={[line, a.report == null ? '' : `${a.report.kind} · ${a.report.text}`].filter((x) => x !== '').join('\n') || undefined}
+        tip={[line, why, report].filter((x) => x !== '').join('\n') || undefined}
         state={<StateMark a={a} />}
         title={<><span className="ag-name">{a.main ? 'bise' : a.name}</span>{line !== '' && <span className="ag-what" data-testid={`agents.line.${id}`}>{line}</span>}</>}
         sub={<>
-          <span className={asksHim(a) ? 'ag-end wait' : 'ag-end'} data-testid={`agents.end.${id}`}>{end}</span>
-          {a.report != null && <span data-testid={`agents.report.${id}`}>{` · ${a.report.kind} · ${a.report.text}`}</span>}
+          <span className={asksHim(a) ? 'ag-end wait' : why !== '' ? 'ag-end failed' : 'ag-end'} data-testid={`agents.end.${id}`}>{end}</span>
+          {why !== '' && <span className="ag-fail-why" data-testid={`agents.why.${id}`}>{` · ${why}`}</span>}
+          {report !== '' && <span data-testid={`agents.report.${id}`}>{` · ${report}`}</span>}
         </>}
         end={<>{pinned && <PinMark testId={`agents.pinned.${id}`} />}<MoreButton menu={menu} testId={`agents.more.${id}`} /></>} />
       {peek && <Peek project={project} agent={a.name} />}

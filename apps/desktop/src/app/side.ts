@@ -68,7 +68,8 @@ export function signOf(a: Agent, now: number, wake?: number): Sign {
     case 'blocked':
       return { g: '⋯', tone: 'dim', end: panel.state_waiting, endTone: 'dim', count: 0, title: `${panel.state_waiting} · ${what}` };
     case 'failed':
-      return { g: '✗', tone: 'err', end: panel.state_failed, endTone: 'err', count: 0, title: `${panel.state_failed} · ${what}` };
+      // why it failed beside 'failed', once (rows::Agent.failure, designer m_67975)
+      return { g: '✗', tone: 'err', end: panel.state_failed, endTone: 'err', count: 0, title: [panel.state_failed, a.failure ?? '', what].filter((x) => x !== '').join(' · ') };
     default:
       break;
   }

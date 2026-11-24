@@ -1076,18 +1076,20 @@ mod disk_gate {
             crate::proto_view::agents(&snap, &mut since, t.env.now, crate::model::user_kind, &|_| None, &|_| None, &|_| None, crate::proto_view::Which::All)
                 .into_iter()
                 .find(|a| a.name == n)
-                .map(|a| (a.status, a.phase))
+                .map(|a| (a.status, a.phase, a.failure))
                 .unwrap()
         };
         let mut t = T::new();
         t.go(Input::DiskFree { gb: 30 });
         spawn(&mut t, "a");
         spawn(&mut t, "b");
-        assert_eq!(row(&mut t, "a"), (RowStatus::Working, Some(Phase::WaitingDisk)));
+        assert_eq!(row(&mut t, "a"), (RowStatus::Working, Some(Phase::WaitingDisk), None));
         t.go(Input::DiskFree { gb: 41 });
-        assert_eq!(row(&mut t, "a"), (RowStatus::Working, Some(Phase::Starting)), "released: made, its REPL starting");
+        assert_eq!(row(&mut t, "a"), (RowStatus::Working, Some(Phase::Starting), None), "released: made, its REPL starting, no failure");
         t.go(Input::DiskFree { gb: 15 });
-        assert_eq!(row(&mut t, "b"), (RowStatus::Failed, None), "refused: the failed row");
+        // the failed row with its reason, once, never starting with 'failed' (architect m_67978)
+        let refused = "refused: 15 GB free, under 20 GB · free some space, then ask bise again".to_string();
+        assert_eq!(row(&mut t, "b"), (RowStatus::Failed, None, Some(refused)), "refused: the failed row and why");
     }
 
     /// held, then a reading under 20 GB: refused, its spawner told

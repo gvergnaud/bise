@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Agent } from '@/proto';
 import { hub_ev } from '@/proto/fixtures.gen';
-import { ago, archivedEnd, archivedOf, dotOf, endOf, heldNumbers, holds, HOLD_MS, lineOf, liveOf, noteJump, numbersOf, rankedOf } from './model';
+import { ago, archivedEnd, archivedOf, dotOf, endOf, heldNumbers, holds, HOLD_MS, lineOf, liveOf, noteJump, numbersOf, rankedOf, subOf } from './model';
 
 const T = 1_791_100_000_000;
 const ag = (name: string, over: Partial<Agent> = {}): Agent => ({ name, dir: name, main: false, status: 'idle', archived: false, title: '', purpose: '', since_ms: T, waits: 0, watching: [], ...over });
@@ -40,6 +40,15 @@ describe('the agents list', () => {
     expect(endOf(ag('a', { status: 'done' }), T)).toEqual({ text: 'done', needs: false });
     // wt-disk: its worktree waits for disk: it says so, not its age, and asks nothing of him (designer m_67943)
     expect(endOf(ag('a', { status: 'working', phase: 'waiting_disk' }), T + 12 * 60_000)).toEqual({ text: 'waiting for disk', needs: false });
+    // wt-disk: a refused one says 'failed' and why, once, even beside a failed report (designer m_67975, architect m_67978)
+    const why = 'refused: 18 GB free, under 20 GB · free some space, then ask bise again';
+    const refused = ag('b', { status: 'failed', failure: why, report: { kind: 'failed', text: why, at_ms: T } });
+    const s = subOf(refused, T);
+    expect(s).toEqual({ end: 'failed', why, report: '' });
+    expect(`${s.end} · ${s.why}`.match(/failed/g)).toHaveLength(1);
+    // no reason: the report as before; not failed: no why
+    expect(subOf(ag('c', { status: 'failed', report: { kind: 'failed', text: 'tests red', at_ms: T } }), T)).toEqual({ end: 'failed', why: '', report: 'failed · tests red' });
+    expect(subOf(ag('d', { status: 'idle', failure: 'old' }), T).why).toBe('');
     // an archived one on /archived (designer m_19489): how it ended, then how long ago
     expect(archivedEnd(ag('a', { archived: true, status: 'done' }), T + 50 * 3_600_000)).toBe('✓ done · 2 d');
     expect(archivedEnd(ag('a', { archived: true, status: 'idle' }), T + 3 * 3_600_000)).toBe('– stopped · 3 h');

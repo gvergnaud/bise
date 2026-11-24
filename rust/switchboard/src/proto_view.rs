@@ -200,6 +200,8 @@ fn agent(
         status,
         // wt-disk: a held worktree's agent waits for disk, not starting
         phase: if a.disk_held { Some(Phase::WaitingDisk) } else { Phase::of_hub(a.status.as_str()) },
+        // display text beside 'failed' (snapshot_rows keeps it only when failed)
+        failure: a.failure.clone(),
         archived,
         title: title_of(a),
         purpose: purpose_of(a),
@@ -919,6 +921,25 @@ mod tests {
     /// agents-light (architect m_37220): the archived agents' light rows
     /// say what their full rows said (status, since, title as about,
     /// dir), and the live rows leave them out.
+    /// wt-disk (architect m_67978): a failed row carries why it failed,
+    /// once; a failed one with no reason and a live one carry none
+    #[test]
+    fn a_failed_row_says_why_once() {
+        let mut since = Since::new();
+        let s = Snapshot {
+            agents: vec![
+                AgentRow { status: crate::model::Status::Failed, failure: Some("refused: 18 GB free, under 20 GB · free some space, then ask bise again".into()), ..AgentRow::test("refused") },
+                AgentRow { status: crate::model::Status::Failed, ..AgentRow::test("broke") },
+                AgentRow { status: crate::model::Status::Working, ..AgentRow::test("live") },
+            ],
+            ..Snapshot::default()
+        };
+        let rows = agents(&s, &mut since, 100, uk, &|_| None, &|_| None, &|_| None, Which::All);
+        let why: Vec<Option<&str>> = rows.iter().map(|a| a.failure.as_deref()).collect();
+        assert_eq!(why, [Some("refused: 18 GB free, under 20 GB · free some space, then ask bise again"), None, None]);
+        assert!(!why[0].unwrap().starts_with("failed"), "never 'failed · failed'");
+    }
+
     #[test]
     fn an_archived_agent_is_a_light_row() {
         let mut since = Since::new();

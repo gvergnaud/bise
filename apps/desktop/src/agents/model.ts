@@ -75,6 +75,26 @@ export function endOf(a: Agent, now: number): { text: string; needs: boolean } {
 }
 
 /**
+ * Why a live failed agent failed, as the hub journaled it (rows::Agent.failure; '' else): the row puts
+ * it beside 'failed', once, and it stands for its failed report (never 'failed · failed', designer
+ * m_67975). Shown whole, never trimmed (architect m_67978). Pure.
+ */
+export function whyOf(a: Agent): string {
+  return a.status === 'failed' && !a.archived ? (a.failure ?? '') : '';
+}
+
+/**
+ * An agent row's second line, its parts in order: the end ('failed' in err), why it failed, its
+ * report; the report goes when the why says it. Pure.
+ */
+export function subOf(a: Agent, now: number): { end: string; why: string; report: string } {
+  const why = whyOf(a);
+  const end = a.archived ? archivedEnd(a, now) : endOf(a, now).text;
+  const report = why === '' && a.report != null ? `${a.report.kind} · ${a.report.text}` : '';
+  return { end, why, report };
+}
+
+/**
  * An archived agent's end on /archived, dim (designer m_19489): how it ended, then how long ago:
  * '✓ done · 2 d' for one that finished, '– stopped · 3 h' for any other. Pure.
  */
