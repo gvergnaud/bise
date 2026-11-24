@@ -38,6 +38,8 @@ describe('the agents list', () => {
     expect(endOf(ag('a', { waits: 3 }), T)).toEqual({ text: 'waits', needs: true });
     expect(endOf(ag('a', { status: 'working' }), T + 12 * 60_000)).toEqual({ text: '12 min', needs: false });
     expect(endOf(ag('a', { status: 'done' }), T)).toEqual({ text: 'done', needs: false });
+    // wt-disk: its worktree waits for disk: it says so, not its age, and asks nothing of him (designer m_67943)
+    expect(endOf(ag('a', { status: 'working', phase: 'waiting_disk' }), T + 12 * 60_000)).toEqual({ text: 'waiting for disk', needs: false });
     // an archived one on /archived (designer m_19489): how it ended, then how long ago
     expect(archivedEnd(ag('a', { archived: true, status: 'done' }), T + 50 * 3_600_000)).toBe('✓ done · 2 d');
     expect(archivedEnd(ag('a', { archived: true, status: 'idle' }), T + 3 * 3_600_000)).toBe('– stopped · 3 h');

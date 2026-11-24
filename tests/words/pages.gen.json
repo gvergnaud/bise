@@ -680,6 +680,16 @@
     "one": null,
     "text": "Use it"
   },
+  "pages.waiting_disk": {
+    "args": [],
+    "one": null,
+    "text": "waiting for disk"
+  },
+  "pages.waiting_disk_tip": {
+    "args": [],
+    "one": null,
+    "text": "starts on its own at 40 GB free"
+  },
   "pages.waits_on_agent": {
     "args": [],
     "one": null,

@@ -21,6 +21,9 @@ pub(super) fn status_word(status: Status, phase: Option<Phase>, archived: bool) 
         (true, ..) => "archived",
         (_, Some(Phase::Starting), _) => "starting",
         (_, Some(Phase::Stopped), _) => "stopped",
+        // wt-disk: not a hub word, the row's phase alone (its worktree
+        // waits for disk; it starts on its own)
+        (_, Some(Phase::WaitingDisk), _) => bise_proto::words::pages::waiting_disk,
         (_, _, Status::Working) => "working",
         (_, _, Status::Waiting) => "waiting",
         (_, _, Status::Blocked) => "blocked",

@@ -188,6 +188,7 @@ pub fn build(i: &RowIn) -> AgentRow {
         mode: a.ws.mode.clone(),
         path: a.ws.path.clone(),
         branch: a.ws.branch.clone(),
+        disk_held: a.ws.disk_held(),
         place: a.place.clone(),
         place_id: crate::place::view_id(a),
         created_ms: a.created_ms,

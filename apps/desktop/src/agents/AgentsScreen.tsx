@@ -178,6 +178,8 @@ export function StateMark({ a }: { a: Agent }) {
   if (a.archived) return <span className="ag-mark" {...tipAttrs(a.status === 'done' ? pages.done : pages.stopped)}><AppIcon name={a.status === 'done' ? 'check' : 'stop'} size={14} /></span>;
   if (a.status === 'done' && a.waiting_on == null) return <span className="ag-mark" {...tipAttrs(pages.done)}><AppIcon name="check" size={14} /></span>;
   if (a.waiting_on?.who === 'agent') return <span className="ag-mark" {...tipAttrs(pages.waits_on_agent)}><AppIcon name="more" size={14} /></span>;
+  // wt-disk: its worktree waits for disk: the waiting look, hollow, in text-2; it starts on its own (designer m_67943)
+  if (a.phase === 'waiting_disk') return <span className="ag-mark disk" data-testid={`agents.disk.${a.name}`} {...tipAttrs(pages.waiting_disk_tip)}><Dot state="off" /></span>;
   if (a.status === 'working') return <WorkingMark tip={pages.working} />;
   // at rest: no mark, as the sidebar (designer m_43933 #4)
   if (a.status === 'idle') return null;

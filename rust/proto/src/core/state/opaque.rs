@@ -53,6 +53,10 @@ pub struct Workspace {
     /// hub/place.bend): no path, no branch, no REPL yet.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub state: Option<String>,
+    /// wt-disk: a placing worktree held for disk (sb-core's hub/disk.bend
+    /// gate: under 40 GB free its checkout waits; journaled with the ws).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub disk_wait: bool,
 }
 
 impl Workspace {
@@ -67,12 +71,20 @@ impl Workspace {
             place: None,
             feature: None,
             state: None,
+            disk_wait: false,
         }
     }
 
     /// Its worktree is still being made (no REPL yet).
     pub fn placing(&self) -> bool {
         self.state.as_deref() == Some("placing")
+    }
+
+    /// Its worktree waits for disk (wt-disk): placing and held by sb-core's
+    /// gate, so no checkout yet; the one test of `disk_wait` (the row's
+    /// phase reads it, architect m_67942).
+    pub fn disk_held(&self) -> bool {
+        self.placing() && self.disk_wait
     }
 
     /// The feature an agent with this workspace lands on (a worktree's).

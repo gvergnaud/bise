@@ -3,6 +3,7 @@
 // component reads the store's agents and draws these.
 import type { Agent, Status } from '@/proto';
 import type { DotState } from '@/ds';
+import { pages } from '@/proto/words_pages.gen';
 
 /** A status as the ds's dot: at work, needs him, done, failed, at rest. */
 export function dotOf(s: Status): DotState {
@@ -56,6 +57,8 @@ export function endOf(a: Agent, now: number): { text: string; needs: boolean } {
   // R9/S3: whom it waits on (the hub's waiting_on): him in accent, another agent dim
   if (a.waiting_on?.who === 'you') return { text: 'waiting on you', needs: true };
   if (a.waiting_on?.who === 'agent') return { text: `waiting on ${shownName(a.waiting_on.name)}`, needs: false };
+  // wt-disk: its worktree waits for disk; it starts on its own, nothing of his (designer m_67943)
+  if (a.phase === 'waiting_disk') return { text: pages.waiting_disk, needs: false };
   switch (a.status) {
     case 'working':
       return { text: ago(a.since_ms, now), needs: false };

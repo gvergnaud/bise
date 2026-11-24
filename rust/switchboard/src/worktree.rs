@@ -458,6 +458,7 @@ impl Env for GitEnv {
             place: Some(crate::place::worktree_id(name)),
             feature: None,
             state: None,
+            disk_wait: false,
         })
     }
 
@@ -492,6 +493,7 @@ impl Env for GitEnv {
             place: Some(crate::place::worktree_id(name)),
             feature: Some(feature.to_string()),
             state: None,
+            disk_wait: false,
         })
     }
 
@@ -635,6 +637,7 @@ impl Env for GitEnv {
             // a feature's agent, restored, lands on it again
             feature: ws.feature.clone(),
             state: None,
+            disk_wait: false,
         })
     }
 }

@@ -48,6 +48,7 @@ impl Env for FakeEnv {
             place: Some(format!("wt:{}", name)),
             feature: None,
             state: None,
+            disk_wait: false,
         })
     }
     fn worktree_loss(&mut self, _ws: &Workspace) -> Loss {
@@ -1012,7 +1013,7 @@ mod disk_gate {
     }
 
     fn waits(t: &T) -> usize {
-        t.hub.st.main_notes.iter().filter(|n| n.contains("waits for disk")).count()
+        t.hub.st.main_notes.iter().filter(|n| n.contains("waiting for disk")).count()
     }
 
     /// no reading yet (or the reading off, BISE_DISK_FREE_GB=off): it goes, as before
@@ -1053,7 +1054,7 @@ mod disk_gate {
         let (fx, _) = spawn(&mut t, "b");
         assert!(creates(&fx).is_empty(), "held: {:?}", fx);
         assert_eq!(waits(&t), 2, "one note per held task: {:?}", t.hub.st.main_notes);
-        assert!(t.hub.st.main_notes.iter().any(|n| n.starts_with("@a waits for disk: 30 GB free")));
+        assert!(t.hub.st.main_notes.iter().any(|n| n == "@a waiting for disk · 30 GB free · starts on its own at 40 GB"));
         assert_eq!(creates(&t.go(Input::DiskFree { gb: 35 })), Vec::<String>::new(), "still under 40");
         assert_eq!(waits(&t), 2, "no second note while it waits");
         assert_eq!(creates(&t.go(Input::DiskFree { gb: 41 })), vec!["a".to_string()], "the first, alone");
@@ -1061,6 +1062,32 @@ mod disk_gate {
         assert!(t.hub.st.agents["b"].ws.placing(), "b still held");
         assert_eq!(creates(&t.go(Input::DiskFree { gb: 42 })), vec!["b".to_string()], "the next reading, the next one");
         assert!(creates(&t.go(Input::DiskFree { gb: 43 })).is_empty(), "none left");
+    }
+
+    /// the window's agents row (architect m_67942): a held one's phase is
+    /// waiting_disk (status working: starting is working), released it is
+    /// starting again, refused it is the failed row
+    #[test]
+    fn the_row_says_waiting_for_disk() {
+        use bise_proto::rows::{Phase, Status as RowStatus};
+        let row = |t: &mut T, n: &str| {
+            let snap = t.hub.snapshot(t.env.now);
+            let mut since = Default::default();
+            crate::proto_view::agents(&snap, &mut since, t.env.now, crate::model::user_kind, &|_| None, &|_| None, &|_| None, crate::proto_view::Which::All)
+                .into_iter()
+                .find(|a| a.name == n)
+                .map(|a| (a.status, a.phase))
+                .unwrap()
+        };
+        let mut t = T::new();
+        t.go(Input::DiskFree { gb: 30 });
+        spawn(&mut t, "a");
+        spawn(&mut t, "b");
+        assert_eq!(row(&mut t, "a"), (RowStatus::Working, Some(Phase::WaitingDisk)));
+        t.go(Input::DiskFree { gb: 41 });
+        assert_eq!(row(&mut t, "a"), (RowStatus::Working, Some(Phase::Starting)), "released: made, its REPL starting");
+        t.go(Input::DiskFree { gb: 15 });
+        assert_eq!(row(&mut t, "b"), (RowStatus::Failed, None), "refused: the failed row");
     }
 
     /// held, then a reading under 20 GB: refused, its spawner told

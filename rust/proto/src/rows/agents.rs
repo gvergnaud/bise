@@ -53,6 +53,10 @@ pub enum Phase {
     Starting,
     /// stopped by the user (`sb stop`, a drop on its way)
     Stopped,
+    /// wt-disk: its worktree waits for disk (under 40 GB free); it starts
+    /// on its own (status working: starting is working). Not a hub status
+    /// word: the hub reads it from its ws (`Workspace::disk_held`)
+    WaitingDisk,
     /// a phase this version doesn't know (a newer hub)
     #[serde(other)]
     Unknown,

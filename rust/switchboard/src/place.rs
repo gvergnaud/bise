@@ -477,6 +477,7 @@ mod tests {
             place: id.map(Into::into),
             feature: None,
             state: None,
+            disk_wait: false,
         }
     }
 

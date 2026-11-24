@@ -89,11 +89,11 @@ def gate(m: Maybe<&2, Nat>) -> Gate:
 
 # the refusal the spawner (or the /restore, the /isolate) reads
 def refused_text(+gb: Nat) -> String:
-  "refused: " ++ Nat.show(gb) ++ " GB free on the disk, under " ++ Nat.show(REFUSE()) ++ " GB: a new worktree checks out a whole tree; free some disk (scripts/disk_reclaim.py, idle worktrees), then try again"
+  "refused: " ++ Nat.show(gb) ++ " GB free, under " ++ Nat.show(REFUSE()) ++ " GB · free some space, then ask bise again"
 
 # main's one note for a held checkout
 def wait_text(+n: String, +gb: Nat) -> String:
-  "@" ++ n ++ " waits for disk: " ++ Nat.show(gb) ++ " GB free, under " ++ Nat.show(LOW()) ++ " GB; its worktree is made at the first reading at " ++ Nat.show(LOW()) ++ " GB or more (one held worktree per reading), refused under " ++ Nat.show(REFUSE()) ++ " GB"
+  "@" ++ n ++ " waiting for disk · " ++ Nat.show(gb) ++ " GB free · starts on its own at " ++ Nat.show(LOW()) ++ " GB"
 
 # what main reads
 def text(+gb: Nat) -> String:

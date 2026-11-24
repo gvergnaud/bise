@@ -14,6 +14,16 @@ fn every_hub_status_word_round_trips() {
     }
 }
 
+/// wt-disk: a held worktree's agent reads 'waiting for disk' (the row's
+/// phase), drawn dim with the waiting glyph (designer m_67943)
+#[test]
+fn a_held_agent_reads_waiting_for_disk() {
+    let w = status_word(Status::Working, Some(Phase::WaitingDisk), false);
+    assert_eq!(w, "waiting for disk");
+    let (g, c) = crate::sb::panel::glyph(w, 0, crate::gust::Motion::Still);
+    assert_eq!((g, c), (crate::theme::G_WAITING, crate::theme::dim()));
+}
+
 fn agent_row() -> rows::Agent {
     serde_json::from_value(json!({
         "name": "perf", "main": false, "status": "working", "phase": "starting", "archived": false,

@@ -16,6 +16,9 @@ pub(super) fn glyph(status: &str, tick: u32, motion: crate::gust::Motion) -> (&'
         "working" => crate::gust::cell(motion),
         "starting" => starting_frame(tick),
         "waiting" => (G_WAITING, text()),
+        // wt-disk: its worktree waits for disk; it resolves on its own, so
+        // dim, never a hue (designer m_67943)
+        s if s == words::pages::waiting_disk => (G_WAITING, dim()),
         // BISE-299: a blocked task is main's to handle, not yours: the
         // same `?`, dim; the accent comes from a card in your inbox
         "blocked" => (G_NEEDS_YOU, dim()),

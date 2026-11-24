@@ -198,7 +198,8 @@ fn agent(
     Agent {
         main: a.main,
         status,
-        phase: Phase::of_hub(a.status.as_str()),
+        // wt-disk: a held worktree's agent waits for disk, not starting
+        phase: if a.disk_held { Some(Phase::WaitingDisk) } else { Phase::of_hub(a.status.as_str()) },
         archived,
         title: title_of(a),
         purpose: purpose_of(a),

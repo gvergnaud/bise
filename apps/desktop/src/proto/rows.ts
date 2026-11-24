@@ -20,7 +20,7 @@ export type Status = "working" | "idle" | "waiting" | "blocked" | "done" | "fail
  * REPL is starting (status working), or the user stopped it (status
  * done). New in P4b-fix, with `Unknown` from the start so it may grow.
  */
-export type Phase = "starting" | "stopped" | "unknown";
+export type Phase = "starting" | "stopped" | "waiting_disk" | "unknown";
 
 export type ReportKind = "progress" | "done" | "failed" | "blocked";
 
