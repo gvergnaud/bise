@@ -41,6 +41,7 @@ mod project_cli;
 mod repl_end;
 mod session_cli;
 mod telemetry_cli;
+mod flags_cli;
 mod info;
 mod office;
 mod update;
@@ -619,6 +620,8 @@ fn run_main() -> std::io::Result<()> {
             Some("update") => std::process::exit(update::main(&args[1..])),
             // the usage counts it shares (telemetry step 5)
             Some("telemetry") => std::process::exit(telemetry_cli::main(&args[1..])),
+            // the feature flags of this bise (docs/flags.md), read only
+            Some("flags") => std::process::exit(flags_cli::main(&args[1..])),
             Some("uninstall") => std::process::exit(update::uninstall(&args[1..])),
             Some("--help" | "-h" | "help") => {
                 println!("{}", usage_styled(&version::cmd_name(), &bise_home::style::Style::stdout()));

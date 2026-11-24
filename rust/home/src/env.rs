@@ -181,6 +181,9 @@ pub const VARS: &[Var] = &[
     test("BISE_DIST_URL_DESKTOP_BETA", "the desktop app's beta channel, where its desktop.json is (tests; as BISE_DIST_URL_DESKTOP)"),
     user("BISE_EDITOR", "the editor a file link opens"),
     internal("BISE_EXPORTS_FOR", "the stamp of the exported Home paths"),
+    // his flag overrides: a test row so a hub gets it and no sb-core, REPL or agent command inherits
+    // it (architect m_65250); docs/flags.md
+    test("BISE_FLAG", "feature flag overrides, 'name=on,x=off', over config.toml's [flags] (bise_home::flags)"),
     test("BISE_GITHUB_API", "the GitHub API base (tests: a stub server)"),
     user("BISE_HOME", "where bise keeps its state (~/.bise)"),
     // a test's: a hub started by the CLI or the ambient core keeps it, or

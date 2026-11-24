@@ -5,6 +5,7 @@
 //! process: [`env`] (issue 11). A workspace's hub id: [`hub_id`]. The
 //! projects registry (`projects.json`, bise layout only): [`projects`].
 //! The artifacts library's folders (`library/folders.json`): [`library`].
+//! Feature flags' reads (`BISE_FLAG`, `config.toml`'s `[flags]`): [`flags`].
 //!
 //! The layout: `~/.bise` (or `$BISE_HOME`): `config.toml`, `auth.json`,
 //! `.env`, `prefs.json`, `sessions/`, `hubs/<name>-<hash>/`, `images/`,
@@ -26,6 +27,7 @@ use std::path::{Path, PathBuf};
 
 pub mod clock;
 pub mod env;
+pub mod flags;
 pub mod guarded;
 pub mod hub_id;
 pub mod hub_state;
