@@ -46,8 +46,11 @@ describe('the agents list', () => {
     const s = subOf(refused, T);
     expect(s).toEqual({ end: 'failed', why, report: '' });
     expect(`${s.end} · ${s.why}`.match(/failed/g)).toHaveLength(1);
-    // no reason: the report as before; not failed: no why
-    expect(subOf(ag('c', { status: 'failed', report: { kind: 'failed', text: 'tests red', at_ms: T } }), T)).toEqual({ end: 'failed', why: '', report: 'failed · tests red' });
+    // no reason: its failed report's words beside 'failed', never 'failed · failed' (ui-review m_67988); not failed: no why
+    const noWhy = subOf(ag('c', { status: 'failed', report: { kind: 'failed', text: 'tests red', at_ms: T } }), T);
+    expect(noWhy).toEqual({ end: 'failed', why: '', report: 'tests red' });
+    expect(`${noWhy.end} · ${noWhy.report}`.match(/failed/g)).toHaveLength(1);
+    expect(subOf(ag('e', { status: 'idle', report: { kind: 'done', text: 'shipped', at_ms: T } }), T).report).toBe('done · shipped');
     expect(subOf(ag('d', { status: 'idle', failure: 'old' }), T).why).toBe('');
     // an archived one on /archived (designer m_19489): how it ended, then how long ago
     expect(archivedEnd(ag('a', { archived: true, status: 'done' }), T + 50 * 3_600_000)).toBe('✓ done · 2 d');

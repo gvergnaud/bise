@@ -201,7 +201,7 @@ const AgentItem = memo(function AgentItem({ project, a, sel, peek, now, pinned, 
         state={<StateMark a={a} />}
         title={<><span className="ag-name">{a.main ? 'bise' : a.name}</span>{line !== '' && <span className="ag-what" data-testid={`agents.line.${id}`}>{line}</span>}</>}
         sub={<>
-          <span className={asksHim(a) ? 'ag-end wait' : why !== '' ? 'ag-end failed' : 'ag-end'} data-testid={`agents.end.${id}`}>{end}</span>
+          <span className={asksHim(a) ? 'ag-end wait' : a.status === 'failed' && !a.archived ? 'ag-end failed' : 'ag-end'} data-testid={`agents.end.${id}`}>{end}</span>
           {why !== '' && <span className="ag-fail-why" data-testid={`agents.why.${id}`}>{` · ${why}`}</span>}
           {report !== '' && <span data-testid={`agents.report.${id}`}>{` · ${report}`}</span>}
         </>}

@@ -43,6 +43,8 @@ export interface BarRow {
   readonly end: string;
   readonly endTone: 'dim' | 'ink' | 'acc' | 'err';
   readonly title: string;
+  /** wt-disk: its line's hover tip when its state says more than its job ('waiting for disk · starts on its own at 40 GB free · …') */
+  readonly why?: string;
   readonly testId: string;
   /** it waits on him: never hidden by a cap (designer v5) */
   readonly waits: boolean;
@@ -191,6 +193,8 @@ function agentRow(x: ProjAgent, now: number, all: boolean, n: number | undefined
     ...(pct === '' ? {} : { ctx: Number.parseInt(pct, 10) }),
     ...(mark === undefined ? {} : { mark }),
     ...(group === undefined ? {} : { group }),
+    // wt-disk: a held one's hover says why, never its job alone (ui-review m_67988)
+    ...(x.a.phase === 'waiting_disk' ? { why: s.title } : {}),
     state: rowState(x.a, now, wake),
   };
 }

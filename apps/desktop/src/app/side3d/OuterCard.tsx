@@ -267,7 +267,7 @@ function AgentLine({ r, pr, wt, job, card, at, now, here, group, pinned, open, o
       onPointerLeave={onLit && (() => {
         onLit(false);
       })}>
-      <Press look="s3-orow-open" aria-label={r.title} aria-expanded={asks ? open : undefined} {...tipAttrs(lineTip(r, job), undefined, 'left')} onClick={() => {
+      <Press look="s3-orow-open" aria-label={r.title} aria-expanded={asks ? open : undefined} {...tipAttrs(r.why ?? lineTip(r, job), undefined, 'left')} onClick={() => {
         if (asks) onToggle();
         else onOpen(r);
       }} data-row="">

@@ -24,7 +24,9 @@ describe('the right bar rows (designer desktop-right-bar v5)', () => {
     // the right bar's waiting look: '…' dim (barSign), never ∿; its time column stays empty (never a state word)
     const r = agentRows([disk], NOW, false)[0];
     expect(r).toMatchObject({ glyph: '…', tone: 'dim', end: '' });
-    expect(JSON.stringify(r)).toContain('waiting for disk · starts on its own at 40 GB free');
+    // its hover tip says why (OuterCard shows r.why over its job's line, ui-review m_67988)
+    expect(r?.why).toBe("waiting for disk · starts on its own at 40 GB free · a's job");
+    expect(agentRows([ag('b', { status: 'working' })], NOW, false)[0]?.why).toBeUndefined();
   });
   it("main stays first past the ⌥ numbers and the worktrees, ⌥0 when ⌥ is held, its title as its line, the breeze while it works", () => {
     const nums = new Map([['main', 0], ['docs', 1], ['perf', 2]]);

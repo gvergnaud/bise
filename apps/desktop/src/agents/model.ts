@@ -90,7 +90,9 @@ export function whyOf(a: Agent): string {
 export function subOf(a: Agent, now: number): { end: string; why: string; report: string } {
   const why = whyOf(a);
   const end = a.archived ? archivedEnd(a, now) : endOf(a, now).text;
-  const report = why === '' && a.report != null ? `${a.report.kind} · ${a.report.text}` : '';
+  // a failed one's failed report: its words beside 'failed', never the kind again (ui-review m_67988)
+  const failed = a.status === 'failed' && !a.archived;
+  const report = why !== '' || a.report == null ? '' : failed && a.report.kind === 'failed' ? a.report.text : `${a.report.kind} · ${a.report.text}`;
   return { end, why, report };
 }
 
