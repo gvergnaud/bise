@@ -5248,12 +5248,22 @@ def disk_release(-o: S.St, m: Maybe<&2, String>, +cx: X.Cx<o>) -> X.Cx<o>:
 # a reading under DK.REFUSE() GB: every held one ends as a worktree not
 # made (place.bend's placed_of: a new one fails, its spawner told; a
 # restore's goes back archived; an isolate's back to the shared folder)
+# one: no longer held (journaled: its row reads failed, never waiting for
+# disk), then its worktree not made
+def disk_refuse.one(-o: S.St, m: Maybe<&2, S.Agent>, +cx: X.Cx<o>, +n: String, +gb: Nat) -> X.Cx<o>:
+  match m:
+    case None{}:
+      cx
+    case Some{+a}:
+      +cx2 = emit(o, cx, M.EWorkspace{n, PL.ws_unhold(S.Agent.ws(a))}, Unit{}, Unit{}, Unit{})
+      placed.in(o, cx2, n, J.JNull{}, DK.refused_text(gb))
+
 def disk_refuse(-o: S.St, ns: List<&2, String>, +cx: X.Cx<o>, +gb: Nat) -> X.Cx<o>:
   match ns:
     case Nil{}:
       cx
     case Con{+n, +rest}:
-      disk_refuse(o, rest, placed.in(o, cx, n, J.JNull{}, DK.refused_text(gb)), gb)
+      disk_refuse(o, rest, disk_refuse.one(o, M.get_agent(st(o, cx), n), cx, n, gb), gb)
 
 def disk_held(-o: S.St, g: DK.Gate, +cx: X.Cx<o>) -> X.Cx<o>:
   match g:
