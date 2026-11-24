@@ -21,6 +21,11 @@ describe('an agent sign', () => {
     expect(signOf(agent('perf', 'working', { turn_ms: 14 * 60_000 }), NOW)).toMatchObject({ g: '∿', tone: 'ink', end: '14 min', count: 0 });
     expect(signOf(agent('perf', 'working', { since_ms: NOW - 6 * 60_000 }), NOW).end).toBe('6 min');
   });
+  it('waiting for disk (wt-disk): ⋯ dim, no turn time, why on hover; it starts on its own', () => {
+    const s = signOf(agent('a', 'working', { phase: 'waiting_disk', since_ms: NOW - 6 * 60_000 }), NOW);
+    expect(s).toMatchObject({ g: '⋯', tone: 'dim', end: 'waiting for disk', count: 0 });
+    expect(s.title).toBe('waiting for disk · starts on its own at 40 GB free · product page speed');
+  });
   it('waiting on someone: ⋯ with who on hover; failed: ✗ and failed in err', () => {
     const w = signOf(agent('a', 'waiting'), NOW);
     expect(w).toMatchObject({ g: '⋯', end: 'waiting' });

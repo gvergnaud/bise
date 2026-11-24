@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Agent } from '@/proto';
-import { agentRows, agentsMore, archivedRows, pageRows, procRoots, procRows, roleWords, watchRows, type ProjAgent } from './barrows';
+import { agentRows, agentsMore, archivedRows, pageRows, procRoots, procRows, roleWords, timeOf, watchRows, type ProjAgent } from './barrows';
 import type { Proc } from '@/proto';
 
 const NOW = 1_791_100_000_000;
@@ -17,6 +17,14 @@ describe('the right bar rows (designer desktop-right-bar v5)', () => {
     expect(rows[0]).toMatchObject({ kind: 'agent', main: true, agent: 'main', glyph: '○', sub: 'team lead', testId: 'app.right.agent.main' });
     expect(rows[1]?.main).toBeUndefined();
     expect(rows[2]).toMatchObject({ glyph: '?', tone: 'acc', end: '', waits: true, sub: "search's job" });
+  });
+  it('AGENTS: waiting for disk (wt-disk) reads so, dim, with no turn time (ui-review m_67968)', () => {
+    const disk = ag('a', { status: 'working', phase: 'waiting_disk' });
+    expect(timeOf(disk.a, NOW)).toBe('');
+    // the right bar's waiting look: '…' dim (barSign), never ∿; its time column stays empty (never a state word)
+    const r = agentRows([disk], NOW, false)[0];
+    expect(r).toMatchObject({ glyph: '…', tone: 'dim', end: '' });
+    expect(JSON.stringify(r)).toContain('waiting for disk · starts on its own at 40 GB free');
   });
   it("main stays first past the ⌥ numbers and the worktrees, ⌥0 when ⌥ is held, its title as its line, the breeze while it works", () => {
     const nums = new Map([['main', 0], ['docs', 1], ['perf', 2]]);

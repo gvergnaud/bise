@@ -148,6 +148,8 @@ export function pctLoud(pct: string): boolean {
 export function timeOf(a: Agent, now: number): string {
   const pause = pauseLine(a, now);
   if (pause !== null) return pause.len;
+  // wt-disk: waiting for disk runs no turn: no time
+  if (a.phase === 'waiting_disk') return '';
   if (a.status === 'working') return waitLen(a.turn_ms ?? now - a.since_ms);
   return '';
 }

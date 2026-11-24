@@ -7,6 +7,7 @@
 import type { Agent, ComputerAgent, ProjectRow } from '@/proto';
 import { hero } from '@/proto/words_hero.gen';
 import { panel } from '@/proto/words_panel.gen';
+import { pages } from '@/proto/words_pages.gen';
 import { running } from '@/proto/words_running.gen';
 import { MAIN, type Route } from './route';
 import { pageOf } from '@/settings/pages';
@@ -58,6 +59,8 @@ export function signOf(a: Agent, now: number, wake?: number): Sign {
   const raw = pauseLine(a, now);
   const pause = raw === null ? null : shownPause(raw);
   if (pause !== null) return { g: '…', tone: 'ink', end: pause.len, endTone: 'dim', count: 0, title: `${pause.title} · ${what}` };
+  // wt-disk: its worktree waits for disk: the waiting look, dim, no turn time; it starts on its own (designer m_67943, ui-review m_67968)
+  if (a.phase === 'waiting_disk') return { g: '⋯', tone: 'dim', end: pages.waiting_disk, endTone: 'dim', count: 0, title: `${pages.waiting_disk} · ${pages.waiting_disk_tip} · ${what}` };
   switch (a.status) {
     case 'working':
       return { g: '∿', tone: 'ink', end: turnShort(a.turn_ms ?? now - a.since_ms), endTone: 'dim', count: 0, title: `${panel.state_working} · ${what}` };
