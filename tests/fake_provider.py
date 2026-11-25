@@ -724,9 +724,17 @@ def sig_of(call_id):
     return {"google": {"thought_signature": "fake-sig-" + call_id}}
 
 
+def current_turn(msgs):
+    """the messages after the last user message: Gemini validates the signatures of the current
+    turn only (an earlier turn's calls, another model's, go unsigned: ai.google.dev thought-signatures)"""
+    users = [i for i, m in enumerate(msgs) if m.get("role") == "user"]
+    return msgs[users[-1] + 1:] if users else msgs
+
+
 def unsigned_replay(body):
-    """the first replayed tool call whose signature is missing or not the one it got, None for none"""
-    for m in body.get("messages") or []:
+    """the first tool call of the current turn whose signature is missing or not the one it got,
+    None for none"""
+    for m in current_turn(body.get("messages") or []):
         for c in (m.get("tool_calls") or []) if m.get("role") == "assistant" else []:
             if c.get("extra_content") != sig_of(c.get("id") or ""):
                 return c

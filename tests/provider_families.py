@@ -207,6 +207,26 @@ def part_c():
               "the log names each request's family and agent")
         check(any(r["family"] == "anthropic" and r["images"] and r["images"][0].startswith("data:image/png;base64,")
                   for r in recs), "the log lists an Anthropic request's images")
+        # gemini-sig: a signing model checks the current turn's calls only, as Gemini does;
+        # an earlier turn's call (another model's, unsigned) goes (tip-fix: the fake checked
+        # the whole history, so a session begun on another model 400'd on its old call_2)
+        def gem_call(cid, signed):
+            c = {"id": cid, "type": "function", "function": {"name": "bash", "arguments": "{}"}}
+            return dict(c, extra_content=F.sig_of(cid)) if signed else c
+
+        def gem_body(old_signed, new_signed):
+            return {"model": "gemini-4-neon", "messages": [
+                {"role": "system", "content": SYS}, {"role": "user", "content": "before"},
+                {"role": "assistant", "content": "", "tool_calls": [gem_call("call_2", old_signed)]},
+                {"role": "tool", "tool_call_id": "call_2", "content": "r0"}, {"role": "user", "content": "now"},
+                {"role": "assistant", "content": "", "tool_calls": [gem_call("call_9_0", new_signed)]},
+                {"role": "tool", "tool_call_id": "call_9_0", "content": "r1"}]}
+        os.environ["FAKE_THOUGHT_SIGS"] = "gemini-4-neon"
+        try:
+            sts = [call(port, "openai-chat", gem_body(o, n), False)[0] for o, n in ((False, True), (True, False))]
+        finally:
+            del os.environ["FAKE_THOUGHT_SIGS"]
+        check(sts == [200, 400], "a signing fake: an earlier turn's unsigned call goes, the current turn's 400s: %r" % sts)
     finally:
         srv.shutdown()
 
