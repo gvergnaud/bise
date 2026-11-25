@@ -977,8 +977,10 @@ fn a_low_disk_tells_main_once_per_crossing() {
     assert_eq!(disk(&t), 2, "back over 45, then under 40: a new crossing");
 }
 
-/// wt-disk (hub/disk.bend's gate, architect m_67917): a new worktree's
-/// checkout waits under 40 GB free and is refused under 20 GB.
+/// wt-disk (hub/disk.bend's gate, architect m_67917; one bar at 10 GB,
+/// architect m_68023): a new worktree's checkout is refused under 10 GB
+/// free and goes at 10 GB or more; nothing new is held. A ws held under the
+/// old 40/20 bars (journaled) starts at a reading at 10 GB or more.
 mod disk_gate {
     use super::*;
 
@@ -1024,44 +1026,61 @@ mod disk_gate {
         assert_eq!(creates(&fx), vec!["a".to_string()]);
     }
 
+    /// at 10 GB it goes at once (the old bars held it there), and nothing
+    /// is ever held: no 'waiting for disk' note
     #[test]
-    fn at_40_gb_it_goes() {
+    fn at_10_gb_it_goes() {
         let mut t = T::new();
-        t.go(Input::DiskFree { gb: 40 });
+        t.go(Input::DiskFree { gb: 10 });
         let (fx, _) = spawn(&mut t, "a");
         assert_eq!(creates(&fx), vec!["a".to_string()]);
         assert_eq!(waits(&t), 0);
+        assert!(!t.hub.st.agents["a"].ws.disk_held());
     }
 
     #[test]
-    fn under_20_gb_it_is_refused() {
+    fn under_10_gb_it_is_refused() {
         let mut t = T::new();
-        t.go(Input::DiskFree { gb: 19 });
+        t.go(Input::DiskFree { gb: 9 });
         let (fx, reply) = spawn(&mut t, "a");
         assert!(creates(&fx).is_empty(), "{:?}", fx);
-        assert!(reply.to_string().contains("refused: 19 GB free"), "{}", reply);
+        assert!(reply.to_string().contains("refused: 9 GB free, under 10 GB"), "{}", reply);
         assert!(!t.hub.st.agents.contains_key("a"), "no task made");
     }
 
-    /// under 40 GB: held (no checkout, main told once), then started one per
-    /// reading at 40 GB or more, in creation order
+    /// TODO(held-ws-before-10gb): goes with the release path in a later
+    /// release (tests/shims.txt). A hub whose journal holds worktrees held
+    /// under the old bars (disk_wait, placing): `names` held, in that order.
+    fn held_before_the_rule(names: &[&str]) -> T {
+        let ws = json!({"mode": "worktree", "path": "", "branch": null, "base_commit": null, "dropped": false,
+            "state": "placing", "disk_wait": true});
+        let ev: Vec<Value> = names
+            .iter()
+            .enumerate()
+            .map(|(i, n)| json!({"type": "task_created", "name": n, "parent": "main", "ws": ws, "at_ms": i, "brief": {"objective": "fake"}}))
+            .collect();
+        let mut h = Hub::new("/w");
+        assert!(h.replay(&ev).is_empty());
+        let t = T::with_hub(h);
+        assert!(names.iter().all(|n| t.hub.st.agents[*n].ws.disk_held()), "replayed held, the boot asked nothing");
+        t
+    }
+
+    /// a ws held before the one bar starts at a reading of 12 GB (the old
+    /// bars kept it until 40), one per reading in creation order; a new
+    /// checkout at 12 GB is never held
     #[test]
-    fn under_40_gb_it_waits_then_starts_one_per_reading() {
-        let mut t = T::new();
-        t.go(Input::DiskFree { gb: 30 });
-        let (fx, _) = spawn(&mut t, "a");
-        assert!(creates(&fx).is_empty(), "held: {:?}", fx);
-        let (fx, _) = spawn(&mut t, "b");
-        assert!(creates(&fx).is_empty(), "held: {:?}", fx);
-        assert_eq!(waits(&t), 2, "one note per held task: {:?}", t.hub.st.main_notes);
-        assert!(t.hub.st.main_notes.iter().any(|n| n == "@a waiting for disk · 30 GB free · starts on its own at 40 GB"));
-        assert_eq!(creates(&t.go(Input::DiskFree { gb: 35 })), Vec::<String>::new(), "still under 40");
-        assert_eq!(waits(&t), 2, "no second note while it waits");
-        assert_eq!(creates(&t.go(Input::DiskFree { gb: 41 })), vec!["a".to_string()], "the first, alone");
+    fn a_ws_held_before_the_rule_starts_at_12_gb() {
+        let mut t = held_before_the_rule(&["a", "b"]);
+        assert_eq!(creates(&t.go(Input::DiskFree { gb: 12 })), vec!["a".to_string()], "the first, alone");
         assert!(!t.hub.st.agents["a"].ws.placing(), "a made");
-        assert!(t.hub.st.agents["b"].ws.placing(), "b still held");
-        assert_eq!(creates(&t.go(Input::DiskFree { gb: 42 })), vec!["b".to_string()], "the next reading, the next one");
-        assert!(creates(&t.go(Input::DiskFree { gb: 43 })).is_empty(), "none left");
+        assert!(t.hub.st.agents["b"].ws.disk_held(), "b still held");
+        let (fx, _) = spawn(&mut t, "c");
+        assert_eq!(creates(&fx), vec!["c".to_string()], "a new one at 12 GB goes");
+        assert!(!t.hub.st.agents["c"].ws.disk_held());
+        assert_eq!(creates(&t.go(Input::DiskFree { gb: 13 })), vec!["b".to_string()], "the next reading, the next one");
+        assert!(creates(&t.go(Input::DiskFree { gb: 14 })).is_empty(), "none left");
+        assert_eq!(waits(&t), 0, "nothing new waits");
     }
 
     /// the window's agents row (architect m_67942): a held one's phase is
@@ -1079,29 +1098,24 @@ mod disk_gate {
                 .map(|a| (a.status, a.phase, a.failure))
                 .unwrap()
         };
-        let mut t = T::new();
-        t.go(Input::DiskFree { gb: 30 });
-        spawn(&mut t, "a");
-        spawn(&mut t, "b");
+        let mut t = held_before_the_rule(&["a", "b"]);
         assert_eq!(row(&mut t, "a"), (RowStatus::Working, Some(Phase::WaitingDisk), None));
-        t.go(Input::DiskFree { gb: 41 });
+        t.go(Input::DiskFree { gb: 12 });
         assert_eq!(row(&mut t, "a"), (RowStatus::Working, Some(Phase::Starting), None), "released: made, its REPL starting, no failure");
-        t.go(Input::DiskFree { gb: 15 });
+        t.go(Input::DiskFree { gb: 8 });
         // the failed row with its reason, once, never starting with 'failed' (architect m_67978)
-        let refused = "refused: 15 GB free, under 20 GB · free some space, then ask bise again".to_string();
+        let refused = "refused: 8 GB free, under 10 GB · free some space, then ask bise again".to_string();
         assert_eq!(row(&mut t, "b"), (RowStatus::Failed, None, Some(refused)), "refused: the failed row and why");
     }
 
-    /// held, then a reading under 20 GB: refused, its spawner told
+    /// held, then a reading under 10 GB: refused, its spawner told
     #[test]
-    fn a_held_one_is_refused_under_20_gb() {
-        let mut t = T::new();
-        t.go(Input::DiskFree { gb: 30 });
-        spawn(&mut t, "a");
-        let fx = t.go(Input::DiskFree { gb: 15 });
+    fn a_held_one_is_refused_under_10_gb() {
+        let mut t = held_before_the_rule(&["a"]);
+        let fx = t.go(Input::DiskFree { gb: 8 });
         assert!(creates(&fx).is_empty());
         let words = format!("{:?}", fx);
-        assert!(words.contains("could not start") && words.contains("refused: 15 GB free"), "{}", words);
+        assert!(words.contains("could not start") && words.contains("refused: 8 GB free"), "{}", words);
         assert!(creates(&t.go(Input::DiskFree { gb: 50 })).is_empty(), "refused stays refused");
     }
 }

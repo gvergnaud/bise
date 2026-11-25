@@ -29,19 +29,16 @@ def Laws.at_low_is_silent():
 def Laws.unknown_disk_goes():
   {==}
 
-def Laws.refused_under_20():
+def Laws.refused_under_10():
   {==}
 
 def Laws.refused_at_0():
   {==}
 
-def Laws.waits_at_20():
+def Laws.goes_at_10():
   {==}
 
-def Laws.waits_under_40():
-  {==}
-
-def Laws.goes_at_40(p):
+def Laws.goes_at_gate(p):
   match p:
     case 0n:
       {==}

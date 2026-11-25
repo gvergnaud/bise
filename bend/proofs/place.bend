@@ -133,5 +133,12 @@ def Laws.first_held_is_the_first(a, rest, e):
 def Laws.boot_skips_held(o, cx, a):
   {==}
 
-def Laws.refused_under_20_makes_nothing(o, cx, t, n, ws, gb):
+def Laws.a_ws_held_before_the_rule_starts_at_10(o, cx, p):
+  match p:
+    case 0n:
+      {==}
+    case 1n+q:
+      {==}
+
+def Laws.refused_under_10_makes_nothing(o, cx, t, n, ws, gb):
   {==}

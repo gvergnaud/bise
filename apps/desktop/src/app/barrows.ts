@@ -43,7 +43,7 @@ export interface BarRow {
   readonly end: string;
   readonly endTone: 'dim' | 'ink' | 'acc' | 'err';
   readonly title: string;
-  /** wt-disk: its line's hover tip when its state says more than its job ('waiting for disk · starts on its own at 40 GB free · …') */
+  /** wt-disk: its line's hover tip when its state says more than its job ('waiting for disk · starts on its own at 10 GB free · …') */
   readonly why?: string;
   readonly testId: string;
   /** it waits on him: never hidden by a cap (designer v5) */

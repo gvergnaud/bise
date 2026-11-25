@@ -41,7 +41,7 @@ describe('the agents list', () => {
     // wt-disk: its worktree waits for disk: it says so, not its age, and asks nothing of him (designer m_67943)
     expect(endOf(ag('a', { status: 'working', phase: 'waiting_disk' }), T + 12 * 60_000)).toEqual({ text: 'waiting for disk', needs: false });
     // wt-disk: a refused one says 'failed' and why, once, even beside a failed report (designer m_67975, architect m_67978)
-    const why = 'refused: 18 GB free, under 20 GB · free some space, then ask bise again';
+    const why = 'refused: 8 GB free, under 10 GB · free some space, then ask bise again';
     const refused = ag('b', { status: 'failed', failure: why, report: { kind: 'failed', text: why, at_ms: T } });
     const s = subOf(refused, T);
     expect(s).toEqual({ end: 'failed', why, report: '' });

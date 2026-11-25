@@ -3,8 +3,8 @@
 //! own). Its whole GB goes to sb-core as `Input::DiskFree` only when it
 //! changed; sb-core decides whether main hears of it (hub/disk.bend: once
 //! under 40 GB, again only after 45) and what a new worktree's checkout
-//! does (under 40 GB it waits, under 20 GB it is refused; a held one starts
-//! at a reading at 40 GB or more, one per reading). The shell keeps where it reads the
+//! does (under 10 GB it is refused; a worktree held under the old bars starts
+//! at a reading at 10 GB or more, one per reading). The shell keeps where it reads the
 //! GB from and the last GB it sent, nothing else.
 //!
 //! Where it reads from is the hub's world, never assumed: the test setting

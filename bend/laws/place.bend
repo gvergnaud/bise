@@ -208,7 +208,7 @@ law boot_skips_not_dropping:
 # LAW: a /restore of a task whose worktree is gone makes the task active
 # at once, its ws placing (no REPL: no_repl_before_placed), then asks the
 # shell to make the dropped ws again with its saved work (the disk's gate
-# open, hub/disk.bend: under 40 GB it waits, under 20 GB it is refused).
+# open, hub/disk.bend: under 10 GB it is refused).
 law restore_off_asks_once:
   for -o: HS.St
   for +cx: HX.Cx<o>
@@ -323,6 +323,10 @@ law feature_rides_the_fx:
   {HC.place.ask(o, True{}, cx, n, ws) == HC.out(o, cx, HF.worktree_create(n, J.get_bool_or(ws, "with_changes", False{}), HPL.ws_feature(ws))) : HX.Cx<o>}
 
 # ---- wt-disk: a checkout held for disk (hub/disk.bend's gate) ----
+# Nothing new is held since the one bar at 10 GB (architect m_68023): these
+# laws keep the ws held under the old bars, journaled on his hubs, moving.
+# TODO(held-ws-before-10gb): they go in a later release with the release
+# path (tests/shims.txt).
 
 # LAW: no worktree fx for a ws held for disk, whatever else it says.
 law held_makes_no_fx:
@@ -330,7 +334,7 @@ law held_makes_no_fx:
   for e: {HPL.ws_held(ws) == True{} : Bool}
   {HPL.makes(ws) == False{} : Bool}
 
-# LAW: a reading at 40 GB or more starts the first held task in creation
+# LAW: a reading at 10 GB or more starts the first held task in creation
 # order, and only it (one per reading).
 law first_held_is_the_first:
   for +a: HS.Agent
@@ -345,9 +349,18 @@ law boot_skips_held:
   for +a: HS.Agent
   {HC.boot.held(o, True{}, cx, a) == cx : HX.Cx<o>}
 
-# LAW: under 20 GB a new task is refused at once: no task, no fx, the
+# LAW: a ws held before the one bar (journaled under the old 40/20 bars) is
+# released at a reading of 10 GB or more: the first held one is asked for,
+# whatever more is free (under the old bars a reading under 40 kept it).
+law a_ws_held_before_the_rule_starts_at_10:
+  for -o: HS.St
+  for +cx: HX.Cx<o>
+  for +p: Nat
+  {HC.disk_held(o, DK.gate.of(Nat.add(10n, p)), cx) == HC.disk_release(o, HPL.first_held(HS.St.agents(HC.st(o, cx))), cx) : HX.Cx<o>}
+
+# LAW: under 10 GB a new task is refused at once: no task, no fx, the
 # refusal's words to the spawner.
-law refused_under_20_makes_nothing:
+law refused_under_10_makes_nothing:
   for -o: HS.St
   for +cx: HX.Cx<o>
   for +t: HC.NewTask

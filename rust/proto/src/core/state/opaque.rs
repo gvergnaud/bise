@@ -54,7 +54,8 @@ pub struct Workspace {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub state: Option<String>,
     /// wt-disk: a placing worktree held for disk (sb-core's hub/disk.bend
-    /// gate: under 40 GB free its checkout waits; journaled with the ws).
+    /// gate, under the old 40/20 bars; nothing new is held since the one
+    /// 10 GB bar, a held one starts at 10 GB free; journaled with the ws).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub disk_wait: bool,
 }

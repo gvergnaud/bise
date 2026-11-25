@@ -688,7 +688,7 @@
   "pages.waiting_disk_tip": {
     "args": [],
     "one": null,
-    "text": "starts on its own at 40 GB free"
+    "text": "starts on its own at 10 GB free"
   },
   "pages.waits_on_agent": {
     "args": [],

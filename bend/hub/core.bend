@@ -426,8 +426,8 @@ def disk_tell(-o: S.St, tell: Bool, +cx: X.Cx<o>, +gb: Nat) -> X.Cx<o>:
 # on the crossing under DK.LOW()
 #
 # The reading's whole GB is kept there too (DK.GB_KEY()): a new checkout's
-# gate reads it (disk_gate); the held ones are started or refused by the
-# input's dispatch (disk_held, below boot)
+# gate reads it (disk_gate); the ws held before the one 10 GB bar are
+# started or refused by the input's dispatch (disk_held, below boot)
 def disk_free(-o: S.St, +cx: X.Cx<o>, +gb: Nat) -> X.Cx<o>:
   +r = rr(o, cx)
   +was = String.eq(KL.kv_get(X.R.last(r), DK.KEY()), "1")
@@ -1438,22 +1438,11 @@ def NewTask.with_changes(x: NewTask) -> Bool:
     case NewTask{_, _, _, _, _, _, +with_changes, _, _, _}:
       with_changes
 
-# wt-disk: main's one note for a held create, once it is made
-def create.held(-o: S.St, p: X.Cx<o> & TaskR, +gb: Nat) -> X.Cx<o> & TaskR:
-  match p:
-    case (+cx, TOk{+n}):
-      (note_main(o, cx, DK.wait_text(n, gb)), TOk{n})
-    case (+cx, +r):
-      (cx, r)
-
-# wt-disk (hub/disk.bend's gate): under DK.REFUSE() GB refused, under
-# DK.LOW() GB made held (its ws placing, no fx; main told once)
+# wt-disk (hub/disk.bend's gate): under DK.GATE() GB refused
 def create.gate(-o: S.St, g: DK.Gate, +cx: X.Cx<o>, +t: NewTask, +name: String, +ws: J.Json) -> X.Cx<o> & TaskR:
   match g:
     case DK.GGo{}:
       create.go(o, cx, t, name, ws)
-    case DK.GWait{+gb}:
-      create.held(o, create.go(o, cx, t, name, PL.ws_hold(ws)), gb)
     case DK.GRefuse{+gb}:
       (cx, TErr{DK.refused_text(gb)})
 
@@ -2130,19 +2119,11 @@ def restore.go_off(-o: S.St, +cx: X.Cx<o>, +a: S.Agent) -> X.Cx<o> & TaskR:
   +cx2 = emit(o, cx, M.EWorkspace{n, PL.restoring_ws(S.Agent.ws(a))}, Unit{}, Unit{}, Unit{})
   restore.go.as(o, out(o, cx2, F.worktree_restore(n, S.Agent.ws(a), S.Agent.snap(a))), a, PL.restoring_note())
 
-# wt-disk (hub/disk.bend's gate): held, its ws placing and held (no fx,
-# main told once; a reading at DK.LOW() GB or more asks for it, as a boot)
-def restore.held(-o: S.St, +cx: X.Cx<o>, +a: S.Agent, +gb: Nat) -> X.Cx<o> & TaskR:
-  +n = S.Agent.name(a)
-  +cx2 = emit(o, cx, M.EWorkspace{n, PL.ws_hold(PL.restoring_ws(S.Agent.ws(a)))}, Unit{}, Unit{}, Unit{})
-  restore.go.as(o, note_main(o, cx2, DK.wait_text(n, gb)), a, PL.restoring_note())
-
+# wt-disk (hub/disk.bend's gate): under DK.GATE() GB refused
 def restore.gate(-o: S.St, g: DK.Gate, +cx: X.Cx<o>, +a: S.Agent) -> X.Cx<o> & TaskR:
   match g:
     case DK.GGo{}:
       restore.go_off(o, cx, a)
-    case DK.GWait{+gb}:
-      restore.held(o, cx, a, gb)
     case DK.GRefuse{+gb}:
       (cx, TErr{DK.refused_text(gb)})
 
@@ -2208,16 +2189,12 @@ def isolate.off(-o: S.St, +cx: X.Cx<o>, +a: S.Agent) -> X.Cx<o> & TaskR:
   +cx5 = out(o, cx4, F.worktree_create(n, False{}, ""))
   (feed(o, cx5, M.MAIN(), FD.info(PL.isolating_text(n))), TOk{n})
 
-# wt-disk (hub/disk.bend's gate): refused before its REPL stops; held: it
-# stops, its ws placing and held, main told once
+# wt-disk (hub/disk.bend's gate): under DK.GATE() GB refused before its
+# REPL stops
 def isolate.gate(-o: S.St, g: DK.Gate, +cx: X.Cx<o>, +a: S.Agent) -> X.Cx<o> & TaskR:
   match g:
     case DK.GGo{}:
       isolate.off(o, cx, a)
-    case DK.GWait{+gb}:
-      +n = S.Agent.name(a)
-      +cx2 = isolate.down(o, cx, a, PL.ws_hold(PL.isolating_ws(S.Agent.ws(a))))
-      (note_main(o, cx2, DK.wait_text(n, gb)), TOk{n})
     case DK.GRefuse{+gb}:
       (cx, TErr{DK.refused_text(gb)})
 
@@ -4914,8 +4891,9 @@ def boot.place(-o: S.St, b: PL.Back, +cx: X.Cx<o>, +a: S.Agent) -> X.Cx<o>:
     case _:
       place.ask(o, PL.makes(S.Agent.ws(a)), cx, S.Agent.name(a), S.Agent.ws(a))
 
-# a held one (wt-disk, PL.ws_held) gets no fx: a reading at DK.LOW() GB
-# or more asks for it (disk_release)
+# a held one (wt-disk, PL.ws_held) gets no fx: a reading at DK.GATE() GB
+# or more asks for it (disk_release). TODO(held-ws-before-10gb): goes in a
+# later release (tests/shims.txt)
 def boot.held(-o: S.St, held: Bool, +cx: X.Cx<o>, +a: S.Agent) -> X.Cx<o>:
   match held:
     case True{}:
@@ -5226,8 +5204,11 @@ def placed.in(-o: S.St, +cx: X.Cx<o>, +name: String, +ws: J.Json, +err: String) 
   placed.join(o, PL.joiners(st(o, cx), name), placed(o, d, cx), d, err)
 
 # ---- wt-disk: the held checkouts at a reading (hub/disk.bend's gate) ----
+# Nothing new is held since the one bar at 10 GB (architect m_68023): these
+# release the ws held under the old bars, journaled on his hubs.
+# TODO(held-ws-before-10gb): goes in a later release (tests/shims.txt).
 
-# a reading at DK.LOW() GB or more: the first held one (creation order) is
+# a reading at DK.GATE() GB or more: the first held one (creation order) is
 # no longer held (journaled), then asked for as a boot asks (a new one's or
 # an isolate's worktree_create, a restore's worktree_restore); one per reading
 def disk_release.agent(-o: S.St, m: Maybe<&2, S.Agent>, +cx: X.Cx<o>, +n: String) -> X.Cx<o>:
@@ -5245,7 +5226,7 @@ def disk_release(-o: S.St, m: Maybe<&2, String>, +cx: X.Cx<o>) -> X.Cx<o>:
     case Some{+n}:
       disk_release.agent(o, M.get_agent(st(o, cx), n), cx, n)
 
-# a reading under DK.REFUSE() GB: every held one ends as a worktree not
+# a reading under DK.GATE() GB: every held one ends as a worktree not
 # made (place.bend's placed_of: a new one fails, its spawner told; a
 # restore's goes back archived; an isolate's back to the shared folder)
 # one: no longer held (journaled: its row reads failed, never waiting for
@@ -5269,8 +5250,6 @@ def disk_held(-o: S.St, g: DK.Gate, +cx: X.Cx<o>) -> X.Cx<o>:
   match g:
     case DK.GGo{}:
       disk_release(o, PL.first_held(S.St.agents(st(o, cx))), cx)
-    case DK.GWait{_}:
-      cx
     case DK.GRefuse{+gb}:
       disk_refuse(o, PL.held_names(S.St.agents(st(o, cx))), cx, gb)
 

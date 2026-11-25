@@ -25,7 +25,7 @@ describe('the right bar rows (designer desktop-right-bar v5)', () => {
     const r = agentRows([disk], NOW, false)[0];
     expect(r).toMatchObject({ glyph: '…', tone: 'dim', end: '' });
     // its hover tip says why (OuterCard shows r.why over its job's line, ui-review m_67988)
-    expect(r?.why).toBe("waiting for disk · starts on its own at 40 GB free · a's job");
+    expect(r?.why).toBe("waiting for disk · starts on its own at 10 GB free · a's job");
     expect(agentRows([ag('b', { status: 'working' })], NOW, false)[0]?.why).toBeUndefined();
   });
   it("main stays first past the ⌥ numbers and the worktrees, ⌥0 when ⌥ is held, its title as its line, the breeze while it works", () => {

@@ -928,7 +928,7 @@ mod tests {
         let mut since = Since::new();
         let s = Snapshot {
             agents: vec![
-                AgentRow { status: crate::model::Status::Failed, failure: Some("refused: 18 GB free, under 20 GB · free some space, then ask bise again".into()), ..AgentRow::test("refused") },
+                AgentRow { status: crate::model::Status::Failed, failure: Some("refused: 8 GB free, under 10 GB · free some space, then ask bise again".into()), ..AgentRow::test("refused") },
                 AgentRow { status: crate::model::Status::Failed, ..AgentRow::test("broke") },
                 AgentRow { status: crate::model::Status::Working, ..AgentRow::test("live") },
             ],
@@ -936,7 +936,7 @@ mod tests {
         };
         let rows = agents(&s, &mut since, 100, uk, &|_| None, &|_| None, &|_| None, Which::All);
         let why: Vec<Option<&str>> = rows.iter().map(|a| a.failure.as_deref()).collect();
-        assert_eq!(why, [Some("refused: 18 GB free, under 20 GB · free some space, then ask bise again"), None, None]);
+        assert_eq!(why, [Some("refused: 8 GB free, under 10 GB · free some space, then ask bise again"), None, None]);
         assert!(!why[0].unwrap().starts_with("failed"), "never 'failed · failed'");
     }
 

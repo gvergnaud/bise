@@ -37,21 +37,20 @@ law at_low_is_silent:
 law unknown_disk_goes:
   {DK.gate(None{}) == DK.GGo{} : DK.Gate}
 
-# LAW: under REFUSE() GB a new checkout is refused.
-law refused_under_20:
-  {DK.gate.of(19n) == DK.GRefuse{19n} : DK.Gate}
+# ---- one bar at 10 GB (his word m_68020, architect m_68023): nothing waits
+
+# LAW: under GATE() GB a new checkout is refused.
+law refused_under_10:
+  {DK.gate.of(9n) == DK.GRefuse{9n} : DK.Gate}
 
 law refused_at_0:
   {DK.gate.of(0n) == DK.GRefuse{0n} : DK.Gate}
 
-# LAW: from REFUSE() GB to under LOW() GB it waits.
-law waits_at_20:
-  {DK.gate.of(20n) == DK.GWait{20n} : DK.Gate}
+# LAW: at 10 GB it goes (under the old bars it waited at 10 and was refused).
+law goes_at_10:
+  {DK.gate.of(10n) == DK.GGo{} : DK.Gate}
 
-law waits_under_40:
-  {DK.gate.of(39n) == DK.GWait{39n} : DK.Gate}
-
-# LAW: at LOW() GB or more it goes, whatever more.
-law goes_at_40:
+# LAW: at GATE() GB or more it goes, whatever more.
+law goes_at_gate:
   for +p: Nat
-  {DK.gate.of(Nat.add(DK.LOW(), p)) == DK.GGo{} : DK.Gate}
+  {DK.gate.of(Nat.add(DK.GATE(), p)) == DK.GGo{} : DK.Gate}

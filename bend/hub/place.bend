@@ -99,14 +99,13 @@ def no_place(m: Maybe<&2, String>) -> Bool:
     case Some{_}:
       False{}
 
-# a placing ws held for disk (wt-disk, hub/disk.bend's gate): no fx yet,
-# its checkout starts at a reading at DK.LOW() GB or more; journaled with
-# the ws (EWorkspace, ETaskCreated), so a restarted hub keeps the wait
+# a placing ws held for disk under the old bars (wt-disk, hub/disk.bend's
+# gate; nothing new is held since the one 10 GB bar): no fx yet, its
+# checkout starts at a reading at DK.GATE() GB or more; journaled with the
+# ws (EWorkspace, ETaskCreated), so a restarted hub keeps the wait.
+# TODO(held-ws-before-10gb): goes in a later release (tests/shims.txt)
 def ws_held(+ws: J.Json) -> Bool:
   J.get_bool_or(ws, "disk_wait", False{})
-
-def ws_hold(+ws: J.Json) -> J.Json:
-  J.set(ws, "disk_wait", J.JBool{True{}})
 
 def ws_unhold(+ws: J.Json) -> J.Json:
   J.set(ws, "disk_wait", J.JBool{False{}})
@@ -123,7 +122,7 @@ def is_failed(l: S.Life) -> Bool:
 def held(+a: S.Agent) -> Bool:
   M.ws_placing(S.Agent.ws(a)) && ws_held(S.Agent.ws(a)) && Bool.not(is_failed(S.Agent.life(a)))
 
-# the first held task in creation order: the one a reading at DK.LOW() GB
+# the first held task in creation order: the one a reading at DK.GATE() GB
 # or more starts (one per reading)
 def held_at(xs: List<&2, S.Agent>) -> Bool:
   match xs:
@@ -146,7 +145,7 @@ def first_held.go(xs: List<&2, S.Agent>, +hit: Bool) -> Maybe<&2, String>:
 def first_held(+as: List<&2, S.Agent>) -> Maybe<&2, String>:
   first_held.go(as, held_at(as))
 
-# every held task, in creation order: a reading under DK.REFUSE() refuses them
+# every held task, in creation order: a reading under DK.GATE() refuses them
 def held_names(as: List<&2, S.Agent>) -> List<&2, String>:
   match as:
     case Nil{}:

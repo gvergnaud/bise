@@ -22,10 +22,10 @@ export const pages = {
   stopped: "stopped",
   /** a row's state mark tip and VoiceOver name: it works now */
   working: "working",
-  /** an agent row's state (its end, and the TUI's status): its worktree waits for disk, under 40 GB free (wt-disk, designer m_67943) */
+  /** an agent row's state (its end, and the TUI's status): its worktree waits for disk (wt-disk, designer m_67943): only a worktree held under the old bars, before the one 10 GB bar (architect m_68023) */
   waiting_disk: "waiting for disk",
   /** its state mark's tip: it needs no act of his */
-  waiting_disk_tip: "starts on its own at 40 GB free",
+  waiting_disk_tip: "starts on its own at 10 GB free",
   /** its row: the agent's name */
   tune_name: "Name",
   /** its row: the model it runs */
