@@ -198,7 +198,10 @@ fn agent(
     Agent {
         main: a.main,
         status,
-        // wt-disk: a held worktree's agent waits for disk, not starting
+        // wt-disk: a held worktree's agent waits for disk, not starting (only
+        // one held under the old 40/20 bars). TODO(held-ws-before-10gb): this
+        // derivation goes in a later release (tests/shims.txt); the
+        // WaitingDisk variant stays (wire: older views read it as Unknown)
         phase: if a.disk_held { Some(Phase::WaitingDisk) } else { Phase::of_hub(a.status.as_str()) },
         // display text beside 'failed' (snapshot_rows keeps it only when failed)
         failure: a.failure.clone(),

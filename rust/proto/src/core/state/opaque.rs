@@ -83,7 +83,9 @@ impl Workspace {
 
     /// Its worktree waits for disk (wt-disk): placing and held by sb-core's
     /// gate, so no checkout yet; the one test of `disk_wait` (the row's
-    /// phase reads it, architect m_67942).
+    /// phase reads it, architect m_67942). Only a ws held under the old
+    /// 40/20 bars: TODO(held-ws-before-10gb), goes in a later release
+    /// (tests/shims.txt).
     pub fn disk_held(&self) -> bool {
         self.placing() && self.disk_wait
     }
