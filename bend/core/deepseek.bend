@@ -4,6 +4,8 @@
 # https://api-docs.deepseek.com/guides/thinking_mode (2026-10-20): with
 # tools, replay reasoning from ALL previous turns, even non-tool turns.
 # Without tools the server ignores it. Keep the wire's exact whitespace.
+# The split itself is shared with the OpenAI Chat field shape
+# (W.think_hist, glm-5-history): one extraction serves both dialects.
 import Base
 import ./wire.bend as W
 import ./oai-chat.bend as Oai
@@ -14,29 +16,15 @@ type History is Data:
   H{visible: String, reason: String}
 
 def unsigned(tm: W.ThinkMark) -> String:
-  match tm:
-    case W.TM{+reason, +sig}:
-      Bool.pick(String, String.is_empty(sig), reason, "")
+  W.own_reason(tm)
 
-def split.go(fuel: Nat, span: Maybe<&2, W.ThinkSpan>, +content: String,
-    +visible: String, +reason: String) -> History:
-  match fuel:
-    case 0n:
+def split.of(h: W.ThinkHist) -> History:
+  match h:
+    case W.TH{+visible, +reason}:
       H{visible, reason}
-    case 1n+k:
-      match span:
-        case None{}:
-          H{String.append(visible, content), reason}
-        case Some{W.TSpan{+n0, +n1}}:
-          +rest = W.asst_think.visible(W.asst_think.raw_visible(content, n1))
-          split.go(k, W.asst_think.find(rest), rest,
-            String.append(visible, String.take(content, n0)),
-            String.append(reason,
-              unsigned(W.think_split(W.asst_think.raw_span(content, n0, n1)))))
 
 def split(+content: String) -> History:
-  split.go(Nat.add(String.length(content), 1n), W.asst_think.find(content),
-    content, "", "")
+  split.of(W.think_hist(content))
 
 # Null is valid only with tool calls. A blank or reasoning-only assistant
 # without calls is left out (sendable): its content would be "" (main's
@@ -82,7 +70,7 @@ def msg_json.pick(asst: Bool, +m: W.WMsg, ids: List<&2, String>)
               call_fields(calls))}),
             List.append(&2, String, ids, W.ids_of(calls)))
     case False{}:
-      Oai.msg_json(m, ids)
+      Oai.msg_json(False{}, m, ids)
 
 def pair_of(+m: W.WMsg, ids: List<&2, String>) -> Oai.MsgPair:
   match m:
@@ -95,14 +83,14 @@ def msgs_go(fuel: Nat, w: Oai.MWalk) -> List<&2, J.Json>:
       Nil{}
     case 1n+k:
       match w:
-        case Oai.MNext{Nil{}, _, +acc}:
+        case Oai.MNext{_, Nil{}, _, +acc}:
           List.reverse(&2, J.Json, acc)
-        case Oai.MNext{Con{+m, +rest}, +ids, +acc}:
-          msgs_go(k, Oai.MPair{pair_of(m, ids), rest, acc})
-        case Oai.MPair{+pair, +todo, +acc}:
+        case Oai.MNext{+blocks, Con{+m, +rest}, +ids, +acc}:
+          msgs_go(k, Oai.MPair{blocks, pair_of(m, ids), rest, acc})
+        case Oai.MPair{+blocks, +pair, +todo, +acc}:
           match pair:
             case Oai.MP{+j, +ids2}:
-              msgs_go(k, Oai.MNext{todo, ids2, Con{j, acc}})
+              msgs_go(k, Oai.MNext{blocks, todo, ids2, Con{j, acc}})
 
 # the text DeepSeek sends of a message: an assistant's visible part (its
 # reasoning rides reasoning_content), any other's content
@@ -133,7 +121,7 @@ def sendable(msgs: List<&2, W.WMsg>) -> List<&2, W.WMsg>:
 
 def msgs_json(+msgs: List<&2, W.WMsg>) -> List<&2, J.Json>:
   msgs_go(Nat.add(Nat.mul(List.length(&2, W.WMsg, msgs), 2n), 16n),
-    Oai.MNext{sendable(msgs), Nil{}, Nil{}})
+    Oai.MNext{False{}, sendable(msgs), Nil{}, Nil{}})
 
 # In DeepSeek's Chat API, reasoning_effort none does NOT disable
 # thinking. Send its documented thinking toggle and omit that effort.
@@ -143,8 +131,8 @@ def head.pick(off: Bool, +o: Oai.Opts,
   match off:
     case True{}:
       match o:
-        case Oai.Opts{_, +output, +key, _}:
-          Oai.body.head(Oai.Opts{False{}, output, key, ""},
+        case Oai.Opts{_, +output, +key, _, _}:
+          Oai.body.head(Oai.Opts{False{}, output, key, "", ""},
             Con{J.kv("thinking", J.obj([J.kv("type", J.str("disabled"))])), rest})
     case False{}:
       Oai.body.head(o, rest)
@@ -152,7 +140,7 @@ def head.pick(off: Bool, +o: Oai.Opts,
 def head(+o: Oai.Opts, +rest: List<&2, Sigma<&2, &2, String, _ => J.Json>>)
     -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
   match o:
-    case Oai.Opts{+reasoning, _, _, +effort}:
+    case Oai.Opts{+reasoning, _, _, +effort, _}:
       head.pick(Bool.or(Bool.not(reasoning), String.eq(effort, "none")), o, rest)
 
 def tool_fields(tools: List<&2, W.WTool>)

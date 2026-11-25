@@ -429,7 +429,7 @@ law oai_stream_json_body:
 # reason gets no reasoning_effort; its max_output is the cap, named
 # max_completion_tokens on OpenAI, max_tokens elsewhere.
 law oai_body_no_reasoning_cap:
-  {Api.api_body_for(Api.OpenAI{}, "m", Api.MFacts{False{}, 4096n, "max_tokens", "", "", "", False{}},
+  {Api.api_body_for(Api.OpenAI{}, "m", Api.MFacts{False{}, 4096n, "max_tokens", "", "", "", False{}, ""},
       W.parse_wire("MODEL default
 MSG user : hi
 END
@@ -437,7 +437,7 @@ END
     == "{\"model\":\"m\",\"max_tokens\":4096,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}" : String}
 
 law oai_body_openai_cap:
-  {Api.api_body_for(Api.OpenAI{}, "m", Api.MFacts{True{}, 128000n, "max_completion_tokens", "", "", "high", False{}},
+  {Api.api_body_for(Api.OpenAI{}, "m", Api.MFacts{True{}, 128000n, "max_completion_tokens", "", "", "high", False{}, ""},
       W.parse_wire("MODEL default
 MSG user : hi
 END
@@ -461,7 +461,7 @@ reasoning = false",
       "")
     == Pv.ROk{Pv.Prov{"openai", "gpt-4.1", Api.OpenAI{},
       "https://api.openai.com/v1/chat/completions", "OPENAI_API_KEY",
-      Api.MFacts{False{}, 200n, "max_completion_tokens", "", "", "", False{}}}}
+      Api.MFacts{False{}, 200n, "max_completion_tokens", "", "", "", False{}, ""}}}
     : Pv.Resolved}
 
 # LAW: only a non-empty flag is a Ctrl+C - the runtime clears the flag to

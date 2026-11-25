@@ -823,6 +823,55 @@ def text_block_json(+text: String) -> J.Json:
 def asst_think.raw_visible(+content: String, +n1: Nat) -> String:
   String.drop(content, Nat.add(n1, 8n))
 
+# ---- the visible text and the reasoning of a marked assistant ----
+# The split of an assistant message for the families whose replay sends
+# reasoning as a sibling field, never a content part (DeepSeek's
+# reasoning_content; the OpenAI Chat default, glm-5-history): the visible
+# text outside the spans, and the spans' reasoning verbatim — a SIGNED
+# span's reasoning stays out (its signature is another transport's to
+# carry; a strict server refuses the part shape it rode in on,
+# databricks' glm-5-3: 'unsupported content item type: "thinking"').
+type ThinkHist is Data:
+  TH{visible: String, reason: String}
+
+# a span's reasoning when nothing signed it, else "" (the DeepSeek rule:
+# a signature never crosses providers, and its reasoning does not go
+# back unsigned)
+def own_reason(tm: ThinkMark) -> String:
+  match tm:
+    case TM{+reason, +sig}:
+      Bool.pick(String, String.is_empty(sig), reason, "")
+
+def think_hist.go(fuel: Nat, span: Maybe<&2, ThinkSpan>, +content: String,
+    +visible: String, +reason: String) -> ThinkHist:
+  match fuel:
+    case 0n:
+      TH{visible, reason}
+    case 1n+k:
+      match span:
+        case None{}:
+          TH{String.append(visible, content), reason}
+        case Some{TSpan{+n0, +n1}}:
+          +rest = asst_think.visible(asst_think.raw_visible(content, n1))
+          think_hist.go(k, asst_think.find(rest), rest,
+            String.append(visible, String.take(content, n0)),
+            String.append(reason,
+              own_reason(think_split(asst_think.raw_span(content, n0, n1)))))
+
+def think_hist(+content: String) -> ThinkHist:
+  think_hist.go(Nat.add(String.length(content), 1n), asst_think.find(content),
+    content, "", "")
+
+# the visible text of a marked assistant content (think_hist's first
+# half, the sendable check of a sibling-field family)
+def think_visible.of(h: ThinkHist) -> String:
+  match h:
+    case TH{+visible, _}:
+      visible
+
+def think_visible(+content: String) -> String:
+  think_visible.of(think_hist(content))
+
 # ---- a hollow assistant text: nothing to show, nothing to replay ----
 # No visible text (blank outside its think spans) and no signed span:
 # an unsigned span replays to no family that checks reasoning (Anthropic

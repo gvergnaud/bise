@@ -19,7 +19,7 @@ reasoning = true
 "), "")
     == Pv.ROk{Pv.Prov{"deepseek", "deepseek-flash", Api.DeepSeek{},
       "https://api.deepseek.com/v1/chat/completions", "DEEPSEEK_API_KEY",
-      Api.MFacts{True{}, 0n, "max_tokens", "", "", "", False{}}}} : Pv.Resolved}
+      Api.MFacts{True{}, 0n, "max_tokens", "", "", "", False{}, ""}}} : Pv.Resolved}
 
 # The api name picks the dialect, never the provider's id: openai-chat
 # stays OpenAI's for every provider, deepseek-chat round-trips.
@@ -59,7 +59,7 @@ END
 
 law deepseek_normal_history_none:
   {Api.api_body_for(Api.DeepSeek{}, "deepseek-flash",
-      Api.MFacts{True{}, 64n, "max_tokens", "", "", "none", False{}},
+      Api.MFacts{True{}, 64n, "max_tokens", "", "", "none", False{}, ""},
       W.parse_wire("MODEL default
 MSG assistant : <think>old</think>\\nanswer
 END
@@ -73,7 +73,7 @@ END
 # their reasoning (deepseek_tools_keep_all_turns_reasoning_and_ids).
 def empty_body(+effort: String) -> J.Json:
   W.parse_json(Api.api_body_for(Api.DeepSeek{}, "deepseek-flash",
-    Api.MFacts{True{}, 64n, "max_tokens", "", "", effort, False{}},
+    Api.MFacts{True{}, 64n, "max_tokens", "", "", effort, False{}, ""},
     W.WReq{Nil{}, [W.WMsg{"assistant", "", Nil{}, ""},
       W.WMsg{"assistant", "<think> native\n </think>", Nil{}, ""},
       W.WMsg{"assistant", "<think>foreign\nBENDSIG::sig</think>", Nil{}, ""}], None{}}))
@@ -103,7 +103,7 @@ END
 
 def tool_body(+effort: String) -> J.Json:
   W.parse_json(Api.api_body_for(Api.DeepSeek{}, "deepseek-flash",
-    Api.MFacts{True{}, 64n, "max_tokens", "", "", effort, False{}}, tool_req()))
+    Api.MFacts{True{}, 64n, "max_tokens", "", "", effort, False{}, ""}, tool_req()))
 
 law deepseek_tools_keep_all_turns_reasoning_and_ids:
   {W.arr_field_or(tool_body("high"), "messages")
@@ -120,7 +120,7 @@ law deepseek_tools_none_disables_thinking:
 
 def signed_tool_body(+effort: String) -> J.Json:
   W.parse_json(Api.api_body_for(Api.DeepSeek{}, "deepseek-flash",
-    Api.MFacts{True{}, 64n, "max_tokens", "", "", effort, False{}},
+    Api.MFacts{True{}, 64n, "max_tokens", "", "", effort, False{}, ""},
     W.parse_wire("MODEL default
 TOOL echo : Returns text.
 MSG assistant : <think>foreign\\nBENDSIG::oair:ENC1</think>
