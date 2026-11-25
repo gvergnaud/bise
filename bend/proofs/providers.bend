@@ -379,3 +379,6 @@ def Laws.status_budget_unchanged(p, w, ms, why, tries):
 
 def Laws.status_budget_exhausted(w, ms, why, tries):
   {==}
+
+def Laws.provider_think_blocks_from_file():
+  {==}

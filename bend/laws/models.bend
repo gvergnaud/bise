@@ -265,7 +265,7 @@ law family_headers_anthropic_betas:
 # (the dispatch passes max output, thinking word and reasoning through).
 law api_body_anth_follows_facts:
   {Api.api_body_for(Api.Anthropic{}, "m",
-      Api.MFacts{False{}, 200n, "max_tokens", "", "", "", False{}},
+      Api.MFacts{False{}, 200n, "max_tokens", "", "", "", False{}, ""},
       W.parse_wire("MODEL default
 MSG user : salut
 END
@@ -382,7 +382,7 @@ law window_follows_the_choice:
 
 # LAW: the chat body sends the call's effort word as is.
 law oai_body_sends_the_effort:
-  {Api.api_body_for(Api.OpenAI{}, "m", Api.MFacts{True{}, 0n, "max_tokens", "", "", "low", False{}},
+  {Api.api_body_for(Api.OpenAI{}, "m", Api.MFacts{True{}, 0n, "max_tokens", "", "", "low", False{}, ""},
       W.parse_wire("MODEL default
 MSG user : hi
 END
@@ -529,7 +529,7 @@ law anth_context_not_a_breakpoint:
 
 # LAW: on the OpenAI Chat family the context is a plain user message.
 law oai_context_is_user:
-  {String.contains(Oai.api_body_with("m", Oai.Opts{False{}, 0n, "max_tokens", ""},
+  {String.contains(Oai.api_body_with("m", Oai.Opts{False{}, 0n, "max_tokens", "", ""},
       W.parse_wire(Rm.with_context("board", pc_req1()))),
     "{\"role\":\"user\",\"content\":\"board\"}]") == True{} : Bool}
 

@@ -106,7 +106,7 @@ fn a_listed_model_takes_its_own_fields_then_its_providers() {
     let c = Catalog::builtin();
     let r = c.resolve("anthropic/claude-haiku-4-5");
     assert_eq!(r.known, Known::Listed);
-    assert_eq!(r.caps, Caps { context: 200_000, max_output: 64_000, vision: true, reasoning: true, tools: true, thinking: "budget".into(), betas: ANTH_BETAS.into(), efforts: "none,low,medium,high,max".into(), effort: String::new(), cache_key: String::new(), cache_header: String::new(), headers_env: String::new(), headers: Default::default(), key_command: String::new(), idle_timeout_sec: 0, max_tokens_field: None });
+    assert_eq!(r.caps, Caps { context: 200_000, max_output: 64_000, vision: true, reasoning: true, tools: true, thinking: "budget".into(), betas: ANTH_BETAS.into(), efforts: "none,low,medium,high,max".into(), effort: String::new(), cache_key: String::new(), cache_header: String::new(), headers_env: String::new(), headers: Default::default(), key_command: String::new(), idle_timeout_sec: 0, max_tokens_field: None, think: String::new() });
     let r = c.resolve("mistral/mistral-large-latest");
     assert_eq!((r.caps.context, r.caps.reasoning, r.caps.vision), (262_144, false, true));
     let r = c.resolve("mistral/mistral-large-4");
@@ -529,6 +529,73 @@ max_tokens_field = "max_completion"
     for n in ["ai-gw/openai/gpt-6.2-sol", "ai-gw/anthropic/claude-x", "vllm/old", "vllm/any"] {
         assert_eq!(back.catalog.resolve(n).caps.max_tokens_field, field(n), "{n}");
     }
+}
+
+// glm-5-history: how marked reasoning replays on OpenAI Chat is a cap
+// ("blocks": the Mistral/vibe ThinkChunk parts, the one family whose
+// backend takes them; "" anything else, a sibling reasoning_content
+// field — the backends behind a gateway 400 the parts). Mistral's own
+// models carry it from the built-in list, a gateway model borrows the
+// cap of the model it is, and the handoff carries it to the runtime.
+#[test]
+fn think_blocks_is_a_cap_carried_to_the_handoff() {
+    let c = Catalog::builtin();
+    assert_eq!(c.resolve("mistral/mistral-large-4").caps.think, "blocks");
+    assert_eq!(c.resolve("mistral/zai-glm-5-3").caps.think, "blocks");
+    // a gateway borrowing a known mistral model: its shape
+    assert_eq!(c.resolve("litellm/mistral/mistral-large-4").caps.think, "blocks");
+    // a gateway borrowing glm (databricks' backend): no blocks, the field
+    assert_eq!(c.resolve("litellm/zai-org/GLM-5.3").caps.think, "");
+    assert_eq!(c.resolve("gw/glm-5-3").caps.think, "");
+    let s = setup(
+        r#"
+model = "gw/mistral/mistral-large-4"
+[providers.gw]
+gateway = true
+base_url = "https://gw.example/v1"
+key_env = "GW"
+[providers.corp]
+base_url = "https://corp.example/v1"
+key_env = "CORP"
+think = "blocks"
+[models."corp/qwen"]
+[models."corp/field"]
+think = ""
+[models."mistral/field"]
+think = ""
+"#,
+    );
+    assert_eq!(s.catalog.resolve("gw/anything").caps.think, "");
+    assert_eq!(s.catalog.resolve("corp/qwen").caps.think, "blocks");
+    // a bad word warns and is ignored
+    let bad = setup(
+        r#"
+[providers.bad]
+base_url = "https://bad.example/v1"
+think = "parts"
+"#,
+    );
+    assert_eq!(bad.catalog.resolve("bad/m").caps.think, "");
+    assert!(bad.catalog.warnings.iter().any(|w| w.contains("bad") && w.contains("think")), "{:?}", bad.catalog.warnings);
+    // the handoff writes the line (the provider's own: a model that
+    // equals it inherits, no line of its own), and reads back the same
+    let text = s.handoff_toml();
+    let mistral: Vec<&str> = text.lines().skip_while(|l| *l != "[providers.mistral]").take_while(|l| !l.starts_with("[models")).collect();
+    assert!(mistral.contains(&"think = \"blocks\""), "{text}");
+    let corp: Vec<&str> = text.lines().skip_while(|l| *l != "[providers.corp]").take_while(|l| !l.starts_with("[models")).collect();
+    assert!(corp.contains(&"think = \"blocks\""), "{text}");
+    assert!(!model_section(&text, "gw/glm-5-3").iter().any(|l| l.starts_with("think ")), "{text}");
+    assert!(model_section(&text, "gw/mistral/mistral-large-4").contains(&"think = \"blocks\""), "{text}");
+    assert!(model_section(&text, "corp/field").contains(&"think = \"\""), "{text}");
+    assert!(model_section(&text, "mistral/field").contains(&"think = \"\""), "{text}");
+    let back = Setup::from_text(Some(&text), &no_env);
+    for n in ["mistral/zai-glm-5-3", "corp/qwen", "gw/glm-5-3", "gw/mistral/mistral-large-4", "corp/field", "mistral/field"] {
+        assert_eq!(back.catalog.resolve(n).caps.think, s.catalog.resolve(n).caps.think, "{n}");
+    }
+    let cleared = setup("[providers.mistral]\nthink = \"\"\n");
+    let cleared_text = cleared.handoff_toml();
+    let mistral: Vec<_> = cleared_text.lines().skip_while(|l| *l != "[providers.mistral]").skip(1).take_while(|l| !l.starts_with('[')).collect();
+    assert!(mistral.contains(&"think = \"\""), "{cleared_text}");
 }
 
 // OpenAI's own models carry the field at the provider level, so a gateway

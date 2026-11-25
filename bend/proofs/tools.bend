@@ -430,3 +430,18 @@ def Laws.edit_schemas():
 
 def Laws.edit_calls_ride_structured():
   {==}
+
+def Laws.glm_think_replays_reasoning_content():
+  {==}
+
+def Laws.glm_blocks_history_unchanged():
+  {==}
+
+def Laws.glm_think_hist_splits():
+  {==}
+
+def Laws.glm_tool_turn_replays_reasoning():
+  {==}
+
+def Laws.glm_hollow_turn_left_out():
+  {==}

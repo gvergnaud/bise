@@ -172,6 +172,85 @@ def asst_content.pick(parts: Maybe<&2, W.ThinkSpan>, +content: String) -> J.Json
 def asst_content_json(+content: String) -> J.Json:
   asst_content.pick(W.asst_think.find(content), content)
 
+# ---- the sibling-field replay of marked reasoning (glm-5-history) ----
+# For the providers whose backend 400s the ThinkChunk parts (databricks'
+# glm-5-3 'unsupported content item type: "thinking"'; google's and
+# baseten's, probed): the visible text as the content, the reasoning as
+# a reasoning_content field — the shape deepseek.bend already sends, so
+# one extraction (W.think_hist) serves both dialects. A SIGNED span's
+# reasoning stays out with its signature (W.own_reason: another
+# transport's, never replayed unsigned).
+
+# the visible text as the field family's content: null only when calls
+# came (a blank no-calls assistant never reaches the walk:
+# field_sendable drops it, deepseek's rule)
+def field_content.pick(null_ok: Bool, +visible: String) -> J.Json:
+  match null_ok:
+    case True{}:
+      J.JNull{}
+    case False{}:
+      J.str(visible)
+
+# reasoning_content only when some reasoning goes, before `rest`
+def field_kvs.reason(empty: Bool, +reason: String,
+    +rest: List<&2, Sigma<&2, &2, String, _ => J.Json>>)
+    -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
+  match empty:
+    case True{}:
+      rest
+    case False{}:
+      Con{J.kv("reasoning_content", J.str(reason)), rest}
+
+# the content and reasoning fields of a marked assistant message:
+# content first (null only with calls), then reasoning_content when
+# the history holds reasoning
+def field_kvs.of(h: W.ThinkHist, has_calls: Bool,
+    +rest: List<&2, Sigma<&2, &2, String, _ => J.Json>>)
+    -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
+  match h:
+    case W.TH{+visible, +reason}:
+      Con{J.kv("content",
+          field_content.pick(Bool.and(has_calls, W.is_blank(visible)),
+            visible)),
+        field_kvs.reason(String.is_empty(reason), reason, rest)}
+
+def field_kvs(+content: String, has_calls: Bool,
+    +rest: List<&2, Sigma<&2, &2, String, _ => J.Json>>)
+    -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
+  field_kvs.of(W.think_hist(content), has_calls, rest)
+
+# the field family's sendable: an assistant counts by its VISIBLE text
+# (a thinking-only turn — blank outside its spans — is left out, its
+# content would be null without calls; deepseek's rule); every other
+# role by today's unsendable
+def is_marked_blank.pick(asst: Bool, +text: String) -> Bool:
+  match asst:
+    case True{}:
+      W.is_blank(W.think_visible(text))
+    case False{}:
+      W.is_blank(text)
+
+def is_marked_blank(+role: String, +text: String) -> Bool:
+  is_marked_blank.pick(String.eq(role, "assistant"), text)
+
+def field_unsendable(+role: String, +text: String, has_calls: Bool) -> Bool:
+  match has_calls:
+    case True{}:
+      False{}
+    case False{}:
+      Bool.and(Bool.not(String.eq(role, "tool")),
+        is_marked_blank(role, text))
+
+def field_sendable(msgs: List<&2, W.WMsg>) -> List<&2, W.WMsg>:
+  match msgs:
+    case Nil{}:
+      Nil{}
+    case Con{+m, rest}:
+      match m:
+        case W.WMsg{+role, +content, +calls, +extra}:
+          W.keep_msg(field_unsendable(role, content, W.has_calls(calls)),
+            W.WMsg{role, content, calls, extra}, field_sendable(rest))
+
 # ---- the provider's extra: Gemini's thought signatures (gemini-sig) ----
 # Gemini signs its tool calls (tool_calls[i].extra_content.google.
 # thought_signature) and may sign the message (extra_content); the next
@@ -369,50 +448,72 @@ def ids_x(calls: List<&2, W.WCall>, ps: List<&2, J.Json>) -> List<&2, String> :
             case Nil{}:
               Con{W.call_id_of(id), ids_x(rest, Nil{})}
 
-# an assistant message without its provider's extra (today's bytes)
-def msg_json.asst.plain(+content: String, +calls: List<&2, W.WCall>,
-    ids: List<&2, String>) -> J.Json & List<&2, String>:
-  match calls:
-    case Nil{}:
-      (J.obj(Con{J.kv("role", J.str("assistant")),
-        Con{J.kv("content", asst_content_json(content)), Nil{}}}), ids)
-    case Con{_, _}:
-      (J.obj(Con{J.kv("role", J.str("assistant")),
-        Con{J.kv("content", asst_content_json(content)),
-          Con{J.kv("tool_calls", calls_json(calls)), Nil{}}}}),
-        List.append(&2, String, ids, W.ids_of(calls)))
+# the content kvs of an assistant message, by its replay shape: the
+# ThinkChunk parts (blocks) or the visible text with a reasoning_content
+# sibling (field); `has_calls` only the field shape reads (its content
+# goes null only when calls came)
+def asst_kvs.pick(blocks: Bool, +content: String, has_calls: Bool)
+    -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
+  match blocks:
+    case True{}:
+      Con{J.kv("content", asst_content_json(content)), Nil{}}
+    case False{}:
+      field_kvs(content, has_calls, Nil{})
 
-def msg_json.asst.signed(+j: J.Json, +content: String,
+def asst_kvs(blocks: Bool, +content: String, has_calls: Bool)
+    -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
+  asst_kvs.pick(blocks, content, has_calls)
+
+# the kvs of an assistant message: role, its content kvs, then `rest`
+# (the tool_calls and the provider's extra, when either came)
+def asst_obj_kvs(blocks: Bool, +content: String, has_calls: Bool,
+    +rest: List<&2, Sigma<&2, &2, String, _ => J.Json>>)
+    -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
+  Con{J.kv("role", J.str("assistant")),
+    List.append(&2, Sigma<&2, &2, String, _ => J.Json>,
+      asst_kvs(blocks, content, has_calls), rest)}
+
+# an assistant message without its provider's extra (today's bytes)
+def msg_json.asst.plain(blocks: Bool, +content: String,
     +calls: List<&2, W.WCall>, ids: List<&2, String>)
     -> J.Json & List<&2, String>:
   match calls:
     case Nil{}:
-      (J.obj(Con{J.kv("role", J.str("assistant")),
-        Con{J.kv("content", asst_content_json(content)), ec_kv(j, Nil{})}}),
+      (J.obj(asst_obj_kvs(blocks, content, False{}, Nil{})), ids)
+    case Con{_, _}:
+      (J.obj(asst_obj_kvs(blocks, content, True{},
+          Con{J.kv("tool_calls", calls_json(calls)), Nil{}})),
+        List.append(&2, String, ids, W.ids_of(calls)))
+
+def msg_json.asst.signed(blocks: Bool, +j: J.Json, +content: String,
+    +calls: List<&2, W.WCall>, ids: List<&2, String>)
+    -> J.Json & List<&2, String>:
+  match calls:
+    case Nil{}:
+      (J.obj(asst_obj_kvs(blocks, content, False{}, ec_kv(j, Nil{}))),
         ids)
     case Con{_, _}:
-      (J.obj(Con{J.kv("role", J.str("assistant")),
-        Con{J.kv("content", asst_content_json(content)),
+      (J.obj(asst_obj_kvs(blocks, content, True{},
           Con{J.kv("tool_calls",
             J.arr(calls_x(calls, W.arr_field_or(j, "calls")))),
-            ec_kv(j, Nil{})}}}),
+            ec_kv(j, Nil{})})),
         List.append(&2, String, ids, ids_x(calls, W.arr_field_or(j, "calls"))))
 
-def msg_json.asst.x(m: Maybe<&2, J.Json>, +content: String,
+def msg_json.asst.x(blocks: Bool, m: Maybe<&2, J.Json>, +content: String,
     +calls: List<&2, W.WCall>, ids: List<&2, String>)
     -> J.Json & List<&2, String>:
   match m:
     case Some{+j}:
-      msg_json.asst.signed(j, content, calls, ids)
+      msg_json.asst.signed(blocks, j, content, calls, ids)
     case None{}:
-      msg_json.asst.plain(content, calls, ids)
+      msg_json.asst.plain(blocks, content, calls, ids)
 
-def msg_json.asst(+content: String, +calls: List<&2, W.WCall>,
+def msg_json.asst(blocks: Bool, +content: String, +calls: List<&2, W.WCall>,
     +extra: String, ids: List<&2, String>) -> J.Json & List<&2, String>:
-  msg_json.asst.x(aligned(extra, List.length(&2, W.WCall, calls)), content,
-    calls, ids)
+  msg_json.asst.x(blocks, aligned(extra, List.length(&2, W.WCall, calls)),
+    content, calls, ids)
 
-def msg_json.pick(is_tool: Bool, is_asst: Bool, +role: String,
+def msg_json.pick(blocks: Bool, is_tool: Bool, is_asst: Bool, +role: String,
     +content: String, +calls: List<&2, W.WCall>, +extra: String,
     ids: List<&2, String>) -> J.Json & List<&2, String>:
   match is_tool:
@@ -421,16 +522,17 @@ def msg_json.pick(is_tool: Bool, is_asst: Bool, +role: String,
     case False{}:
       match is_asst:
         case True{}:
-          msg_json.asst(content, calls, extra, ids)
+          msg_json.asst(blocks, content, calls, extra, ids)
         case False{}:
           (J.obj(Con{J.kv("role", J.str(W.role_out(role))),
             Con{J.kv("content", W.img_content_of(role, Im.IOai{}, content)), Nil{}}}), ids)
 
-def msg_json(m: W.WMsg, ids: List<&2, String>) -> J.Json & List<&2, String>:
+def msg_json(blocks: Bool, m: W.WMsg, ids: List<&2, String>)
+    -> J.Json & List<&2, String>:
   match m:
     case W.WMsg{+role, +content, +calls, +extra}:
-      msg_json.pick(String.eq(role, "tool"), String.eq(role, "assistant"),
-        role, content, calls, extra, ids)
+      msg_json.pick(blocks, String.eq(role, "tool"),
+        String.eq(role, "assistant"), role, content, calls, extra, ids)
 
 # the message walk is one self-recursive def over a Data state (the
 # json package's parser pattern): computed values travel inside
@@ -439,16 +541,18 @@ type MsgPair is Data:
   MP{j: J.Json, ids2: List<&2, String>}
 
 type MWalk is Data:
-  MNext{todo: List<&2, W.WMsg>, ids: List<&2, String>, acc: List<&2, J.Json>}
-  MPair{pair: MsgPair, todo: List<&2, W.WMsg>, acc: List<&2, J.Json>}
+  MNext{blocks: Bool, todo: List<&2, W.WMsg>, ids: List<&2, String>,
+    acc: List<&2, J.Json>}
+  MPair{blocks: Bool, pair: MsgPair, todo: List<&2, W.WMsg>,
+    acc: List<&2, J.Json>}
 
 def pair_of.wrap(t: J.Json & List<&2, String>) -> MsgPair:
   match t:
     case (j, ids2):
       MP{j, ids2}
 
-def pair_of(m: W.WMsg, ids: List<&2, String>) -> MsgPair:
-  pair_of.wrap(msg_json(m, ids))
+def pair_of(blocks: Bool, m: W.WMsg, ids: List<&2, String>) -> MsgPair:
+  pair_of.wrap(msg_json(blocks, m, ids))
 
 def msgs_go(fuel: Nat, w: MWalk) -> List<&2, J.Json>:
   match fuel:
@@ -456,24 +560,33 @@ def msgs_go(fuel: Nat, w: MWalk) -> List<&2, J.Json>:
       Nil{}
     case 1n+k:
       match w:
-        case MNext{Nil{}, _, +acc}:
+        case MNext{_, Nil{}, _, +acc}:
           List.reverse(&2, J.Json, acc)
-        case MNext{Con{+m, +rest}, +ids, +acc}:
-          msgs_go(k, MPair{pair_of(m, ids), rest, acc})
-        case MPair{+pair, +todo, +acc}:
+        case MNext{+blocks, Con{+m, +rest}, +ids, +acc}:
+          msgs_go(k, MPair{blocks, pair_of(blocks, m, ids), rest, acc})
+        case MPair{+blocks, +pair, +todo, +acc}:
           match pair:
             case MP{+j, +ids2}:
-              msgs_go(k, MNext{todo, ids2, Con{j, acc}})
+              msgs_go(k, MNext{blocks, todo, ids2, Con{j, acc}})
 
-# a message with empty content never leaves (W.sendable)
-def msgs_json(+msgs: List<&2, W.WMsg>) -> List<&2, J.Json>:
+# a message with empty content never leaves (W.sendable); the field
+# shape counts an assistant by its visible text (field_sendable)
+def msgs_json(+blocks: Bool, +msgs: List<&2, W.WMsg>) -> List<&2, J.Json>:
   msgs_go(Nat.add(Nat.mul(List.length(&2, W.WMsg, msgs), 2n), 16n),
-    MNext{W.sendable(msgs), Nil{}, Nil{}})
+    MNext{blocks,
+      Bool.pick(List<&2, W.WMsg>, blocks, W.sendable(msgs),
+        field_sendable(msgs)), Nil{}, Nil{}})
 
 # what the catalog says of the model (core/api.bend MFacts): whether it
-# reasons, its output cap (0n: none sent) and the cap's field name
+# reasons, its output cap (0n: none sent) and the cap's field name;
+# think: how marked reasoning replays — "blocks" the ThinkChunk parts
+# (Mistral's shape, the catalog pins it there), anything else a sibling
+# reasoning_content field (glm-5-history: the backends behind a gateway
+# 400 the parts, databricks' glm-5-3 'unsupported content item type:
+# "thinking"'; google's and baseten's, probed)
 type Opts is Data:
-  Opts{reasoning: Bool, output: Nat, max_key: String, effort: String}
+  Opts{reasoning: Bool, output: Nat, max_key: String, effort: String,
+    think: String}
 
 # reasoning_effort "high" rides every call of a reasoning model, the
 # vibe CLI parity: the active model zai-glm-5-3 runs with thinking
@@ -516,9 +629,19 @@ def body.cap(none: Bool, +output: Nat, +key: String,
 def body.head(o: Opts, +rest: List<&2, Sigma<&2, &2, String, _ => J.Json>>)
     -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
   match o:
-    case Opts{+reasoning, +output, +max_key, +effort}:
+    case Opts{+reasoning, +output, +max_key, +effort, _}:
       body.effort(reasoning, effort,
         body.cap(Nat.is_eq(output, 0n), output, max_key, rest))
+
+# the think word of the Opts: "blocks" the ThinkChunk parts (Mistral's),
+# anything else the sibling field (the walk's flag)
+def thinks_blocks(+think: String) -> Bool:
+  String.eq(think, "blocks")
+
+def opts_blocks(o: Opts) -> Bool:
+  match o:
+    case Opts{_, _, _, _, +think}:
+      thinks_blocks(think)
 
 def api_body.pick(empty_tools: Bool, +model: String, +o: Opts,
     +tools: List<&2, W.WTool>, +msgs: List<&2, W.WMsg>) -> String:
@@ -527,11 +650,13 @@ def api_body.pick(empty_tools: Bool, +model: String, +o: Opts,
       # a compaction call offers no tools at all
       J.stringify(J.obj(Con{J.kv("model", J.str(model)),
         body.head(o,
-          Con{J.kv("messages", J.arr(msgs_json(msgs))), Nil{}})}))
+          Con{J.kv("messages",
+            J.arr(msgs_json(opts_blocks(o), msgs))), Nil{}})}))
     case False{}:
       J.stringify(J.obj(Con{J.kv("model", J.str(model)),
         body.head(o,
-          Con{J.kv("messages", J.arr(msgs_json(msgs))),
+          Con{J.kv("messages",
+            J.arr(msgs_json(opts_blocks(o), msgs))),
             Con{J.kv("tools", tools_json(tools)),
               Con{J.kv("tool_choice", J.str("auto")), Nil{}}}})}))
 
@@ -540,9 +665,10 @@ def api_body_with(+model: String, +o: Opts, +req: W.WReq) -> String:
     case W.WReq{+tools, +msgs, _}:
       api_body.pick(W.is_empty_tools(tools), model, o, tools, msgs)
 
-# no catalog facts: reasoning_effort on, no output cap (today's body)
+# no catalog facts: reasoning_effort on, no output cap, Mistral's
+# blocks (the shape of a model the file does not know: today's body)
 def api_body(+model: String, +req: W.WReq) -> String:
-  api_body_with(model, Opts{True{}, 0n, "max_tokens", "high"}, req)
+  api_body_with(model, Opts{True{}, 0n, "max_tokens", "high", "blocks"}, req)
 
 def fn_of(tc: J.Json) -> J.Json:
   W.field_or(tc, "function", J.JNull{})

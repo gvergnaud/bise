@@ -374,6 +374,10 @@ base_url = "https://api.mistral.ai/v1"
 key_env = "MISTRAL_API_KEY"
 # docs.mistral.ai/studio/conversations/advanced/prompt-caching (BISE-268)
 cache_key = "prompt_cache_key"
+# glm-5-history: Mistral replays marked reasoning as the vibe CLI's
+# ThinkChunk content parts, the one family whose backend takes them;
+# every other openai-chat provider gets the reasoning_content field
+think = "blocks"
 stt = "mistral"
 voice_model = "voxtral-mini-transcribe-3"
 small_model = "mistral-small-latest"

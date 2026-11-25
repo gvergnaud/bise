@@ -110,6 +110,13 @@ pub struct Caps {
     /// runtime's default (max_completion_tokens on the `openai`
     /// provider, max_tokens elsewhere: runtime/provider-pure.bend max_key)
     pub max_tokens_field: Option<MaxTokensField>,
+    /// how marked reasoning replays on the OpenAI Chat family: "blocks"
+    /// the Mistral/vibe ThinkChunk content parts; "" anything else, a
+    /// sibling reasoning_content field (glm-5-history: the backends
+    /// behind a gateway 400 the parts — databricks' glm-5-3 'unsupported
+    /// content item type: "thinking"', google's and baseten's probed —
+    /// while the field goes through on every one of them)
+    pub think: String,
 }
 
 /// The name of the output cap in an OpenAI Chat body (`max_tokens_field`
@@ -159,6 +166,7 @@ pub const DEFAULT_CAPS: Caps = Caps {
     key_command: String::new(),
     idle_timeout_sec: 0,
     max_tokens_field: None,
+    think: String::new(),
 };
 
 /// Caps as written in a table: a missing field comes from the level below
@@ -181,6 +189,9 @@ pub struct PartialCaps {
     pub key_command: Option<String>,
     pub idle_timeout_sec: Option<u64>,
     pub max_tokens_field: Option<MaxTokensField>,
+    /// how marked reasoning replays on OpenAI Chat (see [`Caps::think`]):
+    /// "blocks" the Mistral parts; "" the reasoning_content field
+    pub think: Option<String>,
     /// prices (BISE-150), in [`Price`]'s unit
     pub input_price: Option<u64>,
     pub output_price: Option<u64>,
@@ -242,6 +253,7 @@ impl PartialCaps {
             key_command: self.key_command.clone().unwrap_or_else(|| base.key_command.clone()),
             idle_timeout_sec: self.idle_timeout_sec.unwrap_or(base.idle_timeout_sec),
             max_tokens_field: self.max_tokens_field.or(base.max_tokens_field),
+            think: self.think.clone().unwrap_or_else(|| base.think.clone()),
         }
     }
     fn price_over(&self, base: &Price) -> Price {
@@ -271,6 +283,7 @@ impl PartialCaps {
         self.key_command = o.key_command.clone().or(self.key_command.take());
         self.idle_timeout_sec = o.idle_timeout_sec.or(self.idle_timeout_sec);
         self.max_tokens_field = o.max_tokens_field.or(self.max_tokens_field);
+        self.think = o.think.clone().or(self.think.take());
         self.input_price = o.input_price.or(self.input_price);
         self.output_price = o.output_price.or(self.output_price);
         self.cache_read_price = o.cache_read_price.or(self.cache_read_price);
@@ -1003,6 +1016,13 @@ fn cap_field(caps: &mut PartialCaps, k: &str, v: &toml::Value, where_: &str, war
             Some(f) => caps.max_tokens_field = Some(f),
             None => warn(bad("\"max_tokens\" or \"max_completion_tokens\"")),
         },
+        // glm-5-history: how marked reasoning replays on OpenAI Chat
+        // ("blocks": the Mistral/vibe ThinkChunk parts; "" anything
+        // else, a sibling reasoning_content field)
+        "think" => match v.as_str().map(str::trim) {
+            Some(t) if t.is_empty() || t == "blocks" => caps.think = Some(t.to_string()),
+            _ => warn(bad("\"\" or \"blocks\"")),
+        },
         "input_price" | "output_price" | "cache_read_price" | "cache_write_price" => {
             // USD per million tokens, stored in millionths of a dollar
             let usd = v.as_float().or_else(|| v.as_integer().map(|n| n as f64));
@@ -1578,6 +1598,7 @@ fn model_section(o: &mut String, c: &Catalog, name: &str) {
         }
     }
     for (k, x, y) in [
+        ("think", &a.think, &b.think),
         ("thinking", &a.thinking, &b.thinking),
         ("betas", &a.betas, &b.betas),
         ("efforts", &a.efforts, &b.efforts),
@@ -1777,6 +1798,8 @@ fn caps_lines(o: &mut String, c: &Caps) {
     if let Some(f) = c.max_tokens_field {
         o.push_str(&format!("max_tokens_field = {}\n", q(f.word())));
     }
+    // An empty value also overrides the runtime's built-in Mistral cap.
+    o.push_str(&format!("think = {}\n", q(&c.think)));
 }
 
 /// A TOML basic string.

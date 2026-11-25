@@ -261,6 +261,7 @@ def part_d():
         '[providers.fakegwoai]\nname = "Fake AI Gateway"\napi = "openai-chat"\nbase_url = "%s"\nkey_env = ""\n'
         'max_output = 200\n\n'
         '[models."fakegwoai/gpt-6.2-sol"]\nmax_tokens_field = "max_completion_tokens"\n\n'
+        '[models."fakegwoai/glm-5-3"]\nreasoning = true\nefforts = "high"\n\n'
         '[providers.fakeslow]\nname = "Fake Slow"\napi = "openai-chat"\nbase_url = "%s"\nkey_env = ""\n'
         'idle_timeout_sec = 1\n\n'
         '[providers.fakepatient]\nname = "Fake Patient"\napi = "openai-chat"\nbase_url = "%s"\nkey_env = ""\n'
@@ -370,6 +371,21 @@ def part_d():
             n += len(recs)
         finally:
             del os.environ["FAKE_REFUSE_MAX_TOKENS"]
+        # glm-5-history: the gateway rejects thinking parts on every
+        # replay, including the marked history from the earlier Anthropic
+        # turn and the requests following both bash calls.
+        os.environ["FAKE_REFUSE_THINK_PARTS"] = "glm-5-3"
+        try:
+            out = turn("fakegwoai/glm-5-3", "[[think: plan it]] go [[bash: echo one]] [[bash: echo two]]")
+            recs = recs_of("glm-5-3", 3)
+            text = open(session).read()
+            check([r["status"] for r in recs] == [200, 200, 200]
+                  and "tool bash ok: one" in text and "tool bash ok: two" in text,
+                  "glm on openai-chat: marked history and two bash calls replay without thinking parts: %r"
+                  % [r["status"] for r in recs])
+            n += len(recs)
+        finally:
+            del os.environ["FAKE_REFUSE_THINK_PARTS"]
         # gemini-sig: Gemini on openai-chat signs its tool calls and refuses
         # a replay without the signature (Gauthier's 400): the call's
         # second request carries each call's signature back, so both answer

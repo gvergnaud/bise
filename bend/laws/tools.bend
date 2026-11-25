@@ -740,6 +740,51 @@ BENDSIG::sig</think>
     == "[{\"type\":\"thinking\",\"thinking\":[{\"type\":\"text\",\"text\":\"2+2 = 4\"}],\"signature\":\"sig\"},{\"type\":\"text\",\"text\":\"4\"}]"
     : String}
 
+# LAW: the default Chat replay carries visible text and a sibling
+# reasoning_content, never Mistral's thinking content part (glm-5-history).
+law glm_think_replays_reasoning_content:
+  {Oai.api_body_with("m", Oai.Opts{False{}, 0n, "max_tokens", "", ""},
+      W.parse_wire("MODEL default
+MSG assistant : <think>2+2=4</think>\\n4
+END
+"))
+    == "{\"model\":\"m\",\"messages\":[{\"role\":\"assistant\",\"content\":\"4\",\"reasoning_content\":\"2+2=4\"}]}" : String}
+
+law glm_blocks_history_unchanged:
+  {Oai.api_body_with("m", Oai.Opts{True{}, 0n, "max_tokens", "high", "blocks"},
+      W.parse_wire("MODEL default
+MSG assistant : <think>plan</think>\\nready
+END
+"))
+    == Oai.api_body("m", W.parse_wire("MODEL default
+MSG assistant : <think>plan</think>\\nready
+END
+")) : String}
+
+# The shared split keeps each unsigned span, but never strips a
+# signature off foreign reasoning and sends that reasoning unsigned.
+law glm_think_hist_splits:
+  {[W.think_hist("prefix<think>one</think>
+middle<think>foreign
+BENDSIG::sig</think><think>two</think>
+suffix"), W.think_hist("plain")]
+    == [W.TH{"prefixmiddlesuffix", "onetwo"}, W.TH{"plain", ""}]
+      : List<&2, W.ThinkHist>}
+
+law glm_tool_turn_replays_reasoning:
+  {J.stringify(J.arr(Oai.msgs_json(False{},
+      [W.WMsg{"assistant", "<think>plan</think>
+", [W.WCall{"7", "echo", "hi"}], ""},
+       W.WMsg{"tool", "out", Nil{}, ""}])))
+    == "[{\"role\":\"assistant\",\"content\":null,\"reasoning_content\":\"plan\",\"tool_calls\":[{\"id\":\"call_7\",\"type\":\"function\",\"function\":{\"name\":\"echo\",\"arguments\":\"{\\\"arg\\\":\\\"hi\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"out\",\"tool_call_id\":\"call_7\"}]" : String}
+
+law glm_hollow_turn_left_out:
+  {Oai.msgs_json(False{},
+      [W.WMsg{"assistant", "<think>plan</think>
+", Nil{}, ""}, W.WMsg{"user", "go", Nil{}, ""}])
+    == Oai.msgs_json(False{}, [W.WMsg{"user", "go", Nil{}, ""}])
+      : List<&2, J.Json>}
+
 # LAW: tool calls map onto the CALL reply lines the Core parses (1-based
 # ids, the flat arg rehydrated from the arguments JSON string).
 law api_tool_calls_map:

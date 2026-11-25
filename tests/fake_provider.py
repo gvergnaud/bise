@@ -1318,6 +1318,19 @@ class H(http.server.BaseHTTPRequestHandler):
                 "max_tokens", "Unsupported parameter: 'max_tokens' is not supported with this model. "
                 "Use 'max_completion_tokens' instead.", "unsupported_parameter")).encode())
             return
+        # glm-5-history: Databricks refuses Mistral's thinking content
+        # parts on Chat Completions; reasoning_content is a sibling field.
+        refuse_parts = os.environ.get("FAKE_REFUSE_THINK_PARTS", "").split(",")
+        if family == "openai-chat" and body.get("model") in refuse_parts and any(
+                isinstance(m.get("content"), list) and any(
+                    isinstance(p, dict) and p.get("type") == "thinking" for p in m["content"])
+                for m in body.get("messages", [])):
+            with open(LOG, "a") as f:
+                f.write(json.dumps({"agent": "", "family": family, "path": self.path, "status": 400,
+                                    "model": body.get("model"), "thinking_part": True}) + "\n")
+            self.send(400, json.dumps(oai_error(
+                "content", 'unsupported content item type: "thinking"', "unsupported_value")).encode())
+            return
         # gemini-sig: a signing model ($FAKE_THOUGHT_SIGS) refuses a replayed
         # call without its signature, with Gemini's words
         if family == "openai-chat" and signs(body.get("model")) and unsigned_replay(body):

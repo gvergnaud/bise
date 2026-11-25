@@ -39,13 +39,26 @@ law provider_no_default_model:
   {Pv.resolve("", "", "", "", "", "", "")
     == Pv.RErr{"", Pv.NO_MODEL()} : Pv.Resolved}
 
+# A gateway can opt in to Mistral's content parts; absent this cap,
+# OpenAI Chat history uses a sibling reasoning_content field.
+law provider_think_blocks_from_file:
+  {Pv.resolve("corp/glm-5-3", "", "", "", "", "[providers.corp]
+api = \"openai-chat\"
+base_url = \"https://gateway.example/v1\"
+think = \"blocks\"
+", "")
+    == Pv.ROk{Pv.Prov{"corp", "glm-5-3", Api.OpenAI{},
+      "https://gateway.example/v1/chat/completions", "",
+      Api.MFacts{False{}, 0n, "max_tokens", "", "", "", False{}, "blocks"}}}
+      : Pv.Resolved}
+
 law provider_resolves_alias:
   {Pv.resolve("", "", "", "", "model = \"opus-5.5\"",
       "[providers.foundry]\nbase_url = \"https://foundry.example.net/anthropic/v1\"
 efforts = \"none,low,medium,high,xhigh,max\"", "")
     == Pv.ROk{Pv.Prov{"foundry", "claude-opus-5-5", Api.Anthropic{},
       "https://foundry.example.net/anthropic/v1/messages",
-      "ANTHROPIC_FOUNDRY_API_KEY", Api.MFacts{True{}, 0n, "max_tokens", "", "", "high", False{}}}} : Pv.Resolved}
+      "ANTHROPIC_FOUNDRY_API_KEY", Api.MFacts{True{}, 0n, "max_tokens", "", "", "high", False{}, ""}}} : Pv.Resolved}
 
 law provider_legacy_claude_is_foundry:
   {Pv.resolve("", "claude-opus-5-5", "", "", "",
@@ -53,7 +66,7 @@ law provider_legacy_claude_is_foundry:
 efforts = \"none,low,medium,high,xhigh,max\"", "")
     == Pv.ROk{Pv.Prov{"foundry", "claude-opus-5-5", Api.Anthropic{},
       "https://foundry.example.net/anthropic/v1/messages",
-      "ANTHROPIC_FOUNDRY_API_KEY", Api.MFacts{True{}, 0n, "max_tokens", "", "", "high", False{}}}} : Pv.Resolved}
+      "ANTHROPIC_FOUNDRY_API_KEY", Api.MFacts{True{}, 0n, "max_tokens", "", "", "high", False{}, ""}}} : Pv.Resolved}
 
 # LAW: bise ships no URL for the foundry proxy (a private one): without
 # a base_url in config.toml (so in the models file), no call, the error
@@ -82,14 +95,14 @@ base_url = \"\"", "")
 law provider_legacy_glm_is_mistral:
   {Pv.resolve("", "zai-glm-5-3", "", "", "", "", "")
     == Pv.ROk{Pv.Prov{"mistral", "zai-glm-5-3", Api.OpenAI{},
-      "https://api.mistral.ai/v1/chat/completions", "MISTRAL_API_KEY", Api.MFacts{True{}, 0n, "max_tokens", "", "", "", False{}}}} : Pv.Resolved}
+      "https://api.mistral.ai/v1/chat/completions", "MISTRAL_API_KEY", Api.MFacts{True{}, 0n, "max_tokens", "", "", "", False{}, "blocks"}}} : Pv.Resolved}
 
 # LAW: a model the registry does not list works on its provider's
 # defaults.
 law provider_unlisted_model_works:
   {Pv.resolve("", "", "", "", "model = \"mistral/brand-new-7b\"", "", "")
     == Pv.ROk{Pv.Prov{"mistral", "brand-new-7b", Api.OpenAI{},
-      "https://api.mistral.ai/v1/chat/completions", "MISTRAL_API_KEY", Api.MFacts{True{}, 0n, "max_tokens", "", "", "", False{}}}} : Pv.Resolved}
+      "https://api.mistral.ai/v1/chat/completions", "MISTRAL_API_KEY", Api.MFacts{True{}, 0n, "max_tokens", "", "", "", False{}, "blocks"}}} : Pv.Resolved}
 
 # LAW: a model the models file lists with its own `vision = false` (the
 # text the Rust handoff writes for every listed model, pinned by
@@ -330,7 +343,7 @@ law provider_from_models_file:
       "[providers.work]\napi = \"openai-chat\"\nbase_url = \"https://llm.corp.example/v1/\"\nkey_env = \"CORP_KEY\"\nneeds = \"\"",
       "")
     == Pv.ROk{Pv.Prov{"work", "qwen/q3-coder", Api.OpenAI{},
-      "https://llm.corp.example/v1/chat/completions", "CORP_KEY", Api.MFacts{False{}, 0n, "max_tokens", "", "", "", False{}}}}
+      "https://llm.corp.example/v1/chat/completions", "CORP_KEY", Api.MFacts{False{}, 0n, "max_tokens", "", "", "", False{}, ""}}}
     : Pv.Resolved}
 
 # LAW: a model's own key wins over its provider's (a model on another
@@ -340,7 +353,7 @@ law provider_model_key_wins:
       "[providers.local]\napi = \"openai-chat\"\nbase_url = \"http://localhost:1234/v1\"\nkey_env = \"\"\n[models.\"local/m\"]\napi = \"anthropic\"",
       "")
     == Pv.ROk{Pv.Prov{"local", "m", Api.Anthropic{},
-      "http://localhost:1234/v1/messages", "", Api.MFacts{False{}, 0n, "max_tokens", "", "", "", False{}}}} : Pv.Resolved}
+      "http://localhost:1234/v1/messages", "", Api.MFacts{False{}, 0n, "max_tokens", "", "", "", False{}, ""}}} : Pv.Resolved}
 
 # LAW (gateway-caps, architect m_66306): a gateway's model the catalog
 # knows elsewhere runs with the caps the Rust handoff writes in its own
@@ -365,7 +378,7 @@ reasoning = true
 thinking = \"adaptive\"",
       "")
     == Pv.ROk{Pv.Prov{"litellm", "azure_ai/claude-opus-5-5", Api.Anthropic{},
-      "https://gw.example.test/v1/messages", "LITELLM_API_KEY", Api.MFacts{True{}, 32n, "max_tokens", "adaptive", "", "", False{}}}}
+      "https://gw.example.test/v1/messages", "LITELLM_API_KEY", Api.MFacts{True{}, 32n, "max_tokens", "adaptive", "", "", False{}, ""}}}
     : Pv.Resolved}
 
 # LAW: the models file wins over the built-in entries, key by key; its
@@ -377,14 +390,14 @@ efforts = \"none,high\"",
       "")
     == Pv.ROk{Pv.Prov{"foundry", "claude-x", Api.Anthropic{},
       "https://api.anthropic.com/v1/messages",
-      "ANTHROPIC_FOUNDRY_API_KEY", Api.MFacts{True{}, 0n, "max_tokens", "", "", "high", False{}}}} : Pv.Resolved}
+      "ANTHROPIC_FOUNDRY_API_KEY", Api.MFacts{True{}, 0n, "max_tokens", "", "", "high", False{}, ""}}} : Pv.Resolved}
 
 # LAW: BEND_PROVIDER_URL (the tests' fake provider) wins over the URL.
 law provider_url_env_wins:
   {Pv.resolve("", "mistral-small-latest", "", "", "", "",
       "http://127.0.0.1:9/v1/chat/completions")
     == Pv.ROk{Pv.Prov{"mistral", "mistral-small-latest", Api.OpenAI{},
-      "http://127.0.0.1:9/v1/chat/completions", "MISTRAL_API_KEY", Api.MFacts{True{}, 0n, "max_tokens", "", "", "", False{}}}}
+      "http://127.0.0.1:9/v1/chat/completions", "MISTRAL_API_KEY", Api.MFacts{True{}, 0n, "max_tokens", "", "", "", False{}, "blocks"}}}
     : Pv.Resolved}
 
 # LAW: a long file is read to its end (a pair line takes 3 steps of the
@@ -468,7 +481,7 @@ law api_body_anth_maps:
 # LAW: xhigh (Claude's "extra high") goes as is in output_config.effort.
 law api_body_anth_xhigh:
   {Api.api_body_for(Api.Anthropic{}, "m",
-      Api.MFacts{True{}, 0n, "max_tokens", "", "", "xhigh", False{}},
+      Api.MFacts{True{}, 0n, "max_tokens", "", "", "xhigh", False{}, ""},
       W.parse_wire("MODEL default
 MSG user : salut
 END
@@ -720,7 +733,7 @@ law resp_style_of_api:
 # pair on call_1; Anthropic's signed span is dropped (not replayed as
 # text either); the tools are functions, strict off.
 law resp_body_maps:
-  {Api.api_body_for(Api.OpenAIResp{}, "gpt-6.1-sol", Api.MFacts{True{}, 0n, "max_tokens", "", "", "medium", False{}},
+  {Api.api_body_for(Api.OpenAIResp{}, "gpt-6.1-sol", Api.MFacts{True{}, 0n, "max_tokens", "", "", "medium", False{}, ""},
       W.parse_wire("MODEL default\nTOOL bash : Run a command.\nMSG system : Be brief.\nMSG user : hi\nMSG assistant : <think>plan\\nBENDSIG::oair:ENC1</think>\\nok\n  CALL 1 bash : ls\nMSG tool : a.txt\nMSG assistant : <think>old\\nBENDSIG::anthsig</think>\\nbye\nMSG user : again\nEND\n"))
     == "{\"model\":\"gpt-6.1-sol\",\"store\":false,\"reasoning\":{\"effort\":\"medium\",\"summary\":\"auto\"},\"include\":[\"reasoning.encrypted_content\"],\"input\":[{\"role\":\"developer\",\"content\":\"Be brief.\"},{\"role\":\"user\",\"content\":\"hi\"},{\"type\":\"reasoning\",\"summary\":[{\"type\":\"summary_text\",\"text\":\"plan\"}],\"encrypted_content\":\"ENC1\"},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"ok\"}]},{\"type\":\"function_call\",\"call_id\":\"call_1\",\"name\":\"bash\",\"arguments\":\"{\\\"arg\\\":\\\"ls\\\"}\"},{\"type\":\"function_call_output\",\"call_id\":\"call_1\",\"output\":\"a.txt\"},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"bye\"}]},{\"role\":\"user\",\"content\":\"again\"}],\"tools\":[{\"type\":\"function\",\"name\":\"bash\",\"description\":\"Run a command.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"arg\":{\"type\":\"string\"},\"description\":{\"type\":\"string\",\"description\":\"One short line shown to the user while this runs: what you are doing, in the user's language. 8 words at most, starting lowercase, no final period. E.g. 'weighing the hero image', 'je lance les tests du signup'.\"}},\"required\":[\"arg\"]},\"strict\":false}],\"tool_choice\":\"auto\"}"
     : String}
@@ -728,7 +741,7 @@ law resp_body_maps:
 # LAW: a model the catalog does not mark as reasoning sends no
 # reasoning, no include; an output cap rides as max_output_tokens.
 law resp_body_plain_model:
-  {Api.api_body_for(Api.OpenAIResp{}, "m", Api.MFacts{False{}, 64n, "max_tokens", "", "", "", False{}},
+  {Api.api_body_for(Api.OpenAIResp{}, "m", Api.MFacts{False{}, 64n, "max_tokens", "", "", "", False{}, ""},
       W.parse_wire("MODEL default\nMSG user : hi\nEND\n"))
     == "{\"model\":\"m\",\"store\":false,\"max_output_tokens\":64,\"input\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
     : String}
@@ -823,7 +836,7 @@ END
 # what goes on the wire: the family's stream body of the plan body
 def plan.body() -> String:
   Api.wire_body(Api.OpenAIResp{}, Api.api_body_for(Api.OpenAIResp{}, "gpt-6.1-sol",
-    Api.MFacts{True{}, 4096n, "max_tokens", "", "", "medium", True{}}, plan.req()))
+    Api.MFacts{True{}, 4096n, "max_tokens", "", "", "medium", True{}, ""}, plan.req()))
 
 # LAW: the plan body, whole: streamed, not stored, no output cap though
 # the catalog sets one, the system prompt a developer message, the tool
@@ -884,7 +897,7 @@ law resp_no_shape_tools_unchanged:
 
 law resp_no_shape_no_namespace:
   {String.contains(Api.api_body_for(Api.OpenAIResp{}, "gpt-6.1-sol",
-      Api.MFacts{True{}, 4096n, "max_tokens", "", "", "medium", False{}}, plan.req()),
+      Api.MFacts{True{}, 4096n, "max_tokens", "", "", "medium", False{}, ""}, plan.req()),
     "namespace") == False{} : Bool}
 
 # ---- the name of the output cap (fix-gpt-6, Gauthier's report) ----
@@ -907,7 +920,7 @@ max_tokens_field = \"max_completion_tokens\"",
       "")
     == Pv.ROk{Pv.Prov{"ai-gw", "openai/gpt-6.2-sol", Api.OpenAI{},
       "https://gw.example/v1/chat/completions", "GW_KEY",
-      Api.MFacts{False{}, 0n, "max_completion_tokens", "", "", "", False{}}}}
+      Api.MFacts{False{}, 0n, "max_completion_tokens", "", "", "", False{}, ""}}}
     : Pv.Resolved}
 
 law provider_max_tokens_field_absent_is_max_tokens:

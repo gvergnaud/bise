@@ -206,31 +206,43 @@ def wire_body(st: Style, +body: String) -> String:
 
 type MFacts is Data:
   MFacts{reasoning: Bool, output: Nat, max_key: String, thinking: String,
-    betas: String, effort: String, plan: Bool}
+    betas: String, effort: String, plan: Bool, think: String}
+
+# how marked reasoning replays on the OpenAI Chat family: "blocks"
+# the ThinkChunk parts (Mistral's shape, the catalog pins it there);
+# anything else a sibling reasoning_content field (glm-5-history: the
+# backends behind a gateway 400 the parts — databricks' glm-5-3
+# 'unsupported content item type: "thinking"', google's and baseten's
+# probed — while the field goes through on every one of them)
+def facts_think(f: MFacts) -> String:
+  match f:
+    case MFacts{_, _, _, _, _, _, _, +think}:
+      think
 
 def facts_max_key(f: MFacts) -> String:
   match f:
-    case MFacts{_, _, +max_key, _, _, _, _}:
+    case MFacts{_, _, +max_key, _, _, _, _, _}:
       max_key
 
 def facts_betas(f: MFacts) -> String:
   match f:
-    case MFacts{_, _, _, _, +betas, _, _}:
+    case MFacts{_, _, _, _, +betas, _, _, _}:
       betas
 
 def facts_effort(f: MFacts) -> String:
   match f:
-    case MFacts{_, _, _, _, _, +effort, _}:
+    case MFacts{_, _, _, _, _, +effort, _, _}:
       effort
 
 def facts_plan(f: MFacts) -> Bool:
   match f:
-    case MFacts{_, _, _, _, _, _, +plan}:
+    case MFacts{_, _, _, _, _, _, +plan, _}:
       plan
 
-# no catalog entry: today's body (reasoning_effort high, no output cap)
+# no catalog entry: today's body (reasoning_effort high, no output cap),
+# Mistral's blocks (the shape of a model the file does not know)
 def facts0() -> MFacts:
-  MFacts{True{}, 0n, "max_tokens", "", "", "high", False{}}
+  MFacts{True{}, 0n, "max_tokens", "", "", "high", False{}, "blocks"}
 
 # ---- the prompt cache's routing key (BISE-268) ----
 # Some providers route a request to the machine that holds its cached
@@ -357,21 +369,22 @@ def api_body_for(st: Style, +model: String, +facts: MFacts, +req: W.WReq)
   match st:
     case OpenAI{}:
       match facts:
-        case MFacts{+reasoning, +output, +max_key, _, _, +effort, _}:
-          Oai.api_body_with(model, Oai.Opts{reasoning, output, max_key, effort},
-            req)
+        case MFacts{+reasoning, +output, +max_key, _, _, +effort, _, +think}:
+          Oai.api_body_with(model,
+            Oai.Opts{reasoning, output, max_key, effort, think}, req)
     case DeepSeek{}:
       match facts:
-        case MFacts{+reasoning, +output, +max_key, _, _, +effort, _}:
-          Ds.api_body(model, Oai.Opts{reasoning, output, max_key, effort}, req)
+        case MFacts{+reasoning, +output, +max_key, _, _, +effort, _, _}:
+          Ds.api_body(model, Oai.Opts{reasoning, output, max_key, effort, ""},
+            req)
     case Anthropic{}:
       match facts:
-        case MFacts{+reasoning, +output, _, +thinking, _, +effort, _}:
+        case MFacts{+reasoning, +output, _, +thinking, _, +effort, _, _}:
           Anth.api_body_anth_for(model, output, thinking, reasoning, effort,
             req)
     case OpenAIResp{}:
       match facts:
-        case MFacts{+reasoning, +output, _, _, _, +effort, +plan}:
+        case MFacts{+reasoning, +output, _, _, _, +effort, +plan, _}:
           Rs.api_body(model, Rs.Opts{reasoning, output, effort, plan}, req)
 
 def reply_of_for(st: Style, +status: U32, +body: String) -> String:

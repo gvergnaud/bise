@@ -57,7 +57,8 @@ def builtin() -> List<&2, Cf.KV>:
     Cf.KV{"providers.mistral.key_env", "MISTRAL_API_KEY"},
     Cf.KV{"providers.mistral.reasoning", "true"},
     Cf.KV{"providers.mistral.context", "128000"},
-    Cf.KV{"providers.mistral.cache_key", "prompt_cache_key"}]
+    Cf.KV{"providers.mistral.cache_key", "prompt_cache_key"},
+    Cf.KV{"providers.mistral.think", "blocks"}]
 
 # the models file's entries win over the built-in ones (first match)
 def registry(+file: String) -> List<&2, Cf.KV>:
@@ -638,7 +639,8 @@ def facts(+reg: List<&2, Cf.KV>, +prov: String, +id: String, +asked: String)
     Cf.cfg_or(model_key(reg, prov, id, "thinking"), ""),
     Cf.cfg_or(model_key(reg, prov, id, "betas"), ""),
     effort_of(reg, prov, id, asked),
-    is_plan_shape(Cf.cfg_or(model_key(reg, prov, id, "shape"), ""))}
+    is_plan_shape(Cf.cfg_or(model_key(reg, prov, id, "shape"), "")),
+    Cf.cfg_or(model_key(reg, prov, id, "think"), "")}
 
 # ---- a model listed without vision ----
 # The models file writes every listed model its own `vision = true|false`
