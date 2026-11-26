@@ -20,6 +20,12 @@ impl Watch {
         self.moved_ms = now_ms;
     }
 
+    /// The watcher's own process did not run for `gap_ms` (a frozen Mac):
+    /// that time is not stillness (never past `now_ms`).
+    pub fn froze(&mut self, gap_ms: u64, now_ms: u64) {
+        self.moved_ms = self.moved_ms.saturating_add(gap_ms).min(now_ms);
+    }
+
     /// How long it has been still (ms).
     pub fn still_ms(&self, now_ms: u64) -> u64 {
         now_ms.saturating_sub(self.moved_ms)

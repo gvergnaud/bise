@@ -11,6 +11,9 @@
 //!   hub.log and hub.err and exits, unless it already did so within
 //!   [`STUCK_AGAIN_MS`] (then it stays up, said once: a stuck boot does
 //!   not become a crash loop of the hub its clients restart).
+//! - time the hub's process did not run is not time without progress: a
+//!   tick [`FROZEN_GAP`] or more after the last one (the Mac froze the
+//!   process) moves the count by the gap.
 //!
 //! A heartbeat is not progress: the switcher (switch.rs) waits for a
 //! starting hub while lines other than heartbeats come.
@@ -27,6 +30,10 @@ pub const STUCK_AFTER: Duration = Duration::from_secs(600);
 pub const STUCK_AGAIN_MS: u64 = 3_600_000;
 /// The journal replay's progress line, at most this often.
 pub const REPLAY_LINE_EVERY: Duration = Duration::from_secs(5);
+/// The watch ticks every second: a tick this late or later means the Mac
+/// froze the hub's process (swap full, replay-stall: 981 s between two
+/// ticks), and the gap is not counted as no progress.
+pub const FROZEN_GAP: Duration = Duration::from_secs(5);
 
 const HEARTBEAT: &str = "boot: still in ";
 
@@ -58,12 +65,14 @@ pub struct BootWatch {
     watch: Watch,
     said_ms: u64,
     stuck_said: bool,
+    /// the last tick (ms): a late one is a frozen process (FROZEN_GAP)
+    ticked_ms: u64,
 }
 
 impl BootWatch {
     pub fn new(step: &str, now_ms: u64) -> BootWatch {
         let watch = Watch::new(now_ms, STUCK_AFTER.as_millis() as u64);
-        BootWatch { step: step.to_string(), watch, said_ms: now_ms, stuck_said: false }
+        BootWatch { step: step.to_string(), watch, said_ms: now_ms, stuck_said: false, ticked_ms: now_ms }
     }
 
     /// A new boot step: progress.
@@ -80,8 +89,15 @@ impl BootWatch {
     }
 
     /// The verdict at `now_ms`: each heartbeat once per STILL_EVERY,
-    /// stuck once per stall.
+    /// stuck once per stall. A tick FROZEN_GAP or more after the last:
+    /// the process was frozen, the gap does not count.
     pub fn tick(&mut self, now_ms: u64) -> Verdict {
+        let gap = now_ms.saturating_sub(self.ticked_ms);
+        self.ticked_ms = now_ms;
+        if gap >= FROZEN_GAP.as_millis() as u64 {
+            self.watch.froze(gap, now_ms);
+            self.said_ms = self.said_ms.saturating_add(gap).min(now_ms);
+        }
         let still = self.watch.still_ms(now_ms);
         if self.watch.stalled(now_ms) && !self.stuck_said {
             self.stuck_said = true;
@@ -150,14 +166,17 @@ mod tests {
 
     #[test]
     fn a_boot_without_progress_says_where_every_30_s_then_is_stuck_once() {
-        let mut w = BootWatch::new("journal read (37585 events)", 0);
-        assert_eq!(w.tick(29 * S), Verdict::Quiet);
-        assert_eq!(w.tick(30 * S), Verdict::Still { step: "journal read (37585 events)".into(), secs: 30 });
-        assert_eq!(w.tick(31 * S), Verdict::Quiet, "one heartbeat per period");
-        assert_eq!(w.tick(60 * S), Verdict::Still { step: "journal read (37585 events)".into(), secs: 60 });
-        assert_eq!(w.tick(600 * S), Verdict::Stuck { step: "journal read (37585 events)".into(), secs: 600 });
-        assert_eq!(w.tick(601 * S), Verdict::Quiet, "stuck is said once per stall");
-        assert!(matches!(w.tick(630 * S), Verdict::Still { .. }));
+        let step = "journal read (37585 events)";
+        let mut w = BootWatch::new(step, 0);
+        // a heartbeat every 30 s, stuck once at 600 s, then heartbeats again
+        let want: Vec<(u64, Verdict)> = (1..=21u64)
+            .map(|k| {
+                let secs = k * 30;
+                let v = if secs == 600 { Verdict::Stuck { step: step.into(), secs } } else { Verdict::Still { step: step.into(), secs } };
+                (secs, v)
+            })
+            .collect();
+        assert_eq!(ticks(&mut w, 1, 630), want);
     }
 
     #[test]
@@ -165,12 +184,35 @@ mod tests {
         // 37k events at one batch per 20 s: hours, never stuck, never a heartbeat
         let mut w = BootWatch::new("journal read", 0);
         for i in 1..=400u64 {
-            assert_eq!(w.tick(i * 20 * S - 1), Verdict::Quiet, "batch {}", i);
+            assert_eq!(ticks(&mut w, (i - 1) * 20 + 1, i * 20 - 1), vec![], "batch {}", i);
             w.progress(i * 20 * S);
         }
         // a new step is progress too
-        w.step("journal replayed", 9_000 * S);
-        assert_eq!(w.tick(9_029 * S), Verdict::Quiet);
+        w.step("journal replayed", 8_000 * S);
+        assert_eq!(ticks(&mut w, 8_000, 8_029), vec![]);
+    }
+
+    /// Its 1 s ticks from `from` to `to` (s): the verdicts that are not Quiet.
+    fn ticks(w: &mut BootWatch, from: u64, to: u64) -> Vec<(u64, Verdict)> {
+        (from..=to).map(|s| (s, w.tick(s * S))).filter(|(_, v)| *v != Verdict::Quiet).collect()
+    }
+
+    #[test]
+    fn a_frozen_mac_is_not_a_stuck_boot() {
+        // his harness hub (replay-stall): the replay moved until 298 s, then
+        // the Mac froze the whole process (swap full) and the watch's next
+        // tick came at 1279 s; it said stuck there and the switch failed
+        let mut w = BootWatch::new("journal read", 0);
+        for s in 1..=298 {
+            w.tick(s * S);
+            w.progress(s * S);
+        }
+        assert_eq!(w.tick(1_279 * S), Verdict::Quiet, "the 981 s the process did not run are not 981 s without progress");
+        // the replay still does not move once the Mac runs again: stuck
+        // after STUCK_AFTER of ticks, counted from the thaw
+        let said = ticks(&mut w, 1_280, 1_279 + 600);
+        assert_eq!(said.last(), Some(&(1_879, Verdict::Stuck { step: "journal read".into(), secs: 600 })));
+        assert!(said.iter().all(|(s, v)| *s == 1_879 || matches!(v, Verdict::Still { .. })), "{:?}", said);
     }
 
     #[test]
