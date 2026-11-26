@@ -11,7 +11,6 @@ use crate::paths::Paths;
 use crate::util::now_ms;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 
 pub(super) struct Boot {
     paths: Paths,
@@ -31,7 +30,7 @@ impl Boot {
         let core_pid = Arc::new(AtomicU32::new(0));
         let (w, pid, p) = (watch.clone(), core_pid.clone(), paths.clone());
         std::thread::spawn(move || loop {
-            std::thread::sleep(Duration::from_secs(1));
+            std::thread::sleep(boot::TICK);
             let verdict = match w.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
                 Some(bw) => bw.tick(now_ms()),
                 None => return,

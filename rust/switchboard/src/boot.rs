@@ -12,8 +12,9 @@
 //!   [`STUCK_AGAIN_MS`] (then it stays up, said once: a stuck boot does
 //!   not become a crash loop of the hub its clients restart).
 //! - time the hub's process did not run is not time without progress: a
-//!   tick [`FROZEN_GAP`] or more after the last one (the Mac froze the
-//!   process) moves the count by the gap.
+//!   tick later than [`TICK`] after the last one (the Mac froze the
+//!   process) moves the count by its excess over TICK; each tick still
+//!   counts one TICK, so a stuck replay on a loaded Mac is still stuck.
 //!
 //! A heartbeat is not progress: the switcher (switch.rs) waits for a
 //! starting hub while lines other than heartbeats come.
@@ -30,10 +31,11 @@ pub const STUCK_AFTER: Duration = Duration::from_secs(600);
 pub const STUCK_AGAIN_MS: u64 = 3_600_000;
 /// The journal replay's progress line, at most this often.
 pub const REPLAY_LINE_EVERY: Duration = Duration::from_secs(5);
-/// The watch ticks every second: a tick this late or later means the Mac
-/// froze the hub's process (swap full, replay-stall: 981 s between two
-/// ticks), and the gap is not counted as no progress.
-pub const FROZEN_GAP: Duration = Duration::from_secs(5);
+/// The watch's thread ticks this often (daemon/boot.rs). A tick later than
+/// that: the Mac froze the hub's process (swap full, replay-stall: 981 s
+/// between two ticks); the excess is not counted as no progress, each
+/// tick still counts one TICK.
+pub const TICK: Duration = Duration::from_secs(1);
 
 const HEARTBEAT: &str = "boot: still in ";
 
@@ -65,7 +67,7 @@ pub struct BootWatch {
     watch: Watch,
     said_ms: u64,
     stuck_said: bool,
-    /// the last tick (ms): a late one is a frozen process (FROZEN_GAP)
+    /// the last tick (ms): one later than TICK is a frozen process
     ticked_ms: u64,
 }
 
@@ -89,15 +91,13 @@ impl BootWatch {
     }
 
     /// The verdict at `now_ms`: each heartbeat once per STILL_EVERY,
-    /// stuck once per stall. A tick FROZEN_GAP or more after the last:
-    /// the process was frozen, the gap does not count.
+    /// stuck once per stall. A tick later than TICK after the last: the
+    /// process was frozen, the excess does not count.
     pub fn tick(&mut self, now_ms: u64) -> Verdict {
-        let gap = now_ms.saturating_sub(self.ticked_ms);
+        let excess = now_ms.saturating_sub(self.ticked_ms).saturating_sub(TICK.as_millis() as u64);
         self.ticked_ms = now_ms;
-        if gap >= FROZEN_GAP.as_millis() as u64 {
-            self.watch.froze(gap, now_ms);
-            self.said_ms = self.said_ms.saturating_add(gap).min(now_ms);
-        }
+        self.watch.froze(excess, now_ms);
+        self.said_ms = self.said_ms.saturating_add(excess).min(now_ms);
         let still = self.watch.still_ms(now_ms);
         if self.watch.stalled(now_ms) && !self.stuck_said {
             self.stuck_said = true;
@@ -207,12 +207,21 @@ mod tests {
             w.tick(s * S);
             w.progress(s * S);
         }
-        assert_eq!(w.tick(1_279 * S), Verdict::Quiet, "the 981 s the process did not run are not 981 s without progress");
+        assert_eq!(w.tick(1_279 * S), Verdict::Quiet, "the 980 s the process did not run are not 980 s without progress");
         // the replay still does not move once the Mac runs again: stuck
-        // after STUCK_AFTER of ticks, counted from the thaw
-        let said = ticks(&mut w, 1_280, 1_279 + 600);
-        assert_eq!(said.last(), Some(&(1_879, Verdict::Stuck { step: "journal read".into(), secs: 600 })));
-        assert!(said.iter().all(|(s, v)| *s == 1_879 || matches!(v, Verdict::Still { .. })), "{:?}", said);
+        // after STUCK_AFTER of ticks (that late tick counted as one)
+        let said = ticks(&mut w, 1_280, 1_878);
+        assert_eq!(said.last(), Some(&(1_878, Verdict::Stuck { step: "journal read".into(), secs: 600 })));
+        assert!(said.iter().all(|(s, v)| *s == 1_878 || matches!(v, Verdict::Still { .. })), "{:?}", said);
+    }
+
+    #[test]
+    fn a_stuck_replay_on_a_loaded_mac_is_still_stuck() {
+        // every tick 6 s late (architect m_68069): each counts one TICK of
+        // stillness, so 600 ticks without progress are stuck
+        let mut w = BootWatch::new("journal replay 500/37585 events", 0);
+        let said: Vec<(u64, Verdict)> = (1..=600u64).map(|k| (k, w.tick(k * 6 * S))).filter(|(_, v)| *v != Verdict::Quiet).collect();
+        assert_eq!(said.last(), Some(&(600, Verdict::Stuck { step: "journal replay 500/37585 events".into(), secs: 600 })));
     }
 
     #[test]
