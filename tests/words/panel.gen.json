@@ -1477,6 +1477,21 @@
     "one": null,
     "text": "v {v}"
   },
+  "panel.view_failed": {
+    "args": [],
+    "one": null,
+    "text": "This view stopped on an error"
+  },
+  "panel.view_failed_reload": {
+    "args": [],
+    "one": null,
+    "text": "Reload"
+  },
+  "panel.view_failed_why": {
+    "args": [],
+    "one": null,
+    "text": "its error is in app.log"
+  },
   "panel.wakes_at": {
     "args": [
       "at"
