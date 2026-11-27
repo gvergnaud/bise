@@ -11,6 +11,7 @@
 import { takeZoomKey } from '@/artifacts/zoomKeys';
 import { useHasFront, usePrimaryKey } from '@/artifacts/front';
 import { useArtifactFindKey } from '@/artifacts/find';
+import { Boundary } from './Boundary';
 import { inboxItemOpen } from '@/inbox';
 import { goLibrary, libraryPlaces } from '@/artifacts/library';
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
@@ -451,7 +452,10 @@ function Current() {
       <NewAgentHost />
       <div className="app-screen" inert={full} data-testid="app.screen">
         <UnlessFull>
-          <ScreenOf key={formatRoute(route)} route={route} />
+          {/* a throw in a screen's drawing stops that screen alone, the window stays (Boundary.tsx) */}
+          <Boundary key={formatRoute(route)} where={`screen ${route.screen}`} testId="app.screen.failed">
+            <ScreenOf route={route} />
+          </Boundary>
         </UnlessFull>
       </div>
       <RouteTerminal route={route} />

@@ -21,6 +21,7 @@ import { shownName } from '@/agents/model';
 import { useAboutWords } from '@/artifacts/maker';
 import { Breath } from '@/working/Signs';
 import { MAIN } from '@/app/route';
+import { Boundary } from '@/app/Boundary';
 import { inPopup, useEscLayer } from '@/app/escape';
 import { panel } from '@/proto/words_panel.gen';
 import { useAgents, useProjects, useStore } from '@/store';
@@ -109,7 +110,12 @@ function Body({ tab, shown }: { tab: Tab; shown: boolean }) {
       // a web page (WebTab.tsx, page newtab-browser), else the blank browser and its address field
       return what.page === undefined ? <BlankBrowser tabId={tab.id} shown={shown} /> : <WebTab tabId={tab.id} shown={shown} page={what.page} />;
     case 'thing':
-      return what.e.kind === 'tab' ? null : <ThingTab e={what.e} tabId={tab.id} />;
+      // a throw in its drawing stops this tab alone, never the window (app/Boundary.tsx)
+      return what.e.kind === 'tab' ? null : (
+        <Boundary key={tab.id} where={`panel tab ${what.e.kind}`} testId="app.panel.failed">
+          <ThingTab e={what.e} tabId={tab.id} />
+        </Boundary>
+      );
     case 'folder':
       return <FolderTab entry={what.entry} tabId={tab.id} />;
   }

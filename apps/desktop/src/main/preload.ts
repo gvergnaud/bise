@@ -266,10 +266,8 @@ const api: BiseApi = {
   privacySettings: (pane) => {
     ipcRenderer.send(IPC.privacySettings, pane);
   },
-  voice: {
-    log: (line: string) => {
-      ipcRenderer.send(IPC.appLog, line);
-    },
+  log: (line: string) => {
+    ipcRenderer.send(IPC.appLog, line);
   },
   quit: () => {
     ipcRenderer.send(IPC.quit);

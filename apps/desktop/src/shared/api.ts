@@ -251,10 +251,9 @@ export interface BiseApi {
    *  designer's voice-window (1)), Files & Folders (the projects scan's 'macOS said no', designer
    *  m_64068). Test mode: EXTERNAL_LINE with its URL on stdout, nothing opens. */
   readonly privacySettings: (pane: PrivacyPane) => void;
-  readonly voice: {
-    /** One line in app.log, next to core.log (the field's dictation: start, stop, final len/error/ms; never words). */
-    readonly log?: (line: string) => void;
-  };
+  /** One line in app.log, next to core.log: the field's dictation (start, stop, final len/error/ms;
+   *  never words), the capsule's acts, a view's error (app/Boundary.tsx). */
+  readonly log?: (line: string) => void;
   /**
    * Opens a window. A route (or nothing): the main window, on `route` when given (the capsule's ⏎,
    * a card's 'open'). A WindowOpen: a window of its own (bise fait mac: settings, an artifact, an

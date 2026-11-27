@@ -28,7 +28,8 @@ import { micHeld, onCoreEvent, onCoreState, sendToCore, startCore, stopCore } fr
 import { configOfPrefs } from './helper/config';
 import { Shots } from './helper/shot';
 import { Looks } from './helper/look';
-import { installIpc, panelShown, sendClip, sendMenu, setLooks, setProjectRoots } from './ipc';
+import { appLogLine, installIpc, panelShown, sendClip, sendMenu, setLooks, setProjectRoots } from './ipc';
+import { installGoneLog } from './gonelog';
 import { installViewFrames } from './viewframes';
 import { installKeepIpc } from './keep';
 import { installWebHistory } from './webhistoryipc';
@@ -117,6 +118,13 @@ if (testMode) {
     app.dock?.hide();
   }
 }
+
+// a renderer or a child process that dies or hangs: one app.log line each, Chromium's dumps kept
+// in crashDumps (set above), never uploaded (gonelog.ts)
+installGoneLog((line) => {
+  const at = appLogLine(line, new Date());
+  if (at !== null) appendFile(join(app.getPath('userData'), 'app.log'), at, () => undefined);
+});
 
 // every page guarded from birth: no new window, no navigation away (guard.ts)
 installGuard(

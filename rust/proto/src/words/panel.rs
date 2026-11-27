@@ -571,5 +571,13 @@ crate::words! { panel:
     /// under either: where to see it
     art_no_frame_why = "open it in Finder to see it.";
 
+    // ---- a tab or a screen whose drawing threw (app/Boundary.tsx): the window stays
+    /// its title, in place of what it drew
+    view_failed = "This view stopped on an error";
+    /// the line under it: where the error went
+    view_failed_why = "its error is in app.log";
+    /// its action: draw it again
+    view_failed_reload = "Reload";
+
     // ---- the Overview tab's sections (bise fait mac, mockup 1): the head's '…' menu
 }

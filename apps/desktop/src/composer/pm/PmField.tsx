@@ -790,7 +790,7 @@ export function PmField(p: PmFieldProps): JSX.Element {
     pushBar,
     say,
     log: (line) => {
-      (window as { bise?: Window["bise"] }).bise?.voice.log?.(line);
+      (window as { bise?: Window["bise"] }).bise?.log?.(line);
     },
     draft: () => ({ key: props.current.draftKey ?? props.current.target, store: props.current.store }),
     keep: () => {
